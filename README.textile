@@ -42,7 +42,7 @@ h3. Installation
 ** org.apache.cassandra.cql3.QueryOptions includes a new static constructor forInternalCalls().
 ** org.apache.cassandra.service.CassandraDaemon and StorageService to include hooks to start Elasticsearch in the boostrap process.
 ** org.apache.cassandra.service.ElastiCassandraDaemon extends CassandraDaemon with Elasticsearch features.
-**To avoid classloading issue, you can remove these 3 modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
+** To avoid classloading issue, you can remove these 3 modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
 <pre>
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/cql3/QueryOptions*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/CassandraDaemon*'
