@@ -15,7 +15,7 @@ From an Elasticsearch perspective :
   * Elasticsearch document type is mapped to a cassandra table.
   * Elasticsearch document *_id* is a string representation of the cassandra primary key. 
 * Elasticsearch discovery now rely on the cassandra [gossip protocol](https://wiki.apache.org/cassandra/ArchitectureGossip). When a node join or leave the cluster, or when a schema change occurs, each nodes update nodes status and its local routing table.
-* Elasticsearch [gateway](https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html) now store metadata in a cassandra table and in the cassandra schema. Metadata updates are serialized through a [cassandra lightweight transaction](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html). Metadata UUID is the cassandra hostId of the last modifier node.
+* Elasticsearch [gateway](https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html) now store metadata in a cassandra table and in the cassandra schema. Metadata updates are played sequentially through a [cassandra lightweight transaction](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html). Metadata UUID is the cassandra hostId of the last modifier node.
 * Elasticsearch REST and java API remain unchanged (version 1.5).
 * [River ](https://www.elastic.co/guide/en/elasticsearch/rivers/current/index.html) remain fully operational.
 * Logging is now based on [logback](http://logback.qos.ch/) as cassandra.
@@ -23,7 +23,7 @@ From an Elasticsearch perspective :
 From a Cassandra perspective :
 * Columns with an ElasticSecondaryIndex are indexed in ElasticSearch.
 * By default, Elasticsearch document fields are multivalued, so every field is backed by a list. Single valued document field 
-   can be mapped to a basic types by setting single_value: true in our type mapping.
+   can be mapped to a basic types by setting 'single_value: true' in our type mapping.
 * Nested documents are stored using cassandra [User Defined Type](http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
 * Elasticsearch provides a JSON-REST API to cassandra.
  
@@ -49,12 +49,11 @@ zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/CassandraDaemon*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService$*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService.class'
 ```
-* Add target/elasticassandra-SNAPSHOT-x.x.jar and all its dependencies from @target/lib@ in your cassandra lib directory
-* Add elasticsearch.yml in the cassandra conf directory
-* Replace the bin/cassandra script by the one provided in target/bin/cassandra. It adds an option -e to start cassandra with elasticsearch.
-* Optionally add bin/shortcuts.sh 
-* Run bin/cassandra -e to start a cassandra node including elasticsearch. 
-* The cassandra logs logs/system.log includes elasticsearch logs according to the your conf/logback.conf settings.
+* Add 'target/elasticassandra-SNAPSHOT-x.x.jar' and all its dependencies from 'target/lib' in your cassandra lib directory.
+* Add 'target/conf/elasticsearch.yml' in the cassandra conf directory.
+* Replace your 'bin/cassandra' script by the one provided in 'target/bin/cassandra'. The option '-e' to start cassandra with elasticsearch.
+* Run 'bin/cassandra -e' to start a cassandra node including elasticsearch. 
+* The cassandra logs in 'logs/system.log' includes elasticsearch logs according to the your 'conf/logback.conf' settings.
 
 ### Check your cluster state
 
@@ -66,7 +65,7 @@ Datacenter: DC1
 Status=Up/Down
 |/ State=Normal/Leaving/Joining/Moving
 --  Address    Load       Tokens  Owns    Host ID                               Rack
-UN  127.0.0.1  57,61 KB   2       ?       74ae1629-0149-4e65-b790-cd25c7406675  RAC1
+UN  127.0.0.1  57,61 KB   2       ?       **74ae1629-0149-4e65-b790-cd25c7406675**  RAC1
 ```
 
 Check your Elasticsearch cluster state.
@@ -76,10 +75,10 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
 {
   "cluster_name" : "Test Cluster",
   "version" : 1,
-  "master_node" : "74ae1629-0149-4e65-b790-cd25c7406675",
+  "master_node" : **"74ae1629-0149-4e65-b790-cd25c7406675"**,
   "blocks" : { },
   "nodes" : {
-    "74ae1629-0149-4e65-b790-cd25c7406675" : {
+    **"74ae1629-0149-4e65-b790-cd25c7406675"** : {
       "name" : "localhost",
       "status" : "ALIVE",
       "transport_address" : "inet[localhost/127.0.0.1:9300]",
@@ -93,7 +92,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   },
   "metadata" : {
     "version" : 0,
-    "uuid" : "74ae1629-0149-4e65-b790-cd25c7406675",
+    "uuid" : **"74ae1629-0149-4e65-b790-cd25c7406675"**,
     "templates" : { },
     "indices" : { }
   },
@@ -176,7 +175,7 @@ curl -XGET 'http://localhost:9200/twitter/tweet/1?pretty=true'
 curl -XGET 'http://localhost:9200/twitter/tweet/2?pretty=true'
 ```
 
-Elasticsearch state now show reflect the new twitter index. Because we are currently running on one node, the token_ranges routing 
+Elasticsearch state now show reflect the new twitter index. Because we are currently running on one node, the *token_ranges* routing 
 attribute match 100% of the ring Long.MIN_VALUE to Long.MAX_VALUE.
 ```
 curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
@@ -353,7 +352,7 @@ The above will index information into the @kimchy@ index (or keyspace), with two
 
 Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace replication factor. Elasticsearch *numberOfShards* and *numberOfReplicas* then become meaningless. 
 * When adding a new elasticassandra node, the cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data are automattically indexed and each node update its routing table to distribute search requests according to the ring topology. 
-* When updating the Replication Factor, you will need to run a [nodetool repair <keyspace>](http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html) on the new node to effectivelly copy the data.
+* When updating the Replication Factor, you will need to run a [nodetool repair <keyspace>](http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html) on the new node to effectivelly copy and index the data.
 * If a node become unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is red, otherwise cluster status is yellow.  
 
 After starting a new Elasticassandra node, data and elasticsearch indices are distributed on 2 nodes. 
@@ -364,8 +363,8 @@ Datacenter: DC1
 Status=Up/Down
 |/ State=Normal/Leaving/Joining/Moving
 --  Address    Load       Tokens  Owns (effective)  Host ID                               Rack
-UN  127.0.0.1  156,9 KB   2       70,3%             74ae1629-0149-4e65-b790-cd25c7406675  RAC1
-UN  127.0.0.2  129,01 KB  2       29,7%             e5df0651-8608-4590-92e1-4e523e4582b9  RAC2
+UN  127.0.0.1  156,9 KB   2       70,3%             **74ae1629-0149-4e65-b790-cd25c7406675**  RAC1
+UN  127.0.0.2  129,01 KB  2       29,7%             **e5df0651-8608-4590-92e1-4e523e4582b9**  RAC2
 ```
 
 The routing table now distributes search request on 2 elasticassandra nodes to cover 100% of ring.
@@ -378,7 +377,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   "master_node" : "74ae1629-0149-4e65-b790-cd25c7406675",
   "blocks" : { },
   "nodes" : {
-    "74ae1629-0149-4e65-b790-cd25c7406675" : {
+    **"74ae1629-0149-4e65-b790-cd25c7406675"** : {
       "name" : "localhost",
       "status" : "ALIVE",
       "transport_address" : "inet[localhost/127.0.0.1:9300]",
@@ -389,7 +388,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
         "master" : "true"
       }
     },
-    "e5df0651-8608-4590-92e1-4e523e4582b9" : {
+    **"e5df0651-8608-4590-92e1-4e523e4582b9"** : {
       "name" : "127.0.0.2",
       "status" : "ALIVE",
       "transport_address" : "inet[127.0.0.2/127.0.0.2:9300]",
@@ -457,7 +456,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
             "state" : "STARTED",
             "primary" : true,
             "node" : "74ae1629-0149-4e65-b790-cd25c7406675",
-            "token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ],
+            **"token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ]**,
             "shard" : 0,
             "index" : "twitter"
           } ],
@@ -465,7 +464,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
             "state" : "STARTED",
             "primary" : true,
             "node" : "e5df0651-8608-4590-92e1-4e523e4582b9",
-            "token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ],
+            **"token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ]**,
             "shard" : 1,
             "index" : "twitter"
           } ]
@@ -480,7 +479,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
         "state" : "STARTED",
         "primary" : true,
         "node" : "e5df0651-8608-4590-92e1-4e523e4582b9",
-        "token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ],
+        **"token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ]**,
         "shard" : 1,
         "index" : "twitter"
       } ],
@@ -488,7 +487,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
         "state" : "STARTED",
         "primary" : true,
         "node" : "74ae1629-0149-4e65-b790-cd25c7406675",
-        "token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ],
+        **"token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ]**,
         "shard" : 0,
         "index" : "twitter"
       } ]
@@ -497,6 +496,46 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   "allocations" : [ ]
 }
 ```
+
+Internally, each node broadcasts its local shard status in the gossip application state X1 ( "twitter":3 stands for STARTED as defined in [ShardRoutingState](../blob/master/src/main/java/org/elasticsearch/cluster/routing/ShardRoutingState.java) and its current metadata UUID and version in application state X2.
+
+```
+nodetool gossipinfo
+127.0.0.2/127.0.0.2
+  generation:1440659838
+  heartbeat:396197
+  DC:DC1
+  NET_VERSION:8
+  SEVERITY:-1.3877787807814457E-17
+  **X1:{"twitter":3}**
+  **X2:e5df0651-8608-4590-92e1-4e523e4582b9/1**
+  RELEASE_VERSION:2.1.8
+  RACK:RAC2
+  STATUS:NORMAL,-8879901672822909480
+  SCHEMA:ce6febf4-571d-30d2-afeb-b8db9d578fd1
+  INTERNAL_IP:127.0.0.2
+  RPC_ADDRESS:127.0.0.2
+  LOAD:131314.0
+  HOST_ID:e5df0651-8608-4590-92e1-4e523e4582b9
+localhost/127.0.0.1
+  generation:1440659739
+  heartbeat:396550
+  DC:DC1
+  NET_VERSION:8
+  SEVERITY:2.220446049250313E-16
+  **X2:e5df0651-8608-4590-92e1-4e523e4582b9/1**
+  RELEASE_VERSION:2.1.8
+  RACK:RAC1
+  STATUS:NORMAL,-4318747828927358946
+  **X1:{"twitter":3}**
+  SCHEMA:ce6febf4-571d-30d2-afeb-b8db9d578fd1
+  RPC_ADDRESS:127.0.0.1
+  INTERNAL_IP:127.0.0.1
+  LOAD:154824.0
+  HOST_ID:74ae1629-0149-4e65-b790-cd25c7406675
+```
+
+
 
 ## Contribute
 
