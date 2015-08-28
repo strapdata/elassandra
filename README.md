@@ -11,9 +11,9 @@ From an Elasticsearch perspective :
 * Every Elasticassandra node is a master primary data node.
 * Each node only index local data and acts as a primary local shard.
 * Elasticsearch data is not more stored in lucene indices, but in cassandra tables. 
-** An Elasticsearch index is mapped to a cassandra keyspace, 
-** Elasticsearch document type is mapped to a cassandra table.
-** Elasticsearch document _id a string representation of the cassandra partition Cassandra routing is implicitly based on the partition key. 
+- An Elasticsearch index is mapped to a cassandra keyspace, 
+- Elasticsearch document type is mapped to a cassandra table.
+- Elasticsearch document *_id* is a string representation of the cassandra primary key. 
 * Elasticsearch discovery now rely on the cassandra [gossip protocol](https://wiki.apache.org/cassandra/ArchitectureGossip). When a node join or leave the cluster, or when a schema change occurs, each nodes update nodes status and its local routing table.
 * Elasticsearch [gateway](https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html) now store metadata in a cassandra table and in the cassandra schema. Metadata updates are serialized through a [cassandra lightweight transaction](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html). Metadata UUID is the cassandra hostId of the last modifier node.
 * Elasticsearch REST and java API remain unchanged (version 1.5).
@@ -33,7 +33,7 @@ From a Cassandra perspective :
 
 Like Elasticsearch, Elasticassandra uses [Maven](http://maven.apache.org) for its build system.
 
-Simply run the @mvn clean package -DskipTests@ command in the cloned directory. The distribution will be created under @target/releases@.
+Simply run the 'mvn clean package -DskipTests' command in the cloned directory. The distribution will be created under *target/releases*.
 
 ### Installation
 
@@ -66,7 +66,7 @@ Datacenter: DC1
 Status=Up/Down
 |/ State=Normal/Leaving/Joining/Moving
 --  Address    Load       Tokens  Owns    Host ID                               Rack
-UN  127.0.0.1  57,61 KB   2       ?       4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68  RAC1
+UN  127.0.0.1  57,61 KB   2       ?       74ae1629-0149-4e65-b790-cd25c7406675  RAC1
 ```
 
 Check your Elasticsearch cluster state.
@@ -76,13 +76,13 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
 {
   "cluster_name" : "Test Cluster",
   "version" : 1,
-  "master_node" : "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68",
+  "master_node" : "74ae1629-0149-4e65-b790-cd25c7406675",
   "blocks" : { },
   "nodes" : {
-    "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68" : {
-      "name" : "127.0.0.1",
+    "74ae1629-0149-4e65-b790-cd25c7406675" : {
+      "name" : "localhost",
       "status" : "ALIVE",
-      "transport_address" : "inet[127.0.0.1/127.0.0.1:9300]",
+      "transport_address" : "inet[localhost/127.0.0.1:9300]",
       "attributes" : {
         "data" : "true",
         "rack" : "RAC1",
@@ -93,7 +93,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   },
   "metadata" : {
     "version" : 0,
-    "uuid" : "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68",
+    "uuid" : "74ae1629-0149-4e65-b790-cd25c7406675",
     "templates" : { },
     "indices" : { }
   },
@@ -103,7 +103,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   "routing_nodes" : {
     "unassigned" : [ ],
     "nodes" : {
-      "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68" : [ ]
+      "74ae1629-0149-4e65-b790-cd25c7406675" : [ ]
     }
   },
   "allocations" : [ ]
@@ -114,7 +114,7 @@ As you can see, Elasticsearch node UUID = cassandra hostId, and node attributes 
 
 ### Indexing
 
-Let's try and index some twitter like information (demo from "Elasticsearch":https://github.com/elastic/elasticsearch/blob/master/README.textile). First, let's create a twitter user, and add some tweets (the @twitter@ index will be created automatically):
+Let's try and index some *twitter* like information (demo from [Elasticsearch](https://github.com/elastic/elasticsearch/blob/master/README.textile)). First, let's create a twitter user, and add some tweets (the *twitter* index will be created automatically):
 
 ```
 curl -XPUT 'http://localhost:9200/twitter/user/kimchy' -d '{ "name" : "Shay Banon" }'
@@ -132,8 +132,8 @@ curl -XPUT 'http://localhost:9200/twitter/tweet/2' -d '
 }'
 ```
 
-You now have some rows in the cassandra twitter.tweet table.
-<pre>
+You now have some rows in the cassandra *twitter.tweet* table.
+```
 cqlsh
 Connected to Test Cluster at 127.0.0.1:9042.
 [cqlsh 5.0.1 | Cassandra 2.1.8 | CQL spec 3.2.0 | Native protocol v3]
@@ -167,29 +167,29 @@ CREATE TABLE twitter.tweet (
 CREATE CUSTOM INDEX elastic_tweet_message_idx ON twitter.tweet (message) USING 'org.elasticsearch.cassandra.ElasticSecondaryIndex';
 CREATE CUSTOM INDEX elastic_tweet_postDate_idx ON twitter.tweet ("postDate") USING 'org.elasticsearch.cassandra.ElasticSecondaryIndex';
 CREATE CUSTOM INDEX elastic_tweet_user_idx ON twitter.tweet (user) USING 'org.elasticsearch.cassandra.ElasticSecondaryIndex';
-</pre>
+```
 
 Now, let's see if the information was added by GETting it:
-<pre>
+```
 curl -XGET 'http://localhost:9200/twitter/user/kimchy?pretty=true'
 curl -XGET 'http://localhost:9200/twitter/tweet/1?pretty=true'
 curl -XGET 'http://localhost:9200/twitter/tweet/2?pretty=true'
-</pre>
+```
 
 Elasticsearch state now show reflect the new twitter index. Because we are currently running on one node, the token_ranges routing 
 attribute match 100% of the ring Long.MIN_VALUE to Long.MAX_VALUE.
-<pre>
+```
 curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
 {
   "cluster_name" : "Test Cluster",
   "version" : 5,
-  "master_node" : "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68",
+  "master_node" : "74ae1629-0149-4e65-b790-cd25c7406675",
   "blocks" : { },
   "nodes" : {
-    "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68" : {
-      "name" : "127.0.0.1",
+    "74ae1629-0149-4e65-b790-cd25c7406675" : {
+      "name" : "localhost",
       "status" : "ALIVE",
-      "transport_address" : "inet[127.0.0.1/127.0.0.1:9300]",
+      "transport_address" : "inet[localhost/127.0.0.1:9300]",
       "attributes" : {
         "data" : "true",
         "rack" : "RAC1",
@@ -200,15 +200,15 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   },
   "metadata" : {
     "version" : 3,
-    "uuid" : "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68",
+    "uuid" : "74ae1629-0149-4e65-b790-cd25c7406675",
     "templates" : { },
     "indices" : {
       "twitter" : {
         "state" : "open",
         "settings" : {
           "index" : {
-            "creation_date" : "1440609806972",
-            "uuid" : "iHP2_nJaQ3S1qsNWPelR8w",
+            "creation_date" : "1440659762584",
+            "uuid" : "fyqNMDfnRgeRE9KgTqxFWw",
             "number_of_replicas" : "1",
             "number_of_shards" : "1",
             "version" : {
@@ -250,7 +250,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
           "0" : [ {
             "state" : "STARTED",
             "primary" : true,
-            "node" : "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68",
+            "node" : "74ae1629-0149-4e65-b790-cd25c7406675",
             "token_ranges" : [ "(-9223372036854775808,9223372036854775807]" ],
             "shard" : 0,
             "index" : "twitter"
@@ -262,10 +262,10 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   "routing_nodes" : {
     "unassigned" : [ ],
     "nodes" : {
-      "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68" : [ {
+      "74ae1629-0149-4e65-b790-cd25c7406675" : [ {
         "state" : "STARTED",
         "primary" : true,
-        "node" : "4e408cdf-b7fc-4b4f-af16-7a0b9ec7af68",
+        "node" : "74ae1629-0149-4e65-b790-cd25c7406675",
         "token_ranges" : [ "(-9223372036854775808,9223372036854775807]" ],
         "shard" : 0,
         "index" : "twitter"
@@ -274,11 +274,11 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   },
   "allocations" : [ ]
 }
-</pre>
+```
 
 ### Searching
 
-Let's find all the tweets that @kimchy@ posted:
+Let's find all the tweets that *kimchy* posted:
 
 ```
 curl -XGET 'http://localhost:9200/twitter/tweet/_search?q=user:kimchy&pretty=true'
@@ -306,7 +306,7 @@ curl -XGET 'http://localhost:9200/twitter/_search?pretty=true' -d '
 }'
 ```
 
-We can also do range search (the @postDate@ was automatically identified as date)
+We can also do range search (the 'postDate' was automatically identified as date)
 
 ```
 curl -XGET 'http://localhost:9200/twitter/_search?pretty=true' -d '
@@ -325,7 +325,7 @@ There are many more options to perform search, after all, it's a search product 
 
 Maan, that twitter index might get big (in this case, index size == valuation). Let's see if we can structure our twitter system a bit differently in order to support such large amounts of data.
 
-Elasticsearch supports multiple indices, as well as multiple types per index. In the previous example we used an index called @twitter@, with two types, @user@ and @tweet@.
+Elasticsearch supports multiple indices, as well as multiple types per index. In the previous example we used an index called *twitter*, with two types, *user* and *tweet*.
 
 Another way to define our simple twitter system is to have a different index per user (note, though that each index has an overhead). Here is the indexing curl's in this case:
 
@@ -347,12 +347,156 @@ curl -XPUT 'http://localhost:9200/kimchy/tweet/2' -d '
 }'
 ```
 
-The above will index information into the @kimchy@ index (or keyspace), with two types (two cassandra tables), @info@ and @tweet@. Each user will get his own special index.
+The above will index information into the @kimchy@ index (or keyspace), with two types (two cassandra tables), *info* and *tweet*. Each user will get his own special index.
 
-Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace replication factor. Elasticsearch @numberOfShards@ and @numberOfReplicas@ then become meaningless. 
+### Sharding
+
+Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace replication factor. Elasticsearch *numberOfShards* and *numberOfReplicas* then become meaningless. 
 * When adding a new elasticassandra node, the cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data are automattically indexed and each node update its routing table to distribute search requests according to the ring topology. 
-* When updating the Replication Factor, you will need to run a "nodetool repair <keyspace>":http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html on the new node to effectivelly copy the data.
+* When updating the Replication Factor, you will need to run a [nodetool repair <keyspace>](http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html) on the new node to effectivelly copy the data.
 * If a node become unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is red, otherwise cluster status is yellow.  
+
+After starting a new Elasticassandra node, data and elasticsearch indices are distributed on 2 nodes. 
+```
+nodetool status twitter
+Datacenter: DC1
+===============
+Status=Up/Down
+|/ State=Normal/Leaving/Joining/Moving
+--  Address    Load       Tokens  Owns (effective)  Host ID                               Rack
+UN  127.0.0.1  156,9 KB   2       70,3%             74ae1629-0149-4e65-b790-cd25c7406675  RAC1
+UN  127.0.0.2  129,01 KB  2       29,7%             e5df0651-8608-4590-92e1-4e523e4582b9  RAC2
+```
+
+The routing table now distributes search request on 2 elasticassandra nodes to cover 100% of ring.
+
+```
+curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
+{
+  "cluster_name" : "Test Cluster",
+  "version" : 12,
+  "master_node" : "74ae1629-0149-4e65-b790-cd25c7406675",
+  "blocks" : { },
+  "nodes" : {
+    "74ae1629-0149-4e65-b790-cd25c7406675" : {
+      "name" : "localhost",
+      "status" : "ALIVE",
+      "transport_address" : "inet[localhost/127.0.0.1:9300]",
+      "attributes" : {
+        "data" : "true",
+        "rack" : "RAC1",
+        "data_center" : "DC1",
+        "master" : "true"
+      }
+    },
+    "e5df0651-8608-4590-92e1-4e523e4582b9" : {
+      "name" : "127.0.0.2",
+      "status" : "ALIVE",
+      "transport_address" : "inet[127.0.0.2/127.0.0.2:9300]",
+      "attributes" : {
+        "data" : "true",
+        "rack" : "RAC2",
+        "data_center" : "DC1",
+        "master" : "true"
+      }
+    }
+  },
+  "metadata" : {
+    "version" : 1,
+    "uuid" : "e5df0651-8608-4590-92e1-4e523e4582b9",
+    "templates" : { },
+    "indices" : {
+      "twitter" : {
+        "state" : "open",
+        "settings" : {
+          "index" : {
+            "creation_date" : "1440659762584",
+            "uuid" : "fyqNMDfnRgeRE9KgTqxFWw",
+            "number_of_replicas" : "1",
+            "number_of_shards" : "1",
+            "version" : {
+              "created" : "1050299"
+            }
+          }
+        },
+        "mappings" : {
+          "user" : {
+            "properties" : {
+              "name" : {
+                "type" : "string"
+              }
+            }
+          },
+          "tweet" : {
+            "properties" : {
+              "message" : {
+                "type" : "string"
+              },
+              "postDate" : {
+                "format" : "dateOptionalTime",
+                "type" : "date"
+              },
+              "user" : {
+                "type" : "string"
+              },
+              "_token" : {
+                "type" : "long"
+              }
+            }
+          }
+        },
+        "aliases" : [ ]
+      }
+    }
+  },
+  "routing_table" : {
+    "indices" : {
+      "twitter" : {
+        "shards" : {
+          "0" : [ {
+            "state" : "STARTED",
+            "primary" : true,
+            "node" : "74ae1629-0149-4e65-b790-cd25c7406675",
+            "token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ],
+            "shard" : 0,
+            "index" : "twitter"
+          } ],
+          "1" : [ {
+            "state" : "STARTED",
+            "primary" : true,
+            "node" : "e5df0651-8608-4590-92e1-4e523e4582b9",
+            "token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ],
+            "shard" : 1,
+            "index" : "twitter"
+          } ]
+        }
+      }
+    }
+  },
+  "routing_nodes" : {
+    "unassigned" : [ ],
+    "nodes" : {
+      "e5df0651-8608-4590-92e1-4e523e4582b9" : [ {
+        "state" : "STARTED",
+        "primary" : true,
+        "node" : "e5df0651-8608-4590-92e1-4e523e4582b9",
+        "token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ],
+        "shard" : 1,
+        "index" : "twitter"
+      } ],
+      "74ae1629-0149-4e65-b790-cd25c7406675" : [ {
+        "state" : "STARTED",
+        "primary" : true,
+        "node" : "74ae1629-0149-4e65-b790-cd25c7406675",
+        "token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ],
+        "shard" : 0,
+        "index" : "twitter"
+      } ]
+    }
+  },
+  "allocations" : [ ]
+}
+```
 
 ## Contribute
 
