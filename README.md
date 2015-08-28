@@ -65,7 +65,7 @@ Datacenter: DC1
 Status=Up/Down
 |/ State=Normal/Leaving/Joining/Moving
 --  Address    Load       Tokens  Owns    Host ID                               Rack
-UN  127.0.0.1  57,61 KB   2       ?       **74ae1629-0149-4e65-b790-cd25c7406675**  RAC1
+UN  127.0.0.1  57,61 KB   2       ?       74ae1629-0149-4e65-b790-cd25c7406675  RAC1
 ```
 
 Check your Elasticsearch cluster state.
@@ -75,10 +75,10 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
 {
   "cluster_name" : "Test Cluster",
   "version" : 1,
-  "master_node" : **"74ae1629-0149-4e65-b790-cd25c7406675"**,
+  "master_node" : "74ae1629-0149-4e65-b790-cd25c7406675",
   "blocks" : { },
   "nodes" : {
-    **"74ae1629-0149-4e65-b790-cd25c7406675"** : {
+    "74ae1629-0149-4e65-b790-cd25c7406675" : {
       "name" : "localhost",
       "status" : "ALIVE",
       "transport_address" : "inet[localhost/127.0.0.1:9300]",
@@ -92,7 +92,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   },
   "metadata" : {
     "version" : 0,
-    "uuid" : **"74ae1629-0149-4e65-b790-cd25c7406675"**,
+    "uuid" : "74ae1629-0149-4e65-b790-cd25c7406675",
     "templates" : { },
     "indices" : { }
   },
@@ -363,8 +363,8 @@ Datacenter: DC1
 Status=Up/Down
 |/ State=Normal/Leaving/Joining/Moving
 --  Address    Load       Tokens  Owns (effective)  Host ID                               Rack
-UN  127.0.0.1  156,9 KB   2       70,3%             **74ae1629-0149-4e65-b790-cd25c7406675**  RAC1
-UN  127.0.0.2  129,01 KB  2       29,7%             **e5df0651-8608-4590-92e1-4e523e4582b9**  RAC2
+UN  127.0.0.1  156,9 KB   2       70,3%             74ae1629-0149-4e65-b790-cd25c7406675  RAC1
+UN  127.0.0.2  129,01 KB  2       29,7%             e5df0651-8608-4590-92e1-4e523e4582b9  RAC2
 ```
 
 The routing table now distributes search request on 2 elasticassandra nodes to cover 100% of ring.
@@ -377,7 +377,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
   "master_node" : "74ae1629-0149-4e65-b790-cd25c7406675",
   "blocks" : { },
   "nodes" : {
-    **"74ae1629-0149-4e65-b790-cd25c7406675"** : {
+    "74ae1629-0149-4e65-b790-cd25c7406675" : {
       "name" : "localhost",
       "status" : "ALIVE",
       "transport_address" : "inet[localhost/127.0.0.1:9300]",
@@ -388,7 +388,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
         "master" : "true"
       }
     },
-    **"e5df0651-8608-4590-92e1-4e523e4582b9"** : {
+    "e5df0651-8608-4590-92e1-4e523e4582b9" : {
       "name" : "127.0.0.2",
       "status" : "ALIVE",
       "transport_address" : "inet[127.0.0.2/127.0.0.2:9300]",
@@ -456,7 +456,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
             "state" : "STARTED",
             "primary" : true,
             "node" : "74ae1629-0149-4e65-b790-cd25c7406675",
-            **"token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ]**,
+            "token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ],
             "shard" : 0,
             "index" : "twitter"
           } ],
@@ -464,7 +464,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
             "state" : "STARTED",
             "primary" : true,
             "node" : "e5df0651-8608-4590-92e1-4e523e4582b9",
-            **"token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ]**,
+            "token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ],
             "shard" : 1,
             "index" : "twitter"
           } ]
@@ -479,7 +479,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
         "state" : "STARTED",
         "primary" : true,
         "node" : "e5df0651-8608-4590-92e1-4e523e4582b9",
-        **"token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ]**,
+        "token_ranges" : [ "(-9223372036854775808,-8879901672822909480]", "(4094576844402756550,9223372036854775807]" ],
         "shard" : 1,
         "index" : "twitter"
       } ],
@@ -487,7 +487,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
         "state" : "STARTED",
         "primary" : true,
         "node" : "74ae1629-0149-4e65-b790-cd25c7406675",
-        **"token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ]**,
+        "token_ranges" : [ "(-8879901672822909480,4094576844402756550]" ],
         "shard" : 0,
         "index" : "twitter"
       } ]
@@ -497,7 +497,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
 }
 ```
 
-Internally, each node broadcasts its local shard status in the gossip application state X1 ( "twitter":3 stands for STARTED as defined in [ShardRoutingState](../blob/master/src/main/java/org/elasticsearch/cluster/routing/ShardRoutingState.java) and its current metadata UUID and version in application state X2.
+Internally, each node broadcasts its local shard status in the gossip application state X1 ( "twitter":3 stands for STARTED as defined in [ShardRoutingState](tree/master/src/main/java/org/elasticsearch/cluster/routing/ShardRoutingState.java) and its current metadata UUID and version in application state X2.
 
 ```
 nodetool gossipinfo
@@ -507,8 +507,8 @@ nodetool gossipinfo
   DC:DC1
   NET_VERSION:8
   SEVERITY:-1.3877787807814457E-17
-  **X1:{"twitter":3}**
-  **X2:e5df0651-8608-4590-92e1-4e523e4582b9/1**
+  X1:{"twitter":3}
+  X2:e5df0651-8608-4590-92e1-4e523e4582b9/1
   RELEASE_VERSION:2.1.8
   RACK:RAC2
   STATUS:NORMAL,-8879901672822909480
@@ -523,11 +523,11 @@ localhost/127.0.0.1
   DC:DC1
   NET_VERSION:8
   SEVERITY:2.220446049250313E-16
-  **X2:e5df0651-8608-4590-92e1-4e523e4582b9/1**
+  X2:e5df0651-8608-4590-92e1-4e523e4582b9/1
   RELEASE_VERSION:2.1.8
   RACK:RAC1
   STATUS:NORMAL,-4318747828927358946
-  **X1:{"twitter":3}**
+  X1:{"twitter":3}
   SCHEMA:ce6febf4-571d-30d2-afeb-b8db9d578fd1
   RPC_ADDRESS:127.0.0.1
   INTERNAL_IP:127.0.0.1
