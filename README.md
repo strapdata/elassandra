@@ -1,8 +1,8 @@
 # Elasticassandra
 
-Elasticassandra is a fork of "Elasticsearch":https://github.com/elastic/elasticsearch version 1.5 modified to run on top of "Apache Cassandra":http://cassandra.apache.org in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
+Elasticassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) version 1.5 modified to run on top of [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
-Elasticassandra supports Cassandra vnodes and scale horizontally by adding more nodes. Demo video is available "here":http://www.youtube.com/
+Elasticassandra supports Cassandra vnodes and scale horizontally by adding more nodes.
 
 ## Architecture
 
@@ -14,24 +14,24 @@ From an Elasticsearch perspective :
 ** An Elasticsearch index is mapped to a cassandra keyspace, 
 ** Elasticsearch document type is mapped to a cassandra table.
 ** Elasticsearch document _id a string representation of the cassandra partition Cassandra routing is implicitly based on the partition key. 
-* Elasticsearch discovery now rely on the cassandra "gossip":https://wiki.apache.org/cassandra/ArchitectureGossip protocol. When a node join or leave the cluster, or when a schema change occurs, each nodes update nodes status and its local routing table.
-* Elasticsearch "gateway":https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html now store metadata in a cassandra table and in the cassandra schema. Metadata updates are serialized through a "cassandra lightweight transaction":http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html. Metadata UUID is the cassandra hostId of the last modifier node.
+* Elasticsearch discovery now rely on the cassandra [gossip protocol](https://wiki.apache.org/cassandra/ArchitectureGossip). When a node join or leave the cluster, or when a schema change occurs, each nodes update nodes status and its local routing table.
+* Elasticsearch [gateway](https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html) now store metadata in a cassandra table and in the cassandra schema. Metadata updates are serialized through a [cassandra lightweight transaction](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html). Metadata UUID is the cassandra hostId of the last modifier node.
 * Elasticsearch REST and java API remain unchanged (version 1.5).
-* "River plugins":https://www.elastic.co/guide/en/elasticsearch/rivers/current/index.html remain fully operational.
-* Logging is now based on "logback":http://logback.qos.ch/ as cassandra.
+* [River ](https://www.elastic.co/guide/en/elasticsearch/rivers/current/index.html) remain fully operational.
+* Logging is now based on [logback](http://logback.qos.ch/) as cassandra.
 
 From a Cassandra perspective :
 * Columns with an ElasticSecondaryIndex are indexed in ElasticSearch.
 * By default, Elasticsearch document fields are multivalued, so every field is backed by a list. Single valued document field 
    can be mapped to a basic types by setting single_value: true in our type mapping.
-* Nested documents are stored using cassandra "User Defined Type":http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html.
+* Nested documents are stored using cassandra [User Defined Type](http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
 * Elasticsearch provides a JSON-REST API to cassandra.
  
 ## Getting Started
 
 ### Building from Source
 
-Like Elasticsearch, Elasticassandra uses "Maven":http://maven.apache.org for its build system.
+Like Elasticsearch, Elasticassandra uses [Maven](http://maven.apache.org) for its build system.
 
 Simply run the @mvn clean package -DskipTests@ command in the cloned directory. The distribution will be created under @target/releases@.
 
@@ -39,22 +39,22 @@ Simply run the @mvn clean package -DskipTests@ command in the cloned directory. 
 
 * Install Apache Cassandra version 2.1.8. 
 * Elasticassandra is currently built from cassandra version 2.1.8 with the following minor changes :
-** org.apache.cassandra.cql3.QueryOptions includes a new static constructor forInternalCalls().
-** org.apache.cassandra.service.CassandraDaemon and StorageService to include hooks to start Elasticsearch in the boostrap process.
-** org.apache.cassandra.service.ElastiCassandraDaemon extends CassandraDaemon with Elasticsearch features.
-** To avoid classloading issue, you can remove these 3 modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
++ org.apache.cassandra.cql3.QueryOptions includes a new static constructor forInternalCalls().
++ org.apache.cassandra.service.CassandraDaemon and StorageService to include hooks to start Elasticsearch in the boostrap process.
++ org.apache.cassandra.service.ElastiCassandraDaemon extends CassandraDaemon with Elasticsearch features.
++ To avoid classloading issue, you can remove these 3 modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
 ```
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/cql3/QueryOptions*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/CassandraDaemon*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService$*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService.class'
 ```
-* Add @target/elasticassandra-SNAPSHOT-x.x.jar@ and all its dependencies from @target/lib@ in your cassandra lib directory
-* Add @elasticsearch.yml@ in the cassandra conf directory
-* Replace the @bin/cassandra@ script by the one provided in @target/bin/cassandra@. It adds an option -e to start cassandra with elasticsearch.
-* Optionally add @bin/shortcuts.sh@ 
-* Run @bin/cassandra -e@ to start a cassandra node including elasticsearch. 
-* The cassandra logs @logs/system.log@ includes elasticsearch logs according to the your @conf/logback.conf@ settings.
+* Add target/elasticassandra-SNAPSHOT-x.x.jar and all its dependencies from @target/lib@ in your cassandra lib directory
+* Add elasticsearch.yml in the cassandra conf directory
+* Replace the bin/cassandra script by the one provided in target/bin/cassandra. It adds an option -e to start cassandra with elasticsearch.
+* Optionally add bin/shortcuts.sh 
+* Run bin/cassandra -e to start a cassandra node including elasticsearch. 
+* The cassandra logs logs/system.log includes elasticsearch logs according to the your conf/logback.conf settings.
 
 ### Check your cluster state
 
@@ -321,7 +321,7 @@ curl -XGET 'http://localhost:9200/twitter/_search?pretty=true' -d '
 
 There are many more options to perform search, after all, it's a search product no? All the familiar Lucene queries are available through the JSON query language, or through the query parser.
 
-###. Multi Tenant - Indices and Types
+### Multi Tenant - Indices and Types
 
 Maan, that twitter index might get big (in this case, index size == valuation). Let's see if we can structure our twitter system a bit differently in order to support such large amounts of data.
 
