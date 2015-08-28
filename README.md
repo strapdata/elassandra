@@ -33,7 +33,7 @@ From a Cassandra perspective :
 
 Like Elasticsearch, Elasticassandra uses [Maven](http://maven.apache.org) for its build system.
 
-Simply run the 'mvn clean package -DskipTests' command in the cloned directory. The distribution will be created under *target/releases*.
+Simply run the `mvn clean package -DskipTests` command in the cloned directory. The distribution will be created under *target/releases*.
 
 ### Installation
 
@@ -49,11 +49,11 @@ zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/CassandraDaemon*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService$*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService.class'
 ```
-* Add 'target/elasticassandra-SNAPSHOT-x.x.jar' and all its dependencies from 'target/lib' in your cassandra lib directory.
-* Add 'target/conf/elasticsearch.yml' in the cassandra conf directory.
-* Replace your 'bin/cassandra' script by the one provided in 'target/bin/cassandra'. The option '-e' to start cassandra with elasticsearch.
-* Run 'bin/cassandra -e' to start a cassandra node including elasticsearch. 
-* The cassandra logs in 'logs/system.log' includes elasticsearch logs according to the your 'conf/logback.conf' settings.
+* Add `target/elasticassandra-SNAPSHOT-x.x.jar` and all its dependencies from `target/lib` in your cassandra lib directory.
+* Add `target/conf/elasticsearch.yml` in the cassandra conf directory.
+* Replace your `bin/cassandra` script by the one provided in `target/bin/cassandra`. The option '-e' to start cassandra with elasticsearch.
+* Run `bin/cassandra -e` to start a cassandra node including elasticsearch. 
+* The cassandra logs in `logs/system.log` includes elasticsearch logs according to the your `conf/logback.conf` settings.
 
 ### Check your cluster state
 
@@ -497,7 +497,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
 }
 ```
 
-Internally, each node broadcasts its local shard status in the gossip application state X1 ( "twitter":3 stands for STARTED as defined in [ShardRoutingState](tree/master/src/main/java/org/elasticsearch/cluster/routing/ShardRoutingState.java) and its current metadata UUID and version in application state X2.
+Internally, each node broadcasts its local shard status in the gossip application state X1 ( "twitter":3 stands for STARTED as defined in [ShardRoutingState](../../tree/master/src/main/java/org/elasticsearch/cluster/routing/ShardRoutingState.java) and its current metadata UUID and version in application state X2.
 
 ```
 nodetool gossipinfo
