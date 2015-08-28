@@ -11,9 +11,9 @@ From an Elasticsearch perspective :
 * Every Elasticassandra node is a master primary data node.
 * Each node only index local data and acts as a primary local shard.
 * Elasticsearch data is not more stored in lucene indices, but in cassandra tables. 
-..* An Elasticsearch index is mapped to a cassandra keyspace, 
-..* Elasticsearch document type is mapped to a cassandra table.
-..* Elasticsearch document *_id* is a string representation of the cassandra primary key. 
+  * An Elasticsearch index is mapped to a cassandra keyspace, 
+  * Elasticsearch document type is mapped to a cassandra table.
+  * Elasticsearch document *_id* is a string representation of the cassandra primary key. 
 * Elasticsearch discovery now rely on the cassandra [gossip protocol](https://wiki.apache.org/cassandra/ArchitectureGossip). When a node join or leave the cluster, or when a schema change occurs, each nodes update nodes status and its local routing table.
 * Elasticsearch [gateway](https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html) now store metadata in a cassandra table and in the cassandra schema. Metadata updates are serialized through a [cassandra lightweight transaction](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html). Metadata UUID is the cassandra hostId of the last modifier node.
 * Elasticsearch REST and java API remain unchanged (version 1.5).
@@ -39,10 +39,10 @@ Simply run the 'mvn clean package -DskipTests' command in the cloned directory. 
 
 * Install Apache Cassandra version 2.1.8. 
 * Elasticassandra is currently built from cassandra version 2.1.8 with the following minor changes :
-..* org.apache.cassandra.cql3.QueryOptions includes a new static constructor forInternalCalls().
-..* org.apache.cassandra.service.CassandraDaemon and StorageService to include hooks to start Elasticsearch in the boostrap process.
-..* org.apache.cassandra.service.ElastiCassandraDaemon extends CassandraDaemon with Elasticsearch features.
-..* To avoid classloading issue, you can remove these 3 modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
+  * org.apache.cassandra.cql3.QueryOptions includes a new static constructor forInternalCalls().
+  * org.apache.cassandra.service.CassandraDaemon and StorageService to include hooks to start Elasticsearch in the boostrap process.
+  * org.apache.cassandra.service.ElastiCassandraDaemon extends CassandraDaemon with Elasticsearch features.
+  * To avoid classloading issue, you can remove these 3 modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
 ```
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/cql3/QueryOptions*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/CassandraDaemon*'
