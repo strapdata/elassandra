@@ -131,7 +131,7 @@ curl -XPUT 'http://localhost:9200/twitter/tweet/2' -d '
 }'
 ```
 
-You now have some rows in the cassandra *twitter.tweet* table.
+You now have two rows in the cassandra *twitter.tweet* table.
 ```
 cqlsh
 Connected to Test Cluster at 127.0.0.1:9042.
@@ -350,7 +350,7 @@ The above will index information into the @kimchy@ index (or keyspace), with two
 
 ### Sharding
 
-Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace replication factor. Elasticsearch *numberOfShards* and *numberOfReplicas* then become meaningless. 
+Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace [Replication Factor](http://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html). Elasticsearch *numberOfShards* and *numberOfReplicas* then become meaningless. 
 * When adding a new elasticassandra node, the cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data are automattically indexed and each node update its routing table to distribute search requests according to the ring topology. 
 * When updating the Replication Factor, you will need to run a [nodetool repair <keyspace>](http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html) on the new node to effectivelly copy and index the data.
 * If a node become unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is red, otherwise cluster status is yellow.  
@@ -497,7 +497,7 @@ curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
 }
 ```
 
-Internally, each node broadcasts its local shard status in the gossip application state X1 ( "twitter":3 stands for STARTED as defined in [ShardRoutingState](../../tree/master/src/main/java/org/elasticsearch/cluster/routing/ShardRoutingState.java) and its current metadata UUID and version in application state X2.
+Internally, each node broadcasts its local shard status in the gossip application state X1 ( "twitter":3 stands for STARTED as defined in [ShardRoutingState](../../tree/master/src/main/java/org/elasticsearch/cluster/routing/ShardRoutingState.java)) and its current metadata UUID/version in application state X2.
 
 ```
 nodetool gossipinfo
@@ -507,8 +507,8 @@ nodetool gossipinfo
   DC:DC1
   NET_VERSION:8
   SEVERITY:-1.3877787807814457E-17
-  X1:{"twitter":3}
-  X2:e5df0651-8608-4590-92e1-4e523e4582b9/1
+  <b>X1:{"twitter":3}</b>
+  <b>X2:e5df0651-8608-4590-92e1-4e523e4582b9/1</b>
   RELEASE_VERSION:2.1.8
   RACK:RAC2
   STATUS:NORMAL,-8879901672822909480
