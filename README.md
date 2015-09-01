@@ -319,34 +319,6 @@ curl -XGET 'http://localhost:9200/twitter/_search?pretty=true' -d '
 
 There are many more options to perform search, after all, it's a search product no? All the familiar Lucene queries are available through the JSON query language, or through the query parser.
 
-### Multi Tenant - Indices and Types
-
-Maan, that twitter index might get big (in this case, index size == valuation). Let's see if we can structure our twitter system a bit differently in order to support such large amounts of data.
-
-Elasticsearch supports multiple indices, as well as multiple types per index. In the previous example we used an index called *twitter*, with two types, *user* and *tweet*.
-
-Another way to define our simple twitter system is to have a different index per user (note, though that each index has an overhead). Here is the indexing curl's in this case:
-
-```
-curl -XPUT 'http://localhost:9200/kimchy/info/1' -d '{ "name" : "Shay Banon" }'
-
-curl -XPUT 'http://localhost:9200/kimchy/tweet/1' -d '
-{
-    "user": "kimchy",
-    "postDate": "2009-11-15T13:12:00",
-    "message": "Trying out Elasticsearch, so far so good?"
-}'
-
-curl -XPUT 'http://localhost:9200/kimchy/tweet/2' -d '
-{
-    "user": "kimchy",
-    "postDate": "2009-11-15T14:12:12",
-    "message": "Another tweet, will it be indexed?"
-}'
-```
-
-The above will index information into the @kimchy@ index (or keyspace), with two types (two cassandra tables), *info* and *tweet*. Each user will get his own special index.
-
 ### Shards and Replica
 
 Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace [Replication Factor](http://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html). Elasticsearch *numberOfShards* and *numberOfReplicas* then become meaningless. 
