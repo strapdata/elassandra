@@ -25,7 +25,7 @@ import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -59,11 +59,11 @@ public abstract class TransportIndicesReplicationOperationAction<Request extends
     }
 
 
-    protected abstract Map<String, Set<String>> resolveRouting(CassandraClusterState clusterState, Request request) throws ElasticsearchException;
+    protected abstract Map<String, Set<String>> resolveRouting(ClusterState clusterState, Request request) throws ElasticsearchException;
 
     @Override
     protected void doExecute(final Request request, final ActionListener<Response> listener) {
-        CassandraClusterState clusterState = clusterService.state();
+        ClusterState clusterState = clusterService.state();
         ClusterBlockException blockException = checkGlobalBlock(clusterState, request);
         if (blockException != null) {
             throw blockException;
@@ -124,9 +124,9 @@ public abstract class TransportIndicesReplicationOperationAction<Request extends
 
     protected abstract boolean accumulateExceptions();
 
-    protected abstract ClusterBlockException checkGlobalBlock(CassandraClusterState state, Request request);
+    protected abstract ClusterBlockException checkGlobalBlock(ClusterState state, Request request);
 
-    protected abstract ClusterBlockException checkRequestBlock(CassandraClusterState state, Request request, String[] concreteIndices);
+    protected abstract ClusterBlockException checkRequestBlock(ClusterState state, Request request, String[] concreteIndices);
 
     private class TransportHandler extends BaseTransportRequestHandler<Request> {
 

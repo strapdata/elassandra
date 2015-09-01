@@ -66,7 +66,7 @@ public class PutIndexedScriptRequest extends ActionRequest<PutIndexedScriptReque
     private BytesReference source;
     private boolean sourceUnsafe;
 
-    private IndexRequest.OpType opType = IndexRequest.OpType.INSERT;
+    private IndexRequest.OpType opType = IndexRequest.OpType.INDEX;
 
     private long version = Versions.MATCH_ANY;
     private VersionType versionType = VersionType.INTERNAL;
@@ -300,9 +300,9 @@ public class PutIndexedScriptRequest extends ActionRequest<PutIndexedScriptReque
      */
     public PutIndexedScriptRequest create(boolean create) {
         if (create) {
-            return opType(IndexRequest.OpType.INSERT_IF_NOT_EXISTS);
+            return opType(IndexRequest.OpType.CREATE);
         } else {
-            return opType(IndexRequest.OpType.INSERT);
+            return opType(IndexRequest.OpType.INDEX);
         }
     }
 

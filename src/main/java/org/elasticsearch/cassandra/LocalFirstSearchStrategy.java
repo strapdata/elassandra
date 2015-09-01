@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer.
+ * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -38,68 +38,70 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 
 /**
- * Use all local ranges and pickup a random endpoint for remote ranges (may be unbalanced).
+ * Use all local ranges and pickup a random endpoint for remote ranges (may be
+ * unbalanced).
+ * 
  * @author vroyer
  *
  */
 public class LocalFirstSearchStrategy extends AbstractSearchStrategy {
-	private static final Logger logger = LoggerFactory.getLogger(AbstractSearchStrategy.class);
-	
-	@Override
-	public AbstractSearchStrategy.Result topology(String ksName) {
-		Keyspace.open(ksName);
-	    
-		Set<InetAddress> liveNodes = Gossiper.instance.getLiveTokenOwners();
-		InetAddress localAddress = FBUtilities.getBroadcastAddress();
-	    Map<Range<Token>,List<InetAddress>> allRanges  = StorageService.instance.getRangeToAddressMapInLocalDC(ksName);
+    private static final Logger logger = LoggerFactory.getLogger(AbstractSearchStrategy.class);
 
-	    Multimap<InetAddress,Range<Token>> topo = ArrayListMultimap.create();
-	    boolean consistent = true;
-	    
-	    Collection<Range<Token>> localRanges = new ArrayList<Range<Token>>();
-	    for(Entry<Range<Token>,List<InetAddress>> entry: allRanges.entrySet() ) {
-	    	List<InetAddress> addrList = entry.getValue();
-	    	if (addrList.contains(localAddress)) {
-	    		localRanges.add(entry.getKey());
-	    		entry.getValue().remove(localAddress);
-	    	}
-	    }
-	    logger.debug("{} localRanges for keyspace {} on address {} = {}",localRanges.size(), ksName,FBUtilities.getBroadcastAddress(), localRanges);
-	    
-	    
-	    topo.putAll(localAddress, localRanges );
-	    
-	    // remove localRanges from allRanges.
-	    for(Range<Token> range:localRanges) {
-	    	allRanges.remove(range);
-	    }
-	    
-	    // remove dead nodes form allRanges values.
-	    for( Entry<Range<Token>,List<InetAddress>> entry: allRanges.entrySet() ) {
-	    	List<InetAddress> addrList = entry.getValue();
-	    	for(Iterator<InetAddress> i = addrList.iterator(); i.hasNext(); ) {
-	    		InetAddress addr = i.next();
-	    		if (!liveNodes.contains(addr)) {
-	    			i.remove();
-	    		}
-	    	}
-	    	if (addrList.size() == 0) {
-	    		consistent = false;
-	    		logger.warn("Inconsistent search for keyspace {}, no alive node for range {}", ksName, entry.getKey());
-	    	}
-	    }
-	    
-	    // pickup a random address for non-local ranges
-	    Random rnd = new Random();
-	    for( Entry<Range<Token>,List<InetAddress>> entry: allRanges.entrySet() ) {
-	    	List<InetAddress> addrList = entry.getValue();
-	    	InetAddress addr = addrList.get(rnd.nextInt(addrList.size()));
-	    	topo.put( addr, entry.getKey()); 
-	    }
-	    if (logger.isDebugEnabled()) {
-	    	logger.debug("topology for keyspace {} = {}",ksName, topo.asMap());
-	    }
-	    return null;
-	    //return new AbstractSearchStrategy.Result(topo.asMap(), consistent, Gossiper.instance.getUnreachableTokenOwners().size());
-	}
+    @Override
+    public AbstractSearchStrategy.Result topology(String ksName) {
+        Keyspace.open(ksName);
+
+        Set<InetAddress> liveNodes = Gossiper.instance.getLiveTokenOwners();
+        InetAddress localAddress = FBUtilities.getBroadcastAddress();
+        Map<Range<Token>, List<InetAddress>> allRanges = StorageService.instance.getRangeToAddressMapInLocalDC(ksName);
+
+        Multimap<InetAddress, Range<Token>> topo = ArrayListMultimap.create();
+        boolean consistent = true;
+
+        Collection<Range<Token>> localRanges = new ArrayList<Range<Token>>();
+        for (Entry<Range<Token>, List<InetAddress>> entry : allRanges.entrySet()) {
+            List<InetAddress> addrList = entry.getValue();
+            if (addrList.contains(localAddress)) {
+                localRanges.add(entry.getKey());
+                entry.getValue().remove(localAddress);
+            }
+        }
+        logger.debug("{} localRanges for keyspace {} on address {} = {}", localRanges.size(), ksName, FBUtilities.getBroadcastAddress(), localRanges);
+
+        topo.putAll(localAddress, localRanges);
+
+        // remove localRanges from allRanges.
+        for (Range<Token> range : localRanges) {
+            allRanges.remove(range);
+        }
+
+        // remove dead nodes form allRanges values.
+        for (Entry<Range<Token>, List<InetAddress>> entry : allRanges.entrySet()) {
+            List<InetAddress> addrList = entry.getValue();
+            for (Iterator<InetAddress> i = addrList.iterator(); i.hasNext();) {
+                InetAddress addr = i.next();
+                if (!liveNodes.contains(addr)) {
+                    i.remove();
+                }
+            }
+            if (addrList.size() == 0) {
+                consistent = false;
+                logger.warn("Inconsistent search for keyspace {}, no alive node for range {}", ksName, entry.getKey());
+            }
+        }
+
+        // pickup a random address for non-local ranges
+        Random rnd = new Random();
+        for (Entry<Range<Token>, List<InetAddress>> entry : allRanges.entrySet()) {
+            List<InetAddress> addrList = entry.getValue();
+            InetAddress addr = addrList.get(rnd.nextInt(addrList.size()));
+            topo.put(addr, entry.getKey());
+        }
+        if (logger.isDebugEnabled()) {
+            logger.debug("topology for keyspace {} = {}", ksName, topo.asMap());
+        }
+        return null;
+        // return new AbstractSearchStrategy.Result(topo.asMap(), consistent,
+        // Gossiper.instance.getUnreachableTokenOwners().size());
+    }
 }

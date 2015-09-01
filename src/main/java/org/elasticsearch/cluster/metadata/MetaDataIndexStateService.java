@@ -25,7 +25,7 @@ import org.elasticsearch.action.admin.indices.close.CloseIndexClusterStateUpdate
 import org.elasticsearch.action.admin.indices.open.OpenIndexClusterStateUpdateRequest;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -60,7 +60,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
     private final AllocationService allocationService;
 
     @Inject
-    public MetaDataIndexStateService(Settings settings, ClusterService clusterService, AllocationService allocationService ) {
+    public MetaDataIndexStateService(Settings settings, ClusterService clusterService, AllocationService allocationService) {
         super(settings);
         this.clusterService = clusterService;
         this.allocationService = allocationService;
@@ -79,7 +79,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 List<String> indicesToClose = new ArrayList<>();
                 for (String index : request.indices()) {
                     IndexMetaData indexMetaData = currentState.metaData().index(index);
@@ -105,29 +105,22 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 logger.info("closing indices [{}]", indicesAsString);
 
                 MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData()).uuid(clusterService.localNode().id());
-                ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder()
-                        .blocks(currentState.blocks());
+                ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder().blocks(currentState.blocks());
                 for (String index : indicesToClose) {
                     mdBuilder.put(IndexMetaData.builder(currentState.metaData().index(index)).state(IndexMetaData.State.CLOSE));
                     blocksBuilder.addIndexBlock(index, INDEX_CLOSED_BLOCK);
                 }
 
-                CassandraClusterState updatedState = CassandraClusterState.builder(currentState)
-                		.version(currentState.version()+1)
-                		.metaData(mdBuilder)
-                		.blocks(blocksBuilder)
-                		.build();
+                ClusterState updatedState = ClusterState.builder(currentState).version(currentState.version() + 1).metaData(mdBuilder).blocks(blocksBuilder).build();
 
-                
                 RoutingTable.Builder rtBuilder = RoutingTable.builder(currentState.routingTable());
                 for (String index : indicesToClose) {
                     rtBuilder.remove(index);
                 }
-                
-				
-                RoutingAllocation.Result routingResult = allocationService.reroute(CassandraClusterState.builder(updatedState).routingTable(rtBuilder).build());
+
+                RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(rtBuilder).build());
                 //no explicit wait for other nodes needed as we use AckedClusterStateUpdateTask
-                return CassandraClusterState.builder(updatedState).routingResult(routingResult).build();
+                return ClusterState.builder(updatedState).routingResult(routingResult).build();
             }
         });
     }
@@ -145,7 +138,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 List<String> indicesToOpen = new ArrayList<>();
                 for (String index : request.indices()) {
                     IndexMetaData indexMetaData = currentState.metaData().index(index);
@@ -164,29 +157,22 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 logger.info("opening indices [{}]", indicesAsString);
 
                 MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData()).uuid(clusterService.localNode().id());
-                ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder()
-                        .blocks(currentState.blocks());
+                ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder().blocks(currentState.blocks());
                 for (String index : indicesToOpen) {
                     mdBuilder.put(IndexMetaData.builder(currentState.metaData().index(index)).state(IndexMetaData.State.OPEN));
                     blocksBuilder.removeIndexBlock(index, INDEX_CLOSED_BLOCK);
                 }
 
-                CassandraClusterState updatedState = CassandraClusterState.builder(currentState)
-                		.version(currentState.version()+1)
-                		.metaData(mdBuilder)
-                		.blocks(blocksBuilder)
-                		.build();
+                ClusterState updatedState = ClusterState.builder(currentState).version(currentState.version() + 1).metaData(mdBuilder).blocks(blocksBuilder).build();
 
-                
                 RoutingTable.Builder rtBuilder = RoutingTable.builder(updatedState.routingTable());
                 for (String index : indicesToOpen) {
                     rtBuilder.addAsRecovery(updatedState.metaData().index(index));
                 }
-				
-                
-                RoutingAllocation.Result routingResult = allocationService.reroute(CassandraClusterState.builder(updatedState).routingTable(rtBuilder).build());
+
+                RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(rtBuilder).build());
                 //no explicit wait for other nodes needed as we use AckedClusterStateUpdateTask
-                return CassandraClusterState.builder(updatedState).routingResult(routingResult).build();
+                return ClusterState.builder(updatedState).routingResult(routingResult).build();
             }
         });
     }

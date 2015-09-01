@@ -157,7 +157,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
                 RestoreInfo restoreInfo = null;
 
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) {
+                public ClusterState execute(ClusterState currentState) {
                     // Check if another restore process is already running - cannot run two restore processes at the
                     // same time
                     RestoreMetaData restoreMetaData = currentState.metaData().custom(RestoreMetaData.TYPE);
@@ -256,9 +256,9 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
                                 shards.size(), shards.size() - failedShards(shards));
                     }
 
-                    CassandraClusterState updatedState = CassandraClusterState.builder(currentState).metaData(mdBuilder).blocks(blocks).routingTable(rtBuilder).build();
-                    RoutingAllocation.Result routingResult = allocationService.reroute(CassandraClusterState.builder(updatedState).routingTable(rtBuilder).build());
-                    return CassandraClusterState.builder(updatedState).routingResult(routingResult).build();
+                    ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocks).routingTable(rtBuilder).build();
+                    RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(rtBuilder).build());
+                    return ClusterState.builder(updatedState).routingResult(routingResult).build();
                 }
 
                 private void checkAliasNameConflicts(Map<String, String> renamedIndices, Set<String> aliases) {
@@ -406,7 +406,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
                 }
 
                 @Override
-                public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                     listener.onResponse(restoreInfo);
                 }
             });
@@ -467,7 +467,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
             private Map<ShardId, ShardRestoreStatus> shards = null;
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 MetaData metaData = currentState.metaData();
                 MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
                 RestoreMetaData restore = metaData.custom(RestoreMetaData.TYPE);
@@ -497,7 +497,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
                     if (changed) {
                         restore = new RestoreMetaData(entries.toArray(new RestoreMetaData.Entry[entries.size()]));
                         mdBuilder.putCustom(RestoreMetaData.TYPE, restore);
-                        return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                        return ClusterState.builder(currentState).metaData(mdBuilder).build();
                     }
                 }
                 return currentState;
@@ -509,7 +509,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 if (restoreInfo != null) {
                     RoutingTable routingTable = newState.getRoutingTable();
                     final List<ShardId> waitForStarted = newArrayList();
@@ -727,7 +727,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
      * @param repository   repository id
      * @return true if repository is currently in use by one of the running snapshots
      */
-    public static boolean isRepositoryInUse(CassandraClusterState clusterState, String repository) {
+    public static boolean isRepositoryInUse(ClusterState clusterState, String repository) {
         MetaData metaData = clusterState.metaData();
         RestoreMetaData snapshots = metaData.custom(RestoreMetaData.TYPE);
         if (snapshots != null) {

@@ -92,19 +92,20 @@ public class NodeClient extends AbstractClient {
 
     @SuppressWarnings("unchecked")
     @Override
-    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response, RequestBuilder, Client>> ActionFuture<Response> execute(Action<Request, Response, RequestBuilder, Client> action, Request request) {
+    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response, RequestBuilder, Client>> ActionFuture<Response> execute(
+            Action<Request, Response, RequestBuilder, Client> action, Request request) {
         headers.applyTo(request);
-        TransportAction<Request, Response> transportAction = actions.get((ClientAction)action);
+        TransportAction<Request, Response> transportAction = actions.get((ClientAction) action);
         return transportAction.execute(request);
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response, RequestBuilder, Client>> void execute(Action<Request, Response, RequestBuilder, Client> action, Request request, ActionListener<Response> listener) {
+    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response, RequestBuilder, Client>> void execute(
+            Action<Request, Response, RequestBuilder, Client> action, Request request, ActionListener<Response> listener) {
         headers.applyTo(request);
-        TransportAction<Request, Response> transportAction = actions.get((ClientAction)action);
+        TransportAction<Request, Response> transportAction = actions.get((ClientAction) action);
         transportAction.execute(request, listener);
     }
 
-	
 }

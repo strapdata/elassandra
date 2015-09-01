@@ -27,12 +27,10 @@ import java.util.EnumSet;
  *
  */
 public enum ClusterBlockLevel {
-	READ(0),
-    WRITE(1),
-    METADATA(2);
-    
-	public static final EnumSet<ClusterBlockLevel> NONE = EnumSet.noneOf(ClusterBlockLevel.class);
-	public static final EnumSet<ClusterBlockLevel> ALL = EnumSet.of(READ, WRITE, METADATA);
+    READ(0), WRITE(1), METADATA(2);
+
+    public static final EnumSet<ClusterBlockLevel> NONE = EnumSet.noneOf(ClusterBlockLevel.class);
+    public static final EnumSet<ClusterBlockLevel> ALL = EnumSet.of(READ, WRITE, METADATA);
     public static final EnumSet<ClusterBlockLevel> READ_WRITE = EnumSet.of(READ, WRITE);
 
     private final int id;

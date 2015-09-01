@@ -31,7 +31,7 @@ import org.elasticsearch.action.RoutingMissingException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.single.shard.TransportShardSingleOperationAction;
 import org.elasticsearch.cassandra.SchemaService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardIterator;
@@ -57,9 +57,8 @@ public class TransportGetAction extends TransportShardSingleOperationAction<GetR
     private final boolean realtime;
 
     @Inject
-    public TransportGetAction(Settings settings, ClusterService clusterService, TransportService transportService,
-                              IndicesService indicesService, ThreadPool threadPool, ActionFilters actionFilters,
-                              SchemaService elasticSchemaService) {
+    public TransportGetAction(Settings settings, ClusterService clusterService, TransportService transportService, IndicesService indicesService, ThreadPool threadPool, ActionFilters actionFilters,
+            SchemaService elasticSchemaService) {
         super(settings, GetAction.NAME, threadPool, clusterService, transportService, actionFilters);
         this.indicesService = indicesService;
         this.elasticSchemaService = elasticSchemaService;
@@ -78,22 +77,29 @@ public class TransportGetAction extends TransportShardSingleOperationAction<GetR
     }
 
     @Override
-    protected ShardIterator shards(CassandraClusterState state, InternalRequest request) {
-        return clusterService.operationRouting()
-                .getShards(clusterService.state(), request.concreteIndex(), request.request().type(), request.request().id(), request.request().routing(), request.request().preference());
+    protected ShardIterator shards(ClusterState state, InternalRequest request) {
+        return clusterService.operationRouting().getShards(clusterService.state(), request.concreteIndex(), request.request().type(), request.request().id(), request.request().routing(),
+                request.request().preference());
     }
 
     @Override
-    protected void resolveRequest(CassandraClusterState state, InternalRequest request) {
+    protected void resolveRequest(ClusterState state, InternalRequest request) {
         if (request.request().realtime == null) {
             request.request().realtime = this.realtime;
         }
         IndexMetaData indexMeta = state.getMetaData().index(request.concreteIndex());
         if (request.request().realtime && // if the realtime flag is set
-                request.request().preference() == null && // the preference flag is not already set
+                request.request().preference() == null && // the preference flag
+                                                          // is not already set
                 indexMeta != null && // and we have the index
-                IndexMetaData.isIndexUsingShadowReplicas(indexMeta.settings())) { // and the index uses shadow replicas
-            // set the preference for the request to use "_primary" automatically
+                IndexMetaData.isIndexUsingShadowReplicas(indexMeta.settings())) { // and
+                                                                                  // the
+                                                                                  // index
+                                                                                  // uses
+                                                                                  // shadow
+                                                                                  // replicas
+            // set the preference for the request to use "_primary"
+            // automatically
             request.request().preference(Preference.PRIMARY.type());
         }
         // update the routing (request#index here is possibly an alias)
@@ -106,37 +112,37 @@ public class TransportGetAction extends TransportShardSingleOperationAction<GetR
 
     @Override
     protected GetResponse shardOperation(GetRequest request, ShardId shardId) throws ElasticsearchException {
-    	IndexService indexService = indicesService.indexService(request.index());
-    	
-    	List<String> columns;
-    	if (request.fields() != null) {
-    		columns = new ArrayList<String>( request.fields().length );
-    		for(String field : request.fields()) {
-	    		int i = field.indexOf('.');
-	    		String colName = (i > 0) ? field.substring(0,i-1)  : field;
-	    		if (!columns.contains(colName))
-	    			columns.add(colName);
-	    	}
-    	} else {
-    		columns = elasticSchemaService.cassandraMappedColumns(indexService.index().getName(), request.type());
-    	}
-    	
-    	//TODO: add param consistencyLevel
-    	try {
-			UntypedResultSet result = elasticSchemaService.fetchRow(request.index(), request.type(), request.id(), columns);
-			if (!result.isEmpty() ) {
-			    Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(result.one(), null, indexService.mapperService(), new String[] { request.type() });
-			    Map<String, GetField> rowAsFieldMap = elasticSchemaService.flattenGetField(request.fields(), "", rowAsMap, new HashMap<String, GetField>());
-			    
-			    GetResult getResult = new GetResult(request.index(), request.type(), request.id(), 0L, true, new BytesArray(FBUtilities.json(rowAsMap).getBytes("UTF-8")), rowAsFieldMap);
-			    return new GetResponse(getResult);
-			} 
-		} catch (org.apache.cassandra.exceptions.ConfigurationException|org.apache.cassandra.exceptions.SyntaxException e) {
-			logger.warn("Cassandra probably not yet up to date: "+e.getMessage(), e);
-		} catch(Exception e) {
-			throw new ElasticsearchException(e.getMessage(), e);
-		}
-    	return new GetResponse(new GetResult(request.index(), request.type(), request.id(), 0L, false, null, null));
+        IndexService indexService = indicesService.indexService(request.index());
+
+        List<String> columns;
+        if (request.fields() != null) {
+            columns = new ArrayList<String>(request.fields().length);
+            for (String field : request.fields()) {
+                int i = field.indexOf('.');
+                String colName = (i > 0) ? field.substring(0, i - 1) : field;
+                if (!columns.contains(colName))
+                    columns.add(colName);
+            }
+        } else {
+            columns = elasticSchemaService.cassandraMappedColumns(indexService.index().getName(), request.type());
+        }
+
+        // TODO: add param consistencyLevel
+        try {
+            UntypedResultSet result = elasticSchemaService.fetchRow(request.index(), request.type(), request.id(), columns);
+            if (!result.isEmpty()) {
+                Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(result.one(), null, indexService.mapperService(), new String[] { request.type() });
+                Map<String, GetField> rowAsFieldMap = elasticSchemaService.flattenGetField(request.fields(), "", rowAsMap, new HashMap<String, GetField>());
+
+                GetResult getResult = new GetResult(request.index(), request.type(), request.id(), 0L, true, new BytesArray(FBUtilities.json(rowAsMap).getBytes("UTF-8")), rowAsFieldMap);
+                return new GetResponse(getResult);
+            }
+        } catch (org.apache.cassandra.exceptions.ConfigurationException | org.apache.cassandra.exceptions.SyntaxException e) {
+            logger.warn("Cassandra probably not yet up to date: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new ElasticsearchException(e.getMessage(), e);
+        }
+        return new GetResponse(new GetResult(request.index(), request.type(), request.id(), 0L, false, null, null));
     }
 
     @Override

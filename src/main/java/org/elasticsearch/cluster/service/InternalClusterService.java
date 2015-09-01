@@ -45,7 +45,7 @@ import org.elasticsearch.action.support.master.MasterNodeOperationRequest;
 import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
 import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
@@ -97,7 +97,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     private final ThreadPool threadPool;
 
     private final DiscoveryService discoveryService;
-    
+
     private final OperationRouting operationRouting;
 
     private final TransportService transportService;
@@ -118,20 +118,15 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     private final Queue<NotifyTimeout> onGoingTimeouts = ConcurrentCollections.newQueue();
 
-    private volatile CassandraClusterState clusterState;
+    private volatile ClusterState clusterState;
 
     private final ClusterBlocks.Builder initialBlocks;
 
     private volatile ScheduledFuture reconnectToNodes;
 
-    
     @Inject
-    public InternalClusterService(Settings settings,  DiscoveryService discoveryService, 
-    							  OperationRouting operationRouting, TransportService transportService, 
-                                  NodeSettingsService nodeSettingsService, ThreadPool threadPool, 
-                                  ClusterName clusterName, DiscoveryNodeService discoveryNodeService, 
-                                  SchemaService elasticSchemaService,
-                                  Version version) {
+    public InternalClusterService(Settings settings, DiscoveryService discoveryService, OperationRouting operationRouting, TransportService transportService, NodeSettingsService nodeSettingsService,
+            ThreadPool threadPool, ClusterName clusterName, DiscoveryNodeService discoveryNodeService, SchemaService elasticSchemaService, Version version) {
         super(settings);
         this.operationRouting = operationRouting;
         this.transportService = transportService;
@@ -143,8 +138,8 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         this.version = version;
 
         // will be replaced on doStart.
-        this.clusterState = CassandraClusterState.builder(clusterName).build();
-        
+        this.clusterState = ClusterState.builder(clusterName).build();
+
         this.nodeSettingsService.setClusterService(this);
 
         this.reconnectInterval = componentSettings.getAsTime("reconnect_interval", TimeValue.timeValueSeconds(10));
@@ -161,7 +156,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         return this.nodeSettingsService;
     }
 
-    
     public void addInitialStateBlock(ClusterBlock block) throws ElasticsearchIllegalStateException {
         if (lifecycle.started()) {
             throw new ElasticsearchIllegalStateException("can't set initial block when started");
@@ -176,32 +170,31 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         }
         initialBlocks.removeGlobalBlock(block);
     }
-	
-    
+
     @Override
     protected void doStart() throws ElasticsearchException {
-    	
-    	// try to create if not exists elastic_admin keyspace and initialize persisted metadata
-    	elasticSchemaService.createElasticAdminKeyspace();
-    	
+
+        // try to create if not exists elastic_admin keyspace and initialize persisted metadata
+        elasticSchemaService.createElasticAdminKeyspace();
+
         add(localNodeMasterListeners);
-        this.clusterState = CassandraClusterState.builder(clusterState).blocks(initialBlocks).build();
+        this.clusterState = ClusterState.builder(clusterState).blocks(initialBlocks).build();
         this.updateTasksExecutor = EsExecutors.newSinglePrioritizing(daemonThreadFactory(settings, UPDATE_THREAD_NAME));
         this.reconnectToNodes = threadPool.schedule(reconnectInterval, ThreadPool.Names.GENERIC, new ReconnectToNodes());
-       
+
         Map<String, String> nodeAttributes = discoveryNodeService.buildAttributes();
         // note, we rely on the fact that its a new id each time we start, see FD and "kill -9" handling
         final String nodeId = DiscoveryService.generateNodeId(settings);
         DiscoveryNode localNode = new DiscoveryNode(settings.get("name"), nodeId, transportService.boundAddress().publishAddress(), nodeAttributes, version);
         DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder().put(localNode).localNodeId(localNode.id()).masterNodeId(localNode.id());
-        this.clusterState = CassandraClusterState.builder(clusterState).nodes(nodeBuilder).blocks(initialBlocks).build();
+        this.clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).blocks(initialBlocks).build();
         // no more election => no more NoMasterBlock
-        // this.clusterState = CassandraClusterState.builder(clusterState).nodes(nodeBuilder).blocks(ClusterBlocks.builder()).build();
+        // this.clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).blocks(ClusterBlocks.builder()).build();
     }
 
     @Override
     protected void doStop() throws ElasticsearchException {
-    	
+
         this.reconnectToNodes.cancel(true);
         for (NotifyTimeout onGoingTimeout : onGoingTimeouts) {
             onGoingTimeout.cancel();
@@ -214,7 +207,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             // ignore
         }
         remove(localNodeMasterListeners);
-        
+
     }
 
     @Override
@@ -231,9 +224,9 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
      * @throws IOException
      */
     public ShardRoutingState readIndexShardState(InetAddress address, String index, ShardRoutingState defaultState) {
-    	return this.discoveryService.readIndexShardState(address, index, defaultState);
+        return this.discoveryService.readIndexShardState(address, index, defaultState);
     }
-    
+
     /**
      * Set index shard state in the gossip endpoint map (must be synchronized).
      * @param index
@@ -243,31 +236,28 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
      * @throws IOException
      */
     public void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
-    	this.discoveryService.writeIndexShardSate(index, shardRoutingState);
+        this.discoveryService.writeIndexShardSate(index, shardRoutingState);
     }
-    
-    
+
     @Override
     public DiscoveryNode localNode() {
         return clusterState.getNodes().localNode();
     }
 
-    
     @Override
     public OperationRouting operationRouting() {
         return operationRouting;
     }
 
-    
-    public CassandraClusterState state() {
+    public ClusterState state() {
         return this.clusterState;
     }
 
-    public CassandraClusterState state(CassandraClusterState newState) {
-    	this.clusterState = newState;
+    public ClusterState state(ClusterState newState) {
+        this.clusterState = newState;
         return newState;
     }
-    
+
     public void addFirst(ClusterStateListener listener) {
         priorityClusterStateListeners.add(listener);
     }
@@ -284,7 +274,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         clusterStateListeners.remove(listener);
         priorityClusterStateListeners.remove(listener);
         lastClusterStateListeners.remove(listener);
-        for (Iterator<NotifyTimeout> it = onGoingTimeouts.iterator(); it.hasNext(); ) {
+        for (Iterator<NotifyTimeout> it = onGoingTimeouts.iterator(); it.hasNext();) {
             NotifyTimeout timeout = it.next();
             if (timeout.listener.equals(listener)) {
                 timeout.cancel();
@@ -329,7 +319,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         }
     }
 
-    
     public void submitStateUpdateTask(final String source, final ClusterStateUpdateTask updateTask) {
         submitStateUpdateTask(source, Priority.NORMAL, updateTask);
     }
@@ -338,7 +327,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         if (!lifecycle.started()) {
             return;
         }
-        logger.debug("submit new task source={} task class={} doPresistMetaData={}",  source, updateTask.getClass().getName(), updateTask.doPresistMetaData());
+        logger.debug("submit new task source={} task class={} doPresistMetaData={}", source, updateTask.getClass().getName(), updateTask.doPresistMetaData());
         try {
             final UpdateTask task = new UpdateTask(source, priority, updateTask);
             if (updateTask instanceof TimeoutClusterStateUpdateTask) {
@@ -365,9 +354,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             }
         }
     }
-	
-    
-    
+
     @Override
     public List<PendingClusterTask> pendingTasks() {
         PrioritizedEsThreadPoolExecutor.Pending[] pendings = updateTasksExecutor.getPending();
@@ -393,31 +380,27 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         }
         return pendingClusterTasks;
     }
-	
+
     @Override
     public int numberOfPendingTasks() {
         return updateTasksExecutor.getNumberOfPendingTasks();
     }
-    
-    
-	
-    
+
     /**
      * Block until recovery is done and all local shards are STARTED
      */
     public void waitShardsStarted() {
-    	logger.debug("waiting until all local primary shards are STARTED");
-    	while ( (state().blocks().hasGlobalBlock(GatewayService.STATE_NOT_RECOVERED_BLOCK)) || (!state().routingTable().localShardsStarted())) {
-    		try {
+        logger.debug("waiting until all local primary shards are STARTED");
+        while ((state().blocks().hasGlobalBlock(GatewayService.STATE_NOT_RECOVERED_BLOCK)) || (!state().routingTable().localShardsStarted())) {
+            try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
                 // ignore
             }
-    	}
-    	logger.debug("Ok, all local primary shards are STARTED, state={}",state().prettyPrint());
+        }
+        logger.debug("Ok, all local primary shards are STARTED, state={}", state().prettyPrint());
     }
-    
-    
+
     static abstract class TimedPrioritizedRunnable extends PrioritizedRunnable {
         private final long creationTime;
         protected final String source;
@@ -439,7 +422,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         }
     }
 
-    
     /**
      * Seems to manage all clusterState updates
      * - publish through the discoveryService.publish() to all remote nodes and then
@@ -453,7 +435,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
         public final ClusterStateUpdateTask updateTask;
 
-
         UpdateTask(String source, Priority priority, ClusterStateUpdateTask updateTask) {
             super(priority, source);
             this.updateTask = updateTask;
@@ -466,39 +447,38 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                 return;
             }
             logger.debug("processing [{}]: execute", source);
-            CassandraClusterState previousClusterState = clusterState;
-            CassandraClusterState newClusterState;
+            ClusterState previousClusterState = clusterState;
+            ClusterState newClusterState;
             try {
-                newClusterState = updateTask.execute(previousClusterState);    
-                
-                if (!newClusterState.metaData().equals(previousClusterState.metaData()) && 
-                	!newClusterState.blocks().disableStatePersistence() &&
-                	updateTask.doPresistMetaData()) {
-                	// try to persist new metadata in cassandra.
-                	try {
-                		elasticSchemaService.persistMetaData(previousClusterState.metaData(), newClusterState.metaData(), source);
-                	} catch(ConcurrentMetaDataUpdateException e) {
-                		// should replay the task later when current cluster state will match the expected metadata uuid and version
-                		logger.debug("Cannot overwrite persistent metadata, should wait version {}/{}", e.owner(), e.version());
-                		final ConcurrentMetaDataUpdateException cmdue = e;
-                		InternalClusterService.this.addFirst(new ClusterStateListener() {
-							@Override
-							public void clusterChanged(ClusterChangedEvent event) {
-								MetaData metaData = event.state().metaData();
-								if (metaData.uuid().equals(cmdue.owner()) && (metaData.version() == cmdue.version())) {
-									logger.debug("resubmit task source={} because metadata now match {}/{} ", source, cmdue.owner(), cmdue.owner());
-									InternalClusterService.this.remove(this); // replay only once.
-									InternalClusterService.this.submitStateUpdateTask(source, Priority.HIGH, updateTask);
-								}
-							}
-                		});
-                		return; 		
-                	}
+                newClusterState = updateTask.execute(previousClusterState);
+
+                if (!newClusterState.metaData().equals(previousClusterState.metaData()) && !newClusterState.blocks().disableStatePersistence() && updateTask.doPresistMetaData()) {
+                    // try to persist new metadata in cassandra.
+                    try {
+                        elasticSchemaService.persistMetaData(previousClusterState.metaData(), newClusterState.metaData(), source);
+                    } catch (ConcurrentMetaDataUpdateException e) {
+                        // should replay the task later when current cluster state will match the expected metadata uuid and version
+                        logger.debug("Cannot overwrite persistent metadata, should wait version {}/{}", e.owner(), e.version());
+                        final ConcurrentMetaDataUpdateException cmdue = e;
+                        InternalClusterService.this.addFirst(new ClusterStateListener() {
+                            @Override
+                            public void clusterChanged(ClusterChangedEvent event) {
+                                MetaData metaData = event.state().metaData();
+                                if (metaData.uuid().equals(cmdue.owner()) && (metaData.version() == cmdue.version())) {
+                                    logger.debug("resubmit task source={} because metadata now match {}/{} ", source, cmdue.owner(), cmdue.owner());
+                                    InternalClusterService.this.remove(this); // replay only once.
+                                    InternalClusterService.this.submitStateUpdateTask(source, Priority.HIGH, updateTask);
+                                }
+                            }
+                        });
+                        return;
+                    }
                 }
-                
+
             } catch (Throwable e) {
                 if (logger.isTraceEnabled()) {
-                    StringBuilder sb = new StringBuilder("failed to execute cluster state update, state:\nversion [").append(previousClusterState.version()).append("], source [").append(source).append("]\n");
+                    StringBuilder sb = new StringBuilder("failed to execute cluster state update, state:\nversion [").append(previousClusterState.version()).append("], source [").append(source)
+                            .append("]\n");
                     sb.append(previousClusterState.nodes().prettyPrint());
                     sb.append(previousClusterState.routingTable().prettyPrint());
                     sb.append(previousClusterState.readOnlyRoutingNodes().prettyPrint());
@@ -523,7 +503,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             try {
                 Discovery.AckListener ackListener = new NoOpAckListener();
 
-                newClusterState.status(CassandraClusterState.ClusterStateStatus.BEING_APPLIED);
+                newClusterState.status(ClusterState.ClusterStateStatus.BEING_APPLIED);
 
                 if (logger.isTraceEnabled()) {
                     StringBuilder sb = new StringBuilder("cluster state updated, source [").append(source).append("]\n");
@@ -545,29 +525,29 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
                 /*
                 if ((updateTask.doPublish()) && (changeToPublish)) {
-	                // TODO, do this in parallel (and wait)
-	                for (DiscoveryNode node : nodesDelta.addedNodes()) {
-	                    if (!nodeRequiresConnection(node)) {
-	                        continue;
-	                    }
-	                    try {
-	                        transportService.connectToNode(node);
-	                    } catch (Throwable e) {
-	                        // the fault detection will detect it as failed as well
-	                        logger.warn("failed to connect to node [" + node + "]", e);
-	                    }
-	                }
-	
-	                // if we are the master, publish the new state to all nodes
-	                // we publish here before we send a notification to all the listeners, since if it fails
-	                // we don't want to notify
-	                if (newClusterState.nodes().localNodeMaster()) {
-	                    logger.debug("publishing cluster state version {}", newClusterState.version());
-	                    discoveryService.publish(newClusterState, ackListener);
-	                }
-                }
-				*/
+                    // TODO, do this in parallel (and wait)
+                    for (DiscoveryNode node : nodesDelta.addedNodes()) {
+                        if (!nodeRequiresConnection(node)) {
+                            continue;
+                        }
+                        try {
+                            transportService.connectToNode(node);
+                        } catch (Throwable e) {
+                            // the fault detection will detect it as failed as well
+                            logger.warn("failed to connect to node [" + node + "]", e);
+                        }
+                    }
                 
+                    // if we are the master, publish the new state to all nodes
+                    // we publish here before we send a notification to all the listeners, since if it fails
+                    // we don't want to notify
+                    if (newClusterState.nodes().localNodeMaster()) {
+                        logger.debug("publishing cluster state version {}", newClusterState.version());
+                        discoveryService.publish(newClusterState, ackListener);
+                    }
+                }
+                */
+
                 // update the current local cluster state
                 clusterState = newClusterState;
                 logger.debug("set local cluster state to version {}", newClusterState.version());
@@ -590,15 +570,15 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                         logger.warn("failed to disconnect to node [" + node + "]", e);
                     }
                 }
-				*/
-                
-                newClusterState.status(CassandraClusterState.ClusterStateStatus.APPLIED);
+                */
+
+                newClusterState.status(ClusterState.ClusterStateStatus.APPLIED);
 
                 // publish in gossip state the applied metadata.uuid and version
                 discoveryService.publish(newClusterState);
-                
+
                 if (newClusterState.nodes().localNodeMaster()) {
-                	if (updateTask instanceof AckedClusterStateUpdateTask) {
+                    if (updateTask instanceof AckedClusterStateUpdateTask) {
                         final AckedClusterStateUpdateTask ackedUpdateTask = (AckedClusterStateUpdateTask) updateTask;
                         if (ackedUpdateTask.ackTimeout() == null || ackedUpdateTask.ackTimeout().millis() == 0) {
                             ackedUpdateTask.onAckTimeout();
@@ -615,15 +595,14 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                         }
                     }
                 }
-				
+
                 //manual ack only from the master at the end of the publish
                 try {
                     ackListener.onNodeAck(newClusterState.nodes().localNode(), null);
                 } catch (Throwable t) {
                     logger.debug("error while processing ack for master node [{}]", t, newClusterState.nodes().localNode());
                 }
-			
-                
+
                 if (updateTask instanceof ProcessedClusterStateUpdateTask) {
                     ((ProcessedClusterStateUpdateTask) updateTask).clusterStateProcessed(source, previousClusterState, newClusterState);
                 }
@@ -640,9 +619,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         }
     }
 
-
-   
-    
     class NotifyTimeout implements Runnable {
         final TimeoutClusterStateListener listener;
         final TimeValue timeout;
@@ -671,7 +647,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         }
     }
 
-    
     private class ReconnectToNodes implements Runnable {
 
         private ConcurrentMap<DiscoveryNode, Integer> failureCount = ConcurrentCollections.newConcurrentMap();
@@ -688,8 +663,8 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                     continue;
                 }
                 if (!node.getStatus().equals(DiscoveryNodeStatus.ALIVE)) {
-                	// don't try to connect until gossip update node status to ALIVE...
-                	continue;
+                    // don't try to connect until gossip update node status to ALIVE...
+                    continue;
                 }
                 if (clusterState.nodes().nodeExists(node.id())) { // we double check existence of node since connectToNode might take time...
                     if (!transportService.nodeConnected(node)) {
@@ -720,7 +695,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             }
             // go over and remove failed nodes that have been removed
             DiscoveryNodes nodes = clusterState.nodes();
-            for (Iterator<DiscoveryNode> failedNodesIt = failureCount.keySet().iterator(); failedNodesIt.hasNext(); ) {
+            for (Iterator<DiscoveryNode> failedNodesIt = failureCount.keySet().iterator(); failedNodesIt.hasNext();) {
                 DiscoveryNode failedNode = failedNodesIt.next();
                 if (!nodes.nodeExists(failedNode.id())) {
                     failedNodesIt.remove();
@@ -732,13 +707,10 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         }
     }
 
-
-    
     private boolean nodeRequiresConnection(DiscoveryNode node) {
         return localNode().shouldConnectTo(node);
     }
-	
-    
+
     private static class LocalNodeMasterListeners implements ClusterStateListener {
 
         private final List<LocalNodeMasterListener> listeners = new CopyOnWriteArrayList<>();

@@ -27,7 +27,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadOperationAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -65,7 +65,7 @@ public class TransportClusterStateAction extends TransportMasterNodeReadOperatio
     }
 
     @Override
-    protected ClusterBlockException checkBlock(ClusterStateRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(ClusterStateRequest request, ClusterState state) {
         // cluster state calls are done also on a fully blocked cluster to figure out what is going
         // on in the cluster. For example, which nodes have joined yet the recovery has not yet kicked
         // in, we need to make sure we allow those calls
@@ -84,10 +84,10 @@ public class TransportClusterStateAction extends TransportMasterNodeReadOperatio
     }
 
     @Override
-    protected void masterOperation(final ClusterStateRequest request, final CassandraClusterState state, ActionListener<ClusterStateResponse> listener) throws ElasticsearchException {
-        CassandraClusterState currentState = clusterService.state();
+    protected void masterOperation(final ClusterStateRequest request, final ClusterState state, ActionListener<ClusterStateResponse> listener) throws ElasticsearchException {
+        ClusterState currentState = clusterService.state();
         logger.trace("Serving cluster state request using version {}", currentState.version());
-        CassandraClusterState.Builder builder = CassandraClusterState.builder(currentState.getClusterName());
+        ClusterState.Builder builder = ClusterState.builder(currentState.getClusterName());
         builder.version(currentState.version());
         if (request.nodes()) {
             builder.nodes(currentState.nodes());

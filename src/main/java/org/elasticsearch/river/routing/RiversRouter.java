@@ -28,7 +28,7 @@ import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -111,7 +111,7 @@ public class RiversRouter extends AbstractLifecycleComponent<RiversRouter> imple
     }
 
     protected RiverClusterState updateRiverClusterState(final String source, final RiverClusterState currentState,
-                                                                     CassandraClusterState newClusterState, final CountDown countDown) {
+                                                                     ClusterState newClusterState, final CountDown countDown) {
         if (!newClusterState.metaData().hasIndex(riverIndexName)) {
             // if there are routings, publish an empty one (so it will be deleted on nodes), otherwise, return the same state
             if (!currentState.routing().isEmpty()) {

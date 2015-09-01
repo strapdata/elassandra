@@ -50,9 +50,9 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     /**
      * The current state.
      */
-    CassandraClusterState state();
+    ClusterState state();
 
-    CassandraClusterState state(CassandraClusterState newState);
+    ClusterState state(ClusterState newState);
     
     /**
      * Adds an initial block to be set on the first cluster state created.

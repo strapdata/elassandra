@@ -28,7 +28,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -74,7 +74,7 @@ public class TransportNodesShutdownAction extends TransportMasterNodeOperationAc
     }
 
     @Override
-    protected ClusterBlockException checkBlock(NodesShutdownRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(NodesShutdownRequest request, ClusterState state) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
     }
 
@@ -89,7 +89,7 @@ public class TransportNodesShutdownAction extends TransportMasterNodeOperationAc
     }
 
     @Override
-    protected void processBeforeDelegationToMaster(NodesShutdownRequest request, CassandraClusterState state) {
+    protected void processBeforeDelegationToMaster(NodesShutdownRequest request, ClusterState state) {
         String[] nodesIds = request.nodesIds;
         if (nodesIds != null) {
             for (int i = 0; i < nodesIds.length; i++) {
@@ -102,7 +102,7 @@ public class TransportNodesShutdownAction extends TransportMasterNodeOperationAc
     }
 
     @Override
-    protected void masterOperation(final NodesShutdownRequest request, final CassandraClusterState state, final ActionListener<NodesShutdownResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final NodesShutdownRequest request, final ClusterState state, final ActionListener<NodesShutdownResponse> listener) throws ElasticsearchException {
         if (disabled) {
             throw new ElasticsearchIllegalStateException("Shutdown is disabled");
         }

@@ -67,30 +67,29 @@ public enum ShardRoutingState {
         return this.value;
     }
 
-
     public static ShardRoutingState fromValue(byte value) {
         switch (value) {
-            case 1:
-                return UNASSIGNED;
-            case 2:
-                return INITIALIZING;
-            case 3:
-                return STARTED;
-            case 4:
-                return RELOCATING;
-            default:
-                throw new ElasticsearchIllegalStateException("No routing state mapped for [" + value + "]");
+        case 1:
+            return UNASSIGNED;
+        case 2:
+            return INITIALIZING;
+        case 3:
+            return STARTED;
+        case 4:
+            return RELOCATING;
+        default:
+            throw new ElasticsearchIllegalStateException("No routing state mapped for [" + value + "]");
         }
     }
-   
+
     @JsonCreator
     public static ShardRoutingState fromJsonValue(Integer value) {
-    	return fromValue(value.byteValue());
+        return fromValue(value.byteValue());
     }
-    
+
     @JsonValue
     public Integer jsonValue() {
         return new Integer(this.value);
     }
-    
+
 }

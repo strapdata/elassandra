@@ -25,7 +25,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.DestructiveOperations;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -75,12 +75,12 @@ public class TransportCloseIndexAction extends TransportMasterNodeOperationActio
     }
 
     @Override
-    protected ClusterBlockException checkBlock(CloseIndexRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(CloseIndexRequest request, ClusterState state) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, state.metaData().concreteIndices(request.indicesOptions(), request.indices()));
     }
 
     @Override
-    protected void masterOperation(final CloseIndexRequest request, final CassandraClusterState state, final ActionListener<CloseIndexResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final CloseIndexRequest request, final ClusterState state, final ActionListener<CloseIndexResponse> listener) throws ElasticsearchException {
         final String[] concreteIndices = state.metaData().concreteIndices(request.indicesOptions(), request.indices());
         CloseIndexClusterStateUpdateRequest updateRequest = new CloseIndexClusterStateUpdateRequest()
                 .ackTimeout(request.timeout()).masterNodeTimeout(request.masterNodeTimeout())

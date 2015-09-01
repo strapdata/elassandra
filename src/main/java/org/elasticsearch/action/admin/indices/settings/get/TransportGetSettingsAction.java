@@ -25,7 +25,7 @@ import org.elasticsearch.action.admin.cluster.state.ClusterStateRequest;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -61,7 +61,7 @@ public class TransportGetSettingsAction extends TransportMasterNodeReadOperation
     }
 
     @Override
-    protected ClusterBlockException checkBlock(GetSettingsRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(GetSettingsRequest request, ClusterState state) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, state.metaData().concreteIndices(request.indicesOptions(), request.indices()));
     }
 
@@ -77,7 +77,7 @@ public class TransportGetSettingsAction extends TransportMasterNodeReadOperation
     }
 
     @Override
-    protected void masterOperation(GetSettingsRequest request, CassandraClusterState state, ActionListener<GetSettingsResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(GetSettingsRequest request, ClusterState state, ActionListener<GetSettingsResponse> listener) throws ElasticsearchException {
         String[] concreteIndices = state.metaData().concreteIndices(request.indicesOptions(), request.indices());
         ImmutableOpenMap.Builder<String, Settings> indexToSettingsBuilder = ImmutableOpenMap.builder();
         for (String concreteIndex : concreteIndices) {

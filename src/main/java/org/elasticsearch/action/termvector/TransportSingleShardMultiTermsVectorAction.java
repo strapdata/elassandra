@@ -24,7 +24,7 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.action.support.single.shard.TransportShardSingleOperationAction;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.common.inject.Inject;
@@ -75,7 +75,7 @@ public class TransportSingleShardMultiTermsVectorAction extends TransportShardSi
     }
 
     @Override
-    protected ShardIterator shards(CassandraClusterState state, InternalRequest request) {
+    protected ShardIterator shards(ClusterState state, InternalRequest request) {
         return clusterService.operationRouting()
                 .getShards(state, request.concreteIndex(), request.request().shardId(), request.request().preference());
     }

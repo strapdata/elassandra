@@ -25,8 +25,8 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.unit.TimeValue;
 
 /**
- * An extension interface to {@link ClusterStateUpdateTask} that allows to be notified when
- * all the nodes have acknowledged a cluster state update request
+ * An extension interface to {@link ClusterStateUpdateTask} that allows to be
+ * notified when all the nodes have acknowledged a cluster state update request
  */
 public abstract class AckedClusterStateUpdateTask<Response> extends TimeoutClusterStateUpdateTask {
 
@@ -41,20 +41,24 @@ public abstract class AckedClusterStateUpdateTask<Response> extends TimeoutClust
     /**
      * Called to determine which nodes the acknowledgement is expected from
      *
-     * @param discoveryNode a node
+     * @param discoveryNode
+     *            a node
      * @return true if the node is expected to send ack back, false otherwise
      */
     public boolean mustAck(DiscoveryNode discoveryNode) {
-    	// elasticassandra manage opartion locally, no more distributed operation.
-        //return true;
+        // elasticassandra manage opartion locally, no more distributed
+        // operation.
+        // return true;
         return false;
     }
 
     /**
-     * Called once all the nodes have acknowledged the cluster state update request. Must be
-     * very lightweight execution, since it gets executed on the cluster service thread.
+     * Called once all the nodes have acknowledged the cluster state update
+     * request. Must be very lightweight execution, since it gets executed on
+     * the cluster service thread.
      *
-     * @param t optional error that might have been thrown
+     * @param t
+     *            optional error that might have been thrown
      */
     public void onAllNodesAcked(@Nullable Throwable t) {
         listener.onResponse(newResponse(true));
@@ -76,12 +80,13 @@ public abstract class AckedClusterStateUpdateTask<Response> extends TimeoutClust
     }
 
     @Override
-    public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+    public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
 
     }
 
     /**
-     * Acknowledgement timeout, maximum time interval to wait for acknowledgements
+     * Acknowledgement timeout, maximum time interval to wait for
+     * acknowledgements
      */
     public TimeValue ackTimeout() {
         return request.ackTimeout();

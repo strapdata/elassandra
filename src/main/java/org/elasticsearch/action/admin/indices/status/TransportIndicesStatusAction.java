@@ -27,7 +27,7 @@ import org.elasticsearch.action.support.broadcast.BroadcastShardOperationFailedE
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationRequest;
 import org.elasticsearch.action.support.broadcast.TransportBroadcastOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
@@ -85,22 +85,22 @@ public class TransportIndicesStatusAction extends TransportBroadcastOperationAct
      * Status goes across *all* shards.
      */
     @Override
-    protected GroupShardsIterator shards(CassandraClusterState state, IndicesStatusRequest request, String[] concreteIndices) {
+    protected GroupShardsIterator shards(ClusterState state, IndicesStatusRequest request, String[] concreteIndices) {
         return state.routingTable().allAssignedShardsGrouped(concreteIndices, true);
     }
 
     @Override
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state, IndicesStatusRequest request) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, IndicesStatusRequest request) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
     }
 
     @Override
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, IndicesStatusRequest countRequest, String[] concreteIndices) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, IndicesStatusRequest countRequest, String[] concreteIndices) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, concreteIndices);
     }
 
     @Override
-    protected IndicesStatusResponse newResponse(IndicesStatusRequest request, AtomicReferenceArray shardsResponses, CassandraClusterState clusterState) {
+    protected IndicesStatusResponse newResponse(IndicesStatusRequest request, AtomicReferenceArray shardsResponses, ClusterState clusterState) {
         int successfulShards = 0;
         int failedShards = 0;
         List<ShardOperationFailedException> shardFailures = null;

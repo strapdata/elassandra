@@ -30,7 +30,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
 import org.elasticsearch.action.support.replication.TransportShardReplicationOperationAction;
 import org.elasticsearch.cassandra.ElasticSchemaService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
@@ -123,7 +123,7 @@ public class TransportXIndexAction extends TransportShardReplicationOperationAct
     }
 
     @Override
-    protected boolean resolveRequest(CassandraClusterState state, InternalRequest request, ActionListener<XIndexResponse> indexResponseActionListener) {
+    protected boolean resolveRequest(ClusterState state, InternalRequest request, ActionListener<XIndexResponse> indexResponseActionListener) {
         MetaData metaData = clusterService.state().metaData();
 
         MappingMetaData mappingMd = null;
@@ -164,13 +164,13 @@ public class TransportXIndexAction extends TransportShardReplicationOperationAct
     }
 
     @Override
-    protected ShardIterator shards(CassandraClusterState clusterState, InternalRequest request) {
+    protected ShardIterator shards(ClusterState clusterState, InternalRequest request) {
         return clusterService.operationRouting()
                 .indexShards(clusterService.state(), request.concreteIndex(), request.request().type(), request.request().id(), request.request().routing());
     }
 
     @Override
-    protected PrimaryResponse<XIndexResponse, XIndexRequest> shardOperationOnPrimary(CassandraClusterState clusterState, PrimaryOperationRequest shardRequest) throws Throwable {
+    protected PrimaryResponse<XIndexResponse, XIndexRequest> shardOperationOnPrimary(ClusterState clusterState, PrimaryOperationRequest shardRequest) throws Throwable {
         final XIndexRequest request = shardRequest.request;
 
         // validate, if routing is required, that we got routing

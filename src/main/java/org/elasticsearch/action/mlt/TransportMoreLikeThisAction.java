@@ -34,7 +34,7 @@ import org.elasticsearch.action.search.TransportSearchAction;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.MutableShardRouting;
 import org.elasticsearch.cluster.routing.ShardIterator;
@@ -96,7 +96,7 @@ public class TransportMoreLikeThisAction extends HandledTransportAction<MoreLike
     @Override
     protected void doExecute(final MoreLikeThisRequest request, final ActionListener<SearchResponse> listener) {
         // update to actual index name
-        CassandraClusterState clusterState = clusterService.state();
+        ClusterState clusterState = clusterService.state();
         // update to the concrete index
         final String concreteIndex = clusterState.metaData().concreteSingleIndex(request.index(), request.indicesOptions());
 
@@ -245,7 +245,7 @@ public class TransportMoreLikeThisAction extends HandledTransportAction<MoreLike
     }
 
     // Redirects the request to a data node, that has the index meta data locally available.
-    private void redirect(MoreLikeThisRequest request, String concreteIndex, final ActionListener<SearchResponse> listener, CassandraClusterState clusterState) {
+    private void redirect(MoreLikeThisRequest request, String concreteIndex, final ActionListener<SearchResponse> listener, ClusterState clusterState) {
         ShardIterator shardIterator = clusterService.operationRouting().getShards(clusterState, concreteIndex, request.type(), request.id(), request.routing(), null);
         ShardRouting shardRouting = shardIterator.nextOrNull();
         if (shardRouting == null) {

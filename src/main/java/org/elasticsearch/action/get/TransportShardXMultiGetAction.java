@@ -25,7 +25,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.action.support.single.shard.TransportShardSingleOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -80,13 +80,13 @@ public class TransportShardXMultiGetAction extends TransportShardSingleOperation
     }
 
     @Override
-    protected ShardIterator shards(CassandraClusterState state, InternalRequest request) {
+    protected ShardIterator shards(ClusterState state, InternalRequest request) {
         return clusterService.operationRouting()
                 .getShards(state, request.request().index(), request.request().shardId(), request.request().preference());
     }
 
     @Override
-    protected void resolveRequest(CassandraClusterState state, InternalRequest request) {
+    protected void resolveRequest(ClusterState state, InternalRequest request) {
         if (request.request().realtime == null) {
             request.request().realtime = this.realtime;
         }

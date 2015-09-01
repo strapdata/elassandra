@@ -25,7 +25,7 @@ import org.elasticsearch.action.admin.cluster.state.ClusterStateRequest;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.common.inject.Inject;
@@ -52,7 +52,7 @@ public class TransportPendingClusterTasksAction extends TransportMasterNodeReadO
     }
 
     @Override
-    protected ClusterBlockException checkBlock(PendingClusterTasksRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(PendingClusterTasksRequest request, ClusterState state) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
     }
 
@@ -67,7 +67,7 @@ public class TransportPendingClusterTasksAction extends TransportMasterNodeReadO
     }
 
     @Override
-    protected void masterOperation(PendingClusterTasksRequest request, CassandraClusterState state, ActionListener<PendingClusterTasksResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(PendingClusterTasksRequest request, ClusterState state, ActionListener<PendingClusterTasksResponse> listener) throws ElasticsearchException {
         listener.onResponse(new PendingClusterTasksResponse(clusterService.pendingTasks()));
     }
 }

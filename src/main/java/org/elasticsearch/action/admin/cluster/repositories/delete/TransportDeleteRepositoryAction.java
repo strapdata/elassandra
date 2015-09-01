@@ -24,7 +24,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -64,12 +64,12 @@ public class TransportDeleteRepositoryAction extends TransportMasterNodeOperatio
     }
 
     @Override
-    protected ClusterBlockException checkBlock(DeleteRepositoryRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(DeleteRepositoryRequest request, ClusterState state) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, "");
     }
 
     @Override
-    protected void masterOperation(final DeleteRepositoryRequest request, CassandraClusterState state, final ActionListener<DeleteRepositoryResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final DeleteRepositoryRequest request, ClusterState state, final ActionListener<DeleteRepositoryResponse> listener) throws ElasticsearchException {
         repositoriesService.unregisterRepository(
                 new RepositoriesService.UnregisterRepositoryRequest("delete_repository [" + request.name() + "]", request.name())
                         .masterNodeTimeout(request.masterNodeTimeout()).ackTimeout(request.timeout()),

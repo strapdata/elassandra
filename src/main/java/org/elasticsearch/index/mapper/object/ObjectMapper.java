@@ -71,9 +71,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
     }
 
     public static enum Dynamic {
-        TRUE,
-        FALSE,
-        STRICT
+        TRUE, FALSE, STRICT
     }
 
     public static class Nested {
@@ -112,7 +110,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
     public static class Builder<T extends Builder, Y extends ObjectMapper> extends Mapper.Builder<T, Y> {
 
         protected boolean enabled = Defaults.ENABLED;
-        
+
         protected boolean singleValue = Defaults.SINGLE_VALUE;
 
         protected Nested nested = Defaults.NESTED;
@@ -134,7 +132,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             this.enabled = enabled;
             return builder;
         }
-        
+
         public T singleValue(boolean singleValue) {
             this.singleValue = singleValue;
             return builder;
@@ -185,7 +183,8 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             return (Y) objectMapper;
         }
 
-        protected ObjectMapper createMapper(String name, String fullPath, boolean singleValue, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers, @Nullable @IndexSettings Settings settings) {
+        protected ObjectMapper createMapper(String name, String fullPath, boolean singleValue, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers,
+                @Nullable @IndexSettings Settings settings) {
             return new ObjectMapper(name, fullPath, singleValue, enabled, nested, dynamic, pathType, mappers);
         }
     }
@@ -198,7 +197,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
                 String fieldName = Strings.toUnderscoreCase(entry.getKey());
                 Object fieldNode = entry.getValue();
                 parseObjectOrDocumentTypeProperties(fieldName, fieldNode, parserContext, builder);
-                parseObjectProperties(name, fieldName,  fieldNode,  builder);
+                parseObjectProperties(name, fieldName, fieldNode, builder);
             }
             parseNested(name, node, builder);
             return builder;
@@ -236,7 +235,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
         }
 
         protected static void parseObjectProperties(String name, String fieldName, Object fieldNode, ObjectMapper.Builder builder) {
-           if (fieldName.equals("path")) {
+            if (fieldName.equals("path")) {
                 builder.pathType(parsePathType(name, fieldNode.toString()));
             }
         }
@@ -246,7 +245,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             boolean nestedIncludeInParent = false;
             boolean nestedIncludeInRoot = false;
             Object fieldNode = node.get("type");
-            if (fieldNode!=null) {
+            if (fieldNode != null) {
                 String type = fieldNode.toString();
                 if (type.equals(CONTENT_TYPE)) {
                     builder.nested = Nested.NO;
@@ -276,7 +275,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
                 //Should accept empty arrays, as a work around for when the user can't provide an empty Map. (PHP for example)
                 boolean isEmptyList = entry.getValue() instanceof List && ((List<?>) entry.getValue()).isEmpty();
 
-                if (entry.getValue() instanceof  Map) {
+                if (entry.getValue() instanceof Map) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> propNode = (Map<String, Object>) entry.getValue();
                     String type;
@@ -320,8 +319,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
     private final boolean enabled;
 
     private final Nested nested;
-    
-    
+
     private final boolean singleValue;
 
     private final String nestedTypePathAsString;
@@ -364,9 +362,9 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
 
     @Override
     public String contentType() {
-    	return CONTENT_TYPE;
+        return CONTENT_TYPE;
     }
-    
+
     @Override
     public void includeInAll(Boolean includeInAll) {
         if (includeInAll == null) {
@@ -422,9 +420,9 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
         }
         return this;
     }
-    
+
     public Map<String, Mapper> mappers() {
-    	return this.mappers;
+        return this.mappers;
     }
 
     @Override
@@ -657,12 +655,12 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
                             serializeNonDynamicArray(context, lastFieldName, arrayFieldName);
                         }
                     } else {
-                        
+
                         serializeNonDynamicArray(context, lastFieldName, arrayFieldName);
                     }
                 }
             } else {
-                
+
                 serializeNonDynamicArray(context, lastFieldName, arrayFieldName);
             }
         }
@@ -717,7 +715,8 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             } else if (token == XContentParser.Token.VALUE_NULL) {
                 serializeNullValue(context, lastFieldName);
             } else if (token == null) {
-                throw new MapperParsingException("object mapping for [" + name + "] with array for [" + arrayFieldName + "] tried to parse as array, but got EOF, is there a mismatch in types for the same field?");
+                throw new MapperParsingException("object mapping for [" + name + "] with array for [" + arrayFieldName
+                        + "] tried to parse as array, but got EOF, is there a mismatch in types for the same field?");
             } else {
                 serializeValue(context, lastFieldName, token);
             }
@@ -1065,9 +1064,9 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
 
     }
 
-	@Override
-	public boolean isSingleValue() {
-		return this.singleValue;
-	}
+    @Override
+    public boolean isSingleValue() {
+        return this.singleValue;
+    }
 
 }

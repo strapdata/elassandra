@@ -22,7 +22,7 @@ package org.elasticsearch.cluster.action.index;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.IndicesRequest;
 import org.elasticsearch.action.support.IndicesOptions;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
@@ -55,7 +55,7 @@ public class NodeMappingRefreshAction extends AbstractComponent {
         transportService.registerHandler(ACTION_NAME, new NodeMappingRefreshTransportHandler());
     }
 
-    public void nodeMappingRefresh(final CassandraClusterState state, final NodeMappingRefreshRequest request) throws ElasticsearchException {
+    public void nodeMappingRefresh(final ClusterState state, final NodeMappingRefreshRequest request) throws ElasticsearchException {
         final DiscoveryNodes nodes = state.nodes();
         if (nodes.masterNode() == null) {
             logger.warn("can't send mapping refresh for [{}][{}], no master known.", request.index(), Strings.arrayToCommaDelimitedString(request.types()));

@@ -93,10 +93,10 @@ public class AnalyzerMapper implements Mapper, InternalMapper, RootMapper {
     public String name() {
         return CONTENT_TYPE;
     }
-    
+
     @Override
     public String contentType() {
-    	return CONTENT_TYPE;
+        return CONTENT_TYPE;
     }
 
     @Override
@@ -135,8 +135,8 @@ public class AnalyzerMapper implements Mapper, InternalMapper, RootMapper {
         return false;
     }
 
-    public Analyzer setAnalyzer(HighlighterContext context){
-        if (context.analyzer() != null){
+    public Analyzer setAnalyzer(HighlighterContext context) {
+        if (context.analyzer() != null) {
             return context.analyzer();
         }
 
@@ -189,9 +189,9 @@ public class AnalyzerMapper implements Mapper, InternalMapper, RootMapper {
 
     }
 
-	@Override
-	public boolean isSingleValue() {
-		// TODO Auto-generated method stub
-		return false;
-	}
+    @Override
+    public boolean isSingleValue() {
+        // TODO Auto-generated method stub
+        return false;
+    }
 }

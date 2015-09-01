@@ -24,7 +24,7 @@ import java.nio.file.Path;
 import org.apache.lucene.util.XIOUtils;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.FailedNodeException;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
@@ -196,7 +196,7 @@ public class LocalGateway extends AbstractLifecycleComponent<Gateway> implements
             }
         }
         */
-        CassandraClusterState.Builder builder = CassandraClusterState.builder(clusterName);
+        ClusterState.Builder builder = ClusterState.builder(clusterName);
         builder.metaData(metaDataBuilder);
         listener.onSuccess(builder.build());
     }

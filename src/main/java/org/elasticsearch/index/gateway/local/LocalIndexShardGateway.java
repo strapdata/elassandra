@@ -81,8 +81,8 @@ public class LocalIndexShardGateway extends AbstractIndexShardComponent implemen
     private final CancellableThreads cancellableThreads = new CancellableThreads();
 
     @Inject
-    public LocalIndexShardGateway(ShardId shardId, @IndexSettings Settings indexSettings, ThreadPool threadPool, MappingUpdatedAction mappingUpdatedAction,
-                                  IndexService indexService, IndexShard indexShard) {
+    public LocalIndexShardGateway(ShardId shardId, @IndexSettings Settings indexSettings, ThreadPool threadPool, MappingUpdatedAction mappingUpdatedAction, IndexService indexService,
+            IndexShard indexShard) {
         super(shardId, indexSettings);
         this.threadPool = threadPool;
         this.mappingUpdatedAction = mappingUpdatedAction;
@@ -107,8 +107,6 @@ public class LocalIndexShardGateway extends AbstractIndexShardComponent implemen
         return "local";
     }
 
-    
-    
     @Override
     public void recover(boolean indexShouldExists, RecoveryState recoveryState) throws IndexShardGatewayRecoveryException {
         indexShard.prepareForIndexRecovery();
@@ -136,14 +134,15 @@ public class LocalIndexShardGateway extends AbstractIndexShardComponent implemen
                     }
                     */
                     try {
-                    	// elasticsearch node cannot recover at first start, so initialize it.
-	                    logger.debug("create an empty shard, actual files were:"+files, e);
-	                    IndexWriter writer = new IndexWriter(indexShard.store().directory(), new IndexWriterConfig(Lucene.VERSION, Lucene.STANDARD_ANALYZER).setOpenMode(IndexWriterConfig.OpenMode.CREATE));
-	                    writer.close();
-	                    si = Lucene.readSegmentInfos(indexShard.store().directory());
-	                    indexShouldExists = true;
+                        // elasticsearch node cannot recover at first start, so initialize it.
+                        logger.debug("create an empty shard, actual files were:" + files, e);
+                        IndexWriter writer = new IndexWriter(indexShard.store().directory(), new IndexWriterConfig(Lucene.VERSION, Lucene.STANDARD_ANALYZER).setOpenMode(IndexWriterConfig.OpenMode.CREATE));
+                        writer.close();
+                        si = Lucene.readSegmentInfos(indexShard.store().directory());
+                        indexShouldExists = true;
                     } catch (Throwable e1) {
-                    	throw new IndexShardGatewayRecoveryException(shardId(), "shard allocated for local recovery (post api), should exist, but doesn't and failed to create, current files: " + files, e);
+                        throw new IndexShardGatewayRecoveryException(shardId(), "shard allocated for local recovery (post api), should exist, but doesn't and failed to create, current files: "
+                                + files, e);
                     }
                 }
                 if (si != null) {
@@ -273,7 +272,7 @@ public class LocalIndexShardGateway extends AbstractIndexShardComponent implemen
                             in.readInt(); // ignored opSize
                         }
                         operation = stream.read(in);
-                    } catch (TruncatedTranslogException|EOFException e) {
+                    } catch (TruncatedTranslogException | EOFException e) {
                         // ignore, not properly written the last op
                         logger.trace("ignoring translog EOF exception, the last operation was not properly written", e);
                         break;
@@ -330,18 +329,19 @@ public class LocalIndexShardGateway extends AbstractIndexShardComponent implemen
 
         for (final String type : typesToUpdate) {
             final CountDownLatch latch = new CountDownLatch(1);
-            mappingUpdatedAction.updateMappingOnMaster(indexService.index().name(), indexService.mapperService().documentMapper(type), indexService.indexUUID(), new MappingUpdatedAction.MappingUpdateListener() {
-                @Override
-                public void onMappingUpdate() {
-                    latch.countDown();
-                }
+            mappingUpdatedAction.updateMappingOnMaster(indexService.index().name(), indexService.mapperService().documentMapper(type), indexService.indexUUID(),
+                    new MappingUpdatedAction.MappingUpdateListener() {
+                        @Override
+                        public void onMappingUpdate() {
+                            latch.countDown();
+                        }
 
-                @Override
-                public void onFailure(Throwable t) {
-                    latch.countDown();
-                    logger.debug("failed to send mapping update post recovery to master for [{}]", t, type);
-                }
-            });
+                        @Override
+                        public void onFailure(Throwable t) {
+                            latch.countDown();
+                            logger.debug("failed to send mapping update post recovery to master for [{}]", t, type);
+                        }
+                    });
             cancellableThreads.execute(new CancellableThreads.Interruptable() {
                 @Override
                 public void run() throws InterruptedException {
@@ -363,7 +363,6 @@ public class LocalIndexShardGateway extends AbstractIndexShardComponent implemen
     public String type() {
         return "local";
     }
-
 
     @Override
     public void close() {
@@ -400,5 +399,4 @@ public class LocalIndexShardGateway extends AbstractIndexShardComponent implemen
         }
     }
 
-	
 }

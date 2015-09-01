@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer.
+ * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -21,13 +21,12 @@ import org.elasticsearch.ElasticsearchException;
 
 public class NoPersistedMetaDataException extends ElasticsearchException {
 
-	
     public NoPersistedMetaDataException() {
         super("No MetaData as comment");
     }
 
     public NoPersistedMetaDataException(Exception e) {
-        super("Failed to read MetaData as comment",e);
+        super("Failed to read MetaData as comment", e);
     }
 
-} 
+}

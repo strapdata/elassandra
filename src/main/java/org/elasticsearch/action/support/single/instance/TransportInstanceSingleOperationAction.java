@@ -26,7 +26,7 @@ import org.elasticsearch.action.UnavailableShardsException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -78,18 +78,18 @@ public abstract class TransportInstanceSingleOperationAction<Request extends Ins
 
     protected abstract Response newResponse();
 
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.WRITE);
     }
 
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, InternalRequest request) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, InternalRequest request) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, request.concreteIndex());
     }
     /**
      * Resolves the request. If the resolve means a different execution, then return false
      * here to indicate not to continue and execute this request.
      */
-    protected abstract boolean resolveRequest(CassandraClusterState state, InternalRequest request, ActionListener<Response> listener);
+    protected abstract boolean resolveRequest(ClusterState state, InternalRequest request, ActionListener<Response> listener);
 
     protected boolean retryOnFailure(Throwable e) {
         return false;
@@ -102,7 +102,7 @@ public abstract class TransportInstanceSingleOperationAction<Request extends Ins
     /**
      * Should return an iterator with a single shard!
      */
-    protected abstract ShardIterator shards(CassandraClusterState clusterState, InternalRequest request) throws ElasticsearchException;
+    protected abstract ShardIterator shards(ClusterState clusterState, InternalRequest request) throws ElasticsearchException;
 
     class AsyncSingleAction {
 
@@ -251,7 +251,7 @@ public abstract class TransportInstanceSingleOperationAction<Request extends Ins
             internalRequest.request().beforeLocalFork();
             observer.waitForNextChange(new ClusterStateObserver.Listener() {
                 @Override
-                public void onNewClusterState(CassandraClusterState state) {
+                public void onNewClusterState(ClusterState state) {
                     doStart();
                 }
 

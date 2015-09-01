@@ -90,7 +90,8 @@ public class RoutingNode implements Iterable<MutableShardRouting> {
         // TODO use Set with ShardIds for faster lookup.
         for (MutableShardRouting shardRouting : shards) {
             if (shardRouting.shardId().equals(shard.shardId())) {
-                throw new ElasticsearchIllegalStateException("Trying to add a shard [" + shard.shardId().index().name() + "][" + shard.shardId().id() + "] to a node [" + nodeId + "] where it already exists");
+                throw new ElasticsearchIllegalStateException("Trying to add a shard [" + shard.shardId().index().name() + "][" + shard.shardId().id() + "] to a node [" + nodeId
+                        + "] where it already exists");
             }
         }
         shards.add(shard);
@@ -192,7 +193,7 @@ public class RoutingNode implements Iterable<MutableShardRouting> {
     }
 
     public MutableShardRouting get(int i) {
-        return shards.get(i) ;
+        return shards.get(i);
     }
 
     public Collection<MutableShardRouting> copyShards() {

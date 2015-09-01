@@ -21,7 +21,7 @@ package org.elasticsearch.river.cluster;
 
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -88,7 +88,7 @@ public class RiverClusterService extends AbstractLifecycleComponent<RiverCluster
     /**
      * The current state.
      */
-    public CassandraClusterState state() {
+    public ClusterState state() {
         return clusterService.state();
     }
 
@@ -154,14 +154,13 @@ public class RiverClusterService extends AbstractLifecycleComponent<RiverCluster
     private class UpdateClusterStateListener implements PublishRiverClusterStateAction.NewClusterStateListener {
         @Override
         public void onNewClusterState(final RiverClusterState clusterState) {
-            CassandraClusterState state = clusterService.state();
-            
+            ClusterState state = clusterService.state();
+
             if (state.nodes().localNodeMaster()) {
                 logger.warn("master should not receive new cluster state from [{}]", state.nodes().masterNode());
                 return;
             }
-			
-            
+
             submitStateUpdateTask("received_state", new RiverClusterStateUpdateTask() {
                 @Override
                 public RiverClusterState execute(RiverClusterState currentState) {

@@ -31,7 +31,7 @@ import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.master.MasterNodeOperationRequest;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -119,7 +119,7 @@ public class MappingUpdatedAction extends TransportMasterNodeOperationAction<Map
     }
 
     @Override
-    protected ClusterBlockException checkBlock(MappingUpdatedRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(MappingUpdatedRequest request, ClusterState state) {
         // internal call by other nodes, no need to check for blocks
         return null;
     }
@@ -141,7 +141,7 @@ public class MappingUpdatedAction extends TransportMasterNodeOperationAction<Map
     }
 
     @Override
-    protected void masterOperation(final MappingUpdatedRequest request, final CassandraClusterState state, final ActionListener<MappingUpdatedResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final MappingUpdatedRequest request, final ClusterState state, final ActionListener<MappingUpdatedResponse> listener) throws ElasticsearchException {
         metaDataMappingService.updateMapping(request.index(), request.indexUUID(), request.type(), request.mappingSource(), request.order, request.nodeId, new ActionListener<ClusterStateUpdateResponse>() {
             @Override
             public void onResponse(ClusterStateUpdateResponse response) {

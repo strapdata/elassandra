@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.lucene.store.StoreRateLimiting;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
@@ -155,6 +155,9 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
 
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
+        /*
+         * No more relocated shard to remove with elasticassandra.
+         
         if (!event.routingTableChanged()) {
             return;
         }
@@ -174,9 +177,10 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
                 }
             }
         }
+        */
     }
 
-    boolean shardCanBeDeleted(CassandraClusterState state, IndexShardRoutingTable indexShardRoutingTable) {
+    boolean shardCanBeDeleted(ClusterState state, IndexShardRoutingTable indexShardRoutingTable) {
         // a shard can be deleted if all its copies are active, and its not allocated on this node
         if (indexShardRoutingTable.size() == 0) {
             // should not really happen, there should always be at least 1 (primary) shard in a
@@ -215,7 +219,7 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
     }
 
     // TODO will have to ammend this for shadow replicas so we don't delete the shared copy...
-    private void deleteShardIfExistElseWhere(CassandraClusterState state, IndexShardRoutingTable indexShardRoutingTable) {
+    private void deleteShardIfExistElseWhere(ClusterState state, IndexShardRoutingTable indexShardRoutingTable) {
         List<Tuple<DiscoveryNode, ShardActiveRequest>> requests = new ArrayList<>(indexShardRoutingTable.size());
         String indexUUID = state.getMetaData().index(indexShardRoutingTable.shardId().getIndex()).getUUID();
         ClusterName clusterName = state.getClusterName();
@@ -243,11 +247,11 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
 
         private final ShardId shardId;
         private final int expectedActiveCopies;
-        private final CassandraClusterState clusterState;
+        private final ClusterState clusterState;
         private final AtomicInteger awaitingResponses;
         private final AtomicInteger activeCopies;
 
-        public ShardActiveResponseHandler(ShardId shardId, CassandraClusterState clusterState, int expectedActiveCopies) {
+        public ShardActiveResponseHandler(ShardId shardId, ClusterState clusterState, int expectedActiveCopies) {
             this.shardId = shardId;
             this.expectedActiveCopies = expectedActiveCopies;
             this.clusterState = clusterState;
@@ -291,7 +295,7 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
                 return;
             }
 
-            CassandraClusterState latestClusterState = clusterService.state();
+            ClusterState latestClusterState = clusterService.state();
             if (clusterState.getVersion() != latestClusterState.getVersion()) {
                 logger.trace("not deleting shard {}, the latest cluster state version[{}] is not equal to cluster state before shard active api call [{}]", shardId, latestClusterState.getVersion(), clusterState.getVersion());
                 return;
@@ -299,7 +303,7 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
 
             clusterService.submitStateUpdateTask("indices_store", new ClusterStateNonMasterUpdateTask() {
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) throws Exception {
+                public ClusterState execute(ClusterState currentState) throws Exception {
                     if (clusterState.getVersion() != currentState.getVersion()) {
                         logger.trace("not deleting shard {}, the update task state version[{}] is not equal to cluster state before shard active api call [{}]", shardId, currentState.getVersion(), clusterState.getVersion());
                         return currentState;

@@ -36,21 +36,20 @@ public class ClusterChangedEvent {
 
     private final String source;
 
-    private final CassandraClusterState previousState;
+    private final ClusterState previousState;
 
-    private final CassandraClusterState state;
+    private final ClusterState state;
 
     private final DiscoveryNodes.Delta nodesDelta;
-    
+
     // added to avoid to save a just recovered cluster state.
     private final boolean peristMetaData;
 
-   
-    public ClusterChangedEvent(String source, CassandraClusterState state, CassandraClusterState previousState) {
-        this (source, state, previousState, true);
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState) {
+        this(source, state, previousState, true);
     }
-    	
-    public ClusterChangedEvent(String source, CassandraClusterState state, CassandraClusterState previousState, boolean peristMetaData) {
+
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState, boolean peristMetaData) {
         this.source = source;
         this.state = state;
         this.previousState = previousState;
@@ -65,18 +64,18 @@ public class ClusterChangedEvent {
         return this.source;
     }
 
-    public CassandraClusterState state() {
+    public ClusterState state() {
         return this.state;
     }
 
-    public CassandraClusterState previousState() {
+    public ClusterState previousState() {
         return this.previousState;
     }
 
     public boolean peristMetaData() {
-    	return peristMetaData;
+        return peristMetaData;
     }
-    
+
     public boolean routingTableChanged() {
         return state.routingTable() != previousState.routingTable();
     }
@@ -91,7 +90,6 @@ public class ClusterChangedEvent {
         return true;
     }
 
-    
     /**
      * Returns the indices created in this event
      */
@@ -112,7 +110,7 @@ public class ClusterChangedEvent {
                 created.add(index);
             }
         }
-        return created == null ? ImmutableList.<String>of() : created;
+        return created == null ? ImmutableList.<String> of() : created;
     }
 
     /**
@@ -135,7 +133,7 @@ public class ClusterChangedEvent {
                 deleted.add(index);
             }
         }
-        return deleted == null ? ImmutableList.<String>of() : deleted;
+        return deleted == null ? ImmutableList.<String> of() : deleted;
     }
 
     public boolean metaDataChanged() {
@@ -148,7 +146,8 @@ public class ClusterChangedEvent {
             return true;
         }
         IndexMetaData previousIndexMetaData = previousMetaData.index(current.index());
-        // no need to check on version, since disco modules will make sure to use the
+        // no need to check on version, since disco modules will make sure to
+        // use the
         // same instance if its a version match
         if (previousIndexMetaData == current) {
             return false;

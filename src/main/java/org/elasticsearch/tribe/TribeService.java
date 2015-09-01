@@ -223,8 +223,8 @@ public class TribeService extends AbstractLifecycleComponent<TribeService> {
             logger.debug("[{}] received cluster event, [{}]", tribeName, event.source());
             clusterService.submitStateUpdateTask("cluster event from " + tribeName + ", " + event.source(), new ClusterStateNonMasterUpdateTask() {
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) throws Exception {
-                    CassandraClusterState tribeState = event.state();
+                public ClusterState execute(ClusterState currentState) throws Exception {
+                    ClusterState tribeState = event.state();
                     DiscoveryNodes.Builder nodes = DiscoveryNodes.builder(currentState.nodes());
                     // -- merge nodes
                     // go over existing nodes, and see if they need to be removed
@@ -308,7 +308,7 @@ public class TribeService extends AbstractLifecycleComponent<TribeService> {
                         }
                     }
 
-                    return CassandraClusterState.builder(currentState).blocks(blocks).nodes(nodes).metaData(metaData).routingTable(routingTable).build();
+                    return ClusterState.builder(currentState).blocks(blocks).nodes(nodes).metaData(metaData).routingTable(routingTable).build();
                 }
 
                 private void removeIndex(ClusterBlocks.Builder blocks, MetaData.Builder metaData, RoutingTable.Builder routingTable, IndexMetaData index) {
@@ -317,7 +317,7 @@ public class TribeService extends AbstractLifecycleComponent<TribeService> {
                     blocks.removeIndexBlocks(index.index());
                 }
 
-                private void addNewIndex(CassandraClusterState tribeState, ClusterBlocks.Builder blocks, MetaData.Builder metaData, RoutingTable.Builder routingTable, IndexMetaData tribeIndex) {
+                private void addNewIndex(ClusterState tribeState, ClusterBlocks.Builder blocks, MetaData.Builder metaData, RoutingTable.Builder routingTable, IndexMetaData tribeIndex) {
                     Settings tribeSettings = ImmutableSettings.builder().put(tribeIndex.settings()).put(TRIBE_NAME, tribeName).build();
                     metaData.put(IndexMetaData.builder(tribeIndex).settings(tribeSettings));
                     routingTable.add(tribeState.routingTable().index(tribeIndex.index()));

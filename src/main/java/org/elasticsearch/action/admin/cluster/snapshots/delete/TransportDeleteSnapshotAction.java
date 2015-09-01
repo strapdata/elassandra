@@ -24,7 +24,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.SnapshotId;
@@ -63,12 +63,12 @@ public class TransportDeleteSnapshotAction extends TransportMasterNodeOperationA
     }
 
     @Override
-    protected ClusterBlockException checkBlock(DeleteSnapshotRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(DeleteSnapshotRequest request, ClusterState state) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, "");
     }
 
     @Override
-    protected void masterOperation(final DeleteSnapshotRequest request, CassandraClusterState state, final ActionListener<DeleteSnapshotResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final DeleteSnapshotRequest request, ClusterState state, final ActionListener<DeleteSnapshotResponse> listener) throws ElasticsearchException {
         SnapshotId snapshotIds = new SnapshotId(request.repository(), request.snapshot());
         snapshotsService.deleteSnapshot(snapshotIds, new SnapshotsService.DeleteSnapshotListener() {
             @Override

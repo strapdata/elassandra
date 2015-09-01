@@ -34,6 +34,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.lucene.search.OrFilter;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.index.mapper.core.LongFieldMapper.Defaults;
 import org.elasticsearch.index.shard.ShardId;
 
 import com.google.common.collect.ImmutableList;
@@ -62,11 +63,10 @@ public class ImmutableShardRouting implements Streamable, Serializable, ShardRou
 
     protected RestoreSource restoreSource;
 
-    protected final transient  Collection<Range<Token>> tokenRanges;
-    
+    protected final transient Collection<Range<Token>> tokenRanges;
+
     private final transient ImmutableList<ShardRouting> asList;
 
-    		
     ImmutableShardRouting() {
         this.asList = ImmutableList.of((ShardRouting) this);
         this.tokenRanges = ImmutableList.of();
@@ -102,10 +102,9 @@ public class ImmutableShardRouting implements Streamable, Serializable, ShardRou
     }
 
     public ImmutableShardRouting(String index, int shardId, String currentNodeId, boolean primary, ShardRoutingState state, long version) {
-    	this(index, shardId, currentNodeId, primary, state, version, ImmutableList.<Range<Token>>of());
+        this(index, shardId, currentNodeId, primary, state, version, ImmutableList.<Range<Token>> of());
     }
 
-   
     /**
      * 
      * @param index
@@ -115,21 +114,19 @@ public class ImmutableShardRouting implements Streamable, Serializable, ShardRou
      * @param tokenRanges
      * @param state
      */
-    public ImmutableShardRouting(String index, int shardId,  String currentNodeId, boolean isPrimary, ShardRoutingState state, long version, Collection<Range<Token>> tokenRanges) {
-    	this.index = index;
+    public ImmutableShardRouting(String index, int shardId, String currentNodeId, boolean isPrimary, ShardRoutingState state, long version, Collection<Range<Token>> tokenRanges) {
+        this.index = index;
         this.shardId = shardId;
         this.currentNodeId = currentNodeId;
         this.relocatingNodeId = null;
         this.restoreSource = null;
         this.primary = isPrimary;
         this.version = version;
-        this.tokenRanges = (tokenRanges == null) ?   ImmutableList.<Range<Token>>of() : ImmutableList.copyOf(tokenRanges);
+        this.tokenRanges = (tokenRanges == null) ? ImmutableList.<Range<Token>> of() : ImmutableList.copyOf(tokenRanges);
         this.state = state;
         this.asList = ImmutableList.of((ShardRouting) this);
     }
-    
-    
-    
+
     @Override
     public String index() {
         return this.index;
@@ -155,28 +152,24 @@ public class ImmutableShardRouting implements Streamable, Serializable, ShardRou
         return this.version;
     }
 
-    @Override 
+    @Override
     public Collection<Range<Token>> tokenRanges() {
-    	return this.tokenRanges;
+        return this.tokenRanges;
     }
-    
-  
+
     /**
      * TODO: Add RandomPartitionner support. 
      */
     @Override
     public Filter tokenFilter() {
-    	List<NumericRangeFilter> rangeFilters = new ArrayList<NumericRangeFilter>(tokenRanges.size());
-    	for(Range<Token> range : tokenRanges) {
-    		rangeFilters.add(
-    				NumericRangeFilter.newLongRange("_token", 
-    						(Long)range.left.getTokenValue(), 
-    						(Long)range.right.getTokenValue(), false, true)
-    				);
-    	}
-    	return new OrFilter(rangeFilters);
+        List<NumericRangeFilter> rangeFilters = new ArrayList<NumericRangeFilter>(tokenRanges.size());
+        for (Range<Token> range : tokenRanges) {
+            // TODO: check for best precisionStep, see https://lucene.apache.org/core/4_2_0/core/org/apache/lucene/search/NumericRangeQuery.html
+            rangeFilters.add(NumericRangeFilter.newLongRange("_token", Defaults.PRECISION_STEP_64_BIT, (Long) range.left.getTokenValue(), (Long) range.right.getTokenValue(), false, true));
+        }
+        return new OrFilter(rangeFilters);
     }
-    
+
     @Override
     public boolean unassigned() {
         return state == ShardRoutingState.UNASSIGNED;
@@ -240,8 +233,6 @@ public class ImmutableShardRouting implements Streamable, Serializable, ShardRou
         return this.state;
     }
 
-    
-    
     @Override
     public ShardId shardId() {
         if (shardIdentifier != null) {
@@ -410,12 +401,7 @@ public class ImmutableShardRouting implements Streamable, Serializable, ShardRou
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject()
-                .field("state", state())
-                .field("primary", primary())
-                .field("node", currentNodeId())
-                .field("token_ranges", tokenRanges())
-                .field("shard", shardId().id())
+        builder.startObject().field("state", state()).field("primary", primary()).field("node", currentNodeId()).field("token_ranges", tokenRanges()).field("shard", shardId().id())
                 .field("index", shardId().index().name());
         if (restoreSource() != null) {
             builder.field("restore_source");
@@ -424,5 +410,4 @@ public class ImmutableShardRouting implements Streamable, Serializable, ShardRou
         return builder.endObject();
     }
 
-	
 }

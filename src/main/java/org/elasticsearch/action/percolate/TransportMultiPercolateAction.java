@@ -28,7 +28,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationFailedException;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
 import org.elasticsearch.cluster.routing.ShardIterator;
@@ -74,7 +74,7 @@ public class TransportMultiPercolateAction extends HandledTransportAction<MultiP
 
     @Override
     protected void doExecute(final MultiPercolateRequest request, final ActionListener<MultiPercolateResponse> listener) {
-        final CassandraClusterState clusterState = clusterService.state();
+        final ClusterState clusterState = clusterService.state();
         clusterState.blocks().globalBlockedRaiseException(ClusterBlockLevel.READ);
 
         final List<Object> percolateRequests = new ArrayList<>(request.requests().size());
@@ -149,7 +149,7 @@ public class TransportMultiPercolateAction extends HandledTransportAction<MultiP
         final AtomicReferenceArray<AtomicInteger> expectedOperationsPerItem;
         final AtomicReferenceArray<AtomicReferenceArray> responsesByItemAndShard;
 
-        ASyncAction(MultiPercolateRequest multiPercolateRequest, List<Object> percolateRequests, ActionListener<MultiPercolateResponse> finalListener, CassandraClusterState clusterState) {
+        ASyncAction(MultiPercolateRequest multiPercolateRequest, List<Object> percolateRequests, ActionListener<MultiPercolateResponse> finalListener, ClusterState clusterState) {
             this.finalListener = finalListener;
             this.multiPercolateRequest = multiPercolateRequest;
             this.percolateRequests = percolateRequests;

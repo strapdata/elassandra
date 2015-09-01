@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer.
+ * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -43,7 +43,7 @@ public class CassandraGatewayModule extends AbstractModule implements PreProcess
 
     @Override
     public void processModule(Module module) {
-    	/*
+        /*
         if (module instanceof ShardsAllocatorModule) {
             ((ShardsAllocatorModule) module).setGatewayAllocator(CassandraGatewayAllocator.class);
         }

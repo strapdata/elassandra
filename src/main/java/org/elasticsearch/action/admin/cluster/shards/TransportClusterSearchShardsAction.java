@@ -24,7 +24,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -57,7 +57,7 @@ public class TransportClusterSearchShardsAction extends TransportMasterNodeReadO
     }
 
     @Override
-    protected ClusterBlockException checkBlock(ClusterSearchShardsRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(ClusterSearchShardsRequest request, ClusterState state) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, state.metaData().concreteIndices(request.indicesOptions(), request.indices()));
     }
 
@@ -72,8 +72,8 @@ public class TransportClusterSearchShardsAction extends TransportMasterNodeReadO
     }
 
     @Override
-    protected void masterOperation(final ClusterSearchShardsRequest request, final CassandraClusterState state, final ActionListener<ClusterSearchShardsResponse> listener) throws ElasticsearchException {
-        CassandraClusterState clusterState = clusterService.state();
+    protected void masterOperation(final ClusterSearchShardsRequest request, final ClusterState state, final ActionListener<ClusterSearchShardsResponse> listener) throws ElasticsearchException {
+        ClusterState clusterState = clusterService.state();
         String[] concreteIndices = clusterState.metaData().concreteIndices(request.indicesOptions(), request.indices());
         Map<String, Set<String>> routingMap = clusterState.metaData().resolveSearchRouting(request.routing(), request.indices());
         Set<String> nodeIds = newHashSet();

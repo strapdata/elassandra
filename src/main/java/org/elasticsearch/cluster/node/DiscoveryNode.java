@@ -71,31 +71,34 @@ public class DiscoveryNode implements Streamable, Serializable {
         }
         return false;
     }
-    
+
     public static enum DiscoveryNodeStatus {
-		UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2);
+        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2);
 
-		private final byte status;
+        private final byte status;
 
-		DiscoveryNodeStatus(byte status) {
-			this.status = status;
-		}
+        DiscoveryNodeStatus(byte status) {
+            this.status = status;
+        }
 
-		public byte status() {
-			return this.status;
-		}
-		
-		@Override
-		public String toString() {
-		    switch(this) {
-		      case UNKNOWN: return "UNKNOWN";
-		      case ALIVE: return "ALIVE";
-		      case DEAD: return "DEAD";
-		      default: throw new IllegalArgumentException();
-		    }
-		}
-	}
-    
+        public byte status() {
+            return this.status;
+        }
+
+        @Override
+        public String toString() {
+            switch (this) {
+            case UNKNOWN:
+                return "UNKNOWN";
+            case ALIVE:
+                return "ALIVE";
+            case DEAD:
+                return "DEAD";
+            default:
+                throw new IllegalArgumentException();
+            }
+        }
+    }
 
     public static boolean nodeRequiresLocalStorage(Settings settings) {
         return !(settings.getAsBoolean("node.client", false) || (!settings.getAsBoolean("node.data", true) && !settings.getAsBoolean("node.master", true)));
@@ -132,7 +135,7 @@ public class DiscoveryNode implements Streamable, Serializable {
     private ImmutableMap<String, String> attributes;
     private Version version = Version.CURRENT;
     private DiscoveryNodeStatus status = DiscoveryNodeStatus.UNKNOWN;
-    
+
     DiscoveryNode() {
     }
 
@@ -150,7 +153,7 @@ public class DiscoveryNode implements Streamable, Serializable {
      * @param version the version of the node.
      */
     public DiscoveryNode(String nodeId, TransportAddress address, Version version) {
-        this("", nodeId, address, ImmutableMap.<String, String>of(), version);
+        this("", nodeId, address, ImmutableMap.<String, String> of(), version);
     }
 
     /**
@@ -206,9 +209,9 @@ public class DiscoveryNode implements Streamable, Serializable {
     }
 
     public void status(DiscoveryNodeStatus status) {
-    	this.status = status;
+        this.status = status;
     }
-    
+
     /**
      * Should this node form a connection to the provided node.
      */
@@ -237,13 +240,13 @@ public class DiscoveryNode implements Streamable, Serializable {
      * The inet listen address of the node.
      */
     public InetAddress getInetAddress() {
-        return ((InetSocketTransportAddress)address()).address().getAddress();
+        return ((InetSocketTransportAddress) address()).address().getAddress();
     }
 
     public void id(String id) {
-    	this.nodeId = id;
+        this.nodeId = id;
     }
-    
+
     /**
      * The unique id of the node.
      */
@@ -278,7 +281,7 @@ public class DiscoveryNode implements Streamable, Serializable {
     public DiscoveryNodeStatus status() {
         return this.status;
     }
-    
+
     /**
      * The name of the node.
      */
@@ -441,15 +444,13 @@ public class DiscoveryNode implements Streamable, Serializable {
     }
 
     // we need this custom serialization logic because Version is not serializable (because org.apache.lucene.util.Version is not serializable)
-    private void writeObject(java.io.ObjectOutputStream out)
-            throws IOException {
+    private void writeObject(java.io.ObjectOutputStream out) throws IOException {
         StreamOutput streamOutput = new OutputStreamStreamOutput(out);
         streamOutput.setVersion(Version.CURRENT.minimumCompatibilityVersion());
         this.writeTo(streamOutput);
     }
 
-    private void readObject(java.io.ObjectInputStream in)
-            throws IOException, ClassNotFoundException {
+    private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
         StreamInput streamInput = new InputStreamStreamInput(in);
         streamInput.setVersion(Version.CURRENT.minimumCompatibilityVersion());
         this.readFrom(streamInput);

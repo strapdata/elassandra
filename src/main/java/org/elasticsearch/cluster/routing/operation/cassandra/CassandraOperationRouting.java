@@ -23,7 +23,7 @@ import com.google.common.collect.Lists;
 
 import org.apache.lucene.util.CollectionUtil;
 import org.elasticsearch.ElasticsearchIllegalArgumentException;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
@@ -67,32 +67,32 @@ public class CassandraOperationRouting extends AbstractComponent implements Oper
     }
 
     @Override
-    public ShardIterator indexShards(CassandraClusterState clusterState, String index, String type, String id, @Nullable String routing) throws IndexMissingException, IndexShardMissingException {
+    public ShardIterator indexShards(ClusterState clusterState, String index, String type, String id, @Nullable String routing) throws IndexMissingException, IndexShardMissingException {
         return shards(clusterState, index, type, id, routing).shardsIt();
     }
 
     @Override
-    public ShardIterator deleteShards(CassandraClusterState clusterState, String index, String type, String id, @Nullable String routing) throws IndexMissingException, IndexShardMissingException {
+    public ShardIterator deleteShards(ClusterState clusterState, String index, String type, String id, @Nullable String routing) throws IndexMissingException, IndexShardMissingException {
         return shards(clusterState, index, type, id, routing).shardsIt();
     }
 
     @Override
-    public ShardIterator getShards(CassandraClusterState clusterState, String index, String type, String id, @Nullable String routing, @Nullable String preference) throws IndexMissingException, IndexShardMissingException {
+    public ShardIterator getShards(ClusterState clusterState, String index, String type, String id, @Nullable String routing, @Nullable String preference) throws IndexMissingException, IndexShardMissingException {
         return preferenceActiveShardIterator(shards(clusterState, index, type, id, routing), clusterState.nodes().localNodeId(), clusterState.nodes(), preference);
     }
 
     @Override
-    public ShardIterator getShards(CassandraClusterState clusterState, String index, int shardId, @Nullable String preference) throws IndexMissingException, IndexShardMissingException {
+    public ShardIterator getShards(ClusterState clusterState, String index, int shardId, @Nullable String preference) throws IndexMissingException, IndexShardMissingException {
         return preferenceActiveShardIterator(shards(clusterState, index, shardId), clusterState.nodes().localNodeId(), clusterState.nodes(), preference);
     }
 
     @Override
-    public GroupShardsIterator broadcastDeleteShards(CassandraClusterState clusterState, String index) throws IndexMissingException {
+    public GroupShardsIterator broadcastDeleteShards(ClusterState clusterState, String index) throws IndexMissingException {
         return indexRoutingTable(clusterState, index).groupByShardsIt();
     }
 
     @Override
-    public GroupShardsIterator deleteByQueryShards(CassandraClusterState clusterState, String index, @Nullable Set<String> routing) throws IndexMissingException {
+    public GroupShardsIterator deleteByQueryShards(ClusterState clusterState, String index, @Nullable Set<String> routing) throws IndexMissingException {
         if (routing == null || routing.isEmpty()) {
             return indexRoutingTable(clusterState, index).groupByShardsIt();
         }
@@ -112,13 +112,13 @@ public class CassandraOperationRouting extends AbstractComponent implements Oper
     }
 
     @Override
-    public int searchShardsCount(CassandraClusterState clusterState, String[] indices, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference) throws IndexMissingException {
+    public int searchShardsCount(ClusterState clusterState, String[] indices, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference) throws IndexMissingException {
         final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices, routing);
         return shards.size();
     }
 
     @Override
-    public GroupShardsIterator searchShards(CassandraClusterState clusterState, String[] indices, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference) throws IndexMissingException {
+    public GroupShardsIterator searchShards(ClusterState clusterState, String[] indices, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference) throws IndexMissingException {
         final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices, routing);
         final Set<ShardIterator> set = new HashSet<>(shards.size());
         for (IndexShardRoutingTable shard : shards) {
@@ -133,7 +133,7 @@ public class CassandraOperationRouting extends AbstractComponent implements Oper
 
     private static final Map<String, Set<String>> EMPTY_ROUTING = Collections.emptyMap();
 
-    private Set<IndexShardRoutingTable> computeTargetedShards(CassandraClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing) throws IndexMissingException {
+    private Set<IndexShardRoutingTable> computeTargetedShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing) throws IndexMissingException {
         routing = routing == null ? EMPTY_ROUTING : routing; // just use an empty map
         final Set<IndexShardRoutingTable> set = new HashSet<>();
         // we use set here and not list since we might get duplicates
@@ -233,7 +233,7 @@ public class CassandraOperationRouting extends AbstractComponent implements Oper
         }
     }
 
-    public IndexMetaData indexMetaData(CassandraClusterState clusterState, String index) {
+    public IndexMetaData indexMetaData(ClusterState clusterState, String index) {
         IndexMetaData indexMetaData = clusterState.metaData().index(index);
         if (indexMetaData == null) {
             throw new IndexMissingException(new Index(index));
@@ -241,7 +241,7 @@ public class CassandraOperationRouting extends AbstractComponent implements Oper
         return indexMetaData;
     }
 
-    protected IndexRoutingTable indexRoutingTable(CassandraClusterState clusterState, String index) {
+    protected IndexRoutingTable indexRoutingTable(ClusterState clusterState, String index) {
         IndexRoutingTable indexRouting = clusterState.routingTable().index(index);
         if (indexRouting == null) {
             throw new IndexMissingException(new Index(index));
@@ -252,11 +252,11 @@ public class CassandraOperationRouting extends AbstractComponent implements Oper
 
     // either routing is set, or type/id are set
 
-    protected IndexShardRoutingTable shards(CassandraClusterState clusterState, String index, String type, String id, String routing) {
+    protected IndexShardRoutingTable shards(ClusterState clusterState, String index, String type, String id, String routing) {
         return shards(clusterState, index, 0);
     }
 
-    protected IndexShardRoutingTable shards(CassandraClusterState clusterState, String index, int shardId) {
+    protected IndexShardRoutingTable shards(ClusterState clusterState, String index, int shardId) {
         IndexShardRoutingTable indexShard = indexRoutingTable(clusterState, index).shard(shardId);
         if (indexShard == null) {
             throw new IndexShardMissingException(new ShardId(index, shardId));

@@ -27,7 +27,7 @@ import org.elasticsearch.action.support.broadcast.BroadcastShardOperationFailedE
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationRequest;
 import org.elasticsearch.action.support.broadcast.TransportBroadcastOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
@@ -74,22 +74,22 @@ public class TransportIndicesSegmentsAction extends TransportBroadcastOperationA
      * Segments goes across *all* active shards.
      */
     @Override
-    protected GroupShardsIterator shards(CassandraClusterState clusterState, IndicesSegmentsRequest request, String[] concreteIndices) {
+    protected GroupShardsIterator shards(ClusterState clusterState, IndicesSegmentsRequest request, String[] concreteIndices) {
         return clusterState.routingTable().allActiveShardsGrouped(concreteIndices, true);
     }
 
     @Override
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state, IndicesSegmentsRequest request) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, IndicesSegmentsRequest request) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
     }
 
     @Override
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, IndicesSegmentsRequest countRequest, String[] concreteIndices) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, IndicesSegmentsRequest countRequest, String[] concreteIndices) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, concreteIndices);
     }
 
     @Override
-    protected IndicesSegmentResponse newResponse(IndicesSegmentsRequest request, AtomicReferenceArray shardsResponses, CassandraClusterState clusterState) {
+    protected IndicesSegmentResponse newResponse(IndicesSegmentsRequest request, AtomicReferenceArray shardsResponses, ClusterState clusterState) {
         int successfulShards = 0;
         int failedShards = 0;
         List<ShardOperationFailedException> shardFailures = null;

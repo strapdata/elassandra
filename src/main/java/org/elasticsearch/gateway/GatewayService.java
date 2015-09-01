@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.cassandra.ElasticSchemaService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterStateListener;
@@ -50,8 +50,8 @@ import org.elasticsearch.threadpool.ThreadPool;
  */
 public class GatewayService extends AbstractLifecycleComponent<GatewayService> implements ClusterStateListener {
 
-	public static final ClusterBlock STATE_NOT_RECOVERED_BLOCK = new ClusterBlock(1, "state not recovered / initialized", true, true, RestStatus.SERVICE_UNAVAILABLE, ClusterBlockLevel.ALL);
-	public static final ClusterBlock NO_CASSANDRA_RING_BLOCK = new ClusterBlock(12, "no cassandra ring", true, true, RestStatus.SERVICE_UNAVAILABLE, ClusterBlockLevel.NONE);
+    public static final ClusterBlock STATE_NOT_RECOVERED_BLOCK = new ClusterBlock(1, "state not recovered / initialized", true, true, RestStatus.SERVICE_UNAVAILABLE, ClusterBlockLevel.ALL);
+    public static final ClusterBlock NO_CASSANDRA_RING_BLOCK = new ClusterBlock(12, "no cassandra ring", true, true, RestStatus.SERVICE_UNAVAILABLE, ClusterBlockLevel.NONE);
 
     public static final TimeValue DEFAULT_RECOVER_AFTER_TIME_IF_EXPECTED_NODES_IS_SET = TimeValue.timeValueMinutes(5);
 
@@ -65,7 +65,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
 
     private final DiscoveryService discoveryService;
     private final ElasticSchemaService elasticSchemaService;
-    
+
     private final TimeValue recoverAfterTime;
     private final int recoverAfterNodes;
     private final int expectedNodes;
@@ -74,13 +74,12 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
     private final int recoverAfterMasterNodes;
     private final int expectedMasterNodes;
 
-
     private final AtomicBoolean recovered = new AtomicBoolean();
     private final AtomicBoolean scheduledRecovery = new AtomicBoolean();
 
     @Inject
     public GatewayService(Settings settings, Gateway gateway, AllocationService allocationService, ClusterService clusterService, 
-    		DiscoveryService discoveryService, ThreadPool threadPool, ElasticSchemaService elasticSchemaService) {
+            DiscoveryService discoveryService, ThreadPool threadPool, ElasticSchemaService elasticSchemaService) {
         super(settings);
         this.gateway = gateway;
         //this.allocationService = allocationService;
@@ -106,7 +105,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
 
         // Add the not recovered as initial state block, we don't allow anything until
         this.clusterService.addInitialStateBlock(STATE_NOT_RECOVERED_BLOCK);
-        
+
         // block to avoid to persist metadata while cassandra is not ready.
         this.clusterService.addInitialStateBlock(NO_CASSANDRA_RING_BLOCK);
     }
@@ -116,47 +115,41 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
      * (may be update when replaying the cassandra logs)
      */
     public void enableMetaDataPersictency() {
-    	logger.trace("releasing the cassandra ring block...");
-    	
+        logger.trace("releasing the cassandra ring block...");
+
         clusterService.submitStateUpdateTask("gateway-cassandra-ring-ready", new ProcessedClusterStateUpdateTask() {
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
-            	
-            	
+            public ClusterState execute(ClusterState currentState) {
+
                 // remove the block, since we recovered from gateway
-                ClusterBlocks.Builder blocks = ClusterBlocks.builder()
-                        .blocks(currentState.blocks())
-                        .removeGlobalBlock(NO_CASSANDRA_RING_BLOCK);
+                ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks()).removeGlobalBlock(NO_CASSANDRA_RING_BLOCK);
 
                 RoutingTable newRoutingTable = RoutingTable.builder(clusterService, currentState).build();
-                
+
                 // update the state to reflect 
-                CassandraClusterState updatedState = CassandraClusterState.builder(currentState)
-                        .blocks(blocks)
-                        .routingTable(newRoutingTable)
-                        .build();
-                
+                ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).routingTable(newRoutingTable).build();
+
                 return updatedState;
             }
 
             @Override
             public boolean doPresistMetaData() {
-            	// nothing to persist, we just recover from cassandra schema.
-            	return false;
+                // nothing to persist, we just recover from cassandra schema.
+                return false;
             }
-            
+
             @Override
             public void onFailure(String source, Throwable t) {
                 logger.error("unexpected failure during [{}]", t, source);
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 logger.info("cassandra ring block released");
             }
         });
     }
-    
+
     @Override
     protected void doStart() throws ElasticsearchException {
         gateway.start();
@@ -164,7 +157,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
         // if we received initial state, see if we can recover within the start phase, so we hold the
         // node from starting until we recovered properly
         if (discoveryService.initialStateReceived()) {
-            CassandraClusterState clusterState = clusterService.state();
+            ClusterState clusterState = clusterService.state();
             if (clusterState.nodes().localNodeMaster() && clusterState.blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK)) {
                 checkStateMeetsSettingsAndMaybeRecover(clusterState, false);
             }
@@ -195,8 +188,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
         }
     }
 
-    
-    protected void checkStateMeetsSettingsAndMaybeRecover(CassandraClusterState state, boolean asyncRecovery) {
+    protected void checkStateMeetsSettingsAndMaybeRecover(ClusterState state, boolean asyncRecovery) {
         DiscoveryNodes nodes = state.nodes();
         if (state.blocks().hasGlobalBlock(discoveryService.getNoMasterBlock())) {
             logger.debug("not recovering from gateway, no master elected yet");
@@ -233,7 +225,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
     }
 
     private void performStateRecovery(boolean asyncRecovery, boolean enforceRecoverAfterTime, String reason) {
-    	CountDownLatch recoverLatch = new CountDownLatch(1);
+        CountDownLatch recoverLatch = new CountDownLatch(1);
         final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener(recoverLatch);
 
         if (enforceRecoverAfterTime && recoverAfterTime != null) {
@@ -265,10 +257,10 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
             }
         }
         try {
-			recoverLatch.await();
-		} catch (InterruptedException e) {
-			logger.error("Waiting recovery interrupted", e);
-		}
+            recoverLatch.await();
+        } catch (InterruptedException e) {
+            logger.error("Waiting recovery interrupted", e);
+        }
     }
 
     class GatewayRecoveryListener implements Gateway.GatewayStateRecoveredListener {
@@ -280,18 +272,15 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
         }
 
         @Override
-        public void onSuccess(final CassandraClusterState recoveredState) {
+        public void onSuccess(final ClusterState recoveredState) {
             logger.trace("successful state recovery, importing cluster state...");
             clusterService.submitStateUpdateTask("gateway-recover-state", new ProcessedClusterStateUpdateTask() {
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) {
+                public ClusterState execute(ClusterState currentState) {
                     assert currentState.metaData().indices().isEmpty();
 
                     // remove the block, since we recovered from gateway
-                    ClusterBlocks.Builder blocks = ClusterBlocks.builder()
-                            .blocks(currentState.blocks())
-                            .blocks(recoveredState.blocks())
-                            .removeGlobalBlock(STATE_NOT_RECOVERED_BLOCK);
+                    ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks()).blocks(recoveredState.blocks()).removeGlobalBlock(STATE_NOT_RECOVERED_BLOCK);
 
                     MetaData.Builder metaDataBuilder = MetaData.builder(recoveredState.metaData());
                     // automatically generate a UID for the metadata if we need to
@@ -307,28 +296,25 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
                     }
 
                     // update the state to reflect the new metadata and routing
-                    CassandraClusterState updatedState = CassandraClusterState.builder(currentState)
-                            .blocks(blocks)
-                            .metaData(metaDataBuilder)
-                            .build();
+                    ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).metaData(metaDataBuilder).build();
 
                     // initialize all index routing tables with the one local primary shard active only
                     RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, updatedState);
-                    return CassandraClusterState.builder(updatedState).routingTable(routingTableBuilder).build();
+                    return ClusterState.builder(updatedState).routingTable(routingTableBuilder).build();
                 }
 
                 @Override
                 public boolean doPresistMetaData() {
-                	return false;
+                    return false;
                 }
-                
+
                 @Override
                 public void onFailure(String source, Throwable t) {
                     logger.error("unexpected failure during [{}]", t, source);
                 }
 
                 @Override
-                public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                     logger.info("recovered [{}] indices into cluster_state", newState.metaData().indices().size());
                     latch.countDown();
                 }

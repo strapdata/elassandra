@@ -106,7 +106,6 @@ public class LogConfigurator {
                 props.setProperty(key, value);
             }
         }
-        System.out.println("log4j="+props);
         PropertyConfigurator.configure(props);
     }
 

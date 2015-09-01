@@ -96,7 +96,7 @@ public class RestIndexAction extends BaseRestHandler {
         if (sOpType != null) {
             try {
                 indexRequest.opType(IndexRequest.OpType.fromString(sOpType));
-            } catch (ElasticsearchIllegalArgumentException eia){
+            } catch (ElasticsearchIllegalArgumentException eia) {
                 try {
                     XContentBuilder builder = channel.newBuilder();
                     channel.sendResponse(new BytesRestResponse(BAD_REQUEST, builder.startObject().field("error", eia.getMessage()).endObject()));
@@ -117,13 +117,10 @@ public class RestIndexAction extends BaseRestHandler {
         client.index(indexRequest, new RestBuilderListener<IndexResponse>(channel) {
             @Override
             public RestResponse buildResponse(IndexResponse response, XContentBuilder builder) throws Exception {
-                builder.startObject()
-                        .field(Fields._INDEX, response.getIndex())
-                        .field(Fields._TYPE, response.getType())
-                        .field(Fields._ID, response.getId())
+                builder.startObject().field(Fields._INDEX, response.getIndex()).field(Fields._TYPE, response.getType()).field(Fields._ID, response.getId())
                         .field(Fields._VERSION, response.getVersion())
-                       // .field(Fields.CREATED, response.isCreated());
-                		.field(Fields.CREATED, true);
+                        // .field(Fields.CREATED, response.isCreated());
+                        .field(Fields.CREATED, true);
                 builder.endObject();
                 RestStatus status = OK;
                 status = CREATED;

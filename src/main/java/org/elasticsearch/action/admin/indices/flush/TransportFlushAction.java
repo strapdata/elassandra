@@ -26,7 +26,7 @@ import org.elasticsearch.action.support.DefaultShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.TransportBroadcastOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
@@ -67,7 +67,7 @@ public class TransportFlushAction extends TransportBroadcastOperationAction<Flus
     }
 
     @Override
-    protected FlushResponse newResponse(FlushRequest request, AtomicReferenceArray shardsResponses, CassandraClusterState clusterState) {
+    protected FlushResponse newResponse(FlushRequest request, AtomicReferenceArray shardsResponses, ClusterState clusterState) {
         int successfulShards = 0;
         int failedShards = 0;
         List<ShardOperationFailedException> shardFailures = null;
@@ -114,17 +114,17 @@ public class TransportFlushAction extends TransportBroadcastOperationAction<Flus
      * The refresh request works against *all* shards.
      */
     @Override
-    protected GroupShardsIterator shards(CassandraClusterState clusterState, FlushRequest request, String[] concreteIndices) {
+    protected GroupShardsIterator shards(ClusterState clusterState, FlushRequest request, String[] concreteIndices) {
         return clusterState.routingTable().allActiveShardsGrouped(concreteIndices, true, true);
     }
 
     @Override
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state, FlushRequest request) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, FlushRequest request) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
     }
 
     @Override
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, FlushRequest countRequest, String[] concreteIndices) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, FlushRequest countRequest, String[] concreteIndices) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, concreteIndices);
     }
 }

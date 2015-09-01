@@ -19,30 +19,34 @@
 
 package org.elasticsearch.cluster.metadata;
 
+import java.io.IOException;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.elasticsearch.action.support.master.MasterNodeOperationRequest;
+import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.TimeoutClusterStateUpdateTask;
 import org.elasticsearch.cluster.action.index.NodeIndexDeletedAction;
 import org.elasticsearch.cluster.block.ClusterBlocks;
+import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.FutureUtils;
+import org.elasticsearch.discovery.DiscoveryService;
+import org.elasticsearch.discovery.cassandra.CassandraDiscovery;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.IndexMissingException;
 import org.elasticsearch.threadpool.ThreadPool;
-
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  *
@@ -53,29 +57,37 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
     private final ClusterService clusterService;
 
-    //private final AllocationService allocationService;
+    // private final AllocationService allocationService;
 
-    private final NodeIndexDeletedAction nodeIndexDeletedAction;
+    //private final NodeIndexDeletedAction nodeIndexDeletedAction;
 
     private final MetaDataService metaDataService;
 
+    private final DiscoveryService discoveryService;
+    
+    private final SchemaService elasticSchemaService;
+    
     @Inject
-    public MetaDataDeleteIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService,
-                                      NodeIndexDeletedAction nodeIndexDeletedAction, MetaDataService metaDataService) {
+    public MetaDataDeleteIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService, 
+           MetaDataService metaDataService, SchemaService elasticSchemaService, DiscoveryService discoveryService) {
         super(settings);
         this.threadPool = threadPool;
         this.clusterService = clusterService;
-        //this.allocationService = allocationService;
-        this.nodeIndexDeletedAction = nodeIndexDeletedAction;
+        // this.allocationService = allocationService;
+        //this.nodeIndexDeletedAction = nodeIndexDeletedAction;
         this.metaDataService = metaDataService;
+        this.elasticSchemaService = elasticSchemaService;
+        this.discoveryService = discoveryService;
     }
 
     public void deleteIndex(final Request request, final Listener userListener) {
-        // we lock here, and not within the cluster service callback since we don't want to
+        // we lock here, and not within the cluster service callback since we
+        // don't want to
         // block the whole cluster state handling
         final Semaphore mdLock = metaDataService.indexMetaDataLock(request.index);
 
-        // quick check to see if we can acquire a lock, otherwise spawn to a thread pool
+        // quick check to see if we can acquire a lock, otherwise spawn to a
+        // thread pool
         if (mdLock.tryAcquire()) {
             deleteIndex(request, userListener, mdLock);
             return;
@@ -101,6 +113,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
     private void deleteIndex(final Request request, final Listener userListener, Semaphore mdLock) {
         final DeleteIndexListener listener = new DeleteIndexListener(mdLock, userListener);
+     
         clusterService.submitStateUpdateTask("delete-index [" + request.index + "]", Priority.URGENT, new TimeoutClusterStateUpdateTask() {
 
             @Override
@@ -114,7 +127,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
             }
 
             @Override
-            public CassandraClusterState execute(final CassandraClusterState currentState) {
+            public ClusterState execute(final ClusterState currentState) {
                 if (!currentState.metaData().hasConcreteIndex(request.index)) {
                     throw new IndexMissingException(new Index(request.index));
                 }
@@ -124,23 +137,27 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
                 routingTableBuilder.remove(request.index);
 
-                MetaData newMetaData = MetaData.builder(currentState.metaData())
-                		.uuid(clusterService.localNode().id())
-                        .remove(request.index)
-                        .build();
+                MetaData newMetaData = MetaData.builder(currentState.metaData()).uuid(clusterService.localNode().id()).remove(request.index).build();
 
                 /*
-                RoutingAllocation.Result routingResult = allocationService.reroute(
-                        CassandraClusterState.builder(currentState).routingTable(routingTableBuilder).metaData(newMetaData).build());
-				*/
+                 * RoutingAllocation.Result routingResult =
+                 * allocationService.reroute(
+                 * ClusterState.builder(currentState
+                 * ).routingTable(routingTableBuilder
+                 * ).metaData(newMetaData).build());
+                 */
                 ClusterBlocks blocks = ClusterBlocks.builder().blocks(currentState.blocks()).removeIndexBlocks(request.index).build();
 
-                // wait for events from all nodes that it has been removed from their respective metadata...
+                /*
+                // wait for events from all nodes that it has been removed from
+                // their respective metadata...
                 int count = currentState.nodes().size();
-                // add the notifications that the store was deleted from *data* nodes
+                // add the notifications that the store was deleted from *data*
+                // nodes
                 count += currentState.nodes().dataNodes().size();
                 final AtomicInteger counter = new AtomicInteger(count);
-                // this listener will be notified once we get back a notification based on the cluster state change below.
+                // this listener will be notified once we get back a
+                // notification based on the cluster state change below.
                 final NodeIndexDeletedAction.Listener nodeIndexDeleteListener = new NodeIndexDeletedAction.Listener() {
                     @Override
                     public void onNodeIndexDeleted(String index, String nodeId) {
@@ -158,31 +175,49 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                             if (counter.decrementAndGet() == 0) {
                                 listener.onResponse(new Response(true));
                                 nodeIndexDeletedAction.remove(this);
+                                try {
+                                    MetaDataDeleteIndexService.this.elasticSchemaService.removeIndexKeyspace(index);
+                                } catch (IOException e) {
+                                    logger.error("Cannot remove keyspace {}", index,e);
+                                }
                             }
                         }
                     }
                 };
                 nodeIndexDeletedAction.add(nodeIndexDeleteListener);
-
+                */
+                
+                final String index = request.index;
+                CassandraDiscovery.ShardStateRemovedListener gossipListener = new CassandraDiscovery.ShardStateRemovedListener() {
+                    @Override
+                    public String index() {
+                        return index;
+                    }
+                    
+                    @Override
+                    public void removed() {
+                        try {
+                            MetaDataDeleteIndexService.this.elasticSchemaService.removeIndexKeyspace(index);
+                        } catch (IOException e) {
+                            logger.error("Cannot remove keyspace {}", index,e);
+                        }
+                        listener.onResponse(new Response(true));
+                    }
+                };
+                discoveryService.addShardStateRemovedListener(gossipListener);
+               
                 listener.future = threadPool.schedule(request.timeout, ThreadPool.Names.SAME, new Runnable() {
                     @Override
                     public void run() {
                         listener.onResponse(new Response(false));
-                        nodeIndexDeletedAction.remove(nodeIndexDeleteListener);
                     }
                 });
 
-                //return CassandraClusterState.builder(currentState).routingResult(routingResult).metaData(newMetaData).blocks(blocks).build();
-                return CassandraClusterState.builder(currentState)
-                		.version(currentState.version()+1)
-                		.routingTable(routingTableBuilder)
-                		.metaData(newMetaData)
-                		.blocks(blocks)
-                		.build();
+                return ClusterState.builder(currentState).version(currentState.version() + 1).routingTable(routingTableBuilder).metaData(newMetaData).blocks(blocks).build();
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
             }
         });
     }
@@ -217,7 +252,6 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
             }
         }
     }
-
 
     public static interface Listener {
 

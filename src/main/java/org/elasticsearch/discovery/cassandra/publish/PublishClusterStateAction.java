@@ -23,7 +23,7 @@ import com.google.common.collect.Maps;
 
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.ClusterName;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -62,7 +62,7 @@ public class PublishClusterStateAction extends AbstractComponent {
             void onNewClusterStateFailed(Throwable t);
         }
 
-        void onNewClusterState(CassandraClusterState clusterState, NewStateProcessed newStateProcessed);
+        void onNewClusterState(ClusterState clusterState, NewStateProcessed newStateProcessed);
     }
 
     private final TransportService transportService;
@@ -71,9 +71,9 @@ public class PublishClusterStateAction extends AbstractComponent {
     private final NewClusterStateListener listener;
     private final DiscoverySettings discoverySettings;
     private final ClusterName clusterName;
-    
-    public PublishClusterStateAction(Settings settings, TransportService transportService, CassandraDiscovery cassandraDiscovery,
-                                     NewClusterStateListener listener, DiscoverySettings discoverySettings, ClusterName clusterName) {
+
+    public PublishClusterStateAction(Settings settings, TransportService transportService, CassandraDiscovery cassandraDiscovery, NewClusterStateListener listener,
+            DiscoverySettings discoverySettings, ClusterName clusterName) {
         super(settings);
         this.transportService = transportService;
         //this.nodesProvider = nodesProvider;
@@ -88,7 +88,7 @@ public class PublishClusterStateAction extends AbstractComponent {
         transportService.removeHandler(ACTION_NAME);
     }
 
-    public void publish(CassandraClusterState clusterState, final Discovery.AckListener ackListener) {
+    public void publish(ClusterState clusterState, final Discovery.AckListener ackListener) {
         Set<DiscoveryNode> nodesToPublishTo = new HashSet<>(clusterState.nodes().size());
         DiscoveryNode localNode = cassandraDiscovery.localNode();
         for (final DiscoveryNode node : clusterState.nodes()) {
@@ -96,19 +96,18 @@ public class PublishClusterStateAction extends AbstractComponent {
                 continue;
             }
             if (node.getStatus().equals(DiscoveryNodeStatus.ALIVE)) {
-            	nodesToPublishTo.add(node);
+                nodesToPublishTo.add(node);
             }
         }
         if (nodesToPublishTo.size() > 0) {
-        	logger.info("publishing cluster_state to {}", nodesToPublishTo);
-        	publish(clusterState, nodesToPublishTo, new AckClusterStatePublishResponseHandler(nodesToPublishTo, ackListener));
-    	} else {
-    		logger.debug("publishing cluster_state, no alive nodes");
-    	}
+            logger.info("publishing cluster_state to {}", nodesToPublishTo);
+            publish(clusterState, nodesToPublishTo, new AckClusterStatePublishResponseHandler(nodesToPublishTo, ackListener));
+        } else {
+            logger.debug("publishing cluster_state, no alive nodes");
+        }
     }
 
-    private void publish(final CassandraClusterState clusterState, final Set<DiscoveryNode> nodesToPublishTo,
-                         final BlockingClusterStatePublishResponseHandler publishResponseHandler) {
+    private void publish(final ClusterState clusterState, final Set<DiscoveryNode> nodesToPublishTo, final BlockingClusterStatePublishResponseHandler publishResponseHandler) {
 
         Map<Version, BytesReference> serializedStates = Maps.newHashMap();
 
@@ -125,7 +124,7 @@ public class PublishClusterStateAction extends AbstractComponent {
                     BytesStreamOutput bStream = new BytesStreamOutput();
                     StreamOutput stream = new HandlesStreamOutput(CompressorFactory.defaultCompressor().streamOutput(bStream));
                     stream.setVersion(node.version());
-                    CassandraClusterState.Builder.writeTo(clusterState, stream);
+                    ClusterState.Builder.writeTo(clusterState, stream);
                     stream.close();
                     bytes = bStream.bytes();
                     serializedStates.put(node.version(), bytes);
@@ -140,11 +139,9 @@ public class PublishClusterStateAction extends AbstractComponent {
                 // no need to put a timeout on the options here, because we want the response to eventually be received
                 // and not log an error if it arrives after the timeout
                 if (cassandraDiscovery.localNode().shouldConnectTo(node)) {
-                	transportService.connectToNode(node);
+                    transportService.connectToNode(node);
                 }
-                transportService.sendRequest(node, ACTION_NAME,
-                        new BytesTransportRequest(bytes, node.version()),
-                        options, // no need to compress, we already compressed the bytes
+                transportService.sendRequest(node, ACTION_NAME, new BytesTransportRequest(bytes, node.version()), options, // no need to compress, we already compressed the bytes
 
                         new EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
 
@@ -204,8 +201,8 @@ public class PublishClusterStateAction extends AbstractComponent {
                 in = CachedStreamInput.cachedHandles(request.bytes().streamInput());
             }
             in.setVersion(request.version());
-            CassandraClusterState clusterState = CassandraClusterState.Builder.readFrom(in, cassandraDiscovery.localNode(), clusterName);
-            clusterState.status(CassandraClusterState.ClusterStateStatus.RECEIVED);
+            ClusterState clusterState = ClusterState.Builder.readFrom(in, cassandraDiscovery.localNode(), clusterName);
+            clusterState.status(ClusterState.ClusterStateStatus.RECEIVED);
             logger.debug("received cluster state version {} from {} localNodeId={}", clusterState.version(), request.remoteAddress(), clusterState.nodes().localNodeId());
             try {
                 listener.onNewClusterState(clusterState, new NewClusterStateListener.NewStateProcessed() {

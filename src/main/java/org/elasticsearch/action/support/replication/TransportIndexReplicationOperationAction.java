@@ -28,7 +28,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.DefaultShardOperationFailedException;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
@@ -61,7 +61,7 @@ public abstract class TransportIndexReplicationOperationAction<Request extends I
 
     @Override
     protected void doExecute(final Request request, final ActionListener<Response> listener) {
-        CassandraClusterState clusterState = clusterService.state();
+        ClusterState clusterState = clusterService.state();
         ClusterBlockException blockException = checkGlobalBlock(clusterState, request);
         if (blockException != null) {
             throw blockException;
@@ -144,11 +144,11 @@ public abstract class TransportIndexReplicationOperationAction<Request extends I
 
     protected abstract boolean accumulateExceptions();
 
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state, Request request) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, Request request) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.WRITE);
     }
 
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, Request request) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, Request request) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, request.index());
     }
 

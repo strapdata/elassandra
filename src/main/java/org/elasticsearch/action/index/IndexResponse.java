@@ -56,7 +56,7 @@ public class IndexResponse extends ActionResponse {
     /**
      * Returns true if the document was created, false if updated.
      */
-    public boolean isInserted() {
+    public boolean isCreated() {
         return this.inserted;
     }
     

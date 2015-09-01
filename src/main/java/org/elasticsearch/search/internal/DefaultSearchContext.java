@@ -57,6 +57,7 @@ import org.elasticsearch.index.fielddata.IndexFieldDataService;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.FieldMappers;
 import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.core.LongFieldMapper.Defaults;
 import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.query.ParsedFilter;
 import org.elasticsearch.index.query.ParsedQuery;
@@ -133,7 +134,6 @@ public class DefaultSearchContext extends SearchContext {
     // terminate after count
     private int terminateAfter = DEFAULT_TERMINATE_AFTER;
 
-
     private List<String> groupStats;
 
     private Scroll scroll;
@@ -196,10 +196,8 @@ public class DefaultSearchContext extends SearchContext {
 
     private InnerHitsContext innerHitsContext;
 
-    public DefaultSearchContext(long id, ShardSearchRequest request, SearchShardTarget shardTarget,
-                         Engine.Searcher engineSearcher, IndexService indexService, IndexShard indexShard,
-                         ScriptService scriptService, CacheRecycler cacheRecycler, PageCacheRecycler pageCacheRecycler,
-                         BigArrays bigArrays, Counter timeEstimateCounter) {
+    public DefaultSearchContext(long id, ShardSearchRequest request, SearchShardTarget shardTarget, Engine.Searcher engineSearcher, IndexService indexService, IndexShard indexShard,
+            ScriptService scriptService, CacheRecycler cacheRecycler, PageCacheRecycler pageCacheRecycler, BigArrays bigArrays, Counter timeEstimateCounter) {
         this.id = id;
         this.request = request;
         this.searchType = request.searchType();
@@ -217,7 +215,7 @@ public class DefaultSearchContext extends SearchContext {
         this.indexService = indexService;
 
         this.searcher = new ContextIndexSearcher(this, engineSearcher);
-        
+
         // initialize the filtering alias based on the provided filters
         aliasFilter = indexService.aliasesService().aliasFilter(request.filteringAliases());
         this.timeEstimateCounter = timeEstimateCounter;
@@ -268,34 +266,31 @@ public class DefaultSearchContext extends SearchContext {
      * TODO: support for RandomPartitionner and more ...
      */
     public Filter searchFilter(String[] types) {
-    	Collection<Range<Token>> tokenRanges = this.request.tokenRanges();
-    	List<Filter> rangeFilters = new ArrayList<Filter>(tokenRanges.size());
-    	for(Range<Token> range : tokenRanges) {
-    		rangeFilters.add(
-    				NumericRangeFilter.newLongRange("_token", 
-    						(Long)range.left.getTokenValue(), 
-    						(Long)range.right.getTokenValue(), false, true)
-    				);
-    	}
-    	Filter tokenFilter = new OrFilter(rangeFilters);
-    	Loggers.getLogger(DefaultSearchContext.class).debug("search tokenFilter = {}", tokenFilter);
-    	
+        Collection<Range<Token>> tokenRanges = this.request.tokenRanges();
+        List<Filter> rangeFilters = new ArrayList<Filter>(tokenRanges.size());
+        for (Range<Token> range : tokenRanges) {
+            // TODO: check the best precisionStep (16 by default), see https://lucene.apache.org/core/4_2_0/core/org/apache/lucene/search/NumericRangeQuery.html
+            rangeFilters.add(NumericRangeFilter.newLongRange("_token", Defaults.PRECISION_STEP_64_BIT, (Long) range.left.getTokenValue(), (Long) range.right.getTokenValue(), false, true));
+        }
+        Filter tokenFilter = new OrFilter(rangeFilters);
+        Loggers.getLogger(DefaultSearchContext.class).debug("search tokenFilter = {}", tokenFilter);
+
         Filter filter = mapperService().searchFilter(types);
         if (filter == null) {
             //return aliasFilter;
-        	if (aliasFilter == null) {
-        		return tokenFilter;
-        	} else {
-        		return new AndFilter( ImmutableList.<Filter>of( aliasFilter, tokenFilter ) );
-        	}
+            if (aliasFilter == null) {
+                return tokenFilter;
+            } else {
+                return new AndFilter(ImmutableList.<Filter> of(aliasFilter, tokenFilter));
+            }
         } else {
             filter = filterCache().cache(filter);
             if (aliasFilter != null) {
                 //return new AndFilter(ImmutableList.of(filter, aliasFilter));
-            	return new AndFilter(ImmutableList.<Filter>of(filter, aliasFilter, tokenFilter));
+                return new AndFilter(ImmutableList.<Filter> of(filter, aliasFilter, tokenFilter));
             }
             //return filter;
-            return new AndFilter( ImmutableList.<Filter>of( filter, tokenFilter ) );
+            return new AndFilter(ImmutableList.<Filter> of(filter, tokenFilter));
         }
     }
 
@@ -588,8 +583,6 @@ public class DefaultSearchContext extends SearchContext {
     public ParsedQuery parsedQuery() {
         return this.originalQuery;
     }
-    
-    
 
     /**
      * The query to execute, might be rewritten.

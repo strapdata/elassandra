@@ -24,7 +24,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.SnapshotId;
@@ -64,12 +64,12 @@ public class TransportCreateSnapshotAction extends TransportMasterNodeOperationA
     }
 
     @Override
-    protected ClusterBlockException checkBlock(CreateSnapshotRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(CreateSnapshotRequest request, ClusterState state) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, "");
     }
 
     @Override
-    protected void masterOperation(final CreateSnapshotRequest request, CassandraClusterState state, final ActionListener<CreateSnapshotResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final CreateSnapshotRequest request, ClusterState state, final ActionListener<CreateSnapshotResponse> listener) throws ElasticsearchException {
         SnapshotsService.SnapshotRequest snapshotRequest =
                 new SnapshotsService.SnapshotRequest("create_snapshot[" + request.snapshot() + "]", request.snapshot(), request.repository())
                         .indices(request.indices())

@@ -92,16 +92,15 @@ public class FetchPhase implements SearchPhase {
 
     private final FetchSubPhase[] fetchSubPhases;
     private final ElasticSchemaService elasticSchemaService;
-    
+
     @Inject
-    public FetchPhase(HighlightPhase highlightPhase, ScriptFieldsFetchSubPhase scriptFieldsPhase, PartialFieldsFetchSubPhase partialFieldsPhase,
-                      MatchedQueriesFetchSubPhase matchedQueriesPhase, ExplainFetchSubPhase explainPhase, VersionFetchSubPhase versionPhase,
-                      FetchSourceSubPhase fetchSourceSubPhase, FieldDataFieldsFetchSubPhase fieldDataFieldsFetchSubPhase,
-                      InnerHitsFetchSubPhase innerHitsFetchSubPhase, ElasticSchemaService elasticSchemaService) {
+    public FetchPhase(HighlightPhase highlightPhase, ScriptFieldsFetchSubPhase scriptFieldsPhase, PartialFieldsFetchSubPhase partialFieldsPhase, MatchedQueriesFetchSubPhase matchedQueriesPhase,
+            ExplainFetchSubPhase explainPhase, VersionFetchSubPhase versionPhase, FetchSourceSubPhase fetchSourceSubPhase, FieldDataFieldsFetchSubPhase fieldDataFieldsFetchSubPhase,
+            InnerHitsFetchSubPhase innerHitsFetchSubPhase, ElasticSchemaService elasticSchemaService) {
         innerHitsFetchSubPhase.setFetchPhase(this);
         this.elasticSchemaService = elasticSchemaService;
-        this.fetchSubPhases = new FetchSubPhase[]{scriptFieldsPhase, partialFieldsPhase, matchedQueriesPhase, explainPhase, highlightPhase,
-                fetchSourceSubPhase, versionPhase, fieldDataFieldsFetchSubPhase, innerHitsFetchSubPhase};
+        this.fetchSubPhases = new FetchSubPhase[] { scriptFieldsPhase, partialFieldsPhase, matchedQueriesPhase, explainPhase, highlightPhase, fetchSourceSubPhase, versionPhase,
+                fieldDataFieldsFetchSubPhase, innerHitsFetchSubPhase };
     }
 
     @Override
@@ -161,8 +160,8 @@ public class FetchPhase implements SearchPhase {
                     if (context.smartNameObjectMapper(fieldName) != null) {
                         throw new ElasticsearchIllegalArgumentException("field [" + fieldName + "] isn't a leaf field");
                     }
-                //} else if (x.mapper().fieldType().stored()) {
-                } else if (true) {	// every field is stored in cassandra (but not in lucene)
+                    //} else if (x.mapper().fieldType().stored()) {
+                } else if (true) { // every field is stored in cassandra (but not in lucene)
                     if (fieldNames == null) {
                         fieldNames = new HashSet<>();
                     }
@@ -284,7 +283,8 @@ public class FetchPhase implements SearchPhase {
         return searchHit;
     }
 
-    private InternalSearchHit createNestedSearchHit(SearchContext context, int nestedTopDocId, int nestedSubDocId, int rootSubDocId, List<String> extractFieldNames, boolean loadAllStored, Set<String> fieldNames, AtomicReaderContext subReaderContext) throws IOException {
+    private InternalSearchHit createNestedSearchHit(SearchContext context, int nestedTopDocId, int nestedSubDocId, int rootSubDocId, List<String> extractFieldNames, boolean loadAllStored,
+            Set<String> fieldNames, AtomicReaderContext subReaderContext) throws IOException {
         final FieldsVisitor rootFieldsVisitor;
         if (context.sourceRequested() || extractFieldNames != null || context.highlight() != null) {
             // Also if highlighting is requested on nested documents we need to fetch the _source from the root document,
@@ -323,7 +323,7 @@ public class FetchPhase implements SearchPhase {
                     nestedParsedSource = (List<Map<String, Object>>) extractedValue;
                 } else if (extractedValue instanceof Map) {
                     // nested field has an object value in the _source. This just means the nested field has just one inner object, which is valid, but uncommon.
-                    nestedParsedSource = ImmutableList.of((Map < String, Object >) extractedValue);
+                    nestedParsedSource = ImmutableList.of((Map<String, Object>) extractedValue);
                 } else {
                     throw new ElasticsearchIllegalStateException("extracted source isn't an object or an array");
                 }
@@ -386,7 +386,8 @@ public class FetchPhase implements SearchPhase {
         return searchFields;
     }
 
-    private InternalSearchHit.InternalNestedIdentity getInternalNestedIdentity(SearchContext context, int nestedSubDocId, AtomicReaderContext subReaderContext, DocumentMapper documentMapper, ObjectMapper nestedObjectMapper) throws IOException {
+    private InternalSearchHit.InternalNestedIdentity getInternalNestedIdentity(SearchContext context, int nestedSubDocId, AtomicReaderContext subReaderContext, DocumentMapper documentMapper,
+            ObjectMapper nestedObjectMapper) throws IOException {
         int currentParent = nestedSubDocId;
         ObjectMapper nestedParentObjectMapper;
         InternalSearchHit.InternalNestedIdentity nestedIdentity = null;
@@ -425,7 +426,7 @@ public class FetchPhase implements SearchPhase {
      */
     private void loadStoredFields(SearchContext searchContext, AtomicReaderContext readerContext, FieldsVisitor fieldVisitor, int docId) {
         fieldVisitor.reset();
-        
+
         JustUidFieldsVisitor justUidFieldsVisitor = new JustUidFieldsVisitor();
         try {
             readerContext.reader().document(docId, justUidFieldsVisitor);
@@ -434,33 +435,30 @@ public class FetchPhase implements SearchPhase {
         }
 
         if (!(fieldVisitor instanceof JustUidFieldsVisitor)) {
-	        try {
-	        	UntypedResultSet result = elasticSchemaService.fetchRow(
-						searchContext.request().index(), 
-						justUidFieldsVisitor.uid().type(),
-						justUidFieldsVisitor.uid().id(),
-						ImmutableList.<String>copyOf(fieldVisitor.cassandraColumns(searchContext.mapperService(), justUidFieldsVisitor.uid().type())) );
-	        	if (!result.isEmpty()) {
-					Map<String, Object> mapObject = elasticSchemaService.rowAsMap(result.one(), fieldVisitor, searchContext.mapperService(), searchContext.types());
-	
-					if (fieldVisitor.needFields()) {
-						Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
-						elasticSchemaService.flattenObject(fieldVisitor.neededFields(), "", mapObject, flatMap);
-						for(String field : flatMap.keySet()) {
-							fieldVisitor.setValues(field, flatMap.get(field));
-						}
-					}
-					if (fieldVisitor.needSource()) {
-						fieldVisitor.source(FBUtilities.json(mapObject).getBytes("UTF-8"));
-					}
-	        	}
-	
-			} catch (Exception e) {
-				Logger.getLogger(FetchPhase.class).error("Fetch failed id="+ justUidFieldsVisitor.uid().id(),e);
-				throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + justUidFieldsVisitor.uid().id() + "] from cassandra", e);
-			}
+            try {
+                UntypedResultSet result = elasticSchemaService.fetchRow(searchContext.request().index(), justUidFieldsVisitor.uid().type(), justUidFieldsVisitor.uid().id(),
+                        ImmutableList.<String> copyOf(fieldVisitor.cassandraColumns(searchContext.mapperService(), justUidFieldsVisitor.uid().type())));
+                if (!result.isEmpty()) {
+                    Map<String, Object> mapObject = elasticSchemaService.rowAsMap(result.one(), fieldVisitor, searchContext.mapperService(), searchContext.types());
+
+                    if (fieldVisitor.needFields()) {
+                        Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
+                        elasticSchemaService.flattenObject(fieldVisitor.neededFields(), "", mapObject, flatMap);
+                        for (String field : flatMap.keySet()) {
+                            fieldVisitor.setValues(field, flatMap.get(field));
+                        }
+                    }
+                    if (fieldVisitor.needSource()) {
+                        fieldVisitor.source(FBUtilities.json(mapObject).getBytes("UTF-8"));
+                    }
+                }
+
+            } catch (Exception e) {
+                Logger.getLogger(FetchPhase.class).error("Fetch failed id=" + justUidFieldsVisitor.uid().id(), e);
+                throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + justUidFieldsVisitor.uid().id() + "] from cassandra", e);
+            }
         }
-        
-        fieldVisitor.uid(justUidFieldsVisitor.uid());    
+
+        fieldVisitor.uid(justUidFieldsVisitor.uid());
     }
 }

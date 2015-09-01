@@ -21,7 +21,7 @@ package org.elasticsearch.action.admin.cluster.reroute;
 
 import org.elasticsearch.Version;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.routing.allocation.RoutingExplanations;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -33,14 +33,14 @@ import java.io.IOException;
  */
 public class ClusterRerouteResponse extends AcknowledgedResponse {
 
-    private CassandraClusterState state;
+    private ClusterState state;
     private RoutingExplanations explanations;
 
     ClusterRerouteResponse() {
 
     }
 
-    ClusterRerouteResponse(boolean acknowledged, CassandraClusterState state, RoutingExplanations explanations) {
+    ClusterRerouteResponse(boolean acknowledged, ClusterState state, RoutingExplanations explanations) {
         super(acknowledged);
         this.state = state;
         this.explanations = explanations;
@@ -49,7 +49,7 @@ public class ClusterRerouteResponse extends AcknowledgedResponse {
     /**
      * Returns the cluster state resulted from the cluster reroute request execution
      */
-    public CassandraClusterState getState() {
+    public ClusterState getState() {
         return this.state;
     }
 
@@ -60,7 +60,7 @@ public class ClusterRerouteResponse extends AcknowledgedResponse {
     @Override
     public void readFrom(StreamInput in) throws IOException {
         super.readFrom(in);
-        state = CassandraClusterState.Builder.readFrom(in, null, null);
+        state = ClusterState.Builder.readFrom(in, null, null);
         readAcknowledged(in);
         if (in.getVersion().onOrAfter(Version.V_1_1_0)) {
             explanations = RoutingExplanations.readFrom(in);
@@ -72,7 +72,7 @@ public class ClusterRerouteResponse extends AcknowledgedResponse {
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        CassandraClusterState.Builder.writeTo(state, out);
+        ClusterState.Builder.writeTo(state, out);
         writeAcknowledged(out);
         if (out.getVersion().onOrAfter(Version.V_1_1_0)) {
             RoutingExplanations.writeTo(explanations, out);

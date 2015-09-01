@@ -149,23 +149,22 @@ public class RestActionModule extends AbstractModule {
 
         bind(RestNodesInfoAction.class).asEagerSingleton();
         bind(RestNodesStatsAction.class).asEagerSingleton();
-    
+
         bind(RestNodesHotThreadsAction.class).asEagerSingleton();
         bind(RestNodesShutdownAction.class).asEagerSingleton();
         bind(RestNodesRestartAction.class).asEagerSingleton();
-     
+
         bind(RestClusterStatsAction.class).asEagerSingleton();
         bind(RestClusterStateAction.class).asEagerSingleton();
         bind(RestClusterHealthAction.class).asEagerSingleton();
-        
+
         bind(RestClusterUpdateSettingsAction.class).asEagerSingleton();
         bind(RestClusterGetSettingsAction.class).asEagerSingleton();
         bind(RestClusterRerouteAction.class).asEagerSingleton();
         bind(RestClusterSearchShardsAction.class).asEagerSingleton();
-        
+
         bind(RestPendingClusterTasksAction.class).asEagerSingleton();
-        
-        
+
         bind(RestPutRepositoryAction.class).asEagerSingleton();
         bind(RestGetRepositoriesAction.class).asEagerSingleton();
         bind(RestDeleteRepositoryAction.class).asEagerSingleton();
@@ -175,8 +174,7 @@ public class RestActionModule extends AbstractModule {
         bind(RestRestoreSnapshotAction.class).asEagerSingleton();
         bind(RestDeleteSnapshotAction.class).asEagerSingleton();
         bind(RestSnapshotsStatusAction.class).asEagerSingleton();
-		
-        
+
         bind(RestIndicesExistsAction.class).asEagerSingleton();
         bind(RestTypesExistsAction.class).asEagerSingleton();
         bind(RestGetIndicesAction.class).asEagerSingleton();
@@ -189,12 +187,12 @@ public class RestActionModule extends AbstractModule {
         bind(RestIndexPutAliasAction.class).asEagerSingleton();
         bind(RestIndicesAliasesAction.class).asEagerSingleton();
         bind(RestGetIndicesAliasesAction.class).asEagerSingleton();
-        
+
         bind(RestCreateIndexAction.class).asEagerSingleton();
         bind(RestDeleteIndexAction.class).asEagerSingleton();
         bind(RestCloseIndexAction.class).asEagerSingleton();
         bind(RestOpenIndexAction.class).asEagerSingleton();
-        
+
         bind(RestUpdateSettingsAction.class).asEagerSingleton();
         bind(RestGetSettingsAction.class).asEagerSingleton();
 
@@ -219,20 +217,19 @@ public class RestActionModule extends AbstractModule {
         bind(RestUpgradeAction.class).asEagerSingleton();
         bind(RestClearIndicesCacheAction.class).asEagerSingleton();
 
-    
         bind(RestIndexAction.class).asEagerSingleton();
         bind(RestXIndexAction.class).asEagerSingleton();
-        
+
         bind(RestGetAction.class).asEagerSingleton();
         bind(RestXGetAction.class).asEagerSingleton();
         bind(RestGetSourceAction.class).asEagerSingleton();
         bind(RestHeadAction.class).asEagerSingleton();
         bind(RestMultiGetAction.class).asEagerSingleton();
         bind(RestXMultiGetAction.class).asEagerSingleton();
-        
+
         bind(RestDeleteAction.class).asEagerSingleton();
         bind(RestXDeleteAction.class).asEagerSingleton();
-        
+
         bind(RestDeleteByQueryAction.class).asEagerSingleton();
         bind(org.elasticsearch.rest.action.count.RestCountAction.class).asEagerSingleton();
         bind(RestSuggestAction.class).asEagerSingleton();
@@ -265,7 +262,6 @@ public class RestActionModule extends AbstractModule {
         bind(RestGetIndexedScriptAction.class).asEagerSingleton();
         bind(RestPutIndexedScriptAction.class).asEagerSingleton();
         bind(RestDeleteIndexedScriptAction.class).asEagerSingleton();
-
 
         // cat API
         Multibinder<AbstractCatAction> catActionMultibinder = Multibinder.newSetBinder(binder(), AbstractCatAction.class);

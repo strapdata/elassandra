@@ -27,7 +27,7 @@ import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsRespon
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.single.custom.TransportSingleCustomOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.routing.ShardsIterator;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.inject.Inject;
@@ -84,7 +84,7 @@ public class TransportGetFieldMappingsIndexAction extends TransportSingleCustomO
     }
 
     @Override
-    protected ShardsIterator shards(CassandraClusterState state, InternalRequest request) {
+    protected ShardsIterator shards(ClusterState state, InternalRequest request) {
         // Will balance requests between shards
         return state.routingTable().index(request.concreteIndex()).randomAllActiveShardsIt();
     }

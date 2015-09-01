@@ -65,7 +65,7 @@ public class CassandraShardsAllocator extends AbstractComponent implements Shard
     public CassandraShardsAllocator(Settings settings) {
         super(settings);
     }
-    
+
     /**
      * Applies changes on started nodes based on the implemented algorithm. For example if a 
      * shard has changed to {@link ShardRoutingState#STARTED} from {@link ShardRoutingState#RELOCATING} 
@@ -73,16 +73,16 @@ public class CassandraShardsAllocator extends AbstractComponent implements Shard
      * @param allocation all started {@link ShardRouting shards}
      */
     @Override
-    public void applyStartedShards(StartedRerouteAllocation allocation) { /* ONLY FOR GATEWAYS */ }
+    public void applyStartedShards(StartedRerouteAllocation allocation) { /* ONLY FOR GATEWAYS */
+    }
 
     /**
      * Applies changes on failed nodes based on the implemented algorithm. 
      * @param allocation all failed {@link ShardRouting shards}
      */
     @Override
-    public void applyFailedShards(FailedRerouteAllocation allocation) { /* ONLY FOR GATEWAYS */ }
-
-    
+    public void applyFailedShards(FailedRerouteAllocation allocation) { /* ONLY FOR GATEWAYS */
+    }
 
     /**
      * Assign all unassigned shards to nodes 
@@ -92,7 +92,7 @@ public class CassandraShardsAllocator extends AbstractComponent implements Shard
      */
     @Override
     public boolean allocateUnassigned(RoutingAllocation allocation) {
-    	boolean changed = false;
+        boolean changed = false;
         RoutingNodes routingNodes = allocation.routingNodes();
         /* 
          * 1. order nodes by the number of shards allocated on them least one first (this takes relocation into account)
@@ -106,9 +106,9 @@ public class CassandraShardsAllocator extends AbstractComponent implements Shard
         //RoutingNode[] nodes = sortedNodesLeastToHigh(allocation);
 
         Iterator<MutableShardRouting> unassignedIterator = routingNodes.unassigned().iterator();
-        
+
         // allocate all the unassigned shards above to alives nodes.
-        for (Iterator<MutableShardRouting> it = routingNodes.unassigned().iterator(); it.hasNext(); ) {
+        for (Iterator<MutableShardRouting> it = routingNodes.unassigned().iterator(); it.hasNext();) {
             MutableShardRouting shard = it.next();
             // go over the nodes and try and allocate the remaining ones
             for (RoutingNode routingNode : allocation.routingNodes()) {
@@ -119,7 +119,7 @@ public class CassandraShardsAllocator extends AbstractComponent implements Shard
             }
         }
         return changed;
-        
+
     }
 
     /**
@@ -132,7 +132,6 @@ public class CassandraShardsAllocator extends AbstractComponent implements Shard
     public boolean rebalance(RoutingAllocation allocation) {
         return false;
     }
-    
 
     /**
      * Moves a shard from the given node to other node.
@@ -147,5 +146,4 @@ public class CassandraShardsAllocator extends AbstractComponent implements Shard
         return false;
     }
 
-   
 }

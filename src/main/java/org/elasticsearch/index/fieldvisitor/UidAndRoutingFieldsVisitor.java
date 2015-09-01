@@ -54,19 +54,19 @@ public class UidAndRoutingFieldsVisitor extends FieldsVisitor {
     public String routing() {
         return routing;
     }
-    
+
     @Override
     public String[] cassandraColumns(MapperService mapperService, String type) {
-    	return new String[] { "routing" };
+        return new String[] { "routing" };
     }
-    
+
     @Override
     public boolean needSource() {
-    	return false;
+        return false;
     }
-    
+
     @Override
     public boolean needFields() {
-    	return true;
+        return true;
     }
 }

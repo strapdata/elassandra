@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
 import org.elasticsearch.ElasticsearchException;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
@@ -74,8 +74,7 @@ public class ShardStateAction extends AbstractComponent {
     private final BlockingQueue<ShardRoutingEntry> failedShardQueue = ConcurrentCollections.newBlockingQueue();
 
     @Inject
-    public ShardStateAction(Settings settings, ClusterService clusterService, TransportService transportService,
-                            RoutingService routingService, AllocationService allocationService) {
+    public ShardStateAction(Settings settings, ClusterService clusterService, TransportService transportService, RoutingService routingService, AllocationService allocationService) {
         super(settings);
         this.clusterService = clusterService;
         this.transportService = transportService;
@@ -105,13 +104,12 @@ public class ShardStateAction extends AbstractComponent {
         if (clusterService.localNode().equals(masterNode)) {
             innerShardFailed(shardRoutingEntry);
         } else {
-            transportService.sendRequest(masterNode,
-                    SHARD_FAILED_ACTION_NAME, shardRoutingEntry, new EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
-                        @Override
-                        public void handleException(TransportException exp) {
-                            logger.warn("failed to send failed shard to {}", exp, masterNode);
-                        }
-                    });
+            transportService.sendRequest(masterNode, SHARD_FAILED_ACTION_NAME, shardRoutingEntry, new EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
+                @Override
+                public void handleException(TransportException exp) {
+                    logger.warn("failed to send failed shard to {}", exp, masterNode);
+                }
+            });
         }
     }
 
@@ -130,23 +128,22 @@ public class ShardStateAction extends AbstractComponent {
 
         logger.debug("local shard started {}", shardRoutingEntry);
 
-        // update internal shard state 
-    	innerShardStarted(shardRoutingEntry);
-    	
-    	// Don't need to broadcast it to all other nodes because they assume remote shards are STARTED on alive nodes...
-    	/*
-    	for(DiscoveryNode node : this.clusterService.state().nodes()) {
-    		if (node != this.clusterService.localNode()) {
-		        transportService.sendRequest(node,
-		                SHARD_STARTED_ACTION_NAME, new ShardRoutingEntry(shardRouting, indexUUID, reason), new EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
-		                    @Override
-		                    public void handleException(TransportException exp) {
-		                        logger.warn("failed to send shard started to [{}]", exp, node);
-		                    }
-		                });
-    		}
-    	}
-    	*/
+        // update internal shard state
+        innerShardStarted(shardRoutingEntry);
+
+        // Don't need to broadcast it to all other nodes because they assume
+        // remote shards are STARTED on alive nodes...
+        /*
+         * for(DiscoveryNode node : this.clusterService.state().nodes()) { if
+         * (node != this.clusterService.localNode()) {
+         * transportService.sendRequest(node, SHARD_STARTED_ACTION_NAME, new
+         * ShardRoutingEntry(shardRouting, indexUUID, reason), new
+         * EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
+         * 
+         * @Override public void handleException(TransportException exp) {
+         * logger.warn("failed to send shard started to [{}]", exp, node); } });
+         * } }
+         */
     }
 
     private void innerShardFailed(final ShardRoutingEntry shardRoutingEntry) {
@@ -155,7 +152,7 @@ public class ShardStateAction extends AbstractComponent {
         clusterService.submitStateUpdateTask("shard-failed (" + shardRoutingEntry.shardRouting + "), reason [" + shardRoutingEntry.reason + "]", Priority.HIGH, new ProcessedClusterStateUpdateTask() {
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 if (shardRoutingEntry.processed) {
                     return currentState;
                 }
@@ -163,7 +160,8 @@ public class ShardStateAction extends AbstractComponent {
                 List<ShardRoutingEntry> shardRoutingEntries = new ArrayList<>();
                 failedShardQueue.drainTo(shardRoutingEntries);
 
-                // nothing to process (a previous event has processed it already)
+                // nothing to process (a previous event has processed it
+                // already)
                 if (shardRoutingEntries.isEmpty()) {
                     return currentState;
                 }
@@ -176,7 +174,9 @@ public class ShardStateAction extends AbstractComponent {
                     shardRoutingEntry.processed = true;
                     ShardRouting shardRouting = shardRoutingEntry.shardRouting;
                     IndexMetaData indexMetaData = metaData.index(shardRouting.index());
-                    // if there is no metadata or the current index is not of the right uuid, the index has been deleted while it was being allocated
+                    // if there is no metadata or the current index is not of
+                    // the right uuid, the index has been deleted while it was
+                    // being allocated
                     // which is fine, we should just ignore this
                     if (indexMetaData == null) {
                         continue;
@@ -190,12 +190,11 @@ public class ShardStateAction extends AbstractComponent {
                     shardRoutingsToBeApplied.add(shardRouting);
                 }
 
-                
                 RoutingAllocation.Result routingResult = allocationService.applyFailedShards(currentState, shardRoutingsToBeApplied);
                 if (!routingResult.changed()) {
                     return currentState;
                 }
-                return CassandraClusterState.builder(currentState).routingResult(routingResult).build();
+                return ClusterState.builder(currentState).routingResult(routingResult).build();
             }
 
             @Override
@@ -204,7 +203,7 @@ public class ShardStateAction extends AbstractComponent {
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 if (oldState != newState && newState.getRoutingNodes().hasUnassigned()) {
                     logger.trace("unassigned shards after shard failures. scheduling a reroute.");
                     routingService.scheduleReroute();
@@ -215,103 +214,110 @@ public class ShardStateAction extends AbstractComponent {
 
     private void innerShardStarted(final ShardRoutingEntry shardRoutingEntry) {
         logger.debug("received shard started for {}", shardRoutingEntry);
-        // buffer shard started requests, and the state update tasks will simply drain it
-        // this is to optimize the number of "started" events we generate, and batch them
-        // possibly, we can do time based batching as well, but usually, we would want to
+        // buffer shard started requests, and the state update tasks will simply
+        // drain it
+        // this is to optimize the number of "started" events we generate, and
+        // batch them
+        // possibly, we can do time based batching as well, but usually, we
+        // would want to
         // process started events as fast as possible, to make shards available
         startedShardsQueue.add(shardRoutingEntry);
 
-        clusterService.submitStateUpdateTask("shard-started (" + shardRoutingEntry.shardRouting + "), reason [" + shardRoutingEntry.reason + "]", Priority.URGENT,
-                new ClusterStateUpdateTask() {
-                    @Override
-                    public CassandraClusterState execute(CassandraClusterState currentState) {
+        clusterService.submitStateUpdateTask("shard-started (" + shardRoutingEntry.shardRouting + "), reason [" + shardRoutingEntry.reason + "]", Priority.URGENT, new ClusterStateUpdateTask() {
+            @Override
+            public ClusterState execute(ClusterState currentState) {
 
-                        if (shardRoutingEntry.processed) {
-                            return currentState;
+                if (shardRoutingEntry.processed) {
+                    return currentState;
+                }
+
+                List<ShardRoutingEntry> shardRoutingEntries = new ArrayList<>();
+                startedShardsQueue.drainTo(shardRoutingEntries);
+
+                // nothing to process (a previous event has processed it
+                // already)
+                if (shardRoutingEntries.isEmpty()) {
+                    return currentState;
+                }
+
+                RoutingTable routingTable = currentState.routingTable();
+                MetaData metaData = currentState.getMetaData();
+
+                List<ShardRouting> shardRoutingToBeApplied = new ArrayList<>(shardRoutingEntries.size());
+
+                for (int i = 0; i < shardRoutingEntries.size(); i++) {
+                    ShardRoutingEntry shardRoutingEntry = shardRoutingEntries.get(i);
+                    shardRoutingEntry.processed = true;
+                    ShardRouting shardRouting = shardRoutingEntry.shardRouting;
+                    try {
+                        IndexMetaData indexMetaData = metaData.index(shardRouting.index());
+                        IndexRoutingTable indexRoutingTable = routingTable.index(shardRouting.index());
+                        // if there is no metadata, no routing table or the
+                        // current index is not of the right uuid, the index has
+                        // been deleted while it was being allocated
+                        // which is fine, we should just ignore this
+                        if (indexMetaData == null) {
+                            continue;
+                        }
+                        if (indexRoutingTable == null) {
+                            continue;
                         }
 
-                        List<ShardRoutingEntry> shardRoutingEntries = new ArrayList<>();
-                        startedShardsQueue.drainTo(shardRoutingEntries);
-
-                        // nothing to process (a previous event has processed it already)
-                        if (shardRoutingEntries.isEmpty()) {
-                            return currentState;
+                        if (!indexMetaData.isSameUUID(shardRoutingEntry.indexUUID)) {
+                            logger.debug("{} ignoring shard started, different index uuid, current {}, got {}", shardRouting.shardId(), indexMetaData.getUUID(), shardRoutingEntry);
+                            continue;
                         }
 
-                        RoutingTable routingTable = currentState.routingTable();
-                        MetaData metaData = currentState.getMetaData();
+                        // find the one that maps to us, if its already started,
+                        // no need to do anything...
+                        // the shard might already be started since the nodes
+                        // that is starting the shards might get cluster events
+                        // with the shard still initializing, and it will try
+                        // and start it again (until the verification comes)
 
-                        List<ShardRouting> shardRoutingToBeApplied = new ArrayList<>(shardRoutingEntries.size());
+                        IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shard(shardRouting.id());
 
-                        for (int i = 0; i < shardRoutingEntries.size(); i++) {
-                            ShardRoutingEntry shardRoutingEntry = shardRoutingEntries.get(i);
-                            shardRoutingEntry.processed = true;
-                            ShardRouting shardRouting = shardRoutingEntry.shardRouting;
-                            try {
-                                IndexMetaData indexMetaData = metaData.index(shardRouting.index());
-                                IndexRoutingTable indexRoutingTable = routingTable.index(shardRouting.index());
-                                // if there is no metadata, no routing table or the current index is not of the right uuid, the index has been deleted while it was being allocated
-                                // which is fine, we should just ignore this
-                                if (indexMetaData == null) {
-                                    continue;
+                        boolean applyShardEvent = true;
+
+                        for (ShardRouting entry : indexShardRoutingTable) {
+                            if (shardRouting.currentNodeId().equals(entry.currentNodeId())) {
+                                // we found the same shard that exists on the
+                                // same node id
+                                if (!entry.initializing()) {
+                                    // shard is in initialized state, skipping
+                                    // event (probable already started)
+                                    logger.debug("{} ignoring shard started event for {}, current state: {}", shardRouting.shardId(), shardRoutingEntry, entry.state());
+                                    applyShardEvent = false;
                                 }
-                                if (indexRoutingTable == null) {
-                                    continue;
-                                }
-
-                                if (!indexMetaData.isSameUUID(shardRoutingEntry.indexUUID)) {
-                                    logger.debug("{} ignoring shard started, different index uuid, current {}, got {}", shardRouting.shardId(), indexMetaData.getUUID(), shardRoutingEntry);
-                                    continue;
-                                }
-
-                                // find the one that maps to us, if its already started, no need to do anything...
-                                // the shard might already be started since the nodes that is starting the shards might get cluster events
-                                // with the shard still initializing, and it will try and start it again (until the verification comes)
-
-                                IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shard(shardRouting.id());
-
-                                boolean applyShardEvent = true;
-
-                                for (ShardRouting entry : indexShardRoutingTable) {
-                                    if (shardRouting.currentNodeId().equals(entry.currentNodeId())) {
-                                        // we found the same shard that exists on the same node id
-                                        if (!entry.initializing()) {
-                                            // shard is in initialized state, skipping event (probable already started)
-                                            logger.debug("{} ignoring shard started event for {}, current state: {}", shardRouting.shardId(), shardRoutingEntry, entry.state());
-                                            applyShardEvent = false;
-                                        }
-                                    }
-                                }
-
-                                if (applyShardEvent) {
-                                    shardRoutingToBeApplied.add(shardRouting);
-                                    logger.debug("{} will apply shard started {}", shardRouting.shardId(), shardRoutingEntry);
-                                }
-
-                            } catch (Throwable t) {
-                                logger.error("{} unexpected failure while processing shard started [{}]", t, shardRouting.shardId(), shardRouting);
                             }
                         }
 
-                        if (shardRoutingToBeApplied.isEmpty()) {
-                            return currentState;
+                        if (applyShardEvent) {
+                            shardRoutingToBeApplied.add(shardRouting);
+                            logger.debug("{} will apply shard started {}", shardRouting.shardId(), shardRoutingEntry);
                         }
 
-                        
-                        RoutingAllocation.Result routingResult = allocationService.applyStartedShards(currentState, shardRoutingToBeApplied, true);
-                        if (!routingResult.changed()) {
-                            return currentState;
-                        }
-                        return CassandraClusterState.builder(currentState)
-                        		.version(currentState.version()+1)
-                        		.routingResult(routingResult).build();
+                    } catch (Throwable t) {
+                        logger.error("{} unexpected failure while processing shard started [{}]", t, shardRouting.shardId(), shardRouting);
                     }
+                }
 
-                    @Override
-                    public void onFailure(String source, Throwable t) {
-                        logger.error("unexpected failure during [{}]", t, source);
-                    }
-                });
+                if (shardRoutingToBeApplied.isEmpty()) {
+                    return currentState;
+                }
+
+                RoutingAllocation.Result routingResult = allocationService.applyStartedShards(currentState, shardRoutingToBeApplied, true);
+                if (!routingResult.changed()) {
+                    return currentState;
+                }
+                return ClusterState.builder(currentState).version(currentState.version() + 1).routingResult(routingResult).build();
+            }
+
+            @Override
+            public void onFailure(String source, Throwable t) {
+                logger.error("unexpected failure during [{}]", t, source);
+            }
+        });
     }
 
     private class ShardFailedTransportHandler extends BaseTransportRequestHandler<ShardRoutingEntry> {

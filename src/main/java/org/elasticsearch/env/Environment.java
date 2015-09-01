@@ -72,7 +72,7 @@ public class Environment {
         if (settings.get("path.conf") != null) {
             configFile = new File(cleanPath(settings.get("path.conf")));
         } else {
-            configFile = new File(homeFile, "config");
+            configFile = new File(homeFile, "conf");
         }
 
         if (settings.get("path.plugins") != null) {
@@ -204,12 +204,12 @@ public class Environment {
             return resource;
         }
         // try and load it from the classpath with config/ prefix
-        if (!path.startsWith("config/")) {
-            resource = settings.getClassLoader().getResource("config/" + path);
+        if (!path.startsWith("conf/")) {
+            resource = settings.getClassLoader().getResource("conf/" + path);
             if (resource != null) {
                 return resource;
             }
         }
-        throw new FailedToResolveConfigException("Failed to resolve config path [" + origPath + "], tried file path [" + f1 + "], path file [" + f2 + "], and classpath");
+        throw new FailedToResolveConfigException("Failed to resolve conf path [" + origPath + "], tried file path [" + f1 + "], path file [" + f2 + "], and classpath");
     }
 }

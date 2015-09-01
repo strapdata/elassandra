@@ -24,7 +24,7 @@ import org.elasticsearch.action.RoutingMissingException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.single.shard.TransportShardSingleOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.cluster.routing.operation.plain.Preference;
@@ -66,13 +66,13 @@ public class TransportXGetAction extends TransportShardSingleOperationAction<XGe
     }
 
     @Override
-    protected ShardIterator shards(CassandraClusterState state, InternalRequest request) {
+    protected ShardIterator shards(ClusterState state, InternalRequest request) {
         return clusterService.operationRouting()
                 .getShards(clusterService.state(), request.concreteIndex(), request.request().type(), request.request().id(), request.request().routing(), request.request().preference());
     }
 
     @Override
-    protected void resolveRequest(CassandraClusterState state, InternalRequest request) {
+    protected void resolveRequest(ClusterState state, InternalRequest request) {
         if (request.request().realtime == null) {
             request.request().realtime = this.realtime;
         }

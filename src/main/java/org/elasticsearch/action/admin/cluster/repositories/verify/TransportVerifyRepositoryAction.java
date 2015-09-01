@@ -25,7 +25,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.common.inject.Inject;
@@ -68,12 +68,12 @@ public class TransportVerifyRepositoryAction extends TransportMasterNodeOperatio
     }
 
     @Override
-    protected ClusterBlockException checkBlock(VerifyRepositoryRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(VerifyRepositoryRequest request, ClusterState state) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, "");
     }
 
     @Override
-    protected void masterOperation(final VerifyRepositoryRequest request, CassandraClusterState state, final ActionListener<VerifyRepositoryResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final VerifyRepositoryRequest request, ClusterState state, final ActionListener<VerifyRepositoryResponse> listener) throws ElasticsearchException {
         repositoriesService.verifyRepository(request.name(), new  ActionListener<RepositoriesService.VerifyResponse>() {
             @Override
             public void onResponse(RepositoriesService.VerifyResponse verifyResponse) {

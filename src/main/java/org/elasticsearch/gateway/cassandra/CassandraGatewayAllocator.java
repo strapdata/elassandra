@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer.
+ * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -72,8 +72,7 @@ public class CassandraGatewayAllocator extends AbstractComponent implements Gate
     private final String initialShards;
 
     @Inject
-    public CassandraGatewayAllocator(Settings settings,
-                                 TransportNodesListGatewayStartedShards listGatewayStartedShards, TransportNodesListShardStoreMetaData listShardStoreMetaData) {
+    public CassandraGatewayAllocator(Settings settings, TransportNodesListGatewayStartedShards listGatewayStartedShards, TransportNodesListShardStoreMetaData listShardStoreMetaData) {
         super(settings);
         this.listGatewayStartedShards = listGatewayStartedShards;
         this.listShardStoreMetaData = listShardStoreMetaData;
@@ -334,8 +333,7 @@ public class CassandraGatewayAllocator extends AbstractComponent implements Gate
                                         sizeMatched += storeFileMetaData.length();
                                     }
                                 }
-                                logger.trace("{}: node [{}] has [{}/{}] bytes of re-usable data",
-                                        shard, discoNode.name(), new ByteSizeValue(sizeMatched), sizeMatched);
+                                logger.trace("{}: node [{}] has [{}/{}] bytes of re-usable data", shard, discoNode.name(), new ByteSizeValue(sizeMatched), sizeMatched);
                                 if (sizeMatched > lastSizeMatched) {
                                     lastSizeMatched = sizeMatched;
                                     lastDiscoNodeMatched = discoNode;
@@ -352,14 +350,16 @@ public class CassandraGatewayAllocator extends AbstractComponent implements Gate
                 Decision decision = allocation.deciders().canAllocate(shard, lastNodeMatched, allocation);
                 if (decision.type() == Decision.Type.THROTTLE) {
                     if (logger.isDebugEnabled()) {
-                        logger.debug("[{}][{}]: throttling allocation [{}] to [{}] in order to reuse its unallocated persistent store with total_size [{}]", shard.index(), shard.id(), shard, lastDiscoNodeMatched, new ByteSizeValue(lastSizeMatched));
+                        logger.debug("[{}][{}]: throttling allocation [{}] to [{}] in order to reuse its unallocated persistent store with total_size [{}]", shard.index(), shard.id(), shard,
+                                lastDiscoNodeMatched, new ByteSizeValue(lastSizeMatched));
                     }
                     // we are throttling this, but we have enough to allocate to this node, ignore it for now
                     unassignedIterator.remove();
                     routingNodes.ignoredUnassigned().add(shard);
                 } else {
                     if (logger.isDebugEnabled()) {
-                        logger.debug("[{}][{}]: allocating [{}] to [{}] in order to reuse its unallocated persistent store with total_size [{}]", shard.index(), shard.id(), shard, lastDiscoNodeMatched, new ByteSizeValue(lastSizeMatched));
+                        logger.debug("[{}][{}]: allocating [{}] to [{}] in order to reuse its unallocated persistent store with total_size [{}]", shard.index(), shard.id(), shard,
+                                lastDiscoNodeMatched, new ByteSizeValue(lastSizeMatched));
                     }
                     // we found a match
                     changed = true;
@@ -403,11 +403,9 @@ public class CassandraGatewayAllocator extends AbstractComponent implements Gate
         TransportNodesListGatewayStartedShards.NodesLocalGatewayStartedShards response = listGatewayStartedShards.list(shard.shardId(), nodesIdsArray, listTimeout).actionGet();
         logListActionFailures(shard, "state", response.failures());
 
-
         for (TransportNodesListGatewayStartedShards.NodeLocalGatewayStartedShards nodeShardState : response) {
             // -1 version means it does not exists, which is what the API returns, and what we expect to
-            logger.trace("[{}] on node [{}] has version [{}] of shard",
-                    shard, nodeShardState.getNode(), nodeShardState.version());
+            logger.trace("[{}] on node [{}] has version [{}] of shard", shard, nodeShardState.getNode(), nodeShardState.version());
             shardStates.put(nodeShardState.getNode(), nodeShardState.version());
         }
         return shardStates;
@@ -434,7 +432,7 @@ public class CassandraGatewayAllocator extends AbstractComponent implements Gate
         } else {
             nodesIds = ObjectOpenHashSet.newInstance();
             // clean nodes that have failed
-            for (Iterator<DiscoveryNode> it = shardStores.keySet().iterator(); it.hasNext(); ) {
+            for (Iterator<DiscoveryNode> it = shardStores.keySet().iterator(); it.hasNext();) {
                 DiscoveryNode node = it.next();
                 if (!nodes.nodeExists(node.id())) {
                     it.remove();

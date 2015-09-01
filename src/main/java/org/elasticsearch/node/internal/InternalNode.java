@@ -39,7 +39,7 @@ import org.elasticsearch.cache.recycler.PageCacheRecyclerModule;
 import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.node.NodeClientModule;
-import org.elasticsearch.cluster.CassandraClusterModule;
+import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
@@ -116,7 +116,6 @@ public final class InternalNode implements Node {
     private static final String CLIENT_TYPE = "node";
     public static final String HTTP_ENABLED = "http.enabled";
 
-
     private final Lifecycle lifecycle = new Lifecycle();
     private final Injector injector;
     private final Settings settings;
@@ -129,9 +128,9 @@ public final class InternalNode implements Node {
     }
 
     public InternalNode(Settings preparedSettings, boolean loadConfigSettings) throws ElasticsearchException {
-    	
+
         final Settings pSettings = settingsBuilder().put(preparedSettings).build();
-    	Tuple<Settings, Environment> tuple = InternalSettingsPreparer.prepareSettings(pSettings, loadConfigSettings);
+        Tuple<Settings, Environment> tuple = InternalSettingsPreparer.prepareSettings(pSettings, loadConfigSettings);
         tuple = new Tuple<>(TribeService.processSettings(tuple.v1()), tuple.v2());
 
         // The only place we can actually fake the version a node is running on:
@@ -144,8 +143,7 @@ public final class InternalNode implements Node {
 
         if (logger.isDebugEnabled()) {
             Environment env = tuple.v2();
-            logger.debug("using home [{}], config [{}], data [{}], logs [{}], work [{}], plugins [{}]",
-                    env.homeFile(), env.configFile(), Arrays.toString(env.dataFiles()), env.logsFile(),
+            logger.debug("using home [{}], conf [{}], data [{}], logs [{}], work [{}], plugins [{}]", env.homeFile(), env.configFile(), Arrays.toString(env.dataFiles()), env.logsFile(),
                     env.workFile(), env.pluginsFile());
         }
 
@@ -161,22 +159,20 @@ public final class InternalNode implements Node {
         } catch (IOException ex) {
             throw new ElasticsearchIllegalStateException("Failed to created node environment", ex);
         }
-        
+
         boolean success = false;
         try {
             ModulesBuilder modules = new ModulesBuilder();
-            
+
             modules.add(new Version.Module(version));
-            
+
             modules.add(new CacheRecyclerModule(settings));
             modules.add(new PageCacheRecyclerModule(settings));
             modules.add(new CircuitBreakerModule(settings));
             modules.add(new BigArraysModule(settings));
-            
-            
+
             modules.add(new PluginsModule(settings, pluginsService));
-            
-            
+
             modules.add(new SettingsModule(settings));
             modules.add(new NodeModule(this));
             modules.add(new NetworkModule());
@@ -184,40 +180,37 @@ public final class InternalNode implements Node {
             modules.add(new EnvironmentModule(environment));
             modules.add(new NodeEnvironmentModule(nodeEnvironment));
             modules.add(new ClusterNameModule(settings));
-            
+
             modules.add(new ThreadPoolModule(settings));
             modules.add(new DiscoveryModule(settings));
-            modules.add(new CassandraClusterModule(settings));
-            
-             
+            modules.add(new ClusterModule(settings));
+
             modules.add(new RestModule(settings));
             modules.add(new TransportModule(settings));
-            
+
             if (settings.getAsBoolean(HTTP_ENABLED, true)) {
                 modules.add(new HttpServerModule(settings));
             }
-            
+
             modules.add(new RiversModule(settings));
             modules.add(new IndicesModule(settings));
             modules.add(new SearchModule());
-           
+
             modules.add(new ActionModule(false));
             modules.add(new MonitorModule(settings));
-            
+
             modules.add(new GatewayModule(settings));
             modules.add(new NodeClientModule());
-            
+
             modules.add(new BulkUdpModule());
             modules.add(new ShapeModule());
             modules.add(new PercolatorModule());
             modules.add(new ResourceWatcherModule());
             modules.add(new RepositoriesModule());
             modules.add(new TribeModule());
-			
 
             injector = modules.createInjector();
 
-            
             client = injector.getInstance(Client.class);
             success = true;
         } finally {
@@ -239,8 +232,6 @@ public final class InternalNode implements Node {
         return client;
     }
 
-    
-    
     public Node activate() {
         if (!lifecycle.moveToStarted()) {
             return this;
@@ -256,82 +247,78 @@ public final class InternalNode implements Node {
         for (Class<? extends LifecycleComponent> plugin : pluginsService.services()) {
             injector.getInstance(plugin).start();
         }
-		*/
-        
+        */
+
         injector.getInstance(MappingUpdatedAction.class).start();
-        
+
         injector.getInstance(IndicesService.class).start();
         injector.getInstance(IndexingMemoryController.class).start();
-        
+
         injector.getInstance(IndicesClusterStateService.class).start();
         //injector.getInstance(IndicesTTLService.class).start();
         //injector.getInstance(RiversManager.class).start();
         //injector.getInstance(SnapshotsService.class).start();
         injector.getInstance(TransportService.class).start();
-        
+
         ClusterService clusterService = injector.getInstance(ClusterService.class);
         clusterService.start();
-        
+
         /*
         injector.getInstance(RoutingService.class).start();
         injector.getInstance(SearchService.class).start();
         injector.getInstance(MonitorService.class).start();
         injector.getInstance(RestController.class).start();
         */
-        
+
         DiscoveryService discoService = injector.getInstance(DiscoveryService.class).start();
         discoService.waitForInitialState();
-		
+
         // gateway should start after disco, so it can try and recovery from gateway on "start"
         GatewayService gatewayService = injector.getInstance(GatewayService.class);
         gatewayService.start(); // block until recovery done from cassandra schema.
-        
-        
+
         // check metadata not empty and block until all primary local shards are STARTED
-		clusterService.waitShardsStarted();
-		logger.info("activated ...");
+        clusterService.waitShardsStarted();
+        logger.info("activated ...");
         return this;
     }
 
-
-
     public Node start() {
-    	ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
-    	logger.info("starting ...");
-    	
-    	// initilize if needed metadata in cassandra schema.
-    	injector.getInstance(SchemaService.class).initializeMetaDataAsComment();
-    	
-    	// Cassandra started => release metadata update blocks.
-    	injector.getInstance(GatewayService.class).enableMetaDataPersictency();
-    	
-    	for (Class<? extends LifecycleComponent> plugin : pluginsService.services()) {
+        ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
+        logger.info("starting ...");
+
+        // initilize if needed metadata in cassandra schema.
+        injector.getInstance(SchemaService.class).initializeMetaDataAsComment();
+
+        // Cassandra started => release metadata update blocks.
+        injector.getInstance(GatewayService.class).enableMetaDataPersictency();
+
+        for (Class<? extends LifecycleComponent> plugin : pluginsService.services()) {
             injector.getInstance(plugin).start();
         }
-		
-    	
-    	injector.getInstance(IndicesTTLService.class).start();
-    	injector.getInstance(RiversManager.class).start();
+
+        injector.getInstance(IndicesTTLService.class).start();
+        injector.getInstance(RiversManager.class).start();
         injector.getInstance(SnapshotsService.class).start();
-    	
+
         injector.getInstance(RoutingService.class).start();
         injector.getInstance(SearchService.class).start();
         injector.getInstance(MonitorService.class).start();
         injector.getInstance(RestController.class).start();
-        
+
         if (settings.getAsBoolean("http.enabled", true)) {
             injector.getInstance(HttpServer.class).start();
         }
-        
+
         injector.getInstance(BulkUdpService.class).start();
         injector.getInstance(ResourceWatcherService.class).start();
         injector.getInstance(TribeService.class).start();
 
         ClusterService clusterService = injector.getInstance(ClusterService.class);
-    	logger.debug("Elasticsearch started state={}",  clusterService.state().toString());
+        logger.debug("Elasticsearch started state={}", clusterService.state().toString());
         return this;
     }
-    
+
     @Override
     public Node stop() {
         if (!lifecycle.moveToStopped()) {
@@ -363,14 +350,14 @@ public final class InternalNode implements Node {
         } catch (InterruptedException e) {
             // ignore
         }
-        
+
         injector.getInstance(RoutingService.class).stop();
         injector.getInstance(ClusterService.class).stop();
         injector.getInstance(DiscoveryService.class).stop();
         injector.getInstance(MonitorService.class).stop();
         injector.getInstance(GatewayService.class).stop();
         injector.getInstance(SearchService.class).stop();
-        
+
         injector.getInstance(RestController.class).stop();
         injector.getInstance(TransportService.class).stop();
 
@@ -398,29 +385,27 @@ public final class InternalNode implements Node {
         logger.info("closing ...");
 
         StopWatch stopWatch = new StopWatch("node_close");
-        
+
         stopWatch.start("tribe");
         injector.getInstance(TribeService.class).close();
-        
+
         stopWatch.stop().start("bulk.udp");
         injector.getInstance(BulkUdpService.class).close();
-        
+
         stopWatch.stop().start("http");
         if (settings.getAsBoolean("http.enabled", true)) {
             injector.getInstance(HttpServer.class).close();
         }
 
-        
         stopWatch.stop().start("rivers");
         injector.getInstance(RiversManager.class).close();
 
-        
         stopWatch.stop().start("snapshot_service");
         injector.getInstance(SnapshotsService.class).close();
-        
+
         stopWatch.stop().start("client");
         Releasables.close(injector.getInstance(Client.class));
-        
+
         stopWatch.stop().start("indices_cluster");
         injector.getInstance(IndicesClusterStateService.class).close();
         stopWatch.stop().start("indices");
@@ -429,43 +414,41 @@ public final class InternalNode implements Node {
         injector.getInstance(IndexingMemoryController.class).close();
         injector.getInstance(IndicesTTLService.class).close();
         injector.getInstance(IndicesService.class).close();
-        
+
         stopWatch.stop().start("routing");
         injector.getInstance(RoutingService.class).close();
-        
+
         stopWatch.stop().start("cluster");
         injector.getInstance(ClusterService.class).close();
         stopWatch.stop().start("discovery");
         injector.getInstance(DiscoveryService.class).close();
-        
+
         stopWatch.stop().start("monitor");
         injector.getInstance(MonitorService.class).close();
-   
+
         stopWatch.stop().start("gateway");
         injector.getInstance(GatewayService.class).close();
-        
+
         stopWatch.stop().start("search");
         injector.getInstance(SearchService.class).close();
-        
+
         stopWatch.stop().start("rest");
         injector.getInstance(RestController.class).close();
         stopWatch.stop().start("transport");
         injector.getInstance(TransportService.class).close();
-        
-        
+
         stopWatch.stop().start("percolator_service");
         injector.getInstance(PercolatorService.class).close();
-		
+
         for (Class<? extends LifecycleComponent> plugin : pluginsService.services()) {
             stopWatch.stop().start("plugin(" + plugin.getName() + ")");
             injector.getInstance(plugin).close();
         }
 
-        
         stopWatch.stop().start("script");
         try {
             injector.getInstance(ScriptService.class).close();
-        } catch(IOException e) {
+        } catch (IOException e) {
             logger.warn("ScriptService close failed", e);
         }
 
@@ -505,6 +488,5 @@ public final class InternalNode implements Node {
     public Injector injector() {
         return this.injector;
     }
-
 
 }

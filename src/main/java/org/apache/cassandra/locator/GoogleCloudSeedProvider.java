@@ -43,44 +43,40 @@ import org.yaml.snakeyaml.TypeDescription;
 import org.yaml.snakeyaml.Yaml;
 
 /**
- * Provide seed hostnames from Google Cloud project metadata (property seed-<region_name>)
+ * Provide seed hostnames from Google Cloud project metadata (property
+ * seed-<region_name>)
+ * 
  * @author vroyer
  *
  */
-public class GoogleCloudSeedProvider extends GoogleCloudSnitch implements SeedProvider
-{
+public class GoogleCloudSeedProvider extends GoogleCloudSnitch implements SeedProvider {
     private static final Logger logger = LoggerFactory.getLogger(GoogleCloudSeedProvider.class);
 
     private static String SEED_BY_REGION = "http://metadata.google.internal/computeMetadata/v1/project/attributes/seed-%s";
- 
-    		
+
     public GoogleCloudSeedProvider(Map<String, String> args) throws IOException, ConfigurationException {
-    	super();
+        super();
     }
 
-    public List<InetAddress> getSeeds() 
-    {
-    	try {
-			String response = gceApiCall( String.format(SEED_BY_REGION, gceRegion) );
-			logger.debug("seed-"+gceRegion+": "+response);
-			String hosts[] = response.split(",", -1);
-			List<InetAddress> seeds = new ArrayList<InetAddress>(hosts.length);
-			for (String host : hosts)
-			{
-			    try
-			    {
-			        seeds.add(InetAddress.getByName(host.trim()));
-			    }
-			    catch (UnknownHostException ex)
-			    {
-			        // not fatal... DD will bark if there end up being zero seeds.
-			        logger.warn("Seed provider couldn't lookup host {}", host);
-			    }
-			}
-			return Collections.unmodifiableList(seeds);
-		} catch (ConfigurationException |  IOException e) {
-			logger.error("Failed to get cluster seed",e);
-			return Collections.EMPTY_LIST;
-		} 
+    public List<InetAddress> getSeeds() {
+        try {
+            String response = gceApiCall(String.format(SEED_BY_REGION, gceRegion));
+            logger.debug("seed-" + gceRegion + ": " + response);
+            String hosts[] = response.split(",", -1);
+            List<InetAddress> seeds = new ArrayList<InetAddress>(hosts.length);
+            for (String host : hosts) {
+                try {
+                    seeds.add(InetAddress.getByName(host.trim()));
+                } catch (UnknownHostException ex) {
+                    // not fatal... DD will bark if there end up being zero
+                    // seeds.
+                    logger.warn("Seed provider couldn't lookup host {}", host);
+                }
+            }
+            return Collections.unmodifiableList(seeds);
+        } catch (ConfigurationException | IOException e) {
+            logger.error("Failed to get cluster seed", e);
+            return Collections.EMPTY_LIST;
+        }
     }
 }

@@ -27,7 +27,7 @@ import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadOperationAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.block.ClusterBlockException;
@@ -60,7 +60,7 @@ public class TransportClusterHealthAction extends TransportMasterNodeReadOperati
     }
 
     @Override
-    protected ClusterBlockException checkBlock(ClusterHealthRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(ClusterHealthRequest request, ClusterState state) {
         return null; // we want users to be able to call this even when there are global blocks, just to check the health (are there blocks?)
     }
 
@@ -75,17 +75,17 @@ public class TransportClusterHealthAction extends TransportMasterNodeReadOperati
     }
 
     @Override
-    protected void masterOperation(final ClusterHealthRequest request, final CassandraClusterState unusedState, final ActionListener<ClusterHealthResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final ClusterHealthRequest request, final ClusterState unusedState, final ActionListener<ClusterHealthResponse> listener) throws ElasticsearchException {
         if (request.waitForEvents() != null) {
             final long endTime = System.currentTimeMillis() + request.timeout().millis();
             clusterService.submitStateUpdateTask("cluster_health (wait_for_events [" + request.waitForEvents() + "])", request.waitForEvents(), new ProcessedClusterStateUpdateTask() {
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) {
+                public ClusterState execute(ClusterState currentState) {
                     return currentState;
                 }
 
                 @Override
-                public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                     final long timeoutInMillis = Math.max(0, endTime - System.currentTimeMillis());
                     final TimeValue newTimeout = TimeValue.timeValueMillis(timeoutInMillis);
                     request.timeout(newTimeout);
@@ -129,7 +129,7 @@ public class TransportClusterHealthAction extends TransportMasterNodeReadOperati
 
         assert waitFor >= 0;
         final ClusterStateObserver observer = new ClusterStateObserver(clusterService, logger,"clusterHealthRequest");
-        final CassandraClusterState state = observer.observedState();
+        final ClusterState state = observer.observedState();
         if (waitFor == 0 || request.timeout().millis() == 0) {
             listener.onResponse(getResponse(request, state, waitFor, request.timeout().millis() == 0));
             return;
@@ -137,14 +137,14 @@ public class TransportClusterHealthAction extends TransportMasterNodeReadOperati
         final int concreteWaitFor = waitFor;
         final ClusterStateObserver.ChangePredicate validationPredicate = new ClusterStateObserver.ValidationPredicate() {
             @Override
-            protected boolean validate(CassandraClusterState newState) {
-                return newState.status() == CassandraClusterState.ClusterStateStatus.APPLIED && validateRequest(request, newState, concreteWaitFor);
+            protected boolean validate(ClusterState newState) {
+                return newState.status() == ClusterState.ClusterStateStatus.APPLIED && validateRequest(request, newState, concreteWaitFor);
             }
         };
 
         final ClusterStateObserver.Listener stateListener = new ClusterStateObserver.Listener() {
             @Override
-            public void onNewClusterState(CassandraClusterState clusterState) {
+            public void onNewClusterState(ClusterState clusterState) {
                 listener.onResponse(getResponse(request, clusterState, concreteWaitFor, false));
             }
 
@@ -155,24 +155,24 @@ public class TransportClusterHealthAction extends TransportMasterNodeReadOperati
 
             @Override
             public void onTimeout(TimeValue timeout) {
-                final CassandraClusterState clusterState = clusterService.state();
+                final ClusterState clusterState = clusterService.state();
                 final ClusterHealthResponse response = getResponse(request, clusterState, concreteWaitFor, true);
                 listener.onResponse(response);
             }
         };
-        if (state.status() == CassandraClusterState.ClusterStateStatus.APPLIED && validateRequest(request, state, concreteWaitFor)) {
+        if (state.status() == ClusterState.ClusterStateStatus.APPLIED && validateRequest(request, state, concreteWaitFor)) {
             stateListener.onNewClusterState(state);
         } else {
             observer.waitForNextChange(stateListener, validationPredicate, request.timeout());
         }
     }
 
-    private boolean validateRequest(final ClusterHealthRequest request, CassandraClusterState clusterState, final int waitFor) {
+    private boolean validateRequest(final ClusterHealthRequest request, ClusterState clusterState, final int waitFor) {
         ClusterHealthResponse response = clusterHealth(request, clusterState, clusterService.numberOfPendingTasks());
         return prepareResponse(request, response, clusterState, waitFor);
     }
 
-    private ClusterHealthResponse getResponse(final ClusterHealthRequest request, CassandraClusterState clusterState, final int waitFor, boolean timedOut) {
+    private ClusterHealthResponse getResponse(final ClusterHealthRequest request, ClusterState clusterState, final int waitFor, boolean timedOut) {
         ClusterHealthResponse response = clusterHealth(request, clusterState, clusterService.numberOfPendingTasks());
         boolean valid = prepareResponse(request, response, clusterState, waitFor);
         assert valid || timedOut;
@@ -185,7 +185,7 @@ public class TransportClusterHealthAction extends TransportMasterNodeReadOperati
         return response;
     }
 
-    private boolean prepareResponse(final ClusterHealthRequest request, final ClusterHealthResponse response, CassandraClusterState clusterState, final int waitFor) {
+    private boolean prepareResponse(final ClusterHealthRequest request, final ClusterHealthResponse response, ClusterState clusterState, final int waitFor) {
         int waitForCounter = 0;
         if (request.waitForStatus() != null && response.getStatus().value() <= request.waitForStatus().value()) {
             waitForCounter++;
@@ -257,7 +257,7 @@ public class TransportClusterHealthAction extends TransportMasterNodeReadOperati
     }
 
 
-    private ClusterHealthResponse clusterHealth(ClusterHealthRequest request, CassandraClusterState clusterState, int numberOfPendingTasks) {
+    private ClusterHealthResponse clusterHealth(ClusterHealthRequest request, ClusterState clusterState, int numberOfPendingTasks) {
         if (logger.isTraceEnabled()) {
             logger.trace("Calculating health based on state version [{}]", clusterState.version());
         }

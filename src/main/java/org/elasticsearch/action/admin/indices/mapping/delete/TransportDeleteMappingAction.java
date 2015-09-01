@@ -39,7 +39,7 @@ import org.elasticsearch.action.support.QuerySourceBuilder;
 import org.elasticsearch.action.support.broadcast.BroadcastOperationResponse;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -107,12 +107,12 @@ public class TransportDeleteMappingAction extends TransportMasterNodeOperationAc
     }
 
     @Override
-    protected ClusterBlockException checkBlock(DeleteMappingRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(DeleteMappingRequest request, ClusterState state) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, state.metaData().concreteIndices(request.indicesOptions(), request.indices()));
     }
 
     @Override
-    protected void masterOperation(final DeleteMappingRequest request, final CassandraClusterState state, final ActionListener<DeleteMappingResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final DeleteMappingRequest request, final ClusterState state, final ActionListener<DeleteMappingResponse> listener) throws ElasticsearchException {
         final String[] concreteIndices = state.metaData().concreteIndices(request.indicesOptions(), request.indices());
         flushAction.execute(new FlushRequest(request).indices(concreteIndices), new ActionListener<FlushResponse>() {
             @Override

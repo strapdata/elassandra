@@ -24,7 +24,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -64,12 +64,12 @@ public class TransportPutRepositoryAction extends TransportMasterNodeOperationAc
     }
 
     @Override
-    protected ClusterBlockException checkBlock(PutRepositoryRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(PutRepositoryRequest request, ClusterState state) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, "");
     }
 
     @Override
-    protected void masterOperation(final PutRepositoryRequest request, CassandraClusterState state, final ActionListener<PutRepositoryResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final PutRepositoryRequest request, ClusterState state, final ActionListener<PutRepositoryResponse> listener) throws ElasticsearchException {
 
         repositoriesService.registerRepository(
                 new RepositoriesService.RegisterRepositoryRequest("put_repository [" + request.name() + "]",

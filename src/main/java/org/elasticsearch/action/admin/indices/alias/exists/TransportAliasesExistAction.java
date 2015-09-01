@@ -24,7 +24,7 @@ import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.common.inject.Inject;
@@ -48,7 +48,7 @@ public class TransportAliasesExistAction extends TransportMasterNodeReadOperatio
     }
 
     @Override
-    protected ClusterBlockException checkBlock(GetAliasesRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(GetAliasesRequest request, ClusterState state) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, state.metaData().concreteIndices(request.indicesOptions(), request.indices()));
     }
 
@@ -63,7 +63,7 @@ public class TransportAliasesExistAction extends TransportMasterNodeReadOperatio
     }
 
     @Override
-    protected void masterOperation(GetAliasesRequest request, CassandraClusterState state, ActionListener<AliasesExistResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(GetAliasesRequest request, ClusterState state, ActionListener<AliasesExistResponse> listener) throws ElasticsearchException {
         String[] concreteIndices = state.metaData().concreteIndices(request.indicesOptions(), request.indices());
         boolean result = state.metaData().hasAliases(request.aliases(), concreteIndices);
         listener.onResponse(new AliasesExistResponse(result));

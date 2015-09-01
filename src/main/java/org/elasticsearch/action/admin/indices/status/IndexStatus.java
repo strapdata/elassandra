@@ -32,8 +32,7 @@ import java.util.Map;
 import static com.google.common.collect.Lists.newArrayList;
 
 /**
- * This class will be removed in future versions
- * Use the recovery API instead
+ * This class will be removed in future versions Use the recovery API instead
  */
 @Deprecated
 public class IndexStatus implements Iterable<IndexShardStatus> {
@@ -46,7 +45,7 @@ public class IndexStatus implements Iterable<IndexShardStatus> {
         this.index = index;
 
         Map<Integer, List<ShardStatus>> tmpIndexShards = Maps.newHashMap();
-        int i=0;
+        int i = 0;
         for (ShardStatus shard : shards) {
             List<ShardStatus> lst = tmpIndexShards.get(i);
             if (lst == null) {
@@ -58,9 +57,7 @@ public class IndexStatus implements Iterable<IndexShardStatus> {
         }
         indexShards = Maps.newHashMap();
         for (Map.Entry<Integer, List<ShardStatus>> entry : tmpIndexShards.entrySet()) {
-            indexShards.put(entry.getKey(), new IndexShardStatus(
-            		entry.getValue().get(0).getShardRouting().shardId(), 
-            		entry.getValue().toArray(new ShardStatus[entry.getValue().size()])));
+            indexShards.put(entry.getKey(), new IndexShardStatus(entry.getValue().get(0).getShardRouting().shardId(), entry.getValue().toArray(new ShardStatus[entry.getValue().size()])));
         }
     }
 
@@ -69,8 +66,8 @@ public class IndexStatus implements Iterable<IndexShardStatus> {
     }
 
     /**
-     * A shard id to index shard status map (note, index shard status is the replication shard group that maps
-     * to the shard id).
+     * A shard id to index shard status map (note, index shard status is the
+     * replication shard group that maps to the shard id).
      */
     public Map<Integer, IndexShardStatus> getShards() {
         return this.indexShards;

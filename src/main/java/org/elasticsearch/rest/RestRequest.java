@@ -146,7 +146,8 @@ public abstract class RestRequest extends ContextHolder implements ToXContent.Pa
         return Booleans.parseBoolean(param(key), defaultValue);
     }
 
-    @Override @Deprecated
+    @Override
+    @Deprecated
     public Boolean paramAsBooleanOptional(String key, Boolean defaultValue) {
         return paramAsBoolean(key, defaultValue);
     }
@@ -174,22 +175,21 @@ public abstract class RestRequest extends ContextHolder implements ToXContent.Pa
         }
         return params;
     }
-    
+
     public Collection<Range<Token>> paramsAsTokenRanges(String key) {
-    	String value = param(key);
-    	if (value != null) {
-    		Collection<Range<Token>> tokenRanges = new ArrayList<Range<Token>>();
-    		Token.TokenFactory tokenFactory = StorageService.instance.getPartitioner().getTokenFactory();
-    		StringTokenizer stk = new StringTokenizer(value,"{[(,)]}");
-    		while(stk.hasMoreTokens()) {
-    			Token leftToken = tokenFactory.fromString(stk.nextToken());
-    			Token rightToken = tokenFactory.fromString(stk.nextToken());
-    			tokenRanges.add(new Range(leftToken,rightToken));
-    		}
-    		return tokenRanges;
+        String value = param(key);
+        if (value != null) {
+            Collection<Range<Token>> tokenRanges = new ArrayList<Range<Token>>();
+            Token.TokenFactory tokenFactory = StorageService.instance.getPartitioner().getTokenFactory();
+            StringTokenizer stk = new StringTokenizer(value, "{[(,)]}");
+            while (stk.hasMoreTokens()) {
+                Token leftToken = tokenFactory.fromString(stk.nextToken());
+                Token rightToken = tokenFactory.fromString(stk.nextToken());
+                tokenRanges.add(new Range(leftToken, rightToken));
+            }
+            return tokenRanges;
         }
         return null;
     }
-    
-    
+
 }

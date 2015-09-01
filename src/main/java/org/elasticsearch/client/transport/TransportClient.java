@@ -107,11 +107,16 @@ import org.elasticsearch.transport.TransportService;
 import com.google.common.collect.ImmutableList;
 
 /**
- * The transport client allows to create a client that is not part of the cluster, but simply connects to one
- * or more nodes directly by adding their respective addresses using {@link #addTransportAddress(org.elasticsearch.common.transport.TransportAddress)}.
+ * The transport client allows to create a client that is not part of the
+ * cluster, but simply connects to one or more nodes directly by adding their
+ * respective addresses using
+ * {@link #addTransportAddress(org.elasticsearch.common.transport.TransportAddress)}
+ * .
  * <p/>
- * <p>The transport client important modules used is the {@link org.elasticsearch.transport.TransportModule} which is
- * started in client mode (only connects, no bind).
+ * <p>
+ * The transport client important modules used is the
+ * {@link org.elasticsearch.transport.TransportModule} which is started in
+ * client mode (only connects, no bind).
  */
 public class TransportClient extends AbstractClient {
 
@@ -126,36 +131,45 @@ public class TransportClient extends AbstractClient {
     private final InternalTransportClient internalClient;
 
     /**
-     * Constructs a new transport client with settings loaded either from the classpath or the file system (the
-     * <tt>elasticsearch.(yml|json)</tt> files optionally prefixed with <tt>config/</tt>).
+     * Constructs a new transport client with settings loaded either from the
+     * classpath or the file system (the <tt>elasticsearch.(yml|json)</tt> files
+     * optionally prefixed with <tt>config/</tt>).
      */
     public TransportClient() throws ElasticsearchException {
         this(ImmutableSettings.Builder.EMPTY_SETTINGS, true);
     }
 
     /**
-     * Constructs a new transport client with explicit settings and settings loaded either from the classpath or the file
-     * system (the <tt>elasticsearch.(yml|json)</tt> files optionally prefixed with <tt>config/</tt>).
+     * Constructs a new transport client with explicit settings and settings
+     * loaded either from the classpath or the file system (the
+     * <tt>elasticsearch.(yml|json)</tt> files optionally prefixed with
+     * <tt>config/</tt>).
      */
     public TransportClient(Settings settings) {
         this(settings, true);
     }
 
     /**
-     * Constructs a new transport client with explicit settings and settings loaded either from the classpath or the file
-     * system (the <tt>elasticsearch.(yml|json)</tt> files optionally prefixed with <tt>config/</tt>).
+     * Constructs a new transport client with explicit settings and settings
+     * loaded either from the classpath or the file system (the
+     * <tt>elasticsearch.(yml|json)</tt> files optionally prefixed with
+     * <tt>config/</tt>).
      */
     public TransportClient(Settings.Builder settings) {
         this(settings.build(), true);
     }
 
     /**
-     * Constructs a new transport client with the provided settings and the ability to control if settings will
-     * be loaded from the classpath / file system (the <tt>elasticsearch.(yml|json)</tt> files optionally prefixed with
-     * <tt>config/</tt>).
+     * Constructs a new transport client with the provided settings and the
+     * ability to control if settings will be loaded from the classpath / file
+     * system (the <tt>elasticsearch.(yml|json)</tt> files optionally prefixed
+     * with <tt>config/</tt>).
      *
-     * @param settings           The explicit settings.
-     * @param loadConfigSettings <tt>true</tt> if settings should be loaded from the classpath/file system.
+     * @param settings
+     *            The explicit settings.
+     * @param loadConfigSettings
+     *            <tt>true</tt> if settings should be loaded from the
+     *            classpath/file system.
      * @throws org.elasticsearch.ElasticsearchException
      */
     public TransportClient(Settings.Builder settings, boolean loadConfigSettings) throws ElasticsearchException {
@@ -163,21 +177,21 @@ public class TransportClient extends AbstractClient {
     }
 
     /**
-     * Constructs a new transport client with the provided settings and the ability to control if settings will
-     * be loaded from the classpath / file system (the <tt>elasticsearch.(yml|json)</tt> files optionally prefixed with
-     * <tt>config/</tt>).
+     * Constructs a new transport client with the provided settings and the
+     * ability to control if settings will be loaded from the classpath / file
+     * system (the <tt>elasticsearch.(yml|json)</tt> files optionally prefixed
+     * with <tt>config/</tt>).
      *
-     * @param pSettings          The explicit settings.
-     * @param loadConfigSettings <tt>true</tt> if settings should be loaded from the classpath/file system.
+     * @param pSettings
+     *            The explicit settings.
+     * @param loadConfigSettings
+     *            <tt>true</tt> if settings should be loaded from the
+     *            classpath/file system.
      * @throws org.elasticsearch.ElasticsearchException
      */
     public TransportClient(Settings pSettings, boolean loadConfigSettings) throws ElasticsearchException {
         Tuple<Settings, Environment> tuple = InternalSettingsPreparer.prepareSettings(pSettings, loadConfigSettings);
-        Settings settings = settingsBuilder().put(tuple.v1())
-                .put("network.server", false)
-                .put("node.client", true)
-                .put(CLIENT_TYPE_SETTING, CLIENT_TYPE)
-                .build();
+        Settings settings = settingsBuilder().put(tuple.v1()).put("network.server", false).put("node.client", true).put(CLIENT_TYPE_SETTING, CLIENT_TYPE).build();
         this.environment = tuple.v2();
 
         this.pluginsService = new PluginsService(settings, tuple.v2());
@@ -216,7 +230,8 @@ public class TransportClient extends AbstractClient {
 
     /**
      * Returns the current registered transport addresses to use (added using
-     * {@link #addTransportAddress(org.elasticsearch.common.transport.TransportAddress)}.
+     * {@link #addTransportAddress(org.elasticsearch.common.transport.TransportAddress)}
+     * .
      */
     public ImmutableList<TransportAddress> transportAddresses() {
         return nodesService.transportAddresses();
@@ -225,16 +240,17 @@ public class TransportClient extends AbstractClient {
     /**
      * Returns the current connected transport nodes that this client will use.
      * <p/>
-     * <p>The nodes include all the nodes that are currently alive based on the transport
-     * addresses provided.
+     * <p>
+     * The nodes include all the nodes that are currently alive based on the
+     * transport addresses provided.
      */
     public ImmutableList<DiscoveryNode> connectedNodes() {
         return nodesService.connectedNodes();
     }
 
     /**
-     * The list of filtered nodes that were not connected to, for example, due to
-     * mismatch in cluster name.
+     * The list of filtered nodes that were not connected to, for example, due
+     * to mismatch in cluster name.
      */
     public ImmutableList<DiscoveryNode> filteredNodes() {
         return nodesService.filteredNodes();
@@ -250,10 +266,14 @@ public class TransportClient extends AbstractClient {
     /**
      * Adds a transport address that will be used to connect to.
      * <p/>
-     * <p>The Node this transport address represents will be used if its possible to connect to it.
-     * If it is unavailable, it will be automatically connected to once it is up.
+     * <p>
+     * The Node this transport address represents will be used if its possible
+     * to connect to it. If it is unavailable, it will be automatically
+     * connected to once it is up.
      * <p/>
-     * <p>In order to get the list of all the current connected nodes, please see {@link #connectedNodes()}.
+     * <p>
+     * In order to get the list of all the current connected nodes, please see
+     * {@link #connectedNodes()}.
      */
     public TransportClient addTransportAddress(TransportAddress transportAddress) {
         nodesService.addTransportAddresses(transportAddress);
@@ -263,10 +283,14 @@ public class TransportClient extends AbstractClient {
     /**
      * Adds a list of transport addresses that will be used to connect to.
      * <p/>
-     * <p>The Node this transport address represents will be used if its possible to connect to it.
-     * If it is unavailable, it will be automatically connected to once it is up.
+     * <p>
+     * The Node this transport address represents will be used if its possible
+     * to connect to it. If it is unavailable, it will be automatically
+     * connected to once it is up.
      * <p/>
-     * <p>In order to get the list of all the current connected nodes, please see {@link #connectedNodes()}.
+     * <p>
+     * In order to get the list of all the current connected nodes, please see
+     * {@link #connectedNodes()}.
      */
     public TransportClient addTransportAddresses(TransportAddress... transportAddress) {
         nodesService.addTransportAddresses(transportAddress);
@@ -274,7 +298,8 @@ public class TransportClient extends AbstractClient {
     }
 
     /**
-     * Removes a transport address from the list of transport addresses that are used to connect to.
+     * Removes a transport address from the list of transport addresses that are
+     * used to connect to.
      */
     public TransportClient removeTransportAddress(TransportAddress transportAddress) {
         nodesService.removeTransportAddress(transportAddress);
@@ -325,12 +350,14 @@ public class TransportClient extends AbstractClient {
     }
 
     @Override
-    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response, RequestBuilder, Client>> ActionFuture<Response> execute(Action<Request, Response, RequestBuilder, Client> action, Request request) {
+    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response, RequestBuilder, Client>> ActionFuture<Response> execute(
+            Action<Request, Response, RequestBuilder, Client> action, Request request) {
         return internalClient.execute(action, request);
     }
 
     @Override
-    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response, RequestBuilder, Client>> void execute(Action<Request, Response, RequestBuilder, Client> action, Request request, ActionListener<Response> listener) {
+    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response, RequestBuilder, Client>> void execute(
+            Action<Request, Response, RequestBuilder, Client> action, Request request, ActionListener<Response> listener) {
         internalClient.execute(action, request, listener);
     }
 
@@ -343,7 +370,7 @@ public class TransportClient extends AbstractClient {
     public void index(IndexRequest request, ActionListener<IndexResponse> listener) {
         internalClient.index(request, listener);
     }
-    
+
     @Override
     public ActionFuture<XIndexResponse> xindex(XIndexRequest request) {
         return internalClient.xindex(request);
@@ -353,7 +380,7 @@ public class TransportClient extends AbstractClient {
     public void xindex(XIndexRequest request, ActionListener<XIndexResponse> listener) {
         internalClient.xindex(request, listener);
     }
-    
+
     @Override
     public ActionFuture<UpdateResponse> update(UpdateRequest request) {
         return internalClient.update(request);
@@ -373,16 +400,16 @@ public class TransportClient extends AbstractClient {
     public void delete(DeleteRequest request, ActionListener<DeleteResponse> listener) {
         internalClient.delete(request, listener);
     }
-    
-    @Override
-	public ActionFuture<XDeleteResponse> xdelete(XDeleteRequest request) {
-    	return internalClient.xdelete(request);
-	}
 
-	@Override
-	public void xdelete(XDeleteRequest request, ActionListener<XDeleteResponse> listener) {
-		internalClient.xdelete(request, listener);
-	}
+    @Override
+    public ActionFuture<XDeleteResponse> xdelete(XDeleteRequest request) {
+        return internalClient.xdelete(request);
+    }
+
+    @Override
+    public void xdelete(XDeleteRequest request, ActionListener<XDeleteResponse> listener) {
+        internalClient.xdelete(request, listener);
+    }
 
     @Override
     public ActionFuture<BulkResponse> bulk(BulkRequest request) {
@@ -414,7 +441,6 @@ public class TransportClient extends AbstractClient {
         internalClient.get(request, listener);
     }
 
-    
     @Override
     public ActionFuture<XGetResponse> xget(XGetRequest request) {
         return internalClient.xget(request);
@@ -424,8 +450,7 @@ public class TransportClient extends AbstractClient {
     public void xget(XGetRequest request, ActionListener<XGetResponse> listener) {
         internalClient.xget(request, listener);
     }
-    
-    
+
     @Override
     public ActionFuture<MultiGetResponse> multiGet(MultiGetRequest request) {
         return internalClient.multiGet(request);
@@ -536,5 +561,4 @@ public class TransportClient extends AbstractClient {
         internalClient.explain(request, listener);
     }
 
-	
 }

@@ -88,18 +88,16 @@ import com.google.common.collect.Lists;
 /**
  *
  */
-public class MapperService extends AbstractIndexComponent  {
+public class MapperService extends AbstractIndexComponent {
 
     public static final String DEFAULT_MAPPING = "_default_";
-    private static ObjectOpenHashSet<String> META_FIELDS = ObjectOpenHashSet.from(
-            "_uid", "_id", "_type", "_all", "_analyzer", "_boost", "_parent", "_routing", "_index",
-            "_size", "_timestamp", "_ttl"
-    );
+    private static ObjectOpenHashSet<String> META_FIELDS = ObjectOpenHashSet
+            .from("_uid", "_id", "_type", "_all", "_analyzer", "_boost", "_parent", "_routing", "_index", "_size", "_timestamp", "_ttl");
 
     private final AnalysisService analysisService;
     private final IndexFieldDataService fieldDataService;
     private final SchemaService elasticSchemaService;
-    
+
     /**
      * Will create types automatically if they do not exists in the mapping definition yet
      */
@@ -107,7 +105,6 @@ public class MapperService extends AbstractIndexComponent  {
 
     private volatile String defaultMappingSource;
     private volatile String defaultPercolatorMappingSource;
-
 
     private volatile Map<String, DocumentMapper> mappers = ImmutableMap.of();
 
@@ -132,8 +129,8 @@ public class MapperService extends AbstractIndexComponent  {
 
     @Inject
     public MapperService(Index index, @IndexSettings Settings indexSettings, Environment environment, AnalysisService analysisService, IndexFieldDataService fieldDataService,
-                         PostingsFormatService postingsFormatService, DocValuesFormatService docValuesFormatService, SimilarityLookupService similarityLookupService,
-                         ScriptService scriptService, SchemaService elasticSchemaService) {
+            PostingsFormatService postingsFormatService, DocValuesFormatService docValuesFormatService, SimilarityLookupService similarityLookupService, ScriptService scriptService,
+            SchemaService elasticSchemaService) {
         super(index, indexSettings);
         this.analysisService = analysisService;
         this.fieldDataService = fieldDataService;
@@ -146,28 +143,18 @@ public class MapperService extends AbstractIndexComponent  {
         this.dynamic = componentSettings.getAsBoolean("dynamic", true);
         String defaultMappingLocation = componentSettings.get("default_mapping_location");
         final URL defaultMappingUrl;
-        if (index.getName().equals(ScriptService.SCRIPT_INDEX)){
-            defaultMappingUrl = getMappingUrl(indexSettings, environment, defaultMappingLocation,"script-mapping.json","org/elasticsearch/index/mapper/script-mapping.json");
+        if (index.getName().equals(ScriptService.SCRIPT_INDEX)) {
+            defaultMappingUrl = getMappingUrl(indexSettings, environment, defaultMappingLocation, "script-mapping.json", "org/elasticsearch/index/mapper/script-mapping.json");
         } else {
-            defaultMappingUrl = getMappingUrl(indexSettings, environment, defaultMappingLocation,"default-mapping.json","org/elasticsearch/index/mapper/default-mapping.json");
+            defaultMappingUrl = getMappingUrl(indexSettings, environment, defaultMappingLocation, "default-mapping.json", "org/elasticsearch/index/mapper/default-mapping.json");
         }
 
         if (defaultMappingUrl == null) {
             logger.info("failed to find default-mapping.json in the classpath, using the default template");
-            if (index.getName().equals(ScriptService.SCRIPT_INDEX)){
-                defaultMappingSource =  "{" +
-                        "\"_default_\": {" +
-                        "\"properties\": {" +
-                        "\"script\": { \"enabled\": false }," +
-                        "\"template\": { \"enabled\": false }" +
-                        "}" +
-                        "}" +
-                        "}";
+            if (index.getName().equals(ScriptService.SCRIPT_INDEX)) {
+                defaultMappingSource = "{" + "\"_default_\": {" + "\"properties\": {" + "\"script\": { \"enabled\": false }," + "\"template\": { \"enabled\": false }" + "}" + "}" + "}";
             } else {
-                defaultMappingSource = "{\n" +
-                        "    \"_default_\":{\n" +
-                        "    }\n" +
-                        "}";
+                defaultMappingSource = "{\n" + "    \"_default_\":{\n" + "    }\n" + "}";
             }
         } else {
             try {
@@ -198,24 +185,19 @@ public class MapperService extends AbstractIndexComponent  {
                 throw new MapperException("Failed to load default percolator mapping source from [" + percolatorMappingUrl + "]", e);
             }
         } else {
-            defaultPercolatorMappingSource = "{\n" +
+            defaultPercolatorMappingSource = "{\n"
+                    +
                     //"    \"" + PercolatorService.TYPE_NAME + "\":{\n" +
-                    "    \"" + "_default_" + "\":{\n" +
-                    "        \"_id\" : {\"index\": \"not_analyzed\"}," +
-                    "        \"properties\" : {\n" +
-                    "            \"query\" : {\n" +
-                    "                \"type\" : \"object\",\n" +
-                    "                \"enabled\" : false\n" +
-                    "            }\n" +
-                    "        }\n" +
-                    "    }\n" +
-                    "}";
+                    "    \"" + "_default_" + "\":{\n" + "        \"_id\" : {\"index\": \"not_analyzed\"}," + "        \"properties\" : {\n" + "            \"query\" : {\n"
+                    + "                \"type\" : \"object\",\n" + "                \"enabled\" : false\n" + "            }\n" + "        }\n" + "    }\n" + "}";
         }
 
         if (logger.isTraceEnabled()) {
-            logger.trace("using dynamic[{}], default mapping: default_mapping_location[{}], loaded_from[{}] and source[{}], default percolator mapping: location[{}], loaded_from[{}] and source[{}]", dynamic, defaultMappingLocation, defaultMappingUrl, defaultMappingSource, percolatorMappingLocation, percolatorMappingUrl, defaultPercolatorMappingSource);
+            logger.trace("using dynamic[{}], default mapping: default_mapping_location[{}], loaded_from[{}] and source[{}], default percolator mapping: location[{}], loaded_from[{}] and source[{}]",
+                    dynamic, defaultMappingLocation, defaultMappingUrl, defaultMappingSource, percolatorMappingLocation, percolatorMappingUrl, defaultPercolatorMappingSource);
         } else if (logger.isDebugEnabled()) {
-            logger.debug("using dynamic[{}], default mapping: default_mapping_location[{}], loaded_from[{}], default percolator mapping: location[{}], loaded_from[{}]", dynamic, defaultMappingLocation, defaultMappingUrl, percolatorMappingLocation, percolatorMappingUrl);
+            logger.debug("using dynamic[{}], default mapping: default_mapping_location[{}], loaded_from[{}], default percolator mapping: location[{}], loaded_from[{}]", dynamic,
+                    defaultMappingLocation, defaultMappingUrl, percolatorMappingLocation, percolatorMappingUrl);
         }
     }
 
@@ -263,7 +245,7 @@ public class MapperService extends AbstractIndexComponent  {
      *                                As is this not really an active type, you would typically set this to false
      */
     public Iterable<DocumentMapper> docMappers(final boolean includingDefaultMapping) {
-        return  new Iterable<DocumentMapper>() {
+        return new Iterable<DocumentMapper>() {
             @Override
             public Iterator<DocumentMapper> iterator() {
                 final Iterator<DocumentMapper> iterator;
@@ -440,7 +422,7 @@ public class MapperService extends AbstractIndexComponent  {
         String defaultMappingSource;
         if (PercolatorService.TYPE_NAME.equals(mappingType)) {
             defaultMappingSource = this.defaultPercolatorMappingSource;
-        }  else {
+        } else {
             defaultMappingSource = this.defaultMappingSource;
         }
         return documentParser.parseCompressed(mappingType, mappingSource, applyDefault ? defaultMappingSource : null);
@@ -611,9 +593,9 @@ public class MapperService extends AbstractIndexComponent  {
     }
 
     public SchemaService elasticSchemaService() {
-    	return elasticSchemaService;
+        return elasticSchemaService;
     }
-    
+
     /**
      * Returns all the fields that match the given pattern, with an optional narrowing
      * based on a list of types.
@@ -893,16 +875,13 @@ public class MapperService extends AbstractIndexComponent  {
             if (typeParser == null) {
                 throw new ElasticsearchIllegalArgumentException("No mapper found for type [" + type + "]");
             }
-            final Mapper.Builder<?, ?> builder = typeParser.parse("__anonymous_" + type, ImmutableMap.<String, Object>of(), parserContext);
+            final Mapper.Builder<?, ?> builder = typeParser.parse("__anonymous_" + type, ImmutableMap.<String, Object> of(), parserContext);
             final BuilderContext builderContext = new BuilderContext(indexSettings, new ContentPath(1));
             mapper = (FieldMapper<?>) builder.build(builderContext);
 
             // There is no need to synchronize writes here. In the case of concurrent access, we could just
             // compute some mappers several times, which is not a big deal
-            this.unmappedFieldMappers = ImmutableMap.<String, FieldMapper<?>>builder()
-                    .putAll(unmappedFieldMappers)
-                    .put(type, mapper)
-                    .build();
+            this.unmappedFieldMappers = ImmutableMap.<String, FieldMapper<?>> builder().putAll(unmappedFieldMappers).put(type, mapper).build();
         }
         return mapper;
     }
@@ -922,7 +901,6 @@ public class MapperService extends AbstractIndexComponent  {
     public Analyzer fieldSearchQuoteAnalyzer(String field) {
         return this.searchQuoteAnalyzer.getWrappedAnalyzer(field);
     }
-
 
     /**
      * Resolves the closest inherited {@link ObjectMapper} that is nested.
@@ -1146,7 +1124,7 @@ public class MapperService extends AbstractIndexComponent  {
     class InternalFieldMapperListener extends FieldMapperListener {
         @Override
         public void fieldMapper(FieldMapper<?> fieldMapper) {
-            addFieldMappers(Collections.<FieldMapper<?>>singletonList(fieldMapper));
+            addFieldMappers(Collections.<FieldMapper<?>> singletonList(fieldMapper));
         }
 
         @Override
@@ -1158,7 +1136,7 @@ public class MapperService extends AbstractIndexComponent  {
     class InternalObjectMapperListener extends ObjectMapperListener {
         @Override
         public void objectMapper(ObjectMapper objectMapper) {
-            addObjectMappers(new ObjectMapper[]{objectMapper});
+            addObjectMappers(new ObjectMapper[] { objectMapper });
         }
 
         @Override

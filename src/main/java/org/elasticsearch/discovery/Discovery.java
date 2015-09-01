@@ -25,12 +25,14 @@ import java.net.InetAddress;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.LifecycleComponent;
+import org.elasticsearch.discovery.cassandra.CassandraDiscovery;
 import org.elasticsearch.node.service.NodeService;
 
 /**
@@ -48,6 +50,8 @@ public interface Discovery extends LifecycleComponent<Discovery> {
 
     String nodeDescription();
 
+    public DiscoveryNodes nodes();
+    
     /**
      * Here as a hack to solve dep injection problem...
      */
@@ -66,13 +70,13 @@ public interface Discovery extends LifecycleComponent<Discovery> {
      * The {@link AckListener} allows to keep track of the ack received from nodes, and verify whether
      * they updated their own cluster state or not.
      */
-    //void publish(CassandraClusterState clusterState, AckListener ackListener);
+    //void publish(ClusterState clusterState, AckListener ackListener);
 
     /**
      * Publish clusterState Uuid and version in the gossip state
      * @param clusterState
      */
-    public void publish(CassandraClusterState clusterState);
+    public void publish(ClusterState clusterState);
     
     public static interface AckListener {
         void onNodeAck(DiscoveryNode node, @Nullable Throwable t);
@@ -96,12 +100,13 @@ public interface Discovery extends LifecycleComponent<Discovery> {
     /**
      * Set index shard state in the gossip endpoint map (must be synchronized).
      * @param index
-     * @param shardRoutingState
+     * @param shardRoutingState (remove index shard state if null)
      * @throws JsonGenerationException
      * @throws JsonMappingException
      * @throws IOException
      */
-    public void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
+    public void writeIndexShardState(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
     
+    public void addShardStateRemovedListener(CassandraDiscovery.ShardStateRemovedListener listener);
     
 }

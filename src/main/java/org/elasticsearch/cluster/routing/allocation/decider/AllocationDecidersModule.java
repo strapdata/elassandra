@@ -62,10 +62,10 @@ public class AllocationDecidersModule extends AbstractModule {
         bind(AllocationDeciders.class).asEagerSingleton();
     }
 
-    public static final ImmutableSet<Class<? extends AllocationDecider>> DEFAULT_ALLOCATION_DECIDERS = ImmutableSet.<Class<? extends AllocationDecider>>builder().
-            add(CassandraAllocationDecider.class).build();
+    public static final ImmutableSet<Class<? extends AllocationDecider>> DEFAULT_ALLOCATION_DECIDERS = ImmutableSet.<Class<? extends AllocationDecider>> builder()
+            .add(CassandraAllocationDecider.class).build();
     /*
-    		add(SameShardAllocationDecider.class).
+            add(SameShardAllocationDecider.class).
             add(FilterAllocationDecider.class).
             add(ReplicaAfterPrimaryActiveAllocationDecider.class).
             add(ThrottlingAllocationDecider.class).

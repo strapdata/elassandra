@@ -25,7 +25,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.SnapshotId;
@@ -66,12 +66,12 @@ public class TransportGetSnapshotsAction extends TransportMasterNodeOperationAct
     }
 
     @Override
-    protected ClusterBlockException checkBlock(GetSnapshotsRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(GetSnapshotsRequest request, ClusterState state) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, "");
     }
 
     @Override
-    protected void masterOperation(final GetSnapshotsRequest request, CassandraClusterState state, final ActionListener<GetSnapshotsResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final GetSnapshotsRequest request, ClusterState state, final ActionListener<GetSnapshotsResponse> listener) throws ElasticsearchException {
         SnapshotId[] snapshotIds = new SnapshotId[request.snapshots().length];
         for (int i = 0; i < snapshotIds.length; i++) {
             snapshotIds[i] = new SnapshotId(request.repository(), request.snapshots()[i]);

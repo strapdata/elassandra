@@ -23,7 +23,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionResponse;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTableValidation;
@@ -67,11 +67,11 @@ public class ClusterHealthResponse extends ActionResponse implements Iterable<Cl
     }
 
     /** needed for plugins BWC */
-    public ClusterHealthResponse(String clusterName, String[] concreteIndices, CassandraClusterState clusterState) {
+    public ClusterHealthResponse(String clusterName, String[] concreteIndices, ClusterState clusterState) {
         this(clusterName, concreteIndices, clusterState, -1);
     }
 
-    public ClusterHealthResponse(String clusterName, String[] concreteIndices, CassandraClusterState clusterState, int numberOfPendingTasks) {
+    public ClusterHealthResponse(String clusterName, String[] concreteIndices, ClusterState clusterState, int numberOfPendingTasks) {
         this.clusterName = clusterName;
         this.numberOfPendingTasks = numberOfPendingTasks;
         RoutingTableValidation validation = clusterState.routingTable().validate(clusterState.metaData());

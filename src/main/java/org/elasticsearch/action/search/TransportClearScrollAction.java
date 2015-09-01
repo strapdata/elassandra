@@ -24,7 +24,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.collect.Tuple;
@@ -78,7 +78,7 @@ public class TransportClearScrollAction extends HandledTransportAction<ClearScro
         final AtomicReference<Throwable> expHolder;
         final AtomicInteger numberOfFreedSearchContexts = new AtomicInteger(0);
 
-        private Async(ClearScrollRequest request, ActionListener<ClearScrollResponse> listener, CassandraClusterState clusterState) {
+        private Async(ClearScrollRequest request, ActionListener<ClearScrollResponse> listener, ClusterState clusterState) {
             int expectedOps = 0;
             this.nodes = clusterState.nodes();
             if (request.getScrollIds().size() == 1 && "_all".equals(request.getScrollIds().get(0))) {

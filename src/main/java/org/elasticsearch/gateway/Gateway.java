@@ -25,7 +25,7 @@ import java.net.InetAddress;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.component.LifecycleComponent;
@@ -45,7 +45,7 @@ public interface Gateway extends LifecycleComponent<Gateway> {
     void reset() throws Exception;
 
     interface GatewayStateRecoveredListener {
-        void onSuccess(CassandraClusterState recoveredState);
+        void onSuccess(ClusterState recoveredState);
 
         void onFailure(String message);
     }

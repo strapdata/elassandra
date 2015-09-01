@@ -19,7 +19,6 @@
 
 package org.elasticsearch.action.admin.indices.rebuild;
 
-
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.elasticsearch.Version;
@@ -36,7 +35,6 @@ import java.util.Collection;
  *
  */
 class ShardRebuildRequest extends BroadcastShardOperationRequest {
-    
 
     private boolean flush = RebuildRequest.Defaults.FLUSH;
     private Collection<Range<Token>> tokenRanges;
@@ -50,7 +48,6 @@ class ShardRebuildRequest extends BroadcastShardOperationRequest {
         tokenRanges = request.tokenRanges;
     }
 
-    
     public boolean flush() {
         return flush;
     }
@@ -58,13 +55,11 @@ class ShardRebuildRequest extends BroadcastShardOperationRequest {
     public Collection<Range<Token>> tokenRanges() {
         return tokenRanges;
     }
-    
 
     public ShardRebuildRequest tokenRanges(Collection<Range<Token>> tokenRanges) {
-    	this.tokenRanges = tokenRanges;
+        this.tokenRanges = tokenRanges;
         return this;
     }
-    
 
     @Override
     public void readFrom(StreamInput in) throws IOException {
@@ -74,13 +69,13 @@ class ShardRebuildRequest extends BroadcastShardOperationRequest {
         }
 
         flush = in.readBoolean();
-        
+
         Object[] tokens = (Object[]) in.readGenericValue();
-    	tokenRanges = new ArrayList<Range<Token>>(tokens.length/2);
-    	for(int i=0; i < tokens.length; ) {
-    		Range<Token> range = new Range<Token>((Token)tokens[i++],(Token)tokens[i++]);
-    		tokenRanges.add(range);
-    	}
+        tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+        for (int i = 0; i < tokens.length;) {
+            Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+            tokenRanges.add(range);
+        }
     }
 
     @Override
@@ -90,13 +85,13 @@ class ShardRebuildRequest extends BroadcastShardOperationRequest {
             out.writeBoolean(true);
         }
         out.writeBoolean(flush);
-        
+
         Token[] tokens = new Token[tokenRanges.size() * 2];
-    	int i = 0;
-    	for(Range<Token> range : tokenRanges) {
-    		tokens[i++] = range.left;
-    		tokens[i++] = range.right;
-    	}
-    	out.writeGenericValue(tokens);
+        int i = 0;
+        for (Range<Token> range : tokenRanges) {
+            tokens[i++] = range.left;
+            tokens[i++] = range.right;
+        }
+        out.writeGenericValue(tokens);
     }
 }

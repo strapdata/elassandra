@@ -22,7 +22,7 @@ package org.elasticsearch.cluster.action.index;
 import org.apache.lucene.store.LockObtainFailedException;
 import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.ElasticsearchException;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -74,7 +74,7 @@ public class NodeIndexDeletedAction extends AbstractComponent {
         listeners.remove(listener);
     }
 
-    public void nodeIndexDeleted(final CassandraClusterState clusterState, final String index, final Settings indexSettings, final String nodeId) throws ElasticsearchException {
+    public void nodeIndexDeleted(final ClusterState clusterState, final String index, final Settings indexSettings, final String nodeId) throws ElasticsearchException {
         final DiscoveryNodes nodes = clusterState.nodes();
         if (nodes.localNodeMaster()) {
             threadPool.generic().execute(new AbstractRunnable() {
@@ -116,7 +116,7 @@ public class NodeIndexDeletedAction extends AbstractComponent {
         }
     }
 
-    private void lockIndexAndAck(String index, DiscoveryNodes nodes, String nodeId, CassandraClusterState clusterState, Settings indexSettings) throws IOException {
+    private void lockIndexAndAck(String index, DiscoveryNodes nodes, String nodeId, ClusterState clusterState, Settings indexSettings) throws IOException {
         try {
             // we are waiting until we can lock the index / all shards on the node and then we ack the delete of the store to the
             // master. If we can't acquire the locks here immediately there might be a shard of this index still holding on to the lock

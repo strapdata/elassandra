@@ -29,7 +29,7 @@ import java.util.concurrent.ScheduledFuture;
 
 import org.elasticsearch.ElasticsearchIllegalArgumentException;
 import org.elasticsearch.Version;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterStateListener;
@@ -182,7 +182,7 @@ public class LocalGatewayMetaState extends AbstractComponent implements ClusterS
 
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
-        final CassandraClusterState state = event.state();
+        final ClusterState state = event.state();
         if (state.blocks().disableStatePersistence()) {
             // reset the current metadata, we need to start fresh...
             this.currentMetaData = null;

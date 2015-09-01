@@ -32,7 +32,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.single.custom.TransportSingleCustomOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardsIterator;
@@ -95,7 +95,7 @@ public class TransportAnalyzeAction extends TransportSingleCustomOperationAction
     }
 
     @Override
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, InternalRequest request) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, InternalRequest request) {
         if (request.concreteIndex() != null) {
             return super.checkRequestBlock(state, request);
         }
@@ -103,7 +103,7 @@ public class TransportAnalyzeAction extends TransportSingleCustomOperationAction
     }
 
     @Override
-    protected ShardsIterator shards(CassandraClusterState state, InternalRequest request) {
+    protected ShardsIterator shards(ClusterState state, InternalRequest request) {
         if (request.concreteIndex() == null) {
             // just execute locally....
             return null;

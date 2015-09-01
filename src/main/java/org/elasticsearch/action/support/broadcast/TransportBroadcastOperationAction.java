@@ -26,7 +26,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
@@ -75,7 +75,7 @@ public abstract class TransportBroadcastOperationAction<Request extends Broadcas
 
     protected abstract Request newRequest();
 
-    protected abstract Response newResponse(Request request, AtomicReferenceArray shardsResponses, CassandraClusterState clusterState);
+    protected abstract Response newResponse(Request request, AtomicReferenceArray shardsResponses, ClusterState clusterState);
 
     protected abstract ShardRequest newShardRequest();
 
@@ -89,17 +89,17 @@ public abstract class TransportBroadcastOperationAction<Request extends Broadcas
      * Determines the shards this operation will be executed on. The operation is executed once per shard iterator, typically
      * on the first shard in it. If the operation fails, it will be retried on the next shard in the iterator.
      */
-    protected abstract GroupShardsIterator shards(CassandraClusterState clusterState, Request request, String[] concreteIndices);
+    protected abstract GroupShardsIterator shards(ClusterState clusterState, Request request, String[] concreteIndices);
 
-    protected abstract ClusterBlockException checkGlobalBlock(CassandraClusterState state, Request request);
+    protected abstract ClusterBlockException checkGlobalBlock(ClusterState state, Request request);
 
-    protected abstract ClusterBlockException checkRequestBlock(CassandraClusterState state, Request request, String[] concreteIndices);
+    protected abstract ClusterBlockException checkRequestBlock(ClusterState state, Request request, String[] concreteIndices);
 
     protected class AsyncBroadcastAction {
 
         private final Request request;
         private final ActionListener<Response> listener;
-        private final CassandraClusterState clusterState;
+        private final ClusterState clusterState;
         private final DiscoveryNodes nodes;
         private final GroupShardsIterator shardsIts;
         private final int expectedOps;

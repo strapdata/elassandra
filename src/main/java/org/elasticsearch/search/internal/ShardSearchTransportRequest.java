@@ -50,14 +50,12 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
 
     private ShardSearchLocalRequest shardSearchLocalRequest;
 
-    public ShardSearchTransportRequest(){
+    public ShardSearchTransportRequest() {
     }
 
-    public ShardSearchTransportRequest(SearchRequest searchRequest, ShardRouting shardRouting, int numberOfShards,
-                                       boolean useSlowScroll, String[] filteringAliases, long nowInMillis) {
+    public ShardSearchTransportRequest(SearchRequest searchRequest, ShardRouting shardRouting, int numberOfShards, boolean useSlowScroll, String[] filteringAliases, long nowInMillis) {
         super(searchRequest);
-        this.shardSearchLocalRequest = new ShardSearchLocalRequest(searchRequest, shardRouting, numberOfShards,
-                useSlowScroll, filteringAliases, nowInMillis);
+        this.shardSearchLocalRequest = new ShardSearchLocalRequest(searchRequest, shardRouting, numberOfShards, useSlowScroll, filteringAliases, nowInMillis);
         this.originalIndices = new OriginalIndices(searchRequest);
     }
 
@@ -192,8 +190,8 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
         return shardSearchLocalRequest.cacheKey();
     }
 
-	@Override
-	public Collection<Range<Token>> tokenRanges() {
-		return shardSearchLocalRequest.tokenRanges();
-	}
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+        return shardSearchLocalRequest.tokenRanges();
+    }
 }

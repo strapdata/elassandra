@@ -25,7 +25,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.DestructiveOperations;
 import org.elasticsearch.action.support.replication.TransportIndicesReplicationOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.common.inject.Inject;
@@ -62,7 +62,7 @@ public class TransportDeleteByQueryAction extends TransportIndicesReplicationOpe
     }
 
     @Override
-    protected Map<String, Set<String>> resolveRouting(CassandraClusterState clusterState, DeleteByQueryRequest request) throws ElasticsearchException {
+    protected Map<String, Set<String>> resolveRouting(ClusterState clusterState, DeleteByQueryRequest request) throws ElasticsearchException {
         return clusterState.metaData().resolveSearchRouting(request.routing(), request.indices());
     }
 
@@ -89,12 +89,12 @@ public class TransportDeleteByQueryAction extends TransportIndicesReplicationOpe
     }
 
     @Override
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state, DeleteByQueryRequest replicationPingRequest) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, DeleteByQueryRequest replicationPingRequest) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
     }
 
     @Override
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, DeleteByQueryRequest request, String[] concreteIndices) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, DeleteByQueryRequest request, String[] concreteIndices) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.WRITE, concreteIndices);
     }
 

@@ -35,21 +35,20 @@ public class JustUidFieldsVisitor extends FieldsVisitor {
         }
         return uid != null ? Status.STOP : Status.NO;
     }
-    
+
     @Override
     public boolean needSource() {
-    	return false;
+        return false;
     }
-    
+
     @Override
     public boolean needFields() {
-    	return false;
+        return false;
     }
-    
+
     @Override
     public String[] cassandraColumns(MapperService mapperService, String type) {
-    	return null;
+        return null;
     }
-    
-    
+
 }

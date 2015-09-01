@@ -25,7 +25,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
@@ -45,22 +45,22 @@ import org.elasticsearch.transport.TransportService;
 
 import java.util.Map;
 
-import static org.elasticsearch.cluster.CassandraClusterState.builder;
+import static org.elasticsearch.cluster.ClusterState.builder;
 
 /**
  *
  */
 public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOperationAction<ClusterUpdateSettingsRequest, ClusterUpdateSettingsResponse> {
 
-    //private final AllocationService allocationService;
+    // private final AllocationService allocationService;
 
     private final DynamicSettings dynamicSettings;
 
     @Inject
     public TransportClusterUpdateSettingsAction(Settings settings, TransportService transportService, ClusterService clusterService, ThreadPool threadPool,
-                                               @ClusterDynamicSettings DynamicSettings dynamicSettings, ActionFilters actionFilters) {
+            @ClusterDynamicSettings DynamicSettings dynamicSettings, ActionFilters actionFilters) {
         super(settings, ClusterUpdateSettingsAction.NAME, transportService, clusterService, threadPool, actionFilters);
-        //this.allocationService = allocationService;
+        // this.allocationService = allocationService;
         this.dynamicSettings = dynamicSettings;
     }
 
@@ -70,15 +70,15 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
     }
 
     @Override
-    protected ClusterBlockException checkBlock(ClusterUpdateSettingsRequest request, CassandraClusterState state) {
-        // allow for dedicated changes to the metadata blocks, so we don't block those to allow to "re-enable" it
-        if ((request.transientSettings().getAsMap().isEmpty() && request.persistentSettings().getAsMap().size() == 1 && request.persistentSettings().get(MetaData.SETTING_READ_ONLY) != null) ||
-                request.persistentSettings().getAsMap().isEmpty() && request.transientSettings().getAsMap().size() == 1 && request.transientSettings().get(MetaData.SETTING_READ_ONLY) != null) {
+    protected ClusterBlockException checkBlock(ClusterUpdateSettingsRequest request, ClusterState state) {
+        // allow for dedicated changes to the metadata blocks, so we don't block
+        // those to allow to "re-enable" it
+        if ((request.transientSettings().getAsMap().isEmpty() && request.persistentSettings().getAsMap().size() == 1 && request.persistentSettings().get(MetaData.SETTING_READ_ONLY) != null)
+                || request.persistentSettings().getAsMap().isEmpty() && request.transientSettings().getAsMap().size() == 1 && request.transientSettings().get(MetaData.SETTING_READ_ONLY) != null) {
             return null;
         }
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
     }
-
 
     @Override
     protected ClusterUpdateSettingsRequest newRequest() {
@@ -91,7 +91,8 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
     }
 
     @Override
-    protected void masterOperation(final ClusterUpdateSettingsRequest request, final CassandraClusterState state, final ActionListener<ClusterUpdateSettingsResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final ClusterUpdateSettingsRequest request, final ClusterState state, final ActionListener<ClusterUpdateSettingsResponse> listener)
+            throws ElasticsearchException {
         final ImmutableSettings.Builder transientUpdates = ImmutableSettings.settingsBuilder();
         final ImmutableSettings.Builder persistentUpdates = ImmutableSettings.settingsBuilder();
 
@@ -123,8 +124,10 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
             }
 
             private void reroute(final boolean updateSettingsAcked) {
-                // We're about to send a second update task, so we need to check if we're still the elected master
-                // For example the minimum_master_node could have been breached and we're no longer elected master,
+                // We're about to send a second update task, so we need to check
+                // if we're still the elected master
+                // For example the minimum_master_node could have been breached
+                // and we're no longer elected master,
                 // so we should *not* execute the reroute.
                 if (!clusterService.state().nodes().localNodeMaster()) {
                     logger.debug("Skipping reroute after cluster update settings, because node is no longer master");
@@ -132,20 +135,26 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
                     return;
                 }
 
-                // The reason the reroute needs to be send as separate update task, is that all the *cluster* settings are encapsulate
-                // in the components (e.g. FilterAllocationDecider), so the changes made by the first call aren't visible
-                // to the components until the ClusterStateListener instances have been invoked, but are visible after
+                // The reason the reroute needs to be send as separate update
+                // task, is that all the *cluster* settings are encapsulate
+                // in the components (e.g. FilterAllocationDecider), so the
+                // changes made by the first call aren't visible
+                // to the components until the ClusterStateListener instances
+                // have been invoked, but are visible after
                 // the first update task has been completed.
                 clusterService.submitStateUpdateTask("reroute_after_cluster_update_settings", Priority.URGENT, new AckedClusterStateUpdateTask<ClusterUpdateSettingsResponse>(request, listener) {
 
                     @Override
                     public boolean mustAck(DiscoveryNode discoveryNode) {
-                        //we wait for the reroute ack only if the update settings was acknowledged
+                        // we wait for the reroute ack only if the update
+                        // settings was acknowledged
                         return updateSettingsAcked;
                     }
 
                     @Override
-                    //we return when the cluster reroute is acked or it times out but the acknowledged flag depends on whether the update settings was acknowledged
+                    // we return when the cluster reroute is acked or it times
+                    // out but the acknowledged flag depends on whether the
+                    // update settings was acknowledged
                     protected ClusterUpdateSettingsResponse newResponse(boolean acknowledged) {
                         return new ClusterUpdateSettingsResponse(updateSettingsAcked && acknowledged, transientUpdates.build(), persistentUpdates.build());
                     }
@@ -158,22 +167,24 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
 
                     @Override
                     public void onFailure(String source, Throwable t) {
-                        //if the reroute fails we only log
+                        // if the reroute fails we only log
                         logger.debug("failed to perform [{}]", t, source);
                         listener.onFailure(new ElasticsearchException("reroute after update settings failed", t));
                     }
 
                     @Override
-                    public CassandraClusterState execute(final CassandraClusterState currentState) {
-                        // now, reroute in case things that require it changed (e.g. number of replicas)
-                    	/*
-                        RoutingAllocation.Result routingResult = allocationService.reroute(currentState);
-                        if (!routingResult.changed()) {
-                            return currentState;
-                        }
-                        return CassandraClusterState.builder(currentState).routingResult(routingResult).build();
-                        */
-                    	return currentState;
+                    public ClusterState execute(final ClusterState currentState) {
+                        // now, reroute in case things that require it changed
+                        // (e.g. number of replicas)
+                        /*
+                         * RoutingAllocation.Result routingResult =
+                         * allocationService.reroute(currentState); if
+                         * (!routingResult.changed()) { return currentState; }
+                         * return
+                         * ClusterState.builder(currentState).routingResult
+                         * (routingResult).build();
+                         */
+                        return currentState;
                     }
                 });
             }
@@ -185,7 +196,7 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
             }
 
             @Override
-            public CassandraClusterState execute(final CassandraClusterState currentState) {
+            public ClusterState execute(final ClusterState currentState) {
                 ImmutableSettings.Builder transientSettings = ImmutableSettings.settingsBuilder();
                 transientSettings.put(currentState.metaData().transientSettings());
                 for (Map.Entry<String, String> entry : request.transientSettings().getAsMap().entrySet()) {
@@ -224,9 +235,7 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
                     return currentState;
                 }
 
-                MetaData.Builder metaData = MetaData.builder(currentState.metaData())
-                        .persistentSettings(persistentSettings.build())
-                        .transientSettings(transientSettings.build());
+                MetaData.Builder metaData = MetaData.builder(currentState.metaData()).persistentSettings(persistentSettings.build()).transientSettings(transientSettings.build());
 
                 ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
                 boolean updatedReadOnly = metaData.persistentSettings().getAsBoolean(MetaData.SETTING_READ_ONLY, false) || metaData.transientSettings().getAsBoolean(MetaData.SETTING_READ_ONLY, false);

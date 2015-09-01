@@ -25,8 +25,8 @@ import java.util.Map;
 import com.google.common.collect.ImmutableMap;
 
 /**
- * ClusterInfo is an object representing a map of nodes to {@link DiskUsage}
- * and a map of shard ids to shard sizes, see
+ * ClusterInfo is an object representing a map of nodes to {@link DiskUsage} and
+ * a map of shard ids to shard sizes, see
  * <code>InternalClusterInfoService.shardIdentifierFromRouting(String)</code>
  * for the key used in the shardSizes map
  */
@@ -36,10 +36,10 @@ public class ClusterInfo {
     private final ImmutableMap<String, Long> shardSizes;
 
     public ClusterInfo() {
-    	usages = new ImmutableMap.Builder<String, DiskUsage>().build();
-    	shardSizes = new ImmutableMap.Builder<String, Long>().build();
+        usages = new ImmutableMap.Builder<String, DiskUsage>().build();
+        shardSizes = new ImmutableMap.Builder<String, Long>().build();
     }
-    
+
     public ClusterInfo(ImmutableMap<String, DiskUsage> usages, ImmutableMap<String, Long> shardSizes) {
         this.usages = usages;
         this.shardSizes = shardSizes;

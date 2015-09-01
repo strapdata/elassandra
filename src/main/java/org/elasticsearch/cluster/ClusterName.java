@@ -40,19 +40,16 @@ public class ClusterName implements Streamable {
     private String value;
 
     public static ClusterName clusterNameFromSettings(Settings settings) {
-    	/*
-    	if (settings.getAsBoolean("data.node", false)) {
-    		 try {
-    			 // use reflexion to avoid dependency to cassandra when using the client API
-    	         Class klass = Class.forName("org.apache.cassandra.config.DatabaseDescriptor");
-    	         Method m = klass.getMethod("getClusterName");
-    	         return new ClusterName( (String) m.invoke(null) );
-    	     } catch (Exception e) {
-    	         throw new AssertionError(e);
-    	     }
-    	} 
-    	*/
-    	return new ClusterName(settings.get("cluster.name", ClusterName.DEFAULT.value()));
+        /*
+         * if (settings.getAsBoolean("data.node", false)) { try { // use
+         * reflexion to avoid dependency to cassandra when using the client API
+         * Class klass =
+         * Class.forName("org.apache.cassandra.config.DatabaseDescriptor");
+         * Method m = klass.getMethod("getClusterName"); return new ClusterName(
+         * (String) m.invoke(null) ); } catch (Exception e) { throw new
+         * AssertionError(e); } }
+         */
+        return new ClusterName(settings.get("cluster.name", ClusterName.DEFAULT.value()));
     }
 
     private ClusterName() {
@@ -85,12 +82,15 @@ public class ClusterName implements Streamable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         ClusterName that = (ClusterName) o;
 
-        if (value != null ? !value.equals(that.value) : that.value != null) return false;
+        if (value != null ? !value.equals(that.value) : that.value != null)
+            return false;
 
         return true;
     }

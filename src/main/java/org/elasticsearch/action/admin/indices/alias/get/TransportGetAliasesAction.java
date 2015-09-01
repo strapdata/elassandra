@@ -23,7 +23,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.AliasMetaData;
@@ -51,7 +51,7 @@ public class TransportGetAliasesAction extends TransportMasterNodeReadOperationA
     }
 
     @Override
-    protected ClusterBlockException checkBlock(GetAliasesRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(GetAliasesRequest request, ClusterState state) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, state.metaData().concreteIndices(request.indicesOptions(), request.indices()));
     }
 
@@ -66,7 +66,7 @@ public class TransportGetAliasesAction extends TransportMasterNodeReadOperationA
     }
 
     @Override
-    protected void masterOperation(GetAliasesRequest request, CassandraClusterState state, ActionListener<GetAliasesResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(GetAliasesRequest request, ClusterState state, ActionListener<GetAliasesResponse> listener) throws ElasticsearchException {
         String[] concreteIndices = state.metaData().concreteIndices(request.indicesOptions(), request.indices());
         @SuppressWarnings("unchecked") // ImmutableList to List results incompatible type
                 ImmutableOpenMap<String, List<AliasMetaData>> result = (ImmutableOpenMap) state.metaData().findAliases(request.aliases(), concreteIndices);

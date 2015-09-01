@@ -254,7 +254,6 @@ public abstract class StreamOutput extends OutputStream {
         writeLong(Double.doubleToLongBits(v));
     }
 
-
     private static byte ZERO = 0;
     private static byte ONE = 1;
     private static byte TWO = 2;
@@ -320,7 +319,6 @@ public abstract class StreamOutput extends OutputStream {
     public void writeMap(@Nullable Map<String, Object> map) throws IOException {
         writeGenericValue(map);
     }
-
 
     public void writeGenericValue(@Nullable Object value) throws IOException {
         if (value == null) {
@@ -407,11 +405,11 @@ public abstract class StreamOutput extends OutputStream {
             writeByte((byte) 20);
             writeDoubleArray((double[]) value);
         } else if (value instanceof Token) {
-        	writeByte((byte) 21);
-	    	 IPartitioner p = StorageService.instance.getPartitioner();
-	         ByteBuffer b = p.getTokenFactory().toByteArray((Token)value);
-	    	 writeVInt(b.array().length);
-	    	 writeBytes(b.array());
+            writeByte((byte) 21);
+            IPartitioner p = StorageService.instance.getPartitioner();
+            ByteBuffer b = p.getTokenFactory().toByteArray((Token) value);
+            writeVInt(b.array().length);
+            writeBytes(b.array());
         } else {
             throw new IOException("Can't write type [" + type + "]");
         }
@@ -419,28 +417,28 @@ public abstract class StreamOutput extends OutputStream {
 
     public void writeIntArray(int[] value) throws IOException {
         writeVInt(value.length);
-        for (int i=0; i<value.length; i++) {
+        for (int i = 0; i < value.length; i++) {
             writeInt(value[i]);
         }
     }
-    
+
     public void writeLongArray(long[] value) throws IOException {
         writeVInt(value.length);
-        for (int i=0; i<value.length; i++) {
+        for (int i = 0; i < value.length; i++) {
             writeLong(value[i]);
         }
     }
-    
+
     public void writeFloatArray(float[] value) throws IOException {
         writeVInt(value.length);
-        for (int i=0; i<value.length; i++) {
+        for (int i = 0; i < value.length; i++) {
             writeFloat(value[i]);
         }
     }
-    
+
     public void writeDoubleArray(double[] value) throws IOException {
         writeVInt(value.length);
-        for (int i=0; i<value.length; i++) {
+        for (int i = 0; i < value.length; i++) {
             writeDouble(value[i]);
         }
     }

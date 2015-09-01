@@ -55,13 +55,13 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
     private final ImmutableOpenMap<String, DiscoveryNode> dataNodes;
     private final ImmutableOpenMap<String, DiscoveryNode> masterNodes;
 
-
     private final String masterNodeId;
     private final String localNodeId;
     private final Version minNodeVersion;
     private final Version minNonClientNodeVersion;
 
-    private DiscoveryNodes(ImmutableOpenMap<String, DiscoveryNode> nodes, ImmutableOpenMap<String, DiscoveryNode> dataNodes, ImmutableOpenMap<String, DiscoveryNode> masterNodes, String masterNodeId, String localNodeId, Version minNodeVersion, Version minNonClientNodeVersion) {
+    private DiscoveryNodes(ImmutableOpenMap<String, DiscoveryNode> nodes, ImmutableOpenMap<String, DiscoveryNode> dataNodes, ImmutableOpenMap<String, DiscoveryNode> masterNodes, String masterNodeId,
+            String localNodeId, Version minNodeVersion, Version minNonClientNodeVersion) {
         this.nodes = nodes;
         this.dataNodes = dataNodes;
         this.masterNodes = masterNodes;
@@ -88,8 +88,8 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
      * Returns <tt>true</tt> if the local node is the master node.
      */
     public boolean localNodeMaster() {
-    	return true;	// Elasticassandra node are all ES master node.
-    	/*
+        return true; // Elasticassandra node are all ES master node.
+        /*
         if (localNodeId == null) {
             // we don't know yet the local node id, return false
             return false;
@@ -159,8 +159,8 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
      */
     public ImmutableOpenMap<String, DiscoveryNode> masterNodes() {
         //return this.masterNodes;
-    	// In Elasticassandra, all nodes are master.
-    	return nodes();
+        // In Elasticassandra, all nodes are master.
+        return nodes();
     }
 
     /**
@@ -179,11 +179,11 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
      */
     public ImmutableOpenMap<String, DiscoveryNode> masterAndDataNodes() {
         /*
-    	ImmutableOpenMap.Builder<String, DiscoveryNode> nodes = ImmutableOpenMap.builder(dataNodes);
+        ImmutableOpenMap.Builder<String, DiscoveryNode> nodes = ImmutableOpenMap.builder(dataNodes);
         nodes.putAll(masterNodes);
         return nodes.build();
         */
-    	return nodes();
+        return nodes();
     }
 
     /**
@@ -213,7 +213,7 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
      */
     public String masterNodeId() {
         //return this.masterNodeId;
-    	return this.localNodeId;
+        return this.localNodeId;
     }
 
     /**
@@ -268,8 +268,8 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
      */
     public DiscoveryNode masterNode() {
         //return nodes.get(masterNodeId);
-    	// In Elasticassandra, every elastic node is master.
-    	return localNode();
+        // In Elasticassandra, every elastic node is master.
+        return localNode();
     }
 
     /**
@@ -296,7 +296,7 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
         }
         return null;
     }
-    
+
     /**
      * Get a node by its inet address
      *
@@ -317,14 +317,13 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
         return nodesIds == null || nodesIds.length == 0 || (nodesIds.length == 1 && nodesIds[0].equals("_all"));
     }
 
-
     /**
      * Returns the version of the node with the oldest version in the cluster
      *
      * @return the oldest version in the cluster
      */
     public Version smallestVersion() {
-       return minNodeVersion;
+        return minNodeVersion;
     }
 
     /**

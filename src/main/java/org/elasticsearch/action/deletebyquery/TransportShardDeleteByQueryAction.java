@@ -25,7 +25,7 @@ import org.elasticsearch.action.support.replication.TransportShardReplicationOpe
 import org.elasticsearch.cache.recycler.CacheRecycler;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.cassandra.ElasticSchemaService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
@@ -105,7 +105,7 @@ public class TransportShardDeleteByQueryAction extends TransportShardReplication
     }
 
     @Override
-    protected PrimaryResponse<ShardDeleteByQueryResponse, ShardDeleteByQueryRequest> shardOperationOnPrimary(CassandraClusterState clusterState, PrimaryOperationRequest shardRequest) {
+    protected PrimaryResponse<ShardDeleteByQueryResponse, ShardDeleteByQueryRequest> shardOperationOnPrimary(ClusterState clusterState, PrimaryOperationRequest shardRequest) {
         ShardDeleteByQueryRequest request = shardRequest.request;
         IndexService indexService = indicesService.indexServiceSafe(shardRequest.shardId.getIndex());
         IndexShard indexShard = indexService.shardSafe(shardRequest.shardId.id());
@@ -147,7 +147,7 @@ public class TransportShardDeleteByQueryAction extends TransportShardReplication
     }
 
     @Override
-    protected ShardIterator shards(CassandraClusterState clusterState, InternalRequest request) {
+    protected ShardIterator shards(ClusterState clusterState, InternalRequest request) {
         GroupShardsIterator group = clusterService.operationRouting().deleteByQueryShards(clusterService.state(), request.concreteIndex(), request.request().routing());
         for (ShardIterator shardIt : group) {
             if (shardIt.shardId().id() == request.request().shardId()) {

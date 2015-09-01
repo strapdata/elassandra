@@ -23,16 +23,13 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.elasticsearch.ElasticsearchIllegalArgumentException;
 
 /**
- * Write Consistency Level control how many replicas should be active for a write operation to occur (a write operation
- * can be index, or delete).
+ * Write Consistency Level control how many replicas should be active for a
+ * write operation to occur (a write operation can be index, or delete).
  *
  *
  */
 public enum WriteConsistencyLevel {
-    DEFAULT((byte) 0),
-    ONE((byte) 1),
-    QUORUM((byte) 2),
-    ALL((byte) 3);
+    DEFAULT((byte) 0), ONE((byte) 1), QUORUM((byte) 2), ALL((byte) 3);
 
     private final byte id;
 
@@ -69,13 +66,16 @@ public enum WriteConsistencyLevel {
         }
         throw new ElasticsearchIllegalArgumentException("No write consistency match [" + value + "]");
     }
-    
+
     public ConsistencyLevel toCassandraConsistencyLevel() {
-    	switch(id) {
-    	case 1 : return ConsistencyLevel.LOCAL_ONE;
-    	case 2 : return ConsistencyLevel.LOCAL_QUORUM;
-    	case 3 : return ConsistencyLevel.ALL;
-    	}
-    	return ConsistencyLevel.LOCAL_ONE;
+        switch (id) {
+        case 1:
+            return ConsistencyLevel.LOCAL_ONE;
+        case 2:
+            return ConsistencyLevel.LOCAL_QUORUM;
+        case 3:
+            return ConsistencyLevel.ALL;
+        }
+        return ConsistencyLevel.LOCAL_ONE;
     }
 }

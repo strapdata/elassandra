@@ -106,7 +106,7 @@ public class RepositoriesService extends AbstractComponent implements ClusterSta
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) throws IOException {
+            public ClusterState execute(ClusterState currentState) throws IOException {
                 ensureRepositoryNotInUse(currentState, request.name);
                 // Trying to create the new repository on master to make sure it works
                 if (!registerRepository(newRepositoryMetaData)) {
@@ -140,7 +140,7 @@ public class RepositoriesService extends AbstractComponent implements ClusterSta
                     repositories = new RepositoriesMetaData(repositoriesMetaData.toArray(new RepositoryMetaData[repositoriesMetaData.size()]));
                 }
                 mdBuilder.putCustom(RepositoriesMetaData.TYPE, repositories);
-                return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                return ClusterState.builder(currentState).metaData(mdBuilder).build();
             }
 
             @Override
@@ -171,7 +171,7 @@ public class RepositoriesService extends AbstractComponent implements ClusterSta
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 ensureRepositoryNotInUse(currentState, request.name);
                 MetaData metaData = currentState.metaData();
                 MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
@@ -190,7 +190,7 @@ public class RepositoriesService extends AbstractComponent implements ClusterSta
                     if (changed) {
                         repositories = new RepositoriesMetaData(repositoriesMetaData.toArray(new RepositoryMetaData[repositoriesMetaData.size()]));
                         mdBuilder.putCustom(RepositoriesMetaData.TYPE, repositories);
-                        return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                        return ClusterState.builder(currentState).metaData(mdBuilder).build();
                     }
                 }
                 throw new RepositoryMissingException(request.name);
@@ -402,7 +402,7 @@ public class RepositoriesService extends AbstractComponent implements ClusterSta
         }
     }
 
-    private void ensureRepositoryNotInUse(CassandraClusterState clusterState, String repository) {
+    private void ensureRepositoryNotInUse(ClusterState clusterState, String repository) {
         if (SnapshotsService.isRepositoryInUse(clusterState, repository) || RestoreService.isRepositoryInUse(clusterState, repository)) {
             throw new ElasticsearchIllegalStateException("trying to modify or unregister repository that is currently used ");
         }

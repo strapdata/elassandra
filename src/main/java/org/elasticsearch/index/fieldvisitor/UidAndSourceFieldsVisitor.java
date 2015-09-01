@@ -38,14 +38,14 @@ public class UidAndSourceFieldsVisitor extends FieldsVisitor {
 
         return uid != null && source != null ? Status.STOP : Status.NO;
     }
-    
+
     @Override
     public boolean needSource() {
-    	return true;
+        return true;
     }
 
     @Override
     public boolean needFields() {
-    	return false;
+        return false;
     }
 }

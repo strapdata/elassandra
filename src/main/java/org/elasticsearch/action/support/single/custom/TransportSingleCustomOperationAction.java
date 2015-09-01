@@ -28,7 +28,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -78,7 +78,7 @@ public abstract class TransportSingleCustomOperationAction<Request extends Singl
     /**
      * Can return null to execute on this local node.
      */
-    protected abstract ShardsIterator shards(CassandraClusterState state, InternalRequest request);
+    protected abstract ShardsIterator shards(ClusterState state, InternalRequest request);
 
     /**
      * Operation to be executed at the shard level. Can be called with shardId set to null, meaning that there is no
@@ -90,11 +90,11 @@ public abstract class TransportSingleCustomOperationAction<Request extends Singl
 
     protected abstract Response newResponse();
 
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
     }
 
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, InternalRequest request) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, InternalRequest request) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.READ, request.concreteIndex());
     }
 
@@ -113,7 +113,7 @@ public abstract class TransportSingleCustomOperationAction<Request extends Singl
         private AsyncSingleAction(Request request, ActionListener<Response> listener) {
             this.listener = listener;
 
-            CassandraClusterState clusterState = clusterService.state();
+            ClusterState clusterState = clusterService.state();
             nodes = clusterState.nodes();
             ClusterBlockException blockException = checkGlobalBlock(clusterState);
             if (blockException != null) {

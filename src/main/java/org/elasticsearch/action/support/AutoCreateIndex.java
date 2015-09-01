@@ -19,7 +19,7 @@
 
 package org.elasticsearch.action.support;
 
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.regex.Regex;
@@ -67,7 +67,7 @@ public class AutoCreateIndex {
     /**
      * Should the index be auto created?
      */
-    public boolean shouldAutoCreate(String index, CassandraClusterState state) {
+    public boolean shouldAutoCreate(String index, ClusterState state) {
         if (!needToCheck) {
             return false;
         }

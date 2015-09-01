@@ -25,7 +25,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -72,12 +72,12 @@ public class TransportDeleteWarmerAction extends TransportMasterNodeOperationAct
     }
 
     @Override
-    protected ClusterBlockException checkBlock(DeleteWarmerRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(DeleteWarmerRequest request, ClusterState state) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, clusterService.state().metaData().concreteIndices(request.indicesOptions(), request.indices()));
     }
 
     @Override
-    protected void masterOperation(final DeleteWarmerRequest request, final CassandraClusterState state, final ActionListener<DeleteWarmerResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final DeleteWarmerRequest request, final ClusterState state, final ActionListener<DeleteWarmerResponse> listener) throws ElasticsearchException {
         final String[] concreteIndices = clusterService.state().metaData().concreteIndices(request.indicesOptions(), request.indices());
         clusterService.submitStateUpdateTask("delete_warmer [" + Arrays.toString(request.names()) + "]", new AckedClusterStateUpdateTask<DeleteWarmerResponse>(request, listener) {
 
@@ -93,7 +93,7 @@ public class TransportDeleteWarmerAction extends TransportMasterNodeOperationAct
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
 
                 boolean globalFoundAtLeastOne = false;
@@ -151,7 +151,7 @@ public class TransportDeleteWarmerAction extends TransportMasterNodeOperationAct
                     }
                 }
 
-                return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                return ClusterState.builder(currentState).metaData(mdBuilder).build();
             }
         });
     }

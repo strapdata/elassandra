@@ -43,94 +43,90 @@ import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeBuilder;
 import org.elasticsearch.node.internal.InternalNode;
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Charsets;
 
 /**
- * Bootstrap sequence
- * Cassandra setup() 
- * 		joinRing()
- * 			beforBoostrap() -> wait for local shard = STARTED
- * 				 ElasticSearch activate()
- * 					GatewayService recover metadata from cassandra schema
- * 					DiscoveryService discover ring topology and build routing table
- * 				 await that 
- * Cassandra start() 		(Complet cassandra bootstrap)
- * ElasticSearch start() 	(Open Elastic http service)
+ * Bootstrap sequence Cassandra setup() joinRing() beforBoostrap() -> wait for
+ * local shard = STARTED ElasticSearch activate() GatewayService recover
+ * metadata from cassandra schema DiscoveryService discover ring topology and
+ * build routing table await that Cassandra start() (Complet cassandra
+ * bootstrap) ElasticSearch start() (Open Elastic http service)
  * 
  * @author vroyer
  *
  */
 public class ElastiCassandraDaemon extends CassandraDaemon {
-	private Node node;
-	private static volatile Thread keepAliveThread;
+    private static final Logger logger = LoggerFactory.getLogger(ElastiCassandraDaemon.class);
+
+    private Node node;
+    private static volatile Thread keepAliveThread;
     private static volatile CountDownLatch keepAliveLatch;
 
     private static ElastiCassandraDaemon instance = new ElastiCassandraDaemon();
     private Tuple<Settings, Environment> tuple;
     private boolean addShutdownHook;
-    
+
     static {
-    	try {
-        	ESLoggerFactory.setDefaultFactory(new LogbackESLoggerFactory());
+        try {
+            ESLoggerFactory.setDefaultFactory(new LogbackESLoggerFactory());
         } catch (Exception e) {
-            System.err.println("Failed to configure logging...");
-            e.printStackTrace();
+            logger.error("Failed to configure logging",e);
         }
     }
-    
-	public ElastiCassandraDaemon() {
-		super();
-	}
-	
-	public void activate(boolean addShutdownHook, Tuple<Settings, Environment> tuple)  {
-		this.addShutdownHook = addShutdownHook;
-		this.tuple = tuple;
-		try
-        {
+
+    public ElastiCassandraDaemon() {
+        super();
+    }
+
+    public void activate(boolean addShutdownHook, Tuple<Settings, Environment> tuple) {
+        this.addShutdownHook = addShutdownHook;
+        this.tuple = tuple;
+        try {
             MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
             mbs.registerMBean(new StandardMBean(new NativeAccess(), NativeAccessMBean.class), new ObjectName(MBEAN_NAME));
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             logger.error("error registering MBean {}", MBEAN_NAME, e);
-            //Allow the server to start even if the bean can't be registered
+            // Allow the server to start even if the bean can't be registered
         }
-		super.setup();		   // start bootstrap CassandraDaemon and call beforeBootstrap to activate ElasticSearch and wait for local shards
-		super.start();		   // complete cassandra start
-		instance.node.start(); // start ElasticSerach public services to complete
-	}
+        super.setup(); // start bootstrap CassandraDaemon and call
+                       // beforeBootstrap to activate ElasticSearch and wait for
+                       // local shards
+        super.start(); // complete cassandra start
+        instance.node.start(); // start ElasticSerach public services to
+                               // complete
+    }
 
-	
-	@Override
-	public void beforeBootstrap() {
-		logger.debug("Starting ElasticSearch, recover metadata from cassandra schema");
-		instance.buildNode(addShutdownHook, tuple);	// Initialize ElasticSearch
-	    this.node.activate(); // block until recovery and all primary shard started.
-		logger.debug("ElasticSearch ready to index, client={}",this.node.client());
-	}
-	
+    @Override
+    public void beforeBootstrap() {
+        logger.debug("Starting ElasticSearch, recover metadata from cassandra schema");
+        instance.buildNode(addShutdownHook, tuple); // Initialize ElasticSearch
+        this.node.activate(); // block until recovery and all primary shard
+                              // started.
+        logger.debug("ElasticSearch ready to index, client={}", this.node.client());
+    }
 
-	 /**
+    /**
      * hook for JSVC
      */
     public void start() {
-    	super.start();
+        super.start();
     }
 
     /**
      * hook for JSVC
      */
     public void stop() {
-    	node.stop();
-    	super.stop();
+        node.stop();
+        super.stop();
     }
-    
-    
+
     /**
      * hook for JSVC
      */
-    public void init(String[] args)  {
+    public void init(String[] args) {
 
     }
 
@@ -145,29 +141,21 @@ public class ElastiCassandraDaemon extends CassandraDaemon {
      * hook for JSVC
      */
     public void destroy() {
-    	super.destroy();
+        super.destroy();
         node.close();
         keepAliveLatch.countDown();
     }
 
-    
-	
-	
-    
     private void buildNode(boolean addShutdownHook, Tuple<Settings, Environment> tuple) {
         if (tuple.v1().getAsBoolean("bootstrap.mlockall", false)) {
             Natives.tryMlockall();
         }
 
         NodeBuilder nodeBuilder = NodeBuilder.nodeBuilder().settings(tuple.v1()).loadConfigSettings(false);
-        nodeBuilder.clusterName( DatabaseDescriptor.getClusterName() )
-        	.data(true)
-        	.put("gateway.type",CassandraGatewayModule.class.getName())
-        	.put(DiscoveryModule.DISCOVERY_TYPE_KEY,CassandraDiscoveryModule.class.getName())
-        	.put("name", CassandraDiscovery.buildNodeName(DatabaseDescriptor.getRpcAddress()))
-        	.put("network.host", DatabaseDescriptor.getRpcAddress().getHostAddress() );
-        
-        
+        nodeBuilder.clusterName(DatabaseDescriptor.getClusterName()).data(true).put("gateway.type", CassandraGatewayModule.class.getName())
+                .put(DiscoveryModule.DISCOVERY_TYPE_KEY, CassandraDiscoveryModule.class.getName()).put("name", CassandraDiscovery.buildNodeName(DatabaseDescriptor.getRpcAddress()))
+                .put("network.host", DatabaseDescriptor.getRpcAddress().getHostAddress());
+
         this.node = nodeBuilder.build();
         if (addShutdownHook) {
             Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -193,27 +181,23 @@ public class ElastiCassandraDaemon extends CassandraDaemon {
                 }
             });
         }
-        
+
     }
 
-   
-    
-    
-    
-    public static Client  client() {
-    	if ((instance.node != null) && (!instance.node.isClosed()) ) 
-    		return instance.node.client();
-    	return null;
+    public static Client client() {
+        if ((instance.node != null) && (!instance.node.isClosed()))
+            return instance.node.client();
+        return null;
     }
-    
+
     public static Injector injector() {
-    	if ((instance.node != null) && (!instance.node.isClosed()) ) 
-    		return ((InternalNode)instance.node).injector();
-    	return null;
+        if ((instance.node != null) && (!instance.node.isClosed()))
+            return ((InternalNode) instance.node).injector();
+        return null;
     }
 
     public static void main(String[] args) {
-    	
+
         final String pidFile = System.getProperty("es.pidfile", System.getProperty("es-pidfile"));
 
         if (pidFile != null) {
@@ -236,16 +220,16 @@ public class ElastiCassandraDaemon extends CassandraDaemon {
         }
 
         boolean foreground = System.getProperty("es.foreground", System.getProperty("es-foreground")) != null;
-        // handle the wrapper system property, if its a service, don't run as a service
+        // handle the wrapper system property, if its a service, don't run as a
+        // service
         if (System.getProperty("wrapper.service", "XXX").equalsIgnoreCase("true")) {
             foreground = false;
         }
 
-        
         Tuple<Settings, Environment> tuple = null;
         try {
-        	tuple = InternalSettingsPreparer.prepareSettings(EMPTY_SETTINGS, true);
-            //setupLogging(tuple);
+            tuple = InternalSettingsPreparer.prepareSettings(EMPTY_SETTINGS, true);
+            // setupLogging(tuple);
         } catch (Exception e) {
             String errorMessage = buildErrorMessage("Setup", e);
             System.err.println(errorMessage);
@@ -265,7 +249,7 @@ public class ElastiCassandraDaemon extends CassandraDaemon {
         }
 
         String stage = "Initialization";
-        
+
         try {
             if (!foreground) {
                 Loggers.disableConsoleLogging();
@@ -314,7 +298,7 @@ public class ElastiCassandraDaemon extends CassandraDaemon {
                 Loggers.disableConsoleLogging();
             }
             logger.error("Exception", e);
-            
+
             System.exit(3);
         }
     }

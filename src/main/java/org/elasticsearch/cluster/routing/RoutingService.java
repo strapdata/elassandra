@@ -65,7 +65,7 @@ public class RoutingService extends AbstractLifecycleComponent<RoutingService> i
     private volatile Future scheduledRoutingTableFuture;
 
     @Inject
-    public RoutingService(Settings settings, ThreadPool threadPool, ClusterService clusterService ) {
+    public RoutingService(Settings settings, ThreadPool threadPool, ClusterService clusterService) {
         super(settings);
         this.threadPool = threadPool;
         this.clusterService = clusterService;
@@ -113,9 +113,9 @@ public class RoutingService extends AbstractLifecycleComponent<RoutingService> i
                 routingTableDirty = true;
                 reroute();
                 // Commented out since we make sure to reroute whenever shards changes state or metadata changes state
-//            } else if (event.routingTableChanged()) {
-//                routingTableDirty = true;
-//                reroute();
+                //            } else if (event.routingTableChanged()) {
+                //                routingTableDirty = true;
+                //                reroute();
             } else {
                 if (event.nodesAdded()) {
                     for (DiscoveryNode node : event.nodesDelta().addedNodes()) {
@@ -142,15 +142,15 @@ public class RoutingService extends AbstractLifecycleComponent<RoutingService> i
             }
             clusterService.submitStateUpdateTask(CLUSTER_UPDATE_TASK_SOURCE, Priority.HIGH, new ClusterStateUpdateTask() {
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) {
-                	return currentState;
-                	/*
-                	RoutingAllocation.Result routingResult = allocationService.reroute(currentState);
+                public ClusterState execute(ClusterState currentState) {
+                    return currentState;
+                    /*
+                    RoutingAllocation.Result routingResult = allocationService.reroute(currentState);
                     if (!routingResult.changed()) {
                         // no state changed
                         return currentState;
                     }
-                    return CassandraClusterState.builder(currentState).routingResult(routingResult).build();
+                    return ClusterState.builder(currentState).routingResult(routingResult).build();
                     */
                 }
 
@@ -161,7 +161,7 @@ public class RoutingService extends AbstractLifecycleComponent<RoutingService> i
 
                 @Override
                 public void onFailure(String source, Throwable t) {
-                    CassandraClusterState state = clusterService.state();
+                    ClusterState state = clusterService.state();
                     if (logger.isTraceEnabled()) {
                         logger.error("unexpected failure during [{}], current state:\n{}", t, source, state.prettyPrint());
                     } else {
@@ -171,7 +171,7 @@ public class RoutingService extends AbstractLifecycleComponent<RoutingService> i
             });
             routingTableDirty = false;
         } catch (Exception e) {
-            CassandraClusterState state = clusterService.state();
+            ClusterState state = clusterService.state();
             logger.warn("Failed to reroute routing table, current state:\n{}", e, state.prettyPrint());
         }
     }

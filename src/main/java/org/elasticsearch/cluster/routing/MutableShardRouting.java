@@ -45,19 +45,16 @@ public class MutableShardRouting extends ImmutableShardRouting {
         super(index, shardId, currentNodeId, primary, state, version);
     }
 
-    public MutableShardRouting(String index, int shardId, String currentNodeId,
-                               String relocatingNodeId, boolean primary, ShardRoutingState state, long version) {
+    public MutableShardRouting(String index, int shardId, String currentNodeId, String relocatingNodeId, boolean primary, ShardRoutingState state, long version) {
         super(index, shardId, currentNodeId, relocatingNodeId, null, primary, state, version);
     }
 
-    public MutableShardRouting(String index, int shardId, String currentNodeId,
-                               String relocatingNodeId, RestoreSource restoreSource, boolean primary, ShardRoutingState state, long version) {
+    public MutableShardRouting(String index, int shardId, String currentNodeId, String relocatingNodeId, RestoreSource restoreSource, boolean primary, ShardRoutingState state, long version) {
         super(index, shardId, currentNodeId, relocatingNodeId, restoreSource, primary, state, version);
     }
-    
-    public MutableShardRouting(String index, int shardId, String currentNodeId,
-            boolean primary, ShardRoutingState state, long version, Collection<Range<Token>> tokenRanges) {
-    	super(index, shardId, currentNodeId, primary, state, version, tokenRanges);
+
+    public MutableShardRouting(String index, int shardId, String currentNodeId, boolean primary, ShardRoutingState state, long version, Collection<Range<Token>> tokenRanges) {
+        super(index, shardId, currentNodeId, primary, state, version, tokenRanges);
     }
 
     /**
@@ -153,8 +150,7 @@ public class MutableShardRouting extends ImmutableShardRouting {
         primary = false;
     }
 
-    
-    private long hashVersion = version-1;
+    private long hashVersion = version - 1;
     private int hashCode = 0;
 
     @Override
@@ -164,4 +160,3 @@ public class MutableShardRouting extends ImmutableShardRouting {
         return hashCode;
     }
 }
-

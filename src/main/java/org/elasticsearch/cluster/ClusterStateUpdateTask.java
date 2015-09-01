@@ -27,16 +27,15 @@ import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 abstract public class ClusterStateUpdateTask {
 
     /**
-     * Update the cluster state based on the current state. Return the *same instance* if no state
-     * should be changed.
+     * Update the cluster state based on the current state. Return the *same
+     * instance* if no state should be changed.
      */
-    abstract public CassandraClusterState execute(CassandraClusterState currentState) throws Exception;
+    abstract public ClusterState execute(ClusterState currentState) throws Exception;
 
     /**
      * A callback called when execute fails.
      */
     abstract public void onFailure(String source, Throwable t);
-
 
     /**
      * indicates whether this task should only run if current node is master
@@ -46,21 +45,20 @@ abstract public class ClusterStateUpdateTask {
     }
 
     /*
-     * In elasticsearch, all nodes are master, so control cluster state propagation to all nodes.
+     * In elasticsearch, all nodes are master, so control cluster state
+     * propagation to all nodes.
      */
     /*
-    public boolean doPublish() {
-    	return false;
-    }
-    */
-    
+     * public boolean doPublish() { return false; }
+     */
+
     public boolean doPresistMetaData() {
-    	return true;
+        return true;
     }
-    
-    
+
     /**
-     * called when the task was rejected because the local node is no longer master
+     * called when the task was rejected because the local node is no longer
+     * master
      */
     public void onNoLongerMaster(String source) {
         onFailure(source, new EsRejectedExecutionException("no longer master. source: [" + source + "]"));

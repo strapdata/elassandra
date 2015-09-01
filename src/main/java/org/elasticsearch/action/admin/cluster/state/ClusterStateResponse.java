@@ -21,7 +21,7 @@ package org.elasticsearch.action.admin.cluster.state;
 
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.cluster.ClusterName;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
@@ -33,17 +33,17 @@ import java.io.IOException;
 public class ClusterStateResponse extends ActionResponse {
 
     private ClusterName clusterName;
-    private CassandraClusterState clusterState;
+    private ClusterState clusterState;
 
     public ClusterStateResponse() {
     }
 
-    public ClusterStateResponse(ClusterName clusterName, CassandraClusterState clusterState) {
+    public ClusterStateResponse(ClusterName clusterName, ClusterState clusterState) {
         this.clusterName = clusterName;
         this.clusterState = clusterState;
     }
 
-    public CassandraClusterState getState() {
+    public ClusterState getState() {
         return this.clusterState;
     }
 
@@ -55,13 +55,13 @@ public class ClusterStateResponse extends ActionResponse {
     public void readFrom(StreamInput in) throws IOException {
         super.readFrom(in);
         clusterName = ClusterName.readClusterName(in);
-        clusterState = CassandraClusterState.Builder.readFrom(in, null, clusterName);
+        clusterState = ClusterState.Builder.readFrom(in, null, clusterName);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         clusterName.writeTo(out);
-        CassandraClusterState.Builder.writeTo(clusterState, out);
+        ClusterState.Builder.writeTo(clusterState, out);
     }
 }

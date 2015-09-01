@@ -26,7 +26,7 @@ import org.elasticsearch.action.admin.cluster.state.ClusterStateResponse;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.Requests;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -75,12 +75,12 @@ public class RestClusterStateAction extends BaseRestHandler {
         }
 
         if (request.hasParam("metric")) {
-            EnumSet<CassandraClusterState.Metric> metrics = CassandraClusterState.Metric.parseString(request.param("metric"), true);
+            EnumSet<ClusterState.Metric> metrics = ClusterState.Metric.parseString(request.param("metric"), true);
             // do not ask for what we do not need.
-            clusterStateRequest.nodes(metrics.contains(CassandraClusterState.Metric.NODES) || metrics.contains(CassandraClusterState.Metric.MASTER_NODE));
-            clusterStateRequest.routingTable(metrics.contains(CassandraClusterState.Metric.ROUTING_TABLE));
-            clusterStateRequest.metaData(metrics.contains(CassandraClusterState.Metric.METADATA));
-            clusterStateRequest.blocks(metrics.contains(CassandraClusterState.Metric.BLOCKS));
+            clusterStateRequest.nodes(metrics.contains(ClusterState.Metric.NODES) || metrics.contains(ClusterState.Metric.MASTER_NODE));
+            clusterStateRequest.routingTable(metrics.contains(ClusterState.Metric.ROUTING_TABLE));
+            clusterStateRequest.metaData(metrics.contains(ClusterState.Metric.METADATA));
+            clusterStateRequest.blocks(metrics.contains(ClusterState.Metric.BLOCKS));
         }
 
         client.admin().cluster().state(clusterStateRequest, new RestBuilderListener<ClusterStateResponse>(channel) {

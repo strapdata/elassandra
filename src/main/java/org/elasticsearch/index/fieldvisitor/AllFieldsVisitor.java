@@ -37,16 +37,15 @@ public class AllFieldsVisitor extends FieldsVisitor {
     public Status needsField(FieldInfo fieldInfo) throws IOException {
         return Status.YES;
     }
-    
+
     @Override
     public boolean needSource() {
-    	return true;
+        return true;
     }
-    
-     
+
     @Override
     public boolean needFields() {
-    	return true;
+        return true;
     }
-    
+
 }

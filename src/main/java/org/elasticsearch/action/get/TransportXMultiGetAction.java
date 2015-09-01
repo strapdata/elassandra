@@ -27,7 +27,7 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.common.inject.Inject;
@@ -57,7 +57,7 @@ public class TransportXMultiGetAction extends HandledTransportAction<XMultiGetRe
 
     @Override
     protected void doExecute(final XMultiGetRequest request, final ActionListener<XMultiGetResponse> listener) {
-        CassandraClusterState clusterState = clusterService.state();
+        ClusterState clusterState = clusterService.state();
 
         clusterState.blocks().globalBlockedRaiseException(ClusterBlockLevel.READ);
 

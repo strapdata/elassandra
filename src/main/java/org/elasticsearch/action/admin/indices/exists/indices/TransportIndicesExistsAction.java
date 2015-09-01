@@ -25,7 +25,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.common.inject.Inject;
@@ -62,14 +62,14 @@ public class TransportIndicesExistsAction extends TransportMasterNodeReadOperati
     }
 
     @Override
-    protected ClusterBlockException checkBlock(IndicesExistsRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(IndicesExistsRequest request, ClusterState state) {
         //make sure through indices options that the concrete indices call never throws IndexMissingException
         IndicesOptions indicesOptions = IndicesOptions.fromOptions(true, true, request.indicesOptions().expandWildcardsOpen(), request.indicesOptions().expandWildcardsClosed());
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, clusterService.state().metaData().concreteIndices(indicesOptions, request.indices()));
     }
 
     @Override
-    protected void masterOperation(final IndicesExistsRequest request, final CassandraClusterState state, final ActionListener<IndicesExistsResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final IndicesExistsRequest request, final ClusterState state, final ActionListener<IndicesExistsResponse> listener) throws ElasticsearchException {
         boolean exists;
         try {
             // Similar as the previous behaviour, but now also aliases and wildcards are supported.

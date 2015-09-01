@@ -43,14 +43,20 @@ public abstract class BroadcastShardOperationRequest extends TransportRequest im
 
     protected BroadcastShardOperationRequest(ShardId shardId, BroadcastOperationRequest request) {
         super(request);
-        //this.shardId = shardId;
-        this.shardId = new ShardId(shardId.index(), 0); // In elasticassandra, each node effectively hosts shard at index 0.
+        // this.shardId = shardId;
+        this.shardId = new ShardId(shardId.index(), 0); // In elasticassandra,
+                                                        // each node effectively
+                                                        // hosts shard at index
+                                                        // 0.
         this.originalIndices = new OriginalIndices(request);
     }
 
     protected BroadcastShardOperationRequest(ShardId shardId, OriginalIndices originalIndices) {
-        //this.shardId = shardId;
-    	this.shardId = new ShardId(shardId.index(), 0); // In elasticassandra, each node effectively hosts shard at index 0.
+        // this.shardId = shardId;
+        this.shardId = new ShardId(shardId.index(), 0); // In elasticassandra,
+                                                        // each node effectively
+                                                        // hosts shard at index
+                                                        // 0.
         this.originalIndices = originalIndices;
     }
 

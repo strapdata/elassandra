@@ -29,7 +29,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
 import org.elasticsearch.action.support.replication.TransportShardReplicationOperationAction;
 import org.elasticsearch.cassandra.SchemaService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
@@ -44,10 +44,11 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
 /**
- * Performs the delete operation in cassandra, and ElasticSecondaryIndex perform and XDelete action.
+ * Performs the delete operation in cassandra, and ElasticSecondaryIndex perform
+ * and XDelete action.
  */
 public class TransportDeleteAction extends TransportShardReplicationOperationAction<DeleteRequest, DeleteRequest, DeleteResponse> {
- 
+
     private final AutoCreateIndex autoCreateIndex;
 
     private final TransportCreateIndexAction createIndexAction;
@@ -55,10 +56,9 @@ public class TransportDeleteAction extends TransportShardReplicationOperationAct
     private final TransportIndexDeleteAction indexDeleteAction;
 
     @Inject
-    public TransportDeleteAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                 IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
-                                 TransportCreateIndexAction createIndexAction, TransportIndexDeleteAction indexDeleteAction, 
-                                 ActionFilters actionFilters, SchemaService elasticElasticService) {
+    public TransportDeleteAction(Settings settings, TransportService transportService, ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool,
+            ShardStateAction shardStateAction, TransportCreateIndexAction createIndexAction, TransportIndexDeleteAction indexDeleteAction, ActionFilters actionFilters,
+            SchemaService elasticElasticService) {
         super(settings, DeleteAction.NAME, transportService, clusterService, indicesService, threadPool, shardStateAction, actionFilters, elasticElasticService);
         this.createIndexAction = createIndexAction;
         this.indexDeleteAction = indexDeleteAction;
@@ -101,7 +101,7 @@ public class TransportDeleteAction extends TransportShardReplicationOperationAct
     }
 
     @Override
-    protected boolean resolveRequest(final CassandraClusterState state, final InternalRequest request, final ActionListener<DeleteResponse> listener) {
+    protected boolean resolveRequest(final ClusterState state, final InternalRequest request, final ActionListener<DeleteResponse> listener) {
         request.request().routing(state.metaData().resolveIndexRouting(request.request().routing(), request.request().index()));
         if (state.metaData().hasIndex(request.concreteIndex())) {
             // check if routing is required, if so, do a broadcast delete
@@ -110,13 +110,14 @@ public class TransportDeleteAction extends TransportShardReplicationOperationAct
                 if (request.request().routing() == null) {
                     if (request.request().versionType() != VersionType.INTERNAL) {
                         // TODO: implement this feature
-                        throw new ElasticsearchIllegalArgumentException("routing value is required for deleting documents of type [" + request.request().type()
-                                + "] while using version_type [" + request.request().versionType() + "]");
+                        throw new ElasticsearchIllegalArgumentException("routing value is required for deleting documents of type [" + request.request().type() + "] while using version_type ["
+                                + request.request().versionType() + "]");
                     }
                     indexDeleteAction.execute(new IndexDeleteRequest(request.request(), request.concreteIndex()), new ActionListener<IndexDeleteResponse>() {
                         @Override
                         public void onResponse(IndexDeleteResponse indexDeleteResponse) {
-                            // go over the response, see if we have found one, and the version if found
+                            // go over the response, see if we have found one,
+                            // and the version if found
                             long version = Versions.MATCH_ANY;
                             boolean found = false;
                             for (ShardDeleteResponse deleteResponse : indexDeleteResponse.getResponses()) {
@@ -165,28 +166,26 @@ public class TransportDeleteAction extends TransportShardReplicationOperationAct
         return new DeleteResponse();
     }
 
-    
     /**
      * Modified to delete document in cassandra.
      */
     @Override
-    protected PrimaryResponse<DeleteResponse, DeleteRequest> shardOperationOnPrimary(CassandraClusterState clusterState, PrimaryOperationRequest shardRequest) throws Throwable {
+    protected PrimaryResponse<DeleteResponse, DeleteRequest> shardOperationOnPrimary(ClusterState clusterState, PrimaryOperationRequest shardRequest) throws Throwable {
         DeleteRequest request = shardRequest.request;
-        
+
         elasticSchemaService.deleteRow(request.index(), request.type(), request.id(), request.consistencyLevel().toCassandraConsistencyLevel());
 
         DeleteResponse response = new DeleteResponse(shardRequest.shardId.getIndex(), request.type(), request.id(), 0L, true);
         return new PrimaryResponse<>(shardRequest.request, response, null);
     }
-    
+
     @Override
     protected void shardOperationOnReplica(ReplicaOperationRequest shardRequest) {
-    	assert false;
+        assert false;
     }
 
     @Override
-    protected ShardIterator shards(CassandraClusterState clusterState, InternalRequest request) {
-        return clusterService.operationRouting()
-                .deleteShards(clusterService.state(), request.concreteIndex(), request.request().type(), request.request().id(), request.request().routing());
+    protected ShardIterator shards(ClusterState clusterState, InternalRequest request) {
+        return clusterService.operationRouting().deleteShards(clusterService.state(), request.concreteIndex(), request.request().type(), request.request().id(), request.request().routing());
     }
 }

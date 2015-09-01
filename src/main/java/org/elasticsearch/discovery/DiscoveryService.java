@@ -30,7 +30,7 @@ import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchTimeoutException;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
@@ -39,6 +39,7 @@ import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.discovery.cassandra.CassandraDiscovery;
 
 /**
  *
@@ -66,6 +67,7 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
         }
     }
 
+   
     private final TimeValue initialStateTimeout;
     private final Discovery discovery;
     private InitialStateListener initialStateListener;
@@ -100,6 +102,13 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
             Thread.currentThread().interrupt();
             throw new ElasticsearchTimeoutException("Interrupted while waiting for initial discovery state");
         }
+    }
+    
+    /*
+     * returns when 
+     */
+    public void waitForEmptyShardState(String index) {
+        
     }
 
     @Override
@@ -139,13 +148,13 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
      * event based on the response gotten from all nodes
      */
     /*
-    public void publish(CassandraClusterState clusterState, Discovery.AckListener ackListener) {
+    public void publish(ClusterState clusterState, Discovery.AckListener ackListener) {
         if (lifecycle.started()) {
             discovery.publish(clusterState, ackListener);
         }
     }
-	*/
-    
+    */
+
     public static String generateNodeId(Settings settings) {
         String seed = settings.get("discovery.id.seed");
         if (seed != null) {
@@ -153,7 +162,7 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
         }
         return Strings.randomBase64UUID();
     }
-    
+
     /**
      * Get indices shard state from gossip endpoints state map.
      * @param address
@@ -164,7 +173,11 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
      * @throws IOException
      */
     public ShardRoutingState readIndexShardState(InetAddress address, String index, ShardRoutingState defaultState) {
-    	return this.discovery.readIndexShardState(address, index, defaultState);
+        return this.discovery.readIndexShardState(address, index, defaultState);
+    }
+
+    public void addShardStateRemovedListener(CassandraDiscovery.ShardStateRemovedListener listener) {
+        this.discovery.addShardStateRemovedListener(listener);
     }
     
     /**
@@ -176,14 +189,18 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
      * @throws IOException
      */
     public void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
-    	this.discovery.writeIndexShardSate(index, shardRoutingState);
+        this.discovery.writeIndexShardState(index, shardRoutingState);
+    }
+
+    public void removeIndexShardState(String index) throws JsonGenerationException, JsonMappingException, IOException {
+        this.discovery.writeIndexShardState(index, null);
     }
     
     /**
      * Publish cluster metadata uuid and version in gossip state.
      * @param clusterState
      */
-    public void publish(CassandraClusterState clusterState) {
-    	this.discovery.publish(clusterState);
+    public void publish(ClusterState clusterState) {
+        this.discovery.publish(clusterState);
     }
 }

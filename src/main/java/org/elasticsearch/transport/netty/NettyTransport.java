@@ -248,10 +248,8 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
             String name = entry.getKey();
 
             if (DEFAULT_PROFILE.equals(name)) {
-                profileSettings = settingsBuilder()
-                        .put(profileSettings)
-                        .put("port", profileSettings.get("port", componentSettings.get("port", this.settings.get("transport.tcp.port", DEFAULT_PORT_RANGE))))
-                        .build();
+                profileSettings = settingsBuilder().put(profileSettings)
+                        .put("port", profileSettings.get("port", componentSettings.get("port", this.settings.get("transport.tcp.port", DEFAULT_PORT_RANGE)))).build();
             } else {
                 // if profile does not have a port, skip it
                 if (profileSettings.get("port") == null) {
@@ -261,11 +259,7 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
             }
 
             // merge fallback settings with default settings with profile settings so we have complete settings with default values
-            Settings mergedSettings = settingsBuilder()
-                    .put(fallbackSettings)
-                    .put(defaultSettings)
-                    .put(profileSettings)
-                    .build();
+            Settings mergedSettings = settingsBuilder().put(fallbackSettings).put(defaultSettings).put(profileSettings).build();
 
             createServerBootstrap(name, mergedSettings);
             bindServerBootstrap(name, mergedSettings);
@@ -285,9 +279,9 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
 
     private InetSocketAddress createPublishAddress(String publishHost, int publishPort) {
         try {
-        	return new InetSocketAddress(FBUtilities.getLocalAddress() , publishPort);
+            return new InetSocketAddress(FBUtilities.getLocalAddress(), publishPort);
             // MODO: Publish on cassandra node ip address.
-        	// return new InetSocketAddress(networkService.resolvePublishHostAddress(publishHost), publishPort);
+            // return new InetSocketAddress(networkService.resolvePublishHostAddress(publishHost), publishPort);
         } catch (Exception e) {
             throw new BindTransportException("Failed to resolve publish address", e);
         }
@@ -299,11 +293,9 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
             clientBootstrap = new ClientBootstrap(new OioClientSocketChannelFactory(Executors.newCachedThreadPool(daemonThreadFactory(settings, TRANSPORT_CLIENT_WORKER_THREAD_NAME_PREFIX))));
         } else {
             int bossCount = componentSettings.getAsInt("boss_count", 1);
-            clientBootstrap = new ClientBootstrap(new NioClientSocketChannelFactory(
-                    Executors.newCachedThreadPool(daemonThreadFactory(settings, TRANSPORT_CLIENT_BOSS_THREAD_NAME_PREFIX)),
-                    bossCount,
-                    new NioWorkerPool(Executors.newCachedThreadPool(daemonThreadFactory(settings, TRANSPORT_CLIENT_WORKER_THREAD_NAME_PREFIX)), workerCount),
-                    new HashedWheelTimer(daemonThreadFactory(settings, "transport_client_timer"))));
+            clientBootstrap = new ClientBootstrap(new NioClientSocketChannelFactory(Executors.newCachedThreadPool(daemonThreadFactory(settings, TRANSPORT_CLIENT_BOSS_THREAD_NAME_PREFIX)), bossCount, new NioWorkerPool(Executors
+                    .newCachedThreadPool(daemonThreadFactory(settings, TRANSPORT_CLIENT_WORKER_THREAD_NAME_PREFIX)), workerCount), new HashedWheelTimer(daemonThreadFactory(settings,
+                    "transport_client_timer"))));
         }
         clientBootstrap.setPipelineFactory(configureClientChannelPipelineFactory());
         clientBootstrap.setOption("connectTimeoutMillis", connectTimeout.millis());
@@ -431,22 +423,18 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
         ByteSizeValue tcpSendBufferSize = settings.getAsBytesSize("tcp_send_buffer_size", TCP_DEFAULT_SEND_BUFFER_SIZE);
         ByteSizeValue tcpReceiveBufferSize = settings.getAsBytesSize("tcp_receive_buffer_size", TCP_DEFAULT_RECEIVE_BUFFER_SIZE);
 
-        logger.debug("using profile[{}], worker_count[{}], port[{}], bind_host[{}], publish_host[{}], compress[{}], connect_timeout[{}], connections_per_node[{}/{}/{}/{}/{}], receive_predictor[{}->{}]",
-                name, workerCount, port, bindHost, publishHost, compress, connectTimeout, connectionsPerNodeRecovery, connectionsPerNodeBulk, connectionsPerNodeReg, connectionsPerNodeState, connectionsPerNodePing, receivePredictorMin, receivePredictorMax);
+        logger.debug(
+                "using profile[{}], worker_count[{}], port[{}], bind_host[{}], publish_host[{}], compress[{}], connect_timeout[{}], connections_per_node[{}/{}/{}/{}/{}], receive_predictor[{}->{}]",
+                name, workerCount, port, bindHost, publishHost, compress, connectTimeout, connectionsPerNodeRecovery, connectionsPerNodeBulk, connectionsPerNodeReg, connectionsPerNodeState,
+                connectionsPerNodePing, receivePredictorMin, receivePredictorMax);
 
         final ThreadFactory bossFactory = daemonThreadFactory(this.settings, HTTP_SERVER_BOSS_THREAD_NAME_PREFIX, name);
         final ThreadFactory workerFactory = daemonThreadFactory(this.settings, HTTP_SERVER_WORKER_THREAD_NAME_PREFIX, name);
         ServerBootstrap serverBootstrap;
         if (blockingServer) {
-            serverBootstrap = new ServerBootstrap(new OioServerSocketChannelFactory(
-                    Executors.newCachedThreadPool(bossFactory),
-                    Executors.newCachedThreadPool(workerFactory)
-            ));
+            serverBootstrap = new ServerBootstrap(new OioServerSocketChannelFactory(Executors.newCachedThreadPool(bossFactory), Executors.newCachedThreadPool(workerFactory)));
         } else {
-            serverBootstrap = new ServerBootstrap(new NioServerSocketChannelFactory(
-                    Executors.newCachedThreadPool(bossFactory),
-                    Executors.newCachedThreadPool(workerFactory),
-                    workerCount));
+            serverBootstrap = new ServerBootstrap(new NioServerSocketChannelFactory(Executors.newCachedThreadPool(bossFactory), Executors.newCachedThreadPool(workerFactory), workerCount));
         }
         serverBootstrap.setPipelineFactory(configureServerChannelPipelineFactory(name, settings));
         if (!"default".equals(tcpNoDelay)) {
@@ -480,7 +468,7 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
             public void run() {
                 globalLock.writeLock().lock();
                 try {
-                    for (Iterator<NodeChannels> it = connectedNodes.values().iterator(); it.hasNext(); ) {
+                    for (Iterator<NodeChannels> it = connectedNodes.values().iterator(); it.hasNext();) {
                         NodeChannels nodeChannels = it.next();
                         it.remove();
                         nodeChannels.close();
@@ -519,7 +507,7 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
                         serverBootstrapIterator.remove();
                     }
 
-                    for (Iterator<NodeChannels> it = connectedNodes.values().iterator(); it.hasNext(); ) {
+                    for (Iterator<NodeChannels> it = connectedNodes.values().iterator(); it.hasNext();) {
                         NodeChannels nodeChannels = it.next();
                         it.remove();
                         nodeChannels.close();
@@ -574,7 +562,7 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
             } else {
                 String host = address.substring(0, index);
                 int port = Integer.parseInt(address.substring(index + 1));
-                return new TransportAddress[]{new InetSocketTransportAddress(host, port)};
+                return new TransportAddress[] { new InetSocketTransportAddress(host, port) };
             }
         }
     }
@@ -628,7 +616,8 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
     }
 
     @Override
-    public void sendRequest(final DiscoveryNode node, final long requestId, final String action, final TransportRequest request, TransportRequestOptions options) throws IOException, TransportException {
+    public void sendRequest(final DiscoveryNode node, final long requestId, final String action, final TransportRequest request, TransportRequestOptions options) throws IOException,
+            TransportException {
 
         Channel targetChannel = nodeChannel(node, options);
 
@@ -852,7 +841,7 @@ public class NettyTransport extends AbstractLifecycleComponent<Transport> implem
             }
         } catch (RuntimeException e) {
             // clean the futures
-            for (ChannelFuture future : ImmutableList.<ChannelFuture>builder().add(connectRecovery).add(connectBulk).add(connectReg).add(connectState).add(connectPing).build()) {
+            for (ChannelFuture future : ImmutableList.<ChannelFuture> builder().add(connectRecovery).add(connectBulk).add(connectReg).add(connectState).add(connectPing).build()) {
                 future.cancel();
                 if (future.getChannel() != null && future.getChannel().isOpen()) {
                     try {

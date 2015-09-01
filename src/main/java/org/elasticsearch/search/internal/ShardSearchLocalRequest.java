@@ -88,18 +88,16 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
     private long nowInMillis;
 
     private boolean useSlowScroll;
-    
+
     private ShardRouting shardRouting;
 
     private Collection<Range<Token>> tokenRanges;
-    
+
     ShardSearchLocalRequest() {
     }
 
-    ShardSearchLocalRequest(SearchRequest searchRequest, ShardRouting shardRouting, int numberOfShards,
-                            boolean useSlowScroll, String[] filteringAliases, long nowInMillis) {
-        this(shardRouting, numberOfShards, searchRequest.searchType(),
-                searchRequest.source(), searchRequest.types(), searchRequest.queryCache());
+    ShardSearchLocalRequest(SearchRequest searchRequest, ShardRouting shardRouting, int numberOfShards, boolean useSlowScroll, String[] filteringAliases, long nowInMillis) {
+        this(shardRouting, numberOfShards, searchRequest.searchType(), searchRequest.source(), searchRequest.types(), searchRequest.queryCache());
 
         this.extraSource = searchRequest.extraSource();
         this.templateSource = searchRequest.templateSource();
@@ -110,9 +108,9 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         this.useSlowScroll = useSlowScroll;
         this.filteringAliases = filteringAliases;
         this.nowInMillis = nowInMillis;
-        
+
         // Use the user provided token_range of the shardRouting one.
-        this.tokenRanges = (searchRequest.tokenRanges() != null) ? searchRequest.tokenRanges() :  shardRouting.tokenRanges();
+        this.tokenRanges = (searchRequest.tokenRanges() != null) ? searchRequest.tokenRanges() : shardRouting.tokenRanges();
     }
 
     public ShardSearchLocalRequest(String[] types, long nowInMillis) {
@@ -125,9 +123,8 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         this.filteringAliases = filteringAliases;
     }
 
-    public ShardSearchLocalRequest(ShardRouting shardRouting, int numberOfShards, SearchType searchType,
-                                   BytesReference source, String[] types, Boolean queryCache) {
-    	this.shardRouting = shardRouting;
+    public ShardSearchLocalRequest(ShardRouting shardRouting, int numberOfShards, SearchType searchType, BytesReference source, String[] types, Boolean queryCache) {
+        this.shardRouting = shardRouting;
         this.index = shardRouting.getIndex();
         this.shardId = shardRouting.id();
         this.numberOfShards = numberOfShards;
@@ -260,14 +257,14 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         if (in.getVersion().onOrAfter(Version.V_1_4_0_Beta1)) {
             queryCache = in.readOptionalBoolean();
         }
-        
+
         if (in.getVersion().onOrAfter(Version.V_1_5_2)) {
-        	Object[] tokens = (Object[]) in.readGenericValue();
-        	this.tokenRanges = new ArrayList<Range<Token>>(tokens.length/2);
-        	for(int i=0; i < tokens.length; ) {
-        		Range<Token> range = new Range<Token>((Token)tokens[i++],(Token)tokens[i++]);
-        		this.tokenRanges.add(range);
-        	}
+            Object[] tokens = (Object[]) in.readGenericValue();
+            this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+            for (int i = 0; i < tokens.length;) {
+                Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+                this.tokenRanges.add(range);
+            }
         }
     }
 
@@ -311,17 +308,17 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         if (out.getVersion().onOrAfter(Version.V_1_4_0_Beta1)) {
             out.writeOptionalBoolean(queryCache);
         }
-        
+
         if (out.getVersion().onOrAfter(Version.V_1_5_2)) {
-        	Token[] tokens = new Token[tokenRanges.size() * 2];
-        	int i = 0;
-        	for(Range<Token> range : tokenRanges) {
-        		tokens[i++] = range.left;
-        		tokens[i++] = range.right;
-        	}
-        	out.writeGenericValue(tokens);
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
         }
-        
+
     }
 
     @Override
@@ -333,8 +330,8 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         return out.bytes().copyBytesArray();
     }
 
-	@Override
-	public Collection<Range<Token>> tokenRanges() {
-		return this.tokenRanges;
-	}
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+        return this.tokenRanges;
+    }
 }

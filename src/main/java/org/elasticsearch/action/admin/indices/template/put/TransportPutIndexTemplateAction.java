@@ -23,7 +23,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.MetaDataIndexTemplateService;
@@ -63,12 +63,12 @@ public class TransportPutIndexTemplateAction extends TransportMasterNodeOperatio
     }
 
     @Override
-    protected ClusterBlockException checkBlock(PutIndexTemplateRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(PutIndexTemplateRequest request, ClusterState state) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, "");
     }
 
     @Override
-    protected void masterOperation(final PutIndexTemplateRequest request, final CassandraClusterState state, final ActionListener<PutIndexTemplateResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final PutIndexTemplateRequest request, final ClusterState state, final ActionListener<PutIndexTemplateResponse> listener) throws ElasticsearchException {
         String cause = request.cause();
         if (cause.length() == 0) {
             cause = "api";

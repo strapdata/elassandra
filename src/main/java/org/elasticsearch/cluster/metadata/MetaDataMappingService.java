@@ -34,7 +34,7 @@ import org.elasticsearch.action.admin.indices.mapping.delete.DeleteMappingCluste
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
 import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
@@ -77,8 +77,7 @@ public class MetaDataMappingService extends AbstractComponent {
     private long refreshOrUpdateProcessedInsertOrder;
 
     @Inject
-    public MetaDataMappingService(Settings settings, ThreadPool threadPool, ClusterService clusterService, 
-    		IndicesService indicesService,SchemaService elasticSchemaService) {
+    public MetaDataMappingService(Settings settings, ThreadPool threadPool, ClusterService clusterService, IndicesService indicesService, SchemaService elasticSchemaService) {
         super(settings);
         this.threadPool = threadPool;
         this.clusterService = clusterService;
@@ -127,7 +126,7 @@ public class MetaDataMappingService extends AbstractComponent {
      * as possible so we won't create the same index all the time for example for the updates on the same mapping
      * and generate a single cluster change event out of all of those.
      */
-    Tuple<CassandraClusterState, List<MappingTask>> executeRefreshOrUpdate(final CassandraClusterState currentState, final long insertionOrder) throws Exception {
+    Tuple<ClusterState, List<MappingTask>> executeRefreshOrUpdate(final ClusterState currentState, final long insertionOrder) throws Exception {
         final List<MappingTask> allTasks = new ArrayList<>();
 
         synchronized (refreshOrUpdateMutex) {
@@ -259,9 +258,7 @@ public class MetaDataMappingService extends AbstractComponent {
         if (!dirty) {
             return Tuple.tuple(currentState, allTasks);
         }
-        return Tuple.tuple(CassandraClusterState.builder(currentState)
-        		.version(currentState.version()+1)
-        		.metaData(mdBuilder).build(), allTasks);
+        return Tuple.tuple(ClusterState.builder(currentState).version(currentState.version() + 1).metaData(mdBuilder).build(), allTasks);
     }
 
     private boolean processIndexMappingTasks(List<MappingTask> tasks, IndexService indexService, IndexMetaData.Builder builder) {
@@ -327,8 +324,8 @@ public class MetaDataMappingService extends AbstractComponent {
                     }
 
                     MappingMetaData mappingMetaData2 = new MappingMetaData(updatedMapper);
-                    logger.debug("Updating CQL3 schema {}.{} columns={}",index,type, ((Map<String,Object>)mappingMetaData2.sourceAsMap().get("properties")).keySet() );
-                    elasticSchemaService.updateTableSchema(index, type, ((Map<String,Object>)mappingMetaData2.sourceAsMap().get("properties")).keySet(), updatedMapper);
+                    logger.debug("Updating CQL3 schema {}.{} columns={}", index, type, ((Map<String, Object>) mappingMetaData2.sourceAsMap().get("properties")).keySet());
+                    elasticSchemaService.updateTableSchema(index, type, ((Map<String, Object>) mappingMetaData2.sourceAsMap().get("properties")).keySet(), updatedMapper);
                     builder.putMapping(mappingMetaData2);
                     dirty = true;
                 } catch (Throwable t) {
@@ -359,14 +356,14 @@ public class MetaDataMappingService extends AbstractComponent {
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) throws Exception {
-                Tuple<CassandraClusterState, List<MappingTask>> tuple = executeRefreshOrUpdate(currentState, insertOrder);
+            public ClusterState execute(ClusterState currentState) throws Exception {
+                Tuple<ClusterState, List<MappingTask>> tuple = executeRefreshOrUpdate(currentState, insertOrder);
                 this.allTasks = tuple.v2();
                 return tuple.v1();
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 if (allTasks == null) {
                     return;
                 }
@@ -381,7 +378,8 @@ public class MetaDataMappingService extends AbstractComponent {
         });
     }
 
-    public void updateMapping(final String index, final String indexUUID, final String type, final CompressedString mappingSource, final long order, final String nodeId, final ActionListener<ClusterStateUpdateResponse> listener) {
+    public void updateMapping(final String index, final String indexUUID, final String type, final CompressedString mappingSource, final long order, final String nodeId,
+            final ActionListener<ClusterStateUpdateResponse> listener) {
         final long insertOrder;
         synchronized (refreshOrUpdateMutex) {
             insertOrder = ++refreshOrUpdateInsertOrder;
@@ -395,14 +393,14 @@ public class MetaDataMappingService extends AbstractComponent {
             }
 
             @Override
-            public CassandraClusterState execute(final CassandraClusterState currentState) throws Exception {
-                Tuple<CassandraClusterState, List<MappingTask>> tuple = executeRefreshOrUpdate(currentState, insertOrder);
+            public ClusterState execute(final ClusterState currentState) throws Exception {
+                Tuple<ClusterState, List<MappingTask>> tuple = executeRefreshOrUpdate(currentState, insertOrder);
                 this.allTasks = tuple.v2();
                 return tuple.v1();
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 if (allTasks == null) {
                     return;
                 }
@@ -422,53 +420,53 @@ public class MetaDataMappingService extends AbstractComponent {
     }
 
     public void removeMapping(final DeleteMappingClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
-        clusterService.submitStateUpdateTask("remove-mapping [" + Arrays.toString(request.types()) + "]", Priority.HIGH, new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, listener) {
-            @Override
-            protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
-                return new ClusterStateUpdateResponse(acknowledged);
-            }
-
-            @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
-                if (request.indices().length == 0) {
-                    throw new IndexMissingException(new Index("_all"));
-                }
-
-                MetaData.Builder builder = MetaData.builder(currentState.metaData()).uuid(clusterService.localNode().id());;
-                boolean changed = false;
-                String latestIndexWithout = null;
-                for (String indexName : request.indices()) {
-                    IndexMetaData indexMetaData = currentState.metaData().index(indexName);
-                    IndexMetaData.Builder indexBuilder = IndexMetaData.builder(indexMetaData);
-
-                    if (indexMetaData != null) {
-                        boolean isLatestIndexWithout = true;
-                        for (String type : request.types()) {
-                            if (indexMetaData.mappings().containsKey(type)) {
-                                indexBuilder.removeMapping(type);
-                                changed = true;
-                                isLatestIndexWithout = false;
-                            }
-                        }
-                        if (isLatestIndexWithout) {
-                            latestIndexWithout = indexMetaData.index();
-                        }
-
+        clusterService.submitStateUpdateTask("remove-mapping [" + Arrays.toString(request.types()) + "]", Priority.HIGH,
+                new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, listener) {
+                    @Override
+                    protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
+                        return new ClusterStateUpdateResponse(acknowledged);
                     }
-                    builder.put(indexBuilder);
-                }
 
-                if (!changed) {
-                    throw new TypeMissingException(new Index(latestIndexWithout), request.types());
-                }
-                
-                logger.info("[{}] remove_mapping [{}]", request.indices(), request.types());
+                    @Override
+                    public ClusterState execute(ClusterState currentState) {
+                        if (request.indices().length == 0) {
+                            throw new IndexMissingException(new Index("_all"));
+                        }
 
-                return CassandraClusterState.builder(currentState)
-                		.version(currentState.version()+1)
-                		.metaData(builder).build();
-            }
-        });
+                        MetaData.Builder builder = MetaData.builder(currentState.metaData()).uuid(clusterService.localNode().id());
+                        ;
+                        boolean changed = false;
+                        String latestIndexWithout = null;
+                        for (String indexName : request.indices()) {
+                            IndexMetaData indexMetaData = currentState.metaData().index(indexName);
+                            IndexMetaData.Builder indexBuilder = IndexMetaData.builder(indexMetaData);
+
+                            if (indexMetaData != null) {
+                                boolean isLatestIndexWithout = true;
+                                for (String type : request.types()) {
+                                    if (indexMetaData.mappings().containsKey(type)) {
+                                        indexBuilder.removeMapping(type);
+                                        changed = true;
+                                        isLatestIndexWithout = false;
+                                    }
+                                }
+                                if (isLatestIndexWithout) {
+                                    latestIndexWithout = indexMetaData.index();
+                                }
+
+                            }
+                            builder.put(indexBuilder);
+                        }
+
+                        if (!changed) {
+                            throw new TypeMissingException(new Index(latestIndexWithout), request.types());
+                        }
+
+                        logger.info("[{}] remove_mapping [{}]", request.indices(), request.types());
+
+                        return ClusterState.builder(currentState).version(currentState.version() + 1).metaData(builder).build();
+                    }
+                });
     }
 
     public void putMapping(final PutMappingClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
@@ -481,7 +479,7 @@ public class MetaDataMappingService extends AbstractComponent {
             }
 
             @Override
-            public CassandraClusterState execute(final CassandraClusterState currentState) throws Exception {
+            public ClusterState execute(final ClusterState currentState) throws Exception {
                 //List<String> indicesToClose = Lists.newArrayList();
                 try {
                     for (String index : request.indices()) {
@@ -600,18 +598,16 @@ public class MetaDataMappingService extends AbstractComponent {
                         if (mappingMd != null) {
                             builder.put(IndexMetaData.builder(indexMetaData).putMapping(mappingMd));
                         }
-                        
 
-                        logger.debug("Put mapping into CQL3 schema {}.{} columns={}",indexName,mappingMd.type(), ((Map<String,Object>)mappingMd.sourceAsMap().get("properties")).keySet() );
+                        logger.debug("Put mapping into CQL3 schema {}.{} columns={}", indexName, mappingMd.type(), ((Map<String, Object>) mappingMd.sourceAsMap().get("properties")).keySet());
                         IndexService indexService = indicesService.indexService(indexName);
-                        elasticSchemaService.updateTableSchema(indexName, mappingMd.type(), ((Map<String,Object>)mappingMd.sourceAsMap().get("properties")).keySet(), indexService.mapperService().documentMapper(mappingMd.type()) );
+                        elasticSchemaService.updateTableSchema(indexName, mappingMd.type(), ((Map<String, Object>) mappingMd.sourceAsMap().get("properties")).keySet(), indexService.mapperService()
+                                .documentMapper(mappingMd.type()));
                     }
 
-                    return CassandraClusterState.builder(currentState)
-                    		.version(currentState.version()+1)
-                    		.metaData(builder).build();
+                    return ClusterState.builder(currentState).version(currentState.version() + 1).metaData(builder).build();
                 } finally {
-                	/*
+                    /*
                     for (String index : indicesToClose) {
                         indicesService.removeIndex(index, "created for mapping processing");
                     }

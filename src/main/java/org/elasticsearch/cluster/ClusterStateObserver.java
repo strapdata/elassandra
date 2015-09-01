@@ -27,9 +27,9 @@ import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.unit.TimeValue;
 
 /**
- * A utility class which simplifies interacting with the cluster state in cases where
- * one tries to take action based on the current state but may want to wait for a new state
- * and retry upon failure.
+ * A utility class which simplifies interacting with the cluster state in cases
+ * where one tries to take action based on the current state but may want to
+ * wait for a new state and retry upon failure.
  */
 public class ClusterStateObserver {
 
@@ -45,7 +45,6 @@ public class ClusterStateObserver {
     private ClusterService clusterService;
     volatile TimeValue timeOutValue;
 
-
     final AtomicReference<ObservedState> lastObservedState;
     // observingContext is not null when waiting on cluster state changes
     final AtomicReference<ObservingContext> observingContext = new AtomicReference<ObservingContext>(null);
@@ -55,15 +54,16 @@ public class ClusterStateObserver {
 
     volatile TimeoutClusterStateListener clusterStateListener = new ObserverClusterStateListener();
 
-
     public ClusterStateObserver(ClusterService clusterService, ESLogger logger, String source) {
         this(clusterService, new TimeValue(60000), logger, source);
     }
 
     /**
      * @param clusterService
-     * @param timeout        a global timeout for this observer. After it has expired the observer
-     *                       will fail any existing or new #waitForNextChange calls.
+     * @param timeout
+     *            a global timeout for this observer. After it has expired the
+     *            observer will fail any existing or new #waitForNextChange
+     *            calls.
      */
     public ClusterStateObserver(ClusterService clusterService, TimeValue timeout, ESLogger logger, String source) {
         this.timeOutValue = timeout;
@@ -74,8 +74,11 @@ public class ClusterStateObserver {
         this.source = source;
     }
 
-    /** last cluster state observer by this observer. Note that this may not be the current one */
-    public CassandraClusterState observedState() {
+    /**
+     * last cluster state observer by this observer. Note that this may not be
+     * the current one
+     */
+    public ClusterState observedState() {
         ObservedState state = lastObservedState.get();
         assert state != null;
         return state.clusterState;
@@ -101,9 +104,14 @@ public class ClusterStateObserver {
     /**
      * Wait for the next cluster state which satisfies changePredicate
      *
-     * @param listener        callback listener
-     * @param changePredicate predicate to check whether cluster state changes are relevant and the callback should be called
-     * @param timeOutValue    a timeout for waiting. If null the global observer timeout will be used.
+     * @param listener
+     *            callback listener
+     * @param changePredicate
+     *            predicate to check whether cluster state changes are relevant
+     *            and the callback should be called
+     * @param timeOutValue
+     *            a timeout for waiting. If null the global observer timeout
+     *            will be used.
      */
     public void waitForNextChange(Listener listener, ChangePredicate changePredicate, @Nullable TimeValue timeOutValue) {
 
@@ -150,11 +158,12 @@ public class ClusterStateObserver {
     }
 
     /**
-     * reset this observer to the give cluster state. Any pending waits will be canceled.
+     * reset this observer to the give cluster state. Any pending waits will be
+     * canceled.
      *
      * @param toState
      */
-    public void reset(CassandraClusterState toState) {
+    public void reset(ClusterState toState) {
         if (observingContext.getAndSet(null) != null) {
             clusterService.remove(clusterStateListener);
         }
@@ -167,7 +176,8 @@ public class ClusterStateObserver {
         public void clusterChanged(ClusterChangedEvent event) {
             ObservingContext context = observingContext.get();
             if (context == null) {
-                // No need to remove listener as it is the responsibility of the thread that set observingContext to null
+                // No need to remove listener as it is the responsibility of the
+                // thread that set observingContext to null
                 return;
             }
             if (context.changePredicate.apply(event)) {
@@ -189,7 +199,8 @@ public class ClusterStateObserver {
         public void postAdded() {
             ObservingContext context = observingContext.get();
             if (context == null) {
-                // No need to remove listener as it is the responsibility of the thread that set observingContext to null
+                // No need to remove listener as it is the responsibility of the
+                // thread that set observingContext to null
                 return;
             }
             ObservedState newState = new ObservedState(clusterService.state());
@@ -214,7 +225,7 @@ public class ClusterStateObserver {
             ObservingContext context = observingContext.getAndSet(null);
 
             if (context != null) {
-                logger.trace("observer[{}]: cluster service closed. notifying listener.",source);
+                logger.trace("observer[{}]: cluster service closed. notifying listener.", source);
                 clusterService.remove(this);
                 context.listener.onClusterServiceClose();
             }
@@ -226,7 +237,7 @@ public class ClusterStateObserver {
             if (context != null) {
                 clusterService.remove(this);
                 long timeSinceStart = System.currentTimeMillis() - startTime;
-                logger.debug("observer[{}]: timeout notification from cluster service. timeout setting [{}], time since start [{}]",source, timeOutValue, new TimeValue(timeSinceStart));
+                logger.debug("observer[{}]: timeout notification from cluster service. timeout setting [{}], time since start [{}]", source, timeOutValue, new TimeValue(timeSinceStart));
                 // update to latest, in case people want to retry
                 lastObservedState.set(new ObservedState(clusterService.state()));
                 timedOut = true;
@@ -238,7 +249,7 @@ public class ClusterStateObserver {
     public static interface Listener {
 
         /** called when a new state is observed */
-        void onNewClusterState(CassandraClusterState state);
+        void onNewClusterState(ClusterState state);
 
         /** called when the cluster service is closed */
         void onClusterServiceClose();
@@ -249,12 +260,13 @@ public class ClusterStateObserver {
     public interface ChangePredicate {
 
         /**
-         * a rough check used when starting to monitor for a new change. Called infrequently can be less accurate.
+         * a rough check used when starting to monitor for a new change. Called
+         * infrequently can be less accurate.
          *
          * @return true if newState should be accepted
          */
-        public boolean apply(CassandraClusterState previousState, CassandraClusterState.ClusterStateStatus previousStatus,
-        		CassandraClusterState newState, CassandraClusterState.ClusterStateStatus newStatus);
+        public boolean apply(ClusterState previousState, ClusterState.ClusterStateStatus previousStatus, ClusterState newState,
+                ClusterState.ClusterStateStatus newStatus);
 
         /**
          * called to see whether a cluster change should be accepted
@@ -264,18 +276,18 @@ public class ClusterStateObserver {
         public boolean apply(ClusterChangedEvent changedEvent);
     }
 
-
     public static abstract class ValidationPredicate implements ChangePredicate {
 
         @Override
-        public boolean apply(CassandraClusterState previousState, CassandraClusterState.ClusterStateStatus previousStatus, CassandraClusterState newState, CassandraClusterState.ClusterStateStatus newStatus) {
+        public boolean apply(ClusterState previousState, ClusterState.ClusterStateStatus previousStatus, ClusterState newState,
+                ClusterState.ClusterStateStatus newStatus) {
             if (previousState != newState || previousStatus != newStatus) {
                 return validate(newState);
             }
             return false;
         }
 
-        protected abstract boolean validate(CassandraClusterState newState);
+        protected abstract boolean validate(ClusterState newState);
 
         @Override
         public boolean apply(ClusterChangedEvent changedEvent) {
@@ -288,7 +300,8 @@ public class ClusterStateObserver {
 
     public static abstract class EventPredicate implements ChangePredicate {
         @Override
-        public boolean apply(CassandraClusterState previousState, CassandraClusterState.ClusterStateStatus previousStatus, CassandraClusterState newState, CassandraClusterState.ClusterStateStatus newStatus) {
+        public boolean apply(ClusterState previousState, ClusterState.ClusterStateStatus previousStatus, ClusterState newState,
+                ClusterState.ClusterStateStatus newStatus) {
             return previousState != newState || previousStatus != newStatus;
         }
 
@@ -305,10 +318,10 @@ public class ClusterStateObserver {
     }
 
     static class ObservedState {
-        final public CassandraClusterState clusterState;
-        final public CassandraClusterState.ClusterStateStatus status;
+        final public ClusterState clusterState;
+        final public ClusterState.ClusterStateStatus status;
 
-        public ObservedState(CassandraClusterState clusterState) {
+        public ObservedState(ClusterState clusterState) {
             this.clusterState = clusterState;
             this.status = clusterState.status();
         }

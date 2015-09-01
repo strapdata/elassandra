@@ -75,7 +75,7 @@ import static com.google.common.collect.Sets.newHashSet;
  * <ul>
  * <li>On the master node the {@link #createSnapshot(SnapshotRequest, CreateSnapshotListener)} is called and makes sure that no snapshots is currently running
  * and registers the new snapshot in cluster state</li>
- * <li>When cluster state is updated the {@link #beginSnapshot(CassandraClusterState, SnapshotMetaData.Entry, boolean, CreateSnapshotListener)} method
+ * <li>When cluster state is updated the {@link #beginSnapshot(ClusterState, SnapshotMetaData.Entry, boolean, CreateSnapshotListener)} method
  * kicks in and initializes the snapshot in the repository and then populates list of shards that needs to be snapshotted in cluster state</li>
  * <li>Each data node is watching for these shards and when new shards scheduled for snapshotting appear in the cluster state, data nodes
  * start processing them through {@link #processIndexShardSnapshots(SnapshotMetaData)} method</li>
@@ -168,7 +168,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
             private SnapshotMetaData.Entry newSnapshot = null;
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 validate(request, currentState);
 
                 MetaData metaData = currentState.metaData();
@@ -185,7 +185,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
                     throw new ConcurrentSnapshotExecutionException(snapshotId, "a snapshot is already running");
                 }
                 mdBuilder.putCustom(SnapshotMetaData.TYPE, snapshots);
-                return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                return ClusterState.builder(currentState).metaData(mdBuilder).build();
             }
 
             @Override
@@ -196,7 +196,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, final CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, final ClusterState newState) {
                 if (newSnapshot != null) {
                     threadPool.executor(ThreadPool.Names.SNAPSHOT).execute(new Runnable() {
                         @Override
@@ -222,7 +222,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
      * @param state   current cluster state
      * @throws org.elasticsearch.ElasticsearchException
      */
-    private void validate(SnapshotRequest request, CassandraClusterState state) throws ElasticsearchException {
+    private void validate(SnapshotRequest request, ClusterState state) throws ElasticsearchException {
         RepositoriesMetaData repositoriesMetaData = state.getMetaData().custom(RepositoriesMetaData.TYPE);
         if (repositoriesMetaData == null || repositoriesMetaData.repository(request.repository()) == null) {
             throw new RepositoryMissingException(request.repository());
@@ -260,7 +260,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
      * @param partial                    allow partial snapshots
      * @param userCreateSnapshotListener listener
      */
-    private void beginSnapshot(CassandraClusterState clusterState, final SnapshotMetaData.Entry snapshot, final boolean partial, final CreateSnapshotListener userCreateSnapshotListener) {
+    private void beginSnapshot(ClusterState clusterState, final SnapshotMetaData.Entry snapshot, final boolean partial, final CreateSnapshotListener userCreateSnapshotListener) {
         boolean snapshotCreated = false;
         try {
             Repository repository = repositoriesService.repository(snapshot.snapshotId().getRepository());
@@ -289,7 +289,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
                 String failure = null;
 
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) {
+                public ClusterState execute(ClusterState currentState) {
                     MetaData metaData = currentState.metaData();
                     MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
                     SnapshotMetaData snapshots = metaData.custom(SnapshotMetaData.TYPE);
@@ -317,7 +317,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
                         }
                     }
                     mdBuilder.putCustom(SnapshotMetaData.TYPE, new SnapshotMetaData(entries.build()));
-                    return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                    return ClusterState.builder(currentState).metaData(mdBuilder).build();
                 }
 
                 @Override
@@ -333,7 +333,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
                 }
 
                 @Override
-                public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                     // The userCreateSnapshotListener.onResponse() notifies caller that the snapshot was accepted
                     // for processing. If client wants to wait for the snapshot completion, it can register snapshot
                     // completion listener in this method. For the snapshot completion to work properly, the snapshot
@@ -524,7 +524,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
             final boolean newMaster = !event.previousState().nodes().localNodeMaster();
             clusterService.submitStateUpdateTask("update snapshot state after node removal", new ClusterStateUpdateTask() {
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) throws Exception {
+                public ClusterState execute(ClusterState currentState) throws Exception {
                     DiscoveryNodes nodes = currentState.nodes();
                     MetaData metaData = currentState.metaData();
                     MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
@@ -584,7 +584,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
                     if (changed) {
                         snapshots = new SnapshotMetaData(entries.toArray(new SnapshotMetaData.Entry[entries.size()]));
                         mdBuilder.putCustom(SnapshotMetaData.TYPE, snapshots);
-                        return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                        return ClusterState.builder(currentState).metaData(mdBuilder).build();
                     }
                     return currentState;
                 }
@@ -601,7 +601,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
         if (waitingShardsStartedOrUnassigned(event)) {
             clusterService.submitStateUpdateTask("update snapshot state after shards started", new ClusterStateUpdateTask() {
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) throws Exception {
+                public ClusterState execute(ClusterState currentState) throws Exception {
                     MetaData metaData = currentState.metaData();
                     RoutingTable routingTable = currentState.routingTable();
                     MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
@@ -628,7 +628,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
                         if (changed) {
                             snapshots = new SnapshotMetaData(entries.toArray(new SnapshotMetaData.Entry[entries.size()]));
                             mdBuilder.putCustom(SnapshotMetaData.TYPE, snapshots);
-                            return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                            return ClusterState.builder(currentState).metaData(mdBuilder).build();
                         }
                     }
                     return currentState;
@@ -890,7 +890,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
     private void innerUpdateSnapshotState(final UpdateIndexShardSnapshotStatusRequest request) {
         clusterService.submitStateUpdateTask("update snapshot state", new ClusterStateUpdateTask() {
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 MetaData metaData = currentState.metaData();
                 MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
                 SnapshotMetaData snapshots = metaData.custom(SnapshotMetaData.TYPE);
@@ -921,7 +921,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
                     if (changed) {
                         snapshots = new SnapshotMetaData(entries.toArray(new SnapshotMetaData.Entry[entries.size()]));
                         mdBuilder.putCustom(SnapshotMetaData.TYPE, snapshots);
-                        return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                        return ClusterState.builder(currentState).metaData(mdBuilder).build();
                     }
                 }
                 return currentState;
@@ -992,7 +992,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
     private void removeSnapshotFromClusterState(final SnapshotId snapshotId, final SnapshotInfo snapshot, final Throwable t) {
         clusterService.submitStateUpdateTask("remove snapshot metadata", new ProcessedClusterStateUpdateTask() {
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 MetaData metaData = currentState.metaData();
                 MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
                 SnapshotMetaData snapshots = metaData.custom(SnapshotMetaData.TYPE);
@@ -1009,7 +1009,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
                     if (changed) {
                         snapshots = new SnapshotMetaData(entries.toArray(new SnapshotMetaData.Entry[entries.size()]));
                         mdBuilder.putCustom(SnapshotMetaData.TYPE, snapshots);
-                        return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                        return ClusterState.builder(currentState).metaData(mdBuilder).build();
                     }
                 }
                 return currentState;
@@ -1021,7 +1021,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 for (SnapshotCompletionListener listener : snapshotCompletionListeners) {
                     try {
                         if (snapshot != null) {
@@ -1052,7 +1052,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
             boolean waitForSnapshot = false;
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) throws Exception {
+            public ClusterState execute(ClusterState currentState) throws Exception {
                 MetaData metaData = currentState.metaData();
                 MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
                 SnapshotMetaData snapshots = metaData.custom(SnapshotMetaData.TYPE);
@@ -1112,7 +1112,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
                     SnapshotMetaData.Entry newSnapshot = new SnapshotMetaData.Entry(snapshotId, snapshot.includeGlobalState(), State.ABORTED, snapshot.indices(), shards);
                     snapshots = new SnapshotMetaData(newSnapshot);
                     mdBuilder.putCustom(SnapshotMetaData.TYPE, snapshots);
-                    return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                    return ClusterState.builder(currentState).metaData(mdBuilder).build();
                 }
             }
 
@@ -1122,7 +1122,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 if (waitForSnapshot) {
                     logger.trace("adding snapshot completion listener to wait for deleted snapshot to finish");
                     addListener(new SnapshotCompletionListener() {
@@ -1159,7 +1159,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
      * @param repository   repository id
      * @return true if repository is currently in use by one of the running snapshots
      */
-    public static boolean isRepositoryInUse(CassandraClusterState clusterState, String repository) {
+    public static boolean isRepositoryInUse(ClusterState clusterState, String repository) {
         MetaData metaData = clusterState.metaData();
         SnapshotMetaData snapshots = metaData.custom(SnapshotMetaData.TYPE);
         if (snapshots != null) {
@@ -1200,7 +1200,7 @@ public class SnapshotsService extends AbstractLifecycleComponent<SnapshotsServic
      * @param indices      list of indices to be snapshotted
      * @return list of shard to be included into current snapshot
      */
-    private ImmutableMap<ShardId, SnapshotMetaData.ShardSnapshotStatus> shards(CassandraClusterState clusterState, ImmutableList<String> indices) {
+    private ImmutableMap<ShardId, SnapshotMetaData.ShardSnapshotStatus> shards(ClusterState clusterState, ImmutableList<String> indices) {
         ImmutableMap.Builder<ShardId, SnapshotMetaData.ShardSnapshotStatus> builder = ImmutableMap.builder();
         MetaData metaData = clusterState.metaData();
         for (String index : indices) {

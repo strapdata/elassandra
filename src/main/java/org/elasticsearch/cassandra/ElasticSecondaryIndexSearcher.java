@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer.
+ * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -28,35 +28,36 @@ import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public  class ElasticSecondaryIndexSearcher extends SecondaryIndexSearcher {
+public class ElasticSecondaryIndexSearcher extends SecondaryIndexSearcher {
 
-	private static final Logger logger = LoggerFactory.getLogger(ElasticSecondaryIndexSearcher.class);
+    private static final Logger logger = LoggerFactory.getLogger(ElasticSecondaryIndexSearcher.class);
 
-	public ElasticSecondaryIndexSearcher(SecondaryIndexManager indexManager, Set<ByteBuffer> columns) {
-		super(indexManager, columns);
-		logger.debug("new ElasticSecondaryIndexSearcher columns = {}",columns);
-		// TODO Auto-generated constructor stub
-	}
-
-	/**
-     * Validates the specified {@link IndexExpression}. It will throw an {@link org.apache.cassandra.exceptions.InvalidRequestException}
-     * if the provided clause is not valid for the index implementation.
-     *
-     * @param indexExpression An {@link IndexExpression} to be validated
-     * @throws org.apache.cassandra.exceptions.InvalidRequestException in case of validation errors
-     */
-	@Override
-    public void validate(IndexExpression indexExpression) throws InvalidRequestException
-    {
-    	logger.debug("indexExpression = {}",indexExpression);
-    	throw new InvalidRequestException("Search through Elastic secondary index is not implemented. Please use the elasticsearch API.");
+    public ElasticSecondaryIndexSearcher(SecondaryIndexManager indexManager, Set<ByteBuffer> columns) {
+        super(indexManager, columns);
+        logger.debug("new ElasticSecondaryIndexSearcher columns = {}", columns);
+        // TODO Auto-generated constructor stub
     }
-    
-	@Override
-	public List<Row> search(ExtendedFilter paramExtendedFilter) {
-		logger.debug("search paramExtendedFilter = {}",paramExtendedFilter);
-		return null;
-	}
-	
+
+    /**
+     * Validates the specified {@link IndexExpression}. It will throw an
+     * {@link org.apache.cassandra.exceptions.InvalidRequestException} if the
+     * provided clause is not valid for the index implementation.
+     *
+     * @param indexExpression
+     *            An {@link IndexExpression} to be validated
+     * @throws org.apache.cassandra.exceptions.InvalidRequestException
+     *             in case of validation errors
+     */
+    @Override
+    public void validate(IndexExpression indexExpression) throws InvalidRequestException {
+        logger.debug("indexExpression = {}", indexExpression);
+        throw new InvalidRequestException("Search through Elastic secondary index is not implemented. Please use the elasticsearch API.");
+    }
+
+    @Override
+    public List<Row> search(ExtendedFilter paramExtendedFilter) {
+        logger.debug("search paramExtendedFilter = {}", paramExtendedFilter);
+        return null;
+    }
 
 }

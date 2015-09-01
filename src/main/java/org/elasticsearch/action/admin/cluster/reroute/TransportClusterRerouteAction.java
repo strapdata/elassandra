@@ -25,7 +25,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
@@ -41,13 +41,12 @@ import org.elasticsearch.transport.TransportService;
  */
 public class TransportClusterRerouteAction extends TransportMasterNodeOperationAction<ClusterRerouteRequest, ClusterRerouteResponse> {
 
-    //private final AllocationService allocationService;
+    // private final AllocationService allocationService;
 
     @Inject
-    public TransportClusterRerouteAction(Settings settings, TransportService transportService, ClusterService clusterService, ThreadPool threadPool,
-                                         ActionFilters actionFilters) {
+    public TransportClusterRerouteAction(Settings settings, TransportService transportService, ClusterService clusterService, ThreadPool threadPool, ActionFilters actionFilters) {
         super(settings, ClusterRerouteAction.NAME, transportService, clusterService, threadPool, actionFilters);
-        //this.allocationService = allocationService;
+        // this.allocationService = allocationService;
     }
 
     @Override
@@ -57,7 +56,7 @@ public class TransportClusterRerouteAction extends TransportMasterNodeOperationA
     }
 
     @Override
-    protected ClusterBlockException checkBlock(ClusterRerouteRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(ClusterRerouteRequest request, ClusterState state) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
     }
 
@@ -72,10 +71,10 @@ public class TransportClusterRerouteAction extends TransportMasterNodeOperationA
     }
 
     @Override
-    protected void masterOperation(final ClusterRerouteRequest request, final CassandraClusterState state, final ActionListener<ClusterRerouteResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final ClusterRerouteRequest request, final ClusterState state, final ActionListener<ClusterRerouteResponse> listener) throws ElasticsearchException {
         clusterService.submitStateUpdateTask("cluster_reroute (api)", Priority.IMMEDIATE, new AckedClusterStateUpdateTask<ClusterRerouteResponse>(request, listener) {
 
-            private volatile CassandraClusterState clusterStateToSend;
+            private volatile ClusterState clusterStateToSend;
             private volatile RoutingExplanations explanations;
 
             @Override
@@ -95,18 +94,18 @@ public class TransportClusterRerouteAction extends TransportMasterNodeOperationA
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
-            	/*
-                RoutingAllocation.Result routingResult = allocationService.reroute(currentState, request.commands, request.explain());
-                CassandraClusterState newState = CassandraClusterState.builder(currentState).routingResult(routingResult).build();
-                clusterStateToSend = newState;
-                explanations = routingResult.explanations();
-                if (request.dryRun) {
-                    return currentState;
-                }
-                return newState;
-                */
-            	return currentState;
+            public ClusterState execute(ClusterState currentState) {
+                /*
+                 * RoutingAllocation.Result routingResult =
+                 * allocationService.reroute(currentState, request.commands,
+                 * request.explain()); ClusterState newState =
+                 * ClusterState
+                 * .builder(currentState).routingResult(routingResult).build();
+                 * clusterStateToSend = newState; explanations =
+                 * routingResult.explanations(); if (request.dryRun) { return
+                 * currentState; } return newState;
+                 */
+                return currentState;
             }
         });
     }

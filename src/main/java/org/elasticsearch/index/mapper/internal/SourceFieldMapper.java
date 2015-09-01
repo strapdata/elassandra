@@ -75,7 +75,7 @@ public class SourceFieldMapper extends AbstractFieldMapper<byte[]> implements In
         static {
             FIELD_TYPE.setIndexed(false);
             // now stored in cassandra, not in index
-            FIELD_TYPE.setStored(false);	
+            FIELD_TYPE.setStored(false);
             FIELD_TYPE.setOmitNorms(true);
             FIELD_TYPE.setIndexOptions(IndexOptions.DOCS_ONLY);
             FIELD_TYPE.freeze();
@@ -178,7 +178,6 @@ public class SourceFieldMapper extends AbstractFieldMapper<byte[]> implements In
         }
     }
 
-
     private final boolean enabled;
 
     private Boolean compress;
@@ -195,10 +194,9 @@ public class SourceFieldMapper extends AbstractFieldMapper<byte[]> implements In
         this(Defaults.NAME, Defaults.ENABLED, Defaults.FORMAT, null, -1, null, null, indexSettings);
     }
 
-    protected SourceFieldMapper(String name, boolean enabled, String format, Boolean compress, long compressThreshold,
-                                String[] includes, String[] excludes, Settings indexSettings) {
-        super(new Names(name, name, name, name), Defaults.BOOST, new FieldType(Defaults.FIELD_TYPE), null, null,
-                Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER, null, null, null, null, null, indexSettings); // Only stored.
+    protected SourceFieldMapper(String name, boolean enabled, String format, Boolean compress, long compressThreshold, String[] includes, String[] excludes, Settings indexSettings) {
+        super(new Names(name, name, name, name), Defaults.BOOST, new FieldType(Defaults.FIELD_TYPE), null, null, Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER, null, null, null, null, null,
+                indexSettings); // Only stored.
         this.enabled = enabled;
         this.compress = compress;
         this.compressThreshold = compressThreshold;

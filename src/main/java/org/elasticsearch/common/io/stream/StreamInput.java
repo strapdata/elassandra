@@ -115,8 +115,7 @@ public abstract class StreamInput extends InputStream {
      * Reads four bytes and returns an int.
      */
     public int readInt() throws IOException {
-        return ((readByte() & 0xFF) << 24) | ((readByte() & 0xFF) << 16)
-                | ((readByte() & 0xFF) << 8) | (readByte() & 0xFF);
+        return ((readByte() & 0xFF) << 24) | ((readByte() & 0xFF) << 16) | ((readByte() & 0xFF) << 8) | (readByte() & 0xFF);
     }
 
     /**
@@ -266,23 +265,23 @@ public abstract class StreamInput extends InputStream {
         while (spare.length() < charCount) {
             c = readByte() & 0xff;
             switch (c >> 4) {
-                case 0:
-                case 1:
-                case 2:
-                case 3:
-                case 4:
-                case 5:
-                case 6:
-                case 7:
-                    spare.append((char) c);
-                    break;
-                case 12:
-                case 13:
-                    spare.append((char) ((c & 0x1F) << 6 | readByte() & 0x3F));
-                    break;
-                case 14:
-                    spare.append((char) ((c & 0x0F) << 12 | (readByte() & 0x3F) << 6 | (readByte() & 0x3F) << 0));
-                    break;
+            case 0:
+            case 1:
+            case 2:
+            case 3:
+            case 4:
+            case 5:
+            case 6:
+            case 7:
+                spare.append((char) c);
+                break;
+            case 12:
+            case 13:
+                spare.append((char) ((c & 0x1F) << 6 | readByte() & 0x3F));
+                break;
+            case 14:
+                spare.append((char) ((c & 0x0F) << 12 | (readByte() & 0x3F) << 6 | (readByte() & 0x3F) << 0));
+                break;
             }
         }
         return spare.toString();
@@ -291,7 +290,6 @@ public abstract class StreamInput extends InputStream {
     public String readSharedString() throws IOException {
         return readString();
     }
-
 
     public final float readFloat() throws IOException {
         return Float.intBitsToFloat(readInt());
@@ -330,18 +328,18 @@ public abstract class StreamInput extends InputStream {
      */
     public abstract void close() throws IOException;
 
-//    // IS
-//
-//    @Override public int read() throws IOException {
-//        return readByte();
-//    }
-//
-//    // Here, we assume that we always can read the full byte array
-//
-//    @Override public int read(byte[] b, int off, int len) throws IOException {
-//        readBytes(b, off, len);
-//        return len;
-//    }
+    //    // IS
+    //
+    //    @Override public int read() throws IOException {
+    //        return readByte();
+    //    }
+    //
+    //    // Here, we assume that we always can read the full byte array
+    //
+    //    @Override public int read(byte[] b, int off, int len) throws IOException {
+    //        readBytes(b, off, len);
+    //        return len;
+    //    }
 
     public String[] readStringArray() throws IOException {
         int size = readVInt();
@@ -360,118 +358,118 @@ public abstract class StreamInput extends InputStream {
         return (Map<String, Object>) readGenericValue();
     }
 
-    @SuppressWarnings({"unchecked"})
+    @SuppressWarnings({ "unchecked" })
     @Nullable
     public Object readGenericValue() throws IOException {
         byte type = readByte();
         switch (type) {
-            case -1:
-                return null;
-            case 0:
-                return readString();
-            case 1:
-                return readInt();
-            case 2:
-                return readLong();
-            case 3:
-                return readFloat();
-            case 4:
-                return readDouble();
-            case 5:
-                return readBoolean();
-            case 6:
-                int bytesSize = readVInt();
-                byte[] value = new byte[bytesSize];
-                readBytes(value, 0, bytesSize);
-                return value;
-            case 7:
-                int size = readVInt();
-                List list = new ArrayList(size);
-                for (int i = 0; i < size; i++) {
-                    list.add(readGenericValue());
-                }
-                return list;
-            case 8:
-                int size8 = readVInt();
-                Object[] list8 = new Object[size8];
-                for (int i = 0; i < size8; i++) {
-                    list8[i] = readGenericValue();
-                }
-                return list8;
-            case 9:
-                int size9 = readVInt();
-                Map map9 = new LinkedHashMap(size9);
-                for (int i = 0; i < size9; i++) {
-                    map9.put(readSharedString(), readGenericValue());
-                }
-                return map9;
-            case 10:
-                int size10 = readVInt();
-                Map map10 = new HashMap(size10);
-                for (int i = 0; i < size10; i++) {
-                    map10.put(readSharedString(), readGenericValue());
-                }
-                return map10;
-            case 11:
-                return readByte();
-            case 12:
-                return new Date(readLong());
-            case 13:
-                return new DateTime(readLong());
-            case 14:
-                return readBytesReference();
-            case 15:
-                return readText();
-            case 16:
-                return readShort();
-            case 17:
-                return readIntArray();
-            case 18:
-                return readLongArray();
-            case 19:
-                return readFloatArray();
-            case 20:
-                return readDoubleArray();
-            case 21: // Token
-            	byte[] buf = new byte[readVInt()];
-            	readFully(buf);
-            	return DatabaseDescriptor.getPartitioner().getTokenFactory().fromByteArray(ByteBuffer.wrap(buf));
-            default:
-                throw new IOException("Can't read unknown type [" + type + "]");
+        case -1:
+            return null;
+        case 0:
+            return readString();
+        case 1:
+            return readInt();
+        case 2:
+            return readLong();
+        case 3:
+            return readFloat();
+        case 4:
+            return readDouble();
+        case 5:
+            return readBoolean();
+        case 6:
+            int bytesSize = readVInt();
+            byte[] value = new byte[bytesSize];
+            readBytes(value, 0, bytesSize);
+            return value;
+        case 7:
+            int size = readVInt();
+            List list = new ArrayList(size);
+            for (int i = 0; i < size; i++) {
+                list.add(readGenericValue());
+            }
+            return list;
+        case 8:
+            int size8 = readVInt();
+            Object[] list8 = new Object[size8];
+            for (int i = 0; i < size8; i++) {
+                list8[i] = readGenericValue();
+            }
+            return list8;
+        case 9:
+            int size9 = readVInt();
+            Map map9 = new LinkedHashMap(size9);
+            for (int i = 0; i < size9; i++) {
+                map9.put(readSharedString(), readGenericValue());
+            }
+            return map9;
+        case 10:
+            int size10 = readVInt();
+            Map map10 = new HashMap(size10);
+            for (int i = 0; i < size10; i++) {
+                map10.put(readSharedString(), readGenericValue());
+            }
+            return map10;
+        case 11:
+            return readByte();
+        case 12:
+            return new Date(readLong());
+        case 13:
+            return new DateTime(readLong());
+        case 14:
+            return readBytesReference();
+        case 15:
+            return readText();
+        case 16:
+            return readShort();
+        case 17:
+            return readIntArray();
+        case 18:
+            return readLongArray();
+        case 19:
+            return readFloatArray();
+        case 20:
+            return readDoubleArray();
+        case 21: // Token
+            byte[] buf = new byte[readVInt()];
+            readFully(buf);
+            return DatabaseDescriptor.getPartitioner().getTokenFactory().fromByteArray(ByteBuffer.wrap(buf));
+        default:
+            throw new IOException("Can't read unknown type [" + type + "]");
         }
     }
 
     public int[] readIntArray() throws IOException {
         int length = readVInt();
         int[] values = new int[length];
-        for(int i=0; i<length; i++) {
+        for (int i = 0; i < length; i++) {
             values[i] = readInt();
         }
         return values;
     }
-    
+
     public long[] readLongArray() throws IOException {
         int length = readVInt();
         long[] values = new long[length];
-        for(int i=0; i<length; i++) {
+        for (int i = 0; i < length; i++) {
             values[i] = readLong();
         }
         return values;
     }
-    
+
     public float[] readFloatArray() throws IOException {
         int length = readVInt();
         float[] values = new float[length];
-        for(int i=0; i<length; i++) {
+        for (int i = 0; i < length; i++) {
             values[i] = readFloat();
         }
         return values;
     }
-    
+
     public double[] readDoubleArray() throws IOException {
         int length = readVInt();
         double[] values = new double[length];
-        for(int i=0; i<length; i++) {
+        for (int i = 0; i < length; i++) {
             values[i] = readDouble();
         }
         return values;

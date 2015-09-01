@@ -127,20 +127,19 @@ public abstract class FieldsVisitor extends StoredFieldVisitor {
     public BytesReference source() {
         return source;
     }
-    
+
     public FieldsVisitor source(byte[] _source) {
         source = new BytesArray(_source);
         return this;
     }
-    
 
     public Uid uid() {
         return uid;
     }
-    
+
     public FieldsVisitor uid(Uid _uid) {
-    	this.uid = _uid;
-    	return this;
+        this.uid = _uid;
+        return this;
     }
 
     /**
@@ -150,26 +149,26 @@ public abstract class FieldsVisitor extends StoredFieldVisitor {
      * @return
      */
     public String[] cassandraColumns(MapperService mapperService, String type) {
-    	return mapperService.elasticSchemaService().cassandraColumns(mapperService, type );
+        return mapperService.elasticSchemaService().cassandraColumns(mapperService, type);
     }
-    
+
     abstract public boolean needSource();
+
     abstract public boolean needFields();
-    
+
     public static Set<String> EMPTY_SET = ImmutableSet.of();
-    
+
     public Set<String> neededFields() {
-    	return EMPTY_SET;
+        return EMPTY_SET;
     }
-    
+
     public Map<String, List<Object>> fields() {
-        return fieldsValues != null
-                ? fieldsValues
-                : ImmutableMap.<String, List<Object>>of();
+        return fieldsValues != null ? fieldsValues : ImmutableMap.<String, List<Object>> of();
     }
 
     public void reset() {
-        if (fieldsValues != null) fieldsValues.clear();
+        if (fieldsValues != null)
+            fieldsValues.clear();
         source = null;
         uid = null;
     }
@@ -186,11 +185,11 @@ public abstract class FieldsVisitor extends StoredFieldVisitor {
         }
         values.add(value);
     }
-    
+
     public void setValues(String name, List<Object> values) {
-    	if (fieldsValues == null) {
+        if (fieldsValues == null) {
             fieldsValues = newHashMap();
         }
-    	this.fieldsValues.put(name,  values);
+        this.fieldsValues.put(name, values);
     }
 }

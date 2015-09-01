@@ -61,7 +61,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-
 /**
  * A node level service that delete expired docs on node primary shards.
  */
@@ -112,7 +111,6 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
         private final AtomicBoolean running = new AtomicBoolean(true);
         private final Notifier notifier;
         private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-
 
         public PurgerThread(String name, TimeValue interval) {
             super(name);
@@ -275,7 +273,7 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
     private BulkRequest processBulkIfNeeded(BulkRequest bulkRequest, boolean force) {
         if ((force && bulkRequest.numberOfActions() > 0) || bulkRequest.numberOfActions() >= bulkSize) {
             try {
-            	/*
+                /*
                 bulkAction.executeBulk(bulkRequest, new ActionListener<BulkResponse>() {
                     @Override
                     public void onResponse(BulkResponse bulkResponse) {
@@ -302,13 +300,12 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
             final TimeValue currentInterval = IndicesTTLService.this.purgerThread.getInterval();
             final TimeValue interval = settings.getAsTime(INDICES_TTL_INTERVAL, currentInterval);
             if (!interval.equals(currentInterval)) {
-                logger.info("updating indices.ttl.interval from [{}] to [{}]",currentInterval, interval);
+                logger.info("updating indices.ttl.interval from [{}] to [{}]", currentInterval, interval);
                 IndicesTTLService.this.purgerThread.resetInterval(interval);
 
             }
         }
     }
-
 
     private static final class Notifier {
 

@@ -19,7 +19,6 @@
 
 package org.elasticsearch.common.logging.logback;
 
-
 import org.elasticsearch.common.logging.support.AbstractESLogger;
 import org.slf4j.spi.LocationAwareLogger;
 
@@ -126,7 +125,7 @@ public class LogbackESLogger extends AbstractESLogger {
 
     @Override
     protected void internalDebug(String msg) {
-    	if (lALogger != null) {
+        if (lALogger != null) {
             lALogger.log(null, FQCN, LocationAwareLogger.DEBUG_INT, msg, null, null);
         } else {
             logger.debug(msg);
@@ -135,7 +134,7 @@ public class LogbackESLogger extends AbstractESLogger {
 
     @Override
     protected void internalDebug(String msg, Throwable cause) {
-    	if (lALogger != null) {
+        if (lALogger != null) {
             lALogger.log(null, FQCN, LocationAwareLogger.DEBUG_INT, msg, null, cause);
         } else {
             logger.debug(msg, cause);
@@ -144,7 +143,7 @@ public class LogbackESLogger extends AbstractESLogger {
 
     @Override
     protected void internalInfo(String msg) {
-    	if (lALogger != null) {
+        if (lALogger != null) {
             lALogger.log(null, FQCN, LocationAwareLogger.INFO_INT, msg, null, null);
         } else {
             logger.info(msg);
@@ -153,7 +152,7 @@ public class LogbackESLogger extends AbstractESLogger {
 
     @Override
     protected void internalInfo(String msg, Throwable cause) {
-    	if (lALogger != null) {
+        if (lALogger != null) {
             lALogger.log(null, FQCN, LocationAwareLogger.INFO_INT, msg, null, cause);
         } else {
             logger.info(msg, cause);
@@ -162,7 +161,7 @@ public class LogbackESLogger extends AbstractESLogger {
 
     @Override
     protected void internalWarn(String msg) {
-    	if (lALogger != null) {
+        if (lALogger != null) {
             lALogger.log(null, FQCN, LocationAwareLogger.WARN_INT, msg, null, null);
         } else {
             logger.warn(msg);
@@ -171,7 +170,7 @@ public class LogbackESLogger extends AbstractESLogger {
 
     @Override
     protected void internalWarn(String msg, Throwable cause) {
-    	if (lALogger != null) {
+        if (lALogger != null) {
             lALogger.log(null, FQCN, LocationAwareLogger.WARN_INT, msg, null, cause);
         } else {
             logger.warn(msg, cause);
@@ -180,7 +179,7 @@ public class LogbackESLogger extends AbstractESLogger {
 
     @Override
     protected void internalError(String msg) {
-    	if (lALogger != null) {
+        if (lALogger != null) {
             lALogger.log(null, FQCN, LocationAwareLogger.ERROR_INT, msg, null, null);
         } else {
             logger.error(msg);
@@ -189,7 +188,7 @@ public class LogbackESLogger extends AbstractESLogger {
 
     @Override
     protected void internalError(String msg, Throwable cause) {
-    	if (lALogger != null) {
+        if (lALogger != null) {
             lALogger.log(null, FQCN, LocationAwareLogger.ERROR_INT, msg, null, cause);
         } else {
             logger.error(msg, cause);

@@ -29,7 +29,7 @@ import org.elasticsearch.action.support.single.shard.TransportShardSingleOperati
 import org.elasticsearch.cache.recycler.CacheRecycler;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -98,7 +98,7 @@ public class TransportExplainAction extends TransportShardSingleOperationAction<
     }
 
     @Override
-    protected void resolveRequest(CassandraClusterState state, InternalRequest request) {
+    protected void resolveRequest(ClusterState state, InternalRequest request) {
         request.request().filteringAlias(state.metaData().filteringAliases(request.concreteIndex(), request.request().index()));
         // Fail fast on the node that received the request.
         if (request.request().routing() == null && state.getMetaData().routingRequired(request.concreteIndex(), request.request().type())) {
@@ -159,7 +159,7 @@ public class TransportExplainAction extends TransportShardSingleOperationAction<
     }
 
     @Override
-    protected ShardIterator shards(CassandraClusterState state, InternalRequest request) throws ElasticsearchException {
+    protected ShardIterator shards(ClusterState state, InternalRequest request) throws ElasticsearchException {
         return clusterService.operationRouting().getShards(
                 clusterService.state(), request.concreteIndex(), request.request().type(), request.request().id(), request.request().routing(), request.request().preference()
         );

@@ -51,13 +51,19 @@ import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 /**
- * A request to execute search against one or more indices (or all). Best created using
+ * A request to execute search against one or more indices (or all). Best
+ * created using
  * {@link org.elasticsearch.client.Requests#searchRequest(String...)}.
  * <p/>
- * <p>Note, the search {@link #source(org.elasticsearch.search.builder.SearchSourceBuilder)}
- * is required. The search source is the different search options, including facets and such.
+ * <p>
+ * Note, the search
+ * {@link #source(org.elasticsearch.search.builder.SearchSourceBuilder)} is
+ * required. The search source is the different search options, including facets
+ * and such.
  * <p/>
- * <p>There is an option to specify an addition search source using the {@link #extraSource(org.elasticsearch.search.builder.SearchSourceBuilder)}.
+ * <p>
+ * There is an option to specify an addition search source using the
+ * {@link #extraSource(org.elasticsearch.search.builder.SearchSourceBuilder)}.
  *
  * @see org.elasticsearch.client.Requests#searchRequest(String...)
  * @see org.elasticsearch.client.Client#search(RebuildRequest)
@@ -88,7 +94,7 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     private Boolean queryCache;
 
     private Collection<Range<Token>> tokenRanges;
-    
+
     private Scroll scroll;
 
     private String[] types = Strings.EMPTY_ARRAY;
@@ -101,8 +107,9 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
-     * Copy constructor that creates a new search request that is a copy of the one provided as an argument.
-     * The new request will inherit though headers and context from the original request that caused it.
+     * Copy constructor that creates a new search request that is a copy of the
+     * one provided as an argument. The new request will inherit though headers
+     * and context from the original request that caused it.
      */
     public SearchRequest(SearchRequest searchRequest, ActionRequest originalRequest) {
         super(originalRequest);
@@ -127,23 +134,24 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
-     * Constructs a new search request starting from the provided request, meaning that it will
-     * inherit its headers and context
+     * Constructs a new search request starting from the provided request,
+     * meaning that it will inherit its headers and context
      */
     public SearchRequest(ActionRequest request) {
         super(request);
     }
 
     /**
-     * Constructs a new search request against the indices. No indices provided here means that search
-     * will run against all indices.
+     * Constructs a new search request against the indices. No indices provided
+     * here means that search will run against all indices.
      */
     public SearchRequest(String... indices) {
         indices(indices);
     }
 
     /**
-     * Constructs a new search request against the provided indices with the given search source.
+     * Constructs a new search request against the provided indices with the
+     * given search source.
      */
     public SearchRequest(String[] indices, byte[] source) {
         indices(indices);
@@ -154,14 +162,16 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
         // no need to check, we resolve to match all query
-//        if (source == null && extraSource == null) {
-//            validationException = addValidationError("search source is missing", validationException);
-//        }
+        // if (source == null && extraSource == null) {
+        // validationException = addValidationError("search source is missing",
+        // validationException);
+        // }
         return validationException;
     }
 
     public void beforeStart() {
-        // we always copy over if needed, the reason is that a request might fail while being search remotely
+        // we always copy over if needed, the reason is that a request might
+        // fail while being search remotely
         // and then we need to keep the buffer around
         if (source != null && sourceUnsafe) {
             source = source.copyBytesArray();
@@ -206,16 +216,16 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
-     * The document types to execute the search against. Defaults to be executed against
-     * all types.
+     * The document types to execute the search against. Defaults to be executed
+     * against all types.
      */
     public String[] types() {
         return types;
     }
 
     /**
-     * The document types to execute the search against. Defaults to be executed against
-     * all types.
+     * The document types to execute the search against. Defaults to be executed
+     * against all types.
      */
     public SearchRequest types(String... types) {
         this.types = types;
@@ -223,14 +233,16 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
-     * A comma separated list of routing values to control the shards the search will be executed on.
+     * A comma separated list of routing values to control the shards the search
+     * will be executed on.
      */
     public String routing() {
         return this.routing;
     }
 
     /**
-     * A comma separated list of routing values to control the shards the search will be executed on.
+     * A comma separated list of routing values to control the shards the search
+     * will be executed on.
      */
     public SearchRequest routing(String routing) {
         this.routing = routing;
@@ -238,7 +250,8 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
-     * The routing values to control the shards that the search will be executed on.
+     * The routing values to control the shards that the search will be executed
+     * on.
      */
     public SearchRequest routing(String... routings) {
         this.routing = Strings.arrayToCommaDelimitedString(routings);
@@ -246,9 +259,11 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
-     * Sets the preference to execute the search. Defaults to randomize across shards. Can be set to
-     * <tt>_local</tt> to prefer local shards, <tt>_primary</tt> to execute only on primary shards, or
-     * a custom value, which guarantees that the same order will be used across different requests.
+     * Sets the preference to execute the search. Defaults to randomize across
+     * shards. Can be set to <tt>_local</tt> to prefer local shards,
+     * <tt>_primary</tt> to execute only on primary shards, or a custom value,
+     * which guarantees that the same order will be used across different
+     * requests.
      */
     public SearchRequest preference(String preference) {
         this.preference = preference;
@@ -268,9 +283,12 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
-     * The a string representation search type to execute, defaults to {@link SearchType#DEFAULT}. Can be
-     * one of "dfs_query_then_fetch"/"dfsQueryThenFetch", "dfs_query_and_fetch"/"dfsQueryAndFetch",
-     * "query_then_fetch"/"queryThenFetch", and "query_and_fetch"/"queryAndFetch".
+     * The a string representation search type to execute, defaults to
+     * {@link SearchType#DEFAULT}. Can be one of
+     * "dfs_query_then_fetch"/"dfsQueryThenFetch",
+     * "dfs_query_and_fetch"/"dfsQueryAndFetch",
+     * "query_then_fetch"/"queryThenFetch", and
+     * "query_and_fetch"/"queryAndFetch".
      */
     public SearchRequest searchType(String searchType) throws ElasticsearchIllegalArgumentException {
         return searchType(SearchType.fromString(searchType));
@@ -286,7 +304,8 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
-     * The source of the search request. Consider using either {@link #source(byte[])} or
+     * The source of the search request. Consider using either
+     * {@link #source(byte[])} or
      * {@link #source(org.elasticsearch.search.builder.SearchSourceBuilder)}.
      */
     public SearchRequest source(String source) {
@@ -320,7 +339,6 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     public SearchRequest source(byte[] source) {
         return source(source, 0, source.length, false);
     }
-
 
     /**
      * The search source to execute.
@@ -469,21 +487,16 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     public String templateName() {
         return templateName;
     }
-    
-    
-
 
     public Collection<Range<Token>> tokenRanges() {
         return tokenRanges;
     }
-    
 
     public SearchRequest tokenRanges(Collection<Range<Token>> tokenRanges) {
-    	this.tokenRanges = tokenRanges;
-        return  this;
+        this.tokenRanges = tokenRanges;
+        return this;
     }
-    
-    
+
     /**
      * The name of the stored template
      */
@@ -536,23 +549,26 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
-     * If set, will enable scrolling of the search request for the specified timeout.
+     * If set, will enable scrolling of the search request for the specified
+     * timeout.
      */
     public SearchRequest scroll(TimeValue keepAlive) {
         return scroll(new Scroll(keepAlive));
     }
 
     /**
-     * If set, will enable scrolling of the search request for the specified timeout.
+     * If set, will enable scrolling of the search request for the specified
+     * timeout.
      */
     public SearchRequest scroll(String keepAlive) {
         return scroll(new Scroll(TimeValue.parseTimeValue(keepAlive, null)));
     }
 
     /**
-     * Sets if this request should use the query cache or not, assuming that it can (for
-     * example, if "now" is used, it will never be cached). By default (not set, or null,
-     * will default to the index level setting if query cache is enabled or not).
+     * Sets if this request should use the query cache or not, assuming that it
+     * can (for example, if "now" is used, it will never be cached). By default
+     * (not set, or null, will default to the index level setting if query cache
+     * is enabled or not).
      */
     public SearchRequest queryCache(Boolean queryCache) {
         this.queryCache = queryCache;
@@ -607,14 +623,14 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
         if (in.getVersion().onOrAfter(Version.V_1_4_0_Beta1)) {
             queryCache = in.readOptionalBoolean();
         }
-        
+
         if (in.getVersion().onOrAfter(Version.V_1_5_2)) {
-        	Object[] tokens = (Object[]) in.readGenericValue();
-        	this.tokenRanges = new ArrayList<Range<Token>>(tokens.length/2);
-        	for(int i=0; i < tokens.length; ) {
-        		Range<Token> range = new Range<Token>((Token)tokens[i++],(Token)tokens[i++]);
-        		this.tokenRanges.add(range);
-        	}
+            Object[] tokens = (Object[]) in.readGenericValue();
+            this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+            for (int i = 0; i < tokens.length;) {
+                Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+                this.tokenRanges.add(range);
+            }
         }
     }
 
@@ -661,15 +677,15 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
         if (out.getVersion().onOrAfter(Version.V_1_4_0_Beta1)) {
             out.writeOptionalBoolean(queryCache);
         }
-        
+
         if (out.getVersion().onOrAfter(Version.V_1_5_2)) {
-        	Token[] tokens = new Token[tokenRanges.size() * 2];
-        	int i = 0;
-        	for(Range<Token> range : tokenRanges) {
-        		tokens[i++] = range.left;
-        		tokens[i++] = range.right;
-        	}
-        	out.writeGenericValue(tokens);
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
         }
     }
 }

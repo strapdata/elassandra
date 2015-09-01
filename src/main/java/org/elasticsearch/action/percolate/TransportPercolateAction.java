@@ -29,7 +29,7 @@ import org.elasticsearch.action.support.DefaultShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.TransportBroadcastOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
@@ -106,17 +106,17 @@ public class TransportPercolateAction extends TransportBroadcastOperationAction<
     }
 
     @Override
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state, PercolateRequest request) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, PercolateRequest request) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
     }
 
     @Override
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, PercolateRequest request, String[] concreteIndices) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, PercolateRequest request, String[] concreteIndices) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.READ, concreteIndices);
     }
 
     @Override
-    protected PercolateResponse newResponse(PercolateRequest request, AtomicReferenceArray shardsResponses, CassandraClusterState clusterState) {
+    protected PercolateResponse newResponse(PercolateRequest request, AtomicReferenceArray shardsResponses, ClusterState clusterState) {
         return reduce(request, shardsResponses, percolatorService);
     }
 
@@ -181,7 +181,7 @@ public class TransportPercolateAction extends TransportBroadcastOperationAction<
     }
 
     @Override
-    protected GroupShardsIterator shards(CassandraClusterState clusterState, PercolateRequest request, String[] concreteIndices) {
+    protected GroupShardsIterator shards(ClusterState clusterState, PercolateRequest request, String[] concreteIndices) {
         Map<String, Set<String>> routingMap = clusterState.metaData().resolveSearchRouting(request.routing(), request.indices());
         return clusterService.operationRouting().searchShards(clusterState, request.indices(), concreteIndices, routingMap, request.preference());
     }

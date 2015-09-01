@@ -41,7 +41,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.action.support.single.instance.TransportInstanceSingleOperationAction;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.routing.PlainShardIterator;
 import org.elasticsearch.cluster.routing.ShardIterator;
@@ -108,7 +108,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
     }
 
     @Override
-    protected boolean resolveRequest(CassandraClusterState state, InternalRequest request, ActionListener<UpdateResponse> listener) {
+    protected boolean resolveRequest(ClusterState state, InternalRequest request, ActionListener<UpdateResponse> listener) {
         request.request().routing((state.metaData().resolveIndexRouting(request.request().routing(), request.request().index())));
         // Fail fast on the node that received the request, rather than failing when translating on the index or delete request.
         if (request.request().routing() == null && state.getMetaData().routingRequired(request.concreteIndex(), request.request().type())) {
@@ -152,7 +152,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
     }
 
     @Override
-    protected ShardIterator shards(CassandraClusterState clusterState, InternalRequest request) throws ElasticsearchException {
+    protected ShardIterator shards(ClusterState clusterState, InternalRequest request) throws ElasticsearchException {
         if (request.request().shardId() != -1) {
             return clusterState.routingTable().index(request.concreteIndex()).shard(request.request().shardId()).primaryShardIt();
         }

@@ -49,11 +49,11 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
 
     final ShardRouting primary;
     final ImmutableList<ShardRouting> primaryAsList;// singleton of the primary ShardRouting
-    final ImmutableList<ShardRouting> replicas;		// nodes hosting the same token ranges as the local node primary ranges, 
-    												// only used to help clients to connect to the right node (token aware as the cassandra driver do)
+    final ImmutableList<ShardRouting> replicas; // nodes hosting the same token ranges as the local node primary ranges, 
+                                                // only used to help clients to connect to the right node (token aware as the cassandra driver do)
     final ImmutableList<ShardRouting> shards;
     final ImmutableList<ShardRouting> activeShards; // contains ALIVE cassandra nodes
-    final ImmutableList<ShardRouting> assignedShards;	// contains DEAD or UNKNOW cassandra nodes
+    final ImmutableList<ShardRouting> assignedShards; // contains DEAD or UNKNOW cassandra nodes
 
     /**
      * The initializing list, including ones that are initializing on a target node because of relocation.
@@ -109,10 +109,10 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
     }
 
     public ShardRouting getPrimaryShardRouting() {
-    	return primaryAsList.get(0);
-    	
+        return primaryAsList.get(0);
+
     }
-    
+
     /**
      * Normalizes all shard routings to the same version.
      */
@@ -456,7 +456,7 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
         for (final String attribute : key.attributes) {
             final String localAttributeValue = nodes.localNode().attributes().get(attribute);
             if (localAttributeValue != null) {
-                for (Iterator<ShardRouting> iterator = from.iterator(); iterator.hasNext(); ) {
+                for (Iterator<ShardRouting> iterator = from.iterator(); iterator.hasNext();) {
                     ShardRouting fromShard = iterator.next();
                     final DiscoveryNode discoveryNode = nodes.get(fromShard.currentNodeId());
                     if (discoveryNode == null) {
@@ -547,8 +547,7 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
             for (ShardRouting shard : shards) {
                 // don't add two that map to the same node id
                 // we rely on the fact that a node does not have primary and backup of the same shard
-                if (shard.assignedToNode() && shardEntry.assignedToNode()
-                        && shard.currentNodeId().equals(shardEntry.currentNodeId())) {
+                if (shard.assignedToNode() && shardEntry.assignedToNode() && shard.currentNodeId().equals(shardEntry.currentNodeId())) {
                     return this;
                 }
             }

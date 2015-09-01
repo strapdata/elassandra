@@ -63,9 +63,12 @@ public class SingleFieldsVisitor extends FieldsVisitor {
     public void postProcess(FieldMapper mapper) {
         if (uid != null) {
             switch (field) {
-                case UidFieldMapper.NAME: addValue(field, uid.toString());
-                case IdFieldMapper.NAME: addValue(field, uid.id());
-                case TypeFieldMapper.NAME: addValue(field, uid.type());
+            case UidFieldMapper.NAME:
+                addValue(field, uid.toString());
+            case IdFieldMapper.NAME:
+                addValue(field, uid.id());
+            case TypeFieldMapper.NAME:
+                addValue(field, uid.type());
             }
         }
 
@@ -80,24 +83,24 @@ public class SingleFieldsVisitor extends FieldsVisitor {
             fieldValues.set(i, mapper.valueForSearch(fieldValues.get(i)));
         }
     }
-    
+
     @Override
     public String[] cassandraColumns(MapperService mapperService, String type) {
-    	return new String[] { field };
+        return new String[] { field };
     }
-    
+
     @Override
     public boolean needSource() {
-    	return SourceFieldMapper.NAME.equals(field);
+        return SourceFieldMapper.NAME.equals(field);
     }
-    
+
     @Override
     public boolean needFields() {
-    	return true;
+        return true;
     }
-    
+
     @Override
     public Set<String> neededFields() {
-    	return ImmutableSet.of(field);
+        return ImmutableSet.of(field);
     }
 }

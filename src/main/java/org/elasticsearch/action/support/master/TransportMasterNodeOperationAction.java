@@ -26,7 +26,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
@@ -64,15 +64,15 @@ public abstract class TransportMasterNodeOperationAction<Request extends MasterN
 
     protected abstract Response newResponse();
 
-    protected abstract void masterOperation(Request request, CassandraClusterState state, ActionListener<Response> listener) throws ElasticsearchException;
+    protected abstract void masterOperation(Request request, ClusterState state, ActionListener<Response> listener) throws ElasticsearchException;
 
     protected boolean localExecute(Request request) {
         return false;
     }
 
-    protected abstract ClusterBlockException checkBlock(Request request, CassandraClusterState state);
+    protected abstract ClusterBlockException checkBlock(Request request, ClusterState state);
 
-    protected void processBeforeDelegationToMaster(Request request, CassandraClusterState state) {
+    protected void processBeforeDelegationToMaster(Request request, ClusterState state) {
 
     }
 
@@ -89,7 +89,7 @@ public abstract class TransportMasterNodeOperationAction<Request extends MasterN
     }
 
     private void innerExecute(final Request request, final ActionListener<Response> listener, final ClusterStateObserver observer, final boolean retrying) {
-        final CassandraClusterState clusterState = observer.observedState();
+        final ClusterState clusterState = observer.observedState();
         final DiscoveryNodes nodes = clusterState.nodes();
         if (nodes.localNodeMaster() || localExecute(request)) {
             // check for block, if blocked, retry, else, execute locally
@@ -103,7 +103,7 @@ public abstract class TransportMasterNodeOperationAction<Request extends MasterN
                 observer.waitForNextChange(
                         new ClusterStateObserver.Listener() {
                             @Override
-                            public void onNewClusterState(CassandraClusterState state) {
+                            public void onNewClusterState(ClusterState state) {
                                 innerExecute(request, listener, observer, false);
                             }
 
@@ -118,7 +118,7 @@ public abstract class TransportMasterNodeOperationAction<Request extends MasterN
                             }
                         }, new ClusterStateObserver.ValidationPredicate() {
                             @Override
-                            protected boolean validate(CassandraClusterState newState) {
+                            protected boolean validate(ClusterState newState) {
                                 ClusterBlockException blockException = checkBlock(request, newState);
                                 return (blockException == null || !blockException.retryable());
                             }
@@ -150,7 +150,7 @@ public abstract class TransportMasterNodeOperationAction<Request extends MasterN
                     observer.waitForNextChange(
                             new ClusterStateObserver.Listener() {
                                 @Override
-                                public void onNewClusterState(CassandraClusterState state) {
+                                public void onNewClusterState(ClusterState state) {
                                     innerExecute(request, listener, observer, true);
                                 }
 
@@ -165,8 +165,8 @@ public abstract class TransportMasterNodeOperationAction<Request extends MasterN
                                 }
                             }, new ClusterStateObserver.ChangePredicate() {
                                 @Override
-                                public boolean apply(CassandraClusterState previousState, CassandraClusterState.ClusterStateStatus previousStatus,
-                                                     CassandraClusterState newState, CassandraClusterState.ClusterStateStatus newStatus) {
+                                public boolean apply(ClusterState previousState, ClusterState.ClusterStateStatus previousStatus,
+                                                     ClusterState newState, ClusterState.ClusterStateStatus newStatus) {
                                     return newState.nodes().masterNodeId() != null;
                                 }
 
@@ -204,7 +204,7 @@ public abstract class TransportMasterNodeOperationAction<Request extends MasterN
                                 nodes.masterNode(), exp.getDetailedMessage());
                         observer.waitForNextChange(new ClusterStateObserver.Listener() {
                                                        @Override
-                                                       public void onNewClusterState(CassandraClusterState state) {
+                                                       public void onNewClusterState(ClusterState state) {
                                                            innerExecute(request, listener, observer, false);
                                                        }
 

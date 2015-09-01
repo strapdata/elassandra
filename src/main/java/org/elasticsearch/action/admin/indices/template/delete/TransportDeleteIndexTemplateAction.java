@@ -23,7 +23,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.MetaDataIndexTemplateService;
@@ -63,12 +63,12 @@ public class TransportDeleteIndexTemplateAction extends TransportMasterNodeOpera
     }
 
     @Override
-    protected ClusterBlockException checkBlock(DeleteIndexTemplateRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(DeleteIndexTemplateRequest request, ClusterState state) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, "");
     }
 
     @Override
-    protected void masterOperation(final DeleteIndexTemplateRequest request, final CassandraClusterState state, final ActionListener<DeleteIndexTemplateResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final DeleteIndexTemplateRequest request, final ClusterState state, final ActionListener<DeleteIndexTemplateResponse> listener) throws ElasticsearchException {
         indexTemplateService.removeTemplates(new MetaDataIndexTemplateService.RemoveRequest(request.name()).masterTimeout(request.masterNodeTimeout()), new MetaDataIndexTemplateService.RemoveListener() {
             @Override
             public void onResponse(MetaDataIndexTemplateService.RemoveResponse response) {

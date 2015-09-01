@@ -37,7 +37,7 @@ import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.cassandra.SchemaService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
@@ -78,7 +78,8 @@ import org.elasticsearch.transport.TransportService;
 /**
  * Excute a ReplicaRequest on shards
  */
-public abstract class TransportShardReplicationOperationAction<Request extends ShardReplicationOperationRequest, ReplicaRequest extends ShardReplicationOperationRequest, Response extends ActionResponse> extends TransportAction<Request, Response> {
+public abstract class TransportShardReplicationOperationAction<Request extends ShardReplicationOperationRequest, ReplicaRequest extends ShardReplicationOperationRequest, Response extends ActionResponse>
+        extends TransportAction<Request, Response> {
 
     protected final TransportService transportService;
     protected final ClusterService clusterService;
@@ -93,17 +94,15 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
     final String executor;
     final boolean checkWriteConsistency;
 
-    protected TransportShardReplicationOperationAction(Settings settings, String actionName, TransportService transportService,
-                                                       ClusterService clusterService, IndicesService indicesService,
-                                                       ThreadPool threadPool, ShardStateAction shardStateAction, 
-                                                       ActionFilters actionFilters, SchemaService elasticSchemaService) {
+    protected TransportShardReplicationOperationAction(Settings settings, String actionName, TransportService transportService, ClusterService clusterService, IndicesService indicesService,
+            ThreadPool threadPool, ShardStateAction shardStateAction, ActionFilters actionFilters, SchemaService elasticSchemaService) {
         super(settings, actionName, threadPool, actionFilters);
         this.transportService = transportService;
         this.clusterService = clusterService;
         this.indicesService = indicesService;
         this.shardStateAction = shardStateAction;
         this.elasticSchemaService = elasticSchemaService;
-        
+
         this.transportReplicaAction = actionName + "[r]";
         this.executor = executor();
         this.checkWriteConsistency = checkWriteConsistency();
@@ -130,7 +129,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
 
     protected abstract String executor();
 
-    protected abstract PrimaryResponse<Response, ReplicaRequest> shardOperationOnPrimary(CassandraClusterState clusterState, PrimaryOperationRequest shardRequest) throws Throwable;
+    protected abstract PrimaryResponse<Response, ReplicaRequest> shardOperationOnPrimary(ClusterState clusterState, PrimaryOperationRequest shardRequest) throws Throwable;
 
     protected abstract void shardOperationOnReplica(ReplicaOperationRequest shardRequest);
 
@@ -141,25 +140,26 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
 
     }
 
-    protected abstract ShardIterator shards(CassandraClusterState clusterState, InternalRequest request) throws ElasticsearchException;
+    protected abstract ShardIterator shards(ClusterState clusterState, InternalRequest request) throws ElasticsearchException;
 
     protected abstract boolean checkWriteConsistency();
 
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.WRITE);
     }
 
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, InternalRequest request) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, InternalRequest request) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, request.concreteIndex());
     }
 
     protected abstract boolean resolveIndex();
 
     /**
-     * Resolves the request, by default doing nothing. If the resolve
-     * means a different execution, then return false here to indicate not to continue and execute this request.
+     * Resolves the request, by default doing nothing. If the resolve means a
+     * different execution, then return false here to indicate not to continue
+     * and execute this request.
      */
-    protected boolean resolveRequest(CassandraClusterState state, InternalRequest request, ActionListener<Response> listener) {
+    protected boolean resolveRequest(ClusterState state, InternalRequest request, ActionListener<Response> listener) {
         return true;
     }
 
@@ -168,12 +168,12 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
     }
 
     /**
-     * Should the operations be performed on the replicas as well. Defaults to <tt>false</tt> meaning operations
-     * will be executed on the replica.
+     * Should the operations be performed on the replicas as well. Defaults to
+     * <tt>false</tt> meaning operations will be executed on the replica.
      */
     protected boolean ignoreReplicas() {
         return true; // replication is now achieved by cassandra.
-        //return false;
+        // return false;
     }
 
     protected boolean retryPrimaryException(Throwable e) {
@@ -181,7 +181,8 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
     }
 
     /**
-     * Should an exception be ignored when the operation is performed on the replica.
+     * Should an exception be ignored when the operation is performed on the
+     * replica.
      */
     protected boolean ignoreReplicaException(Throwable e) {
         if (TransportActions.isShardNotAvailableException(e)) {
@@ -222,9 +223,11 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
 
         @Override
         public void messageReceived(final Request request, final TransportChannel channel) throws Exception {
-            // no need to have a threaded listener since we just send back a response
+            // no need to have a threaded listener since we just send back a
+            // response
             request.listenerThreaded(false);
-            // if we have a local operation, execute it on a thread since we don't spawn
+            // if we have a local operation, execute it on a thread since we
+            // don't spawn
             request.operationThreaded(true);
             execute(request, new ActionListener<Response>() {
                 @Override
@@ -325,7 +328,8 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             request.readFrom(in);
             if (in.getVersion().before(Version.V_1_4_0_Beta1)) {
                 assert shard >= 0;
-                //older nodes will send the concrete index as part of the request
+                // older nodes will send the concrete index as part of the
+                // request
                 shardId = new ShardId(request.index(), shard);
             }
         }
@@ -337,7 +341,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                 shardId.writeTo(out);
             } else {
                 out.writeVInt(shardId.id());
-                //older nodes expect the concrete index as part of the request
+                // older nodes expect the concrete index as part of the request
                 request.index(shardId.getIndex());
             }
             request.writeTo(out);
@@ -364,12 +368,13 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
         }
 
         public void start() {
-            this.observer = new ClusterStateObserver(clusterService, internalRequest.request().timeout(), logger,TransportShardReplicationOperationAction.this.getClass().getName());
+            this.observer = new ClusterStateObserver(clusterService, internalRequest.request().timeout(), logger, TransportShardReplicationOperationAction.this.getClass().getName());
             doStart();
         }
 
         /**
-         * Returns <tt>true</tt> if the action starting to be performed on the primary (or is done).
+         * Returns <tt>true</tt> if the action starting to be performed on the
+         * primary (or is done).
          */
         protected void doStart() throws ElasticsearchException {
             try {
@@ -408,7 +413,8 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                 return;
             }
 
-            // no shardIt, might be in the case between index gateway recovery and shardIt initialization
+            // no shardIt, might be in the case between index gateway recovery
+            // and shardIt initialization
             if (shardIt.size() == 0) {
                 logger.trace("no shard instances known for shard [{}], scheduling a retry", shardIt.shardId());
                 retryBecauseUnavailable(shardIt.shardId(), "No active shards.");
@@ -455,7 +461,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                         listener.onFailure(t);
                     }
                 } else {
-                	// dead code for elasticassandra.
+                    // dead code for elasticassandra.
                     DiscoveryNode node = observer.observedState().nodes().get(shard.currentNodeId());
                     transportService.sendRequest(node, actionName, internalRequest.request(), transportOptions, new BaseTransportResponseHandler<Response>() {
 
@@ -476,12 +482,14 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
 
                         @Override
                         public void handleException(TransportException exp) {
-                            // if we got disconnected from the node, or the node / shard is not in the right state (being closed)
-                            if (exp.unwrapCause() instanceof ConnectTransportException || exp.unwrapCause() instanceof NodeClosedException ||
-                                    retryPrimaryException(exp)) {
+                            // if we got disconnected from the node, or the node
+                            // / shard is not in the right state (being closed)
+                            if (exp.unwrapCause() instanceof ConnectTransportException || exp.unwrapCause() instanceof NodeClosedException || retryPrimaryException(exp)) {
                                 primaryOperationStarted.set(false);
                                 internalRequest.request().setCanHaveDuplicates();
-                                // we already marked it as started when we executed it (removed the listener) so pass false
+                                // we already marked it as started when we
+                                // executed it (removed the listener) so pass
+                                // false
                                 // to re-add to the cluster listener
                                 logger.trace("received an error from node the primary was assigned to ({}), scheduling a retry", exp.getMessage());
                                 retry(exp);
@@ -493,7 +501,8 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                 }
                 break;
             }
-            // we won't find a primary if there are no shards in the shard iterator, retry...
+            // we won't find a primary if there are no shards in the shard
+            // iterator, retry...
             if (!foundPrimary) {
                 logger.trace("couldn't find a eligible primary shard, scheduling for retry.");
                 retryBecauseUnavailable(shardIt.shardId(), "No active shards.");
@@ -503,17 +512,19 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
         void retry(Throwable failure) {
             assert failure != null;
             if (observer.isTimedOut()) {
-                // we running as a last attempt after a timeout has happened. don't retry
+                // we running as a last attempt after a timeout has happened.
+                // don't retry
                 listener.onFailure(failure);
                 return;
             }
-            // make it threaded operation so we fork on the discovery listener thread
+            // make it threaded operation so we fork on the discovery listener
+            // thread
             internalRequest.request().beforeLocalFork();
             internalRequest.request().operationThreaded(true);
 
             observer.waitForNextChange(new ClusterStateObserver.Listener() {
                 @Override
-                public void onNewClusterState(CassandraClusterState state) {
+                public void onNewClusterState(ClusterState state) {
                     doStart();
                 }
 
@@ -531,12 +542,13 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
         }
 
         void performOnPrimary(int primaryShardId, final ShardRouting shard) {
-            CassandraClusterState clusterState = observer.observedState();
+            ClusterState clusterState = observer.observedState();
             if (raiseFailureIfHaveNotEnoughActiveShardCopies(shard, clusterState)) {
                 return;
             }
             try {
-                PrimaryResponse<Response, ReplicaRequest> response = shardOperationOnPrimary(clusterState, new PrimaryOperationRequest(primaryShardId, internalRequest.concreteIndex(), internalRequest.request()));
+                PrimaryResponse<Response, ReplicaRequest> response = shardOperationOnPrimary(clusterState,
+                        new PrimaryOperationRequest(primaryShardId, internalRequest.concreteIndex(), internalRequest.request()));
                 performReplicas(response);
             } catch (Throwable e) {
                 internalRequest.request.setCanHaveDuplicates();
@@ -568,13 +580,17 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
             ShardRouting shard;
 
-            // we double check on the state, if it got changed we need to make sure we take the latest one cause
-            // maybe a replica shard started its recovery process and we need to apply it there...
+            // we double check on the state, if it got changed we need to make
+            // sure we take the latest one cause
+            // maybe a replica shard started its recovery process and we need to
+            // apply it there...
 
-            // we also need to make sure if the new state has a new primary shard (that we indexed to before) started
-            // and assigned to another node (while the indexing happened). In that case, we want to apply it on the
+            // we also need to make sure if the new state has a new primary
+            // shard (that we indexed to before) started
+            // and assigned to another node (while the indexing happened). In
+            // that case, we want to apply it on the
             // new primary shard as well...
-            CassandraClusterState newState = clusterService.state();
+            ClusterState newState = clusterService.state();
             ShardRouting newPrimaryShard = null;
             if (observer.observedState() != newState) {
                 shardIt.reset();
@@ -602,7 +618,12 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                     }
                 }
                 shardIt.reset();
-                internalRequest.request().setCanHaveDuplicates(); // safe side, cluster state changed, we might have dups
+                internalRequest.request().setCanHaveDuplicates(); // safe side,
+                                                                  // cluster
+                                                                  // state
+                                                                  // changed, we
+                                                                  // might have
+                                                                  // dups
             } else {
                 shardIt.reset();
                 while ((shard = shardIt.nextOrNull()) != null) {
@@ -630,14 +651,14 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                 postPrimaryOperation(internalRequest, response);
                 // async replication, notify the listener
                 listener.onResponse(response.response());
-                // now, trick the counter so it won't decrease to 0 and notify the listeners
+                // now, trick the counter so it won't decrease to 0 and notify
+                // the listeners
                 replicaCounter = Integer.MIN_VALUE;
             }
 
             // we add one to the replica count to do the postPrimaryOperation
             replicaCounter++;
             AtomicInteger counter = new AtomicInteger(replicaCounter);
-
 
             IndexMetaData indexMetaData = observer.observedState().metaData().index(internalRequest.concreteIndex());
 
@@ -652,7 +673,8 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                     continue;
                 }
 
-                // if the shard is primary and relocating, add one to the counter since we perform it on the replica as well
+                // if the shard is primary and relocating, add one to the
+                // counter since we perform it on the replica as well
                 // (and we already did it on the primary)
                 boolean doOnlyOnRelocating = false;
                 if (shard.primary()) {
@@ -662,8 +684,10 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                         continue;
                     }
                 }
-                // we index on a replica that is initializing as well since we might not have got the event
-                // yet that it was started. We will get an exception IllegalShardState exception if its not started
+                // we index on a replica that is initializing as well since we
+                // might not have got the event
+                // yet that it was started. We will get an exception
+                // IllegalShardState exception if its not started
                 // and that's fine, we will ignore it
                 if (!doOnlyOnRelocating) {
                     performOnReplica(response, counter, shard, shard.currentNodeId(), indexMetaData);
@@ -673,17 +697,21 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                 }
             }
 
-            // now do the postPrimary operation, and check if the listener needs to be invoked
+            // now do the postPrimary operation, and check if the listener needs
+            // to be invoked
             postPrimaryOperation(internalRequest, response);
-            // we also invoke here in case replicas finish before postPrimaryAction does
+            // we also invoke here in case replicas finish before
+            // postPrimaryAction does
             if (counter.decrementAndGet() == 0) {
                 listener.onResponse(response.response());
             }
         }
 
         void performOnReplica(final PrimaryResponse<Response, ReplicaRequest> response, final AtomicInteger counter, final ShardRouting shard, String nodeId, final IndexMetaData indexMetaData) {
-            // if we don't have that node, it means that it might have failed and will be created again, in
-            // this case, we don't have to do the operation, and just let it failover
+            // if we don't have that node, it means that it might have failed
+            // and will be created again, in
+            // this case, we don't have to do the operation, and just let it
+            // failover
             if (!observer.observedState().nodes().nodeExists(nodeId)) {
                 if (counter.decrementAndGet() == 0) {
                     listener.onResponse(response.response());
@@ -709,8 +737,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
 
             if (!nodeId.equals(observer.observedState().nodes().localNodeId())) {
                 final DiscoveryNode node = observer.observedState().nodes().get(nodeId);
-                transportService.sendRequest(node, transportReplicaAction, shardRequest,
-                        transportOptions, new EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
+                transportService.sendRequest(node, transportReplicaAction, shardRequest, transportOptions, new EmptyTransportResponseHandler(ThreadPool.Names.SAME) {
                     @Override
                     public void handleResponse(TransportResponse.Empty vResponse) {
                         finishIfPossible();
@@ -721,8 +748,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                         logger.trace("[{}] Transport failure during replica request [{}] ", exp, node, internalRequest.request());
                         if (!ignoreReplicaException(exp)) {
                             logger.warn("Failed to perform " + actionName + " on remote replica " + node + shardIt.shardId(), exp);
-                            shardStateAction.shardFailed(shard, indexMetaData.getUUID(),
-                                    "Failed to perform [" + actionName + "] on replica, message [" + ExceptionsHelper.detailedMessage(exp) + "]");
+                            shardStateAction.shardFailed(shard, indexMetaData.getUUID(), "Failed to perform [" + actionName + "] on replica, message [" + ExceptionsHelper.detailedMessage(exp) + "]");
                         }
                         finishIfPossible();
                     }
@@ -750,7 +776,8 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                                 }
                             }
 
-                            // we must never reject on because of thread pool capacity on replicas
+                            // we must never reject on because of thread pool
+                            // capacity on replicas
                             @Override
                             public boolean isForceExecution() {
                                 return true;
@@ -762,7 +789,8 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                         });
                     } catch (Throwable e) {
                         failReplicaIfNeeded(shard.index(), shard.id(), e);
-                        // we want to decrement the counter here, in teh failure handling, cause we got rejected
+                        // we want to decrement the counter here, in teh failure
+                        // handling, cause we got rejected
                         // from executing on the thread pool
                         if (counter.decrementAndGet() == 0) {
                             listener.onResponse(response.response());
@@ -781,7 +809,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
         }
 
-        boolean raiseFailureIfHaveNotEnoughActiveShardCopies(ShardRouting shard, CassandraClusterState state) {
+        boolean raiseFailureIfHaveNotEnoughActiveShardCopies(ShardRouting shard, ClusterState state) {
             if (!checkWriteConsistency) {
                 return false;
             }
@@ -794,14 +822,16 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
             final int sizeActive;
             final int requiredNumber;
-            
-            IndexRoutingTable indexRoutingTable =  state.getRoutingTable().index(shard.index());
+
+            IndexRoutingTable indexRoutingTable = state.getRoutingTable().index(shard.index());
             if (indexRoutingTable != null) {
                 IndexShardRoutingTable shardRoutingTable = indexRoutingTable.shard(shard.getId());
                 if (shardRoutingTable != null) {
-                    sizeActive =  shardRoutingTable.activeShards().size();
+                    sizeActive = shardRoutingTable.activeShards().size();
                     if (consistencyLevel == WriteConsistencyLevel.QUORUM && shardRoutingTable.getSize() > 2) {
-                        // only for more than 2 in the number of shardIt it makes sense, otherwise its 1 shard with 1 replica, quorum is 1 (which is what it is initialized to)
+                        // only for more than 2 in the number of shardIt it
+                        // makes sense, otherwise its 1 shard with 1 replica,
+                        // quorum is 1 (which is what it is initialized to)
                         requiredNumber = (shardRoutingTable.getSize() / 2) + 1;
                     } else if (consistencyLevel == WriteConsistencyLevel.ALL) {
                         requiredNumber = shardRoutingTable.getSize();
@@ -818,8 +848,8 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
 
             if (sizeActive < requiredNumber) {
-                logger.trace("not enough active copies of shard [{}] to meet write consistency of [{}] (have {}, needed {}), scheduling a retry.",
-                        shard.shardId(), consistencyLevel, sizeActive, requiredNumber);
+                logger.trace("not enough active copies of shard [{}] to meet write consistency of [{}] (have {}, needed {}), scheduling a retry.", shard.shardId(), consistencyLevel, sizeActive,
+                        requiredNumber);
                 primaryOperationStarted.set(false);
                 // A dedicated exception would be nice...
                 retryBecauseUnavailable(shard.shardId(), "Not enough active copies to meet write consistency of [" + consistencyLevel + "] (have " + sizeActive + ", needed " + requiredNumber + ").");
@@ -830,7 +860,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
         }
 
         void retryBecauseUnavailable(ShardId shardId, String message) {
-            retry(new UnavailableShardsException(shardId, message + " Timeout: [" + internalRequest.request().timeout() +"], request: " +  internalRequest.request().toString()));
+            retry(new UnavailableShardsException(shardId, message + " Timeout: [" + internalRequest.request().timeout() + "], request: " + internalRequest.request().toString()));
         }
 
     }
@@ -877,7 +907,8 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
     }
 
     /**
-     * Internal request class that gets built on each node. Holds the original request plus additional info.
+     * Internal request class that gets built on each node. Holds the original
+     * request plus additional info.
      */
     protected class InternalRequest {
         final Request request;

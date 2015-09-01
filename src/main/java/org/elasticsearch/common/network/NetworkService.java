@@ -94,13 +94,12 @@ public class NetworkService extends AbstractComponent {
         customNameResolvers.add(customNameResolver);
     }
 
-
     public InetAddress resolveBindHostAddress(String bindHost) throws IOException {
         return resolveBindHostAddress(bindHost, null);
     }
 
     public InetAddress resolveBindHostAddress(String bindHost, String defaultValue2) throws IOException {
-    	
+
         return resolveInetAddress(bindHost, settings.get(GLOBAL_NETWORK_BINDHOST_SETTING, settings.get(GLOBAL_NETWORK_HOST_SETTING)), defaultValue2);
     }
 
@@ -142,13 +141,13 @@ public class NetworkService extends AbstractComponent {
             }
             return null;
         } else {
-        	// if host is a string representation of InetAddress, nothing to resolve...
-        	 try {
-     			return com.google.common.net.InetAddresses.forString(host);
-     		} catch (IllegalArgumentException e) {
-     		}
+            // if host is a string representation of InetAddress, nothing to resolve...
+            try {
+                return com.google.common.net.InetAddresses.forString(host);
+            } catch (IllegalArgumentException e) {
+            }
         }
-        
+
         String origHost = host;
         if ((host.startsWith("#") && host.endsWith("#")) || (host.startsWith("_") && host.endsWith("_"))) {
             host = host.substring(1, host.length() - 1);
@@ -195,7 +194,7 @@ public class NetworkService extends AbstractComponent {
             }
             throw new IOException("Failed to find network interface for [" + origHost + "]");
         }
-        
+
         return InetAddress.getByName(host);
     }
 }

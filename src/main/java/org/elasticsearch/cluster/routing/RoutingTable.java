@@ -27,7 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
@@ -97,7 +97,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
         return indicesRouting();
     }
 
-    public RoutingNodes routingNodes(CassandraClusterState state) {
+    public RoutingNodes routingNodes(ClusterState state) {
         return new RoutingNodes(state);
     }
 
@@ -129,17 +129,16 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
      * Block until all local primary shard are started (always has index 0 in routing table)
      */
     public boolean localShardsStarted() {
-    	boolean result = true;
+        boolean result = true;
         for (IndexRoutingTable indexRoutingTable : this) {
             IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shards().get(0);
             if ((indexShardRoutingTable.getPrimaryShardRouting() == null) || (indexShardRoutingTable.getPrimaryShardRouting().state() != ShardRoutingState.STARTED)) {
-            	return false;
+                return false;
             }
         }
         return result;
     }
 
-    
     /**
      * All the shards (replicas) for the provided indices.
      *
@@ -187,7 +186,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
             if (indexRoutingTable == null) {
                 continue;
                 // we simply ignore indices that don't exists (make sense for operations that use it currently)
-//                throw new IndexMissingException(new Index(index));
+                //                throw new IndexMissingException(new Index(index));
             }
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
                 for (ShardRouting shardRouting : indexShardRoutingTable) {
@@ -220,7 +219,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
             if (indexRoutingTable == null) {
                 continue;
                 // we simply ignore indices that don't exists (make sense for operations that use it currently)
-//                throw new IndexMissingException(new Index(index));
+                //                throw new IndexMissingException(new Index(index));
             }
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
                 for (ShardRouting shardRouting : indexShardRoutingTable) {
@@ -230,7 +229,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
                             set.add(new PlainShardIterator(shardRouting.shardId(), ImmutableList.of(shardRouting.targetRoutingIfRelocating())));
                         }
                     } else if (includeEmpty) { // we need this for counting properly, just make it an empty one
-                        set.add(new PlainShardIterator(shardRouting.shardId(), ImmutableList.<ShardRouting>of()));
+                        set.add(new PlainShardIterator(shardRouting.shardId(), ImmutableList.<ShardRouting> of()));
                     }
                 }
             }
@@ -260,7 +259,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
             if (indexRoutingTable == null) {
                 continue;
                 // we simply ignore indices that don't exists (make sense for operations that use it currently)
-//                throw new IndexMissingException(new Index(index));
+                //                throw new IndexMissingException(new Index(index));
             }
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
                 for (ShardRouting shardRouting : indexShardRoutingTable) {
@@ -270,7 +269,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
                             set.add(new PlainShardIterator(shardRouting.shardId(), ImmutableList.of(shardRouting.targetRoutingIfRelocating())));
                         }
                     } else if (includeEmpty) { // we need this for counting properly, just make it an empty one
-                        set.add(new PlainShardIterator(shardRouting.shardId(), ImmutableList.<ShardRouting>of()));
+                        set.add(new PlainShardIterator(shardRouting.shardId(), ImmutableList.<ShardRouting> of()));
                     }
                 }
             }
@@ -304,7 +303,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
                 if (primary.active()) {
                     set.add(primary.shardsIt());
                 } else if (includeEmpty) { // we need this for counting properly, just make it an empty one
-                    set.add(new PlainShardIterator(primary.shardId(), ImmutableList.<ShardRouting>of()));
+                    set.add(new PlainShardIterator(primary.shardId(), ImmutableList.<ShardRouting> of()));
                 }
             }
         }
@@ -315,13 +314,11 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
         return new Builder();
     }
 
-    
     public static Builder builder(RoutingTable routingTable) {
         return new Builder(routingTable);
     }
-    
-    
-    public static Builder builder(ClusterService clusterService, CassandraClusterState clusterState) {
+
+    public static Builder builder(ClusterService clusterService, ClusterState clusterState) {
         return new Builder(clusterService, clusterState);
     }
 
@@ -334,35 +331,31 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
 
         }
 
-        
         public Builder(RoutingTable routingTable) {
             version = routingTable.version;
             for (IndexRoutingTable indexRoutingTable : routingTable) {
                 indicesRouting.put(indexRoutingTable.index(), indexRoutingTable);
             }
         }
-        
-        
+
         /**
          * Build a RoutingTable according to clusterState (
          * -Allocate unallocated indices with one primary shard on local node).
          * -Remove obsolete IndexRoutingTable
          */
-        public Builder(ClusterService clusterService,  CassandraClusterState clusterState) {
-        	 version = clusterState.routingTable().version();
-        
-        	for(ObjectObjectCursor<String,IndexMetaData> entry : clusterState.metaData().getIndices()) {
-        		IndexRoutingTable indexRoutingTable = clusterState.routingTable().index(entry.key);
-        		ShardRouting primayShardRouting = (indexRoutingTable != null) ? indexRoutingTable.getShardRouting(clusterState.nodes().getLocalNodeId()) : null;
-        		primayShardRouting = new MutableShardRouting(entry.key, 0, clusterState.nodes().getLocalNodeId(), null, true, 
-	                        ((primayShardRouting == null) || (primayShardRouting.state() == null)) ? ShardRoutingState.INITIALIZING : primayShardRouting.state(), 
-	                        clusterState.metaData().version());
-        		indexRoutingTable = new IndexRoutingTable(primayShardRouting, clusterService, clusterState );
-        		indicesRouting.put(indexRoutingTable.index(), indexRoutingTable); 
-        	}
+        public Builder(ClusterService clusterService, ClusterState clusterState) {
+            version = clusterState.routingTable().version();
+
+            for (ObjectObjectCursor<String, IndexMetaData> entry : clusterState.metaData().getIndices()) {
+                IndexRoutingTable indexRoutingTable = clusterState.routingTable().index(entry.key);
+                ShardRouting primayShardRouting = (indexRoutingTable != null) ? indexRoutingTable.getShardRouting(clusterState.nodes().getLocalNodeId()) : null;
+                primayShardRouting = new MutableShardRouting(entry.key, 0, clusterState.nodes().getLocalNodeId(), null, true, ((primayShardRouting == null) || (primayShardRouting.state() == null)) ? ShardRoutingState.INITIALIZING
+                        : primayShardRouting.state(), clusterState.metaData().version());
+                indexRoutingTable = new IndexRoutingTable(primayShardRouting, clusterService, clusterState);
+                indicesRouting.put(indexRoutingTable.index(), indexRoutingTable);
+            }
         }
 
-        
         public Builder updateNodes(RoutingNodes routingNodes) {
             // this is being called without pre initializing the routing table, so we must copy over the version as well
             this.version = routingNodes.routingTable().version();
@@ -408,7 +401,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
             }
             return this;
         }
-	
+
         public Builder updateNumberOfReplicas(int numberOfReplicas, String... indices) throws IndexMissingException {
             if (indices == null || indices.length == 0) {
                 indices = indicesRouting.keySet().toArray(new String[indicesRouting.keySet().size()]);
@@ -445,12 +438,9 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
             return this;
         }
 
-        
-        
         public Builder addAsNew(IndexMetaData indexMetaData) {
             if (indexMetaData.state() == IndexMetaData.State.OPEN) {
-                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetaData.index())
-                        .initializeAsNew(indexMetaData);
+                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetaData.index()).initializeAsNew(indexMetaData);
                 add(indexRoutingBuilder);
             }
             return this;
@@ -458,23 +448,20 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
 
         public Builder addAsRecovery(IndexMetaData indexMetaData) {
             if (indexMetaData.state() == IndexMetaData.State.OPEN) {
-                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetaData.index())
-                        .initializeAsRecovery(indexMetaData);
+                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetaData.index()).initializeAsRecovery(indexMetaData);
                 add(indexRoutingBuilder);
             }
             return this;
         }
 
         public Builder addAsRestore(IndexMetaData indexMetaData, RestoreSource restoreSource) {
-            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetaData.index())
-                    .initializeAsRestore(indexMetaData, restoreSource);
+            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetaData.index()).initializeAsRestore(indexMetaData, restoreSource);
             add(indexRoutingBuilder);
             return this;
         }
 
         public Builder addAsNewRestore(IndexMetaData indexMetaData, RestoreSource restoreSource, IntSet ignoreShards) {
-            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetaData.index())
-                    .initializeAsNewRestore(indexMetaData, restoreSource, ignoreShards);
+            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetaData.index()).initializeAsNewRestore(indexMetaData, restoreSource, ignoreShards);
             add(indexRoutingBuilder);
             return this;
         }
@@ -508,7 +495,6 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
             return new RoutingTable(version, indicesRouting);
         }
 
-        
         public static RoutingTable readFrom(StreamInput in) throws IOException {
             Builder builder = new Builder();
             builder.version = in.readLong();
@@ -537,6 +523,5 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
         }
         return sb.toString();
     }
-
 
 }

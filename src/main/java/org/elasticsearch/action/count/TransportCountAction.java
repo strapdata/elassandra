@@ -29,7 +29,7 @@ import org.elasticsearch.action.support.broadcast.TransportBroadcastOperationAct
 import org.elasticsearch.cache.recycler.CacheRecycler;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
@@ -120,23 +120,23 @@ public class TransportCountAction extends TransportBroadcastOperationAction<Coun
     }
 
     @Override
-    protected GroupShardsIterator shards(CassandraClusterState clusterState, CountRequest request, String[] concreteIndices) {
+    protected GroupShardsIterator shards(ClusterState clusterState, CountRequest request, String[] concreteIndices) {
         Map<String, Set<String>> routingMap = clusterState.metaData().resolveSearchRouting(request.routing(), request.indices());
         return clusterService.operationRouting().searchShards(clusterState, request.indices(), concreteIndices, routingMap, request.preference());
     }
 
     @Override
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state, CountRequest request) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, CountRequest request) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
     }
 
     @Override
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, CountRequest countRequest, String[] concreteIndices) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, CountRequest countRequest, String[] concreteIndices) {
         return state.blocks().indicesBlockedException(ClusterBlockLevel.READ, concreteIndices);
     }
 
     @Override
-    protected CountResponse newResponse(CountRequest request, AtomicReferenceArray shardsResponses, CassandraClusterState clusterState) {
+    protected CountResponse newResponse(CountRequest request, AtomicReferenceArray shardsResponses, ClusterState clusterState) {
         int successfulShards = 0;
         int failedShards = 0;
         long count = 0;

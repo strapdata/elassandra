@@ -17,13 +17,12 @@ From an Elasticsearch perspective :
 * Elasticsearch discovery now rely on the cassandra [gossip protocol](https://wiki.apache.org/cassandra/ArchitectureGossip). When a node join or leave the cluster, or when a schema change occurs, each nodes update nodes status and its local routing table.
 * Elasticsearch [gateway](https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html) now store metadata in a cassandra table and in the cassandra schema. Metadata updates are played sequentially through a [cassandra lightweight transaction](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html). Metadata UUID is the cassandra hostId of the last modifier node.
 * Elasticsearch REST and java API remain unchanged (version 1.5).
-* [River ](https://www.elastic.co/guide/en/elasticsearch/rivers/current/index.html) remain fully operational.
+* [River plugins](https://www.elastic.co/guide/en/elasticsearch/rivers/current/index.html) remain fully operational.
 * Logging is now based on [logback](http://logback.qos.ch/) as cassandra.
 
 From a Cassandra perspective :
 * Columns with an ElasticSecondaryIndex are indexed in ElasticSearch.
-* By default, Elasticsearch document fields are multivalued, so every field is backed by a list. Single valued document field 
-   can be mapped to a basic types by setting 'single_value: true' in our type mapping.
+* By default, Elasticsearch document fields are multivalued, so every field is backed by a list. Single valued document field can be mapped to a basic types by setting 'single_value: true' in our type mapping.
 * Nested documents are stored using cassandra [User Defined Type](http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
 * Elasticsearch provides a JSON-REST API to cassandra.
  
@@ -348,14 +347,14 @@ curl -XPUT 'http://localhost:9200/kimchy/tweet/2' -d '
 
 The above will index information into the @kimchy@ index (or keyspace), with two types (two cassandra tables), *info* and *tweet*. Each user will get his own special index.
 
-### Sharding
+### Shards and Replica
 
 Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace [Replication Factor](http://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html). Elasticsearch *numberOfShards* and *numberOfReplicas* then become meaningless. 
 * When adding a new elasticassandra node, the cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data are automattically indexed and each node update its routing table to distribute search requests according to the ring topology. 
 * When updating the Replication Factor, you will need to run a [nodetool repair <keyspace>](http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html) on the new node to effectivelly copy and index the data.
 * If a node become unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is red, otherwise cluster status is yellow.  
 
-After starting a new Elasticassandra node, data and elasticsearch indices are distributed on 2 nodes. 
+After starting a new Elasticassandra node, data and elasticsearch indices are distributed on 2 nodes (with no replication). 
 ```
 nodetool status twitter
 Datacenter: DC1
@@ -507,8 +506,8 @@ nodetool gossipinfo
   DC:DC1
   NET_VERSION:8
   SEVERITY:-1.3877787807814457E-17
-  <b>X1:{"twitter":3}</b>
-  <b>X2:e5df0651-8608-4590-92e1-4e523e4582b9/1</b>
+  X1:{"twitter":3}
+  X2:e5df0651-8608-4590-92e1-4e523e4582b9/1
   RELEASE_VERSION:2.1.8
   RACK:RAC2
   STATUS:NORMAL,-8879901672822909480
@@ -523,19 +522,17 @@ localhost/127.0.0.1
   DC:DC1
   NET_VERSION:8
   SEVERITY:2.220446049250313E-16
+  X1:{"twitter":3}
   X2:e5df0651-8608-4590-92e1-4e523e4582b9/1
   RELEASE_VERSION:2.1.8
   RACK:RAC1
   STATUS:NORMAL,-4318747828927358946
-  X1:{"twitter":3}
   SCHEMA:ce6febf4-571d-30d2-afeb-b8db9d578fd1
   RPC_ADDRESS:127.0.0.1
   INTERNAL_IP:127.0.0.1
   LOAD:154824.0
   HOST_ID:74ae1629-0149-4e65-b790-cd25c7406675
 ```
-
-
 
 ## Contribute
 

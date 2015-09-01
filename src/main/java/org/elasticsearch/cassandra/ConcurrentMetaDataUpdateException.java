@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer.
+ * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -21,20 +21,20 @@ import org.elasticsearch.ElasticsearchException;
 
 public class ConcurrentMetaDataUpdateException extends ElasticsearchException {
 
-	UUID owner;
-	long version;
-	
+    UUID owner;
+    long version;
+
     public ConcurrentMetaDataUpdateException(UUID owner, long version) {
-        super("Expecting owner/version = "+owner+"/"+version);
-        this.owner= owner;
+        super("Expecting owner/version = " + owner + "/" + version);
+        this.owner = owner;
         this.version = version;
     }
 
     public UUID owner() {
-    	return this.owner;
+        return this.owner;
     }
-    
+
     public long version() {
-    	return this.version;
+        return this.version;
     }
-} 
+}

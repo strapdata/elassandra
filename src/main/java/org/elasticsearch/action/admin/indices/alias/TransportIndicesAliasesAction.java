@@ -26,7 +26,7 @@ import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest.AliasA
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -71,7 +71,7 @@ public class TransportIndicesAliasesAction extends TransportMasterNodeOperationA
     }
 
     @Override
-    protected ClusterBlockException checkBlock(IndicesAliasesRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(IndicesAliasesRequest request, ClusterState state) {
         Set<String> indices = Sets.newHashSet();
         for (AliasActions aliasAction : request.aliasActions()) {
             for (String index : aliasAction.indices()) {
@@ -82,7 +82,7 @@ public class TransportIndicesAliasesAction extends TransportMasterNodeOperationA
     }
 
     @Override
-    protected void masterOperation(final IndicesAliasesRequest request, final CassandraClusterState state, final ActionListener<IndicesAliasesResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final IndicesAliasesRequest request, final ClusterState state, final ActionListener<IndicesAliasesResponse> listener) throws ElasticsearchException {
 
         //Expand the indices names
         List<AliasActions> actions = request.aliasActions();

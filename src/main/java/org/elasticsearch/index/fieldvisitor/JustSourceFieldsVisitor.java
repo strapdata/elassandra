@@ -34,14 +34,14 @@ public class JustSourceFieldsVisitor extends FieldsVisitor {
         }
         return source != null ? Status.STOP : Status.NO;
     }
-    
+
     @Override
     public boolean needSource() {
-    	return true;
+        return true;
     }
-    
+
     @Override
     public boolean needFields() {
-    	return false;
+        return false;
     }
 }

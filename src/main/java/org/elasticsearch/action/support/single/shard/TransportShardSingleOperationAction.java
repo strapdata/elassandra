@@ -30,7 +30,7 @@ import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -99,19 +99,19 @@ public abstract class TransportShardSingleOperationAction<Request extends Single
 
     protected abstract boolean resolveIndex();
 
-    protected ClusterBlockException checkGlobalBlock(CassandraClusterState state) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
     }
 
-    protected ClusterBlockException checkRequestBlock(CassandraClusterState state, InternalRequest request) {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, InternalRequest request) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.READ, request.concreteIndex());
     }
 
-    protected void resolveRequest(CassandraClusterState state, InternalRequest request) {
+    protected void resolveRequest(ClusterState state, InternalRequest request) {
 
     }
 
-    protected abstract ShardIterator shards(CassandraClusterState state, InternalRequest request) throws ElasticsearchException;
+    protected abstract ShardIterator shards(ClusterState state, InternalRequest request) throws ElasticsearchException;
 
     class AsyncSingleAction {
 
@@ -124,7 +124,7 @@ public abstract class TransportShardSingleOperationAction<Request extends Single
         private AsyncSingleAction(Request request, ActionListener<Response> listener) {
             this.listener = listener;
 
-            CassandraClusterState clusterState = clusterService.state();
+            ClusterState clusterState = clusterService.state();
             if (logger.isTraceEnabled()) {
                 logger.trace("executing [{}] based on cluster state version [{}]", request, clusterState.version());
             }

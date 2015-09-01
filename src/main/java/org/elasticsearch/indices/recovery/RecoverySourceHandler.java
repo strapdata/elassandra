@@ -37,7 +37,7 @@ import org.apache.lucene.store.RateLimiter;
 import org.apache.lucene.util.ArrayUtil;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.TimeoutClusterStateUpdateTask;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
@@ -716,12 +716,12 @@ public class RecoverySourceHandler implements Engine.RecoveryHandler {
         }
 
         @Override
-        public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
             latch.countDown();
         }
 
         @Override
-        public CassandraClusterState execute(CassandraClusterState currentState) throws Exception {
+        public ClusterState execute(ClusterState currentState) throws Exception {
             if (cancellableThreads.isCancelled() == false) { // no need to run this if recovery is canceled
                 IndexMetaData indexMetaData = clusterService.state().metaData().getIndices().get(indexService.index().getName());
                 ImmutableOpenMap<String, MappingMetaData> metaDataMappings = null;

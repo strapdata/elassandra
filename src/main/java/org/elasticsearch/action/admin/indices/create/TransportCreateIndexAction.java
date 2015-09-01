@@ -24,7 +24,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -35,7 +35,6 @@ import org.elasticsearch.indices.IndexAlreadyExistsException;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
-
 /**
  * Create index action.
  */
@@ -44,20 +43,20 @@ public class TransportCreateIndexAction extends TransportMasterNodeOperationActi
     private final MetaDataCreateIndexService createIndexService;
 
     @Inject
-    public TransportCreateIndexAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                      ThreadPool threadPool, MetaDataCreateIndexService createIndexService, ActionFilters actionFilters) {
+    public TransportCreateIndexAction(Settings settings, TransportService transportService, ClusterService clusterService, ThreadPool threadPool, MetaDataCreateIndexService createIndexService,
+            ActionFilters actionFilters) {
         super(settings, CreateIndexAction.NAME, transportService, clusterService, threadPool, actionFilters);
         this.createIndexService = createIndexService;
     }
-    
+
     /**
      * Excute locally because every elasticsearch node is master
      */
     @Override
     protected boolean localExecute(CreateIndexRequest request) {
-    	return true;
+        return true;
     }
-    
+
     @Override
     protected String executor() {
         // we go async right away
@@ -75,21 +74,19 @@ public class TransportCreateIndexAction extends TransportMasterNodeOperationActi
     }
 
     @Override
-    protected ClusterBlockException checkBlock(CreateIndexRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(CreateIndexRequest request, ClusterState state) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, request.index());
     }
 
     @Override
-    protected void masterOperation(final CreateIndexRequest request, final CassandraClusterState state, final ActionListener<CreateIndexResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final CreateIndexRequest request, final ClusterState state, final ActionListener<CreateIndexResponse> listener) throws ElasticsearchException {
         String cause = request.cause();
         if (cause.length() == 0) {
             cause = "api";
         }
 
-        final CreateIndexClusterStateUpdateRequest updateRequest = new CreateIndexClusterStateUpdateRequest(request, cause, request.index())
-                .ackTimeout(request.timeout()).masterNodeTimeout(request.masterNodeTimeout())
-                .settings(request.settings()).mappings(request.mappings())
-                .aliases(request.aliases()).customs(request.customs());
+        final CreateIndexClusterStateUpdateRequest updateRequest = new CreateIndexClusterStateUpdateRequest(request, cause, request.index()).ackTimeout(request.timeout())
+                .masterNodeTimeout(request.masterNodeTimeout()).settings(request.settings()).mappings(request.mappings()).aliases(request.aliases()).customs(request.customs());
 
         createIndexService.createIndex(updateRequest, new ActionListener<ClusterStateUpdateResponse>() {
 

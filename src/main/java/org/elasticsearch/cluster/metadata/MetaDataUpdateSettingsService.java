@@ -31,7 +31,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsClusterStateUpdateRequest;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterStateListener;
@@ -94,16 +94,14 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
 
                     final int dash = autoExpandReplicas.indexOf('-');
                     if (-1 == dash) {
-                        logger.warn("Unexpected value [{}] for setting [{}]; it should be dash delimited",
-                                autoExpandReplicas, IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS);
+                        logger.warn("Unexpected value [{}] for setting [{}]; it should be dash delimited", autoExpandReplicas, IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS);
                         continue;
                     }
                     final String sMin = autoExpandReplicas.substring(0, dash);
                     try {
                         min = Integer.parseInt(sMin);
                     } catch (NumberFormatException e) {
-                        logger.warn("failed to set [{}], minimum value is not a number [{}]",
-                                e, IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS, sMin);
+                        logger.warn("failed to set [{}], minimum value is not a number [{}]", e, IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS, sMin);
                         continue;
                     }
                     String sMax = autoExpandReplicas.substring(dash + 1);
@@ -113,8 +111,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                         try {
                             max = Integer.parseInt(sMax);
                         } catch (NumberFormatException e) {
-                            logger.warn("failed to set [{}], maximum value is neither [{}] nor a number [{}]",
-                                    e, IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS, ALL_NODES_VALUE, sMax);
+                            logger.warn("failed to set [{}], maximum value is neither [{}] nor a number [{}]", e, IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS, ALL_NODES_VALUE, sMax);
                             continue;
                         }
                     }
@@ -150,8 +147,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                 Settings settings = ImmutableSettings.settingsBuilder().put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, fNumberOfReplicas).build();
                 final List<String> indices = nrReplicasChanged.get(fNumberOfReplicas);
 
-                UpdateSettingsClusterStateUpdateRequest updateRequest = new UpdateSettingsClusterStateUpdateRequest()
-                        .indices(indices.toArray(new String[indices.size()])).settings(settings)
+                UpdateSettingsClusterStateUpdateRequest updateRequest = new UpdateSettingsClusterStateUpdateRequest().indices(indices.toArray(new String[indices.size()])).settings(settings)
                         .ackTimeout(TimeValue.timeValueMillis(0)) //no need to wait for ack here
                         .masterNodeTimeout(TimeValue.timeValueMinutes(10));
 
@@ -220,7 +216,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 String[] actualIndices = currentState.metaData().concreteIndices(IndicesOptions.strictExpand(), request.indices());
                 RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
                 MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData()).uuid(clusterService.localNode().id());
@@ -238,11 +234,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                 }
 
                 if (!removedSettings.isEmpty() && !openIndices.isEmpty()) {
-                    throw new ElasticsearchIllegalArgumentException(String.format(Locale.ROOT,
-                            "Can't update non dynamic settings[%s] for open indices[%s]",
-                            removedSettings,
-                            openIndices
-                    ));
+                    throw new ElasticsearchIllegalArgumentException(String.format(Locale.ROOT, "Can't update non dynamic settings[%s] for open indices[%s]", removedSettings, openIndices));
                 }
 
                 int updatedNumberOfReplicas = openSettings.getAsInt(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, -1);
@@ -307,16 +299,11 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                     metaDataBuilder.updateSettings(closeSettings, indices);
                 }
 
-
-                CassandraClusterState updatedState = CassandraClusterState.builder(currentState)
-                		.metaData(metaDataBuilder)
-                		.routingTable(routingTableBuilder)
-                		.blocks(blocks)
-                		.build();
+                ClusterState updatedState = ClusterState.builder(currentState).metaData(metaDataBuilder).routingTable(routingTableBuilder).blocks(blocks).build();
 
                 // now, reroute in case things change that require it (like number of replicas)
                 //RoutingAllocation.Result routingResult = allocationService.reroute(updatedState);
-                //updatedState = CassandraClusterState.builder(updatedState).routingResult(routingResult).build();
+                //updatedState = ClusterState.builder(updatedState).routingResult(routingResult).build();
 
                 return updatedState;
             }

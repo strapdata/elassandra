@@ -27,7 +27,7 @@ import org.elasticsearch.ElasticsearchIllegalArgumentException;
 import org.elasticsearch.action.admin.indices.alias.Alias;
 import org.elasticsearch.action.support.master.MasterNodeOperationRequest;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.TimeoutClusterStateUpdateTask;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
@@ -75,7 +75,7 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 Set<String> templateNames = Sets.newHashSet();
                 for (ObjectCursor<String> cursor : currentState.metaData().templates().keys()) {
                     String templateName = cursor.value;
@@ -95,13 +95,11 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
                 for (String templateName : templateNames) {
                     metaData.removeTemplate(templateName);
                 }
-                return CassandraClusterState.builder(currentState)
-                		.version(currentState.version()+1)
-                		.metaData(metaData).build();
+                return ClusterState.builder(currentState).version(currentState.version() + 1).metaData(metaData).build();
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 listener.onResponse(new RemoveResponse(true));
             }
         });
@@ -138,8 +136,7 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
                 templateBuilder.putMapping(entry.getKey(), entry.getValue());
             }
             for (Alias alias : request.aliases) {
-                AliasMetaData aliasMetaData = AliasMetaData.builder(alias.name()).filter(alias.filter())
-                        .indexRouting(alias.indexRouting()).searchRouting(alias.searchRouting()).build();
+                AliasMetaData aliasMetaData = AliasMetaData.builder(alias.name()).filter(alias.filter()).indexRouting(alias.indexRouting()).searchRouting(alias.searchRouting()).build();
                 templateBuilder.putAlias(aliasMetaData);
             }
             for (Map.Entry<String, IndexMetaData.Custom> entry : request.customs.entrySet()) {
@@ -164,21 +161,17 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
             }
 
             @Override
-            public CassandraClusterState execute(CassandraClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) {
                 if (request.create && currentState.metaData().templates().containsKey(request.name)) {
                     throw new IndexTemplateAlreadyExistsException(request.name);
                 }
-                MetaData.Builder builder = MetaData.builder(currentState.metaData())
-                		.uuid(clusterService.localNode().id())
-                		.put(template);
+                MetaData.Builder builder = MetaData.builder(currentState.metaData()).uuid(clusterService.localNode().id()).put(template);
 
-                return CassandraClusterState.builder(currentState)
-                		.version(currentState.version()+1)
-                		.metaData(builder).build();
+                return ClusterState.builder(currentState).version(currentState.version() + 1).metaData(builder).build();
             }
 
             @Override
-            public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 listener.onResponse(new PutResponse(true, template));
             }
         });
@@ -271,7 +264,7 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
             this.mappings.putAll(mappings);
             return this;
         }
-        
+
         public PutRequest aliases(Set<Alias> aliases) {
             this.aliases.addAll(aliases);
             return this;

@@ -24,7 +24,7 @@ import org.elasticsearch.common.collect.Tuple;
 /**
  * Routing Preference Type
  */
-public enum  Preference {
+public enum Preference {
 
     /**
      * Route to specific shards
@@ -70,11 +70,11 @@ public enum  Preference {
     public String type() {
         return type;
     }
-    
+
     public boolean isLocal() {
-    	return this == LOCAL || this == ONLY_LOCAL;
+        return this == LOCAL || this == ONLY_LOCAL;
     }
-    
+
     /**
      * Parses the Preference Type given a string
      */
@@ -88,27 +88,24 @@ public enum  Preference {
         }
 
         switch (preferenceType) {
-            case "_shards":
-                return SHARDS;
-            case "_prefer_node":
-                return PREFER_NODE;
-            case "_only_node":
-                return ONLY_NODE;
-            case "_local":
-                return LOCAL;
-            case "_primary":
-                return PRIMARY;
-            case "_primary_first":
-            case "_primaryFirst":
-                return PRIMARY_FIRST;
-            case "_only_local":
-            case "_onlyLocal":
-                return ONLY_LOCAL;
-            default:
-                throw new ElasticsearchIllegalArgumentException("no Preference for [" + preferenceType + "]");
+        case "_shards":
+            return SHARDS;
+        case "_prefer_node":
+            return PREFER_NODE;
+        case "_only_node":
+            return ONLY_NODE;
+        case "_local":
+            return LOCAL;
+        case "_primary":
+            return PRIMARY;
+        case "_primary_first":
+        case "_primaryFirst":
+            return PRIMARY_FIRST;
+        case "_only_local":
+        case "_onlyLocal":
+            return ONLY_LOCAL;
+        default:
+            throw new ElasticsearchIllegalArgumentException("no Preference for [" + preferenceType + "]");
         }
     }
 }
-
-
-

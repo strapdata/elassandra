@@ -20,7 +20,7 @@
 package org.elasticsearch.gateway.local.state.meta;
 
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -63,7 +63,7 @@ public class LocalAllocateDangledIndices extends AbstractComponent {
     }
 
     public void allocateDangled(IndexMetaData[] indices, final Listener listener) {
-        CassandraClusterState clusterState = clusterService.state();
+        ClusterState clusterState = clusterService.state();
         DiscoveryNode masterNode = clusterState.nodes().masterNode();
         if (masterNode == null) {
             listener.onFailure(new MasterNotDiscoveredException("no master to send allocate dangled request"));
@@ -114,7 +114,7 @@ public class LocalAllocateDangledIndices extends AbstractComponent {
             }
             clusterService.submitStateUpdateTask("allocation dangled indices " + Arrays.toString(indexNames), new ProcessedClusterStateUpdateTask() {
                 @Override
-                public CassandraClusterState execute(CassandraClusterState currentState) {
+                public ClusterState execute(ClusterState currentState) {
                     if (currentState.blocks().disableStatePersistence()) {
                         return currentState;
                     }
@@ -144,12 +144,12 @@ public class LocalAllocateDangledIndices extends AbstractComponent {
                     }
                     logger.info("auto importing dangled indices {} from [{}]", sb.toString(), request.fromNode);
 
-                    CassandraClusterState updatedState = CassandraClusterState.builder(currentState).metaData(metaData).blocks(blocks).routingTable(routingTableBuilder).build();
+                    ClusterState updatedState = ClusterState.builder(currentState).metaData(metaData).blocks(blocks).routingTable(routingTableBuilder).build();
 
                     // now, reroute
-                    RoutingAllocation.Result routingResult = allocationService.reroute(CassandraClusterState.builder(updatedState).routingTable(routingTableBuilder).build());
+                    RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(routingTableBuilder).build());
 
-                    return CassandraClusterState.builder(updatedState).routingResult(routingResult).build();
+                    return ClusterState.builder(updatedState).routingResult(routingResult).build();
                 }
 
                 @Override
@@ -163,7 +163,7 @@ public class LocalAllocateDangledIndices extends AbstractComponent {
                 }
 
                 @Override
-                public void clusterStateProcessed(String source, CassandraClusterState oldState, CassandraClusterState newState) {
+                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                     try {
                         channel.sendResponse(new AllocateDangledResponse(true));
                     } catch (IOException e) {

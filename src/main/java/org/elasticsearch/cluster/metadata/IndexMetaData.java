@@ -69,7 +69,6 @@ import com.google.common.collect.ImmutableMap;
  */
 public class IndexMetaData {
 
-
     public interface Custom {
 
         String type();
@@ -89,8 +88,9 @@ public class IndexMetaData {
             void toXContent(T customIndexMetaData, XContentBuilder builder, ToXContent.Params params) throws IOException;
 
             /**
-             * Merges from first to second, with first being more important, i.e., if something exists in first and second,
-             * first will prevail.
+             * Merges from first to second, with first being more important,
+             * i.e., if something exists in first and second, first will
+             * prevail.
              */
             T merge(T first, T second);
         }
@@ -104,7 +104,8 @@ public class IndexMetaData {
     }
 
     /**
-     * Register a custom index meta data factory. Make sure to call it from a static block.
+     * Register a custom index meta data factory. Make sure to call it from a
+     * static block.
      */
     public static void registerFactory(String type, Custom.Factory factory) {
         customFactories.put(type, factory);
@@ -123,14 +124,14 @@ public class IndexMetaData {
         return factory;
     }
 
-    public static final ClusterBlock INDEX_READ_ONLY_BLOCK = new ClusterBlock(5, "index read-only (api)", false, false, RestStatus.FORBIDDEN, EnumSet.of(ClusterBlockLevel.WRITE, ClusterBlockLevel.METADATA));
+    public static final ClusterBlock INDEX_READ_ONLY_BLOCK = new ClusterBlock(5, "index read-only (api)", false, false, RestStatus.FORBIDDEN, EnumSet.of(ClusterBlockLevel.WRITE,
+            ClusterBlockLevel.METADATA));
     public static final ClusterBlock INDEX_READ_BLOCK = new ClusterBlock(7, "index read (api)", false, false, RestStatus.FORBIDDEN, EnumSet.of(ClusterBlockLevel.READ));
     public static final ClusterBlock INDEX_WRITE_BLOCK = new ClusterBlock(8, "index write (api)", false, false, RestStatus.FORBIDDEN, EnumSet.of(ClusterBlockLevel.WRITE));
     public static final ClusterBlock INDEX_METADATA_BLOCK = new ClusterBlock(9, "index metadata (api)", false, false, RestStatus.FORBIDDEN, EnumSet.of(ClusterBlockLevel.METADATA));
 
     public static enum State {
-        OPEN((byte) 0),
-        CLOSE((byte) 1);
+        OPEN((byte) 0), CLOSE((byte) 1);
 
         private final byte id;
 
@@ -160,6 +161,7 @@ public class IndexMetaData {
             throw new ElasticsearchIllegalStateException("No state match for [" + state + "]");
         }
     }
+
     public static final String INDEX_SETTING_PREFIX = "index.";
     public static final String SETTING_NUMBER_OF_SHARDS = "index.number_of_shards";
     public static final String SETTING_NUMBER_OF_REPLICAS = "index.number_of_replicas";
@@ -195,7 +197,8 @@ public class IndexMetaData {
     private final DiscoveryNodeFilters includeFilters;
     private final DiscoveryNodeFilters excludeFilters;
 
-    private IndexMetaData(String index, long version, State state, Settings settings, ImmutableOpenMap<String, MappingMetaData> mappings, ImmutableOpenMap<String, AliasMetaData> aliases, ImmutableOpenMap<String, Custom> customs) {
+    private IndexMetaData(String index, long version, State state, Settings settings, ImmutableOpenMap<String, MappingMetaData> mappings, ImmutableOpenMap<String, AliasMetaData> aliases,
+            ImmutableOpenMap<String, Custom> customs) {
         Preconditions.checkArgument(settings.getAsInt(SETTING_NUMBER_OF_SHARDS, null) != null, "must specify numberOfShards for index [" + index + "]");
         Preconditions.checkArgument(settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, null) != null, "must specify numberOfReplicas for index [" + index + "]");
         this.index = index;
@@ -227,8 +230,6 @@ public class IndexMetaData {
         }
     }
 
-
-
     public String index() {
         return index;
     }
@@ -240,15 +241,14 @@ public class IndexMetaData {
     public String uuid() {
         return settings.get(SETTING_UUID, INDEX_UUID_NA_VALUE);
     }
-    
-    
 
     public String getUUID() {
         return uuid();
     }
 
     /**
-     * Test whether the current index UUID is the same as the given one. Returns true if either are _na_
+     * Test whether the current index UUID is the same as the given one. Returns
+     * true if either are _na_
      */
     public boolean isSameUUID(String otherUUID) {
         assert otherUUID != null;
@@ -308,7 +308,7 @@ public class IndexMetaData {
     }
 
     public Settings settings() {
-    	return settings;
+        return settings;
     }
 
     public Settings getSettings() {
@@ -337,11 +337,13 @@ public class IndexMetaData {
     }
 
     /**
-     * Sometimes, the default mapping exists and an actual mapping is not created yet (introduced),
-     * in this case, we want to return the default mapping in case it has some default mapping definitions.
+     * Sometimes, the default mapping exists and an actual mapping is not
+     * created yet (introduced), in this case, we want to return the default
+     * mapping in case it has some default mapping definitions.
      * <p/>
-     * Note, once the mapping type is introduced, the default mapping is applied on the actual typed MappingMetaData,
-     * setting its routing, timestamp, and so on if needed.
+     * Note, once the mapping type is introduced, the default mapping is applied
+     * on the actual typed MappingMetaData, setting its routing, timestamp, and
+     * so on if needed.
      */
     @Nullable
     public MappingMetaData mappingOrDefault(String mappingType) {
@@ -464,8 +466,6 @@ public class IndexMetaData {
             return this;
         }
 
-       
-
         public int getNumberOfShards() {
             return numberOfShards();
         }
@@ -488,10 +488,6 @@ public class IndexMetaData {
             return settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, -1);
         }
 
-       
-        
-        
-        
         public Builder creationDate(long creationDate) {
             settings = settingsBuilder().put(settings).put(SETTING_CREATION_DATE, creationDate).build();
             return this;
@@ -579,7 +575,6 @@ public class IndexMetaData {
             this.version = version;
             return this;
         }
-        
 
         public IndexMetaData build() {
             ImmutableOpenMap.Builder<String, AliasMetaData> tmpAliases = aliases;
@@ -606,15 +601,16 @@ public class IndexMetaData {
 
             builder.startObject("settings");
             for (Map.Entry<String, String> entry : indexMetaData.settings().getAsMap().entrySet()) {
-            	switch(entry.getKey()) {
-            	case SETTING_NUMBER_OF_SHARDS:
-            		builder.field(SETTING_NUMBER_OF_SHARDS, indexMetaData.numberOfShards());
-            		break;
-            	case SETTING_NUMBER_OF_REPLICAS:
-            		builder.field(SETTING_NUMBER_OF_REPLICAS, indexMetaData.numberOfReplicas() );
-            		break;
-            	default : builder.field(entry.getKey(), entry.getValue());
-            	}
+                switch (entry.getKey()) {
+                case SETTING_NUMBER_OF_SHARDS:
+                    builder.field(SETTING_NUMBER_OF_SHARDS, indexMetaData.numberOfShards());
+                    break;
+                case SETTING_NUMBER_OF_REPLICAS:
+                    builder.field(SETTING_NUMBER_OF_REPLICAS, indexMetaData.numberOfReplicas());
+                    break;
+                default:
+                    builder.field(entry.getKey(), entry.getValue());
+                }
             }
             builder.endObject();
 
@@ -644,15 +640,22 @@ public class IndexMetaData {
             }
             builder.endObject();
 
-
             builder.endObject();
         }
 
         public static IndexMetaData fromXContent(XContentParser parser) throws IOException {
-            if (parser.currentToken() == null) { // fresh parser? move to the first token
+            if (parser.currentToken() == null) { // fresh parser? move to the
+                                                 // first token
                 parser.nextToken();
             }
-            if (parser.currentToken() == XContentParser.Token.START_OBJECT) {  // on a start object move to next token
+            if (parser.currentToken() == XContentParser.Token.START_OBJECT) { // on
+                                                                              // a
+                                                                              // start
+                                                                              // object
+                                                                              // move
+                                                                              // to
+                                                                              // next
+                                                                              // token
                 parser.nextToken();
             }
             Builder builder = new Builder(parser.currentName());
@@ -671,7 +674,7 @@ public class IndexMetaData {
                                 currentFieldName = parser.currentName();
                             } else if (token == XContentParser.Token.START_OBJECT) {
                                 String mappingType = currentFieldName;
-                                Map<String, Object> mappingSource = MapBuilder.<String, Object>newMapBuilder().put(mappingType, parser.mapOrdered()).map();
+                                Map<String, Object> mappingSource = MapBuilder.<String, Object> newMapBuilder().put(mappingType, parser.mapOrdered()).map();
                                 builder.putMapping(new MappingMetaData(mappingType, mappingSource));
                             }
                         }
@@ -683,7 +686,7 @@ public class IndexMetaData {
                         // check if its a custom index metadata
                         Custom.Factory<Custom> factory = lookupFactory(currentFieldName);
                         if (factory == null) {
-                            //TODO warn
+                            // TODO warn
                             parser.skipChildren();
                         } else {
                             builder.putCustom(factory.type(), factory.fromXContent(parser));
@@ -762,22 +765,25 @@ public class IndexMetaData {
     /**
      * Returns <code>true</code> iff the given settings indicate that the index
      * associated with these settings allocates it's shards on a shared
-     * filesystem. Otherwise <code>false</code>. The default setting for this
-     * is the returned value from
-     * {@link #isIndexUsingShadowReplicas(org.elasticsearch.common.settings.Settings)}.
+     * filesystem. Otherwise <code>false</code>. The default setting for this is
+     * the returned value from
+     * {@link #isIndexUsingShadowReplicas(org.elasticsearch.common.settings.Settings)}
+     * .
      */
     public static boolean isOnSharedFilesystem(Settings settings) {
         return settings.getAsBoolean(SETTING_SHARED_FILESYSTEM, isIndexUsingShadowReplicas(settings));
     }
 
     /**
-     * Returns <code>true</code> iff the given settings indicate that the index associated
-     * with these settings uses shadow replicas. Otherwise <code>false</code>. The default
-     * setting for this is <code>true</code> (Modified for elasticsearch).
+     * Returns <code>true</code> iff the given settings indicate that the index
+     * associated with these settings uses shadow replicas. Otherwise
+     * <code>false</code>. The default setting for this is <code>true</code>
+     * (Modified for elasticsearch).
      * 
      */
     public static boolean isIndexUsingShadowReplicas(Settings settings) {
-        return settings.getAsBoolean(SETTING_SHADOW_REPLICAS, true);
+        // default is false for elasticassandra
+        return settings.getAsBoolean(SETTING_SHADOW_REPLICAS, false);
     }
 
 }

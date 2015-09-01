@@ -26,7 +26,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesClusterStateUpdateRequest;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
@@ -69,7 +69,7 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
             }
 
             @Override
-            public CassandraClusterState execute(final CassandraClusterState currentState) {
+            public ClusterState execute(final ClusterState currentState) {
                 List<String> indicesToClose = Lists.newArrayList();
                 Map<String, IndexService> indices = Maps.newHashMap();
                 try {
@@ -118,12 +118,8 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
 
                                 aliasValidator.validateAliasFilter(aliasAction.alias(), filter, indexService.queryParserService());
                             }
-                            AliasMetaData newAliasMd = AliasMetaData.newAliasMetaDataBuilder(
-                                    aliasAction.alias())
-                                    .filter(filter)
-                                    .indexRouting(aliasAction.indexRouting())
-                                    .searchRouting(aliasAction.searchRouting())
-                                    .build();
+                            AliasMetaData newAliasMd = AliasMetaData.newAliasMetaDataBuilder(aliasAction.alias()).filter(filter).indexRouting(aliasAction.indexRouting())
+                                    .searchRouting(aliasAction.searchRouting()).build();
                             // Check if this alias already exists
                             AliasMetaData aliasMd = indexMetaData.aliases().get(aliasAction.alias());
                             if (aliasMd != null && aliasMd.equals(newAliasMd)) {
@@ -143,10 +139,7 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
                     }
 
                     if (changed) {
-                    	CassandraClusterState updatedState = CassandraClusterState.builder(currentState)
-                    			.version(currentState.version()+1)
-                    			.metaData(builder)
-                    			.build();
+                        ClusterState updatedState = ClusterState.builder(currentState).version(currentState.version() + 1).metaData(builder).build();
                         // even though changes happened, they resulted in 0 actual changes to metadata
                         // i.e. remove and add the same alias to the same index
                         if (!updatedState.metaData().aliases().equals(currentState.metaData().aliases())) {

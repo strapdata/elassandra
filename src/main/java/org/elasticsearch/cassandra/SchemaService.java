@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer.
+ * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -36,7 +36,7 @@ import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.index.fieldvisitor.FieldsVisitor;
 import org.elasticsearch.index.get.GetField;
@@ -49,102 +49,84 @@ import com.google.common.collect.ImmutableList;
 
 public interface SchemaService {
 
-	public  Map<String,GetField> flattenGetField(final String[] fieldFilter, final String path, final Map<String,Object> map, Map<String,GetField> fields);
-	public  Map<String,List<Object>> flattenObject(final Set<String> neededFiedls, final String path, final Map<String,Object> map, Map<String,List<Object>> fields);
+    public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Map<String, Object> map, Map<String, GetField> fields);
 
-	
-	/**
-	 * @param index
-	 * @param replicationFactor
-	 * @throws IOException
-	 */
-	public void createIndexKeyspace(String index, int replicationFactor)
-			throws IOException;
+    public Map<String, List<Object>> flattenObject(final Set<String> neededFiedls, final String path, final Map<String, Object> map, Map<String, List<Object>> fields);
 
-	public String updateUDT(String ksName, String cfName, String name,
-			ObjectMapper objectMapper) throws RequestExecutionException;
+    /**
+     * @param index
+     * @param replicationFactor
+     * @throws IOException
+     */
+    public void createIndexKeyspace(String index, int replicationFactor) throws IOException;
 
-	/**
-	 * @param index
-	 * @param type
-	 * @param typesMap
-	 * @throws IOException
-	 */
-	public void updateTableSchema(String index, String type,
-			Set<String> columns, DocumentMapper docMapper) throws IOException;
+    public void removeIndexKeyspace(String index) throws IOException;
+    
+    public String updateUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
 
-	public List<ColumnDefinition> getPrimaryKeyColumns(String ksName,
-			String cfName) throws ConfigurationException;
+    /**
+     * @param index
+     * @param type
+     * @param typesMap
+     * @throws IOException
+     */
+    public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
 
-	public List<String> getPrimaryKeyColumnsName(String ksName,
-			String cfName) throws ConfigurationException;
+    public List<ColumnDefinition> getPrimaryKeyColumns(String ksName, String cfName) throws ConfigurationException;
 
-	public List<String> cassandraMappedColumns(String ksName,
-			String cfName);
+    public List<String> getPrimaryKeyColumnsName(String ksName, String cfName) throws ConfigurationException;
 
-	public String[] cassandraColumns(MapperService mapperService,
-			String type);
+    public List<String> cassandraMappedColumns(String ksName, String cfName);
 
-	/**
-	 * Fetch the row from the matching keyspace.table
-	 * @param index
-	 * @param type
-	 * @param requiredColumns
-	 * @param id
-	 * @return
-	 * @throws InvalidRequestException
-	 * @throws RequestExecutionException
-	 * @throws RequestValidationException
-	 * @throws IOException
-	 */
-	public UntypedResultSet fetchRow(String index, String type,
-			String id, List<String> requiredColumns)
-			throws InvalidRequestException, RequestExecutionException,
-			RequestValidationException, IOException;
+    public String[] cassandraColumns(MapperService mapperService, String type);
 
-	public  UntypedResultSet fetchRow(String index, String type,
-			String id, List<String> requiredColumns, ConsistencyLevel cl)
-			throws InvalidRequestException, RequestExecutionException,
-			RequestValidationException, IOException;
+    /**
+     * Fetch the row from the matching keyspace.table
+     * 
+     * @param index
+     * @param type
+     * @param requiredColumns
+     * @param id
+     * @return
+     * @throws InvalidRequestException
+     * @throws RequestExecutionException
+     * @throws RequestValidationException
+     * @throws IOException
+     */
+    public UntypedResultSet fetchRow(String index, String type, String id, List<String> requiredColumns) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
+            IOException;
 
-	public Map<String, Object> rowAsMap(UntypedResultSet.Row row,
-			FieldsVisitor fieldVisitor, MapperService mapperService,
-			String[] types);
+    public UntypedResultSet fetchRow(String index, String type, String id, List<String> requiredColumns, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException,
+            RequestValidationException, IOException;
 
-	public void deleteRow(String index, String type, String id,
-			ConsistencyLevel cl) throws InvalidRequestException,
-			RequestExecutionException, RequestValidationException, IOException;
+    public Map<String, Object> rowAsMap(UntypedResultSet.Row row, FieldsVisitor fieldVisitor, MapperService mapperService, String[] types);
 
-	public String insertDocument(IndicesService indicesService,
-			IndexRequest request, CassandraClusterState clusterState,
-			Long writetime, Boolean applied) throws Exception;
+    public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
-	public String insertRow(String index, String type,
-			String[] columns, Object[] values, String id, boolean ifNotExists,
-			long ttl, ConsistencyLevel cl, Long writetime, Boolean applied)
-			throws Exception;
+    public String insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, Long writetime, Boolean applied) throws Exception;
 
-	public void index(String[] indices,
-			Collection<Range<Token>> tokenRanges);
+    public String insertRow(String index, String type, String[] columns, Object[] values, String id, boolean ifNotExists, long ttl, ConsistencyLevel cl, Long writetime, Boolean applied)
+            throws Exception;
 
-	public void indexColumnFamilly(String ksName, String cfName,
-			String index, String type, Collection<Range<Token>> tokenRanges);
+    public void index(String[] indices, Collection<Range<Token>> tokenRanges);
 
-	public void index(String index, String type, String id,
-			Object[] sourceData);
+    public void indexColumnFamilly(String ksName, String cfName, String index, String type, Collection<Range<Token>> tokenRanges);
 
-	public Token getToken(ByteBuffer rowKey, ColumnFamily cf);
+    public void index(String index, String type, String id, Object[] sourceData);
 
-	public void createElasticAdminKeyspace();
+    public Token getToken(ByteBuffer rowKey, ColumnFamily cf);
 
-	public void writeMetaDataAsComment(MetaData metadata) throws ConfigurationException, IOException;
+    public void createElasticAdminKeyspace();
 
-	public void initializeMetaDataAsComment();
-	
-	public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException;
-	public MetaData readMetaDataAsRow() throws NoPersistedMetaDataException;
-	
-	public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException, RequestValidationException;
+    public void writeMetaDataAsComment(MetaData metadata) throws ConfigurationException, IOException;
+
+    public void initializeMetaDataAsComment();
+
+    public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException;
+
+    public MetaData readMetaDataAsRow() throws NoPersistedMetaDataException;
+
+    public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
+            RequestValidationException;
 
 }
-

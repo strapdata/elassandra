@@ -219,8 +219,31 @@ public class IndexRequestBuilder extends ShardReplicationOperationRequestBuilder
         request.contentType(contentType);
         return this;
     }
-
     
+    /**
+     * Sets the type of operation to perform.
+     */
+    public IndexRequestBuilder setOpType(IndexRequest.OpType opType) {
+        request.opType(opType);
+        return this;
+    }
+
+    /**
+     * Sets a string representation of the {@link #setOpType(org.elasticassandra.action.index.IndexRequest.OpType)}. Can
+     * be either "index" or "create".
+     */
+    public IndexRequestBuilder setOpType(String opType) {
+        request.opType(IndexRequest.OpType.fromString(opType));
+        return this;
+    }
+
+    /**
+     * Set to <tt>true</tt> to force this index to use {@link org.elasticassandra.action.index.IndexRequest.OpType#CREATE}.
+     */
+    public IndexRequestBuilder setCreate(boolean create) {
+        request.create(create);
+        return this;
+    }
 
     /**
      * Should a refresh be executed post this index operation causing the operation to

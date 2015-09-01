@@ -56,40 +56,40 @@ public class CustomFieldsVisitor extends FieldsVisitor {
 
         return fields.contains(fieldInfo.name) ? Status.YES : Status.NO;
     }
-    
+
     @Override
     public String[] cassandraColumns(MapperService mapperService, String type) {
-    	Set<String> columns = new HashSet<String>(fields.size());
-    	DocumentMapper docMapper = mapperService.documentMapper(type);
-    	for(String f : fields) {
-    		if (f.indexOf('.') > 0) {
-    			String rootField = f.substring(0,f.indexOf('.'));
-    			ObjectMapper rootMapper = docMapper.objectMappers().get(rootField);
-    			if (rootMapper != null) {
-    				// nested UDT x.y.z, if multi valued => get x, otherwise get x"."y"."z
-    				columns.add( (rootMapper.isSingleValue()) ? f.replaceAll("\\.","\".\"") : rootField );
-    				continue;
-    			} 
-    		} 
-    		// field name x or x.y.z
-    		columns.add(f);
-    	}
-    	return columns.toArray(new String[columns.size()]);
+        Set<String> columns = new HashSet<String>(fields.size());
+        DocumentMapper docMapper = mapperService.documentMapper(type);
+        for (String f : fields) {
+            if (f.indexOf('.') > 0) {
+                String rootField = f.substring(0, f.indexOf('.'));
+                ObjectMapper rootMapper = docMapper.objectMappers().get(rootField);
+                if (rootMapper != null) {
+                    // nested UDT x.y.z, if multi valued => get x, otherwise get x"."y"."z
+                    columns.add((rootMapper.isSingleValue()) ? f.replaceAll("\\.", "\".\"") : rootField);
+                    continue;
+                }
+            }
+            // field name x or x.y.z
+            columns.add(f);
+        }
+        return columns.toArray(new String[columns.size()]);
     }
-    
+
     @Override
     public boolean needSource() {
-    	return fields.contains(SourceFieldMapper.NAME);
+        return fields.contains(SourceFieldMapper.NAME);
     }
-    
+
     @Override
     public boolean needFields() {
-    	return true;
+        return true;
     }
-    
+
     @Override
     public Set<String> neededFields() {
-    	return fields;
+        return fields;
     }
-    
+
 }

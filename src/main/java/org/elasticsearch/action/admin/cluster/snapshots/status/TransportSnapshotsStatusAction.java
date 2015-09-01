@@ -27,7 +27,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.SnapshotId;
@@ -69,7 +69,7 @@ public class TransportSnapshotsStatusAction extends TransportMasterNodeOperation
     }
 
     @Override
-    protected ClusterBlockException checkBlock(SnapshotsStatusRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(SnapshotsStatusRequest request, ClusterState state) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
     }
 
@@ -85,7 +85,7 @@ public class TransportSnapshotsStatusAction extends TransportMasterNodeOperation
 
     @Override
     protected void masterOperation(final SnapshotsStatusRequest request,
-                                   final CassandraClusterState state,
+                                   final ClusterState state,
                                    final ActionListener<SnapshotsStatusResponse> listener) throws ElasticsearchException {
         ImmutableList<SnapshotMetaData.Entry> currentSnapshots = snapshotsService.currentSnapshots(request.repository(), request.snapshots());
 

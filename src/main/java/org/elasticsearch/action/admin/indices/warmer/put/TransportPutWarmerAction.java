@@ -28,7 +28,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -78,13 +78,13 @@ public class TransportPutWarmerAction extends TransportMasterNodeOperationAction
     }
 
     @Override
-    protected ClusterBlockException checkBlock(PutWarmerRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(PutWarmerRequest request, ClusterState state) {
         String[] concreteIndices = clusterService.state().metaData().concreteIndices(request.searchRequest().indicesOptions(), request.searchRequest().indices());
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, concreteIndices);
     }
 
     @Override
-    protected void masterOperation(final PutWarmerRequest request, final CassandraClusterState state, final ActionListener<PutWarmerResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(final PutWarmerRequest request, final ClusterState state, final ActionListener<PutWarmerResponse> listener) throws ElasticsearchException {
         // first execute the search request, see that its ok...
         SearchRequest searchRequest = new SearchRequest(request.searchRequest(), request);
         searchAction.execute(searchRequest, new ActionListener<SearchResponse>() {
@@ -109,7 +109,7 @@ public class TransportPutWarmerAction extends TransportMasterNodeOperationAction
                     }
 
                     @Override
-                    public CassandraClusterState execute(CassandraClusterState currentState) {
+                    public ClusterState execute(ClusterState currentState) {
                         MetaData metaData = currentState.metaData();
                         String[] concreteIndices = metaData.concreteIndices(request.searchRequest().indicesOptions(), request.searchRequest().indices());
 
@@ -155,7 +155,7 @@ public class TransportPutWarmerAction extends TransportMasterNodeOperationAction
                             mdBuilder.put(indexBuilder);
                         }
 
-                        return CassandraClusterState.builder(currentState).metaData(mdBuilder).build();
+                        return ClusterState.builder(currentState).metaData(mdBuilder).build();
                     }
                 });
             }

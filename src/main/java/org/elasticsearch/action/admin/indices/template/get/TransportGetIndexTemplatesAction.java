@@ -25,7 +25,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadOperationAction;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.CassandraClusterState;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexTemplateMetaData;
@@ -53,7 +53,7 @@ public class TransportGetIndexTemplatesAction extends TransportMasterNodeReadOpe
     }
 
     @Override
-    protected ClusterBlockException checkBlock(GetIndexTemplatesRequest request, CassandraClusterState state) {
+    protected ClusterBlockException checkBlock(GetIndexTemplatesRequest request, ClusterState state) {
         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
     }
 
@@ -68,7 +68,7 @@ public class TransportGetIndexTemplatesAction extends TransportMasterNodeReadOpe
     }
 
     @Override
-    protected void masterOperation(GetIndexTemplatesRequest request, CassandraClusterState state, ActionListener<GetIndexTemplatesResponse> listener) throws ElasticsearchException {
+    protected void masterOperation(GetIndexTemplatesRequest request, ClusterState state, ActionListener<GetIndexTemplatesResponse> listener) throws ElasticsearchException {
         List<IndexTemplateMetaData> results;
 
         // If we did not ask for a specific name, then we return all templates

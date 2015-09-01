@@ -153,11 +153,10 @@ public class NodeBuilder {
     }
 
     public NodeBuilder put(String name, String value) {
-    	settings.put(name,value);
-    	return this;
+        settings.put(name, value);
+        return this;
     }
-    
-    
+
     /**
      * Builds the node without starting it.
      */

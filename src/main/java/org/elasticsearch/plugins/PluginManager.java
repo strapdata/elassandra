@@ -82,20 +82,10 @@ public class PluginManager {
     // By default timeout is 0 which means no timeout
     public static final TimeValue DEFAULT_TIMEOUT = TimeValue.timeValueMillis(0);
 
-    private static final ImmutableSet<Object> BLACKLIST = ImmutableSet.builder()
-            .add("elasticsearch",
-                    "elasticsearch.bat",
-                    "elasticsearch.in.sh",
-                    "plugin",
-                    "plugin.bat",
-                    "service.bat").build();
+    private static final ImmutableSet<Object> BLACKLIST = ImmutableSet.builder().add("elasticsearch", "elasticsearch.bat", "elasticsearch.in.sh", "plugin", "plugin.bat", "service.bat").build();
 
     // Valid directory names for plugin ZIP files when it has only one single dir
-    private static final ImmutableSet<Object> VALID_TOP_LEVEL_PLUGIN_DIRS = ImmutableSet.builder()
-            .add("_site",
-                    "bin",
-                    "config",
-                    "_dict").build();
+    private static final ImmutableSet<Object> VALID_TOP_LEVEL_PLUGIN_DIRS = ImmutableSet.builder().add("_site", "bin", "config", "_dict").build();
 
     private final Environment environment;
 
@@ -109,21 +99,17 @@ public class PluginManager {
         this.outputMode = outputMode;
         this.timeout = timeout;
 
-        TrustManager[] trustAllCerts = new TrustManager[]{
-                new X509TrustManager() {
-                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                        return null;
-                    }
+        TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
+            public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                return null;
+            }
 
-                    public void checkClientTrusted(
-                            java.security.cert.X509Certificate[] certs, String authType) {
-                    }
+            public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+            }
 
-                    public void checkServerTrusted(
-                            java.security.cert.X509Certificate[] certs, String authType) {
-                    }
-                }
-        };
+            public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+            }
+        } };
 
         // Install the all-trusting trust manager
         try {
@@ -246,7 +232,6 @@ public class PluginManager {
             File toLocation = pluginHandle.binDir(environment);
             debug("Found bin, moving to " + toLocation.getAbsolutePath());
 
-
             FileSystemUtils.deleteRecursively(toLocation);
             try {
                 FileSystemUtils.move(binFile.toPath(), toLocation.toPath());
@@ -264,8 +249,6 @@ public class PluginManager {
                     return FileVisitResult.CONTINUE;
                 }
             });
-
-
 
             debug("Installed " + name + " into " + toLocation.getAbsolutePath());
             potentialSitePlugin = false;
@@ -311,8 +294,7 @@ public class PluginManager {
         if (pluginToDelete.exists()) {
             debug("Removing: " + pluginToDelete.getPath());
             if (!FileSystemUtils.deleteRecursively(pluginToDelete, true)) {
-                throw new IOException("Unable to remove " + pluginHandle.name + ". Check file permissions on " +
-                        pluginToDelete.toString());
+                throw new IOException("Unable to remove " + pluginHandle.name + ". Check file permissions on " + pluginToDelete.toString());
             }
             removed = true;
         }
@@ -320,8 +302,7 @@ public class PluginManager {
         if (pluginToDelete.exists()) {
             debug("Removing: " + pluginToDelete.getPath());
             if (!pluginToDelete.delete()) {
-                throw new IOException("Unable to remove " + pluginHandle.name + ". Check file permissions on " +
-                        pluginToDelete.toString());
+                throw new IOException("Unable to remove " + pluginHandle.name + ". Check file permissions on " + pluginToDelete.toString());
             }
             removed = true;
         }
@@ -329,8 +310,7 @@ public class PluginManager {
         if (binLocation.exists()) {
             debug("Removing: " + binLocation.getPath());
             if (!FileSystemUtils.deleteRecursively(binLocation)) {
-                throw new IOException("Unable to remove " + pluginHandle.name + ". Check file permissions on " +
-                        binLocation.toString());
+                throw new IOException("Unable to remove " + pluginHandle.name + ". Check file permissions on " + binLocation.toString());
             }
             removed = true;
         }
@@ -400,10 +380,10 @@ public class PluginManager {
     private static final int EXIT_CODE_ERROR = 70;
 
     public static void main(String[] args) {
-    	
-    	// set cassandra in client mode.
-    	Config.setClientMode(true);
-    	
+
+        // set cassandra in client mode.
+        Config.setClientMode(true);
+
         Tuple<Settings, Environment> initialSettings = InternalSettingsPreparer.prepareSettings(EMPTY_SETTINGS, true);
 
         if (!initialSettings.v2().pluginsFile().exists()) {
@@ -424,72 +404,71 @@ public class PluginManager {
             for (int c = 0; c < args.length; c++) {
                 String command = args[c];
                 switch (command) {
-                    case "-u":
-                    case "--url":
+                case "-u":
+                case "--url":
                     // deprecated versions:
-                    case "url":
-                    case "-url":
-                        url = getCommandValue(args, ++c, "--url");
-                        // Until update is supported, then supplying a URL implies installing
-                        // By specifying this action, we also avoid silently failing without
-                        //  dubious checks.
-                        action = ACTION.INSTALL;
-                        break;
-                    case "-v":
-                    case "--verbose":
+                case "url":
+                case "-url":
+                    url = getCommandValue(args, ++c, "--url");
+                    // Until update is supported, then supplying a URL implies installing
+                    // By specifying this action, we also avoid silently failing without
+                    //  dubious checks.
+                    action = ACTION.INSTALL;
+                    break;
+                case "-v":
+                case "--verbose":
                     // deprecated versions:
-                    case "verbose":
-                    case "-verbose":
-                        outputMode = OutputMode.VERBOSE;
-                        break;
-                    case "-s":
-                    case "--silent":
+                case "verbose":
+                case "-verbose":
+                    outputMode = OutputMode.VERBOSE;
+                    break;
+                case "-s":
+                case "--silent":
                     // deprecated versions:
-                    case "silent":
-                    case "-silent":
-                        outputMode = OutputMode.SILENT;
-                        break;
-                    case "-i":
-                    case "--install":
+                case "silent":
+                case "-silent":
+                    outputMode = OutputMode.SILENT;
+                    break;
+                case "-i":
+                case "--install":
                     // deprecated versions:
-                    case "install":
-                    case "-install":
-                        pluginName = getCommandValue(args, ++c, "--install");
-                        action = ACTION.INSTALL;
-                        break;
-                    case "-r":
-                    case "--remove":
+                case "install":
+                case "-install":
+                    pluginName = getCommandValue(args, ++c, "--install");
+                    action = ACTION.INSTALL;
+                    break;
+                case "-r":
+                case "--remove":
                     // deprecated versions:
-                    case "remove":
-                    case "-remove":
-                        pluginName = getCommandValue(args, ++c, "--remove");
-                        action = ACTION.REMOVE;
-                        break;
-                    case "-t":
-                    case "--timeout":
+                case "remove":
+                case "-remove":
+                    pluginName = getCommandValue(args, ++c, "--remove");
+                    action = ACTION.REMOVE;
+                    break;
+                case "-t":
+                case "--timeout":
                     // deprecated versions:
-                    case "timeout":
-                    case "-timeout":
-                        String timeoutValue = getCommandValue(args, ++c, "--timeout");
-                        timeout = TimeValue.parseTimeValue(timeoutValue, DEFAULT_TIMEOUT);
-                        break;
-                    case "-l":
-                    case "--list":
-                        action = ACTION.LIST;
-                        break;
-                    case "-h":
-                    case "--help":
-                        displayHelp(null);
-                        break;
-                    default:
-                        displayHelp("Command [" + command + "] unknown.");
-                        // Unknown command. We break...
-                        System.exit(EXIT_CODE_CMD_USAGE);
+                case "timeout":
+                case "-timeout":
+                    String timeoutValue = getCommandValue(args, ++c, "--timeout");
+                    timeout = TimeValue.parseTimeValue(timeoutValue, DEFAULT_TIMEOUT);
+                    break;
+                case "-l":
+                case "--list":
+                    action = ACTION.LIST;
+                    break;
+                case "-h":
+                case "--help":
+                    displayHelp(null);
+                    break;
+                default:
+                    displayHelp("Command [" + command + "] unknown.");
+                    // Unknown command. We break...
+                    System.exit(EXIT_CODE_CMD_USAGE);
                 }
             }
         } catch (Throwable e) {
-            displayHelp("Error while parsing options: " + e.getClass().getSimpleName() +
-                    ": " + e.getMessage());
+            displayHelp("Error while parsing options: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             System.exit(EXIT_CODE_CMD_USAGE);
         }
 
@@ -497,50 +476,47 @@ public class PluginManager {
             int exitCode = EXIT_CODE_ERROR; // we fail unless it's reset
             PluginManager pluginManager = new PluginManager(initialSettings.v2(), url, outputMode, timeout);
             switch (action) {
-                case ACTION.INSTALL:
-                    try {
-                        pluginManager.log("-> Installing " + Strings.nullToEmpty(pluginName) + "...");
-                        pluginManager.downloadAndExtract(pluginName);
-                        exitCode = EXIT_CODE_OK;
-                    } catch (IOException e) {
-                        exitCode = EXIT_CODE_IO_ERROR;
-                        pluginManager.log("Failed to install " + pluginName + ", reason: " + e.getMessage());
-                    } catch (Throwable e) {
-                        exitCode = EXIT_CODE_ERROR;
-                        displayHelp("Error while installing plugin, reason: " + e.getClass().getSimpleName() +
-                                ": " + e.getMessage());
-                    }
-                    break;
-                case ACTION.REMOVE:
-                    try {
-                        pluginManager.log("-> Removing " + Strings.nullToEmpty(pluginName) + "...");
-                        pluginManager.removePlugin(pluginName);
-                        exitCode = EXIT_CODE_OK;
-                    } catch (ElasticsearchIllegalArgumentException e) {
-                        exitCode = EXIT_CODE_CMD_USAGE;
-                        pluginManager.log("Failed to remove " + pluginName + ", reason: " + e.getMessage());
-                    } catch (IOException e) {
-                        exitCode = EXIT_CODE_IO_ERROR;
-                        pluginManager.log("Failed to remove " + pluginName + ", reason: " + e.getMessage());
-                    } catch (Throwable e) {
-                        exitCode = EXIT_CODE_ERROR;
-                        displayHelp("Error while removing plugin, reason: " + e.getClass().getSimpleName() +
-                                ": " + e.getMessage());
-                    }
-                    break;
-                case ACTION.LIST:
-                    try {
-                        pluginManager.listInstalledPlugins();
-                        exitCode = EXIT_CODE_OK;
-                    } catch (Throwable e) {
-                        displayHelp("Error while listing plugins, reason: " + e.getClass().getSimpleName() +
-                                ": " + e.getMessage());
-                    }
-                    break;
-
-                default:
-                    pluginManager.log("Unknown Action [" + action + "]");
+            case ACTION.INSTALL:
+                try {
+                    pluginManager.log("-> Installing " + Strings.nullToEmpty(pluginName) + "...");
+                    pluginManager.downloadAndExtract(pluginName);
+                    exitCode = EXIT_CODE_OK;
+                } catch (IOException e) {
+                    exitCode = EXIT_CODE_IO_ERROR;
+                    pluginManager.log("Failed to install " + pluginName + ", reason: " + e.getMessage());
+                } catch (Throwable e) {
                     exitCode = EXIT_CODE_ERROR;
+                    displayHelp("Error while installing plugin, reason: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                }
+                break;
+            case ACTION.REMOVE:
+                try {
+                    pluginManager.log("-> Removing " + Strings.nullToEmpty(pluginName) + "...");
+                    pluginManager.removePlugin(pluginName);
+                    exitCode = EXIT_CODE_OK;
+                } catch (ElasticsearchIllegalArgumentException e) {
+                    exitCode = EXIT_CODE_CMD_USAGE;
+                    pluginManager.log("Failed to remove " + pluginName + ", reason: " + e.getMessage());
+                } catch (IOException e) {
+                    exitCode = EXIT_CODE_IO_ERROR;
+                    pluginManager.log("Failed to remove " + pluginName + ", reason: " + e.getMessage());
+                } catch (Throwable e) {
+                    exitCode = EXIT_CODE_ERROR;
+                    displayHelp("Error while removing plugin, reason: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                }
+                break;
+            case ACTION.LIST:
+                try {
+                    pluginManager.listInstalledPlugins();
+                    exitCode = EXIT_CODE_OK;
+                } catch (Throwable e) {
+                    displayHelp("Error while listing plugins, reason: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                }
+                break;
+
+            default:
+                pluginManager.log("Unknown Action [" + action + "]");
+                exitCode = EXIT_CODE_ERROR;
 
             }
             System.exit(exitCode); // exit here!
@@ -570,8 +546,7 @@ public class PluginManager {
 
         // If we had a value that is blank, then fail immediately
         if (trimmedValue == null) {
-            throw new ElasticsearchIllegalArgumentException(
-                    "value for " + flag + "('" + args[arg] + "') must be set. Usage: " + flag + " [value]");
+            throw new ElasticsearchIllegalArgumentException("value for " + flag + "('" + args[arg] + "') must be set. Usage: " + flag + " [value]");
         }
 
         return trimmedValue;
@@ -601,11 +576,13 @@ public class PluginManager {
     }
 
     private void debug(String line) {
-        if (outputMode == OutputMode.VERBOSE) System.out.println(line);
+        if (outputMode == OutputMode.VERBOSE)
+            System.out.println(line);
     }
 
     private void log(String line) {
-        if (outputMode != OutputMode.SILENT) System.out.println(line);
+        if (outputMode != OutputMode.SILENT)
+            System.out.println(line);
     }
 
     /**
