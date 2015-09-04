@@ -3,6 +3,7 @@
 Like Elasticsearch, Elasticassandra support schema-less dynamic addition of unmapped fields. Here is the mapping from Elasticsearch field basic types to cassandra colums types :
 
 Elasticearch Types | CQL Types | Comment
+--- | --- | ---
 string | test |
 integer, short, byte | timestamp |
 long | bigint | 
