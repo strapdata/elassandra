@@ -43,7 +43,10 @@ import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.serializers.CollectionSerializer;
+import org.apache.cassandra.serializers.ListSerializer;
 import org.apache.cassandra.service.ElastiCassandraDaemon;
+import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
@@ -91,23 +94,33 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
         super();
     }
 
-    public static Map<String, Object> deserializeUDT(UserType utype, ByteBuffer bb) {
-        Map<String, Object> mapValue = new HashMap<String, Object>();
-        ByteBuffer[] components = utype.split(bb);
-        for (int i = 0; i < components.length; i++) {
-            String fieldName = UTF8Type.instance.compose(utype.fieldName(i));
-            Object value;
-            AbstractType<?> ctype = utype.type(i);
-            if (ctype instanceof UserType) {
-                value = deserializeUDT((UserType) ctype, components[i]);
-            } else {
-                value = (components[i] == null) ? null : ctype.compose(components[i]);
+    public static Object deserialize(AbstractType type, ByteBuffer bb) {
+        if (type instanceof UserType) {
+            UserType utype = (UserType) type;
+            Map<String, Object> mapValue = new HashMap<String, Object>();
+            ByteBuffer[] components = utype.split(bb);
+            for (int i = 0; i < components.length; i++) {
+                String fieldName = UTF8Type.instance.compose(utype.fieldName(i));
+                AbstractType<?> ctype = utype.type(i);
+                Object value = (components[i] == null) ? null : deserialize(ctype, components[i]);
+                mapValue.put(fieldName, value);
             }
-            mapValue.put(fieldName, value);
+            return mapValue;
+        } else if (type instanceof ListType) {
+            ListType ltype = (ListType)type;
+            ByteBuffer input = bb.duplicate();
+            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
+            List list = new ArrayList(size);
+            for(int i=0; i < size; i++) {
+                list.add( deserialize(ltype.getElementsType(), ltype.getSerializer().getElement(bb, i)));
+            }
+            return list;
+        } else {
+            return type.compose(bb);
         }
-        return mapValue;
     }
 
+    
     public String getElasticId(ByteBuffer rowKey, ColumnFamily cf) {
         if (cf.metadata().getKeyValidatorAsCType().isCompound()) {
             return Bytes.toRawHexString(rowKey);
@@ -148,11 +161,14 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
                     if (ctype instanceof ListType) {
                         ctype = ((ListType) ctype).getElementsType();
                     }
+                    value = deserialize(ctype, cell.value());
+                    /*
                     if (ctype instanceof UserType) {
                         value = deserializeUDT((UserType) ctype, cell.value());
                     } else {
                         value = ctype.compose(cell.value());
                     }
+                    */
                     sourceData.add(cd.name.toString());
                     sourceData.add(value);
                     logger.debug("indexing row id={} column={} type={} value={}", id, cd.name, ctype, value);

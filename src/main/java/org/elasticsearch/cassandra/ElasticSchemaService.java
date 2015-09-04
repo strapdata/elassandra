@@ -160,7 +160,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     };
 
     public boolean isNativeCql3Type(String cqlType) {
-        return !cqlType.startsWith("geo_");
+        return typeMapping.values().contains(cqlType) && !cqlType.startsWith("geo_");
     }
 
     @Inject
@@ -215,12 +215,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         return process(cl, null, query, values);
     }
 
-    protected final class TokenComparator implements Comparator<Token> {
-        public int compare(Token a, Token b) {
-            return a.compareTo(b);
-        }
-    }
-
+    
     /**
      * Don't use QueryProcessor.executeInternal, we need to propagate this on
      * all nodes.
@@ -270,7 +265,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     }
 
     /**
-     * Recusivelly build UDT value according to the input map.
+     * Recursive build UDT value according to the input map.
      * 
      * @param ksName
      * @param cfName
@@ -286,7 +281,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
 
         if (source instanceof Map) {
             // elasticsearch object type = cassandra UDT
-            ByteBuffer bb = buildUDTValueForOneObject(ksName, cfName, fieldName, (Map<String, Object>) source, mapper);
+            ByteBuffer bb = buildUDTValueForMap(ksName, cfName, fieldName, (Map<String, Object>) source, mapper);
             if (mapper.isSingleValue()) {
                 return bb;
             } else {
@@ -299,7 +294,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             }
             List<ByteBuffer> components = new ArrayList<ByteBuffer>();
             for (Object sourceObject : (List) source) {
-                ByteBuffer bb = buildUDTValueForOneObject(ksName, cfName, fieldName, (Map<String, Object>) sourceObject, mapper);
+                ByteBuffer bb = buildUDTValueForMap(ksName, cfName, fieldName, (Map<String, Object>) sourceObject, mapper);
                 components.add(bb);
             }
             return components;
@@ -307,17 +302,16 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         throw new MapperParsingException("unexpected object=" + source + " mapper=" + mapper.name());
     }
 
-    public ByteBuffer buildUDTValueForOneObject(final String ksName, final String cfName, final String fieldName, final Map<String, Object> source, final Mapper mapper) throws SyntaxException,
+    public ByteBuffer buildUDTValueForMap(final String ksName, final String cfName, final String fieldName, final Map<String, Object> source, final Mapper mapper) throws SyntaxException,
             ConfigurationException {
         List<ByteBuffer> components = new ArrayList<ByteBuffer>();
         Pair<List<String>, List<String>> udtInfo = getUDTInfo(ksName, cfName + '_' + fieldName);
         for (int i = 0; i < udtInfo.left.size(); i++) {
-            String field_name = udtInfo.left.get(i);
-            String field_type = udtInfo.right.get(i);
-            AbstractType type = TypeParser.parse(field_type);
-            Object field_value = source.get(field_name);
+            String fname = udtInfo.left.get(i);
+            AbstractType type = TypeParser.parse(udtInfo.right.get(i));
+            Object field_value = source.get(fname);
             ObjectMapper objectMapper = (ObjectMapper) mapper;
-            components.add(buildTypeValue(type, field_name, field_value, objectMapper.mappers().get(field_name)));
+            components.add(buildTypeValue(ksName, cfName, type, fieldName+'_'+fname, field_value, objectMapper.mappers().get(fname)));
         }
         return TupleType.buildValue(components.toArray(new ByteBuffer[components.size()]));
     }
@@ -337,7 +331,8 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         }
     }
 
-    public ByteBuffer buildTypeValue(final AbstractType type, final String name, final Object value, final Mapper mapper) {
+    public ByteBuffer buildTypeValue(final String ksName, final String cfName, final AbstractType type, final String name, final Object value, final Mapper mapper) throws SyntaxException,
+    ConfigurationException {
         if (value == null)
             return null;
 
@@ -350,30 +345,33 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 AbstractType<?> subType = udt.fieldType(j);
                 Mapper subMapper = ((ObjectMapper) mapper).mappers().get(subName);
                 Object subValue = mapValue.get(subName);
-                components.add(buildTypeValue(subType, subName, subValue, subMapper));
+                components.add(buildTypeValue(ksName, cfName, subType, subName, subValue, subMapper));
             }
             return TupleType.buildValue(components.toArray(new ByteBuffer[components.size()]));
         } else if (type instanceof ListType) {
             if (!(value instanceof List)) {
-                // build a singleton
-                return type.decompose(ImmutableList.of(value));
+                if (value instanceof Map) {
+                    // build a singleton list of UDT 
+                    return type.decompose(ImmutableList.of( buildUDTValueForMap(ksName, cfName, name, (Map<String, Object>) value, mapper) ) );
+                } else {
+                    return type.decompose(ImmutableList.of( mappedValue((FieldMapper) mapper, value) ));
+                }
             } else {
                 return type.decompose(value);
             }
         } else {
             // Native cassandra type,
-            FieldMapper fieldMapper = (FieldMapper) mapper;
-
-            Object mappedValue;
-            if (fieldMapper instanceof DateFieldMapper) {
-                mappedValue = new Date(((DateFieldMapper) fieldMapper).value(value));
-            } else {
-                mappedValue = fieldMapper.value(value);
-            }
-            return type.decompose(mappedValue);
+            return type.decompose( mappedValue((FieldMapper) mapper, value) );
         }
     }
 
+    public Object mappedValue(FieldMapper fieldMapper, Object value) {
+        if (fieldMapper instanceof DateFieldMapper) {
+            return new Date(((DateFieldMapper) fieldMapper).value(value));
+        } 
+        return fieldMapper.value(value);
+    }
+    
     /*
      * (non-Javadoc)
      * 
@@ -397,6 +395,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         Pair<List<String>, List<String>> udt = getUDTInfo(ksName, objectMapper.fullPath().replace('.', '_'));
         if (udt == null) {
             // create new UDT.
+            // TODO: Support dynamic mapping by altering UDT
             StringBuilder create = new StringBuilder(String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( ", ksName, typeName));
             boolean first = true;
             for (Entry<String, Mapper> entry : objectMapper.mappers().entrySet()) {
@@ -405,19 +404,28 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     first = false;
                 else
                     create.append(", ");
-                create.append(mapper.name());
+                create.append(mapper.name()).append(" ");
                 if (mapper instanceof ObjectMapper) {
-                    create.append(" " + ((mapper.isSingleValue()) ? "frozen<" : "list<")).append(cfName + '_' + ((ObjectMapper) mapper).fullPath().replace('.', '_')).append(">");
+                    if (!mapper.isSingleValue()) create.append("list<");
+                    create.append("frozen<").append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_')).append(">");
+                    if (!mapper.isSingleValue()) create.append(">");
                 } else {
                     String cqlType = typeMapping.get(mapper.contentType());
                     if (mapper.isSingleValue()) {
-                        create.append(" ").append(cqlType);
+                        create.append(cqlType);
                     } else {
-                        create.append(" list<").append(cqlType).append(">");
+                        create.append("list<");
+                        if (!isNativeCql3Type(cqlType)) create.append("frozen<");
+                        create.append(cqlType);
+                        if (!isNativeCql3Type(cqlType)) create.append(">");
+                        create.append(">");
                     }
                 }
             }
             create.append(" )");
+            if (logger.isDebugEnabled()) {
+                logger.debug(create.toString());
+            }
             QueryProcessor.process(create.toString(), ConsistencyLevel.LOCAL_QUORUM);
         } else {
             // update existing UDT.
@@ -815,7 +823,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                         List<ByteBuffer> lbb = row.getList(colSpec.name.toString(), BytesType.instance);
                         list = new ArrayList<Map<String, Object>>(lbb.size());
                         for (ByteBuffer bb : lbb) {
-                            list.add(ElasticSecondaryIndex.deserializeUDT((UserType) elementType, bb));
+                            list.add(ElasticSecondaryIndex.deserialize(elementType, bb));
                         }
                     } else {
                         list = row.getList(colSpec.name.toString(), elementType);
@@ -837,7 +845,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 }
             } else if (colSpec.type instanceof UserType) {
                 ByteBuffer bb = row.getBytes(colSpec.name.toString());
-                mapObject.put(columnName, ElasticSecondaryIndex.deserializeUDT((UserType) colSpec.type, bb));
+                mapObject.put(columnName, ElasticSecondaryIndex.deserialize(colSpec.type, bb));
             } else if (cql3Type instanceof CQL3Type.Custom) {
 
             }
@@ -959,15 +967,15 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 if (fieldMapper.isSingleValue() && (fieldValue instanceof List)) {
                     throw new MapperParsingException("field " + fieldMapper.name() + " should be a single value");
                 }
-
+                ;
                 if (fieldMapper.isSingleValue()) {
-                    values.add(buildFieldValue(fieldMapper, fieldValue));
+                    values.add(buildFieldValue(fieldMapper, fieldMapper.value(fieldValue)));
                 } else {
                     List<Object> fieldValueList2 = new ArrayList();
                     if (fieldValue instanceof List) {
                         List<Object> fieldValueList = (List) fieldValue;
                         for (Object o : fieldValueList) {
-                            fieldValueList2.add(buildFieldValue(fieldMapper, o));
+                            fieldValueList2.add(buildFieldValue(fieldMapper, fieldMapper.value(o)));
                         }
                     } else {
                         fieldValueList2.add(buildFieldValue(fieldMapper, fieldValue));
@@ -975,7 +983,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     values.add(fieldValueList2);
                 }
             } else {
-                logger.debug("Ignoring unmapped field {} = {} ", field, fieldValue);
+                logger.debug("Ignoring unmapped field {} = {} ", field, fieldMapper.value(fieldValue));
             }
         }
 
