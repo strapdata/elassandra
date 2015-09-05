@@ -461,7 +461,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                         listener.onFailure(t);
                     }
                 } else {
-                    // dead code for elasticassandra.
+                    // dead code for elassandra.
                     DiscoveryNode node = observer.observedState().nodes().get(shard.currentNodeId());
                     transportService.sendRequest(node, actionName, internalRequest.request(), transportOptions, new BaseTransportResponseHandler<Response>() {
 

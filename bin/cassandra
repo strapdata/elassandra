@@ -197,11 +197,10 @@ while true; do
         
 		-e)	# Start Elaticsearch in cassandra.
 			echo "Starting with Elasticsearch enabled."
-			CLASSPATH="$CLASSPATH:$CASSANDRA_HOME/lib/sigar/libsigar-universal64-macosx.dylib"
+			#CLASSPATH="$CLASSPATH:$CASSANDRA_HOME/lib/sigar/libsigar-universal64-macosx.dylib"
 			JVM_OPTS="$JVM_OPTS -Djava.library.path=$CASSANDRA_HOME/lib/sigar -ea -Djava.awt.headless=true"
 			JVM_OPTS="$JVM_OPTS -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 -XX:+UseCMSInitiatingOccupancyOnly"
-			JVM_OPTS="$JVM_OPTS -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=logs/heapdump.hprof"
-	    	classname="org.apache.cassandra.service.ElastiCassandraDaemon"
+			classname="org.apache.cassandra.service.ElassandraDaemon"
 	    	shift 1
         ;;
         -d) # start in debug mode

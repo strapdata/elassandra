@@ -45,7 +45,7 @@ import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.ListSerializer;
-import org.apache.cassandra.service.ElastiCassandraDaemon;
+import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
@@ -133,7 +133,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
      */
     @Override
     public void index(ByteBuffer rowKey, ColumnFamily cf) {
-        if (ElastiCassandraDaemon.client() == null) {
+        if (ElassandraDaemon.client() == null) {
             // TODO: save the update in a commit log to replay it later....
             logger.warn("Elasticsearch  not ready, cannot index");
             return;
@@ -227,13 +227,13 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
      * @throws Throwable
      */
     private void synchronousIndex(String indexName, String type, String id, Object[] sourceData, long ttl, boolean refresh) throws Throwable {
-        ClusterService clusterService = ElastiCassandraDaemon.injector().getInstance(ClusterService.class);
+        ClusterService clusterService = ElassandraDaemon.injector().getInstance(ClusterService.class);
 
         // validate, if routing is required, that we got routing
         IndexMetaData indexMetaData = clusterService.state().metaData().index(indexName);
         MappingMetaData mappingMd = indexMetaData.mappingOrDefault(type);
 
-        IndicesService indicesService = ElastiCassandraDaemon.injector().getInstance(IndicesService.class);
+        IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
         IndexService indexService = indicesService.indexServiceSafe(indexName);
         IndexShard indexShard = indexService.shardSafe(0);
         SourceToParse sourceToParse = SourceToParse.source(SourceToParse.Origin.PRIMARY, source(sourceData)).type(type).id(id)
@@ -284,7 +284,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
      */
     @Override
     public void delete(DecoratedKey key, Group opGroup) {
-        if (ElastiCassandraDaemon.client() == null) {
+        if (ElassandraDaemon.client() == null) {
             // TODO: save the update in a commit log to replay it later....
             logger.warn("Elastic node not yet started, cannot delete document");
             return;
@@ -311,7 +311,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
                     logger.error("failed to delete doc id=" + id, e);
                 }
             };
-            ElastiCassandraDaemon.client().xdelete(request, listener);
+            ElassandraDaemon.client().xdelete(request, listener);
         }
     }
 
@@ -375,8 +375,8 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
      */
     @Override
     public void forceBlockingFlush() {
-        if (ElastiCassandraDaemon.injector() != null) {
-            IndicesService indicesService = ElastiCassandraDaemon.injector().getInstance(IndicesService.class);
+        if (ElassandraDaemon.injector() != null) {
+            IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
             if (indicesService != null) {
                 for (Pair<String, String> target : targets) {
                     IndexShard indexShard = indicesService.indexServiceSafe(target.left).shardSafe(0);

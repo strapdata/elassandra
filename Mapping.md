@@ -1,6 +1,6 @@
 # Elasticsearch document mapping
 
-Like Elasticsearch, Elasticassandra support schema-less dynamic addition of unmapped fields. Here is the mapping from Elasticsearch field basic types to cassandra colums types :
+Like Elasticsearch, Elassandra support schema-less dynamic addition of unmapped fields. Here is the mapping from Elasticsearch field basic types to cassandra colums types :
 
 Elasticearch Types | CQL Types | Comment
 --- | --- | ---

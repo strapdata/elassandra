@@ -229,7 +229,7 @@ public class IndexRequestBuilder extends ShardReplicationOperationRequestBuilder
     }
 
     /**
-     * Sets a string representation of the {@link #setOpType(org.elasticassandra.action.index.IndexRequest.OpType)}. Can
+     * Sets a string representation of the {@link #setOpType(org.elasticsearch.action.index.IndexRequest.OpType)}. Can
      * be either "index" or "create".
      */
     public IndexRequestBuilder setOpType(String opType) {
@@ -238,7 +238,7 @@ public class IndexRequestBuilder extends ShardReplicationOperationRequestBuilder
     }
 
     /**
-     * Set to <tt>true</tt> to force this index to use {@link org.elasticassandra.action.index.IndexRequest.OpType#CREATE}.
+     * Set to <tt>true</tt> to force this index to use {@link org.elasticsearch.action.index.IndexRequest.OpType#CREATE}.
      */
     public IndexRequestBuilder setCreate(boolean create) {
         request.create(create);

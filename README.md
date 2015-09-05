@@ -1,14 +1,14 @@
-# Elasticassandra
+# Elassandra
 
-Elasticassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) version 1.5 modified to run on top of [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
+Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) version 1.5 modified to run on top of [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
-Elasticassandra supports Cassandra vnodes and scale horizontally by adding more nodes.
+Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes.
 
 ## Architecture
 
 From an Elasticsearch perspective :
 * An Elasticsearch cluster is a Cassandra virtual datacenter.
-* Every Elasticassandra node is a master primary data node.
+* Every Elassandra node is a master primary data node.
 * Each node only index local data and acts as a primary local shard.
 * Elasticsearch data is not more stored in lucene indices, but in cassandra tables. 
   * An Elasticsearch index is mapped to a cassandra keyspace, 
@@ -30,17 +30,17 @@ From a Cassandra perspective :
 
 ### Building from Source
 
-Like Elasticsearch, Elasticassandra uses [Maven](http://maven.apache.org) for its build system.
+Like Elasticsearch, Elassandra uses [Maven](http://maven.apache.org) for its build system.
 
 Simply run the `mvn clean package -DskipTests` command in the cloned directory. The distribution will be created under *target/releases*.
 
 ### Installation
 
 * Install Apache Cassandra version 2.1.8. 
-* Elasticassandra is currently built from cassandra version 2.1.8 with the following minor changes :
+* Elassandra is currently built from cassandra version 2.1.8 with the following minor changes :
   * org.apache.cassandra.cql3.QueryOptions includes a new static constructor forInternalCalls().
   * org.apache.cassandra.service.CassandraDaemon and StorageService to include hooks to start Elasticsearch in the boostrap process.
-  * org.apache.cassandra.service.ElastiCassandraDaemon extends CassandraDaemon with Elasticsearch features.
+  * org.apache.cassandra.service.ElassandraDaemon extends CassandraDaemon with Elasticsearch features.
   * To avoid classloading issue, you can remove these 3 modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
 ```
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/cql3/QueryOptions*'
@@ -120,7 +120,7 @@ curl -XPUT 'http://localhost:9200/twitter/tweet/1' -d '
 {
     "user": "kimchy",
     "postDate": "2009-11-15T13:12:00",
-    "message": "Trying out Elasticsearch, so far so good?"
+    "message": "Trying out Elassandra, so far so good?"
 }'
 curl -XPUT 'http://localhost:9200/twitter/tweet/2' -d '
 {
@@ -137,10 +137,10 @@ Connected to Test Cluster at 127.0.0.1:9042.
 [cqlsh 5.0.1 | Cassandra 2.1.8 | CQL spec 3.2.0 | Native protocol v3]
 Use HELP for help.
 cqlsh> select * from twitter.tweet;
- _id | message                                       | postDate                     | user
------+-----------------------------------------------+------------------------------+------------
-   2 |        ['Another tweet, will it be indexed?'] | ['2009-11-15 15:12:12+0100'] | ['kimchy']
-   1 | ['Trying out Elasticsearch, so far so good?'] | ['2009-11-15 14:12:00+0100'] | ['kimchy']
+ _id | message                                    | postDate                     | user
+-----+--------------------------------------------+------------------------------+------------
+   2 |     ['Another tweet, will it be indexed?'] | ['2009-11-15 15:12:12+0100'] | ['kimchy']
+   1 | ['Trying out Elassandra, so far so good?'] | ['2009-11-15 14:12:00+0100'] | ['kimchy']
 (2 rows)
 
 cqlsh> describe table twitter.tweet;
@@ -151,7 +151,7 @@ CREATE TABLE twitter.tweet (
     user list<text>
 ) WITH bloom_filter_fp_chance = 0.01
     AND caching = '{"keys":"ALL", "rows_per_partition":"NONE"}'
-    AND comment = 'Auto-created by ElastiCassandra'
+    AND comment = 'Auto-created by Elassandra'
     AND compaction = {'min_threshold': '4', 'class': 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy', 'max_threshold': '32'}
     AND compression = {'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
     AND dclocal_read_repair_chance = 0.1
@@ -326,7 +326,7 @@ Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter,
 * When updating the Replication Factor, you will need to run a [nodetool repair <keyspace>](http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html) on the new node to effectivelly copy and index the data.
 * If a node become unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is red, otherwise cluster status is yellow.  
 
-After starting a new Elasticassandra node, data and elasticsearch indices are distributed on 2 nodes (with no replication). 
+After starting a new Elassandra node, data and elasticsearch indices are distributed on 2 nodes (with no replication). 
 ```
 nodetool status twitter
 Datacenter: DC1
@@ -506,9 +506,25 @@ localhost/127.0.0.1
   HOST_ID:74ae1629-0149-4e65-b790-cd25c7406675
 ```
 
+# Consistency Level
+
+When indexing a document, you can set write consistency level like this.
+
+```
+curl -XPUT 'http://localhost:9200/twitter/user/kimchy?consistency=one' -d '{ "name" : "Shay Banon" }'
+```
+
+Elasticsearch | Cassandra | Comment
+--- | --- | ---
+DEFAULT | LOCAL_ONE | One in local datacenter
+ONE | LOCAL_ONE |
+QUORUM | LOCAL_QUORUM |
+ALL | ALL | Because there is no LOCAL_ALL in cassandra, ALL involve write in all datacenters hosting the keyspace. 
+
+
 ## Contribute
 
-Contributors are welcome to test and enhance Elasticassandra to make it production ready.
+Contributors are welcome to test and enhance Elassandra to make it production ready.
 
 ## License
 

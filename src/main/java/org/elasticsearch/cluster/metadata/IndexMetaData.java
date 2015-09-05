@@ -782,7 +782,7 @@ public class IndexMetaData {
      * 
      */
     public static boolean isIndexUsingShadowReplicas(Settings settings) {
-        // default is false for elasticassandra
+        // default is false for elassandra
         return settings.getAsBoolean(SETTING_SHADOW_REPLICAS, false);
     }
 

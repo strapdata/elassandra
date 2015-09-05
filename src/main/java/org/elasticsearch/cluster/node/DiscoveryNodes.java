@@ -88,7 +88,7 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
      * Returns <tt>true</tt> if the local node is the master node.
      */
     public boolean localNodeMaster() {
-        return true; // Elasticassandra node are all ES master node.
+        return true; // Elassandra node are all ES master node.
         /*
         if (localNodeId == null) {
             // we don't know yet the local node id, return false
@@ -159,7 +159,7 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
      */
     public ImmutableOpenMap<String, DiscoveryNode> masterNodes() {
         //return this.masterNodes;
-        // In Elasticassandra, all nodes are master.
+        // In Elassandra, all nodes are master.
         return nodes();
     }
 
@@ -268,7 +268,7 @@ public class DiscoveryNodes implements Iterable<DiscoveryNode> {
      */
     public DiscoveryNode masterNode() {
         //return nodes.get(masterNodeId);
-        // In Elasticassandra, every elastic node is master.
+        // In Elassandra, every elastic node is master.
         return localNode();
     }
 

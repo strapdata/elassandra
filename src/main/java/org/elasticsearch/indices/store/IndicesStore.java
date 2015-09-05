@@ -156,7 +156,7 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
         /*
-         * No more relocated shard to remove with elasticassandra.
+         * No more relocated shard to remove with elassandra.
          
         if (!event.routingTableChanged()) {
             return;

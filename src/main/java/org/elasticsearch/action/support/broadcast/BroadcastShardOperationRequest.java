@@ -44,7 +44,7 @@ public abstract class BroadcastShardOperationRequest extends TransportRequest im
     protected BroadcastShardOperationRequest(ShardId shardId, BroadcastOperationRequest request) {
         super(request);
         // this.shardId = shardId;
-        this.shardId = new ShardId(shardId.index(), 0); // In elasticassandra,
+        this.shardId = new ShardId(shardId.index(), 0); // In elassandra,
                                                         // each node effectively
                                                         // hosts shard at index
                                                         // 0.
@@ -53,7 +53,7 @@ public abstract class BroadcastShardOperationRequest extends TransportRequest im
 
     protected BroadcastShardOperationRequest(ShardId shardId, OriginalIndices originalIndices) {
         // this.shardId = shardId;
-        this.shardId = new ShardId(shardId.index(), 0); // In elasticassandra,
+        this.shardId = new ShardId(shardId.index(), 0); // In elassandra,
                                                         // each node effectively
                                                         // hosts shard at index
                                                         // 0.

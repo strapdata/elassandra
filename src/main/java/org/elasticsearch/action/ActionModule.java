@@ -334,7 +334,7 @@ public class ActionModule extends AbstractModule {
         registerAction(TermVectorAction.INSTANCE, TransportSingleShardTermVectorAction.class);
         registerAction(MultiTermVectorsAction.INSTANCE, TransportMultiTermVectorsAction.class, TransportSingleShardMultiTermsVectorAction.class);
         
-        // hook for elasticassandra delete//xdelete
+        // hook for elassandra delete//xdelete
         registerAction(DeleteAction.INSTANCE, TransportDeleteAction.class);
         registerAction(XDeleteAction.INSTANCE, TransportXDeleteAction.class, TransportIndexDeleteAction.class, TransportShardDeleteAction.class);
         

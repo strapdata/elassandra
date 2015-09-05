@@ -68,7 +68,7 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.service.ClientState;
-import org.apache.cassandra.service.ElastiCassandraDaemon;
+import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
@@ -533,7 +533,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 }
 
                 if (newTable) {
-                    String query = String.format("CREATE TABLE IF NOT EXISTS \"%s\".\"%s\" ( \"%s\" text PRIMARY KEY %s ) WITH COMMENT='Auto-created by ElastiCassandra'", index, type,
+                    String query = String.format("CREATE TABLE IF NOT EXISTS \"%s\".\"%s\" ( \"%s\" text PRIMARY KEY %s ) WITH COMMENT='Auto-created by Elassandra'", index, type,
                             ELASTIC_ID_COLUMN_NAME, columnsList);
                     logger.debug(query);
                     QueryProcessor.process(query, ConsistencyLevel.LOCAL_QUORUM);
@@ -1247,7 +1247,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         logger.debug("indexing in {}.{} source={}", index, type, Arrays.toString(sourceData));
         XIndexRequest request = new XIndexRequest(index, type, id);
         request.source(sourceData);
-        ElastiCassandraDaemon.client().xindex(request, listener);
+        ElassandraDaemon.client().xindex(request, listener);
     }
 
     public Object[] elasticIdToPrimaryKeyObject(String ksName, String cfName, String id) throws IOException {

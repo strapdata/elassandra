@@ -1,4 +1,13 @@
-# ElastiCassandra environnement-independant shortcuts
+# Elassandra environnement-independant shortcuts
+#
+# Please set the following variable in your environnement
+export NODE=`hostname`
+export NODETOOL_JMX_PORT="7199"
+
+# for debug purpose only
+export JVM_DEBUG_PORT="4242"
+export JVM_DEBUG_WAIT="n"
+
 
 if [ "x$CASSANDRA_HOME" = "x" ]; then
    echo "Please set CASSANDRA_HOME"
@@ -6,7 +15,9 @@ if [ "x$CASSANDRA_HOME" = "x" ]; then
 fi
 echo "CASSANDRA_HOME=$CASSANDRA_HOME"
 
-export JAVA_HOME=$(/usr/libexec/java_home -v 1.7)
+# For mac onlly
+#export JAVA_HOME=$(/usr/libexec/java_home -v 1.7)
+
 
 export CASSANDRA_CONF=$CASSANDRA_HOME/conf
 export CASSANDRA_DATA=$CASSANDRA_HOME/data
@@ -18,7 +29,7 @@ function ckill() {
 }
 
 function cstatus() {
-   ps ax | grep java | grep $ELASTICASSANDRA_RUN_DIR
+   ps ax | grep java | grep $CASSANDRA_HOME
 }
 
 function cleanall() {
@@ -35,7 +46,7 @@ function cleanlogs() {
 alias cstart='$CASSANDRA_HOME/bin/cassandra'
 alias cdebug='$CASSANDRA_HOME/bin/cassandra -d'
 
-# Start ElasticCassandra
+# Start Elassandra
 alias ecstart='$CASSANDRA_HOME/bin/cassandra -e'
 alias ecdebug='$CASSANDRA_HOME/bin/cassandra -d -e'
 

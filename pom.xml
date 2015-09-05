@@ -2,13 +2,13 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <name>elasticassandra</name>
+    <name>elassandra</name>
     <modelVersion>4.0.0</modelVersion>
-    <groupId>org.elasticassandra</groupId>
-    <artifactId>elasticassandra</artifactId>
+    <groupId>org.elassandra</groupId>
+    <artifactId>elassandra</artifactId>
     <version>SNAPSHOT-0.1</version>
     <packaging>jar</packaging>
-    <description>ElastiCassandra - ElasticSearch s Cassandra</description>
+    <description>Elassandra - ElasticSearch for Cassandra</description>
     <inceptionYear>2015</inceptionYear>
     <licenses>
         <license>
@@ -19,9 +19,9 @@
     </licenses>
 
     <scm>
-        <connection>scm:git:git@github.com:elasticassandra/elasticassandra.git</connection>
-        <developerConnection>scm:git:git@github.com:elasticassandra/elasticassandra.git</developerConnection>
-        <url>http://github.com/elasticassandra/elasticassandra</url>
+        <connection>scm:git:git@github.com:vroyer/elassandra.git</connection>
+        <developerConnection>scm:git:git@github.com:vroyer/elassandra.git</developerConnection>
+        <url>http://github.com/vroyer/elassandra</url>
     </scm>
 
     <parent>
@@ -82,6 +82,11 @@
             <groupId>io.airlift</groupId>
             <artifactId>airline</artifactId>
             <version>0.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.javassist</groupId>
+            <artifactId>javassist</artifactId>
+            <version>3.20.0-GA</version>
         </dependency>
         <dependency>
             <groupId>log4j</groupId>
@@ -949,7 +954,7 @@
                             <dataSet>
                                 <data>
                                     <src>${project.basedir}/</src>
-                                    <includes>*.txt, *.textile</includes>
+                                    <includes>*.txt, *.md</includes>
                                     <excludes>LICENSE.txt, .DS_Store</excludes>
                                     <type>directory</type>
                                     <mapper>
@@ -1388,7 +1393,7 @@
                                 <exclude>src/main/java/org/elasticsearch/http/netty/pipelining/**</exclude>
                                 <!-- Datastax Inc. -->
                                 <exclude>src/main/java/org/elasticsearch/common/Bytes.java</exclude>
-                                <!-- Elasticassandra specific classes -->
+                                <!-- Elassandra specific classes -->
                                 <exclude>src/main/java/org/elasticsearch/cassandra/*.java</exclude>
                                 <exclude>src/main/java/org/elasticsearch/discovery/cassandra/*.java</exclude>
                                 <exclude>src/main/java/org/elasticsearch/gateway/cassandra/*.java</exclude>
