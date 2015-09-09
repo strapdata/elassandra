@@ -105,9 +105,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
     private static final ConcurrentMap<ClusterName, ClusterGroup> clusterGroups = ConcurrentCollections.newConcurrentMap();
 
+    private final ClusterGroup clusterGroup;
+
     private InetAddress localAddress = null;
     private String localDc = null;
-
+    
     @Inject
     public CassandraDiscovery(Settings settings, ClusterName clusterName, TransportService transportService, ClusterService clusterService, DiscoveryNodeService discoveryNodeService, Version version,
             DiscoverySettings discoverySettings, SchemaService schemaService) {
@@ -119,8 +121,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         this.version = version;
         this.discoverySettings = discoverySettings;
         this.schemaService = schemaService;
+        
+        this.clusterGroup = new ClusterGroup();
+        clusterGroups.put(clusterName, clusterGroup);
+        
         //this.publishClusterStateAction = new PublishClusterStateAction(settings, transportService, this, new NewClusterStateListener(), discoverySettings, clusterName);
-
     }
 
     @Override
@@ -150,12 +155,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     @Override
     protected void doStart() throws ElasticsearchException {
 
-        synchronized (clusterGroups) {
-            ClusterGroup clusterGroup = clusterGroups.get(clusterName);
-            if (clusterGroup == null) {
-                clusterGroup = new ClusterGroup();
-                clusterGroups.put(clusterName, clusterGroup);
-            }
+        synchronized (clusterGroup) {
             logger.debug("Connected to cluster [{}]", clusterName.value());
 
             localAddress = FBUtilities.getLocalAddress();
@@ -210,9 +210,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     }
     
     
-    
     public DiscoveryNodes nodes() {
-        return clusterGroups.get(clusterName).nodes();
+        return this.clusterGroup.nodes();
     }
 
     private void updateClusterState(String source, MetaData newMetadata1) {
@@ -224,7 +223,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
             public ClusterState execute(ClusterState currentState) {
                 ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
 
-                DiscoveryNodes newDiscoveryNodes = clusterGroups.get(clusterName).nodes();
+                DiscoveryNodes newDiscoveryNodes = nodes();
                 newStateBuilder.nodes(newDiscoveryNodes);
 
                 if (schemaMetaData != null) {
@@ -266,7 +265,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
      * This should trigger re-sharding of index for new nodes (when token distribution change).
      */
     public void updateClusterGroupsFromGossiper() {
-        ClusterGroup clusterGroup = clusterGroups.get(clusterName);
         for (Entry<InetAddress, EndpointState> entry : Gossiper.instance.getEndpointStates()) {
             DiscoveryNodeStatus status = (entry.getValue().isAlive()) ? DiscoveryNode.DiscoveryNodeStatus.ALIVE : DiscoveryNode.DiscoveryNodeStatus.DEAD;
 
@@ -274,7 +272,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 VersionedValue vv = entry.getValue().getApplicationState(ApplicationState.HOST_ID);
                 if (vv != null) {
                     String hostId = vv.value;
-                    DiscoveryNode dn = clusterGroup.members().get(hostId);
+                    DiscoveryNode dn = clusterGroup.get(hostId);
                     if (dn == null) {
                         Map<String, String> attrs = Maps.newHashMap();
                         attrs.put("data", "true");
@@ -286,13 +284,15 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                         dn.status(status);
 
                         if (localAddress.equals(entry.getKey())) {
-                            logger.debug("Update local node host_id={} status=", entry.getKey().toString(), dn.getId(), dn.getName(), entry.getValue().isAlive());
-                            clusterGroup.members.remove(this.localNode);
+                            logger.debug("Update local node host_id={} status={} timestamp={}", 
+                                    entry.getKey().toString(), dn.getId(), dn.getName(), entry.getValue().isAlive(), entry.getValue().getUpdateTimestamp());
+                            clusterGroup.remove(this.localNode.id());
                             this.localNode = dn;
                         } else {
-                            logger.debug("New node addr_ip={} node_name={} host_id={} status=", entry.getKey().toString(), dn.getId(), dn.getName(), entry.getValue().isAlive());
+                            logger.debug("New node addr_ip={} node_name={} host_id={} status={} timestamp={}", 
+                                    entry.getKey().toString(), dn.getId(), dn.getName(), entry.getValue().isAlive(), entry.getValue().getUpdateTimestamp());
                         }
-                        clusterGroup.members.put(dn.getId(), dn);
+                        clusterGroup.put(dn.getId(), dn);
                     } else {
                         // may update DiscoveryNode status.
                         if (!dn.getStatus().equals(status)) {
@@ -316,14 +316,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         logger.debug("ignoring unchanged metadata uuid/version={}/{}", newMetaData.uuid(), newMetaData.version());
         return null;
     }
-
+    
     public void updateNode(InetAddress addr, EndpointState state) {
-        ClusterGroup clusterGroup = clusterGroups.get(clusterName);
+        
         DiscoveryNodeStatus status = (state.isAlive()) ? DiscoveryNode.DiscoveryNodeStatus.ALIVE : DiscoveryNode.DiscoveryNodeStatus.DEAD;
         boolean updatedNode = false;
         if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(addr).equals(localDc)) {
             String hostId = state.getApplicationState(ApplicationState.HOST_ID).value;
-            DiscoveryNode dn = clusterGroup.members().get(hostId);
+            DiscoveryNode dn = clusterGroup.get(hostId);
             if (dn == null) {
                 Map<String, String> attrs = Maps.newHashMap();
                 attrs.put("data", "true");
@@ -333,7 +333,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
                 dn = new DiscoveryNode(buildNodeName(addr), hostId.toString(), new InetSocketTransportAddress(addr, settings.getAsInt("transport.tcp.port", 9300)), attrs, version);
                 dn.status(status);
-                logger.debug("New node soure=updateNode addr_ip={} node_name={} host_id={} status={}", addr.getHostAddress(), dn.getId(), dn.getName(), status);
+                logger.debug("New node soure=updateNode addr_ip={} node_name={} host_id={} status={} timestamp={}", addr.getHostAddress(), dn.getId(), dn.getName(), status, state.getUpdateTimestamp());
                 clusterGroup.members.put(dn.getId(), dn);
                 updatedNode = true;
             } else {
@@ -358,7 +358,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         if (!localNode.getInetAddress().equals(endpoint)) {
             switch (state) {
             case SCHEMA: // remote metadata change
-            case STATUS:
             case X1: // remote shards state change
                 logger.debug("Endpoint={} ApplicationState={} value={} => update metaData and routingTable", endpoint, state, value.value);
                 updateClusterState("onChange-" + endpoint + "-" + state.toString(), hasNewMetaData());
@@ -395,13 +394,18 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
     @Override
     public void onAlive(InetAddress arg0, EndpointState arg1) {
-        logger.debug("onAlive Endpoint={} ApplicationState={} => update nodes", arg0, arg1);
-        updateNode(arg0, arg1);
+        logger.debug("onAlive Endpoint={} ApplicationState={}", arg0, arg1);
     }
+    
+    @Override
+    public void onRestart(InetAddress arg0, EndpointState arg1) {
+        logger.debug("onRestart Endpoint={}  ApplicationState={}", arg0, arg1);
+    }
+
 
     @Override
     public void onJoin(InetAddress arg0, EndpointState arg1) {
-        logger.debug("onJoin Endpoint={} ApplicationState={} => update nodes", arg0, arg1);
+        logger.debug("onJoin Endpoint={} ApplicationState={} => update node", arg0, arg1);
         updateNode(arg0, arg1);
     }
 
@@ -411,34 +415,28 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         updateNode(arg0, arg1);
     }
 
-    @Override
-    public void onRestart(InetAddress arg0, EndpointState arg1) {
-        logger.debug("onRestart Endpoint={}  ApplicationState={}", arg0, arg1);
-        updateNode(arg0, arg1);
-    }
-
+   
     @Override
     public void onRemove(InetAddress arg0) {
-        logger.debug("onRemove Endpoint={}  => update nodes", arg0);
+        // TODO: support onRemove (hostId unavailable)
+        logger.warn("onRemove Endpoint={}  => removing a node not supported", arg0);
     }
 
     @Override
     protected void doStop() throws ElasticsearchException {
-        synchronized (clusterGroups) {
-            ClusterGroup clusterGroup = clusterGroups.get(clusterName);
+        Gossiper.instance.unregister(this);
+        
+        synchronized (clusterGroup) {
             if (clusterGroup == null) {
                 logger.warn("Illegal state, should not have an empty cluster group when stopping, I should be there at teh very least...");
                 return;
             }
-            clusterGroup.members().remove(this);
             if (clusterGroup.members().isEmpty()) {
                 // no more members, remove and return
                 clusterGroups.remove(clusterName);
                 return;
             }
         }
-
-        Gossiper.instance.unregister(this);
     }
 
     /**
@@ -557,62 +555,49 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         if (!master) {
             throw new ElasticsearchIllegalStateException("Shouldn't publish state when not master");
         }
-
         // publish new clusterState over the network to cassandra nodes.
         //publishClusterStateAction.publish(clusterState, ackListener);
     }
-
     private void publish(DiscoveryNode[] members, ClusterState clusterState, final BlockingClusterStatePublishResponseHandler publishResponseHandler) {
-
         try {
             // we do the marshaling intentionally, to check it works well...
             final byte[] clusterStateBytes = Builder.toBytes(clusterState);
-
             for (final DiscoveryNode node : members) {
-
                 if (discovery.master) {
                     continue;
                 }
-
                 final ClusterState nodeSpecificClusterState = ClusterState.Builder.fromBytes(clusterStateBytes, node, clusterName);
                 nodeSpecificClusterState.status(ClusterState.ClusterStateStatus.RECEIVED);
                 // ignore cluster state messages that do not include "me", not in the game yet...
                 if (nodeSpecificClusterState.nodes().localNode() != null) {
                     assert nodeSpecificClusterState.nodes().masterNode() != null : "received a cluster state without a master";
                     assert !nodeSpecificClusterState.blocks().hasGlobalBlock(discoverySettings.getNoMasterBlock()) : "received a cluster state with a master block";
-
                     this.clusterService.submitStateUpdateTask("cassandra-disco-receive(from " + this.nodeName() + ")", new ProcessedClusterStateNonMasterUpdateTask() {
                         @Override
                         public ClusterState execute(ClusterState currentState) {
                             if (nodeSpecificClusterState.version() < currentState.version() && Objects.equal(nodeSpecificClusterState.nodes().masterNodeId(), currentState.nodes().masterNodeId())) {
                                 return currentState;
                             }
-
                             if (currentState.blocks().hasGlobalBlock(discoverySettings.getNoMasterBlock())) {
                                 // its a fresh update from the master as we transition from a start of not having a master to having one
                                 logger.debug("got first state from fresh master [{}]", nodeSpecificClusterState.nodes().masterNodeId());
                                 return nodeSpecificClusterState;
                             }
-
                             ClusterState.Builder builder = ClusterState.builder(nodeSpecificClusterState);
                             // if the routing table did not change, use the original one
                             if (nodeSpecificClusterState.routingTable().version() == currentState.routingTable().version()) {
                                 builder.routingTable(currentState.routingTable());
                             }
-
                             if (nodeSpecificClusterState.metaData().version() == currentState.metaData().version()) {
                                 builder.metaData(currentState.metaData());
                             }
-
                             return builder.build();
                         }
-
                         @Override
                         public void onFailure(String source, Throwable t) {
                             logger.error("unexpected failure during [{}]", t, source);
                             publishResponseHandler.onFailure(node, t);
                         }
-
                         @Override
                         public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                             sendInitialStateEventIfNeeded();
@@ -623,7 +608,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                     publishResponseHandler.onResponse(node);
                 }
             }
-
             TimeValue publishTimeout = discoverySettings.getPublishTimeout();
             if (publishTimeout.millis() > 0) {
                 try {
@@ -640,7 +624,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                     Thread.currentThread().interrupt();
                 }
             }
-
         } catch (Exception e) {
             // failure to marshal or un-marshal
             throw new ElasticsearchIllegalStateException("Cluster state failed to serialize", e);
@@ -670,7 +653,16 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         public void put(String id, DiscoveryNode node) {
             members.put(id, node);
         }
+        
+        public void remove(String id) {
+            members.remove(id);
+        }
 
+
+        public DiscoveryNode get(String id) {
+            return members.get(id);
+        }
+        
         public DiscoveryNodes nodes() {
             DiscoveryNodes.Builder nodesBuilder = new DiscoveryNodes.Builder();
             nodesBuilder.localNodeId(CassandraDiscovery.this.localNode.id()).masterNodeId(CassandraDiscovery.this.localNode.id());
@@ -683,7 +675,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
     /*
         private class NewClusterStateListener implements PublishClusterStateAction.NewClusterStateListener {
-
             @Override
             public void onNewClusterState(ClusterState clusterState, NewStateProcessed newStateProcessed) {
                 handleNewClusterStateFromMaster(clusterState, newStateProcessed);
@@ -694,7 +685,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
             final ClusterState clusterState;
             final PublishClusterStateAction.NewClusterStateListener.NewStateProcessed newStateProcessed;
             volatile boolean processed;
-
             ProcessClusterState(ClusterState clusterState, PublishClusterStateAction.NewClusterStateListener.NewStateProcessed newStateProcessed) {
                 this.clusterState = clusterState;
                 this.newStateProcessed = newStateProcessed;
@@ -702,7 +692,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         }
         
         private final BlockingQueue<ProcessClusterState> processNewClusterStates = ConcurrentCollections.newBlockingQueue();
-
         void handleNewClusterStateFromMaster(ClusterState newClusterState, final PublishClusterStateAction.NewClusterStateListener.NewStateProcessed newStateProcessed) {
             final ClusterName incomingClusterName = newClusterState.getClusterName();
             // The cluster name can still be null if the state comes from a node that is prev 1.1.1
@@ -730,15 +719,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                         .routingTable(RoutingTable.builder(clusterService, mergedClusterState)).build();
                    
                    logger.debug("newClusterState={}", newClusterState.prettyPrint());   
-
                     return newClusterState;
                 }
-
                 @Override
                 public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                     newStateProcessed.onNewClusterStateProcessed();
                 }
-
                 @Override
                 public void onFailure(String source, Throwable t) {
                     logger.error("unexpected failure during [{}]", t, source);
@@ -750,11 +736,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                    // do not propagate cluster state we've received from another node !
                    return false;
                 }
-
             });
             
         }
-
        */
 
 }
