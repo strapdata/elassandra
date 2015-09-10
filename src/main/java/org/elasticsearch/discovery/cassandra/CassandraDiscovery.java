@@ -394,27 +394,25 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
     @Override
     public void onAlive(InetAddress arg0, EndpointState arg1) {
-        logger.debug("onAlive Endpoint={} ApplicationState={}", arg0, arg1);
+        logger.debug("onAlive Endpoint={} ApplicationState={} isAlive={} => update node", arg0, arg1, arg1.isAlive());
+        updateNode(arg0, arg1);
+    }
+    
+    @Override
+    public void onDead(InetAddress arg0, EndpointState arg1) {
+        logger.debug("onDead Endpoint={}  ApplicationState={} isAlive={} => update node", arg0, arg1, arg1.isAlive());
+        updateNode(arg0, arg1);
     }
     
     @Override
     public void onRestart(InetAddress arg0, EndpointState arg1) {
-        logger.debug("onRestart Endpoint={}  ApplicationState={}", arg0, arg1);
+        logger.debug("onRestart Endpoint={}  ApplicationState={} isAlive={}", arg0, arg1, arg1.isAlive());
     }
-
 
     @Override
     public void onJoin(InetAddress arg0, EndpointState arg1) {
-        logger.debug("onJoin Endpoint={} ApplicationState={} => update node", arg0, arg1);
-        updateNode(arg0, arg1);
+        logger.debug("onAlive Endpoint={} ApplicationState={} isAlive={}", arg0, arg1, arg1.isAlive() );
     }
-
-    @Override
-    public void onDead(InetAddress arg0, EndpointState arg1) {
-        logger.debug("onDead Endpoint={}  ApplicationState={} => update node", arg0, arg1);
-        updateNode(arg0, arg1);
-    }
-
    
     @Override
     public void onRemove(InetAddress arg0) {

@@ -180,6 +180,16 @@ public abstract class TransportBroadcastOperationAction<Request extends Broadcas
                             // no node connected, act as failure
                             onOperation(shard, shardIt, shardIndex, new NoShardAvailableActionException(shardIt.shardId()));
                         } else {
+                            
+                            if (!transportService.nodeConnected(node)) {
+                                try {
+                                    transportService.connectToNode(node);
+                                } catch (Throwable e) {
+                                    // the fault detection will detect it as failed as well
+                                    logger.warn("failed to connect to node [" + node + "]", e);
+                                }
+                            }
+                            
                             transportService.sendRequest(node, transportShardAction, shardRequest, new BaseTransportResponseHandler<ShardResponse>() {
                                 @Override
                                 public ShardResponse newInstance() {
