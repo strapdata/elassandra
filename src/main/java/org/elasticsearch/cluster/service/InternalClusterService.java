@@ -43,6 +43,7 @@ import org.elasticsearch.ElasticsearchIllegalStateException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.support.master.MasterNodeOperationRequest;
 import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
+import org.elasticsearch.cassandra.ElasticSchemaService;
 import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterState;
@@ -64,6 +65,8 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNodeService;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.routing.IndexRoutingTable;
+import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.operation.OperationRouting;
 import org.elasticsearch.common.Nullable;
@@ -175,7 +178,11 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     protected void doStart() throws ElasticsearchException {
 
         // try to create if not exists elastic_admin keyspace and initialize persisted metadata
-        elasticSchemaService.createElasticAdminKeyspace();
+        try {
+            elasticSchemaService.createElasticAdminKeyspace();
+        } catch (Throwable e) {
+            logger.warn("Cannot create "+ElasticSchemaService.ELASTIC_ADMIN_KEYSPACE, e);
+        }
 
         add(localNodeMasterListeners);
         this.clusterState = ClusterState.builder(clusterState).blocks(initialBlocks).build();
@@ -237,6 +244,20 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
      */
     public void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
         this.discoveryService.writeIndexShardSate(index, shardRoutingState);
+    }
+    
+    /**
+     * Publish on Gossip.X1 all local shard state.
+     */
+    public void publishAllShardsState() {
+        for (IndexRoutingTable indexRoutingTable : state().routingTable()) {
+            IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shards().get(0);
+            try {
+                writeIndexShardSate(indexRoutingTable.getIndex(), indexShardRoutingTable.getPrimaryShardRouting().state() );
+            } catch (IOException e) {
+                logger.error("Failed to publish primary shard state index=[{}]", indexRoutingTable.getIndex(), e);
+            }
+        }
     }
 
     @Override

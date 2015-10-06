@@ -436,10 +436,10 @@ public class FetchPhase implements SearchPhase {
 
         if (!(fieldVisitor instanceof JustUidFieldsVisitor)) {
             try {
-                UntypedResultSet result = elasticSchemaService.fetchRow(searchContext.request().index(), justUidFieldsVisitor.uid().type(), justUidFieldsVisitor.uid().id(),
+                UntypedResultSet result = elasticSchemaService.fetchRowInternal(searchContext.request().index(), justUidFieldsVisitor.uid().type(), justUidFieldsVisitor.uid().id(),
                         ImmutableList.<String> copyOf(fieldVisitor.cassandraColumns(searchContext.mapperService(), justUidFieldsVisitor.uid().type())));
                 if (!result.isEmpty()) {
-                    Map<String, Object> mapObject = elasticSchemaService.rowAsMap(result.one(), fieldVisitor, searchContext.mapperService(), searchContext.types());
+                    Map<String, Object> mapObject = elasticSchemaService.rowAsMap(result.one());
 
                     if (fieldVisitor.needFields()) {
                         Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();

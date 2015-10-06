@@ -23,6 +23,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentMap;
@@ -30,6 +31,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.Cell;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -43,8 +45,9 @@ import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.serializers.CollectionSerializer;
-import org.apache.cassandra.serializers.ListSerializer;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -89,7 +92,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
 
     String index_name;
     List<Pair<String, String>> targets = new ArrayList<Pair<String, String>>();
-
+    
     public ElasticSecondaryIndex() {
         super();
     }
@@ -132,7 +135,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
      * Index a mutation. Set empty field for deleted cells.
      */
     @Override
-    public void index(ByteBuffer rowKey, ColumnFamily cf) {
+    public void index(ByteBuffer rowKey, ColumnFamily cf)  {
         if (ElassandraDaemon.client() == null) {
             // TODO: save the update in a commit log to replay it later....
             logger.warn("Elasticsearch  not ready, cannot index");
@@ -152,6 +155,12 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
             // if pk is one column => do not index pk as a field.
             // if pk is composite => do index pk columns.
 
+            
+            List<String> indexedColumns = new ArrayList<String>(getColumnDefs().size());
+            for(ColumnDefinition cd : getColumnDefs()) {
+                indexedColumns.add(cd.name.toString());
+            }
+            
             Vector<Object> sourceData = new Vector<Object>((cf.getColumnCount() + 1) * 2);
             for (Cell cell : cf) {
                 ColumnDefinition cd = cf.metadata().getColumnDefinition(cell.name());
@@ -162,19 +171,29 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
                         ctype = ((ListType) ctype).getElementsType();
                     }
                     value = deserialize(ctype, cell.value());
-                    /*
-                    if (ctype instanceof UserType) {
-                        value = deserializeUDT((UserType) ctype, cell.value());
-                    } else {
-                        value = ctype.compose(cell.value());
-                    }
-                    */
                     sourceData.add(cd.name.toString());
                     sourceData.add(value);
-                    logger.debug("indexing row id={} column={} type={} value={}", id, cd.name, ctype, value);
+                    indexedColumns.remove(cd.name.toString());
+                    
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("indexing row id={} column={} type={} value={}", id, cd.name, ctype, value);
+                    }
                 }
             }
-            // add partition token to elastic index to filter on search.
+            if (indexedColumns.size() > 0) {
+                try {
+                    // fetch missing fields from the local cassandra row to update Elasticsearch index
+                    SchemaService schemaService = ElassandraDaemon.injector().getInstance(SchemaService.class);
+                    Row row = schemaService.fetchRowInternal(cf.metadata().ksName, cf.metadata().cfName, id, indexedColumns).one();
+                    for(Entry<String,Object> entry : schemaService.rowAsMap(row).entrySet()) {
+                        sourceData.add(entry.getKey());
+                        sourceData.add(entry.getValue());
+                    }
+                } catch (RequestValidationException | IOException e) {
+                    logger.error("Failed to fetch columns {}",indexedColumns,e);
+                }
+            }
+            
             // TODO: Add support for RandomPartitionner
             IPartitioner partitioner = DatabaseDescriptor.getPartitioner();
             sourceData.add(ELASTIC_TOKEN);
@@ -332,9 +351,9 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
                 logger.warn("Ignoring invalid targets entry {}", indexAndType);
             }
         }
-        index_name = this.baseCfs.name + "_" + cdef.name.toString() + "_idx";
-        logger.debug("init " + getIndexName() + " targets=" + targets);
-
+        index_name = ElasticSchemaService.buildIndexName(this.baseCfs.name, cdef.name.toString());
+        logger.debug(" " + getIndexName() + " targets=" + targets);
+        
     }
 
     /**
@@ -381,7 +400,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
                 for (Pair<String, String> target : targets) {
                     IndexShard indexShard = indicesService.indexServiceSafe(target.left).shardSafe(0);
                     indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
-                    logger.debug("Elasticsearch index {} flushed");
+                    logger.debug("Elasticsearch index {} flushed",target.left);
                 }
             }
         }

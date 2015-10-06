@@ -19,11 +19,20 @@
 
 package org.elasticsearch.index.get;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Sets;
+import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.lucene.index.Term;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchIllegalArgumentException;
+import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
@@ -32,6 +41,7 @@ import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.common.metrics.CounterMetric;
 import org.elasticsearch.common.metrics.MeanMetric;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentType;
@@ -42,24 +52,29 @@ import org.elasticsearch.index.fielddata.IndexFieldDataService;
 import org.elasticsearch.index.fieldvisitor.CustomFieldsVisitor;
 import org.elasticsearch.index.fieldvisitor.FieldsVisitor;
 import org.elasticsearch.index.fieldvisitor.JustSourceFieldsVisitor;
-import org.elasticsearch.index.mapper.*;
-import org.elasticsearch.index.mapper.internal.*;
+import org.elasticsearch.index.mapper.DocumentMapper;
+import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.index.mapper.FieldMappers;
+import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
+import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
+import org.elasticsearch.index.mapper.internal.SizeFieldMapper;
+import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
+import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
+import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
+import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.index.settings.IndexSettings;
 import org.elasticsearch.index.shard.AbstractIndexShardComponent;
-import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.fetch.source.FetchSourceContext;
 import org.elasticsearch.search.lookup.SearchLookup;
 
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Sets;
 
 /**
  */
@@ -72,6 +87,8 @@ public class ShardGetService extends AbstractIndexShardComponent {
     private final IndexFieldDataService fieldDataService;
 
     private IndexShard indexShard;
+    
+    private final SchemaService schemaService;
 
     private final MeanMetric existsMetric = new MeanMetric();
     private final MeanMetric missingMetric = new MeanMetric();
@@ -79,11 +96,12 @@ public class ShardGetService extends AbstractIndexShardComponent {
 
     @Inject
     public ShardGetService(ShardId shardId, @IndexSettings Settings indexSettings, ScriptService scriptService,
-                           MapperService mapperService, IndexFieldDataService fieldDataService) {
+                           MapperService mapperService, IndexFieldDataService fieldDataService, SchemaService schemaService) {
         super(shardId, indexSettings);
         this.scriptService = scriptService;
         this.mapperService = mapperService;
         this.fieldDataService = fieldDataService;
+        this.schemaService = schemaService;
     }
 
     public GetStats stats() {
@@ -275,9 +293,17 @@ public class ShardGetService extends AbstractIndexShardComponent {
                 BytesReference sourceToBeReturned = null;
                 SourceFieldMapper sourceFieldMapper = docMapper.sourceMapper();
                 if (fetchSourceContext.fetchSource() && sourceFieldMapper.enabled()) {
+                    
+                    // sourceToBeReturned = source.source;
 
-                    sourceToBeReturned = source.source;
-
+                    // In elassandra, Engine does not store the source any more, but fetch it from cassandra.
+                    try {
+                        Map<String, Object> sourceMap = schemaService.rowAsMap(schemaService.fetchRow(shardId.index().name(), type, id).one());
+                        sourceToBeReturned = XContentFactory.contentBuilder(XContentType.JSON).map(sourceMap).bytes();
+                    } catch (RequestExecutionException | RequestValidationException | IOException e1) {
+                        throw new ElasticsearchException("Cannot fetch source type [" + type + "] and id [" + id + "]", e1);
+                    }
+                    
                     // Cater for source excludes/includes at the cost of performance
                     // We must first apply the field mapper filtering to make sure we get correct results
                     // in the case that the fetchSourceContext white lists something that's not included by the field mapper
@@ -340,11 +366,15 @@ public class ShardGetService extends AbstractIndexShardComponent {
         FieldsVisitor fieldVisitor = buildFieldsVisitors(gFields, fetchSourceContext);
         if (fieldVisitor != null) {
             try {
-                docIdAndVersion.context.reader().document(docIdAndVersion.docId, fieldVisitor);
-            } catch (IOException e) {
+                // fetch source from cassandra
+                Map<String, Object> sourceMap = schemaService.rowAsMap(schemaService.fetchRow(shardId.index().name(), type, id).one());
+                source = XContentFactory.contentBuilder(XContentType.JSON).map(sourceMap).bytes();
+                fieldVisitor.source( source.toBytes() );
+                //docIdAndVersion.context.reader().document(docIdAndVersion.docId, fieldVisitor);
+            } catch (IOException | RequestExecutionException | RequestValidationException e) {
                 throw new ElasticsearchException("Failed to get type [" + type + "] and id [" + id + "]", e);
             }
-            source = fieldVisitor.source();
+            //source = fieldVisitor.source();
 
             if (!fieldVisitor.fields().isEmpty()) {
                 fieldVisitor.postProcess(docMapper);

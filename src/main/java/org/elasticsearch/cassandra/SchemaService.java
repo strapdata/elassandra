@@ -76,10 +76,12 @@ public interface SchemaService {
 
     public List<String> getPrimaryKeyColumnsName(String ksName, String cfName) throws ConfigurationException;
 
+    
     public List<String> cassandraMappedColumns(String ksName, String cfName);
 
     public String[] cassandraColumns(MapperService mapperService, String type);
 
+    
     /**
      * Fetch the row from the matching keyspace.table
      * 
@@ -99,7 +101,12 @@ public interface SchemaService {
     public UntypedResultSet fetchRow(String index, String type, String id, List<String> requiredColumns, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException,
             RequestValidationException, IOException;
 
-    public Map<String, Object> rowAsMap(UntypedResultSet.Row row, FieldsVisitor fieldVisitor, MapperService mapperService, String[] types);
+    public UntypedResultSet fetchRow(final String index, final String type, final String id) 
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
+    
+    public UntypedResultSet fetchRowInternal(String index, String type, String id, List<String> requiredColumns) throws ConfigurationException, IOException;
+    
+    public Map<String, Object> rowAsMap(UntypedResultSet.Row row);
 
     public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
@@ -116,7 +123,7 @@ public interface SchemaService {
 
     public Token getToken(ByteBuffer rowKey, ColumnFamily cf);
 
-    public void createElasticAdminKeyspace();
+    public void createElasticAdminKeyspace() throws Exception;
 
     public void writeMetaDataAsComment(MetaData metadata) throws ConfigurationException, IOException;
 
@@ -128,5 +135,7 @@ public interface SchemaService {
 
     public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
             RequestValidationException;
+
+   
 
 }

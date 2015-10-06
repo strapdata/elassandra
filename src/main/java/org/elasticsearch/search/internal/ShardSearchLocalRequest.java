@@ -24,8 +24,10 @@ import static org.elasticsearch.search.Scroll.readScroll;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 
+import org.apache.cassandra.dht.LongToken;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.elasticsearch.Version;
@@ -116,6 +118,9 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
     public ShardSearchLocalRequest(String[] types, long nowInMillis) {
         this.types = types;
         this.nowInMillis = nowInMillis;
+        
+        // Add full ring filter for validation query.
+        this.tokenRanges = Collections.singleton(new Range<Token>(new LongToken(Long.MIN_VALUE), new LongToken(Long.MAX_VALUE)));
     }
 
     public ShardSearchLocalRequest(String[] types, long nowInMillis, String[] filteringAliases) {

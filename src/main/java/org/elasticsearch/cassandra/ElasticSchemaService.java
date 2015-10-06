@@ -74,6 +74,7 @@ import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.Pair;
+import org.apache.log4j.Logger;
 import org.elasticsearch.ElasticsearchIllegalArgumentException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.index.IndexRequest;
@@ -106,6 +107,7 @@ import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.mapper.core.DateFieldMapper;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
+import org.elasticsearch.index.mapper.geo.GeoShapeFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
@@ -137,8 +139,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             put("boolean", "boolean");
             put("binary", "blob");
             put("ip", "inet");
-            put("geo_point", "geo_point");
-            put("geo_shape", "geo_shape");
         }
     };
 
@@ -264,75 +264,18 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         return null;
     }
 
-    /**
-     * Recursive build UDT value according to the input map.
-     * 
-     * @param ksName
-     * @param cfName
-     * @param fieldName
-     * @param valueMap
-     * @param objectMapper
-     * @return ByteBuffer or List<ByteBuffer>
-     * @throws ConfigurationException
-     * @throws SyntaxException
-     */
-    public Object buildUDTValue(final String ksName, final String cfName, final String fieldName, final Object source, final Mapper mapper) throws SyntaxException, ConfigurationException,
-            MapperParsingException {
-
-        if (source instanceof Map) {
-            // elasticsearch object type = cassandra UDT
-            ByteBuffer bb = buildUDTValueForMap(ksName, cfName, fieldName, (Map<String, Object>) source, mapper);
-            if (mapper.isSingleValue()) {
-                return bb;
-            } else {
-                return ImmutableList.of(bb);
-            }
-        } else if (source instanceof List) {
-            // elasticsearch object array = cassandra list<UDT>
-            if (mapper.isSingleValue()) {
-                throw new MapperParsingException("field " + mapper.name() + " should be a single value");
-            }
-            List<ByteBuffer> components = new ArrayList<ByteBuffer>();
-            for (Object sourceObject : (List) source) {
-                ByteBuffer bb = buildUDTValueForMap(ksName, cfName, fieldName, (Map<String, Object>) sourceObject, mapper);
-                components.add(bb);
-            }
-            return components;
-        }
-        throw new MapperParsingException("unexpected object=" + source + " mapper=" + mapper.name());
-    }
-
-    public ByteBuffer buildUDTValueForMap(final String ksName, final String cfName, final String fieldName, final Map<String, Object> source, final Mapper mapper) throws SyntaxException,
-            ConfigurationException {
-        List<ByteBuffer> components = new ArrayList<ByteBuffer>();
-        Pair<List<String>, List<String>> udtInfo = getUDTInfo(ksName, cfName + '_' + fieldName);
-        for (int i = 0; i < udtInfo.left.size(); i++) {
-            String fname = udtInfo.left.get(i);
-            AbstractType type = TypeParser.parse(udtInfo.right.get(i));
-            Object field_value = source.get(fname);
-            ObjectMapper objectMapper = (ObjectMapper) mapper;
-            components.add(buildTypeValue(ksName, cfName, type, fieldName+'_'+fname, field_value, objectMapper.mappers().get(fname)));
-        }
-        return TupleType.buildValue(components.toArray(new ByteBuffer[components.size()]));
-    }
-
-    public Object buildFieldValue(FieldMapper mapper, Object value) {
+    
+    public Object value(FieldMapper mapper, Object value) {
         if (mapper instanceof DateFieldMapper) {
             // workaround because elasticsearch manage Date as Long
             return new Date(((DateFieldMapper) mapper).value(value));
-        } else if (mapper instanceof GeoPointFieldMapper) {
-            GeoPoint point = ((GeoPointFieldMapper) mapper).value(value.toString());
-            List<ByteBuffer> components = new ArrayList<ByteBuffer>();
-            components.add(DoubleType.instance.decompose(point.lat()));
-            components.add(DoubleType.instance.decompose(point.lon()));
-            return TupleType.buildValue(components.toArray(new ByteBuffer[components.size()]));
         } else {
             return mapper.value(value);
         }
     }
 
-    public ByteBuffer buildTypeValue(final String ksName, final String cfName, final AbstractType type, final String name, final Object value, final Mapper mapper) throws SyntaxException,
-    ConfigurationException {
+    public ByteBuffer serialize(final String ksName, final String cfName, final AbstractType type, final String name, final Object value, final Mapper mapper) 
+            throws SyntaxException, ConfigurationException {
         if (value == null)
             return null;
 
@@ -345,33 +288,89 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 AbstractType<?> subType = udt.fieldType(j);
                 Mapper subMapper = ((ObjectMapper) mapper).mappers().get(subName);
                 Object subValue = mapValue.get(subName);
-                components.add(buildTypeValue(ksName, cfName, subType, subName, subValue, subMapper));
+                components.add(serialize(ksName, cfName, subType, subName, subValue, subMapper));
             }
             return TupleType.buildValue(components.toArray(new ByteBuffer[components.size()]));
         } else if (type instanceof ListType) {
             if (!(value instanceof List)) {
                 if (value instanceof Map) {
                     // build a singleton list of UDT 
-                    return type.decompose(ImmutableList.of( buildUDTValueForMap(ksName, cfName, name, (Map<String, Object>) value, mapper) ) );
+                    return type.decompose(ImmutableList.of( serializeMap(ksName, cfName, name, (Map<String, Object>) value, mapper) ) );
                 } else {
-                    return type.decompose(ImmutableList.of( mappedValue((FieldMapper) mapper, value) ));
+                    return type.decompose(ImmutableList.of( value((FieldMapper) mapper, value) ));
                 }
             } else {
                 return type.decompose(value);
             }
         } else {
             // Native cassandra type,
-            return type.decompose( mappedValue((FieldMapper) mapper, value) );
+            return type.decompose( value((FieldMapper) mapper, value) );
         }
     }
 
-    public Object mappedValue(FieldMapper fieldMapper, Object value) {
-        if (fieldMapper instanceof DateFieldMapper) {
-            return new Date(((DateFieldMapper) fieldMapper).value(value));
-        } 
-        return fieldMapper.value(value);
+    public ByteBuffer serializeMap(final String ksName, final String cfName, final String fieldName, final Map<String, Object> source, final Mapper mapper) 
+            throws SyntaxException, ConfigurationException 
+    {
+        List<ByteBuffer> components = new ArrayList<ByteBuffer>();
+        
+        if (mapper instanceof GeoPointFieldMapper) {
+            components.add( DoubleType.instance.decompose( (Double) source.get("lat") ) );
+            components.add( DoubleType.instance.decompose( (Double) source.get("lon") ) );
+        } else if (mapper instanceof ObjectMapper) {
+            Pair<List<String>, List<String>> udtInfo = getUDTInfo(ksName, cfName + '_' + fieldName);
+            if (udtInfo == null) {
+                throw new ConfigurationException("User Defined Type not found:"+ksName+"."+cfName + '_' + fieldName);
+            }
+            for (int i = 0; i < udtInfo.left.size(); i++) {
+                String fname = udtInfo.left.get(i);
+                AbstractType type = TypeParser.parse(udtInfo.right.get(i));
+                Object field_value = source.get(fname);
+                components.add(serialize(ksName, cfName, type, fieldName+'_'+fname, field_value, ((ObjectMapper) mapper).mappers().get(fname)));
+            }  
+        }
+        return TupleType.buildValue(components.toArray(new ByteBuffer[components.size()]));
     }
     
+    /**
+     * Recursive build UDT value according to the input map.
+     * 
+     * @param ksName
+     * @param cfName
+     * @param fieldName
+     * @param valueMap
+     * @param objectMapper
+     * @return ByteBuffer or List<ByteBuffer>
+     * @throws ConfigurationException
+     * @throws SyntaxException
+     */
+    public Object serializeUDT(final String ksName, final String cfName, final String fieldName, final Object source, final Mapper mapper) throws SyntaxException, ConfigurationException,
+            MapperParsingException {
+
+        if (source instanceof Map) {
+            // elasticsearch object type = cassandra UDT
+            ByteBuffer bb = serializeMap(ksName, cfName, fieldName, (Map<String, Object>) source, mapper);
+            if (mapper.isSingleValue()) {
+                return bb;
+            } else {
+                return ImmutableList.of(bb);
+            }
+        } else if (source instanceof List) {
+            // elasticsearch object array = cassandra list<UDT>
+            if (mapper.isSingleValue()) {
+                throw new MapperParsingException("field " + mapper.name() + " should be a single value");
+            }
+            List<ByteBuffer> components = new ArrayList<ByteBuffer>();
+            for (Object sourceObject : (List) source) {
+                ByteBuffer bb = serializeMap(ksName, cfName, fieldName, (Map<String, Object>) sourceObject, mapper);
+                components.add(bb);
+            }
+            return components;
+        }
+        throw new MapperParsingException("unexpected object=" + source + " mapper=" + mapper.name());
+    }
+
+    
+
     /*
      * (non-Javadoc)
      * 
@@ -389,7 +388,9 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             Mapper mapper = entry.getValue();
             if (mapper instanceof ObjectMapper) {
                 updateUDT(ksName, cfName, entry.getKey(), (ObjectMapper) mapper);
-            }
+            } else if (mapper instanceof GeoPointFieldMapper) {
+                buildGeoPointType(ksName, typeName+'_'+entry.getKey());
+            } 
         }
 
         Pair<List<String>, List<String>> udt = getUDTInfo(ksName, objectMapper.fullPath().replace('.', '_'));
@@ -404,10 +405,18 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     first = false;
                 else
                     create.append(", ");
-                create.append(mapper.name()).append(" ");
+                create.append('\"').append(mapper.name()).append("\" ");
                 if (mapper instanceof ObjectMapper) {
                     if (!mapper.isSingleValue()) create.append("list<");
-                    create.append("frozen<").append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_')).append(">");
+                    create.append("frozen<")
+                        .append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_'))
+                        .append(">");
+                    if (!mapper.isSingleValue()) create.append(">");
+                } else if (mapper instanceof GeoPointFieldMapper) {
+                    if (!mapper.isSingleValue()) create.append("list<");
+                    create.append("frozen<")
+                        .append(typeName).append('_').append(mapper.name())
+                        .append(">");
                     if (!mapper.isSingleValue()) create.append(">");
                 } else {
                     String cqlType = typeMapping.get(mapper.contentType());
@@ -433,13 +442,13 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         return typeName;
     }
 
-    public void buildGeoPointType(String ksName) throws RequestExecutionException {
-        String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"geo_point\" ( lat double, lon double )", ksName);
+    public void buildGeoPointType(String ksName, String typeName) throws RequestExecutionException {
+        String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( lat double, lon double )", ksName, typeName);
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_QUORUM);
     }
 
-    public void buildGeoShapeType(String ksName) {
-        // TODO: Implements geo_shap.
+    public void buildGeoShapeType(String ksName, String typeName) {
+        // TODO: Implements geo_shape.
     }
 
     /*
@@ -478,15 +487,12 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                             // workaround because elasticsearch maps date to
                             // long.
                             cqlType = typeMapping.get("date");
+                        } else if (fieldMapper instanceof GeoPointFieldMapper) {
+                            cqlType = fieldMapper.name().replace('.', '_');
                         } else {
                             cqlType = typeMapping.get(fieldMapper.contentType());
                         }
-                        // create build-in geo types.
-                        if (cqlType.equals("geo_point"))
-                            buildGeoPointType(index);
-                        else if (cqlType.equals("geo_shape"))
-                            buildGeoShapeType(index);
-
+                        
                         if (!fieldMapper.isSingleValue()) {
                             if (isNativeCql3Type(cqlType)) {
                                 cqlType = "list<" + cqlType + ">";
@@ -497,7 +503,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     } else {
                         ObjectMapper objectMapper = docMapper.objectMappers().get(column);
                         if (objectMapper != null) {
-                            cqlType = "frozen<" + updateUDT(index, type, column, objectMapper) + ">";
+                            cqlType = "frozen<\"" + updateUDT(index, type, column, objectMapper) + "\">";
                             if (!objectMapper.isSingleValue()) {
                                 cqlType = "list<" + cqlType + ">";
                             }
@@ -553,9 +559,14 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         }
     }
 
-    public String buildIndexName(final String cfName, final String colName) {
-        return new StringBuilder("elastic_").append(cfName).append('_').append(colName.replace('.', '_')).append("_idx").toString();
+    public static String buildIndexName(final String cfName, final String colName) {
+        return new StringBuilder("elastic_")
+            .append(cfName).append('_')
+            .append(colName.replaceAll("\\W+", "_"))
+            .append("_idx").toString();
     }
+    
+    
 
     /*
      * (non-Javadoc)
@@ -700,6 +711,12 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         return cols.toArray(new String[cols.size()]);
     }
 
+    @Override
+    public UntypedResultSet fetchRow(final String index, final String type, final String id) 
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        return fetchRow(index, type, id, cassandraMappedColumns(index, type), ConsistencyLevel.LOCAL_ONE);
+    }
+    
     /*
      * (non-Javadoc)
      * 
@@ -746,6 +763,43 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         return process(cl, query, elasticIdToPrimaryKeyObject(ksName, cfName, id));
     }
 
+    /**
+     * Fetch row from local node.
+     * @param index
+     * @param type
+     * @param id
+     * @param requiredColumns
+     * @return
+     * @throws ConfigurationException 
+     * @throws InvalidRequestException
+     * @throws RequestExecutionException
+     * @throws RequestValidationException
+     * @throws IOException
+     */
+    @Override
+    public UntypedResultSet fetchRowInternal(final String index, final String type, final String id, final List<String> requiredColumns) throws ConfigurationException, IOException  {
+        Pair<String, String> targetPair = ElasticSecondaryIndex.mapping.get(Pair.<String, String> create(index, type));
+        String ksName = (targetPair == null) ? index : targetPair.left;
+        String cfName = (targetPair == null) ? type : targetPair.right;
+
+        StringBuilder pkCols = new StringBuilder();
+        StringBuilder pkWhere = new StringBuilder();
+        buildPrimaryKeyFragment(ksName, cfName, pkCols, pkWhere);
+
+        StringBuilder columns = new StringBuilder();
+        for (String c : requiredColumns) {
+            if (columns.length() > 0)
+                columns.append(',');
+            if (c.equals("_token")) {
+                columns.append("token(").append(pkCols).append(") as \"_token\"");
+            } else {
+                columns.append("\"").append(c).append("\"");
+            }
+        }
+        String query = String.format("SELECT %s FROM \"%s\".\"%s\" WHERE %s", new Object[] { columns, ksName, cfName, pkWhere });
+        return QueryProcessor.instance.executeInternal(query, elasticIdToPrimaryKeyObject(ksName, cfName, id));
+    }
+    
     /*
      * (non-Javadoc)
      * 
@@ -756,7 +810,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
      * org.elasticsearch.index.mapper.MapperService, java.lang.String[])
      */
     @Override
-    public Map<String, Object> rowAsMap(UntypedResultSet.Row row, FieldsVisitor fieldVisitor, MapperService mapperService, String[] types) {
+    public Map<String, Object> rowAsMap(UntypedResultSet.Row row) {
         Map<String, Object> mapObject = new HashMap<String, Object>();
         List<ColumnSpecification> columnSpecs = row.getColumns();
 
@@ -764,8 +818,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             ColumnSpecification colSpec = columnSpecs.get(columnIndex);
             String columnName = colSpec.name.toString();
             CQL3Type cql3Type = colSpec.type.asCQL3Type();
-            FieldMappers mappers = mapperService.smartNameFieldMappers(columnName, types);
-
+            
             if (!row.has(colSpec.name.toString()))
                 continue;
 
@@ -781,11 +834,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     mapObject.put(columnName, row.getUUID(colSpec.name.toString()));
                     break;
                 case TIMESTAMP:
-                    // Timestamp+Date are stored as Long in ElasticSearch
-                    // DateFieldMapper dateMapper =
-                    // (DateFieldMapper)mapperService.smartNameFieldMappers(columnName).mapper();
-                    // mapObject.put(columnName,
-                    // dateMapper.dateTimeFormatter().printer().print(row.getTimestamp(colSpec.name.toString()).getTime()));
                     mapObject.put(columnName, row.getTimestamp(colSpec.name.toString()).getTime());
                     break;
                 case INT:
@@ -961,7 +1009,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
 
             if (objectMapper != null) {
                 columns.add(field);
-                values.add(buildUDTValue(request.index(), request.type(), field, fieldValue, objectMapper));
+                values.add(serializeUDT(request.index(), request.type(), field, fieldValue, objectMapper));
             } else if (fieldMapper != null) {
                 columns.add(field);
                 if (fieldMapper.isSingleValue() && (fieldValue instanceof List)) {
@@ -969,21 +1017,21 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 }
                 ;
                 if (fieldMapper.isSingleValue()) {
-                    values.add(buildFieldValue(fieldMapper, fieldMapper.value(fieldValue)));
+                    values.add(value(fieldMapper, fieldMapper.value(fieldValue)));
                 } else {
                     List<Object> fieldValueList2 = new ArrayList();
                     if (fieldValue instanceof List) {
                         List<Object> fieldValueList = (List) fieldValue;
                         for (Object o : fieldValueList) {
-                            fieldValueList2.add(buildFieldValue(fieldMapper, fieldMapper.value(o)));
+                            fieldValueList2.add(value(fieldMapper, fieldMapper.value(o)));
                         }
                     } else {
-                        fieldValueList2.add(buildFieldValue(fieldMapper, fieldValue));
+                        fieldValueList2.add(value(fieldMapper, fieldValue));
                     }
                     values.add(fieldValueList2);
                 }
             } else {
-                logger.debug("Ignoring unmapped field {} = {} ", field, fieldMapper.value(fieldValue));
+                logger.debug("Ignoring unmapped field {} = {} ", field, fieldValue);
             }
         }
 
@@ -1076,7 +1124,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         String query = String.format("INSERT INTO \"%s\".\"%s\" (%s) VALUES (%s) %s %s", ksName, cfName, sbCols.toString(), questionsMarks.toString(), (ifNotExists) ? "IF NOT EXISTS" : "",
                 (ttl > 0) ? "USING TTL " + Long.toString(ttl) : "");
         try {
-            UntypedResultSet result = process(cl, query, values);
+            UntypedResultSet result = process(cl, (ifNotExists) ? ConsistencyLevel.LOCAL_SERIAL : null, query, values);
             if (ifNotExists) {
                 if (!result.isEmpty()) {
                     Row row = result.one();
@@ -1307,16 +1355,11 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
      * ()
      */
     @Override
-    public void createElasticAdminKeyspace() {
-        try {
-            QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };", ELASTIC_ADMIN_KEYSPACE),
-                    ConsistencyLevel.LOCAL_QUORUM);
-            QueryProcessor.process(String.format("CREATE TABLE IF NOT EXISTS %s.\"%s\" ( dc text PRIMARY KEY, owner uuid, version bigint, metadata text);", ELASTIC_ADMIN_KEYSPACE, metaDataTableName),
-                    ConsistencyLevel.LOCAL_QUORUM);
-
-        } catch (Throwable e) {
-            logger.error("Failed to create " + ELASTIC_ADMIN_KEYSPACE + " keyspace or table " + metaDataTableName, e);
-        }
+    public void createElasticAdminKeyspace() throws Exception {
+        QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };", ELASTIC_ADMIN_KEYSPACE),
+                ConsistencyLevel.LOCAL_QUORUM);
+        QueryProcessor.process(String.format("CREATE TABLE IF NOT EXISTS %s.\"%s\" ( dc text PRIMARY KEY, owner uuid, version bigint, metadata text);", ELASTIC_ADMIN_KEYSPACE, metaDataTableName),
+                ConsistencyLevel.LOCAL_QUORUM);
     }
 
     /*

@@ -192,7 +192,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                     DiscoveryNode dn = new DiscoveryNode(buildNodeName(entry.getKey()), entry.getValue().toString(), new InetSocketTransportAddress(entry.getKey(), settings.getAsInt(
                             "transport.tcp.port", 9300)), attrs, version);
                     EndpointState endpointState = Gossiper.instance.getEndpointStateForEndpoint(entry.getKey());
-                    dn.status((endpointState.isAlive()) ? DiscoveryNodeStatus.ALIVE : DiscoveryNodeStatus.DEAD);
+                    if (endpointState == null) {
+                        dn.status( DiscoveryNodeStatus.UNKNOWN );
+                    } else {
+                        dn.status((endpointState.isAlive()) ? DiscoveryNodeStatus.ALIVE : DiscoveryNodeStatus.DEAD);
+                    }
                     clusterGroup.put(dn.getId(), dn);
                     logger.debug("remanent node addr_ip={} node_name={} host_id={} ", entry.getKey().toString(), dn.getId(), dn.getName());
                 }
@@ -502,6 +506,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 }
             }
             Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(jsonMapper.writeValueAsString(shardsStateMap)));
+        } else {
+            logger.warn("Gossiper not enabled to publish shard state");
         }
     }
 

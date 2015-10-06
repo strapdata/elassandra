@@ -131,7 +131,7 @@ public class TransportGetAction extends TransportShardSingleOperationAction<GetR
         try {
             UntypedResultSet result = elasticSchemaService.fetchRow(request.index(), request.type(), request.id(), columns);
             if (!result.isEmpty()) {
-                Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(result.one(), null, indexService.mapperService(), new String[] { request.type() });
+                Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(result.one());
                 Map<String, GetField> rowAsFieldMap = elasticSchemaService.flattenGetField(request.fields(), "", rowAsMap, new HashMap<String, GetField>());
 
                 GetResult getResult = new GetResult(request.index(), request.type(), request.id(), 0L, true, new BytesArray(FBUtilities.json(rowAsMap).getBytes("UTF-8")), rowAsFieldMap);

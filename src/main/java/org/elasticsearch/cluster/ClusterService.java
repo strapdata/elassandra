@@ -151,4 +151,6 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
      * @throws IOException
      */
     public void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
+    
+    public void publishAllShardsState();
 }

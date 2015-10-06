@@ -283,6 +283,9 @@ public final class InternalNode implements Node {
         return this;
     }
 
+    /**
+     * finish ElasticSearch start when we have joined the ring.
+     */
     public Node start() {
         ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
         logger.info("starting ...");
@@ -315,6 +318,7 @@ public final class InternalNode implements Node {
         injector.getInstance(TribeService.class).start();
 
         ClusterService clusterService = injector.getInstance(ClusterService.class);
+        clusterService.publishAllShardsState();
         logger.debug("Elasticsearch started state={}", clusterService.state().toString());
         return this;
     }

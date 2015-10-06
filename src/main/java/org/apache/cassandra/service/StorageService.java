@@ -878,7 +878,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
             // start elasticsearch and block until all local shards are started
             // (#table with custom ElasticSecondaryIndex).
-            this.daemon.beforeBootstrap();
+            this.daemon.beforeStartupComplete();
         }
 
         // if we don't have system_traces keyspace at this point, then create it

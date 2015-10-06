@@ -33,16 +33,17 @@ import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.delete.TransportDeleteAction;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.index.TransportIndexAction;
-import org.elasticsearch.action.index.TransportXIndexAction;
 import org.elasticsearch.action.index.XIndexRequest;
 import org.elasticsearch.action.index.XIndexResponse;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.action.support.single.instance.TransportInstanceSingleOperationAction;
-import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.routing.PlainShardIterator;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.cluster.routing.ShardRouting;
@@ -68,7 +69,7 @@ import com.google.common.collect.ImmutableList;
 public class TransportUpdateAction extends TransportInstanceSingleOperationAction<UpdateRequest, UpdateResponse> {
 
     private final TransportDeleteAction deleteAction;
-    private final TransportXIndexAction indexAction;
+    private final TransportIndexAction indexAction;
     private final AutoCreateIndex autoCreateIndex;
     private final TransportCreateIndexAction createIndexAction;
     private final UpdateHelper updateHelper;
@@ -76,7 +77,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
 
     @Inject
     public TransportUpdateAction(Settings settings, ThreadPool threadPool, ClusterService clusterService, TransportService transportService,
-                                 TransportXIndexAction indexAction, TransportDeleteAction deleteAction, TransportCreateIndexAction createIndexAction,
+                                 TransportIndexAction indexAction, TransportDeleteAction deleteAction, TransportCreateIndexAction createIndexAction,
                                  UpdateHelper updateHelper, ActionFilters actionFilters, IndicesService indicesService) {
         super(settings, UpdateAction.NAME, threadPool, clusterService, transportService, actionFilters);
         this.indexAction = indexAction;
@@ -178,12 +179,12 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
         final UpdateHelper.Result result = updateHelper.prepare(request.request(), indexShard);
         switch (result.operation()) {
             case UPSERT:
-                XIndexRequest upsertRequest = new XIndexRequest((XIndexRequest)result.action(), request.request());
+                IndexRequest upsertRequest = new IndexRequest((IndexRequest)result.action(), request.request());
                 // we fetch it from the index request so we don't generate the bytes twice, its already done in the index request
                 final BytesReference upsertSourceBytes = upsertRequest.source();
-                indexAction.execute(upsertRequest, new ActionListener<XIndexResponse>() {
+                indexAction.execute(upsertRequest, new ActionListener<IndexResponse>() {
                     @Override
-                    public void onResponse(XIndexResponse response) {
+                    public void onResponse(IndexResponse response) {
                         UpdateResponse update = new UpdateResponse(response.getIndex(), response.getType(), response.getId(), response.getVersion(), response.isCreated());
                         if (request.request().fields() != null && request.request().fields().length > 0) {
                             Tuple<XContentType, Map<String, Object>> sourceAndContent = XContentHelper.convertToMap(upsertSourceBytes, true);
@@ -213,12 +214,12 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                 });
                 break;
             case INDEX:
-                XIndexRequest indexRequest = new XIndexRequest((XIndexRequest)result.action(), request.request());
+                IndexRequest indexRequest = new IndexRequest((IndexRequest)result.action(), request.request());
                 // we fetch it from the index request so we don't generate the bytes twice, its already done in the index request
                 final BytesReference indexSourceBytes = indexRequest.source();
-                indexAction.execute(indexRequest, new ActionListener<XIndexResponse>() {
+                indexAction.execute(indexRequest, new ActionListener<IndexResponse>() {
                     @Override
-                    public void onResponse(XIndexResponse response) {
+                    public void onResponse(IndexResponse response) {
                         UpdateResponse update = new UpdateResponse(response.getIndex(), response.getType(), response.getId(), response.getVersion(), response.isCreated());
                         update.setGetResult(updateHelper.extractGetResult(request.request(), request.concreteIndex(), response.getVersion(), result.updatedSourceAsMap(), result.updateSourceContentType(), indexSourceBytes));
                         listener.onResponse(update);

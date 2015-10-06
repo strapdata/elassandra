@@ -254,6 +254,8 @@ public class CassandraDaemon {
         // load keyspace descriptions.
         DatabaseDescriptor.loadSchemas();
 
+        
+        
         // clean up compaction leftovers
         Map<Pair<String, String>, Map<Integer, UUID>> unfinishedCompactions = SystemKeyspace.getUnfinishedCompactions();
         for (Pair<String, String> kscf : unfinishedCompactions.keySet()) {
@@ -274,6 +276,8 @@ public class CassandraDaemon {
                 ColumnFamilyStore.scrubDataDirectories(cfm);
         }
 
+        beforeRecover();
+        
         Keyspace.setInitialized();
         // initialize keyspaces
         for (String keyspaceName : Schema.instance.getKeyspaces()) {
@@ -299,7 +303,8 @@ public class CassandraDaemon {
             JVMStabilityInspector.inspectThrowable(t);
             logger.warn("Unable to start GCInspector (currently only supported on the Sun JVM)");
         }
-
+        
+        
         // replay the log if necessary
         try {
             CommitLog.instance.recover();
@@ -484,16 +489,32 @@ public class CassandraDaemon {
         stop();
         destroy();
     }
+    
+    /**
+     * This is a hook for concrete daemons to initialize themselves suitably.
+     * Subclasses should override this to initialize before cassandra bootstrap
+     * (called once from CassandraDaemon.setup()).
+     */
+    public void beforeRecover() {
+    }
 
     /**
      * This is a hook for concrete daemons to initialize themselves suitably.
      * Subclasses should override this to initialize before cassandra bootstrap
-     * (called once from ServiceStorage.joinRing()).
+     * (called once from ServiceStorage.joinTokenRing() when boostraping).
      */
     public void beforeBootstrap() {
-
     }
 
+    /**
+     * This is a hook for concrete daemons to initialize themselves suitably.
+     * Subclasses should override this to initialize before cassandra bootstrap
+     * (called once from ServiceStorage.joinTokenRing() when elastic_admin keyspace does not exist and not boostraping).
+     */
+    public void beforeStartupComplete() {
+    }
+   
+    
     private void waitForGossipToSettle() {
         int forceAfter = Integer.getInteger("cassandra.skip_wait_for_gossip_to_settle", -1);
         if (forceAfter == 0) {
@@ -571,4 +592,6 @@ public class CassandraDaemon {
          */
         public boolean isRunning();
     }
+
+
 }
