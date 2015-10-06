@@ -36,7 +36,7 @@ From an Elasticsearch perspective :
 
 From a Cassandra perspective :
 * Columns with an ElasticSecondaryIndex are indexed in ElasticSearch.
-* By default, Elasticsearch document fields are multivalued, so every field is backed by a list. Single valued document field can be mapped to a basic types by setting 'single_value: true' in our type mapping.
+* By default, Elasticsearch document fields are multivalued, so every field is backed by a list. Single valued document field can be mapped to a basic types by setting 'single_value: true' in our type mapping. See [Mapping](Mapping.md) for details.
 * Nested documents are stored using cassandra [User Defined Type](http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
 * Elasticsearch provides a JSON-REST API to cassandra.
  
