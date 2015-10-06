@@ -1,6 +1,6 @@
 0.1 - Initial release
 
-0.2 
+0.2 - 2015-10-07
 * Add support for partial document update
 * Add support for Kibana
 * Fix User Defined Type creation
