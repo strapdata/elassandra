@@ -8,6 +8,16 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 " target="_blank"><img src="http://img.youtube.com/vi/a4sjX15OOrA/0.jpg" 
 alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
+## Kibana + Elassandra
+
+[Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) can run on Elassandra, providing a visualization tool for cassandra and elasticsearch data. Here is a demo video.
+
+<a href="http://www.youtube.com/watch?feature=player_embedded&v=a4sjX15OOrA
+" target="_blank"><img src="http://img.youtube.com/vi/a4sjX15OOrA/0.jpg" 
+alt="Elassandra demo" width="240" height="180" border="10" /></a>
+
+Because cassandra keyspace, type, table and column names can only contains alphanumeric and underscore characters (see [cassandra documentation](http://docs.datastax.com/en/cql/3.1/cql/cql_reference/ref-lexical-valid-chars.html), the same restriction apply to ElasticSearch index, type and field names.
+
 ## Architecture
 
 From an Elasticsearch perspective :
