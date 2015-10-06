@@ -1,0 +1,7 @@
+0.1 - Initial release
+
+0.2 
+* Add support for partial document update
+* Add support for Kibana
+* Fix User Defined Type creation
+* Change cassandra StorageService hooks to start Elasticsearch (Fix commitlogs recover)
