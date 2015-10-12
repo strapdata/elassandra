@@ -11,12 +11,13 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 ## Benefits of Elassandra
 
 For cassandra users, elassandra provides elasicsearch features :
-* Full-Text and spatial search on your cassandra data, you can define which table or column to index in elasticsearch.
+* Cassandra update are automatically indexed in Elasticsearch.
+* Full-Text and spatial search on your cassandra data.
 * Real-time aggregation (does not require Spark or Hadoop to group by)
-* Provide search on multiple tables in one query (Elasticsearch search accross many document types).
+* Provide search on multiple tables in one query.
 * Provide automatic schema creation and support nested document using User Defined Types.
-* Provide a JSON REST access your cassandra data (for indexed data of course)
-* There are many elasticsearch plugins to import data in cassandra (the IMAP river plugin for exemple) or to visualize your data, with [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) for exemple.
+* Provide a read/write JSON REST access to cassandra data (for indexed data)
+* There are many elasticsearch plugins to import data in cassandra or to visualize your data, with [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) for exemple.
 
 For Elasticsearch users, elassandra provides usefull features :
 * Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Moreover, source documents are now stored in Cassandra, reducing disk space if you need a noSql database and elasticsearch.
