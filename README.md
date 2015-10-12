@@ -8,6 +8,25 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 " target="_blank"><img src="http://img.youtube.com/vi/a4sjX15OOrA/0.jpg" 
 alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
+## Benefits of Elassandra
+
+For cassandra users, elassandra provides elasicsearch features :
+* Full-Text and spatial search on your cassandra data, you can define which table or column to index in elasticsearch.
+* Real-time aggregation (does not require Spark or Hadoop to group by)
+* Provide search on multiple tables in one query (Elasticsearch search accross many document types).
+* Provide automatic schema creation and support nested document using User Defined Types.
+* Provide a JSON REST access your cassandra data (for indexed data of course)
+* There are many elasticsearch plugins to import data in cassandra (the IMAP river plugin for exemple) or to visualize your data, with [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) for exemple.
+
+For Elasticsearch users, elassandra provides usefull features :
+* Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Moreover, source documents are now stored in Cassandra, reducing disk space if you need a noSql database and elasticsearch.
+* In elassandra, Elasticsearch is masterless and split-brain resistant because cluster state is now manager within cassandra lightweight transactions.
+* Write operations are not more restricted to one primary shards, but distributed on all cassandra nodes in a virtual datacenter. Number of shards does not limit your write throughput, just add some elassandra nodes to increase both read and write throughput.
+* Elasticsearch indices can be replicated between many cassandra datacenters, allowing to write in the closest datacenter and search globally.
+* The cassandra driver is Datacenter and Token aware, that means requests are sent to the most appropriate node.
+* Hive and Spark support with pushdown predicate.
+* Cassandra supports distributed counters.
+
 ## Kibana + Elassandra
 
 [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) can run on Elassandra, providing a visualization tool for cassandra and elasticsearch data. Here is a demo video.
@@ -16,7 +35,13 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 " target="_blank"><img src="http://img.youtube.com/vi/yKT96wtjJNg/0.jpg" 
 alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
-Because cassandra keyspace, type, table and column names can only contains alphanumeric and underscore characters (see [cassandra documentation](http://docs.datastax.com/en/cql/3.1/cql/cql_reference/ref-lexical-valid-chars.html), the same restriction apply to index, type and field names. So, if you want to load sample data from [Kibana Getting started](https://www.elastic.co/guide/en/kibana/current/getting-started.html), apply the following changes to logstash.jsonl with a sed command. 
+Because cassandra keyspace, type and table can only contain alphanumeric and underscore characters (see [cassandra documentation](http://docs.datastax.com/en/cql/3.1/cql/cql_reference/ref-lexical-valid-chars.html), the same restriction applies to index and type names. 
+
+* Replace **'index-pattern'** by **'index_pattern'** in *kibana/src/public/index.js* with the following sed command:
+```
+sed -e "s/type: \'index-pattern\'/type: \'index_pattern\'/g" -e "s/type = \'index-pattern\'/type = \'index_pattern\'/g"
+```
+* If you want to load sample data from [Kibana Getting started](https://www.elastic.co/guide/en/kibana/current/getting-started.html), apply the following changes to logstash.jsonl with a sed command. 
 
 ```
 s/logstash-2015.05.18/logstash_20150518/g
