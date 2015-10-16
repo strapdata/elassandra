@@ -38,6 +38,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 Because cassandra keyspace, type and table can only contain alphanumeric and underscore characters (see [cassandra documentation](http://docs.datastax.com/en/cql/3.1/cql/cql_reference/ref-lexical-valid-chars.html), the same restriction applies to index and type names. 
 
+* Replace the index name **.kibana** by **kibana** in *config/kibana.yaml*.
 * Replace **'index-pattern'** by **'index_pattern'** in *kibana/src/public/index.js* with the following sed command:
 ```
 sed -e "s/type: \'index-pattern\'/type: \'index_pattern\'/g" -e "s/type = \'index-pattern\'/type = \'index_pattern\'/g"
