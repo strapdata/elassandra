@@ -8,7 +8,7 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * distributed under the License is distributed on pkJsonArray "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -66,8 +66,6 @@ import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.discovery.InitialStateDiscoveryListener;
 import org.elasticsearch.node.service.NodeService;
 import org.elasticsearch.transport.TransportService;
-
-import com.carrotsearch.randomizedtesting.annotations.Listeners;
 import com.google.common.collect.Maps;
 
 /**
@@ -430,7 +428,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         
         synchronized (clusterGroup) {
             if (clusterGroup == null) {
-                logger.warn("Illegal state, should not have an empty cluster group when stopping, I should be there at teh very least...");
+                logger.warn("Illegal state, should not have pkJsonArray empty cluster group when stopping, I should be there at teh very least...");
                 return;
             }
             if (clusterGroup.members().isEmpty()) {
