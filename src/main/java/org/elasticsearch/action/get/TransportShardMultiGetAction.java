@@ -19,20 +19,29 @@
 
 package org.elasticsearch.action.get;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.utils.FBUtilities;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.action.support.single.shard.TransportShardSingleOperationAction;
+import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.routing.ShardIterator;
+import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.get.GetResult;
 import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.get.GetField;
+import org.elasticsearch.index.get.GetResult;
 import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -42,15 +51,17 @@ public class TransportShardMultiGetAction extends TransportShardSingleOperationA
     private static final String ACTION_NAME = MultiGetAction.NAME + "[shard]";
 
     private final IndicesService indicesService;
-
+    private final SchemaService elasticSchemaService;
     private final boolean realtime;
 
     @Inject
     public TransportShardMultiGetAction(Settings settings, ClusterService clusterService, TransportService transportService,
-                                        IndicesService indicesService, ThreadPool threadPool, ActionFilters actionFilters) {
+                                        IndicesService indicesService, ThreadPool threadPool, ActionFilters actionFilters,
+                                        SchemaService elasticSchemaService) {
         super(settings, ACTION_NAME, threadPool, clusterService, transportService, actionFilters);
         this.indicesService = indicesService;
-
+        this.elasticSchemaService = elasticSchemaService;
+        
         this.realtime = settings.getAsBoolean("action.get.realtime", true);
     }
 
@@ -92,6 +103,7 @@ public class TransportShardMultiGetAction extends TransportShardSingleOperationA
         }
     }
 
+    /*
     @Override
     protected MultiGetShardResponse shardOperation(MultiGetShardRequest request, ShardId shardId) throws ElasticsearchException {
         IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
@@ -117,6 +129,59 @@ public class TransportShardMultiGetAction extends TransportShardSingleOperationA
             }
         }
 
+        return response;
+    }
+    */
+    
+    @Override
+    protected MultiGetShardResponse shardOperation(MultiGetShardRequest request, ShardId shardId) throws ElasticsearchException {
+        IndexService indexService = indicesService.indexService(request.index());
+
+        MultiGetShardResponse response = new MultiGetShardResponse();
+        for (int i = 0; i < request.locations.size(); i++) {
+            MultiGetRequest.Item item = request.items.get(i);
+            Collection<String> columns;
+            if (item.fields() != null) {
+                columns = new ArrayList<String>(item.fields().length);
+                for (String field : item.fields()) {
+                    int j = field.indexOf('.');
+                    String colName = (j > 0) ? field.substring(0, j - 1) : field;
+                    if (!columns.contains(colName))
+                        columns.add(colName);
+                }
+            } else {
+                columns = elasticSchemaService.mappedColumns(indexService.index().getName(), item.type());
+            }
+            
+            try {
+                UntypedResultSet result = elasticSchemaService.fetchRow(request.index(), item.type(), columns, item.id());
+                if (!result.isEmpty()) {
+                    Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(result.one());
+                    Map<String, GetField> rowAsFieldMap = elasticSchemaService.flattenGetField(item.fields(), "", rowAsMap, new HashMap<String, GetField>());
+
+                    GetResult getResult = new GetResult(request.index(), item.type(), item.id(), 0L, true, new BytesArray(FBUtilities.json(rowAsMap).getBytes("UTF-8")), rowAsFieldMap);
+                    response.add(request.locations.get(i), new GetResponse(getResult));
+                } else {
+                    // document not found
+                    GetResult getResult = new GetResult(request.index(), item.type(), item.id(), 0L, false, null , null);
+                    response.add(request.locations.get(i), new GetResponse(getResult));
+                }
+            } catch (org.apache.cassandra.exceptions.ConfigurationException | org.apache.cassandra.exceptions.SyntaxException e) {
+                logger.debug("Failed to read cassandra table [{}]/[{}]/[{}] => doc not found", e, request.index(), item.type(), item.id());
+                GetResult getResult = new GetResult(request.index(), item.type(), item.id(), 0L, false, null , null);
+                response.add(request.locations.get(i), new GetResponse(getResult));
+                
+            } catch (Throwable t) {
+                if (TransportActions.isShardNotAvailableException(t)) {
+                    throw (ElasticsearchException) t;
+                } else {
+                    logger.debug("{} failed to execute multi_get for [{}]/[{}]", t, shardId, item.type(), item.id());
+                    response.add(request.locations.get(i), new MultiGetResponse.Failure(request.index(), item.type(), item.id(), ExceptionsHelper.detailedMessage(t)));
+                }
+            }
+            
+        }
+        
         return response;
     }
 }

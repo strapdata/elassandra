@@ -149,7 +149,7 @@ public abstract class FieldsVisitor extends StoredFieldVisitor {
      * @return
      */
     public String[] cassandraColumns(MapperService mapperService, String type) {
-        return mapperService.elasticSchemaService().cassandraColumns(mapperService, type);
+        return mapperService.elasticSchemaService().mappedColumns(mapperService, type);
     }
 
     abstract public boolean needSource();

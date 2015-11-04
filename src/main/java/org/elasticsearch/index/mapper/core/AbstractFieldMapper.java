@@ -19,11 +19,14 @@
 
 package org.elasticsearch.index.mapper.core;
 
-import com.carrotsearch.hppc.ObjectOpenHashSet;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
-import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableList;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.TreeMap;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
@@ -31,7 +34,16 @@ import org.apache.lucene.index.FieldInfo.IndexOptions;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queries.TermFilter;
 import org.apache.lucene.queries.TermsFilter;
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.FuzzyQuery;
+import org.apache.lucene.search.MultiTermQuery;
+import org.apache.lucene.search.PrefixFilter;
+import org.apache.lucene.search.PrefixQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.RegexpQuery;
+import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.TermRangeFilter;
+import org.apache.lucene.search.TermRangeQuery;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchIllegalArgumentException;
 import org.elasticsearch.common.Nullable;
@@ -51,17 +63,31 @@ import org.elasticsearch.index.codec.postingsformat.PostingFormats;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatService;
 import org.elasticsearch.index.fielddata.FieldDataType;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.ContentPath;
+import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.index.mapper.FieldMapperListener;
+import org.elasticsearch.index.mapper.FieldMappers;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ObjectMapperListener;
+import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.ParseContext.Document;
 import org.elasticsearch.index.mapper.internal.AllFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.search.FieldDataTermsFilter;
 import org.elasticsearch.index.similarity.SimilarityLookupService;
 import org.elasticsearch.index.similarity.SimilarityProvider;
 
-import java.io.IOException;
-import java.util.*;
+import com.carrotsearch.hppc.ObjectOpenHashSet;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import com.google.common.base.Objects;
+import com.google.common.collect.ImmutableList;
 
 /**
  *
@@ -82,7 +108,10 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T> {
             FIELD_TYPE.freeze();
         }
 
-        public static final boolean SINGLE_VALUE = false;
+        public static final CqlCollection CQL_COLLECTION = CqlCollection.LIST;
+        public static final CqlStruct CQL_STRUCT = CqlStruct.UDT;
+        public static final boolean CQL_PARTIAL_UPDATE = false;
+        
         public static final float BOOST = 1.0f;
         public static final ContentPath.Type PATH_TYPE = ContentPath.Type.FULL;
     }
@@ -106,7 +135,9 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T> {
         protected Settings fieldDataSettings;
         protected final MultiFields.Builder multiFieldsBuilder;
         protected CopyTo copyTo;
-        protected boolean singleValue;
+        protected CqlCollection cqlCollection;
+        protected CqlStruct cqlStruct;
+        protected boolean cqlPartialUpdate;
 
         protected Builder(String name, FieldType fieldType) {
             super(name);
@@ -124,11 +155,21 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T> {
             return builder;
         }
 
-        public T singleValue(boolean singleValue) {
-            this.singleValue = singleValue;
+        public T cqlCollection(CqlCollection cqlCollection) {
+            this.cqlCollection = cqlCollection;
+            return builder;
+        }
+        
+        public T cqlStruct(CqlStruct cqlStruct) {
+            this.cqlStruct = cqlStruct;
             return builder;
         }
 
+        public T cqlPartialUpdate(boolean cqlPartialUpdate) {
+            this.cqlPartialUpdate = cqlPartialUpdate;
+            return builder;
+        }
+        
         public T docValues(boolean docValues) {
             this.docValues = docValues;
             return builder;
@@ -276,25 +317,28 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T> {
     protected final MultiFields multiFields;
     protected CopyTo copyTo;
 
-    // control cassandra mapping as list<X> or X column type.
-    protected boolean singleValue;
-
-    protected AbstractFieldMapper(Names names, float boost, FieldType fieldType, Boolean singleValue, Boolean docValues, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
+    protected ObjectMapper.CqlCollection cqlCollection;
+    protected ObjectMapper.CqlStruct cqlStruct;
+    protected boolean cqlPartialUpdate;
+    
+    protected AbstractFieldMapper(Names names, float boost, FieldType fieldType, CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, Boolean docValues, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
             PostingsFormatProvider postingsFormat, DocValuesFormatProvider docValuesFormat, SimilarityProvider similarity, Loading normsLoading, @Nullable Settings fieldDataSettings,
             Settings indexSettings) {
-        this(names, boost, fieldType, singleValue, docValues, indexAnalyzer, searchAnalyzer, postingsFormat, docValuesFormat, similarity, normsLoading, fieldDataSettings, indexSettings, MultiFields
+        this(names, boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, indexAnalyzer, searchAnalyzer, postingsFormat, docValuesFormat, similarity, normsLoading, fieldDataSettings, indexSettings, MultiFields
                 .empty(), null);
     }
 
-    protected AbstractFieldMapper(Names names, float boost, FieldType fieldType, Boolean singleValue, Boolean docValues, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
+    protected AbstractFieldMapper(Names names, float boost, FieldType fieldType, CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, Boolean docValues, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
             PostingsFormatProvider postingsFormat, DocValuesFormatProvider docValuesFormat, SimilarityProvider similarity, Loading normsLoading, @Nullable Settings fieldDataSettings,
             Settings indexSettings, MultiFields multiFields, CopyTo copyTo) {
         this.names = names;
         this.boost = boost;
         this.fieldType = fieldType;
         this.fieldType.freeze();
-        this.singleValue = (singleValue == null) ? Defaults.SINGLE_VALUE : singleValue;
-
+        this.cqlCollection = (cqlCollection == null) ? Defaults.CQL_COLLECTION : cqlCollection;
+        this.cqlStruct = (cqlStruct == null) ? Defaults.CQL_STRUCT : cqlStruct;
+        this.cqlPartialUpdate = (cqlPartialUpdate == null) ? Defaults.CQL_PARTIAL_UPDATE : cqlPartialUpdate;
+        
         // automatically set to keyword analyzer if its indexed and not analyzed
         if (indexAnalyzer == null && !this.fieldType.tokenized() && this.fieldType.indexed()) {
             this.indexAnalyzer = Lucene.KEYWORD_ANALYZER;
@@ -694,8 +738,26 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T> {
         if (includeDefaults || hasDocValues() != Defaults.DOC_VALUES) {
             builder.field(TypeParsers.DOC_VALUES, docValues);
         }
-        if (includeDefaults || singleValue != Defaults.SINGLE_VALUE) {
-            builder.field(TypeParsers.SINGLE_VALUE, singleValue);
+        if (includeDefaults || cqlCollection != Defaults.CQL_COLLECTION) {
+            if (cqlCollection.equals(CqlCollection.LIST)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "list");
+            } else if (cqlCollection.equals(CqlCollection.SET)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "set");
+            } else if (cqlCollection.equals(CqlCollection.SINGLETON)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "singleton");
+            }
+        }
+        if (includeDefaults || cqlStruct != Defaults.CQL_STRUCT) {
+            if (cqlStruct.equals(CqlStruct.MAP)) {
+                builder.field(TypeParsers.CQL_STRUCT, "map");
+            } else if (cqlStruct.equals(CqlStruct.UDT)) {
+                builder.field(TypeParsers.CQL_STRUCT, "udt");
+            } else if (cqlStruct.equals(CqlStruct.TUPLE)) {
+                builder.field(TypeParsers.CQL_STRUCT, "tuple");
+            }
+        }
+        if (includeDefaults || cqlPartialUpdate != Defaults.CQL_PARTIAL_UPDATE) {
+            builder.field(TypeParsers.CQL_PARTIAL_UPDATE, cqlPartialUpdate);
         }
         if (includeDefaults || fieldType.storeTermVectors() != defaultFieldType.storeTermVectors()) {
             builder.field("term_vector", termVectorOptionsToString(fieldType));
@@ -848,10 +910,27 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T> {
     }
 
     @Override
-    public boolean isSingleValue() {
-        return this.singleValue;
+    public CqlCollection cqlCollection() {
+        return this.cqlCollection;
+    }
+    
+    @Override
+    public String cqlCollectionTag() {
+        if (this.cqlCollection.equals(CqlCollection.LIST)) return "list";
+        if (this.cqlCollection.equals(CqlCollection.SET)) return "set";
+        return "";
+    }
+    
+    @Override
+    public CqlStruct cqlStruct() {
+        return this.cqlStruct;
     }
 
+    @Override
+    public boolean cqlPartialUpdate() {
+        return this.cqlPartialUpdate;
+    }
+    
     @Override
     public boolean isSortable() {
         return true;

@@ -41,13 +41,13 @@ import org.elasticsearch.ElasticsearchIllegalArgumentException;
 import org.elasticsearch.ElasticsearchIllegalStateException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.cassandra.ElasticSchemaService;
-import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.text.StringAndBytesText;
 import org.elasticsearch.common.text.Text;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
@@ -82,8 +82,6 @@ import org.elasticsearch.search.internal.SearchContext;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-
-import org.elasticsearch.common.logging.Loggers;
 
 /**
  *
@@ -436,20 +434,21 @@ public class FetchPhase implements SearchPhase {
 
         if (!(fieldVisitor instanceof JustUidFieldsVisitor)) {
             try {
-                UntypedResultSet result = elasticSchemaService.fetchRowInternal(searchContext.request().index(), justUidFieldsVisitor.uid().type(), justUidFieldsVisitor.uid().id(),
-                        ImmutableList.<String> copyOf(fieldVisitor.cassandraColumns(searchContext.mapperService(), justUidFieldsVisitor.uid().type())));
+                UntypedResultSet result = elasticSchemaService.fetchRowInternal(searchContext.request().index(), justUidFieldsVisitor.uid().type(),
+                        ImmutableList.<String> copyOf(fieldVisitor.cassandraColumns(searchContext.mapperService(), justUidFieldsVisitor.uid().type())),
+                        justUidFieldsVisitor.uid().id());
                 if (!result.isEmpty()) {
                     Map<String, Object> mapObject = elasticSchemaService.rowAsMap(result.one());
 
                     if (fieldVisitor.needFields()) {
                         Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
-                        elasticSchemaService.flattenObject(fieldVisitor.neededFields(), "", mapObject, flatMap);
+                        elasticSchemaService.flattenTree(fieldVisitor.neededFields(), "", mapObject, flatMap);
                         for (String field : flatMap.keySet()) {
                             fieldVisitor.setValues(field, flatMap.get(field));
                         }
                     }
                     if (fieldVisitor.needSource()) {
-                        fieldVisitor.source(FBUtilities.json(mapObject).getBytes("UTF-8"));
+                        fieldVisitor.source(XContentFactory.contentBuilder(XContentType.JSON).map(mapObject).bytes().array());
                     }
                 }
 

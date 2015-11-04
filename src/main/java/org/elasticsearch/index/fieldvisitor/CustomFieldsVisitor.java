@@ -66,8 +66,12 @@ public class CustomFieldsVisitor extends FieldsVisitor {
                 String rootField = f.substring(0, f.indexOf('.'));
                 ObjectMapper rootMapper = docMapper.objectMappers().get(rootField);
                 if (rootMapper != null) {
-                    // nested UDT x.y.z, if multi valued => get x, otherwise get x"."y"."z
-                    columns.add((rootMapper.isSingleValue()) ? f.replaceAll("\\.", "\".\"") : rootField);
+                    // nested UDT x.y.z, if list or set valued => get x, otherwise get x"."y"."z
+                    columns.add(
+                            (rootMapper.cqlStruct() == ObjectMapper.CqlStruct.UDT) &&
+                            (rootMapper.cqlCollection() == ObjectMapper.CqlCollection.SINGLETON) ? 
+                                    f.replaceAll("\\.", "\".\"") : rootField
+                    );
                     continue;
                 }
             }

@@ -19,6 +19,14 @@
 
 package org.elasticsearch.index.mapper.core;
 
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.index.mapper.MapperBuilders.booleanField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.FieldInfo.IndexOptions;
@@ -36,16 +44,14 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
 import org.elasticsearch.index.fielddata.FieldDataType;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.similarity.SimilarityProvider;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
-import static org.elasticsearch.index.mapper.MapperBuilders.booleanField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
 
 /**
  *
@@ -97,7 +103,7 @@ public class BooleanFieldMapper extends AbstractFieldMapper<Boolean> {
 
         @Override
         public BooleanFieldMapper build(BuilderContext context) {
-            return new BooleanFieldMapper(buildNames(context), boost, fieldType, singleValue, nullValue, postingsProvider, 
+            return new BooleanFieldMapper(buildNames(context), boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, nullValue, postingsProvider, 
                     docValuesProvider, similarity, normsLoading, fieldDataSettings, context.indexSettings(), multiFieldsBuilder.build(this, context), copyTo);
         }
     }
@@ -123,10 +129,10 @@ public class BooleanFieldMapper extends AbstractFieldMapper<Boolean> {
 
     private Boolean nullValue;
 
-    protected BooleanFieldMapper(Names names, float boost, FieldType fieldType, Boolean monoValued, Boolean nullValue, PostingsFormatProvider postingsProvider,
+    protected BooleanFieldMapper(Names names, float boost, FieldType fieldType, CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, Boolean nullValue, PostingsFormatProvider postingsProvider,
                                  DocValuesFormatProvider docValuesProvider, SimilarityProvider similarity, Loading normsLoading,
                                  @Nullable Settings fieldDataSettings, Settings indexSettings, MultiFields multiFields, CopyTo copyTo) {
-        super(names, boost, fieldType, monoValued, null, Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER, postingsProvider, docValuesProvider, similarity, normsLoading, fieldDataSettings, indexSettings, multiFields, copyTo);
+        super(names, boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, null, Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER, postingsProvider, docValuesProvider, similarity, normsLoading, fieldDataSettings, indexSettings, multiFields, copyTo);
         this.nullValue = nullValue;
     }
 

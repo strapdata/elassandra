@@ -24,7 +24,6 @@ import static org.elasticsearch.index.mapper.core.TypeParsers.parseDateTimeForma
 import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
 
 import java.io.IOException;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -69,6 +68,8 @@ import org.elasticsearch.index.mapper.MergeContext;
 import org.elasticsearch.index.mapper.MergeMappingException;
 import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.core.LongFieldMapper.CustomLongNumericField;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.search.NumericRangeFieldDataFilter;
 import org.elasticsearch.index.similarity.SimilarityProvider;
@@ -141,7 +142,7 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
                 dateTimeFormatter = new FormatDateTimeFormatter(dateTimeFormatter.format(), dateTimeFormatter.parser(), dateTimeFormatter.printer(), locale);
             }
             DateFieldMapper fieldMapper = new DateFieldMapper(buildNames(context), dateTimeFormatter,
-                    fieldType.numericPrecisionStep(), boost, fieldType, singleValue, docValues, nullValue, timeUnit, roundCeil, ignoreMalformed(context), coerce(context),
+                    fieldType.numericPrecisionStep(), boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, nullValue, timeUnit, roundCeil, ignoreMalformed(context), coerce(context),
                     postingsProvider, docValuesProvider, similarity, normsLoading, fieldDataSettings, context.indexSettings(),
                     multiFieldsBuilder.build(this, context), copyTo);
             fieldMapper.includeInAll(includeInAll);
@@ -196,12 +197,13 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
 
     protected final TimeUnit timeUnit;
 
-    protected DateFieldMapper(Names names, FormatDateTimeFormatter dateTimeFormatter, int precisionStep, float boost, FieldType fieldType, Boolean monoValued, Boolean docValues,
+    protected DateFieldMapper(Names names, FormatDateTimeFormatter dateTimeFormatter, int precisionStep, float boost, FieldType fieldType, 
+                              CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, Boolean docValues,
                               String nullValue, TimeUnit timeUnit, boolean roundCeil, Explicit<Boolean> ignoreMalformed,Explicit<Boolean> coerce,
                               PostingsFormatProvider postingsProvider, DocValuesFormatProvider docValuesProvider, SimilarityProvider similarity,
 
                               Loading normsLoading, @Nullable Settings fieldDataSettings, Settings indexSettings, MultiFields multiFields, CopyTo copyTo) {
-        super(names, precisionStep, boost, fieldType, monoValued, docValues, ignoreMalformed, coerce, NumericDateAnalyzer.buildNamedAnalyzer(dateTimeFormatter, precisionStep),
+        super(names, precisionStep, boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, ignoreMalformed, coerce, NumericDateAnalyzer.buildNamedAnalyzer(dateTimeFormatter, precisionStep),
                 NumericDateAnalyzer.buildNamedAnalyzer(dateTimeFormatter, Integer.MAX_VALUE),
                 postingsProvider, docValuesProvider, similarity, normsLoading, fieldDataSettings, indexSettings, multiFields, copyTo);
         this.dateTimeFormatter = dateTimeFormatter;

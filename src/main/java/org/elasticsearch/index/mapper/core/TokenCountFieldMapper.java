@@ -19,6 +19,14 @@
 
 package org.elasticsearch.index.mapper.core;
 
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeIntegerValue;
+import static org.elasticsearch.index.mapper.MapperBuilders.tokenCountField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.document.Field;
@@ -30,17 +38,16 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.core.StringFieldMapper.ValueAndBoost;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.similarity.SimilarityProvider;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeIntegerValue;
-import static org.elasticsearch.index.mapper.MapperBuilders.tokenCountField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
 
 /**
  * A {@link FieldMapper} that takes a string and writes a count of the tokens in that string
@@ -78,7 +85,8 @@ public class TokenCountFieldMapper extends IntegerFieldMapper {
         @Override
         public TokenCountFieldMapper build(BuilderContext context) {
             fieldType.setOmitNorms(fieldType.omitNorms() && boost == 1.0f);
-            TokenCountFieldMapper fieldMapper = new TokenCountFieldMapper(buildNames(context), fieldType.numericPrecisionStep(), boost, fieldType, singleValue, docValues, nullValue,
+            TokenCountFieldMapper fieldMapper = new TokenCountFieldMapper(buildNames(context), fieldType.numericPrecisionStep(), boost, fieldType, 
+                    cqlCollection, cqlStruct, cqlPartialUpdate, docValues, nullValue,
                     ignoreMalformed(context), coerce(context), postingsProvider, docValuesProvider, similarity, normsLoading, fieldDataSettings, context.indexSettings(),
                     analyzer, multiFieldsBuilder.build(this, context), copyTo);
             fieldMapper.includeInAll(includeInAll);
@@ -114,11 +122,12 @@ public class TokenCountFieldMapper extends IntegerFieldMapper {
 
     private NamedAnalyzer analyzer;
 
-    protected TokenCountFieldMapper(Names names, int precisionStep, float boost, FieldType fieldType, Boolean monoValued, Boolean docValues, Integer nullValue,
+    protected TokenCountFieldMapper(Names names, int precisionStep, float boost, FieldType fieldType, 
+            CqlCollection cqlCollection, CqlStruct cqlStruct,Boolean cqlPartialUpdate, Boolean docValues, Integer nullValue,
             Explicit<Boolean> ignoreMalformed, Explicit<Boolean> coerce, PostingsFormatProvider postingsProvider, DocValuesFormatProvider docValuesProvider,
             SimilarityProvider similarity, Loading normsLoading, Settings fieldDataSettings, Settings indexSettings, NamedAnalyzer analyzer,
             MultiFields multiFields, CopyTo copyTo) {
-        super(names, precisionStep, boost, fieldType, monoValued, docValues, nullValue, ignoreMalformed, coerce, postingsProvider, docValuesProvider, 
+        super(names, precisionStep, boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, nullValue, ignoreMalformed, coerce, postingsProvider, docValuesProvider, 
                 similarity, normsLoading, fieldDataSettings, indexSettings, multiFields, copyTo);
 
         this.analyzer = analyzer;

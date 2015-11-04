@@ -19,9 +19,14 @@
 
 package org.elasticsearch.index.mapper;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
+import static org.elasticsearch.index.mapper.MapperBuilders.doc;
+
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
 import org.elasticsearch.Version;
+import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.collect.MapBuilder;
@@ -37,10 +42,37 @@ import org.elasticsearch.index.analysis.AnalysisService;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatService;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatService;
-import org.elasticsearch.index.mapper.core.*;
+import org.elasticsearch.index.mapper.core.BinaryFieldMapper;
+import org.elasticsearch.index.mapper.core.BooleanFieldMapper;
+import org.elasticsearch.index.mapper.core.ByteFieldMapper;
+import org.elasticsearch.index.mapper.core.CompletionFieldMapper;
+import org.elasticsearch.index.mapper.core.DateFieldMapper;
+import org.elasticsearch.index.mapper.core.DoubleFieldMapper;
+import org.elasticsearch.index.mapper.core.FloatFieldMapper;
+import org.elasticsearch.index.mapper.core.IntegerFieldMapper;
+import org.elasticsearch.index.mapper.core.LongFieldMapper;
+import org.elasticsearch.index.mapper.core.Murmur3FieldMapper;
+import org.elasticsearch.index.mapper.core.ShortFieldMapper;
+import org.elasticsearch.index.mapper.core.StringFieldMapper;
+import org.elasticsearch.index.mapper.core.TokenCountFieldMapper;
+import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.geo.GeoShapeFieldMapper;
-import org.elasticsearch.index.mapper.internal.*;
+import org.elasticsearch.index.mapper.internal.AllFieldMapper;
+import org.elasticsearch.index.mapper.internal.AnalyzerMapper;
+import org.elasticsearch.index.mapper.internal.BoostFieldMapper;
+import org.elasticsearch.index.mapper.internal.FieldNamesFieldMapper;
+import org.elasticsearch.index.mapper.internal.IdFieldMapper;
+import org.elasticsearch.index.mapper.internal.IndexFieldMapper;
+import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
+import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
+import org.elasticsearch.index.mapper.internal.SizeFieldMapper;
+import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
+import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
+import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
+import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
+import org.elasticsearch.index.mapper.internal.UidFieldMapper;
+import org.elasticsearch.index.mapper.internal.VersionFieldMapper;
 import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.mapper.object.RootObjectMapper;
@@ -51,11 +83,8 @@ import org.elasticsearch.script.ScriptParameterParser.ScriptParameterValue;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.script.ScriptService.ScriptType;
 
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.doc;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 
 /**
  *
@@ -67,7 +96,8 @@ public class DocumentMapperParser extends AbstractIndexComponent {
     private final DocValuesFormatService docValuesFormatService;
     private final SimilarityLookupService similarityLookupService;
     private final ScriptService scriptService;
-
+    private final SchemaService schemaService;
+    
     private final RootObjectMapper.TypeParser rootObjectTypeParser = new RootObjectMapper.TypeParser();
 
     private final Object typeParsersMutex = new Object();
@@ -78,13 +108,15 @@ public class DocumentMapperParser extends AbstractIndexComponent {
 
     public DocumentMapperParser(Index index, @IndexSettings Settings indexSettings, AnalysisService analysisService,
                                 PostingsFormatService postingsFormatService, DocValuesFormatService docValuesFormatService,
-                                SimilarityLookupService similarityLookupService, ScriptService scriptService) {
+                                SimilarityLookupService similarityLookupService, ScriptService scriptService,
+                                SchemaService schemaService) {
         super(index, indexSettings);
         this.analysisService = analysisService;
         this.postingsFormatService = postingsFormatService;
         this.docValuesFormatService = docValuesFormatService;
         this.similarityLookupService = similarityLookupService;
         this.scriptService = scriptService;
+        this.schemaService = schemaService;
         MapBuilder<String, Mapper.TypeParser> typeParsersBuilder = new MapBuilder<String, Mapper.TypeParser>()
                 .put(ByteFieldMapper.CONTENT_TYPE, new ByteFieldMapper.TypeParser())
                 .put(ShortFieldMapper.CONTENT_TYPE, new ShortFieldMapper.TypeParser())
@@ -259,6 +291,8 @@ public class DocumentMapperParser extends AbstractIndexComponent {
                 } else {
                     throw new MapperParsingException("Transform must be an object or an array but was:  " + fieldNode);
                 }
+            } else if ("columns_regexp".equals(fieldName)) {
+                iterator.remove();
             } else {
                 Mapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
                 if (typeParser != null) {
@@ -341,10 +375,33 @@ public class DocumentMapperParser extends AbstractIndexComponent {
             throw new MapperParsingException("malformed mapping no root object found");
         }
         String rootName = root.keySet().iterator().next();
+        
+        
+        
         Tuple<String, Map<String, Object>> mapping;
         if (type == null || type.equals(rootName)) {
+            try {
+                String columnRegexp = ((Map<String,String>) root.get(rootName)).get("columns_regexp");
+                if (columnRegexp != null) {
+                    String cqlMapping = this.schemaService.buildTableMapping(index.getName(), type, columnRegexp);
+                    logger.info("put mapping {}", cqlMapping);
+                    return extractMapping(type, cqlMapping);
+                }
+            } catch(Exception e) {
+                logger.warn("error", e);
+            }
             mapping = new Tuple<>(rootName, (Map<String, Object>) root.get(rootName));
         } else {
+            try {
+                String columnRegexp = (String) root.get("columns_regexp");
+                if (columnRegexp != null) {
+                    String cqlMapping = this.schemaService.buildTableMapping(index.getName(), type, columnRegexp);
+                    logger.info("put mapping {}", cqlMapping);
+                    return extractMapping(type, cqlMapping);
+                }
+            } catch(Exception e) { 
+                logger.warn("error", e);
+            }
             mapping = new Tuple<>(type, root);
         }
         return mapping;

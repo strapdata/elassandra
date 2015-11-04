@@ -20,8 +20,8 @@
 package org.elasticsearch.action.get;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.apache.cassandra.cql3.UntypedResultSet;
@@ -31,19 +31,25 @@ import org.elasticsearch.action.RoutingMissingException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.single.shard.TransportShardSingleOperationAction;
 import org.elasticsearch.cassandra.SchemaService;
-import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.cluster.routing.operation.plain.Preference;
 import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.get.GetResult;
+import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.search.fetch.source.FetchSourceContext;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
@@ -112,29 +118,41 @@ public class TransportGetAction extends TransportShardSingleOperationAction<GetR
 
     @Override
     protected GetResponse shardOperation(GetRequest request, ShardId shardId) throws ElasticsearchException {
+        /*
         IndexService indexService = indicesService.indexService(request.index());
 
-        List<String> columns;
+        Collection<String> columns;
         if (request.fields() != null) {
             columns = new ArrayList<String>(request.fields().length);
             for (String field : request.fields()) {
                 int i = field.indexOf('.');
-                String colName = (i > 0) ? field.substring(0, i - 1) : field;
+                String colName = (i > 0) ? field.substring(0, i ) : field;
                 if (!columns.contains(colName))
                     columns.add(colName);
             }
         } else {
-            columns = elasticSchemaService.cassandraMappedColumns(indexService.index().getName(), request.type());
+            columns = elasticSchemaService.mappedColumns(indexService.index().getName(), request.type());
         }
 
         // TODO: add param consistencyLevel
         try {
-            UntypedResultSet result = elasticSchemaService.fetchRow(request.index(), request.type(), request.id(), columns);
+            request.f
+            UntypedResultSet result = elasticSchemaService.fetchRow(request.index(), request.type(), columns, request.id() );
             if (!result.isEmpty()) {
                 Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(result.one());
-                Map<String, GetField> rowAsFieldMap = elasticSchemaService.flattenGetField(request.fields(), "", rowAsMap, new HashMap<String, GetField>());
-
-                GetResult getResult = new GetResult(request.index(), request.type(), request.id(), 0L, true, new BytesArray(FBUtilities.json(rowAsMap).getBytes("UTF-8")), rowAsFieldMap);
+                Map<String, GetField> rowAsFieldMap = null;
+                BytesReference source = null;
+                
+                
+                if (request.fields() != null) {
+                    elasticSchemaService.flattenGetField(request.fields(), "", rowAsMap, rowAsFieldMap);
+                } else {
+                    if (request.q)
+                    //source = new BytesArray(FBUtilities.json(rowAsMap).getBytes("UTF-8"));
+                    source = XContentFactory.contentBuilder(XContentType.JSON).map(rowAsMap).bytes();
+                }
+                
+                GetResult getResult = new GetResult(request.index(), request.type(), request.id(), 0L, true, source, rowAsFieldMap);
                 return new GetResponse(getResult);
             }
         } catch (org.apache.cassandra.exceptions.ConfigurationException | org.apache.cassandra.exceptions.SyntaxException e) {
@@ -143,6 +161,17 @@ public class TransportGetAction extends TransportShardSingleOperationAction<GetR
             throw new ElasticsearchException(e.getMessage(), e);
         }
         return new GetResponse(new GetResult(request.index(), request.type(), request.id(), 0L, false, null, null));
+        */
+        IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
+        IndexShard indexShard = indexService.shardSafe(shardId.id());
+
+        if (request.refresh() && !request.realtime()) {
+            indexShard.refresh("refresh_flag_get");
+        }
+
+        GetResult result = indexShard.getService().get(request.type(), request.id(), request.fields(),
+                request.realtime(), request.version(), request.versionType(), request.fetchSourceContext(), request.ignoreErrorsOnGeneratedFields());
+        return new GetResponse(result);
     }
 
     @Override

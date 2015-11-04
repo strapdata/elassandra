@@ -92,7 +92,7 @@ public class MapperService extends AbstractIndexComponent {
 
     public static final String DEFAULT_MAPPING = "_default_";
     private static ObjectOpenHashSet<String> META_FIELDS = ObjectOpenHashSet
-            .from("_uid", "_id", "_type", "_all", "_analyzer", "_boost", "_parent", "_routing", "_index", "_size", "_timestamp", "_ttl");
+            .from("_uid", "_id", "_type", "_all", "_analyzer", "_boost", "_parent", "_routing", "_index", "_size", "_timestamp", "_ttl", "_token");
 
     private final AnalysisService analysisService;
     private final IndexFieldDataService fieldDataService;
@@ -136,7 +136,7 @@ public class MapperService extends AbstractIndexComponent {
         this.fieldDataService = fieldDataService;
         this.elasticSchemaService = elasticSchemaService;
         this.fieldMappers = new FieldMappersLookup();
-        this.documentParser = new DocumentMapperParser(index, indexSettings, analysisService, postingsFormatService, docValuesFormatService, similarityLookupService, scriptService);
+        this.documentParser = new DocumentMapperParser(index, indexSettings, analysisService, postingsFormatService, docValuesFormatService, similarityLookupService, scriptService, elasticSchemaService);
         this.searchAnalyzer = new SmartIndexNameSearchAnalyzer(analysisService.defaultSearchAnalyzer());
         this.searchQuoteAnalyzer = new SmartIndexNameSearchQuoteAnalyzer(analysisService.defaultSearchQuoteAnalyzer());
 

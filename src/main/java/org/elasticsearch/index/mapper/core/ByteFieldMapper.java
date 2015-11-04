@@ -18,6 +18,14 @@
  */
 package org.elasticsearch.index.mapper.core;
 
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeByteValue;
+import static org.elasticsearch.index.mapper.MapperBuilders.byteField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Field;
@@ -43,18 +51,16 @@ import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
 import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.fielddata.IndexNumericFieldData;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.search.NumericRangeFieldDataFilter;
 import org.elasticsearch.index.similarity.SimilarityProvider;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeByteValue;
-import static org.elasticsearch.index.mapper.MapperBuilders.byteField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
 
 /**
  *
@@ -91,7 +97,7 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
         public ByteFieldMapper build(BuilderContext context) {
             fieldType.setOmitNorms(fieldType.omitNorms() && boost == 1.0f);
             ByteFieldMapper fieldMapper = new ByteFieldMapper(buildNames(context),
-                    fieldType.numericPrecisionStep(), boost, fieldType, singleValue, docValues, nullValue, ignoreMalformed(context),
+                    fieldType.numericPrecisionStep(), boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, nullValue, ignoreMalformed(context),
                     coerce(context), postingsProvider, docValuesProvider, similarity, normsLoading, 
                     fieldDataSettings, context.indexSettings(), multiFieldsBuilder.build(this, context), copyTo);
             fieldMapper.includeInAll(includeInAll);
@@ -122,12 +128,13 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
 
     private String nullValueAsString;
 
-    protected ByteFieldMapper(Names names, int precisionStep, float boost, FieldType fieldType, Boolean monoValued, Boolean docValues,
+    protected ByteFieldMapper(Names names, int precisionStep, float boost, FieldType fieldType, 
+                              CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, Boolean docValues,
                               Byte nullValue, Explicit<Boolean> ignoreMalformed, Explicit<Boolean> coerce, 
                               PostingsFormatProvider postingsProvider,
                               DocValuesFormatProvider docValuesProvider, SimilarityProvider similarity, Loading normsLoading,
                               @Nullable Settings fieldDataSettings, Settings indexSettings, MultiFields multiFields, CopyTo copyTo) {
-        super(names, precisionStep, boost, fieldType, monoValued, docValues,
+        super(names, precisionStep, boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues,
                 ignoreMalformed, coerce, new NamedAnalyzer("_byte/" + precisionStep, new NumericIntegerAnalyzer(precisionStep)),
                 new NamedAnalyzer("_byte/max", new NumericIntegerAnalyzer(Integer.MAX_VALUE)), postingsProvider,
                 docValuesProvider, similarity, normsLoading, fieldDataSettings, indexSettings, multiFields, copyTo);

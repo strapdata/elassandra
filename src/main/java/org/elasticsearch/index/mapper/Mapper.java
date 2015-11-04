@@ -19,9 +19,10 @@
 
 package org.elasticsearch.index.mapper;
 
-import com.google.common.collect.ImmutableMap;
+import java.io.IOException;
+import java.util.Map;
+
 import org.elasticsearch.Version;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
@@ -29,10 +30,12 @@ import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.index.analysis.AnalysisService;
 import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatService;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatService;
+import org.elasticsearch.index.mapper.object.ObjectMapper;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.similarity.SimilarityLookupService;
 
-import java.io.IOException;
-import java.util.Map;
+import com.google.common.collect.ImmutableMap;
 
 /**
  *
@@ -144,7 +147,6 @@ public interface Mapper extends ToXContent {
 
     String contentType();
     
-    boolean isSingleValue();
     
     void parse(ParseContext context) throws IOException;
 
@@ -155,4 +157,15 @@ public interface Mapper extends ToXContent {
     void traverse(ObjectMapperListener objectMapperListener);
 
     void close();
+
+    
+    public CqlCollection cqlCollection();
+    
+    public String cqlCollectionTag();
+
+    public CqlStruct cqlStruct();
+    
+    public boolean cqlPartialUpdate();
+    
+
 }

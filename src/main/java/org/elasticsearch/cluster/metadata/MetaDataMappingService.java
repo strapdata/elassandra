@@ -22,9 +22,11 @@ package org.elasticsearch.cluster.metadata;
 import static com.google.common.collect.Maps.newHashMap;
 import static org.elasticsearch.index.mapper.DocumentMapper.MergeFlags.mergeFlags;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,8 +36,8 @@ import org.elasticsearch.action.admin.indices.mapping.delete.DeleteMappingCluste
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
 import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
-import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.common.Priority;
@@ -88,7 +90,7 @@ public class MetaDataMappingService extends AbstractComponent {
     static class MappingTask {
         final String index;
         final String indexUUID;
-
+        
         MappingTask(String index, final String indexUUID) {
             this.index = index;
             this.indexUUID = indexUUID;
@@ -110,7 +112,9 @@ public class MetaDataMappingService extends AbstractComponent {
         final long order; // -1 for unknown
         final String nodeId; // null fr unknown
         final ActionListener<ClusterStateUpdateResponse> listener;
-
+        
+        public Set<String> columns = null;
+        
         UpdateTask(String index, String indexUUID, String type, CompressedString mappingSource, long order, String nodeId, ActionListener<ClusterStateUpdateResponse> listener) {
             super(index, indexUUID);
             this.type = type;
@@ -119,6 +123,7 @@ public class MetaDataMappingService extends AbstractComponent {
             this.nodeId = nodeId;
             this.listener = listener;
         }
+        
     }
 
     /**
@@ -324,9 +329,13 @@ public class MetaDataMappingService extends AbstractComponent {
                     }
 
                     MappingMetaData mappingMetaData2 = new MappingMetaData(updatedMapper);
-                    logger.debug("Updating CQL3 schema {}.{} columns={}", index, type, ((Map<String, Object>) mappingMetaData2.sourceAsMap().get("properties")).keySet());
-                    elasticSchemaService.updateTableSchema(index, type, ((Map<String, Object>) mappingMetaData2.sourceAsMap().get("properties")).keySet(), updatedMapper);
                     builder.putMapping(mappingMetaData2);
+                    
+                    Set<String> columns = ((Map<String, Object>) mappingMetaData2.sourceAsMap().get("properties")).keySet();
+                    logger.debug("Updating CQL3 schema {}.{} columns={}", index, type, columns);
+                    elasticSchemaService.updateTableSchema(index, type, columns, updatedMapper);
+                    updateTask.columns = columns;
+                    
                     dirty = true;
                 } catch (Throwable t) {
                     logger.warn("[{}] failed to update-mapping in cluster state, type [{}]", t, index, updateTask.type);
@@ -407,6 +416,16 @@ public class MetaDataMappingService extends AbstractComponent {
                 for (Object task : allTasks) {
                     if (task instanceof UpdateTask) {
                         UpdateTask uTask = (UpdateTask) task;
+                        
+                        if (uTask.columns != null) {
+                            try {
+                                logger.debug("Updating CQL3 schema {}.{} columns={}", index, type, uTask.columns);
+                                elasticSchemaService.createSecondaryIndex(index, type, uTask.columns);
+                            } catch (IOException e) {
+                                logger.warn("Failed to update CQL3 schema {}.{}",e, index, type);
+                            }
+                        }    
+                        
                         ClusterStateUpdateResponse response = new ClusterStateUpdateResponse(true);
                         try {
                             uTask.listener.onResponse(response);
@@ -473,6 +492,9 @@ public class MetaDataMappingService extends AbstractComponent {
 
         clusterService.submitStateUpdateTask("put-mapping [" + request.type() + "]", Priority.HIGH, new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, listener) {
 
+            // Store mapping updates to update CQL schema when cluster state is applied (when clusterStateProcessed is fired once). 
+            Map<String,MappingMetaData> mappingMetaDataMap = new HashMap<String,MappingMetaData>();
+            
             @Override
             protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
                 return new ClusterStateUpdateResponse(acknowledged);
@@ -598,13 +620,14 @@ public class MetaDataMappingService extends AbstractComponent {
                         if (mappingMd != null) {
                             builder.put(IndexMetaData.builder(indexMetaData).putMapping(mappingMd));
                         }
-
-                        logger.debug("Put mapping into CQL3 schema {}.{} columns={}", indexName, mappingMd.type(), ((Map<String, Object>) mappingMd.sourceAsMap().get("properties")).keySet());
-                        IndexService indexService = indicesService.indexService(indexName);
-                        elasticSchemaService.updateTableSchema(indexName, mappingMd.type(), ((Map<String, Object>) mappingMd.sourceAsMap().get("properties")).keySet(), indexService.mapperService()
-                                .documentMapper(mappingMd.type()));
+                        
+                        Set<String> columns = ((Map<String, Object>) mappingMd.sourceAsMap().get("properties")).keySet();
+                        logger.debug("Update CQL3 schema {}.{} columns={}", indexName, mappingMd.type(), columns);
+                        elasticSchemaService.updateTableSchema(indexName, mappingMd.type(), columns, 
+                                indicesService.indexService(indexName).mapperService().documentMapper(mappingMd.type()));
+                        mappingMetaDataMap.put(indexName, mappingMd);
                     }
-
+                    
                     return ClusterState.builder(currentState).version(currentState.version() + 1).metaData(builder).build();
                 } finally {
                     /*
@@ -612,6 +635,24 @@ public class MetaDataMappingService extends AbstractComponent {
                         indicesService.removeIndex(index, "created for mapping processing");
                     }
                     */
+                }
+            }
+            
+            @Override
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+                for(Map.Entry<String, MappingMetaData> entry : mappingMetaDataMap.entrySet()) {
+                    try {
+                        String index = entry.getKey();
+                        MappingMetaData mappingMd = entry.getValue();
+                        Set<String> columns = ((Map<String, Object>) mappingMd.sourceAsMap().get("properties")).keySet();
+                        
+                        // update CQL3 secondary indices when cluster state is applied and table schema up to date.
+                        logger.debug("Update CQL3 secondary index {}.{} for columns={}", index, mappingMd.type(), columns);
+                        elasticSchemaService.createSecondaryIndex(index, mappingMd.type(), columns);
+                        
+                    } catch (IOException e) {
+                        logger.error("error", e);
+                    }
                 }
             }
         });

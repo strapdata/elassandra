@@ -83,7 +83,7 @@ public class PutMappingRequest extends AcknowledgedRequest<PutMappingRequest> im
         ActionRequestValidationException validationException = null;
         if (type == null) {
             validationException = addValidationError("mapping type is missing", validationException);
-        }else if (type.isEmpty()) {
+        } else if (type.isEmpty()) {
             validationException = addValidationError("mapping type is empty", validationException);
         }
         if (source == null) {

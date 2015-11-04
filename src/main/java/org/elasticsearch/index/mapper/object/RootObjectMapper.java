@@ -99,7 +99,7 @@ public class RootObjectMapper extends ObjectMapper {
 
 
         @Override
-        protected ObjectMapper createMapper(String name, String fullPath, boolean singleValue, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers, @Nullable @IndexSettings Settings settings) {
+        protected ObjectMapper createMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, boolean cqlPartialUpdate, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers, @Nullable @IndexSettings Settings settings) {
             assert !nested.isNested();
             FormatDateTimeFormatter[] dates = null;
             if (dynamicDateTimeFormatters == null) {
@@ -110,7 +110,7 @@ public class RootObjectMapper extends ObjectMapper {
             } else {
                 dates = dynamicDateTimeFormatters.toArray(new FormatDateTimeFormatter[dynamicDateTimeFormatters.size()]);
             }
-            return new RootObjectMapper(name, singleValue, enabled, dynamic, pathType, mappers,
+            return new RootObjectMapper(name, cqlCollection, cqlStruct, cqlPartialUpdate, enabled, dynamic, pathType, mappers,
                     dates,
                     dynamicTemplates.toArray(new DynamicTemplate[dynamicTemplates.size()]),
                     dateDetection, numericDetection);
@@ -197,9 +197,9 @@ public class RootObjectMapper extends ObjectMapper {
 
     private volatile DynamicTemplate dynamicTemplates[];
 
-    RootObjectMapper(String name, boolean singleValue, boolean enabled, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers,
+    RootObjectMapper(String name, CqlCollection cqlCollection, CqlStruct cqlStruct, boolean cqlPartialUpdate, boolean enabled, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers,
                      FormatDateTimeFormatter[] dynamicDateTimeFormatters, DynamicTemplate dynamicTemplates[], boolean dateDetection, boolean numericDetection) {
-        super(name, name, singleValue, enabled, Nested.NO, dynamic, pathType, mappers);
+        super(name, name, cqlCollection, cqlStruct, cqlPartialUpdate, enabled, Nested.NO, dynamic, pathType, mappers);
         this.dynamicTemplates = dynamicTemplates;
         this.dynamicDateTimeFormatters = dynamicDateTimeFormatters;
         this.dateDetection = dateDetection;

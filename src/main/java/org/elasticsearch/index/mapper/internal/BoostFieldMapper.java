@@ -125,7 +125,7 @@ public class BoostFieldMapper extends NumberFieldMapper<Float> implements Intern
 
     protected BoostFieldMapper(String name, String indexName, int precisionStep, float boost, FieldType fieldType, Boolean docValues, Float nullValue,
                                PostingsFormatProvider postingsProvider, DocValuesFormatProvider docValuesProvider, @Nullable Settings fieldDataSettings, Settings indexSettings) {
-        super(new Names(name, indexName, indexName, name), precisionStep, boost, fieldType, null, docValues, Defaults.IGNORE_MALFORMED, Defaults.COERCE,
+        super(new Names(name, indexName, indexName, name), precisionStep, boost, fieldType, null, null,null, docValues, Defaults.IGNORE_MALFORMED, Defaults.COERCE,
                 NumericFloatAnalyzer.buildNamedAnalyzer(precisionStep), NumericFloatAnalyzer.buildNamedAnalyzer(Integer.MAX_VALUE),
                 postingsProvider, docValuesProvider, null, null, fieldDataSettings, indexSettings, MultiFields.empty(), null);
         this.nullValue = nullValue;

@@ -38,13 +38,11 @@ import org.elasticsearch.gateway.GatewayException;
 import org.elasticsearch.index.gateway.local.LocalIndexGatewayModule;
 
 /**
- *
+ * Recover metadata from cassandra schema.
  */
-public class CassandraGateway extends AbstractLifecycleComponent<Gateway> implements Gateway, ClusterStateListener {
+public class CassandraGateway extends AbstractLifecycleComponent<Gateway> implements Gateway {
 
     private final ClusterService clusterService;
-    private final ClusterName clusterName;
-    private final CassandraDiscovery cassandraDiscovery;
     private final SchemaService elasticSchemaService;
     private final NodeEnvironment nodeEnv;
 
@@ -53,11 +51,8 @@ public class CassandraGateway extends AbstractLifecycleComponent<Gateway> implem
             SchemaService elasticSchemaService) {
         super(settings);
         this.clusterService = clusterService;
-        this.clusterName = clusterName;
-        this.cassandraDiscovery = cassandraDiscovery;
         this.elasticSchemaService = elasticSchemaService;
         this.nodeEnv = nodeEnv;
-        clusterService.addLast(this);
     }
 
     @Override
@@ -75,7 +70,6 @@ public class CassandraGateway extends AbstractLifecycleComponent<Gateway> implem
 
     @Override
     protected void doClose() throws ElasticsearchException {
-        clusterService.remove(this);
     }
 
     @Override
@@ -113,32 +107,6 @@ public class CassandraGateway extends AbstractLifecycleComponent<Gateway> implem
         }
     }
 
-    /**
-     * Save state change in cassandra.
-     */
-    @Override
-    public void clusterChanged(final ClusterChangedEvent event) {
-        /*
-        final ClusterState newState = event.state();
-        if (newState.blocks().disableStatePersistence() || !event.peristMetaData()) {
-            // reset the current metadata, we need to start fresh...
-            return;
-        }
-
-        MetaData newMetaData = newState.metaData();
-        logger.debug("clusterChanged metaDataChange={} source={} old_metadata={}/{} new_metadata={}/{} ", event.metaDataChanged(), event.source(), event.previousState().metaData().uuid(), event
-                .previousState().metaData().version(), newMetaData.uuid(), newMetaData.version());
-
-        ClusterState previousState = event.previousState();
-        if (event.metaDataChanged()) {
-            try {
-                elasticSchemaService.pushMetaData(newState.getNodes().getLocalNodeId(), previousState.metaData(), newState.metaData(), "gateway-metadata-changed");
-            } catch (Exception e) {
-                logger.error("failed to persist new metadata", e);
-            }
-
-        }
-        */
-    }
+    
 
 }

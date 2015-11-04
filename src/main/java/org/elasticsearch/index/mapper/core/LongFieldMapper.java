@@ -19,6 +19,14 @@
 
 package org.elasticsearch.index.mapper.core;
 
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeLongValue;
+import static org.elasticsearch.index.mapper.MapperBuilders.longField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Field;
@@ -44,18 +52,16 @@ import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
 import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.fielddata.IndexNumericFieldData;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.search.NumericRangeFieldDataFilter;
 import org.elasticsearch.index.similarity.SimilarityProvider;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeLongValue;
-import static org.elasticsearch.index.mapper.MapperBuilders.longField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
 
 /**
  *
@@ -91,7 +97,8 @@ public class LongFieldMapper extends NumberFieldMapper<Long> {
         @Override
         public LongFieldMapper build(BuilderContext context) {
             fieldType.setOmitNorms(fieldType.omitNorms() && boost == 1.0f);
-            LongFieldMapper fieldMapper = new LongFieldMapper(buildNames(context), fieldType.numericPrecisionStep(), boost, fieldType, singleValue, docValues, nullValue,
+            LongFieldMapper fieldMapper = new LongFieldMapper(buildNames(context), fieldType.numericPrecisionStep(), boost, fieldType, 
+                    cqlCollection, cqlStruct, cqlPartialUpdate, docValues, nullValue,
                     ignoreMalformed(context), coerce(context), postingsProvider, docValuesProvider, similarity, normsLoading, 
                     fieldDataSettings, context.indexSettings(), multiFieldsBuilder.build(this, context), copyTo);
             fieldMapper.includeInAll(includeInAll);
@@ -122,12 +129,13 @@ public class LongFieldMapper extends NumberFieldMapper<Long> {
 
     private String nullValueAsString;
 
-    protected LongFieldMapper(Names names, int precisionStep, float boost, FieldType fieldType, Boolean monoValued, Boolean docValues,
+    protected LongFieldMapper(Names names, int precisionStep, float boost, FieldType fieldType, 
+                              CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, Boolean docValues,
                               Long nullValue, Explicit<Boolean> ignoreMalformed, Explicit<Boolean> coerce,
                               PostingsFormatProvider postingsProvider, DocValuesFormatProvider docValuesProvider,
                               SimilarityProvider similarity, Loading normsLoading, @Nullable Settings fieldDataSettings, 
                               Settings indexSettings, MultiFields multiFields, CopyTo copyTo) {
-        super(names, precisionStep, boost, fieldType, monoValued, docValues, ignoreMalformed, coerce,
+        super(names, precisionStep, boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, ignoreMalformed, coerce,
                 NumericLongAnalyzer.buildNamedAnalyzer(precisionStep), NumericLongAnalyzer.buildNamedAnalyzer(Integer.MAX_VALUE),
                 postingsProvider, docValuesProvider, similarity, normsLoading, fieldDataSettings, indexSettings, multiFields, copyTo);
         this.nullValue = nullValue;

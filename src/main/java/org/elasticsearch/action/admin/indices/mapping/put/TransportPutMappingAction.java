@@ -23,6 +23,7 @@ import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
+import org.elasticsearch.cassandra.ElasticSchemaService;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
@@ -40,12 +41,15 @@ import org.elasticsearch.transport.TransportService;
 public class TransportPutMappingAction extends TransportMasterNodeOperationAction<PutMappingRequest, PutMappingResponse> {
 
     private final MetaDataMappingService metaDataMappingService;
-
+    private final ElasticSchemaService elasticSchemaService;
+    
     @Inject
     public TransportPutMappingAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                     ThreadPool threadPool, MetaDataMappingService metaDataMappingService, ActionFilters actionFilters) {
+                                     ThreadPool threadPool, MetaDataMappingService metaDataMappingService, ActionFilters actionFilters,
+                                     ElasticSchemaService elasticSchemaService) {
         super(settings, PutMappingAction.NAME, transportService, clusterService, threadPool, actionFilters);
         this.metaDataMappingService = metaDataMappingService;
+        this.elasticSchemaService = elasticSchemaService;
     }
 
     @Override

@@ -19,8 +19,31 @@
 
 package org.elasticsearch.index.mapper.object;
 
-import com.google.common.collect.Iterables;
+import static com.google.common.collect.Lists.newArrayList;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.index.mapper.MapperBuilders.binaryField;
+import static org.elasticsearch.index.mapper.MapperBuilders.booleanField;
+import static org.elasticsearch.index.mapper.MapperBuilders.dateField;
+import static org.elasticsearch.index.mapper.MapperBuilders.doubleField;
+import static org.elasticsearch.index.mapper.MapperBuilders.floatField;
+import static org.elasticsearch.index.mapper.MapperBuilders.integerField;
+import static org.elasticsearch.index.mapper.MapperBuilders.longField;
+import static org.elasticsearch.index.mapper.MapperBuilders.object;
+import static org.elasticsearch.index.mapper.MapperBuilders.stringField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parsePathType;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
@@ -37,22 +60,26 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.ContentPath;
+import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.index.mapper.FieldMapperListener;
+import org.elasticsearch.index.mapper.InternalMapper;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperBuilders;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ObjectMapperListener;
+import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.ParseContext.Document;
+import org.elasticsearch.index.mapper.StrictDynamicMappingException;
 import org.elasticsearch.index.mapper.core.TypeParsers;
-import org.elasticsearch.index.mapper.core.AbstractFieldMapper.Defaults;
 import org.elasticsearch.index.mapper.internal.AllFieldMapper;
 import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.index.settings.IndexSettings;
 
-import java.io.IOException;
-import java.util.*;
-
-import static com.google.common.collect.Lists.newArrayList;
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
-import static org.elasticsearch.index.mapper.MapperBuilders.*;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parsePathType;
+import com.google.common.collect.Iterables;
 
 /**
  *
@@ -64,7 +91,9 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
 
     public static class Defaults {
         public static final boolean ENABLED = true;
-        public static final boolean SINGLE_VALUE = false;
+        public static final CqlCollection CQL_COLLECTION = CqlCollection.LIST;
+        public static final CqlStruct CQL_STRUCT = CqlStruct.UDT;
+        public static final boolean  CQL_PARTIAL_UPDATE = false; // if true, force read on collection columns when updating a row.
         public static final Nested NESTED = Nested.NO;
         public static final Dynamic DYNAMIC = null; // not set, inherited from root
         public static final ContentPath.Type PATH_TYPE = ContentPath.Type.FULL;
@@ -74,6 +103,14 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
         TRUE, FALSE, STRICT
     }
 
+    public static enum CqlCollection {
+        LIST, SET, SINGLETON
+    }
+    
+    public static enum CqlStruct {
+        UDT, MAP, TUPLE
+    }
+    
     public static class Nested {
 
         public static final Nested NO = new Nested(false, false, false);
@@ -111,8 +148,12 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
 
         protected boolean enabled = Defaults.ENABLED;
 
-        protected boolean singleValue = Defaults.SINGLE_VALUE;
+        protected CqlCollection cqlCollection = Defaults.CQL_COLLECTION;
 
+        protected CqlStruct cqlStruct = Defaults.CQL_STRUCT;
+
+        protected boolean cqlPartialUpdate = Defaults.CQL_PARTIAL_UPDATE;
+        
         protected Nested nested = Defaults.NESTED;
 
         protected Dynamic dynamic = Defaults.DYNAMIC;
@@ -133,8 +174,18 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             return builder;
         }
 
-        public T singleValue(boolean singleValue) {
-            this.singleValue = singleValue;
+        public T cqlPartialUpdate(boolean cqlPartialUpdate) {
+            this.cqlPartialUpdate = cqlPartialUpdate;
+            return builder;
+        }
+        
+        public T cqlCollection(CqlCollection cqlCollection) {
+            this.cqlCollection = cqlCollection;
+            return builder;
+        }
+        
+        public T cqlStruct(CqlStruct cqlStruct) {
+            this.cqlStruct = cqlStruct;
             return builder;
         }
 
@@ -177,15 +228,15 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             context.path().pathType(origPathType);
             context.path().remove();
 
-            ObjectMapper objectMapper = createMapper(name, context.path().fullPathAsText(name), singleValue, enabled, nested, dynamic, pathType, mappers, context.indexSettings());
+            ObjectMapper objectMapper = createMapper(name, context.path().fullPathAsText(name), cqlCollection, cqlStruct, cqlPartialUpdate, enabled, nested, dynamic, pathType, mappers, context.indexSettings());
             objectMapper.includeInAllIfNotSet(includeInAll);
 
             return (Y) objectMapper;
         }
 
-        protected ObjectMapper createMapper(String name, String fullPath, boolean singleValue, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers,
+        protected ObjectMapper createMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, boolean cqlPartialUpdate, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers,
                 @Nullable @IndexSettings Settings settings) {
-            return new ObjectMapper(name, fullPath, singleValue, enabled, nested, dynamic, pathType, mappers);
+            return new ObjectMapper(name, fullPath, cqlCollection, cqlStruct, cqlPartialUpdate, enabled, nested, dynamic, pathType, mappers);
         }
     }
 
@@ -215,8 +266,24 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             } else if (fieldName.equals("enabled")) {
                 builder.enabled(nodeBooleanValue(fieldNode));
                 return true;
-            } else if (fieldName.equals("single_value")) {
-                builder.singleValue(nodeBooleanValue(fieldNode));
+            } else if (fieldName.equals(TypeParsers.CQL_PARTIAL_UPDATE)) {
+                builder.cqlPartialUpdate(nodeBooleanValue(fieldNode));
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_COLLECTION)) {
+                String value = StringUtils.lowerCase(fieldNode.toString());
+                switch (value) {
+                case "list": builder.cqlCollection(CqlCollection.LIST); break;
+                case "set": builder.cqlCollection(CqlCollection.SET); break;
+                case "singleton": builder.cqlCollection(CqlCollection.SINGLETON); break;
+                }
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_STRUCT)) {
+                String value = StringUtils.lowerCase(fieldNode.toString());
+                switch (value) {
+                case "tuple": builder.cqlStruct(CqlStruct.TUPLE); break;
+                case "map": builder.cqlStruct(CqlStruct.MAP); break;
+                case "udt": builder.cqlStruct(CqlStruct.UDT); break;
+                }
                 return true;
             } else if (fieldName.equals("properties")) {
                 if (fieldNode instanceof Collection && ((Collection) fieldNode).isEmpty()) {
@@ -320,7 +387,9 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
 
     private final Nested nested;
 
-    private final boolean singleValue;
+    private final CqlCollection cqlCollection;
+    private final CqlStruct cqlStruct;
+    private final boolean cqlPartialUpdate;
 
     private final String nestedTypePathAsString;
     private final BytesRef nestedTypePathAsBytes;
@@ -337,12 +406,14 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
 
     private final Object mutex = new Object();
 
-    ObjectMapper(String name, String fullPath, boolean singleValue, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers) {
+    ObjectMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, boolean cqlPartialUpdate, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers) {
         this.name = name;
         this.fullPath = fullPath;
         this.enabled = enabled;
         this.nested = nested;
-        this.singleValue = singleValue;
+        this.cqlCollection = cqlCollection;
+        this.cqlStruct = cqlStruct;
+        this.cqlPartialUpdate = cqlPartialUpdate;
         this.dynamic = dynamic;
         this.pathType = pathType;
         if (mappers == null) {
@@ -997,12 +1068,33 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             if (nested.isIncludeInRoot()) {
                 builder.field("include_in_root", true);
             }
+            
+            if (cqlStruct != Defaults.CQL_STRUCT) {
+                if (cqlStruct.equals(CqlStruct.MAP)) {
+                    builder.field(TypeParsers.CQL_STRUCT, "map");
+                } else if (cqlStruct.equals(CqlStruct.UDT)) {
+                    builder.field(TypeParsers.CQL_STRUCT, "udt");
+                } else if (cqlStruct.equals(CqlStruct.TUPLE)) {
+                    builder.field(TypeParsers.CQL_STRUCT, "tuple");
+                }
+            }
         } else if (mappers.isEmpty()) { // only write the object content type if there are no properties, otherwise, it is automatically detected
             builder.field("type", CONTENT_TYPE);
+        } 
+        
+        if (cqlCollection != Defaults.CQL_COLLECTION) {
+            if (cqlCollection.equals(CqlCollection.SET)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "set");
+            } else if (cqlCollection.equals(CqlCollection.LIST)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "list");
+            } else if (cqlCollection.equals(CqlCollection.SINGLETON)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "singleton");
+            }
         }
-        if (singleValue != Defaults.SINGLE_VALUE) {
-            builder.field(TypeParsers.SINGLE_VALUE, singleValue);
+        if (cqlPartialUpdate != Defaults.CQL_PARTIAL_UPDATE) {
+            builder.field(TypeParsers.CQL_PARTIAL_UPDATE, cqlPartialUpdate);
         }
+        
         if (dynamic != null) {
             builder.field("dynamic", dynamic.name().toLowerCase(Locale.ROOT));
         }
@@ -1064,9 +1156,23 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
 
     }
 
-    @Override
-    public boolean isSingleValue() {
-        return this.singleValue;
+    public CqlCollection cqlCollection() {
+        return this.cqlCollection;
+    }
+    
+
+    public String cqlCollectionTag() {
+        if (this.cqlCollection.equals(CqlCollection.LIST)) return "list";
+        if (this.cqlCollection.equals(CqlCollection.SET)) return "set";
+        return "";
+    }
+    
+
+    public CqlStruct cqlStruct() {
+        return this.cqlStruct;
     }
 
+    public boolean cqlPartialUpdate() {
+        return this.cqlPartialUpdate;
+    }
 }

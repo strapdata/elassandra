@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.elassandra</groupId>
     <artifactId>elassandra</artifactId>
-    <version>SNAPSHOT-0.1</version>
+    <version>SNAPSHOT-0.3</version>
     <packaging>jar</packaging>
     <description>Elassandra - ElasticSearch for Cassandra</description>
     <inceptionYear>2015</inceptionYear>
@@ -46,16 +46,6 @@
         <tests.topn>5</tests.topn>
         <execution.hint.file>.local-${project.version}-execution-hints.log</execution.hint.file>
     </properties>
-
-<!--
-    <repositories>
-        <repository>
-            <id>codehaus-snapshots</id>
-            <name>Codehaus Snapshots</name>
-            <url>http://repository.codehaus.org/</url>
-        </repository>
-    </repositories>
--->
 
     <repositories>
         <repository>
@@ -1401,6 +1391,7 @@
                                 <exclude>src/main/java/org/elasticsearch/cassandra/*.java</exclude>
                                 <exclude>src/main/java/org/elasticsearch/discovery/cassandra/*.java</exclude>
                                 <exclude>src/main/java/org/elasticsearch/gateway/cassandra/*.java</exclude>
+                                <exclude>src/main/java/**/*.buk</exclude>
                             </excludes>
                         </configuration>
                         <executions>

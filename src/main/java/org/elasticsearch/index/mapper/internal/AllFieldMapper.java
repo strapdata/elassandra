@@ -149,7 +149,7 @@ public class AllFieldMapper extends AbstractFieldMapper<String> implements Inter
                              EnabledAttributeMapper enabled, boolean autoBoost, PostingsFormatProvider postingsProvider,
                              DocValuesFormatProvider docValuesProvider, SimilarityProvider similarity, Loading normsLoading,
                              @Nullable Settings fieldDataSettings, Settings indexSettings) {
-        super(new Names(name, name, name, name), 1.0f, fieldType, null, null, indexAnalyzer, searchAnalyzer, postingsProvider, docValuesProvider,
+        super(new Names(name, name, name, name), 1.0f, fieldType, null, null, null, null, indexAnalyzer, searchAnalyzer, postingsProvider, docValuesProvider,
                 similarity, normsLoading, fieldDataSettings, indexSettings);
         if (hasDocValues()) {
             throw new MapperParsingException("Field [" + names.fullName() + "] is always tokenized and cannot have doc values");

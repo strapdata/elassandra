@@ -19,9 +19,19 @@
 
 package org.elasticsearch.index.mapper.geo;
 
-import com.carrotsearch.hppc.ObjectOpenHashSet;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.google.common.base.Objects;
+import static org.elasticsearch.index.mapper.MapperBuilders.doubleField;
+import static org.elasticsearch.index.mapper.MapperBuilders.geoPointField;
+import static org.elasticsearch.index.mapper.MapperBuilders.stringField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseMultiField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parsePathType;
+
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.FieldInfo;
@@ -45,20 +55,28 @@ import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
 import org.elasticsearch.index.fielddata.FieldDataType;
-import org.elasticsearch.index.mapper.*;
-import org.elasticsearch.index.mapper.core.*;
+import org.elasticsearch.index.mapper.ContentPath;
+import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.index.mapper.FieldMapperListener;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ObjectMapperListener;
+import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.core.AbstractFieldMapper;
+import org.elasticsearch.index.mapper.core.DoubleFieldMapper;
+import org.elasticsearch.index.mapper.core.NumberFieldMapper;
 import org.elasticsearch.index.mapper.core.NumberFieldMapper.CustomNumericDocValuesField;
+import org.elasticsearch.index.mapper.core.StringFieldMapper;
 import org.elasticsearch.index.mapper.object.ArrayValueMapperParser;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.similarity.SimilarityProvider;
 
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.*;
-import static org.elasticsearch.index.mapper.core.TypeParsers.*;
+import com.carrotsearch.hppc.ObjectOpenHashSet;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.base.Objects;
 
 /**
  * Parsing: We handle:
@@ -196,7 +214,7 @@ public class GeoPointFieldMapper extends AbstractFieldMapper<GeoPoint> implement
             // store them as a single token.
             fieldType.setTokenized(false);
 
-            return new GeoPointFieldMapper(buildNames(context), fieldType, singleValue, docValues, indexAnalyzer, searchAnalyzer, postingsProvider, docValuesProvider,
+            return new GeoPointFieldMapper(buildNames(context), fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, indexAnalyzer, searchAnalyzer, postingsProvider, docValuesProvider,
                     similarity, fieldDataSettings, context.indexSettings(), origPathType, enableLatLon, enableGeoHash, enableGeohashPrefix, precisionStep,
                     geoHashPrecision, latMapper, lonMapper, geohashMapper, validateLon, validateLat, normalizeLon, normalizeLat
             , multiFieldsBuilder.build(this, context));
@@ -401,7 +419,8 @@ public class GeoPointFieldMapper extends AbstractFieldMapper<GeoPoint> implement
     private final boolean normalizeLon;
     private final boolean normalizeLat;
 
-    public GeoPointFieldMapper(FieldMapper.Names names, FieldType fieldType, Boolean monoValued, Boolean docValues,
+    public GeoPointFieldMapper(FieldMapper.Names names, FieldType fieldType, 
+            CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, Boolean docValues,
             NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
             PostingsFormatProvider postingsFormat, DocValuesFormatProvider docValuesFormat,
             SimilarityProvider similarity, @Nullable Settings fieldDataSettings, Settings indexSettings,
@@ -409,7 +428,7 @@ public class GeoPointFieldMapper extends AbstractFieldMapper<GeoPoint> implement
             DoubleFieldMapper latMapper, DoubleFieldMapper lonMapper, StringFieldMapper geohashMapper,
             boolean validateLon, boolean validateLat,
             boolean normalizeLon, boolean normalizeLat, MultiFields multiFields) {
-        super(names, 1f, fieldType, monoValued, docValues, null, indexAnalyzer, postingsFormat, docValuesFormat, similarity, null, fieldDataSettings, indexSettings, multiFields, null);
+        super(names, 1f, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, null, indexAnalyzer, postingsFormat, docValuesFormat, similarity, null, fieldDataSettings, indexSettings, multiFields, null);
         this.pathType = pathType;
         this.enableLatLon = enableLatLon;
         this.enableGeoHash = enableGeoHash || enableGeohashPrefix; // implicitly enable geohashes if geohash_prefix is set

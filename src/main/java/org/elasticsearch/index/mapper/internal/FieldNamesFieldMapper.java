@@ -142,7 +142,7 @@ public class FieldNamesFieldMapper extends AbstractFieldMapper<String> implement
 
     public FieldNamesFieldMapper(String name, String indexName, float boost, FieldType fieldType, PostingsFormatProvider postingsProvider,
                                  DocValuesFormatProvider docValuesProvider, EnabledAttributeMapper enabledState, @Nullable Settings fieldDataSettings, Settings indexSettings) {
-        super(new Names(name, indexName, indexName, name), boost, fieldType, null, null, Lucene.KEYWORD_ANALYZER,
+        super(new Names(name, indexName, indexName, name), boost, fieldType, null, null,null, null, Lucene.KEYWORD_ANALYZER,
                 Lucene.KEYWORD_ANALYZER, postingsProvider, docValuesProvider, null, null, fieldDataSettings, indexSettings);
         this.defaultFieldType = Defaults.FIELD_TYPE;
         this.pre13Index = Version.indexCreated(indexSettings).before(Version.V_1_3_0);

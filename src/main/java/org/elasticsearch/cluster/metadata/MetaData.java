@@ -39,6 +39,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.gms.Gossiper;
 import org.elasticsearch.ElasticsearchIllegalArgumentException;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.cluster.block.ClusterBlock;
@@ -1283,6 +1284,10 @@ public class MetaData implements Iterable<IndexMetaData> {
         }
 
         public Builder(MetaData metaData) {
+            if (metaData.uuid != null && metaData.uuid.equals(SystemKeyspace.getLocalHostId().toString()) && localVersion < metaData.version) {
+                // Initialize localVersion counter from the persisted value.
+                localVersion = metaData.version;
+            }
             this.uuid = metaData.uuid;
             this.version = metaData.version;
             this.transientSettings = metaData.transientSettings;

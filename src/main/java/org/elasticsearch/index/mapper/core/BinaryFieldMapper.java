@@ -19,7 +19,14 @@
 
 package org.elasticsearch.index.mapper.core;
 
-import com.carrotsearch.hppc.ObjectArrayList;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.index.mapper.MapperBuilders.binaryField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.FieldInfo;
@@ -43,15 +50,15 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
 import org.elasticsearch.index.fielddata.FieldDataType;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
-import static org.elasticsearch.index.mapper.MapperBuilders.binaryField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+import com.carrotsearch.hppc.ObjectArrayList;
 
 /**
  *
@@ -93,7 +100,7 @@ public class BinaryFieldMapper extends AbstractFieldMapper<BytesReference> {
 
         @Override
         public BinaryFieldMapper build(BuilderContext context) {
-            return new BinaryFieldMapper(buildNames(context), fieldType, singleValue, docValues, compress, compressThreshold, postingsProvider,
+            return new BinaryFieldMapper(buildNames(context), fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, compress, compressThreshold, postingsProvider,
                     docValuesProvider, fieldDataSettings, multiFieldsBuilder.build(this, context), copyTo);
         }
     }
@@ -126,10 +133,10 @@ public class BinaryFieldMapper extends AbstractFieldMapper<BytesReference> {
 
     private long compressThreshold;
 
-    protected BinaryFieldMapper(Names names, FieldType fieldType, Boolean monoValued, Boolean docValues, Boolean compress, long compressThreshold,
+    protected BinaryFieldMapper(Names names, FieldType fieldType, CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, Boolean docValues, Boolean compress, long compressThreshold,
                                 PostingsFormatProvider postingsProvider, DocValuesFormatProvider docValuesProvider, @Nullable Settings fieldDataSettings,
                                 MultiFields multiFields, CopyTo copyTo) {
-        super(names, 1.0f, fieldType, monoValued, docValues, null, null, postingsProvider, docValuesProvider, null, null, fieldDataSettings, null, multiFields, copyTo);
+        super(names, 1.0f, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, null, null, postingsProvider, docValuesProvider, null, null, fieldDataSettings, null, multiFields, copyTo);
         this.compress = compress;
         this.compressThreshold = compressThreshold;
     }

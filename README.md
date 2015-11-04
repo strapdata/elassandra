@@ -21,12 +21,12 @@ For cassandra users, elassandra provides elasicsearch features :
 
 For Elasticsearch users, elassandra provides usefull features :
 * Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Moreover, source documents are now stored in Cassandra, reducing disk space if you need a noSql database and elasticsearch.
-* In elassandra, Elasticsearch is masterless and split-brain resistant because cluster state is now manager within cassandra lightweight transactions.
+* In elassandra, Elasticsearch is masterless and split-brain resistant because cluster state is now manager within [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
 * Write operations are not more restricted to one primary shards, but distributed on all cassandra nodes in a virtual datacenter. Number of shards does not limit your write throughput, just add some elassandra nodes to increase both read and write throughput.
 * Elasticsearch indices can be replicated between many cassandra datacenters, allowing to write in the closest datacenter and search globally.
-* The cassandra driver is Datacenter and Token aware, that means requests are sent to the most appropriate node.
-* Hive and Spark support with pushdown predicate.
-* Cassandra supports distributed counters.
+* The [cassandra driver](http://www.planetcassandra.org/client-drivers-tools/) is Datacenter and Token aware.
+* Hadoop Hive, Pig and Spark support with pushdown predicate.
+* Cassandra supports partial update and [distributed counters](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_counter_t.html).
 
 ## Kibana + Elassandra
 
@@ -573,6 +573,159 @@ localhost/127.0.0.1
   HOST_ID:74ae1629-0149-4e65-b790-cd25c7406675
 ```
 
+# Elasticsearch document mapping
+
+Here is the mapping from Elasticsearch field basic types to CQL3 types :
+
+Elasticearch Types | CQL Types | Comment
+--- | --- | ---
+string | test |
+integer, short, byte | timestamp |
+long | bigint | 
+double | double | 
+float | float | 
+boolean | boolean | 
+binary | blob | 
+ip | inet | Internet address
+geo_point | UDT geo_point | Built-In User Defined Type
+geo_shape | UDT geo_shape | **Not yet implemented**
+object, nested | Custom User Defined Type
+
+ 
+Parameter | Values | Description
+cql_collection | **list**, set or singleton | Control how the field of type X is mapped to a column list<X>, set<X> or X. Default is *list* because Elasticsearch fields are multivalued.
+cql_struct | **udt** or map | Control how an object or nested field is mapped to a User Defined Type or to a cassandra map<text,?>. Default is *udt*.
+cql_partial_update | true or **false** | Elasticsearch index full document. For partial CQL update, this control which field should be read to index a full document. Default is *false*.
+
+
+## Elasticsearch mapping from an existing cassandra table.
+
+A new put mapping parameter `column_regexp` allow to create Elasticsearch mapping from an existing cassandra table for columns whose name match the provided regular expression. The following command create the elasticsearch mapping for all columns starting by 'a' of the cassandra table *my.keyspace.my_table*. 
+
+```
+curl -XPUT "http://localhost:9200/my_keyspace/_mapping/my_table" -d '{ "my_table" : { "columns_regexp" : "a.*" }}'
+```
+
+##  Compound primary key support
+
+When mapping an existing cassandra table to an Elasticsearch index.type, primary key is mapped to the `_id` field. 
+* Single primary key is converted to a string.
+* Compound primary key is converted to a JSON array stored as string in the  `_id` field.
+
+## Object and Nested mapping
+
+By default, Elasticsearch [object or nested types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-object-type.html) are mapped to dynamically created Cassandra User Defined Types. 
+
+```
+curl -XPUT 'http://localhost:9200/twitter/tweet/1' -d '
+{
+     "user" : {
+         "name" : {
+             "first_name" : "Vincent",
+             "last_name" : "Royer"
+         },
+         "uid" : "12345"
+     },
+     "message" : "This is a tweet!"
+}'
+
+curl -XGET 'http://localhost:9200/twitter/tweet/1/_source'
+{"message":"This is a tweet!","user":{"uid":["12345"],"name":[{"first_name":["Vincent"],"last_name":["Royer"]}]}}
+```
+The resulting cassandra user defined types and table.
+
+```
+cqlsh>describe keyspace twitter;
+CREATE TYPE twitter.tweet_user (
+    name frozen<list<frozen<tweet_user_name>>>,
+    uid frozen<list<text>>
+);
+
+CREATE TYPE twitter.tweet_user_name (
+    last_name frozen<list<text>>,
+    first_name frozen<list<text>>
+);
+
+CREATE TABLE twitter.tweet (
+    "_id" text PRIMARY KEY,
+    message list<text>,
+    person list<frozen<tweet_person>>
+)
+
+cqlsh> select * from twitter.tweet;
+_id  | message              | user
+-----+----------------------+-----------------------------------------------------------------------------
+   1 | ['This is a tweet!'] | [{name: [{last_name: ['Royer'], first_name: ['Vincent']}], uid: ['12345']}]
+```
+
+
+### Dynamique mapping of cassandra map
+
+Since version 0.3, nested document can be mapped to *User Defined Type* or to CQL [map](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_map_t.html#toc_pane). In the following example, the cassandra map is automatically mapped with `cql_partial_update:true`, so a partial CQL update cause a read of the whole map to re-index a document in the elasticsearch index. 
+
+```
+cqlsh>CREATE KEYSPACE IF NOT EXISTS twitter WITH replication={ 'class':'NetworkTopologyStrategy', 'DC1':'1' };
+cqlsh>CREATE TABLE twitter.user ( 
+name text,
+attrs map<text,text>,
+primary key (name)
+);
+cqlsh>INSERT INTO twitter.user (name,attrs) VALUES ('bob',{'email':'bob@gmail.com','firstname':'bob'});
+```
+
+```
+curl -XPUT "http://localhost:9200/twitter/" -d '{ "settings" : { "number_of_shards" : 1, "number_of_replicas" : 0 } }'
+curl -XPUT "http://localhost:9200/twitter/_mapping/user" -d '{ "user" : { "columns_regexp" : ".*" }}'
+curl -XGET "http://localhost:9200/twitter/user/bob?pretty=true"
+{
+  "_index" : "twitter",
+  "_type" : "user",
+  "_id" : "bob",
+  "_version" : 0,
+  "found" : true,
+  "_source":{"name":"bob","attrs":{"email":"bob@gmail.com","firstname":"bob"}}
+}
+```
+
+
+Now insert a new entry in the attrs map column and search for a nested field `attrs.city:paris`.
+
+```
+cqlsh>UPDATE twitter.user SET attrs = attrs + { 'city':'paris' } WHERE name = 'bob';
+```
+
+
+```
+curl -XGET "http://localhost:9200/twitter/_search?pretty=true" -d '{
+"query":{
+    "nested":{ 
+            "path":"attrs",
+            "query":{ "match": {"attrs.city":"paris" } }
+             }
+        }
+}'
+{
+  "took" : 3,
+  "timed_out" : false,
+  "_shards" : {
+    "total" : 1,
+    "successful" : 1,
+    "failed" : 0
+  },
+  "hits" : {
+    "total" : 1,
+    "max_score" : 2.3862944,
+    "hits" : [ {
+      "_index" : "twitter",
+      "_type" : "user",
+      "_id" : "bob",
+      "_score" : 2.3862944,
+      "_source":{"attrs":{"city":"paris","email":"bob@gmail.com","firstname":"bob"},"name":"bob"}
+    } ]
+  }
+}
+```
+
 # Consistency Level
 
 When indexing a document, you can set write consistency level like this.
@@ -588,12 +741,21 @@ ONE | LOCAL_ONE |
 QUORUM | LOCAL_QUORUM |
 ALL | ALL | Because there is no LOCAL_ALL in cassandra, ALL involve write in all datacenters hosting the keyspace. 
 
+# Known bugs and restrictions
+    
+* Cassandra 
+ * Thrift is not supported, only CQL3.
+ * CQL3 truncate has not effect on elasticsearch indices.
 
-## Contribute
+* Elasticsearch 
+ * tribe, percolate, snapshots and recovery service not tested.
+ * Geoshape type not supported.
+ 
+# Contribute
 
 Contributors are welcome to test and enhance Elassandra to make it production ready.
 
-## License
+# License
 
 ```
 This software is licensed under the Apache License, version 2 ("ALv2"), quoted below.

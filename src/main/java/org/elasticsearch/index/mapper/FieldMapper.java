@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
-import com.google.common.base.Strings;
+import java.util.List;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.FieldType;
@@ -34,10 +34,12 @@ import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
 import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.mapper.core.AbstractFieldMapper;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.similarity.SimilarityProvider;
 
-import java.util.List;
+import com.google.common.base.Strings;
 
 /**
  *
@@ -289,8 +291,6 @@ public interface FieldMapper<T> extends Mapper {
 
     boolean isSortable();
     
-    boolean isSingleValue();
-
     boolean supportsNullValue();
 
     boolean hasDocValues();
@@ -304,5 +304,6 @@ public interface FieldMapper<T> extends Mapper {
      * @return If the field is available before indexing or not.
      * */
     public boolean isGenerated();
+
 
 }

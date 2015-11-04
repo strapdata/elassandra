@@ -435,7 +435,7 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
 
             assert indexRequest.versionType().validateVersionForWrites(indexRequest.version());
 
-            IndexResponse indexResponse = new IndexResponse(request.index(), indexRequest.type(), indexRequest.id(), writetime, applied);
+            IndexResponse indexResponse = new IndexResponse(request.index(), indexRequest.type(), id, writetime, applied);
             return new WriteResult(indexResponse, null, applied);
         } catch (Throwable t) {
             throw new WriteFailureException(t, null);

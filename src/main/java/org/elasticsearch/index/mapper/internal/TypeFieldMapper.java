@@ -108,7 +108,7 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements Inte
 
     public TypeFieldMapper(String name, String indexName, float boost, FieldType fieldType, PostingsFormatProvider postingsProvider,
                            DocValuesFormatProvider docValuesProvider, @Nullable Settings fieldDataSettings, Settings indexSettings) {
-        super(new Names(name, indexName, indexName, name), boost, fieldType, null, null, Lucene.KEYWORD_ANALYZER,
+        super(new Names(name, indexName, indexName, name), boost, fieldType, null, null, null, null, Lucene.KEYWORD_ANALYZER,
                 Lucene.KEYWORD_ANALYZER, postingsProvider, docValuesProvider, null, null, fieldDataSettings, indexSettings);
     }
 

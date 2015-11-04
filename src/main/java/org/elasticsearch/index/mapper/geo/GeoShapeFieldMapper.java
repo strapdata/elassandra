@@ -18,7 +18,12 @@
  */
 package org.elasticsearch.index.mapper.geo;
 
-import com.spatial4j.core.shape.Shape;
+import static org.elasticsearch.index.mapper.MapperBuilders.geoShapeField;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.FieldInfo;
@@ -44,12 +49,10 @@ import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.core.AbstractFieldMapper;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.geoShapeField;
+import com.spatial4j.core.shape.Shape;
 
 
 /**
@@ -161,7 +164,7 @@ public class GeoShapeFieldMapper extends AbstractFieldMapper<String> {
                 throw new ElasticsearchIllegalArgumentException("Unknown prefix tree type [" + tree + "]");
             }
 
-            return new GeoShapeFieldMapper(names, singleValue, prefixTree, strategyName, distanceErrorPct, orientation, fieldType, postingsProvider,
+            return new GeoShapeFieldMapper(names, cqlCollection, cqlStruct, cqlPartialUpdate, prefixTree, strategyName, distanceErrorPct, orientation, fieldType, postingsProvider,
                     docValuesProvider, multiFieldsBuilder.build(this, context), copyTo);
         }
     }
@@ -207,10 +210,10 @@ public class GeoShapeFieldMapper extends AbstractFieldMapper<String> {
     private final TermQueryPrefixTreeStrategy termStrategy;
     private Orientation shapeOrientation;
 
-    public GeoShapeFieldMapper(FieldMapper.Names names, Boolean monoValued, SpatialPrefixTree tree, String defaultStrategyName, double distanceErrorPct,
+    public GeoShapeFieldMapper(FieldMapper.Names names, CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, SpatialPrefixTree tree, String defaultStrategyName, double distanceErrorPct,
                                Orientation shapeOrientation, FieldType fieldType, PostingsFormatProvider postingsProvider,
                                DocValuesFormatProvider docValuesProvider, MultiFields multiFields, CopyTo copyTo) {
-        super(names, 1, fieldType, monoValued, null, null, null, postingsProvider, docValuesProvider, null, null, null, null, multiFields, copyTo);
+        super(names, 1, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, null, null, null, postingsProvider, docValuesProvider, null, null, null, null, multiFields, copyTo);
         this.recursiveStrategy = new RecursivePrefixTreeStrategy(tree, names.indexName());
         this.recursiveStrategy.setDistErrPct(distanceErrorPct);
         this.termStrategy = new TermQueryPrefixTreeStrategy(tree, names.indexName());

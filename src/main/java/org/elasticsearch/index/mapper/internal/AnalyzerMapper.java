@@ -19,18 +19,28 @@
 
 package org.elasticsearch.index.mapper.internal;
 
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.index.IndexableField;
-import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.mapper.*;
-import org.elasticsearch.search.highlight.HighlighterContext;
+import static org.elasticsearch.index.mapper.MapperBuilders.analyzer;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-import static org.elasticsearch.index.mapper.MapperBuilders.analyzer;
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.index.IndexableField;
+import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.index.mapper.FieldMapperListener;
+import org.elasticsearch.index.mapper.InternalMapper;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ObjectMapperListener;
+import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.RootMapper;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
+import org.elasticsearch.search.highlight.HighlighterContext;
 
 /**
  *
@@ -189,9 +199,24 @@ public class AnalyzerMapper implements Mapper, InternalMapper, RootMapper {
 
     }
 
+
     @Override
-    public boolean isSingleValue() {
-        // TODO Auto-generated method stub
+    public CqlCollection cqlCollection() {
+        return null;
+    }
+    
+    @Override
+    public String cqlCollectionTag(){
+        return null;
+    } 
+
+    @Override
+    public CqlStruct cqlStruct(){
+        return null;
+    }
+    
+    @Override
+    public boolean cqlPartialUpdate(){
         return false;
     }
 }

@@ -193,7 +193,7 @@ public class TimestampFieldMapper extends DateFieldMapper implements InternalMap
                                    DocValuesFormatProvider docValuesProvider, Loading normsLoading,
                                    @Nullable Settings fieldDataSettings, Settings indexSettings) {
         super(new Names(Defaults.NAME, Defaults.NAME, Defaults.NAME, Defaults.NAME), dateTimeFormatter,
-                Defaults.PRECISION_STEP_64_BIT, Defaults.BOOST, fieldType, null, docValues,
+                Defaults.PRECISION_STEP_64_BIT, Defaults.BOOST, fieldType, null,null, null, docValues,
                 Defaults.NULL_VALUE, TimeUnit.MILLISECONDS /*always milliseconds*/,
                 roundCeil, ignoreMalformed, coerce, postingsProvider, docValuesProvider, null, normsLoading, fieldDataSettings, 
                 indexSettings, MultiFields.empty(), null);

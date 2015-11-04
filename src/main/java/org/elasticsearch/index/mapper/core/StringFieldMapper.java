@@ -19,6 +19,14 @@
 
 package org.elasticsearch.index.mapper.core;
 
+import static org.elasticsearch.index.mapper.MapperBuilders.stringField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseMultiField;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
@@ -37,17 +45,15 @@ import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
 import org.elasticsearch.index.fielddata.FieldDataType;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.internal.AllFieldMapper;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.similarity.SimilarityProvider;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.stringField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseMultiField;
 
 /**
  *
@@ -138,7 +144,7 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
             }
             defaultFieldType.freeze();
             StringFieldMapper fieldMapper = new StringFieldMapper(buildNames(context),
-                    boost, fieldType, defaultFieldType, singleValue, docValues, nullValue, indexAnalyzer, searchAnalyzer, searchQuotedAnalyzer,
+                    boost, fieldType, defaultFieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, nullValue, indexAnalyzer, searchAnalyzer, searchQuotedAnalyzer,
                     positionOffsetGap, ignoreAbove, postingsProvider, docValuesProvider, similarity, normsLoading, 
                     fieldDataSettings, context.indexSettings(), multiFieldsBuilder.build(this, context), copyTo);
             fieldMapper.includeInAll(includeInAll);
@@ -195,13 +201,14 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
     private int ignoreAbove;
     private final FieldType defaultFieldType;
 
-    protected StringFieldMapper(Names names, float boost, FieldType fieldType,FieldType defaultFieldType, Boolean monoValued, Boolean docValues,
-                                String nullValue, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
+    protected StringFieldMapper(Names names, float boost, FieldType fieldType,FieldType defaultFieldType, 
+                                CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, 
+                                Boolean docValues, String nullValue, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
                                 NamedAnalyzer searchQuotedAnalyzer, int positionOffsetGap, int ignoreAbove,
                                 PostingsFormatProvider postingsFormat, DocValuesFormatProvider docValuesFormat,
                                 SimilarityProvider similarity, Loading normsLoading, @Nullable Settings fieldDataSettings,
                                 Settings indexSettings, MultiFields multiFields, CopyTo copyTo) {
-        super(names, boost, fieldType, monoValued, docValues, indexAnalyzer, searchAnalyzer, postingsFormat, docValuesFormat, 
+        super(names, boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, indexAnalyzer, searchAnalyzer, postingsFormat, docValuesFormat, 
                 similarity, normsLoading, fieldDataSettings, indexSettings, multiFields, copyTo);
         if (fieldType.tokenized() && fieldType.indexed() && hasDocValues()) {
             throw new MapperParsingException("Field [" + names.fullName() + "] cannot be analyzed and have doc values");

@@ -19,7 +19,15 @@
 
 package org.elasticsearch.index.mapper.ip;
 
-import com.google.common.net.InetAddresses;
+import static org.elasticsearch.index.mapper.MapperBuilders.ipField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
+
 import org.apache.lucene.analysis.NumericTokenStream;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
@@ -46,21 +54,20 @@ import org.elasticsearch.index.codec.docvaluesformat.DocValuesFormatProvider;
 import org.elasticsearch.index.codec.postingsformat.PostingsFormatProvider;
 import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.fielddata.IndexNumericFieldData;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MergeContext;
+import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.core.LongFieldMapper.CustomLongNumericField;
 import org.elasticsearch.index.mapper.core.NumberFieldMapper;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
+import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.search.NumericRangeFieldDataFilter;
 import org.elasticsearch.index.similarity.SimilarityProvider;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.ipField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+import com.google.common.net.InetAddresses;
 
 /**
  *
@@ -126,7 +133,7 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
         public IpFieldMapper build(BuilderContext context) {
             fieldType.setOmitNorms(fieldType.omitNorms() && boost == 1.0f);
             IpFieldMapper fieldMapper = new IpFieldMapper(buildNames(context),
-                    fieldType.numericPrecisionStep(), boost, fieldType, singleValue, docValues, nullValue, ignoreMalformed(context), coerce(context),
+                    fieldType.numericPrecisionStep(), boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues, nullValue, ignoreMalformed(context), coerce(context),
                     postingsProvider, docValuesProvider, similarity,
                     normsLoading, fieldDataSettings, context.indexSettings(), multiFieldsBuilder.build(this, context), copyTo);
             fieldMapper.includeInAll(includeInAll);
@@ -155,12 +162,13 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
 
     private String nullValue;
 
-    protected IpFieldMapper(Names names, int precisionStep, float boost, FieldType fieldType, Boolean monoValued, Boolean docValues,
+    protected IpFieldMapper(Names names, int precisionStep, float boost, FieldType fieldType, 
+                            CqlCollection cqlCollection, CqlStruct cqlStruct, Boolean cqlPartialUpdate, Boolean docValues,
                             String nullValue, Explicit<Boolean> ignoreMalformed, Explicit<Boolean> coerce,
                             PostingsFormatProvider postingsProvider, DocValuesFormatProvider docValuesProvider,
                             SimilarityProvider similarity, Loading normsLoading, @Nullable Settings fieldDataSettings, 
                             Settings indexSettings, MultiFields multiFields, CopyTo copyTo) {
-        super(names, precisionStep, boost, fieldType, monoValued, docValues,
+        super(names, precisionStep, boost, fieldType, cqlCollection, cqlStruct, cqlPartialUpdate, docValues,
                 ignoreMalformed, coerce, new NamedAnalyzer("_ip/" + precisionStep, new NumericIpAnalyzer(precisionStep)),
                 new NamedAnalyzer("_ip/max", new NumericIpAnalyzer(Integer.MAX_VALUE)), postingsProvider, docValuesProvider,
                 similarity, normsLoading, fieldDataSettings, indexSettings, multiFields, copyTo);
