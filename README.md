@@ -597,7 +597,7 @@ Parameter | Values | Description
 --- | --- | ---
 cql_collection | **list**, set or singleton | Control how the field of type X is mapped to a column list<X>, set<X> or X. Default is *list* because Elasticsearch fields are multivalued.
 cql_struct | **udt** or map | Control how an object or nested field is mapped to a User Defined Type or to a cassandra map<text,?>. Default is *udt*.
-cql_partial_update | true or **false** | Elasticsearch index full document. For partial CQL update, this control which field should be read to index a full document. Default is *false*.
+cql_partial_update | true or **false** | Elasticsearch index full document. For partial CQL updates, this control which field should be read to index a full document from a row. Default is *false*.
 
 
 ## Elasticsearch mapping from an existing cassandra table.
