@@ -68,7 +68,7 @@ public interface SchemaService {
 
     public List<String> getPrimaryKeyColumnsName(String ksName, String cfName) throws ConfigurationException;
 
-    
+    public Collection<String> indexedColumns(String ksName, String cfName);
     public Collection<String> mappedColumns(final String index, final String type);
     public String[] mappedColumns(final MapperService mapperService, final String type);
     

@@ -552,7 +552,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
         IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
         IndexService indexService = indicesService.indexServiceSafe(indexName);
         IndexShard indexShard = indexService.shardSafe(0);
-        SourceToParse sourceToParse = SourceToParse.source(SourceToParse.Origin.PRIMARY, doc.source()).type(type).id(doc.id)
+        SourceToParse sourceToParse = SourceToParse.source(SourceToParse.Origin.PRIMARY, doc.source()).type(type).id(doc.id())
                 .timestamp(Long.toString(System.currentTimeMillis()))
                 .ttl(ttl);
         
@@ -577,7 +577,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
         }
 
         logger.debug("document index.type={}.{} id={} version={} created={} ttl={} refresh={} doc={}", 
-                indexName, type, doc.id, version, created, ttl, refresh, doc.builder.string());
+                indexName, type, doc.id(), version, created, ttl, refresh, doc.builder.string());
     }
 
     /**
@@ -648,6 +648,9 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
 
     
     private void buildMappedColumns()  {
+        Collection indexedColumns = ElassandraDaemon.injector().getInstance(SchemaService.class)
+                .indexedColumns(this.baseCfs.metadata.ksName, this.baseCfs.name);
+        
         ImmutableMap.Builder<String,Boolean> builder = new ImmutableMap.Builder<String,Boolean>();
         IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
         for(Pair<String,String> indexAndType : targets.keySet()) {
@@ -664,14 +667,12 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                     }
                 }
             }
+            
         }
+        
         this.mappedColumns = builder.build();
         logger.debug("{} mapped columns = {}",this.index_name,this.mappedColumns);
     }
-    
-    
-    
-    
     
     /**
      * Reload an existing index following a change to its configuration, or that
@@ -692,6 +693,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                     throw new ConfigurationException("Unknown elastic secondary index options: " + optionKey);
                 }
             }
+            
         }
     }
 
@@ -733,6 +735,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
     public void removeIndex(ByteBuffer columnName) {
         try {
             logger.debug("removeIndex {}", ByteBufferUtil.string(columnName));
+            
         } catch (CharacterCodingException e) {
             logger.warn("removeIndex error", e);
         }

@@ -930,6 +930,28 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         return cols.toArray(new String[cols.size()]);
     }
     
+    
+    
+    @Override
+    public Collection<String> indexedColumns(String ksName, String cfName) {
+        ArrayList<String> cols = new ArrayList<String>();
+        try {
+            UntypedResultSet result = QueryProcessor.executeInternal("SELECT  column_name, index_type, index_options FROM system.schema_columns WHERE keyspace_name=? and columnfamily_name=?", 
+                    new Object[] { ksName, cfName });
+            for (Row row : result) {
+                if (row.has("index_type") && "CUSTOM".equals(row.getString("index_type"))) {
+                    String index_options = row.getString("index_options");
+                    if (index_options != null && index_options.indexOf("\"class_name\":\"org.elasticsearch.cassandra.ElasticSecondaryIndex\"") > 0) {
+                        cols.add(row.getString("column_name"));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to retreive column names from " + ksName + "." + cfName, e);
+        }
+
+        return cols;
+    }
 
     @Override
     public UntypedResultSet fetchRow(final String index, final String type, final String id) 
