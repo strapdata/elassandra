@@ -448,7 +448,7 @@ public class FetchPhase implements SearchPhase {
                         }
                     }
                     if (fieldVisitor.needSource()) {
-                        fieldVisitor.source(XContentFactory.contentBuilder(XContentType.JSON).map(mapObject).bytes().array());
+                        fieldVisitor.source(XContentFactory.contentBuilder(XContentType.JSON).map(mapObject).bytes().toBytes());
                     }
                 }
 
