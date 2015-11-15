@@ -10,7 +10,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
-* *2015-11-11 New elassandra tarball ready-to-run*.
+* **2015-11-11 New elassandra tarball ready-to-run**.
 
 ## Benefits of Elassandra
 
@@ -95,8 +95,8 @@ From an Elasticsearch perspective :
 From a Cassandra perspective :
 * Columns with an ElasticSecondaryIndex are indexed in ElasticSearch.
 * By default, Elasticsearch document fields are multivalued, so every field is backed by a list. Single valued document field can be mapped to a basic types by setting 'single_value: true' in our type mapping. See [Mapping](Mapping.md) for details.
-* Nested documents are stored using cassandra [User Defined Type](http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
-* Elasticsearch provides a JSON-REST API to cassandra.
+* Nested documents are stored using cassandra [User Defined Type](http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html) or [map](http://docs.datastax.com/en/cql/3.0/cql/cql_using/use_map_t.html).
+* Elasticsearch provides a JSON-REST API to cassandra, see [Elasticsearch API](https://www.elastic.co/guide/en/elasticsearch/reference/1.5/index.html).
  
 # Getting Started
   
@@ -129,7 +129,7 @@ zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService.clas
 ## Run Elassandra
 
 * Set `CASSANDRA_HOME=<elassandra_install_dir>`
-* Run `<elassandra_install_dir>/bin/cassandra -e` to start a cassandra node including elasticsearch. 
+* Run `<elassandra_install_dir>/bin/cassandra -e` to start a cassandra node including elasticsearch (or the *ecstart* alias from bin/shorcuts-env.sh). 
 * The cassandra logs in `logs/system.log` includes elasticsearch logs according to the your `conf/logback.conf` settings.
 
 Check your cassandra node status:
