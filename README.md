@@ -10,7 +10,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
-* **2015-11-11 New elassandra tarball ready-to-run**.
+* **2015-11-15 New elassandra tarball ready-to-run**.
 
 ## Benefits of Elassandra
 
