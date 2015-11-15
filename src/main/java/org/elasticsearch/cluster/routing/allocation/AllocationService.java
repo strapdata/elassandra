@@ -87,6 +87,7 @@ public class AllocationService extends AbstractComponent {
 
     public RoutingAllocation.Result applyStartedShards(ClusterState clusterState, List<? extends ShardRouting> startedShards, boolean withReroute) {
         RoutingNodes routingNodes = clusterState.routingNodes();
+        
         // shuffle the unassigned nodes, just so we won't have things like poison failed shards
         routingNodes.unassigned().shuffle();
         StartedRerouteAllocation allocation = new StartedRerouteAllocation(allocationDeciders, routingNodes, clusterState.nodes(), startedShards, new ClusterInfo());
@@ -94,10 +95,14 @@ public class AllocationService extends AbstractComponent {
         if (!changed) {
             return new RoutingAllocation.Result(false, clusterState.routingTable());
         }
+        
+        
         shardsAllocators.applyStartedShards(allocation);
         if (withReroute) {
             reroute(allocation);
         }
+        
+        
 
         // update local gossip state
         for (RoutingNode routingNode : routingNodes) {
@@ -255,6 +260,14 @@ public class AllocationService extends AbstractComponent {
         return changed;
     }
 
+    // assign 
+    private boolean assignLocalPrimaryShard(RoutingAllocation allocation) {
+        boolean changed = false;
+        
+        assert RoutingNodes.assertShardStats(allocation.routingNodes());
+        return changed;
+    }
+    
     private boolean moveShards(RoutingAllocation allocation) {
         boolean changed = false;
 
