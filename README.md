@@ -124,7 +124,7 @@ zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService.clas
 
 * Install Java version 7 or 8 (check version with `java -version`). Version 8 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.1/cassandra/install/installJdkRHEL.html).
 * Download Elassandra tarbal from [elassandra repository]() and extract files in your installation directory
-* Configure your cassandra cluster, see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html)
+* Configure your cassandra cluster (cluster name, sntich, ip address, seed...), see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html). Default Elasticsearch configuration is located in `conf/elasticsearch.yml`.
 
 ## Run Elassandra
 
