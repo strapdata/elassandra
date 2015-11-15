@@ -8,6 +8,10 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 " target="_blank"><img src="http://img.youtube.com/vi/a4sjX15OOrA/0.jpg" 
 alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
+## News
+
+* *2015-11-11 New elassandra tarball ready-to-run*.
+
 ## Benefits of Elassandra
 
 For cassandra users, elassandra provides elasicsearch features :
@@ -36,12 +40,13 @@ For Elasticsearch users, elassandra provides usefull features :
 " target="_blank"><img src="http://img.youtube.com/vi/yKT96wtjJNg/0.jpg" 
 alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
-Because cassandra keyspace, type and table can only contain alphanumeric and underscore characters (see [cassandra documentation](http://docs.datastax.com/en/cql/3.1/cql/cql_reference/ref-lexical-valid-chars.html), the same restriction applies to index and type names. 
+Because cassandra keyspace, type and table can only contain alphanumeric and underscore characters (see [cassandra documentation](http://docs.datastax.com/en/cql/3.1/cql/cql_reference/ref-lexical-valid-chars.html)), the same restriction applies to index and type names. 
 
 * Replace the index name **.kibana** by **kibana** in *config/kibana.yaml*.
 * Replace **'index-pattern'** by **'index_pattern'** in *kibana/src/public/index.js* with the following sed command:
 ```
-sed -e "s/type: \'index-pattern\'/type: \'index_pattern\'/g" -e "s/type = \'index-pattern\'/type = \'index_pattern\'/g"
+q=\'
+sed -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" index.js
 ```
 * If you want to load sample data from [Kibana Getting started](https://www.elastic.co/guide/en/kibana/current/getting-started.html), apply the following changes to logstash.jsonl with a sed command. 
 
@@ -93,22 +98,17 @@ From a Cassandra perspective :
 * Nested documents are stored using cassandra [User Defined Type](http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
 * Elasticsearch provides a JSON-REST API to cassandra.
  
-## Getting Started
+# Getting Started
+  
+## Building from source
 
-### Building from Source
-
-Like Elasticsearch, Elassandra uses [Maven](http://maven.apache.org) for its build system.
-
-Simply run the `mvn clean package -DskipTests` command in the cloned directory. The distribution will be created under *target/releases*.
-
-### Installation
-
+* Elassandra uses [Maven](http://maven.apache.org) for its build system. Simply run the `mvn clean package -DskipTests` command in the cloned directory. The  distribution will be created under *target/releases*.
 * Install Apache Cassandra version 2.1.8. 
 * Elassandra is currently built from cassandra version 2.1.8 with the following minor changes :
   * org.apache.cassandra.cql3.QueryOptions includes a new static constructor forInternalCalls().
   * org.apache.cassandra.service.CassandraDaemon and StorageService to include hooks to start Elasticsearch in the boostrap process.
   * org.apache.cassandra.service.ElassandraDaemon extends CassandraDaemon with Elasticsearch features.
-  * To avoid classloading issue, you can remove these 3 modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
+* To avoid classloading issue, remove these modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
 ```
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/cql3/QueryOptions*'
 zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/CassandraDaemon*'
@@ -118,10 +118,19 @@ zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService.clas
 * Add `target/elasticassandra-SNAPSHOT-x.x.jar` and all its dependencies from `target/lib` in your cassandra lib directory.
 * Add `target/conf/elasticsearch.yml` in the cassandra conf directory.
 * Replace your `bin/cassandra` script by the one provided in `target/bin/cassandra`. The option '-e' to start cassandra with elasticsearch.
-* Run `bin/cassandra -e` to start a cassandra node including elasticsearch. 
-* The cassandra logs in `logs/system.log` includes elasticsearch logs according to the your `conf/logback.conf` settings.
+* Add `target/bin/plugin` in your cassandra bin directory.
 
-### Check your cluster state
+## Elassandra Tarball Installation
+
+* Install Java version 7 or 8 (check version with `java -version`). Version 8 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.1/cassandra/install/installJdkRHEL.html).
+* Download Elassandra tarbal from [elassandra repository]() and extract files in your installation directory
+* Configure your cassandra cluster, see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html)
+
+## Run Elassandra
+
+* Set `CASSANDRA_HOME=<elassandra_install_dir>`
+* Run `<elassandra_install_dir>/bin/cassandra -e` to start a cassandra node including elasticsearch. 
+* The cassandra logs in `logs/system.log` includes elasticsearch logs according to the your `conf/logback.conf` settings.
 
 Check your cassandra node status:
 ```
@@ -752,6 +761,7 @@ ALL | ALL | Because there is no LOCAL_ALL in cassandra, ALL involve write in all
 * Elasticsearch 
  * tribe, percolate, snapshots and recovery service not tested.
  * Geoshape type not supported.
+ * Any Elasticsearch metadata update require the LOCAL_QUORUM (more than half the number of nodes in the elassandra datacenter)
  
 # Contribute
 

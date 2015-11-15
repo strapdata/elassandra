@@ -1,6 +1,13 @@
-# Elassandra environnement-independant shortcuts
+# Elassandra shortcuts
+
+if [ "x$CASSANDRA_HOME" = "x" ]; then
+    echo "Please set your CASSANDRA_HOME"
+    exit 1
+fi
+echo "CASSANDRA_HOME=$CASSANDRA_HOME"
+
 #
-# Please set the following variable in your environnement
+# Please set the following variable in your environnement (multihoming support)
 export NODE=`hostname`
 export NODETOOL_JMX_PORT="7199"
 
@@ -8,14 +15,7 @@ export NODETOOL_JMX_PORT="7199"
 export JVM_DEBUG_PORT="4242"
 export JVM_DEBUG_WAIT="n"
 
-
-if [ "x$CASSANDRA_HOME" = "x" ]; then
-   echo "Please set CASSANDRA_HOME"
-   exit 1
-fi
-echo "CASSANDRA_HOME=$CASSANDRA_HOME"
-
-# For mac onlly
+# To run with jdk 1.7 on mac only
 #export JAVA_HOME=$(/usr/libexec/java_home -v 1.7)
 
 
@@ -37,7 +37,6 @@ function cleanall() {
    rm -rf $CASSANDRA_LOGS/*
 }
 
-
 function cleanlogs() {
 	rm -rf $CASSANDRA_HOME/logs/*.log*
 }
@@ -52,16 +51,18 @@ alias ecdebug='$CASSANDRA_HOME/bin/cassandra -d -e'
 
 alias clog='less $CASSANDRA_LOGS/system.log'
 
-alias nodetool='$CASSANDRA_HOME/bin/nodetool -p $NODETOOL_JMX_PORT -h $NODE'
+# Cassandra aliases
+alias nodetool='$CASSANDRA_HOME/bin/nodetool -p $NODETOOL_JMX_PORT'
 alias cstop='$CASSANDRA_HOME/bin/nodetool -p $NODETOOL_JMX_PORT -h $NODE stopdaemon'
 alias cqlsh='$CASSANDRA_HOME/bin/cqlsh $NODE'
 
-
+# Elasticsearch aliases
 alias health='curl -XGET http://$NODE:9200/_cluster/health/?pretty=true'
 alias state='curl -XGET http://$NODE:9200/_cluster/state/?pretty=true'
 alias status='curl -XGET http://$NODE:9200/_status/?pretty=true'
 alias stats='curl -XGET http://$NODE:9200/_stats?pretty=true'
-alias shards='curl -XGET http://$NODE:9200/_cat/shards'
+alias shards='curl -XGET http://$NODE:9200/_cat/shards?v'
+alias indices='curl -XGET http://$NODE:9200/_cat/indices?v'
 alias nodes='curl -XGET http://$NODE:9200/_nodes/_all/_all?pretty=true'
 alias settings='curl -XGET http://$NODE:9200/_cluster/settings?pretty=true'
 

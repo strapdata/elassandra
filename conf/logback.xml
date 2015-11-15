@@ -1,4 +1,4 @@
-!--
+<!--
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
  distributed with this work for additional information
@@ -17,7 +17,7 @@
  under the License.
 -->
 
-<configuration scan="true" debug="true">
+<configuration scan="true" debug="false">
   <jmxConfigurator />
   <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
     <file>${cassandra.logdir}/system.log</file>
@@ -37,13 +37,14 @@
       -->
     </encoder>
   </appender>
-
+  
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
       <pattern>%-5level %date{HH:mm:ss,SSS} %msg%n</pattern>
     </encoder>
   </appender>
-
+  
+        
   <logger name="com.thinkaurelius.thrift" level="ERROR"/>
   <logger name="org.apache" level="WARN" />
   <logger name="org.apache.cassandra" level="WARN" />
@@ -52,14 +53,16 @@
   <logger name="org.apache.cassandra.config.DatabaseDescriptor" level="DEBUG" />
   <logger name="org.apache.cassandra.service.CassandraDaemon" level="DEBUG" />
   <logger name="org.apache.cassandra.service.ElassandraDaemon" level="DEBUG" />
+  <logger name="org.elasticsearch" level="TRACE" />
+  <logger name="org.elasticsearch.cassandra" level="TRACE" />
 
-  <logger name="org.elasticsearch.http" level="WARN"/>
-  <logger name="org.elasticsearch.transport" level="WARN"/>
+  <logger name="org.elasticsearch.http" level="DEBUG"/>
+  <logger name="org.elasticsearch.transport" level="DEBUG"/>
 
 
   <root level="TRACE">
     <appender-ref ref="FILE" />
     <appender-ref ref="STDOUT" />
   </root>
-
+  
 </configuration>

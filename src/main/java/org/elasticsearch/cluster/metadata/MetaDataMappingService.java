@@ -113,8 +113,6 @@ public class MetaDataMappingService extends AbstractComponent {
         final String nodeId; // null fr unknown
         final ActionListener<ClusterStateUpdateResponse> listener;
         
-        public Set<String> columns = null;
-        
         UpdateTask(String index, String indexUUID, String type, CompressedString mappingSource, long order, String nodeId, ActionListener<ClusterStateUpdateResponse> listener) {
             super(index, indexUUID);
             this.type = type;
@@ -223,12 +221,12 @@ public class MetaDataMappingService extends AbstractComponent {
             }
 
             // construct the actual index if needed, and make sure the relevant mappings are there
-            boolean removeIndex = false;
+            //boolean removeIndex = false;
             IndexService indexService = indicesService.indexService(index);
             if (indexService == null) {
                 // we need to create the index here, and add the current mapping to it, so we can merge
                 indexService = indicesService.createIndex(indexMetaData.index(), indexMetaData.settings(), currentState.nodes().localNode().id());
-                removeIndex = true;
+                // removeIndex = true;
                 Set<String> typesToIntroduce = Sets.newHashSet();
                 for (MappingTask task : tasks) {
                     if (task instanceof UpdateTask) {
@@ -254,9 +252,11 @@ public class MetaDataMappingService extends AbstractComponent {
                     dirty = true;
                 }
             } finally {
+                /*
                 if (removeIndex) {
                     indicesService.removeIndex(index, "created for mapping processing");
                 }
+                */
             }
         }
 
@@ -334,7 +334,6 @@ public class MetaDataMappingService extends AbstractComponent {
                     Set<String> columns = ((Map<String, Object>) mappingMetaData2.sourceAsMap().get("properties")).keySet();
                     logger.debug("Updating CQL3 schema {}.{} columns={}", index, type, columns);
                     elasticSchemaService.updateTableSchema(index, type, columns, updatedMapper);
-                    updateTask.columns = columns;
                     
                     dirty = true;
                 } catch (Throwable t) {
@@ -416,16 +415,6 @@ public class MetaDataMappingService extends AbstractComponent {
                 for (Object task : allTasks) {
                     if (task instanceof UpdateTask) {
                         UpdateTask uTask = (UpdateTask) task;
-                        
-                        if (uTask.columns != null) {
-                            try {
-                                logger.debug("Updating CQL3 schema {}.{} columns={}", index, type, uTask.columns);
-                                elasticSchemaService.createSecondaryIndex(index, type, uTask.columns);
-                            } catch (IOException e) {
-                                logger.warn("Failed to update CQL3 schema {}.{}",e, index, type);
-                            }
-                        }    
-                        
                         ClusterStateUpdateResponse response = new ClusterStateUpdateResponse(true);
                         try {
                             uTask.listener.onResponse(response);
@@ -434,6 +423,7 @@ public class MetaDataMappingService extends AbstractComponent {
                         }
                     }
                 }
+                listener.onResponse(new ClusterStateUpdateResponse(true));
             }
         });
     }
@@ -492,8 +482,6 @@ public class MetaDataMappingService extends AbstractComponent {
 
         clusterService.submitStateUpdateTask("put-mapping [" + request.type() + "]", Priority.HIGH, new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, listener) {
 
-            // Store mapping updates to update CQL schema when cluster state is applied (when clusterStateProcessed is fired once). 
-            Map<String,MappingMetaData> mappingMetaDataMap = new HashMap<String,MappingMetaData>();
             
             @Override
             protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
@@ -625,7 +613,6 @@ public class MetaDataMappingService extends AbstractComponent {
                         logger.debug("Update CQL3 schema {}.{} columns={}", indexName, mappingMd.type(), columns);
                         elasticSchemaService.updateTableSchema(indexName, mappingMd.type(), columns, 
                                 indicesService.indexService(indexName).mapperService().documentMapper(mappingMd.type()));
-                        mappingMetaDataMap.put(indexName, mappingMd);
                     }
                     
                     return ClusterState.builder(currentState).version(currentState.version() + 1).metaData(builder).build();
@@ -638,23 +625,6 @@ public class MetaDataMappingService extends AbstractComponent {
                 }
             }
             
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                for(Map.Entry<String, MappingMetaData> entry : mappingMetaDataMap.entrySet()) {
-                    try {
-                        String index = entry.getKey();
-                        MappingMetaData mappingMd = entry.getValue();
-                        Set<String> columns = ((Map<String, Object>) mappingMd.sourceAsMap().get("properties")).keySet();
-                        
-                        // update CQL3 secondary indices when cluster state is applied and table schema up to date.
-                        logger.debug("Update CQL3 secondary index {}.{} for columns={}", index, mappingMd.type(), columns);
-                        elasticSchemaService.createSecondaryIndex(index, mappingMd.type(), columns);
-                        
-                    } catch (IOException e) {
-                        logger.error("error", e);
-                    }
-                }
-            }
         });
     }
 }

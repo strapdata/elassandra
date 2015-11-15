@@ -1,5 +1,7 @@
-Elassandra is a fork of Elasticsearch version 1.5.1 developed by
-Elasticsearch Copyright 2009-2015 http://www.elastic.co 
+Elassandra Copyright (C) 2015 Vincent Royer (vroyer@vroyer.org).
+
+This product include software developed by Elasticsearch 
+Copyright 2009-2015 http://www.elastic.co 
 
 This product includes software developed by The Apache Software
 Foundation (http://www.apache.org/).

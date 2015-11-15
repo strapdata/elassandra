@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -27,7 +28,6 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -98,6 +98,7 @@ import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.messages.ResultMessage;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
@@ -109,10 +110,11 @@ import org.elasticsearch.action.index.XIndexRequest;
 import org.elasticsearch.action.index.XIndexResponse;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
+import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -140,13 +142,11 @@ import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
 
 import com.fasterxml.jackson.core.JsonFactory;
-import com.google.common.base.Function;
 import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Iterators;
 
 public class ElasticSchemaService extends AbstractComponent implements SchemaService {
 
@@ -154,7 +154,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     public static String MAPPING_UPDATE_TIMEOUT = "cassandra.mapping_update.timeout";
 
     private final ClusterService clusterService;
-    private final MappingUpdatedAction mappingUpdatedAction;
     private final TimeValue mappingUpdateTimeout;
 
     // ElasticSearch to Cassandra mapping
@@ -210,10 +209,9 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     }
 
     @Inject
-    public ElasticSchemaService(Settings settings, MappingUpdatedAction mappingUpdatedAction, ClusterService clusterService) {
+    public ElasticSchemaService(Settings settings, ClusterService clusterService) {
         super(settings);
         this.clusterService = clusterService;
-        this.mappingUpdatedAction = mappingUpdatedAction;
         this.mappingUpdateTimeout = settings.getAsTime(MAPPING_UPDATE_TIMEOUT, TimeValue.timeValueSeconds(30));
     }
 
@@ -634,8 +632,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             createIndexKeyspace(index, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1);
 
             Pair<String, String> targetPair = ElasticSecondaryIndex.mapping.get(Pair.<String, String> create(index, type));
-            // Do not update schema when mapping is not the default one
-            // (index.type == keyspace.table)
             if (targetPair == null) {
 
                 CFMetaData cfm = Schema.instance.getCFMetaData(index, type);
@@ -643,6 +639,8 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
 
                 logger.debug("Inferring CQL3 schema {}.{} with columns={}", index, type, columns);
                 StringBuilder columnsList = new StringBuilder();
+                StringBuilder readOnUpdateColumnList = new StringBuilder();
+                Map<String,Boolean> columnsMap = new HashMap<String, Boolean>(columns.size());
                 for (String column : columns) {
                     columnsList.append(',');
                     if (column.equals("_token")) {
@@ -651,6 +649,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     String cqlType = null;
                     FieldMapper<?> fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
                     if (fieldMapper != null) {
+                        columnsMap.put(column,  fieldMapper.cqlPartialUpdate());
                         if (fieldMapper instanceof DateFieldMapper) {
                             // workaround because elasticsearch maps date to long
                             cqlType = typeMapping.get("date");
@@ -669,6 +668,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                         }
                     } else {
                         ObjectMapper objectMapper = docMapper.objectMappers().get(column);
+                        columnsMap.put(column,  objectMapper.cqlPartialUpdate());
                         if (objectMapper != null) {
                             if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
                                 // check columnName exists and is map<text,?>
@@ -713,17 +713,8 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                                 }
                             }
                         }
-                        /*
-                        if ((cdef == null) || 
-                            (cdef.getIndexType() == null) && !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY )) {
-                            // cannot create secondary index on a single column partition key.
-                            QueryProcessor.process(String.format("CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s' WITH OPTIONS = {'%s': '%s.%s'}",
-                                    buildIndexName(type, column), index, type, column, org.elasticsearch.cassandra.ElasticSecondaryIndex.class.getName(),
-                                    ElasticSecondaryIndex.ELASTIC_OPTION_TARGETS, index, type), ConsistencyLevel.LOCAL_ONE);
-                        }
-                        */
                     }
-                    
+                  
                 }
 
                 if (newTable) {
@@ -731,51 +722,30 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                             ELASTIC_ID_COLUMN_NAME, columnsList);
                     logger.debug(query);
                     QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
-                    /*
-                    for (String column : columns) {
-                        if (column.equals("_token")) {
-                            continue; // ignore pseudo column known by Elasticsearch
-                        }
-                        QueryProcessor.process(String.format("CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s' WITH OPTIONS = {'%s': '%s.%s'}",
-                                buildIndexName(type, column), index, type, column, org.elasticsearch.cassandra.ElasticSecondaryIndex.class.getName(), 
-                                ElasticSecondaryIndex.ELASTIC_OPTION_TARGETS, index, type), ConsistencyLevel.LOCAL_ONE);
-                    }
-                    */
                 }
+                
+                // build secondary indices
+                for (String column : columns) {
+                    if (column.equals("_token")) {
+                        continue; // ignore pseudo column known by Elasticsearch
+                    }
+                    ColumnDefinition cdef = (cfm == null) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+                    if (newTable || (cdef != null) && !cdef.isIndexed() && !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY )) {
+                        QueryProcessor.process(String.format("CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s' WITH OPTIONS = {'%s':'%s.%s', '%s':'%s'}",
+                            buildIndexName(type, column), index, type, column, org.elasticsearch.cassandra.ElasticSecondaryIndex.class.getName(), 
+                            ElasticSecondaryIndex.ELASTIC_OPTION_TARGETS, index, type,
+                            ElasticSecondaryIndex.ELASTIC_OPTION_PARTIAL_UPDATE, columnsMap.get(column).toString()), 
+                            ConsistencyLevel.LOCAL_ONE);
+                    } 
+                }
+                    
             }
         } catch (Throwable e) {
             throw new IOException(e.getMessage(), e);
         }
     }
+   
     
-    public void createSecondaryIndex(final String index, final String type, Set<String> columns) throws IOException {
-        Pair<String, String> targetPair = ElasticSecondaryIndex.mapping.get(Pair.<String, String> create(index, type));
-        // Do not update schema when mapping is not the default one
-        // (index.type == keyspace.table)
-        if (targetPair == null) {
-            CFMetaData cfm = Schema.instance.getCFMetaData(index, type);
-            logger.debug("Creating CQL3 secondary index {}.{} with columns={}", index, type, columns);
-            for (String column : columns) {
-                if (column.equals("_token")) {
-                    continue; // ignore pseudo column known by Elasticsearch
-                }
-                
-                ColumnDefinition cdef = cfm.getColumnDefinition(new ColumnIdentifier(column, true));
-                if ((cdef == null) || 
-                   (cdef.getIndexType() == null) && !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY )) {
-                    // cannot create secondary index on a single column partition key.
-                    try {
-                        QueryProcessor.process(String.format("CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s' WITH OPTIONS = {'%s': '%s.%s'}",
-                                buildIndexName(type, column), index, type, column, org.elasticsearch.cassandra.ElasticSecondaryIndex.class.getName(),
-                                ElasticSecondaryIndex.ELASTIC_OPTION_TARGETS, index, type), ConsistencyLevel.LOCAL_ONE);
-                    } catch (RequestExecutionException e) {
-                        throw new IOException(e.getMessage(), e);
-                    }
-                }
-            }
-        }
-    }
-
     public static String buildIndexName(final String cfName, final String colName) {
         return new StringBuilder("elastic_")
             .append(cfName).append('_')
@@ -932,27 +902,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     
     
     
-    @Override
-    public Collection<String> indexedColumns(String ksName, String cfName) {
-        ArrayList<String> cols = new ArrayList<String>();
-        try {
-            UntypedResultSet result = QueryProcessor.executeInternal("SELECT  column_name, index_type, index_options FROM system.schema_columns WHERE keyspace_name=? and columnfamily_name=?", 
-                    new Object[] { ksName, cfName });
-            for (Row row : result) {
-                if (row.has("index_type") && "CUSTOM".equals(row.getString("index_type"))) {
-                    String index_options = row.getString("index_options");
-                    if (index_options != null && index_options.indexOf("\"class_name\":\"org.elasticsearch.cassandra.ElasticSecondaryIndex\"") > 0) {
-                        cols.add(row.getString("column_name"));
-                    }
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to retreive column names from " + ksName + "." + cfName, e);
-        }
-
-        return cols;
-    }
-
+    
     @Override
     public UntypedResultSet fetchRow(final String index, final String type, final String id) 
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
@@ -1200,14 +1150,9 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
 
     
 
-    private static class MappingUpdateListener implements MappingUpdatedAction.MappingUpdateListener {
+    private static class MappingUpdateListener implements ActionListener<ClusterStateUpdateResponse> {
         private final CountDownLatch latch = new CountDownLatch(1);
         private volatile Throwable error = null;
-
-        @Override
-        public void onMappingUpdate() {
-            latch.countDown();
-        }
 
         @Override
         public void onFailure(Throwable t) {
@@ -1224,11 +1169,18 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             if (error != null)
                 throw new RuntimeException(error);
         }
+
+        @Override
+        public void onResponse(ClusterStateUpdateResponse response) {
+            latch.countDown();
+        }
     }
 
+    
     public void blockingMappingUpdate(IndexService indexService, DocumentMapper mapper ) throws Exception {
         MappingUpdateListener mappingUpdateListener = new MappingUpdateListener();
-        mappingUpdatedAction.updateMappingOnMaster(indexService.index().name(), mapper, indexService.indexUUID(), mappingUpdateListener);
+        MetaDataMappingService metaDataMappingService = ElassandraDaemon.injector().getInstance(MetaDataMappingService.class);
+        metaDataMappingService.updateMapping(indexService.index().name(), indexService.indexUUID(), mapper.type(), mapper.refreshSource(), -1, clusterService.localNode().id(), mappingUpdateListener);
         mappingUpdateListener.waitForMappingUpdate(mappingUpdateTimeout);
     }
     
@@ -1268,60 +1220,64 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         Map<String, Object> map = new HashMap<String, Object>();
         for (String field : sourceMap.keySet()) {
             Object fieldValue = sourceMap.get(field);
-            ObjectMapper objectMapper = objectMappers.get(field);
-            FieldMapper<?> fieldMapper = fieldMappers.smartNameFieldMapper(field);
-            if (fieldValue == null) {
-                Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMapper;
-                // Can insert null value only when mapping is known
-                if (mapper != null) {
-                    if (fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
-                        map.put(field, null);
-                    } else if (fieldMapper.cqlCollection().equals(CqlCollection.SET)) {
-                        map.put(field, ImmutableSet.of());
-                    } else {
-                        map.put(field, ImmutableList.of());
-                    }
-                } 
-                continue;
-            }
+            try {
+                ObjectMapper objectMapper = objectMappers.get(field);
+                FieldMapper<?> fieldMapper = fieldMappers.smartNameFieldMapper(field);
+                if (fieldValue == null) {
+                    Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMapper;
+                    // Can insert null value only when mapping is known
+                    if (mapper != null) {
+                        if (fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                            map.put(field, null);
+                        } else if (fieldMapper.cqlCollection().equals(CqlCollection.SET)) {
+                            map.put(field, ImmutableSet.of());
+                        } else {
+                            map.put(field, ImmutableList.of());
+                        }
+                    } 
+                    continue;
+                }
 
-            if (objectMapper != null) {
-                if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
-                    map.put(field, serializeUDT(request.index(), request.type(), field, fieldValue, objectMapper));
-                } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
-                    map.put(field, serializeMapAsMap(request.index(), request.type(), field, (Map<String,Object>)fieldValue, objectMapper));
-                }
-            } else if (fieldMapper != null) {
-                if (fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON) && (fieldValue instanceof Collection)) {
-                    throw new MapperParsingException("field " + fieldMapper.name() + " should be a single value");
-                }
-                if (fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
-                    map.put(field, value(fieldMapper, fieldMapper.value(fieldValue)));
-                } else if (fieldMapper.cqlCollection().equals(CqlCollection.LIST)) {
-                    List<Object> fieldValueList2 = new ArrayList();
-                    if (fieldValue instanceof List) {
-                        List<Object> fieldValueList = (List) fieldValue;
-                        for (Object o : fieldValueList) {
-                            fieldValueList2.add(value(fieldMapper, fieldMapper.value(o)));
-                        }
-                    } else {
-                        fieldValueList2.add(value(fieldMapper, fieldValue));
+                if (objectMapper != null) {
+                    if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
+                        map.put(field, serializeUDT(request.index(), request.type(), field, fieldValue, objectMapper));
+                    } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
+                        map.put(field, serializeMapAsMap(request.index(), request.type(), field, (Map<String,Object>)fieldValue, objectMapper));
                     }
-                    map.put(field, fieldValueList2);
-                } else if (fieldMapper.cqlCollection().equals(CqlCollection.SET)) {
-                    Set<Object> fieldValueList2 = new HashSet<Object>();
-                    if (fieldValue instanceof List) {
-                        List<Object> fieldValueList = (List) fieldValue;
-                        for (Object o : fieldValueList) {
-                            fieldValueList2.add(value(fieldMapper, fieldMapper.value(o)));
-                        }
-                    } else {
-                        fieldValueList2.add(value(fieldMapper, fieldValue));
+                } else if (fieldMapper != null) {
+                    if (fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON) && (fieldValue instanceof Collection)) {
+                        throw new MapperParsingException("field " + fieldMapper.name() + " should be a single value");
                     }
-                    map.put(field, fieldValueList2);
+                    if (fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                        map.put(field, value(fieldMapper, fieldMapper.value(fieldValue)));
+                    } else if (fieldMapper.cqlCollection().equals(CqlCollection.LIST)) {
+                        List<Object> fieldValueList2 = new ArrayList();
+                        if (fieldValue instanceof List) {
+                            List<Object> fieldValueList = (List) fieldValue;
+                            for (Object o : fieldValueList) {
+                                fieldValueList2.add(value(fieldMapper, fieldMapper.value(o)));
+                            }
+                        } else {
+                            fieldValueList2.add(value(fieldMapper, fieldValue));
+                        }
+                        map.put(field, fieldValueList2);
+                    } else if (fieldMapper.cqlCollection().equals(CqlCollection.SET)) {
+                        Set<Object> fieldValueList2 = new HashSet<Object>();
+                        if (fieldValue instanceof List) {
+                            List<Object> fieldValueList = (List) fieldValue;
+                            for (Object o : fieldValueList) {
+                                fieldValueList2.add(value(fieldMapper, fieldMapper.value(o)));
+                            }
+                        } else {
+                            fieldValueList2.add(value(fieldMapper, fieldValue));
+                        }
+                        map.put(field, fieldValueList2);
+                    }
+                } else {
+                    logger.debug("[{}].[{}] ignoring unmapped field [{}] = [{}] ", request.index(), request.type(), field, fieldValue);
                 }
-            } else {
-                logger.debug("Ignoring unmapped field {} = {} ", field, fieldValue);
+            } catch (Exception e) {
+                logger.warn("[{}].[{}] failed to parse field {}={} => ignoring", e, request.index(), request.type(), field, fieldValue );
             }
         }
 

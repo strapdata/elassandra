@@ -19,9 +19,12 @@
 
 package org.elasticsearch.action.bulk;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchIllegalStateException;
 import org.elasticsearch.ExceptionsHelper;
@@ -448,11 +451,17 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
         // update the request with the version so it will go to the replicas
         deleteRequest.versionType(delete.versionType().versionTypeForReplicationAndRecovery());
         deleteRequest.version(delete.version());
-
+        
         assert deleteRequest.versionType().validateVersionForWrites(deleteRequest.version());
-
-        DeleteResponse deleteResponse = new DeleteResponse(request.index(), deleteRequest.type(), deleteRequest.id(), delete.version(), delete.found());
-        return new WriteResult(deleteResponse, null, true);
+        
+        try {
+            elasticSchemaService.deleteRow(request.index(), deleteRequest.type(), deleteRequest.id(), request.consistencyLevel().toCassandraConsistencyLevel() );
+            DeleteResponse deleteResponse = new DeleteResponse(request.index(), deleteRequest.type(), deleteRequest.id(), delete.version(), true);
+            return new WriteResult(deleteResponse, null, true);
+        } catch (RequestExecutionException | RequestValidationException | IOException e) {
+            logger.error("[{}].[{}] failed to delete id = [{}]", e, request.index(), deleteRequest.type(), deleteRequest.id());
+            throw new WriteFailureException(e, null);
+        }
     }
 
     static class UpdateResult {

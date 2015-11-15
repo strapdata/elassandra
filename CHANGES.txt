@@ -6,13 +6,18 @@
 * Fix User Defined Type creation
 * Change cassandra StorageService hooks to start Elasticsearch (Fix commitlogs recover)
 
-0.3 - 2015-11-05
+0.3.2 - 2015-11-05 (Based on cassandra-2.1.8 + elasticsearch 1.5.1)
 * Bug fixes
  * Fix multiget on a multiple nodes cluster (Allow to save kibana configuration on multi-node cluster).
  * Fix a bug in cluster state management when restarting. 
+ * Fix CASSANDRA-9912
  
 * New features
  * Add support for compound cassandra keys. 
  * Add support for partial CQL update of cassandra collection types.
  * Enhance Elasticsearch put mapping to automatically build mapping from an existing CQL3 table.
  * Replace the single_value mapping attribute by cql_collection, cql_struct and cql_partial_update. This allow to map nested document to a User Defined Types or to a cassandra map<text,?>.
+
+ 0.4 - 2015-11-11 (Based on cassandra-2.1.8 + elasticsearch 1.5.1)
+  * Fix various bugs
+  * New tarball package.

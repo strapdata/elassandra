@@ -314,6 +314,11 @@ public class ShardStateAction extends AbstractComponent {
             }
 
             @Override
+            public boolean doPresistMetaData() {
+                return false;
+            }
+            
+            @Override
             public void onFailure(String source, Throwable t) {
                 logger.error("unexpected failure during [{}]", t, source);
             }

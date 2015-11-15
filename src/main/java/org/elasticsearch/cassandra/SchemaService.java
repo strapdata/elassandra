@@ -62,13 +62,11 @@ public interface SchemaService {
     public String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
 
     public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
-    public void createSecondaryIndex(final String index, final String type, Set<String> columns) throws IOException;
     
     public List<ColumnDefinition> getPrimaryKeyColumns(String ksName, String cfName) throws ConfigurationException;
 
     public List<String> getPrimaryKeyColumnsName(String ksName, String cfName) throws ConfigurationException;
 
-    public Collection<String> indexedColumns(String ksName, String cfName);
     public Collection<String> mappedColumns(final String index, final String type);
     public String[] mappedColumns(final MapperService mapperService, final String type);
     

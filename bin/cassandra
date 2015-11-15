@@ -144,7 +144,8 @@ launch_service()
     
     # Added for elasticsearch
     # cassandra_parms="$cassandra_parms -Dcassandra.boot_without_jna=true"
-    cassandra_parms="$cassandra_parms -Djava.library.path=$CASSANDRA_HOME/lib/sigar -ea -Djava.awt.headless=true"
+    cassandra_parms="$cassandra_parms -Djava.library.path=$CASSANDRA_HOME/lib/sigar"
+    cassandra_parms="$cassandra_parms -ea"
 	
     if [ "x$pidpath" != "x" ]; then
         cassandra_parms="$cassandra_parms -Dcassandra-pidfile=$pidpath"
