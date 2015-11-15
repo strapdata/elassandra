@@ -34,7 +34,7 @@ For Elasticsearch users, elassandra provides usefull features :
 
 ## Kibana + Elassandra
 
-[Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) can run on Elassandra, providing a visualization tool for cassandra and elasticsearch data. Here is a demo video.
+[Kibana](https://www.elastic.co/guide/en/kibana/4.1/introduction.html) version 4.1 can run on Elassandra, providing a visualization tool for cassandra and elasticsearch data. Here is a demo video.
 
 <a href="http://www.youtube.com/watch?feature=player_embedded&v=yKT96wtjJNg
 " target="_blank"><img src="http://img.youtube.com/vi/yKT96wtjJNg/0.jpg" 
