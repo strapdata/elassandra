@@ -98,7 +98,6 @@ import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.messages.ResultMessage;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
@@ -154,6 +153,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     public static String MAPPING_UPDATE_TIMEOUT = "cassandra.mapping_update.timeout";
 
     private final ClusterService clusterService;
+    private final IndicesService indicesService;
     private final TimeValue mappingUpdateTimeout;
 
     // ElasticSearch to Cassandra mapping
@@ -209,9 +209,10 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     }
 
     @Inject
-    public ElasticSchemaService(Settings settings, ClusterService clusterService) {
+    public ElasticSchemaService(Settings settings, ClusterService clusterService, IndicesService indicesService) {
         super(settings);
         this.clusterService = clusterService;
+        this.indicesService = indicesService;
         this.mappingUpdateTimeout = settings.getAsTime(MAPPING_UPDATE_TIMEOUT, TimeValue.timeValueSeconds(30));
     }
 
@@ -995,17 +996,20 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     }
     
     @Override
-    public Map<String, Object> rowAsMap(UntypedResultSet.Row row) throws IOException {
+    public Map<String, Object> rowAsMap(final String index, final String type, UntypedResultSet.Row row) throws IOException {
         Map<String, Object> mapObject = new HashMap<String, Object>();
-        rowAsMap(row, mapObject);
+        rowAsMap(index, type, row, mapObject);
         return mapObject;
     }
 
     @Override
-    public int rowAsMap(UntypedResultSet.Row row, Map<String, Object> mapObject) throws IOException {
+    public int rowAsMap(final String index, final String type, UntypedResultSet.Row row, Map<String, Object> mapObject) throws IOException {
         int putCount = 0;
         List<ColumnSpecification> columnSpecs = row.getColumns();
-
+        
+        IndexService indexService = indicesService.indexServiceSafe(index);
+        DocumentMapper documentMapper = indexService.mapperService().documentMapper(type);
+        
         for (int columnIndex = 0; columnIndex < columnSpecs.size(); columnIndex++) {
             ColumnSpecification colSpec = columnSpecs.get(columnIndex);
             String columnName = colSpec.name.toString();
@@ -1015,6 +1019,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 continue;
 
             if (cql3Type instanceof CQL3Type.Native) {
+                FieldMapper<?> fieldMapper = documentMapper.mappers().smartNameFieldMapper(columnName);
                 switch ((CQL3Type.Native) cql3Type) {
                 case ASCII:
                 case TEXT:
@@ -1024,38 +1029,38 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     break;
                 case TIMEUUID:
                 case UUID:
-                    mapObject.put(columnName, row.getUUID(colSpec.name.toString()));
+                    mapObject.put(columnName, row.getUUID(colSpec.name.toString()).toString() );
                     putCount++;
                     break;
                 case TIMESTAMP:
-                    mapObject.put(columnName, row.getTimestamp(colSpec.name.toString()).getTime());
+                    mapObject.put(columnName, fieldMapper.valueForSearch( row.getTimestamp(colSpec.name.toString()).getTime()));
                     putCount++;
                     break;
                 case INT:
-                    mapObject.put(columnName, row.getInt(colSpec.name.toString()));
+                    mapObject.put(columnName, fieldMapper.valueForSearch( row.getInt(colSpec.name.toString())) );
                     putCount++;
                     break;
                 case BIGINT:
-                    mapObject.put(columnName, row.getLong(colSpec.name.toString()));
+                    mapObject.put(columnName, fieldMapper.valueForSearch( row.getLong(colSpec.name.toString())) );
                     putCount++;
                     break;
                 case DECIMAL:
                 case DOUBLE:
-                    mapObject.put(columnName, row.getDouble(colSpec.name.toString()));
+                    mapObject.put(columnName, fieldMapper.valueForSearch( row.getDouble(colSpec.name.toString())));
                     putCount++;
                     break;
                 case BLOB:
-                    mapObject.put(columnName, row.getBytes(colSpec.name.toString()));
+                    mapObject.put(columnName, fieldMapper.valueForSearch( row.getBytes(colSpec.name.toString())));
                     putCount++;
                     break;
                 case BOOLEAN:
-                    mapObject.put(columnName, row.getBoolean(colSpec.name.toString()));
+                    mapObject.put(columnName, fieldMapper.valueForSearch( row.getBoolean(colSpec.name.toString())));
                     putCount++;
                     break;
                 case COUNTER:
                     break;
                 case INET:
-                    mapObject.put(columnName, row.getInetAddress(colSpec.name.toString()));
+                    mapObject.put(columnName, fieldMapper.valueForSearch( row.getInetAddress(colSpec.name.toString()).getHostAddress()));
                     putCount++;
                     break;
                 default:

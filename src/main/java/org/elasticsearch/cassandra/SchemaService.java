@@ -82,8 +82,8 @@ public interface SchemaService {
     public UntypedResultSet fetchRowInternal(String index, String type, Collection<String> requiredColumns, String id) throws ConfigurationException, IOException;
     public UntypedResultSet fetchRowInternal(String ksName, String cfName, Collection<String> requiredColumns, Object[] pkColumns) throws ConfigurationException, IOException;
     
-    public Map<String, Object> rowAsMap(UntypedResultSet.Row row) throws IOException;
-    public int rowAsMap(UntypedResultSet.Row row, Map<String, Object> map) throws IOException;
+    public Map<String, Object> rowAsMap(final String index, final String type, UntypedResultSet.Row row) throws IOException;
+    public int rowAsMap(final String index, final String type, UntypedResultSet.Row row, Map<String, Object> map) throws IOException;
 
     public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 

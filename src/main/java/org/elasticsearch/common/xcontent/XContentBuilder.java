@@ -19,7 +19,16 @@
 
 package org.elasticsearch.common.xcontent;
 
-import com.google.common.base.Charsets;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.net.InetAddress;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Map;
+
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -36,14 +45,7 @@ import org.joda.time.ReadableInstant;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.Map;
+import com.google.common.base.Charsets;
 
 /**
  *
@@ -364,6 +366,16 @@ public final class XContentBuilder implements BytesStream, Releasable {
             generator.writeNull();
         } else {
             generator.writeNumber(value.intValue());
+        }
+        return this;
+    }
+    
+    public XContentBuilder field(XContentBuilderString name, InetAddress value) throws IOException {
+        field(name);
+        if (value == null) {
+            generator.writeNull();
+        } else {
+            generator.writeString(value.getHostAddress());
         }
         return this;
     }

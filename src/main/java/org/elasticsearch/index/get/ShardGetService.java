@@ -296,7 +296,7 @@ public class ShardGetService extends AbstractIndexShardComponent {
             if (result.isEmpty()) {
                 return new GetResult(shardId.index().name(), type, id, -1, false, null, null);
             }
-            sourceAsMap = schemaService.rowAsMap(result.one());
+            sourceAsMap = schemaService.rowAsMap(shardId.index().name(), type, result.one());
             if (fetchSourceContext.fetchSource())
                 sourceToBeReturned = XContentFactory.contentBuilder(XContentType.JSON).map(sourceAsMap).bytes();
         } catch (RequestExecutionException | RequestValidationException | IOException e1) {
@@ -365,7 +365,7 @@ public class ShardGetService extends AbstractIndexShardComponent {
         if (fieldVisitor != null) {
             try {
                 // fetch source from cassandra
-                Map<String, Object> sourceMap = schemaService.rowAsMap(schemaService.fetchRow(shardId.index().name(), type, id).one());
+                Map<String, Object> sourceMap = schemaService.rowAsMap(shardId.index().name(), type, schemaService.fetchRow(shardId.index().name(), type, id).one());
                 source = XContentFactory.contentBuilder(XContentType.JSON).map(sourceMap).bytes();
                 fieldVisitor.source( source.toBytes() );
                 //docIdAndVersion.context.reader().document(docIdAndVersion.docId, fieldVisitor);

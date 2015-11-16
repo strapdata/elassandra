@@ -83,13 +83,13 @@ import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 
 /**
@@ -324,7 +324,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
                         logger.debug(" {}.{} id={} read fields={}",metadata.ksName, metadata.cfName, id(), mustReadColumns);
                         SchemaService schemaService = ElassandraDaemon.injector().getInstance(SchemaService.class);
                         Row row = schemaService.fetchRowInternal(metadata.ksName, metadata.cfName, mustReadColumns, pkColumns).one();
-                        int putCount = schemaService.rowAsMap(row, docMap);
+                        int putCount = schemaService.rowAsMap(metadata.ksName, metadata.cfName, row, docMap);
                         if (putCount > 0) docLive = true;
                     } catch (RequestValidationException | IOException e) {
                         logger.error("Failed to fetch columns {}",mustReadColumns,e);

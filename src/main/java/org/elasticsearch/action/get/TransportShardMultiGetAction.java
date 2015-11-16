@@ -156,7 +156,7 @@ public class TransportShardMultiGetAction extends TransportShardSingleOperationA
             try {
                 UntypedResultSet result = elasticSchemaService.fetchRow(request.index(), item.type(), columns, item.id());
                 if (!result.isEmpty()) {
-                    Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(result.one());
+                    Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(request.index(), item.type(), result.one());
                     Map<String, GetField> rowAsFieldMap = elasticSchemaService.flattenGetField(item.fields(), "", rowAsMap, new HashMap<String, GetField>());
 
                     GetResult getResult = new GetResult(request.index(), item.type(), item.id(), 0L, true, new BytesArray(FBUtilities.json(rowAsMap).getBytes("UTF-8")), rowAsFieldMap);

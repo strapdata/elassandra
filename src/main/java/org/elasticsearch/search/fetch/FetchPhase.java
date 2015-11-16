@@ -438,7 +438,7 @@ public class FetchPhase implements SearchPhase {
                         ImmutableList.<String> copyOf(fieldVisitor.cassandraColumns(searchContext.mapperService(), justUidFieldsVisitor.uid().type())),
                         justUidFieldsVisitor.uid().id());
                 if (!result.isEmpty()) {
-                    Map<String, Object> mapObject = elasticSchemaService.rowAsMap(result.one());
+                    Map<String, Object> mapObject = elasticSchemaService.rowAsMap(searchContext.request().index(), justUidFieldsVisitor.uid().type(), result.one());
 
                     if (fieldVisitor.needFields()) {
                         Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
