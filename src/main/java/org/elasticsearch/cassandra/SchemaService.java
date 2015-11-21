@@ -115,8 +115,7 @@ public interface SchemaService {
     public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
             RequestValidationException;
     
-    public String buildTableMapping(String ksName, String cfName) throws IOException, SyntaxException, ConfigurationException;
-    
-    public String buildTableMapping(String ksName, String cfName, String columnRegexp) throws IOException, SyntaxException, ConfigurationException;
+    public Map<String, Object> expandTableMapping(final String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
+    public Map<String, Object> expandTableMapping(final String ksName, final String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
 
 }

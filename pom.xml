@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.elassandra</groupId>
     <artifactId>elassandra</artifactId>
-    <version>0.4</version>
+    <version>0.4.2</version>
     <packaging>jar</packaging>
     <description>Elassandra - ElasticSearch for Cassandra</description>
     <inceptionYear>2015</inceptionYear>

@@ -98,6 +98,7 @@ import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.messages.ResultMessage;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
@@ -118,9 +119,7 @@ import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.common.xcontent.json.JsonXContentParser;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.Engine;
@@ -133,11 +132,13 @@ import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.mapper.core.DateFieldMapper;
+import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
 import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.IndicesService;
 
 import com.fasterxml.jackson.core.JsonFactory;
@@ -146,6 +147,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Maps;
 
 public class ElasticSchemaService extends AbstractComponent implements SchemaService {
 
@@ -545,75 +547,89 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     }
     
    
-    public void buildObjectMapping(XContentBuilder builder, AbstractType<?> type) throws IOException {
+    public void buildObjectMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
         CQL3Type cql3type = type.asCQL3Type();
         if (cql3type instanceof CQL3Type.Native) {
-            builder.field("type", cqlMapping.get(cql3type.toString()));
+            mapping.put("type", cqlMapping.get(cql3type.toString()));
         } else if (cql3type instanceof CQL3Type.UserDefined) {
-            builder.field("type", "nested");
-            builder.field("cql_struct", "udt");
-            XContentBuilder propertiesBuilder = builder.startObject("properties");
+            mapping.put("type", ObjectMapper.NESTED_CONTENT_TYPE);
+            mapping.put(TypeParsers.CQL_STRUCT, "udt");
+            Map<String, Object> properties = Maps.newHashMap();
             TupleType tuple = (TupleType)type;
             for(int i=0; i< tuple.size(); i++) {
-                buildTypeMapping(propertiesBuilder, tuple.type(i));
+                buildTypeMapping(properties, tuple.type(i));
             }
-            propertiesBuilder.endObject();
+            mapping.put("properties", properties);
         }
     }
     
-    public void buildTypeMapping(XContentBuilder builder, AbstractType<?> type) throws IOException {
+    public void buildTypeMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
         CQL3Type cql3type = type.asCQL3Type();
         if (type.isCollection()) {
             if (type instanceof ListType) {
-                builder.field("cql_collection", "list");
-                buildObjectMapping(builder, ((SetType<?>)type).getElementsType() );
+                mapping.put(TypeParsers.CQL_COLLECTION, "list");
+                buildObjectMapping(mapping, ((SetType<?>)type).getElementsType() );
             } else if (type instanceof SetType) {
-                builder.field("cql_collection", "set");
-                buildObjectMapping(builder, ((SetType<?>)type).getElementsType() );
+                mapping.put(TypeParsers.CQL_COLLECTION, "set");
+                buildObjectMapping(mapping, ((SetType<?>)type).getElementsType() );
             } else if (type instanceof MapType) {
                 MapType mtype = (MapType)type;
                 if (mtype.getKeysType().asCQL3Type() == CQL3Type.Native.TEXT) {
-                   builder.field("cql_collection", "singleton");
-                   builder.field("cql_struct", "map");
-                   builder.field("cql_partial_update", Boolean.TRUE);
-                   builder.field("type", "nested");
-                   XContentBuilder propertiesBuilder = builder.startObject("properties");
-                   propertiesBuilder.endObject();
+                   mapping.put(TypeParsers.CQL_COLLECTION, "singleton");
+                   mapping.put(TypeParsers.CQL_STRUCT, "map");
+                   mapping.put(TypeParsers.CQL_PARTIAL_UPDATE, Boolean.TRUE);
+                   mapping.put("type", ObjectMapper.NESTED_CONTENT_TYPE);
                 }
             }
         } else {
-            builder.field("cql_collection", "singleton");
-            buildObjectMapping(builder, type );
+            mapping.put(TypeParsers.CQL_COLLECTION, "singleton");
+            buildObjectMapping(mapping, type );
         }
     }
     
-    public String buildTableMapping(String ksName, String cfName) throws IOException, SyntaxException, ConfigurationException {
-        return buildTableMapping(ksName, cfName, ".*");
+
+    public Map<String, Object> expandTableMapping(final String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException {
+        for(String type : mapping.keySet()) {
+            expandTableMapping(ksName, type, (Map<String, Object>)mapping.get(type));
+        }
+        return mapping;
     }
+        
     
-    public String buildTableMapping(String ksName, String cfName, String columnRegexp) throws IOException, SyntaxException, ConfigurationException {
-        Pattern pattern =  Pattern.compile(columnRegexp);
-        try {
-            XContentBuilder builder = JsonXContent.contentBuilder();
-            XContentBuilder propertiesBuilder = builder.startObject();
-            UntypedResultSet result = QueryProcessor.executeInternal("SELECT  column_name,validator FROM system.schema_columns WHERE keyspace_name=? and columnfamily_name=?", 
-                    new Object[] { ksName, cfName });
-            for (Row row : result) {
-                if (row.has("validator") && pattern.matcher(row.getString("column_name")).matches()) {
-                    XContentBuilder columnTypeBuilder = propertiesBuilder.startObject(row.getString("column_name"));
-                    AbstractType<?> type =  TypeParser.parse(row.getString("validator"));
-                    buildTypeMapping(columnTypeBuilder, type);
-                    columnTypeBuilder.endObject();
-                }
+    public Map<String, Object> expandTableMapping(final String ksName, final String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException {
+        final String columnRegexp = (String)mapping.get("columns_regexp");
+        if (columnRegexp != null) {
+            mapping.remove("columns_regexp");
+            Pattern pattern =  Pattern.compile(columnRegexp);
+            Map<String, Object> properties = (Map)mapping.get("properties");
+            if (properties == null) {
+                properties = Maps.newHashMap();
+                mapping.put("properties", properties);
             }
-            propertiesBuilder.endObject();
-            if (logger.isDebugEnabled()) 
-                logger.debug("mapping = {}", builder.string());
-            return "{properties:"+builder.string()+"}";
-        } catch (IOException | SyntaxException | ConfigurationException e) {
-            logger.warn("Failed to build elasticsearch mapping " + ksName + "." + cfName, e);
-            throw e;
+            try {
+                UntypedResultSet result = QueryProcessor.executeInternal("SELECT  column_name,validator FROM system.schema_columns WHERE keyspace_name=? and columnfamily_name=?", 
+                        new Object[] { ksName, cfName });
+                for (Row row : result) {
+                    if (row.has("validator") && pattern.matcher(row.getString("column_name")).matches()) {
+                        String columnName = row.getString("column_name");
+                        Map<String,Object> props = (Map<String, Object>) properties.get(columnName);
+                        if (props == null) {
+                            props = Maps.newHashMap();
+                            properties.put(columnName, props);
+                        }
+                        AbstractType<?> type =  TypeParser.parse(row.getString("validator"));
+                        buildTypeMapping(props, type);
+                    }
+                }
+                if (logger.isDebugEnabled()) 
+                    logger.debug("mapping {} : {}", cfName, mapping);
+                return mapping;
+            } catch (IOException | SyntaxException | ConfigurationException e) {
+                logger.warn("Failed to build elasticsearch mapping " + ksName + "." + cfName, e);
+                throw e;
+            }
         }
+        return mapping;
     }
     
     
@@ -725,7 +741,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
                 }
                 
-                // build secondary indices
+                // build secondary indices when shard is started
                 for (String column : columns) {
                     if (column.equals("_token")) {
                         continue; // ignore pseudo column known by Elasticsearch
@@ -735,7 +751,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                         QueryProcessor.process(String.format("CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s' WITH OPTIONS = {'%s':'%s.%s', '%s':'%s'}",
                             buildIndexName(type, column), index, type, column, org.elasticsearch.cassandra.ElasticSecondaryIndex.class.getName(), 
                             ElasticSecondaryIndex.ELASTIC_OPTION_TARGETS, index, type,
-                            ElasticSecondaryIndex.ELASTIC_OPTION_PARTIAL_UPDATE, columnsMap.get(column).toString()), 
+                            ElasticSecondaryIndex.ELASTIC_OPTION_PARTIAL_UPDATE, FBUtilities.json(columnsMap)), 
                             ConsistencyLevel.LOCAL_ONE);
                     } 
                 }

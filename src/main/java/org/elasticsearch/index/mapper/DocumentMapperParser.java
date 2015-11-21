@@ -21,10 +21,13 @@ package org.elasticsearch.index.mapper;
 
 import static org.elasticsearch.index.mapper.MapperBuilders.doc;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.SyntaxException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.common.Nullable;
@@ -380,30 +383,19 @@ public class DocumentMapperParser extends AbstractIndexComponent {
         
         Tuple<String, Map<String, Object>> mapping;
         if (type == null || type.equals(rootName)) {
-            try {
-                String columnRegexp = ((Map<String,String>) root.get(rootName)).get("columns_regexp");
-                if (columnRegexp != null) {
-                    String cqlMapping = this.schemaService.buildTableMapping(index.getName(), type, columnRegexp);
-                    logger.info("put mapping {}", cqlMapping);
-                    return extractMapping(type, cqlMapping);
-                }
-            } catch(Exception e) {
-                logger.warn("error", e);
-            }
             mapping = new Tuple<>(rootName, (Map<String, Object>) root.get(rootName));
         } else {
-            try {
-                String columnRegexp = (String) root.get("columns_regexp");
-                if (columnRegexp != null) {
-                    String cqlMapping = this.schemaService.buildTableMapping(index.getName(), type, columnRegexp);
-                    logger.info("put mapping {}", cqlMapping);
-                    return extractMapping(type, cqlMapping);
-                }
-            } catch(Exception e) { 
-                logger.warn("error", e);
-            }
             mapping = new Tuple<>(type, root);
         }
+        
+        try {
+            this.schemaService.expandTableMapping(index.getName(), root);
+        } catch (SyntaxException | ConfigurationException | IOException e) {
+            logger.error("Failed to expand mapping", e);
+        }
+        
         return mapping;
     }
+    
+
 }

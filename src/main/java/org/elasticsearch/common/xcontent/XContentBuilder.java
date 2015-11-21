@@ -1200,6 +1200,8 @@ public final class XContentBuilder implements BytesStream, Releasable {
             generator.writeNumber(((Short) value).shortValue());
         } else if (type == Boolean.class) {
             generator.writeBoolean(((Boolean) value).booleanValue());
+        } else if (value instanceof InetAddress) {
+            generator.writeString(((InetAddress) value).getHostAddress());
         } else if (type == GeoPoint.class) {
             generator.writeStartObject();
             generator.writeNumberField("lat", ((GeoPoint) value).lat());

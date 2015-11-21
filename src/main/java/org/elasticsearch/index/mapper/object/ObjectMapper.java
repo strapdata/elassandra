@@ -93,7 +93,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
         public static final boolean ENABLED = true;
         public static final CqlCollection CQL_COLLECTION = CqlCollection.LIST;
         public static final CqlStruct CQL_STRUCT = CqlStruct.UDT;
-        public static final boolean  CQL_PARTIAL_UPDATE = false; // if true, force read on collection columns when updating a row.
+        public static final boolean  CQL_PARTIAL_UPDATE = true; // if true, force read on collection columns when updating a row.
         public static final Nested NESTED = Nested.NO;
         public static final Dynamic DYNAMIC = null; // not set, inherited from root
         public static final ContentPath.Type PATH_TYPE = ContentPath.Type.FULL;

@@ -35,8 +35,6 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
-import org.apache.cassandra.cql3.QueryProcessor;
-import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.Cell;
 import org.apache.cassandra.db.ColumnFamily;
@@ -64,17 +62,26 @@ import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ArrayNode;
+import org.codehaus.jackson.type.TypeReference;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.delete.XDeleteRequest;
 import org.elasticsearch.action.delete.XDeleteResponse;
+import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.block.ClusterBlockLevel;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -83,9 +90,11 @@ import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.engine.Engine;
-import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.SourceToParse;
+import org.elasticsearch.index.mapper.core.AbstractFieldMapper.Defaults;
+import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.indices.IndicesService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,11 +102,12 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Maps;
 
 /**
- * Custom secondary index for CQL3 only.
+ * Custom secondary index for CQL3 only, should be created when mapping is applied and local shard started.
+ * Index row as document when Elasticsearch clusterState has no write blocks and local shard is started.
  * @author vroyer
  *
  */
-public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
+public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements ClusterStateListener {
     private static final Logger logger = LoggerFactory.getLogger(ElasticSecondaryIndex.class);
 
     public static final String ELASTIC_TOKEN = "_token";
@@ -109,15 +119,17 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
     
     // keyspace.table to elasticsearch index.type mapping used when keyspace.table <> index.type
     protected static final ConcurrentMap<Pair<String, String>, Pair<String, String>> mapping = Maps.newConcurrentMap();
-
+    
+ // Indexed columns and if we need to read it to deal with partial updates.
+    protected final ConcurrentMap<String, Boolean> readOnUpdateColumnMap = Maps.newConcurrentMap();
+    
     String index_name;
+    Boolean isOpen = false;
     IPartitioner partitioner = DatabaseDescriptor.getPartitioner();
     
     // elasticsearch index.type -> mappingMetaData
     Set<Pair<String, String>> targets = new HashSet<Pair<String, String>>();
     
-    // Indexed columns and if we need to read it to deal with partial updates.
-    Map<String,Boolean> readOnUpdateColumnMap;
     
     
     public ElasticSecondaryIndex() {
@@ -451,11 +463,11 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
      */
     @Override
     public void index(ByteBuffer rowKey, ColumnFamily cf)  {
-        if (ElassandraDaemon.client() == null) {
-            logger.warn("Elasticsearch  not ready, cannot index");
+        if (!this.isOpen) {
+            logger.warn("Elasticsearch not ready, cannot index");
             return;
         }
-        
+
         CFMetaData metadata = cf.metadata();
         
         if (logger.isTraceEnabled()) {       
@@ -585,9 +597,9 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
      */
     @Override
     public void delete(DecoratedKey key, Group opGroup) {
-        if (ElassandraDaemon.client() == null) {
+        if (!this.isOpen) {
             // TODO: save the update in a commit log to replay it later....
-            logger.warn("Elastic node not yet started, cannot delete document");
+            logger.warn("Elastic node not ready, cannot delete document");
             return;
         }
         Token token = key.getToken();
@@ -635,39 +647,12 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
             }
         }
         index_name = ElasticSchemaService.buildIndexName(this.baseCfs.name, cdef.name.toString());
-        logger.debug(" " + getIndexName() + " targets=" + targets);
-        buildReadOnUpdateColumnMap();
+        updateReadOnUpdateMap();
+        logger.debug(" {} targets={} readOnUpdate={}", this.getIndexName(), this.targets, this.readOnUpdateColumnMap);
+        updateIndexState();
     }
 
 
-    public Map<String,Boolean> indexedColumns(String ksName, String cfName) {
-        Map<String,Boolean> cols = new HashMap<String, Boolean>();
-        try {
-            UntypedResultSet result = QueryProcessor.executeInternal("SELECT  column_name, index_type, index_options FROM system.schema_columns WHERE keyspace_name=? and columnfamily_name=?", 
-                    new Object[] { ksName, cfName });
-            for (Row row : result) {
-                if (row.has("index_type") && "CUSTOM".equals(row.getString("index_type"))) {
-                    Map<String,String> index_options = FBUtilities.fromJsonMap(row.getString("index_options"));
-                    if (index_options != null && "org.elasticsearch.cassandra.ElasticSecondaryIndex".equals(index_options.get("class_name"))) {
-                        cols.put(row.getString("column_name"), Boolean.valueOf(index_options.get(ElasticSecondaryIndex.ELASTIC_OPTION_PARTIAL_UPDATE)));
-                    }
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to retreive column names from " + ksName + "." + cfName, e);
-        }
-
-        return cols;
-    }
-    
-    private void buildReadOnUpdateColumnMap()  {
-        this.readOnUpdateColumnMap = indexedColumns(this.baseCfs.keyspace.getName(), this.baseCfs.name);
-        if (logger.isDebugEnabled()) {
-            logger.debug("{} mapped readOnUpdateColumnMap = {}",this.index_name,this.readOnUpdateColumnMap.toString());
-        }
-    }
-    
-    
     /**
      * Reload an existing index following a change to its configuration, or that
      * of the indexed column(s). Differs from init() in that we expect expect
@@ -676,9 +661,13 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
      */
     @Override
     public void reload() {
-        buildReadOnUpdateColumnMap();
+        updateReadOnUpdateMap();
     }
 
+    private static final ObjectMapper jsonMapper = new ObjectMapper();
+    private static final TypeReference<Map<String, Boolean>> readOnUpdateColumnTypeReference = new TypeReference<Map<String, Boolean>>() {
+    };
+    
     @Override
     public void validateOptions() throws ConfigurationException {
         for (ColumnDefinition cd : getColumnDefs()) {
@@ -687,8 +676,23 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
                     throw new ConfigurationException("Unknown elastic secondary index options: " + optionKey);
                 }
             }
-            
         }
+    }
+    
+    public void updateReadOnUpdateMap() {
+        for (ColumnDefinition cd : getColumnDefs()) {
+            for (String optionKey : cd.getIndexOptions().keySet()) {
+                String partialUpdate = cd.getIndexOptions().get(ELASTIC_OPTION_PARTIAL_UPDATE);
+                if (partialUpdate != null) {
+                    try {
+                        this.readOnUpdateColumnMap.putAll((Map<String,Boolean>)jsonMapper.readValue(partialUpdate, readOnUpdateColumnTypeReference));
+                    } catch (IOException e) {
+                        logger.error("Failed to parse "+ELASTIC_OPTION_PARTIAL_UPDATE, e);
+                    }
+                }
+            }
+        }
+        logger.debug(" index [{}] {} = {}", index_name, ELASTIC_OPTION_PARTIAL_UPDATE, readOnUpdateColumnMap);
     }
 
     @Override
@@ -707,28 +711,28 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
      */
     @Override
     public void forceBlockingFlush() {
-        if (ElassandraDaemon.client() == null) {
-            logger.warn("Elasticsearch  not ready, cannot flush Elasticsearch index");
+        if (!this.isOpen) {
+            logger.warn("Elasticsearch not ready, cannot flush Elasticsearch index");
             return;
         }
-        
-        if (ElassandraDaemon.injector() != null) {
-            IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
-            if (indicesService != null) {
-                for (Pair<String, String> target : targets) {
-                    try {
-                        IndexShard indexShard = indicesService.indexServiceSafe(target.left).shardSafe(0);
-                        logger.debug("Flushing Elasticsearch index=[{}] state=[{}]",target.left, indexShard.state());
-                        indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
-                        logger.debug("Elasticsearch index=[{}] flushed",target.left);
-                    } catch (ElasticsearchException e) {
-                        logger.error("Unexpected error",e);
-                    }
+        for (Pair<String, String> target : targets) {
+            try {
+                IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
+                IndexShard indexShard = indicesService.indexServiceSafe(target.left).shardSafe(0);
+                logger.debug("Flushing Elasticsearch index=[{}] state=[{}]",target.left, indexShard.state());
+                if (indexShard.state() == IndexShardState.STARTED)  {
+                    indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
+                    logger.debug("Elasticsearch index=[{}] flushed",target.left);
+                } else {
+                    logger.warn("Cannot flush index=[{}], state=[{}]",target.left, IndexShardState.STARTED);
                 }
+            } catch (ElasticsearchException e) {
+                logger.error("Unexpected error",e);
             }
         }
     }
 
+    
     @Override
     public ColumnFamilyStore getIndexCfs() {
         // TODO Auto-generated method stub
@@ -780,6 +784,58 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex {
     public long estimateResultRows() {
         // TODO Auto-generated method stub
         return 0;
+    }
+
+    public void updateIndexState() {
+        ClusterService clusterService = ElassandraDaemon.injector().getInstance(ClusterService.class);
+        ClusterState state = clusterService.state();
+        for (Pair<String, String> target : targets) { // only one target
+            ClusterBlockException clusterBlockException = state.blocks().indexBlockedException(ClusterBlockLevel.METADATA, target.left);
+            this.isOpen = (clusterBlockException == null);
+            if (this.isOpen) {
+                this.isOpen = state.routingTable().localShardsStarted(target.left);
+            }
+            updateReadOnUpdate(state);
+        }
+    }
+    
+    
+    
+    @Override
+    public void clusterChanged(ClusterChangedEvent event) {
+        for (Pair<String, String> target : targets) { // only one target
+            if (event.blocksChanged()) {
+                ClusterBlockException clusterBlockException = event.state().blocks().indexBlockedException(ClusterBlockLevel.METADATA, target.left);
+                this.isOpen = (clusterBlockException == null);
+            } 
+            if (this.isOpen && event.indexRoutingTableChanged(target.left)) {
+                this.isOpen = event.state().routingTable().localShardsStarted(target.left);
+            }
+            if (event.metaDataChanged()) {
+                updateReadOnUpdate(event.state());
+            }
+        }
+    }
+    
+    public void updateReadOnUpdate(ClusterState state) {
+        for (Pair<String, String> target : targets) {   // only one target
+            IndexMetaData indexMetaData = state.metaData().index(target.left);
+            MappingMetaData mappingMetaData = indexMetaData.getMappings().get(target.right);
+            if (mappingMetaData != null) {
+                try {
+                    Map<String, Object> properties = (Map<String, Object>) mappingMetaData.getSourceAsMap().get("properties");
+                    for(String field : properties.keySet()) {
+                        boolean readOnUpdate = Defaults.CQL_PARTIAL_UPDATE;
+                        if (properties.get(TypeParsers.CQL_PARTIAL_UPDATE) != null) {
+                            readOnUpdate = Boolean.valueOf((String)properties.get(TypeParsers.CQL_PARTIAL_UPDATE));
+                        }
+                        this.readOnUpdateColumnMap.put(field, readOnUpdate);
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to parse mapping metadata = {}", e, mappingMetaData);
+                }
+            }
+        }
     }
 
 }

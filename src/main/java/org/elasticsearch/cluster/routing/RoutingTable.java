@@ -137,6 +137,10 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
         }
         return true;
     }
+    
+    public boolean localShardsStarted(String index) {
+        return index(index).allPrimaryShardsActive();
+    }
 
     /**
      * All the shards (replicas) for the provided indices.

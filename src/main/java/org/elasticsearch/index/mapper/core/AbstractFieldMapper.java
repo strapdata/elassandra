@@ -110,7 +110,7 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T> {
 
         public static final CqlCollection CQL_COLLECTION = CqlCollection.LIST;
         public static final CqlStruct CQL_STRUCT = CqlStruct.UDT;
-        public static final boolean CQL_PARTIAL_UPDATE = false;
+        public static final boolean CQL_PARTIAL_UPDATE = true; // read on partial update
         
         public static final float BOOST = 1.0f;
         public static final ContentPath.Type PATH_TYPE = ContentPath.Type.FULL;
@@ -137,7 +137,7 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T> {
         protected CopyTo copyTo;
         protected CqlCollection cqlCollection;
         protected CqlStruct cqlStruct;
-        protected boolean cqlPartialUpdate;
+        protected boolean cqlPartialUpdate = AbstractFieldMapper.Defaults.CQL_PARTIAL_UPDATE;
 
         protected Builder(String name, FieldType fieldType) {
             super(name);

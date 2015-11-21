@@ -611,12 +611,23 @@ cql_partial_update | true or **false** | Elasticsearch index full document. For 
 
 ## Elasticsearch mapping from an existing cassandra table.
 
-A new put mapping parameter `column_regexp` allow to create Elasticsearch mapping from an existing cassandra table for columns whose name match the provided regular expression. The following command create the elasticsearch mapping for all columns starting by 'a' of the cassandra table *my.keyspace.my_table*. 
+A new put mapping parameter `column_regexp` allow to create Elasticsearch mapping from an existing cassandra table for columns whose name match the provided regular expression. The following command create the elasticsearch mapping for all columns starting by 'a' of the cassandra table *my.keyspace.my_table*.and set a specific analyzer for column *name*. 
 
 ```
-curl -XPUT "http://localhost:9200/my_keyspace/_mapping/my_table" -d '{ "my_table" : { "columns_regexp" : "a.*" }}'
+curl -XPUT "http://localhost:9200/my_keyspace/_mapping/my_table" -d '{ 
+    "my_table" : { 
+        "columns_regexp" : "a.*",
+        "properties" : {
+            "name" : {
+                "type" : "string",
+                "index" : "not_analyzed"
+            }
+        }
+    }
+}'
 ```
 
+If you need to set specific mapping for some columns, you can 
 ##  Compound primary key support
 
 When mapping an existing cassandra table to an Elasticsearch index.type, primary key is mapped to the `_id` field. 
