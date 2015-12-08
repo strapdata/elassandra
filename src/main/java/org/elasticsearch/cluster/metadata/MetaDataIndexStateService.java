@@ -30,6 +30,7 @@ import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
+import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTable;
@@ -78,6 +79,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 return new ClusterStateUpdateResponse(acknowledged);
             }
 
+            
             @Override
             public ClusterState execute(ClusterState currentState) {
                 List<String> indicesToClose = new ArrayList<>();
@@ -137,6 +139,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 return new ClusterStateUpdateResponse(acknowledged);
             }
 
+            
             @Override
             public ClusterState execute(ClusterState currentState) {
                 List<String> indicesToOpen = new ArrayList<>();
