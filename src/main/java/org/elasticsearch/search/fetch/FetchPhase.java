@@ -448,7 +448,9 @@ public class FetchPhase implements SearchPhase {
                         }
                     }
                     if (fieldVisitor.needSource()) {
-                        fieldVisitor.source(XContentFactory.contentBuilder(XContentType.JSON).map(mapObject).bytes().toBytes());
+                        // rebuild the source document from the cassandra row.
+                        XContentBuilder builder = ElasticSchemaService.buildDocument(searchContext.mapperService().documentMapper(justUidFieldsVisitor.uid().type()), mapObject);
+                        fieldVisitor.source(builder.bytes().toBytes());
                     }
                 }
 

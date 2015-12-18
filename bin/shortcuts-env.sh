@@ -1,8 +1,7 @@
 # Elassandra shortcuts
 
 if [ "x$CASSANDRA_HOME" = "x" ]; then
-    echo "Please set your CASSANDRA_HOME"
-    exit 1
+    CASSANDRA_HOME=$PWD
 fi
 echo "CASSANDRA_HOME=$CASSANDRA_HOME"
 
@@ -14,10 +13,6 @@ export NODETOOL_JMX_PORT="7199"
 # for debug purpose only
 export JVM_DEBUG_PORT="4242"
 export JVM_DEBUG_WAIT="n"
-
-# To run with jdk 1.7 on mac only
-#export JAVA_HOME=$(/usr/libexec/java_home -v 1.7)
-
 
 export CASSANDRA_CONF=$CASSANDRA_HOME/conf
 export CASSANDRA_DATA=$CASSANDRA_HOME/data

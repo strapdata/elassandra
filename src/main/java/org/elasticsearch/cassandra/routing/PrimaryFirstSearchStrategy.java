@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
- * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -13,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.elasticsearch.cassandra;
+package org.elasticsearch.cassandra.routing;
 
 import java.net.InetAddress;
 import java.util.Collection;

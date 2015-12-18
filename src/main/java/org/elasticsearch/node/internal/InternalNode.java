@@ -36,14 +36,15 @@ import org.elasticsearch.cache.recycler.CacheRecycler;
 import org.elasticsearch.cache.recycler.CacheRecyclerModule;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.cache.recycler.PageCacheRecyclerModule;
+import org.elasticsearch.cassandra.ElasticSecondaryIndex;
 import org.elasticsearch.cassandra.SchemaService;
+import org.elasticsearch.cassandra.SecondaryIndicesService;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.node.NodeClientModule;
 import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-import org.elasticsearch.cluster.routing.RoutingService;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.collect.Tuple;
@@ -260,6 +261,9 @@ public final class InternalNode implements Node {
         //injector.getInstance(SnapshotsService.class).start();
         injector.getInstance(TransportService.class).start();
 
+        SecondaryIndicesService secondaryIndicesService = injector.getInstance(SecondaryIndicesService.class);
+        secondaryIndicesService.start();
+        
         ClusterService clusterService = injector.getInstance(ClusterService.class);
         clusterService.start();
 
@@ -277,9 +281,16 @@ public final class InternalNode implements Node {
         GatewayService gatewayService = injector.getInstance(GatewayService.class);
         gatewayService.start(); // block until recovery done from cassandra schema.
 
+        
         // check metadata not empty and block until all primary local shards are STARTED
         clusterService.waitShardsStarted();
         logger.info("activated ...");
+        
+        // initialize custom secondary indices.
+        for(ElasticSecondaryIndex esi : ElasticSecondaryIndex.elasticSecondayIndices) {
+            esi.initMapping();
+        }
+        
         return this;
     }
 
@@ -304,7 +315,7 @@ public final class InternalNode implements Node {
         injector.getInstance(RiversManager.class).start();
         injector.getInstance(SnapshotsService.class).start();
 
-        injector.getInstance(RoutingService.class).start();
+        //injector.getInstance(RoutingService.class).start();
         injector.getInstance(SearchService.class).start();
         injector.getInstance(MonitorService.class).start();
         injector.getInstance(RestController.class).start();
@@ -355,7 +366,7 @@ public final class InternalNode implements Node {
             // ignore
         }
 
-        injector.getInstance(RoutingService.class).stop();
+        //injector.getInstance(RoutingService.class).stop();
         injector.getInstance(ClusterService.class).stop();
         injector.getInstance(DiscoveryService.class).stop();
         injector.getInstance(MonitorService.class).stop();
@@ -419,9 +430,11 @@ public final class InternalNode implements Node {
         injector.getInstance(IndicesTTLService.class).close();
         injector.getInstance(IndicesService.class).close();
 
+        /*
         stopWatch.stop().start("routing");
         injector.getInstance(RoutingService.class).close();
-
+        */
+        
         stopWatch.stop().start("cluster");
         injector.getInstance(ClusterService.class).close();
         stopWatch.stop().start("discovery");

@@ -176,9 +176,6 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
         return this.discovery.readIndexShardState(address, index, defaultState);
     }
 
-    public void addShardStateRemovedListener(CassandraDiscovery.ShardStateRemovedListener listener) {
-        this.discovery.addShardStateRemovedListener(listener);
-    }
     
     /**
      * Set index shard state in the gossip endpoint map (must be synchronized).
@@ -203,4 +200,9 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
     public void publish(ClusterState clusterState) {
         this.discovery.publish(clusterState);
     }
+
+    public boolean awaitMetaDataVersion(long version, TimeValue ackTimeout) throws Exception  {
+        return this.discovery.awaitMetaDataVersion(version, ackTimeout);
+    }
+
 }

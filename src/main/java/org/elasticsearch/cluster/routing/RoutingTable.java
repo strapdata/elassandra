@@ -128,7 +128,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
     /*
      * Block until all local primary shard are started (always has index 0 in routing table)
      */
-    public boolean localShardsStarted() {
+    public boolean isLocalShardsStarted() {
         for (IndexRoutingTable indexRoutingTable : this) {
             IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shards().get(0);
             if ((indexShardRoutingTable.getPrimaryShardRouting() == null) || (indexShardRoutingTable.getPrimaryShardRouting().state() != ShardRoutingState.STARTED)) {
@@ -137,8 +137,9 @@ public class RoutingTable implements Iterable<IndexRoutingTable> {
         }
         return true;
     }
+
     
-    public boolean localShardsStarted(String index) {
+    public boolean isLocalShardsStarted(String index) {
         return index(index).allPrimaryShardsActive();
     }
 

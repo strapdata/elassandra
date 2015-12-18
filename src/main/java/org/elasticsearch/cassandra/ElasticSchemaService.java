@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -61,7 +62,6 @@ import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.ListType;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.marshal.SetType;
-import org.apache.cassandra.db.marshal.TimestampType;
 import org.apache.cassandra.db.marshal.TupleType;
 import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.db.marshal.UTF8Type;
@@ -98,7 +98,6 @@ import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.messages.ResultMessage;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
@@ -119,7 +118,10 @@ import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.json.JsonXContentParser;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.Engine;
@@ -134,15 +136,16 @@ import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.mapper.core.DateFieldMapper;
 import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
+import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper.Names;
+import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper.CqlCollection;
 import org.elasticsearch.index.mapper.object.ObjectMapper.CqlStruct;
 import org.elasticsearch.index.shard.IndexShard;
-import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.IndicesService;
 
+import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.fasterxml.jackson.core.JsonFactory;
-import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -332,6 +335,10 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         if (mapper instanceof DateFieldMapper) {
             // workaround because elasticsearch manage Date as Long
             return new Date(((DateFieldMapper) mapper).value(value));
+        } else if (mapper instanceof IpFieldMapper) {
+            // workaround because elasticsearch manage InetAddress as Long
+            Long ip = ((IpFieldMapper) mapper).value(value);
+            return  com.google.common.net.InetAddresses.forString(IpFieldMapper.longToIp(ip));
         } else {
             return mapper.value(value);
         }
@@ -538,7 +545,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     }
 
     public void buildGeoPointType(String ksName, String typeName) throws RequestExecutionException {
-        String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( lat double, lon double )", ksName, typeName);
+        String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( %s double, %s double )", ksName, typeName,Names.LAT,Names.LON);
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
     }
 
@@ -568,7 +575,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         if (type.isCollection()) {
             if (type instanceof ListType) {
                 mapping.put(TypeParsers.CQL_COLLECTION, "list");
-                buildObjectMapping(mapping, ((SetType<?>)type).getElementsType() );
+                buildObjectMapping(mapping, ((ListType<?>)type).getElementsType() );
             } else if (type instanceof SetType) {
                 mapping.put(TypeParsers.CQL_COLLECTION, "set");
                 buildObjectMapping(mapping, ((SetType<?>)type).getElementsType() );
@@ -579,6 +586,8 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                    mapping.put(TypeParsers.CQL_STRUCT, "map");
                    mapping.put(TypeParsers.CQL_PARTIAL_UPDATE, Boolean.TRUE);
                    mapping.put("type", ObjectMapper.NESTED_CONTENT_TYPE);
+                } else {
+                    throw new IOException("Expecting a map<text,?>");
                 }
             }
         } else {
@@ -587,6 +596,75 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         }
     }
     
+    
+    public static void toXContent(XContentBuilder builder, Mapper mapper, String field, Object value) throws IOException {
+        if (value instanceof Collection) {
+           if (field == null) {
+               builder.startArray(); 
+           } else {
+               builder.startArray(field);
+           }
+           for(Iterator<Object> i = ((Collection)value).iterator(); i.hasNext(); ) {
+               toXContent(builder, mapper, null, i.next());
+           } 
+           builder.endArray();
+        } else if (value instanceof Map) {
+           Map<String, Object> map = (Map<String,Object>)value;
+           if (field != null) {
+               builder.startObject(field);
+           } else {
+               builder.startObject();
+           }
+           for(String subField : map.keySet()) {
+               if (mapper != null) {
+                   if (mapper instanceof ObjectMapper) {
+                       toXContent(builder, ((ObjectMapper)mapper).mappers().get(subField), subField, map.get(subField));
+                   } else if (mapper instanceof GeoPointFieldMapper) {
+                       GeoPointFieldMapper geoMapper = (GeoPointFieldMapper)mapper;
+                       toXContent(builder, geoMapper.latMapper(), Names.LAT, map.get(Names.LAT));
+                       toXContent(builder, geoMapper.lonMapper(), Names.LON, map.get(Names.LON));
+                   } else {
+                       builder.field(subField, map.get(subField));
+                   }
+               } else {
+                   builder.field(subField, map.get(subField));
+               }
+           }
+           builder.endObject();
+        } else {
+           FieldMapper<?> fieldMapper = (FieldMapper<?>)mapper;
+           if (field != null) {
+               builder.field(field, (fieldMapper==null) ? value : fieldMapper.valueForSearch(value));
+           } else {
+               builder.value((fieldMapper==null) ? value : fieldMapper.valueForSearch(value));
+           }
+        }
+    }
+    
+    public static XContentBuilder buildDocument(DocumentMapper documentMapper, Map<String, Object> docMap) throws IOException {
+        XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
+        builder.startObject();
+        for(String field : docMap.keySet()) {
+            if (field.equals(ElasticSecondaryIndex.ELASTIC_TOKEN)) {
+                builder.field(ElasticSecondaryIndex.ELASTIC_TOKEN, docMap.get(ElasticSecondaryIndex.ELASTIC_TOKEN));
+            } else {
+                FieldMapper<?> fieldMapper = documentMapper.mappers().smartNameFieldMapper(field);
+                if (fieldMapper != null) {
+                    toXContent(builder, fieldMapper, field, docMap.get(field));
+                } else {
+                    ObjectMapper objectMapper = documentMapper.objectMappers().get(field);
+                    if (objectMapper != null) {
+                        toXContent(builder, objectMapper, field, docMap.get(field));
+                    } else {
+                        // no mapping
+                        builder.field(field, docMap.get(field));
+                    }
+                }
+            }
+        }
+        builder.endObject();
+        return builder;
+    }
 
     public Map<String, Object> expandTableMapping(final String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException {
         for(String type : mapping.keySet()) {
@@ -645,123 +723,160 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     @Override
     public void updateTableSchema(final String index, final String type, Set<String> columns, DocumentMapper docMapper) throws IOException {
         try {
-            
-            createIndexKeyspace(index, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1);
+            IndexService indexService = this.indicesService.indexService(index);
+            String ksName = indexService.getIndexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, index);
+            createIndexKeyspace(ksName, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1);
 
-            Pair<String, String> targetPair = ElasticSecondaryIndex.mapping.get(Pair.<String, String> create(index, type));
-            if (targetPair == null) {
+            CFMetaData cfm = Schema.instance.getCFMetaData(ksName, type);
+            boolean newTable = (cfm == null);
 
-                CFMetaData cfm = Schema.instance.getCFMetaData(index, type);
-                boolean newTable = (cfm == null);
-
-                logger.debug("Inferring CQL3 schema {}.{} with columns={}", index, type, columns);
-                StringBuilder columnsList = new StringBuilder();
-                StringBuilder readOnUpdateColumnList = new StringBuilder();
-                Map<String,Boolean> columnsMap = new HashMap<String, Boolean>(columns.size());
-                for (String column : columns) {
-                    columnsList.append(',');
-                    if (column.equals("_token")) {
-                        continue; // ignore pseudo column known by Elasticsearch
-                    }
-                    String cqlType = null;
-                    FieldMapper<?> fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
-                    if (fieldMapper != null) {
-                        columnsMap.put(column,  fieldMapper.cqlPartialUpdate());
-                        if (fieldMapper instanceof DateFieldMapper) {
-                            // workaround because elasticsearch maps date to long
-                            cqlType = typeMapping.get("date");
-                        } else if (fieldMapper instanceof GeoPointFieldMapper) {
-                            cqlType = fieldMapper.name().replace('.', '_');
-                        } else {
-                            cqlType = typeMapping.get(fieldMapper.contentType());
-                        }
-                        
-                        if (!fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
-                            if (isNativeCql3Type(cqlType)) {
-                                cqlType = fieldMapper.cqlCollectionTag()+"<" + cqlType + ">";
-                            } else {
-                                cqlType = fieldMapper.cqlCollectionTag()+"<frozen<" + cqlType + ">>";
-                            }
-                        }
+            logger.debug("Inferring CQL3 schema {}.{} with columns={}", ksName, type, columns);
+            StringBuilder columnsList = new StringBuilder();
+            StringBuilder readOnUpdateColumnList = new StringBuilder();
+            Map<String,Boolean> columnsMap = new HashMap<String, Boolean>(columns.size());
+            for (String column : columns) {
+                columnsList.append(',');
+                if (column.equals("_token")) {
+                    continue; // ignore pseudo column known by Elasticsearch
+                }
+                String cqlType = null;
+                FieldMapper<?> fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
+                if (fieldMapper != null) {
+                    columnsMap.put(column,  fieldMapper.cqlPartialUpdate());
+                    if (fieldMapper instanceof DateFieldMapper) {
+                        // workaround because elasticsearch maps date to long
+                        cqlType = typeMapping.get("date");
+                    } else if (fieldMapper instanceof GeoPointFieldMapper) {
+                        cqlType = fieldMapper.name().replace('.', '_');
                     } else {
-                        ObjectMapper objectMapper = docMapper.objectMappers().get(column);
-                        columnsMap.put(column,  objectMapper.cqlPartialUpdate());
-                        if (objectMapper != null) {
-                            if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
-                                // check columnName exists and is map<text,?>
-                                logger.debug("Expecting column [{}] to be a map<text,?>", column);
-                            } else  if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
-                                // Cassandra 2.1.8 : Non-frozen collections are not allowed inside collections
-                                cqlType = "frozen<\"" + buildCql(index, type, column, objectMapper) + "\">";
-                                if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
-                                    cqlType = objectMapper.cqlCollectionTag()+"<"+cqlType+">";
-                                }
-                            }
-                        } else {
-                            logger.warn("Cannot infer CQL type mapping for field [{}]", column);
-                            continue;
-                        }
+                        cqlType = typeMapping.get(fieldMapper.contentType());
                     }
-
                     
-                    if (newTable) {
-                        if (cqlType != null) {
-                            columnsList.append("\"").append(column).append("\" ").append(cqlType);
-                        }
-                    } else {
-                        ColumnDefinition cdef = cfm.getColumnDefinition(new ColumnIdentifier(column, true));
-                        if (cqlType != null) {
-                            if (cdef == null) {
-                                try {
-                                    String query = String.format("ALTER TABLE \"%s\".\"%s\" ADD \"%s\" %s", index, type, column, cqlType);
-                                    logger.debug(query);
-                                    QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
-                                } catch (Exception e) {
-                                    logger.warn("Cannot alter table {}.{} column {} with type {}", e, index, type, column, cqlType);
-                                }
-                            } else {
-                                // check that the existing column matches the provided mapping
-                                // TODO: do this check for collection
-                                if (!cdef.type.isCollection()) {
-                                    // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
-                                    if (!cdef.type.asCQL3Type().toString().equals(cqlType)) {
-                                        throw new IOException("Existing column "+column+" mismatch type "+cqlType);
-                                    }
-                                }
-                            }
+                    if (!fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                        if (isNativeCql3Type(cqlType)) {
+                            cqlType = fieldMapper.cqlCollectionTag()+"<" + cqlType + ">";
+                        } else {
+                            cqlType = fieldMapper.cqlCollectionTag()+"<frozen<" + cqlType + ">>";
                         }
                     }
-                  
+                } else {
+                    ObjectMapper objectMapper = docMapper.objectMappers().get(column);
+                    columnsMap.put(column,  objectMapper.cqlPartialUpdate());
+                    if (objectMapper != null) {
+                        if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
+                            // check columnName exists and is map<text,?>
+                            logger.debug("Expecting column [{}] to be a map<text,?>", column);
+                        } else  if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
+                            // Cassandra 2.1.8 : Non-frozen collections are not allowed inside collections
+                            cqlType = "frozen<\"" + buildCql(ksName, type, column, objectMapper) + "\">";
+                            if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                                cqlType = objectMapper.cqlCollectionTag()+"<"+cqlType+">";
+                            }
+                        }
+                    } else {
+                        logger.warn("Cannot infer CQL type mapping for field [{}]", column);
+                        continue;
+                    }
                 }
 
-                if (newTable) {
-                    String query = String.format("CREATE TABLE IF NOT EXISTS \"%s\".\"%s\" ( \"%s\" text PRIMARY KEY %s ) WITH COMMENT='Auto-created by Elassandra'", index, type,
-                            ELASTIC_ID_COLUMN_NAME, columnsList);
-                    logger.debug(query);
-                    QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
-                }
                 
-                // build secondary indices when shard is started
-                for (String column : columns) {
-                    if (column.equals("_token")) {
-                        continue; // ignore pseudo column known by Elasticsearch
+                if (newTable) {
+                    if (cqlType != null) {
+                        columnsList.append("\"").append(column).append("\" ").append(cqlType);
                     }
-                    ColumnDefinition cdef = (cfm == null) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
-                    if (newTable || (cdef != null) && !cdef.isIndexed() && !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY )) {
-                        QueryProcessor.process(String.format("CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s' WITH OPTIONS = {'%s':'%s.%s', '%s':'%s'}",
-                            buildIndexName(type, column), index, type, column, org.elasticsearch.cassandra.ElasticSecondaryIndex.class.getName(), 
-                            ElasticSecondaryIndex.ELASTIC_OPTION_TARGETS, index, type,
-                            ElasticSecondaryIndex.ELASTIC_OPTION_PARTIAL_UPDATE, FBUtilities.json(columnsMap)), 
-                            ConsistencyLevel.LOCAL_ONE);
-                    } 
+                } else {
+                    ColumnDefinition cdef = cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+                    if (cqlType != null) {
+                        if (cdef == null) {
+                            try {
+                                String query = String.format("ALTER TABLE \"%s\".\"%s\" ADD \"%s\" %s", ksName, type, column, cqlType);
+                                logger.debug(query);
+                                QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+                            } catch (Exception e) {
+                                logger.warn("Cannot alter table {}.{} column {} with type {}", e, ksName, type, column, cqlType);
+                            }
+                        } else {
+                            // check that the existing column matches the provided mapping
+                            // TODO: do this check for collection
+                            if (!cdef.type.isCollection()) {
+                                // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
+                                if (!cdef.type.asCQL3Type().toString().equals(cqlType)) {
+                                    throw new IOException("Existing column "+column+" mismatch type "+cqlType);
+                                }
+                            }
+                        }
+                    }
                 }
-                    
+              
             }
+
+            if (newTable) {
+                String query = String.format("CREATE TABLE IF NOT EXISTS \"%s\".\"%s\" ( \"%s\" text PRIMARY KEY %s ) WITH COMMENT='Auto-created by Elassandra'", ksName, type,
+                        ELASTIC_ID_COLUMN_NAME, columnsList);
+                logger.debug(query);
+                QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+            }
+
         } catch (Throwable e) {
             throw new IOException(e.getMessage(), e);
         }
     }
+    
+    @Override
+    public void createSecondaryIndices(String index) throws IOException {
+        IndexService indexService = this.indicesService.indexService(index);
+        String ksName = indexService.getIndexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, index);
+        IndexMetaData indexMetaData = this.clusterService.state().metaData().index(index);
+        for(ObjectCursor<MappingMetaData> cursor: indexMetaData.mappings().values()) {
+            createSecondaryIndex(ksName, cursor.value);
+        }
+    }
    
+    // build secondary indices when shard is started and mapping applied
+    @Override
+    public void createSecondaryIndex(String ksName, MappingMetaData mapping) throws IOException {
+        CFMetaData cfm = Schema.instance.getCFMetaData(ksName, mapping.type());
+        if (cfm != null) {
+            try {
+                for (String column : ((Map<String,Object>)mapping.sourceAsMap().get("properties")).keySet()) {
+                    if (column.equals("_token")) {
+                        continue; // ignore pseudo column known by Elasticsearch
+                    }
+                    ColumnDefinition cdef = (cfm == null) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+                    if ((cdef != null) && !cdef.isIndexed() && !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY )) {
+                        logger.debug("CREATE CUSTOM INDEX IF NOT EXISTS {} ON {}.{} ({})", buildIndexName(mapping.type(), column), ksName, mapping.type(), column);
+                        QueryProcessor.process(String.format("CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s'",
+                            buildIndexName(mapping.type(), column), ksName, mapping.type(), column, org.elasticsearch.cassandra.ElasticSecondaryIndex.class.getName()), 
+                            ConsistencyLevel.LOCAL_ONE);
+                    } 
+                }
+            } catch (Throwable e) {
+                throw new IOException(e.getMessage(), e);
+            }
+        }
+    }
+    
+    @Override
+    public void dropSecondaryIndices(String ksName) throws RequestExecutionException {
+        for(String cfName : Schema.instance.getKeyspaceMetaData(ksName).keySet()) {
+            dropSecondaryIndex(ksName, cfName);
+        }
+    }
+    
+    @Override
+    public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException  {
+        CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
+        if (cfm != null) {
+            for (ColumnDefinition cdef : Iterables.concat(cfm.partitionKeyColumns(), cfm.clusteringColumns(), cfm.regularColumns())) {
+                if (cdef.isIndexed() && ElasticSecondaryIndex.class.getName().equals(cdef.getIndexOptions().get(ElasticSecondaryIndex.CUSTOM_INDEX_OPTION_NAME))) {
+                    logger.debug("DROP INDEX IF EXISTS {}.{}", ksName, buildIndexName(cfName, cdef.name.toString()));
+                    QueryProcessor.process(String.format("DROP INDEX IF EXISTS \"%s\".\"%s\"",
+                        ksName, buildIndexName(cfName, cdef.name.toString())), 
+                        ConsistencyLevel.LOCAL_ONE);
+                } 
+            }
+        }
+    }
     
     public static String buildIndexName(final String cfName, final String colName) {
         return new StringBuilder("elastic_")
@@ -792,33 +907,28 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         throw new ConfigurationException("Unknown table " + ksName + "." + cfName);
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.elasticsearch.cassandra.ElasticSchemaService#getPrimaryKeyColumnsName
-     * (java.lang.String, java.lang.String)
-     */
-    @Override
-    public List<String> getPrimaryKeyColumnsName(final String ksName, final String cfName) throws ConfigurationException {
-        List<ColumnDefinition> pkColumns = getPrimaryKeyColumns(ksName, cfName);
-        ArrayList<String> names = new ArrayList<String>(pkColumns.size());
-        for (ColumnDefinition cd : pkColumns) {
-            names.add(cd.name.toString());
-        }
-        return names;
-    }
+
 
     
-    public void buildPrimaryKeyFragment(final String ksName, final String cfName, StringBuilder pkCols, StringBuilder pkWhere) throws ConfigurationException {
-        List<ColumnDefinition> pkColumns = getPrimaryKeyColumns(ksName, cfName);
-        for (ColumnDefinition cd : pkColumns) {
-            if (pkCols.length() > 0) {
-                pkCols.append(',');
-                pkWhere.append(" AND ");
+    public void buildPrimaryKeyFragment(final String ksName, final String cfName, StringBuilder ptCols, StringBuilder pkCols, StringBuilder pkWhere) throws ConfigurationException {
+        CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
+        for (ColumnDefinition cd : metadata.partitionKeyColumns()) {
+            if (ptCols != null && ptCols.length() > 0) {
+                ptCols.append(',');
+                if (pkCols != null) pkCols.append(',');
+                if (pkWhere != null) pkWhere.append(" AND ");
             }
-            pkCols.append('\"').append(cd.name.toString()).append('\"');
-            pkWhere.append('\"').append(cd.name.toString()).append("\" = ?");
+            if (ptCols != null) ptCols.append('\"').append(cd.name.toString()).append('\"');
+            if (pkCols != null) pkCols.append('\"').append(cd.name.toString()).append('\"');
+            if (pkWhere != null) pkWhere.append('\"').append(cd.name.toString()).append("\" = ?");
+        }
+        for (ColumnDefinition cd : metadata.clusteringColumns()) {
+            if (pkCols != null && pkCols.length() > 0) {
+                pkCols.append(',');
+                if (pkWhere != null) pkWhere.append(" AND ");
+            }
+            if (pkCols != null) pkCols.append('\"').append(cd.name.toString()).append('\"');
+            if (pkWhere != null) pkWhere.append('\"').append(cd.name.toString()).append("\" = ?");
         }
     }
 
@@ -897,7 +1007,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             if (mappingMetaData != null) {
                 try {
                     Set<String> set = ((Map<String, Object>)mappingMetaData.sourceAsMap().get("properties")).keySet();
-                    set.remove(ElasticSecondaryIndex.ELASTIC_TOKEN);
+                    //set.remove(ElasticSecondaryIndex.ELASTIC_TOKEN);
                     Collection<String> cols = new ArrayList<String>(set.size());
                     for(String s : set) {
                         int x = s.indexOf('.');
@@ -943,13 +1053,9 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
      * Fetch from the coordinator node.
      */
     @Override
-    public UntypedResultSet fetchRow(final String index, final String type, final Collection<String> requiredColumns, final String id, final ConsistencyLevel cl) throws InvalidRequestException,
+    public UntypedResultSet fetchRow(final String index, final String cfName, final Collection<String> requiredColumns, final String id, final ConsistencyLevel cl) throws InvalidRequestException,
             RequestExecutionException, RequestValidationException, IOException {
-        Pair<String, String> targetPair = ElasticSecondaryIndex.mapping.get(Pair.<String, String> create(index, type));
-        String ksName = (targetPair == null) ? index : targetPair.left;
-        String cfName = (targetPair == null) ? type : targetPair.right;
-
-        return process(cl, buildFetchQuery(ksName,cfName,requiredColumns), parseElasticId(ksName, cfName, id));
+        return process(cl, buildFetchQuery(index,cfName,requiredColumns), parseElasticId(index, cfName, id));
     }
 
     /**
@@ -966,29 +1072,29 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
      * @throws IOException
      */
     @Override
-    public UntypedResultSet fetchRowInternal(final String index, final String type, final Collection<String> requiredColumns, final String id) throws ConfigurationException, IOException  {
-        Pair<String, String> targetPair = ElasticSecondaryIndex.mapping.get(Pair.<String, String> create(index, type));
-        String ksName = (targetPair == null) ? index : targetPair.left;
-        String cfName = (targetPair == null) ? type : targetPair.right;
-        return fetchRowInternal(index, type, requiredColumns, parseElasticId(ksName, cfName, id));
+    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final Collection<String> requiredColumns, final String id) throws ConfigurationException, IOException  {
+        return fetchRowInternal(index, cfName, requiredColumns, parseElasticId(index, cfName, id));
     }
     
     @Override
-    public UntypedResultSet fetchRowInternal(final String ksName, final String cfName, final Collection<String> requiredColumns, final Object[] pkColumns) throws ConfigurationException, IOException  {
-        return QueryProcessor.instance.executeInternal(buildFetchQuery(ksName,cfName,requiredColumns), pkColumns);
+    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final Collection<String> requiredColumns, final Object[] pkColumns) throws ConfigurationException, IOException  {
+        return QueryProcessor.instance.executeInternal(buildFetchQuery(index,cfName,requiredColumns), pkColumns);
     }
     
-    public String buildFetchQuery(final String ksName, final String cfName, final Collection<String> requiredColumns) throws ConfigurationException {
+    public String buildFetchQuery(final String index, final String cfName, final Collection<String> requiredColumns) throws ConfigurationException {
+        IndexService indexService = this.indicesService.indexService(index);
+        String ksName = indexService.getIndexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
         StringBuilder columns = new StringBuilder();
+        StringBuilder ptColums = new StringBuilder();
         StringBuilder pkColums = new StringBuilder();
         StringBuilder pkWhere = new StringBuilder();
         
-        buildPrimaryKeyFragment(ksName, cfName, pkColums, pkWhere);
+        buildPrimaryKeyFragment(ksName, cfName, ptColums, pkColums, pkWhere);
         for (String c : requiredColumns) {
             if (columns.length() > 0)
                 columns.append(',');
             if (c.equals("_token")) {
-                columns.append("token(").append(pkColums).append(") as \"_token\"");
+                columns.append("token(").append(ptColums).append(") as \"_token\"");
             } else {
                 columns.append("\"").append(c).append("\"");
             }
@@ -997,15 +1103,10 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     }
 
     @Override
-    public void deleteRow(final String index, final String type, final String id, final ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
+    public void deleteRow(final String ksName, final String cfName, final String id, final ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
             IOException {
-        Pair<String, String> targetPair = ElasticSecondaryIndex.mapping.get(Pair.<String, String> create(index, type));
-        String ksName = (targetPair == null) ? index : targetPair.left;
-        String cfName = (targetPair == null) ? type : targetPair.right;
-
-        StringBuilder pkCols = new StringBuilder();
         StringBuilder pkWhere = new StringBuilder();
-        buildPrimaryKeyFragment(ksName, cfName, pkCols, pkWhere);
+        buildPrimaryKeyFragment(ksName, cfName, null, null, pkWhere);
 
         String query = String.format("DELETE FROM \"%s\".\"%s\" WHERE %s", new Object[] { ksName, cfName, pkWhere });
         process(cl, query, parseElasticId(ksName, cfName, id));
@@ -1030,12 +1131,12 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             ColumnSpecification colSpec = columnSpecs.get(columnIndex);
             String columnName = colSpec.name.toString();
             CQL3Type cql3Type = colSpec.type.asCQL3Type();
+            FieldMapper<?> fieldMapper = documentMapper.mappers().smartNameFieldMapper(columnName);
             
             if (!row.has(colSpec.name.toString()))
                 continue;
 
             if (cql3Type instanceof CQL3Type.Native) {
-                FieldMapper<?> fieldMapper = documentMapper.mappers().smartNameFieldMapper(columnName);
                 switch ((CQL3Type.Native) cql3Type) {
                 case ASCII:
                 case TEXT:
@@ -1097,14 +1198,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     } else {
                         list = row.getList(colSpec.name.toString(), elementType);
                     }
-                    if (elementType instanceof TimestampType) {
-                        // Timestamp+Date are stored as Long in ElasticSearch
-                        List<Long> dateList = new ArrayList<Long>(list.size());
-                        for (Object date : list) {
-                            dateList.add(((Date) date).getTime());
-                        }
-                        list = dateList;
-                    }
                     mapObject.put(columnName, (list.size() == 1) ? list.get(0) : list);
                     putCount++;
                     break;
@@ -1119,14 +1212,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                         }
                     } else {
                         set = row.getSet(colSpec.name.toString(), elementType);
-                    }
-                    if (elementType instanceof TimestampType) {
-                        // Timestamp+Date are stored as Long in ElasticSearch
-                        Set<Long> dateSet = new HashSet<Long>(set.size());
-                        for (Object date : set) {
-                            dateSet.add(((Date) date).getTime());
-                        }
-                        set = dateSet;
                     }
                     mapObject.put(columnName, (set.size() == 1) ? set.iterator().next() : set);
                     putCount++;
@@ -1146,13 +1231,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                         }
                     } else {
                         map = row.getMap(colSpec.name.toString(), keyType, elementType);
-                    }
-                    if (elementType instanceof TimestampType) {
-                        Map<String, Long> dateMap = new HashMap<String, Long>(map.size());
-                        for(Object key : map.keySet()) {
-                            dateMap.put((String)key, ((Date) map.get(key)).getTime());
-                        }
-                        map = dateMap;
                     }
                     mapObject.put(columnName, map);
                     putCount++;
@@ -1223,10 +1301,10 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 .timestamp(request.timestamp()).ttl(request.ttl());
 
         Engine.Index index = indexShard.prepareIndex(sourceToParse, request.version(), request.versionType(), Engine.Operation.Origin.PRIMARY, request.canHaveDuplicates());
-        boolean mappingUpdated = false;
         if (index.parsedDoc().mappingsModified()) {
-            mappingUpdated = true;
-            // blocking Elasticsearch mapping update (required to update cassandra schema, this is the cost of dynamic mapping)
+            if (logger.isDebugEnabled()) 
+                logger.debug("Document source={} require a blocking mapping update of [{}]", request.sourceAsMap(), indexService.index().name());
+            // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
             blockingMappingUpdate(indexService, index.docMapper());
         }
 
@@ -1235,8 +1313,11 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         Map<String, ObjectMapper> objectMappers = index.docMapper().objectMappers();
         DocumentFieldMappers fieldMappers = index.docMapper().mappers();
 
-        logger.debug("Insert id={} source={} mapping_updated={} fieldMappers={} objectMappers={} consistency={} ttl={}", request.id(), sourceMap, mappingUpdated,
+        if (logger.isDebugEnabled()) 
+            logger.debug("Insert index=[{}] id=[{}] source={} fieldMappers={} objectMappers={} consistency={} ttl={}", 
+                indexService.index().name(), request.id(), sourceMap,
                 Arrays.toString(fieldMappers.toArray()), objectMappers, request.consistencyLevel().toCassandraConsistencyLevel(), request.ttl());
+
 
         Map<String, Object> map = new HashMap<String, Object>();
         for (String field : sourceMap.keySet()) {
@@ -1302,7 +1383,8 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             }
         }
 
-        return insertRow(request.index(), request.type(), map, request.id(),
+        String keyspaceName = indexService.getIndexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, request.index());
+        return insertRow(keyspaceName, request.type(), map, request.id(),
                 (request.opType() == OpType.CREATE), request.ttl(), request.consistencyLevel().toCassandraConsistencyLevel(), writetime, applied);
     }
 
@@ -1317,12 +1399,9 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
      * java.lang.Boolean)
      */
     @Override
-    public String insertRow(final String index, final String type, Map<String, Object> map, String id, final boolean ifNotExists, final long ttl, final ConsistencyLevel cl,
+    public String insertRow(final String ksName, final String cfName, Map<String, Object> map, String id, final boolean ifNotExists, final long ttl, final ConsistencyLevel cl,
             Long writetime, Boolean applied) throws Exception {
-        Pair<String, String> targetPair = ElasticSecondaryIndex.mapping.get(Pair.<String, String> create(index, type));
-        String ksName = (targetPair == null) ? index : targetPair.left;
-        String cfName = (targetPair == null) ? type : targetPair.right;
-
+        
         CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
         // if the provided columns does not contains all the primary key columns, parse the _id to populate the columns in map.
         boolean buildId = true;
@@ -1332,7 +1411,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 addToJsonArray(cd.type, map.get(cd.name.toString()), array);
             } else {
                 buildId = false;
-                parseElasticId(index, type, id, map);
+                parseElasticId(ksName, cfName, id, map);
             }
         }
         if (buildId) {
@@ -1383,6 +1462,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
      */
     @Override
     public void index(String[] indices, Collection<Range<Token>> tokenRanges) {
+        /*
         ImmutableBiMap<Pair<String, String>, Pair<String, String>> immutableMapping = ImmutableBiMap.<Pair<String, String>, Pair<String, String>> copyOf(ElasticSecondaryIndex.mapping);
         for (String index : indices) {
             for (Entry<Pair<String, String>, Pair<String, String>> entry : immutableMapping.entrySet()) {
@@ -1391,109 +1471,9 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                 }
             }
         }
+        */
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.elasticsearch.cassandra.ElasticSchemaService#indexColumnFamilly(java
-     * .lang.String, java.lang.String, java.lang.String, java.lang.String,
-     * java.util.Collection)
-     */
-    @Override
-    public void indexColumnFamilly(String ksName, String cfName, String index, String type, Collection<Range<Token>> tokenRanges) {
-        try {
-            List<String> pkColums = getPrimaryKeyColumnsName(ksName, cfName);
-            StringBuilder partkeyCols = new StringBuilder();
-            buildPartitionKeyFragment(ksName, cfName, partkeyCols);
-            logger.info("Re-indexing table {}.{} for tokenRanges={}", ksName, cfName, tokenRanges);
-            for (Range<Token> range : tokenRanges) {
-
-                String query = String.format("SELECT * FROM \"%s\".\"%s\" WHERE token(%s) > ? AND token(%s) <= ?", ksName, cfName, partkeyCols, partkeyCols);
-
-                UntypedResultSet result = QueryProcessor.executeInternalWithPaging(query, 1024, new Object[] { range.left.getTokenValue(), range.right.getTokenValue() });
-                for (Row row : result) {
-                    List<ColumnSpecification> columnSpecs = row.getColumns();
-
-                    for (int columnIndex = 0; columnIndex < columnSpecs.size(); columnIndex++) {
-                        ColumnSpecification colSpec = columnSpecs.get(columnIndex);
-                        String columnName = colSpec.name.toString();
-                        CQL3Type cql3Type = colSpec.type.asCQL3Type();
-
-                        if (!row.has(colSpec.name.toString()))
-                            continue;
-                        ArrayList<Object> sourceData = new ArrayList<Object>();
-                        Map<String,Object> primayKeyMap = new HashMap<String,Object>(pkColums.size());
-                        if (cql3Type instanceof CQL3Type.Native) {
-                            int pkIdx = pkColums.indexOf(columnName);
-
-                            switch ((CQL3Type.Native) cql3Type) {
-                            case ASCII:
-                            case TEXT:
-                            case VARCHAR:
-                                sourceData.add(columnName);
-                                sourceData.add(row.getString(columnName));
-                                primayKeyMap.put(columnName, row.getString(columnName));
-                                break;
-                            case TIMEUUID:
-                            case UUID:
-                                sourceData.add(columnName);
-                                sourceData.add(row.getUUID(columnName));
-                                primayKeyMap.put(columnName, row.getUUID(columnName));
-                                break;
-                            case TIMESTAMP:
-                                sourceData.add(columnName);
-                                sourceData.add(row.getTimestamp(columnName).getTime());
-                                primayKeyMap.put(columnName, row.getTimestamp(columnName).getTime());
-                                break;
-                            case VARINT:
-                            case INT:
-                            case BIGINT:
-                                sourceData.add(columnName);
-                                sourceData.add(row.getLong(columnName));
-                                primayKeyMap.put(columnName, row.getLong(columnName));
-                                break;
-                            case FLOAT:
-                                break;
-                            case DECIMAL:
-                            case DOUBLE:
-                                sourceData.add(columnName);
-                                sourceData.add(row.getDouble(columnName));
-                                primayKeyMap.put(columnName, row.getDouble(columnName));
-                                break;
-                            case BLOB:
-                                sourceData.add(columnName);
-                                sourceData.add(row.getBytes(columnName));
-                                primayKeyMap.put(columnName, row.getBytes(columnName));
-                                break;
-                            case BOOLEAN:
-                                sourceData.add(columnName);
-                                sourceData.add(row.getBoolean(columnName));
-                                primayKeyMap.put(columnName, row.getBoolean(columnName));
-                                break;
-                            case COUNTER:
-                                break;
-                            case INET:
-                                sourceData.add(columnName);
-                                sourceData.add(row.getInetAddress(columnName));
-                                primayKeyMap.put(columnName, row.getInetAddress(columnName));
-                                break;
-                            }
-                        } else if (cql3Type.isCollection()) {
-                            // TODO: mapping from list to elastic arrays.
-                        } else if (cql3Type instanceof CQL3Type.Custom) {
-
-                        }
-                
-                        //index(index, type, buildElasticId(ksName, cfName, primayKeyMap), sourceData.toArray());
-                    }
-                }
-            }
-        } catch (ConfigurationException e) {
-            logger.error("Error:", e);
-        }
-    }
     
 
     /*
@@ -1525,8 +1505,8 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     }
 
 
-    public Object[] parseElasticId(final String ksName, final String cfName, final String id) throws IOException {
-        return parseElasticId(ksName, cfName, id, null);
+    public Object[] parseElasticId(final String index, final String cfName, final String id) throws IOException {
+        return parseElasticId(index, cfName, id, null);
     }
     
     /**
@@ -1536,7 +1516,9 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
      * @param map
      * @param id
      */
-    public Object[] parseElasticId(final String ksName, final String cfName, final String id, Map<String, Object> map) throws IOException {
+    public Object[] parseElasticId(final String index, final String cfName, final String id, Map<String, Object> map) throws IOException {
+        IndexService indexService = this.indicesService.indexService(index);
+        String ksName = indexService.getIndexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
         CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
         List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
         List<ColumnDefinition> clusteringColumns = metadata.clusteringColumns();
@@ -1662,14 +1644,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         }
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.elasticsearch.cassandra.ElasticSchemaService#pullMetaData()
-     */
-    public static volatile String lastPulledMetaDataUuid = null;
-    public static volatile long lastPulledMetaDataVersion = -1;
-
+   
     private static final String metaDataTableName = ELASTIC_ADMIN_METADATA_TABLE_PREFIX.concat(DatabaseDescriptor.getLocalDataCenter()).replace("-", "_");
 
     /*
@@ -1684,8 +1659,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         CFMetaData cfm = Schema.instance.getCFMetaData(ELASTIC_ADMIN_KEYSPACE, metaDataTableName);
         cfm.comment(metadataString);
         MigrationManager.announceColumnFamilyUpdate(cfm, false, false);
-        this.lastPulledMetaDataUuid = metadata.uuid();
-        this.lastPulledMetaDataVersion = metadata.version();
     }
 
     /**
@@ -1703,10 +1676,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
                     if (logger.isDebugEnabled()) {
                         logger.debug("recovered metadata from {}.{} = {}", ELASTIC_ADMIN_KEYSPACE, metaDataTableName, MetaData.Builder.toXContent(metaData));
                     }
-                    synchronized (this) {
-                        lastPulledMetaDataUuid = metaData.uuid();
-                        lastPulledMetaDataVersion = metaData.version();
-                    }
                     return metaData;
                 }
             } catch (Exception e) {
@@ -1722,15 +1691,11 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             try {
                 XContentParser xparser = new JsonXContentParser(new JsonFactory().createParser(metadataString));
                 metaData = MetaData.Builder.fromXContent(xparser);
-                if (logger.isDebugEnabled()) {
-                    logger.debug("recovered metadata from {}.{} = {}", ELASTIC_ADMIN_KEYSPACE, metaDataTableName, MetaData.Builder.toXContent(metaData));
+                if (logger.isTraceEnabled()) {
+                    logger.trace("recovered metadata from {}.{} = {}", ELASTIC_ADMIN_KEYSPACE, metaDataTableName, MetaData.Builder.toXContent(metaData));
                 }
             } catch (IOException e) {
                 throw new NoPersistedMetaDataException(e);
-            }
-            synchronized (this) {
-                lastPulledMetaDataUuid = metaData.uuid();
-                lastPulledMetaDataVersion = metaData.version();
             }
             return metaData;
         }
@@ -1741,7 +1706,8 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     public MetaData readMetaDataAsRow() throws NoPersistedMetaDataException {
         UntypedResultSet result;
         try {
-            result = process(ConsistencyLevel.LOCAL_QUORUM, ConsistencyLevel.LOCAL_SERIAL, String.format("SELECT metadata FROM \"%s\".\"%s\" WHERE dc = ?", ELASTIC_ADMIN_KEYSPACE, metaDataTableName),
+            result = process(ConsistencyLevel.LOCAL_QUORUM,
+                    String.format("SELECT metadata FROM \"%s\".\"%s\" WHERE dc = ?", ELASTIC_ADMIN_KEYSPACE, metaDataTableName),
                     DatabaseDescriptor.getLocalDataCenter());
         } catch (RequestExecutionException | RequestValidationException e) {
             throw new NoPersistedMetaDataException(e);
@@ -1776,8 +1742,8 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         }
     }
 
-    private static final String updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE dc = ? IF owner = ? AND version = ?", new Object[] {
-            ELASTIC_ADMIN_KEYSPACE, metaDataTableName });
+    private static final String updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE dc = ? IF owner = ? AND version = ?", 
+            new Object[] {ELASTIC_ADMIN_KEYSPACE, metaDataTableName });
 
     /*
      * (non-Javadoc)

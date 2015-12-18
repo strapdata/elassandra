@@ -148,7 +148,7 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
         }
         final IndexTemplateMetaData template = templateBuilder.build();
 
-        clusterService.submitStateUpdateTask("create-index-template [" + request.name + "], cause [" + request.cause + "]", Priority.URGENT, new TimeoutClusterStateUpdateTask() {
+        clusterService.submitStateUpdateTask("create-index-template [" + request.name + "], cause [" + request.cause + "]", Priority.HIGH, new TimeoutClusterStateUpdateTask() {
 
             @Override
             public TimeValue timeout() {

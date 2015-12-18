@@ -1284,7 +1284,7 @@ public class MetaData implements Iterable<IndexMetaData> {
         }
 
         public Builder(MetaData metaData) {
-            if (metaData.uuid != null && metaData.uuid.equals(SystemKeyspace.getLocalHostId().toString()) && localVersion < metaData.version) {
+            if (metaData.uuid != null && localVersion < metaData.version) {
                 // Initialize localVersion counter from the persisted value.
                 localVersion = metaData.version;
             }

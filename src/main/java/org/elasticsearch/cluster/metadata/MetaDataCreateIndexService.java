@@ -471,8 +471,9 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         if (!currentState.blocks().hasGlobalBlock(GatewayService.NO_CASSANDRA_RING_BLOCK)) {
                             // don't create a keyspace while cassandra is not
                             // fully started.
-                            logger.debug("creating if not exists keyspace {} with RF={}", indexMetaData.index(), indexMetaData.getNumberOfReplicas()+1);
-                            elasticSchemaService.createIndexKeyspace(indexMetaData.index(), indexMetaData.getNumberOfReplicas()+1);
+                            String keyspaceName = indexMetaData.keyspace();
+                            logger.debug("creating if not exists keyspace {} with RF={}", keyspaceName, indexMetaData.getNumberOfReplicas()+1);
+                            elasticSchemaService.createIndexKeyspace(keyspaceName, indexMetaData.getNumberOfReplicas()+1);
                         }
                     } catch (Exception e) {
                         removalReason = "failed to build index metadata or keyspace";

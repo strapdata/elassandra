@@ -35,8 +35,8 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.service.StorageService;
 import org.elasticsearch.ElasticsearchIllegalStateException;
-import org.elasticsearch.cassandra.AbstractSearchStrategy;
-import org.elasticsearch.cassandra.PrimaryFirstSearchStrategy;
+import org.elasticsearch.cassandra.routing.AbstractSearchStrategy;
+import org.elasticsearch.cassandra.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -121,13 +121,14 @@ public class IndexRoutingTable implements Iterable<IndexShardRoutingTable> {
         try {
             Set<InetAddress> aliveEndpoints = Gossiper.instance.getLiveMembers();
             Set<InetAddress> unreachableEndpoints = Gossiper.instance.getUnreachableMembers();
-            topologyResult = new PrimaryFirstSearchStrategy().topology(this.index);
+            String ksName = currentState.metaData().index(index).keyspace();
+            topologyResult = new PrimaryFirstSearchStrategy().topology(ksName);
 
             DiscoveryNode localNode = currentState.nodes().getLocalNode();
 
             //ImmutableShardRouting(String index, int shardId,  String currentNodeId, boolean isPrimary, ShardRoutingState state, long version, Collection<Range<Token>> tokenRanges)
-            ShardRouting shardRouting = new ImmutableShardRouting(index, 0, localNode.id(), true, localPrimaryShardRouting.state(), localPrimaryShardRouting.version(), topologyResult.getTokenRanges(localNode
-                    .getInetAddress()));
+            ShardRouting shardRouting = new ImmutableShardRouting(index, 0, localNode.id(), true, localPrimaryShardRouting.state(), 
+                    localPrimaryShardRouting.version(), topologyResult.getTokenRanges(localNode.getInetAddress()));
             allShards.add(shardRouting);
             allActiveShards.add(shardRouting);
 
@@ -139,8 +140,10 @@ public class IndexRoutingTable implements Iterable<IndexShardRoutingTable> {
                 for (InetAddress deadNode : unreachableEndpoints) {
                     for (List<InetAddress> endPoints : topologyResult.getRangeToAddressMap().values()) {
                         if (endPoints.contains(deadNode) && endPoints.contains(localNode.getInetAddress())) {
-                            shardRoutingList
-                                    .add(new ImmutableShardRouting(index, i, currentState.nodes().findByInetAddress(deadNode).id(), false, ShardRoutingState.UNASSIGNED, currentState.version(), AbstractSearchStrategy.EMPTY_RANGE_TOKEN));
+                            ShardRouting fakeShardRouting = new ImmutableShardRouting(index, i, currentState.nodes().findByInetAddress(deadNode).id(), false, 
+                                    ShardRoutingState.UNASSIGNED, currentState.version(), AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
+                            shardRoutingList.add(fakeShardRouting);
+                            allShards.add(fakeShardRouting);
                             break;
                         }
                     }
@@ -166,8 +169,8 @@ public class IndexRoutingTable implements Iterable<IndexShardRoutingTable> {
                         // get state from gossip state
                         shardRoutingState = clusterService.readIndexShardState(node.getInetAddress(), index, shardRoutingState);
 
-                        shardRouting = new ImmutableShardRouting(index, i, node.id(), true, shardRoutingState, // We assue shard is started on alive nodes...
-                        currentState.version(), token_ranges);
+                        shardRouting = new ImmutableShardRouting(index, i, node.id(), true, shardRoutingState, // We assume shard is started on alive nodes...
+                                                                    currentState.version(), token_ranges);
                         allShards.add(shardRouting);
                         if (shardRouting.active()) {
                             allActiveShards.add(shardRouting);
@@ -180,9 +183,10 @@ public class IndexRoutingTable implements Iterable<IndexShardRoutingTable> {
                             for (InetAddress deadNode : unreachableEndpoints) {
                                 for (List<InetAddress> endPoints : topologyResult.getRangeToAddressMap().values()) {
                                     if (endPoints.contains(deadNode) && endPoints.contains(node.getInetAddress())) {
-                                        shardRoutingList
-                                                .add(new ImmutableShardRouting(index, i, currentState.nodes().findByInetAddress(deadNode).id(), false, ShardRoutingState.UNASSIGNED, currentState
-                                                        .version(), AbstractSearchStrategy.EMPTY_RANGE_TOKEN));
+                                        ShardRouting fakeShardRouting = new ImmutableShardRouting(index, i, currentState.nodes().findByInetAddress(deadNode).id(), false, ShardRoutingState.UNASSIGNED, currentState
+                                                .version(), AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
+                                        shardRoutingList.add(fakeShardRouting);
+                                        allShards.add(fakeShardRouting);
                                         break;
                                     }
                                 }

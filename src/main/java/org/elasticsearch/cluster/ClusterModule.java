@@ -23,7 +23,9 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.elasticsearch.cassandra.ElasticSchemaService;
+import org.elasticsearch.cassandra.ElasticSecondaryIndicesService;
 import org.elasticsearch.cassandra.SchemaService;
+import org.elasticsearch.cassandra.SecondaryIndicesService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.action.index.NodeIndexDeletedAction;
 import org.elasticsearch.cluster.action.index.NodeMappingRefreshAction;
@@ -37,7 +39,6 @@ import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.cluster.metadata.MetaDataService;
 import org.elasticsearch.cluster.metadata.MetaDataUpdateSettingsService;
 import org.elasticsearch.cluster.node.DiscoveryNodeService;
-import org.elasticsearch.cluster.routing.RoutingService;
 import org.elasticsearch.cluster.routing.allocation.AllocationModule;
 import org.elasticsearch.cluster.routing.operation.OperationRoutingModule;
 import org.elasticsearch.cluster.service.InternalClusterService;
@@ -77,6 +78,7 @@ public class ClusterModule extends AbstractModule implements SpawnModules {
     @Override
     protected void configure() {
         bind(SchemaService.class).to(ElasticSchemaService.class).asEagerSingleton();
+        bind(SecondaryIndicesService.class).to(ElasticSecondaryIndicesService.class).asEagerSingleton();
 
         bind(DiscoveryNodeService.class).asEagerSingleton();
         bind(ClusterService.class).to(InternalClusterService.class).asEagerSingleton();
@@ -90,7 +92,7 @@ public class ClusterModule extends AbstractModule implements SpawnModules {
         bind(MetaDataUpdateSettingsService.class).asEagerSingleton();
         bind(MetaDataIndexTemplateService.class).asEagerSingleton();
 
-        bind(RoutingService.class).asEagerSingleton();
+        //bind(RoutingService.class).asEagerSingleton();
 
         // bind(ShardStateAction.class).asEagerSingleton();
 

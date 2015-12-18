@@ -21,6 +21,7 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
 import org.elasticsearch.bootstrap.JVMCheck;
 import org.elasticsearch.cassandra.ElasticSchemaService;
+import org.elasticsearch.cassandra.ElasticSecondaryIndex;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.CreationException;

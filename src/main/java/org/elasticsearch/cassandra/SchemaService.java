@@ -39,6 +39,7 @@ import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.fieldvisitor.FieldsVisitor;
@@ -55,8 +56,14 @@ public interface SchemaService {
     public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Object node, Map<String, GetField> flatFields);
     public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> fields);
 
+    public void createElasticAdminKeyspace() throws Exception;
     public void createIndexKeyspace(String index, int replicationFactor) throws IOException;
-
+    
+    public void createSecondaryIndices(String index) throws IOException;
+    public void createSecondaryIndex(String ksName, MappingMetaData mapping) throws IOException;
+    public void dropSecondaryIndices(String ksName) throws RequestExecutionException;
+    public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException;
+    
     public void removeIndexKeyspace(String index) throws IOException;
     
     public String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
@@ -64,8 +71,6 @@ public interface SchemaService {
     public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
     
     public List<ColumnDefinition> getPrimaryKeyColumns(String ksName, String cfName) throws ConfigurationException;
-
-    public List<String> getPrimaryKeyColumnsName(String ksName, String cfName) throws ConfigurationException;
 
     public Collection<String> mappedColumns(final String index, final String type);
     public String[] mappedColumns(final MapperService mapperService, final String type);
@@ -94,15 +99,13 @@ public interface SchemaService {
 
     public void index(String[] indices, Collection<Range<Token>> tokenRanges);
 
-    public void indexColumnFamilly(String ksName, String cfName, String index, String type, Collection<Range<Token>> tokenRanges);
-
     public void index(String index, String type, String id, Object[] sourceData);
 
     public void blockingMappingUpdate(IndexService indexService, DocumentMapper mapper ) throws Exception;
     
     public Token getToken(ByteBuffer rowKey, ColumnFamily cf);
 
-    public void createElasticAdminKeyspace() throws Exception;
+    
 
     public void writeMetaDataAsComment(MetaData metadata) throws ConfigurationException, IOException;
 

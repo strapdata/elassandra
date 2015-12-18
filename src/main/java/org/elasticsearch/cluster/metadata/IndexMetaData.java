@@ -176,6 +176,7 @@ public class IndexMetaData {
     public static final String SETTING_CREATION_DATE = "index.creation_date";
     public static final String SETTING_UUID = "index.uuid";
     public static final String SETTING_DATA_PATH = "index.data_path";
+    public static final String SETTING_KEYSPACE_NAME = "index.keyspace_name"; 
     public static final String INDEX_UUID_NA_VALUE = "_na_";
 
     private final String index;
@@ -315,6 +316,10 @@ public class IndexMetaData {
         return settings();
     }
 
+    public String keyspace() {
+        return settings().get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
+    }
+    
     public ImmutableOpenMap<String, AliasMetaData> aliases() {
         return this.aliases;
     }

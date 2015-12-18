@@ -2,6 +2,8 @@
 
 Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) version 1.5 modified to run on top of [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
+![Elassandra architecture](/images/elassandra1.png)
+
 Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes. A demo video is available on youtube.
 
 <a href="http://www.youtube.com/watch?feature=player_embedded&v=a4sjX15OOrA
@@ -10,7 +12,8 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
-* **2015-11-15 New elassandra tarball ready-to-run**.
+* **2015-12-18 Release 0.5 Re-index you data from cassandra with zero downtime**.
+* **2015-11-15 Release 0.4 New elassandra tarball ready-to-run**.
 
 ## Benefits of Elassandra
 
@@ -18,16 +21,17 @@ For cassandra users, elassandra provides elasicsearch features :
 * Cassandra update are automatically indexed in Elasticsearch.
 * Full-Text and spatial search on your cassandra data.
 * Real-time aggregation (does not require Spark or Hadoop to group by)
-* Provide search on multiple tables in one query.
+* Provide search on multiple keyspace and tables in one query.
 * Provide automatic schema creation and support nested document using User Defined Types.
 * Provide a read/write JSON REST access to cassandra data (for indexed data)
 * There are many elasticsearch plugins to import data in cassandra or to visualize your data, with [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) for exemple.
 
 For Elasticsearch users, elassandra provides usefull features :
-* Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Moreover, source documents are now stored in Cassandra, reducing disk space if you need a noSql database and elasticsearch.
-* In elassandra, Elasticsearch is masterless and split-brain resistant because cluster state is now manager within [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
+* Change the mapping and re-index you data from cassandra with zero downtime, see [Mapping change with zero downtime](Mapping-change-with-zero-downtime)
+* Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Source documents are now stored in Cassandra, reducing disk space if you need a noSql database and elasticsearch.
+* In elassandra, Elasticsearch is masterless and split-brain resistant because cluster state is now managed within a [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
 * Write operations are not more restricted to one primary shards, but distributed on all cassandra nodes in a virtual datacenter. Number of shards does not limit your write throughput, just add some elassandra nodes to increase both read and write throughput.
-* Elasticsearch indices can be replicated between many cassandra datacenters, allowing to write in the closest datacenter and search globally.
+* Elasticsearch indices can be replicated between many cassandra datacenters, allowing to write to the closest datacenter and search globally.
 * The [cassandra driver](http://www.planetcassandra.org/client-drivers-tools/) is Datacenter and Token aware.
 * Hadoop Hive, Pig and Spark support with pushdown predicate.
 * Cassandra supports partial update and [distributed counters](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_counter_t.html).
@@ -627,20 +631,52 @@ curl -XPUT "http://localhost:9200/my_keyspace/_mapping/my_table" -d '{
 }'
 ```
 
-If you need to set specific mapping for some columns, you can 
+When creating the first Elasticsearch index for a given cassandra table, custom CQL3 secondary indices are created and cassandra asynchronously index all existing data. Later CQL inserts or updates are automatically indexed in Elasticsearch. Then if you add a second or more Elasticsearch indices to an existing indexed table (see (Mapping change with zero downtime)[#Mapping-change-with-zero-downtime], existing data are not automatically indexed because cassandra has already indexed existing data. Rebuild the cassandra index to re-index all existing data in all  Elasticsearch indices.
+
 ##  Compound primary key support
 
 When mapping an existing cassandra table to an Elasticsearch index.type, primary key is mapped to the `_id` field. 
 * Single primary key is converted to a string.
 * Compound primary key is converted to a JSON array stored as string in the  `_id` field.
 
+## Mapping-change-with-zero-downtime
+
+You can map servral Elasticsearch indices with different mapping to the same cassandra keyspace. By default, an index is mapped to a keyspace with the same name, but you can specify a target keyspace. 
+
+![Elassandra multiple indice mapping](/images/multi-index.png)
+
+For exemple, the following command creates a new index **twitter2** mapped to the cassandra keyspace **twitter** and set a mapping for type **tweet** associated to the cassandra table **twitter.tweet**. 
+``` 
+curl -XPUT "http://localhost:9200/twitter2/" -d '{ "settings" : { "keyspace_name" : "twitter" } }'
+curl -XPUT "http://localhost:9200/twitter2/_mapping/tweet" -d '{ 
+    "tweet" : {
+            "properties" : {
+              "message" : { "type" : "string", "index" : "not_analyzed" },
+              "post_date" : { "type" : "date", "format": "yyyy-MM-dd" },
+              "user" : { "type" : "string","index" : "not_analyzed" },
+              "size" : { "type" : "long" }
+            }
+   }
+}'
+``` 
+
+You can the set a specific mapping for **twitter2** and re-index existing data on each cassandra node. Because cassandra rebuild indices from SSTable, we need to flush the table **twitter.tweet** before to rebuild the secondary index that update the Elasticsearch index. This secondary index is named **elatic_<table_name>**. New data inserted to the cassandra table **twitter.tweet** are indexed in **twitter2** as soon as you set the mapping.
+```
+nodetool rebuild_index twitter tweet elastic_tweet
+```
+
+Once your **twitter2** index is ready, set an alias **twitter** for **twitter2** to switch from the old mapping to the new one, and delete the old **twitter** index.
+```
+curl -XPOST "http://localhost:9200/_aliases" -d '{ "actions" : [ { "add" : { "index" : "twitter2", "alias" : "twitter" } } ] }'
+curl -XDELETE "http://localhost:9200/twitter"
+```
+
 ## Object and Nested mapping
 
 By default, Elasticsearch [object or nested types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-object-type.html) are mapped to dynamically created Cassandra User Defined Types. 
 
 ```
-curl -XPUT 'http://localhost:9200/twitter/tweet/1' -d '
-{
+curl -XPUT 'http://localhost:9200/twitter/tweet/1' -d '{
      "user" : {
          "name" : {
              "first_name" : "Vincent",

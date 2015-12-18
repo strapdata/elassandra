@@ -46,6 +46,7 @@ import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
 
 import com.google.common.base.Charsets;
+import com.google.common.net.InetAddresses;
 
 /**
  *
@@ -1201,7 +1202,7 @@ public final class XContentBuilder implements BytesStream, Releasable {
         } else if (type == Boolean.class) {
             generator.writeBoolean(((Boolean) value).booleanValue());
         } else if (value instanceof InetAddress) {
-            generator.writeString(((InetAddress) value).getHostAddress());
+            generator.writeString(InetAddresses.toAddrString((InetAddress) value));
         } else if (type == GeoPoint.class) {
             generator.writeStartObject();
             generator.writeNumberField("lat", ((GeoPoint) value).lat());

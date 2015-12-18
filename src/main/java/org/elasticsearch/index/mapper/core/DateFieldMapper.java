@@ -24,6 +24,7 @@ import static org.elasticsearch.index.mapper.core.TypeParsers.parseDateTimeForma
 import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -246,6 +247,9 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
         }
         if (value instanceof BytesRef) {
             return Numbers.bytesToLong((BytesRef) value);
+        }
+        if (value instanceof Date) {
+            return ((Date)value).getTime();
         }
         return parseStringValue(value.toString());
     }

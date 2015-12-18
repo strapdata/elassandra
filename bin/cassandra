@@ -142,11 +142,6 @@ launch_service()
     cassandra_parms="$cassandra_parms -Dcassandra.logdir=$CASSANDRA_HOME/logs"
     cassandra_parms="$cassandra_parms -Dcassandra.storagedir=$cassandra_storagedir"
     
-    # Added for elasticsearch
-    # cassandra_parms="$cassandra_parms -Dcassandra.boot_without_jna=true"
-    cassandra_parms="$cassandra_parms -Djava.library.path=$CASSANDRA_HOME/lib/sigar"
-    cassandra_parms="$cassandra_parms -ea"
-	
     if [ "x$pidpath" != "x" ]; then
         cassandra_parms="$cassandra_parms -Dcassandra-pidfile=$pidpath"
     fi
@@ -195,18 +190,17 @@ while true; do
             properties="$properties -D$2"
             shift 2
         ;;
-        
-		-e)	# Start Elaticsearch in cassandra.
-			echo "Starting with Elasticsearch enabled."
-			#CLASSPATH="$CLASSPATH:$CASSANDRA_HOME/lib/sigar/libsigar-universal64-macosx.dylib"
-			JVM_OPTS="$JVM_OPTS -Djava.library.path=$CASSANDRA_HOME/lib/sigar -ea -Djava.awt.headless=true"
-			JVM_OPTS="$JVM_OPTS -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 -XX:+UseCMSInitiatingOccupancyOnly"
-			JVM_OPTS="$JVM_OPTS -XX:-UseSplitVerifier"
-			classname="org.apache.cassandra.service.ElassandraDaemon"
-	    	shift 1
+        -e)
+            echo "Starting with Elasticsearch enabled."
+            echo "CLASSPATH=$CLASSPATH"
+            JVM_OPTS="$JVM_OPTS -Djava.library.path=$CASSANDRA_HOME/lib/sigar -Djava.awt.headless=true"
+            JVM_OPTS="$JVM_OPTS -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 -XX:+UseCMSInitiatingOccupancyOnly"
+            classname="org.apache.cassandra.service.ElassandraDaemon"
+            shift 1
         ;;
         -d) # start in debug mode
-            JVM_OPTS="$JVM_OPTS -Xdebug -Xnoagent -Xrunjdwp:transport=dt_socket,server=y,suspend=${JVM_DEBUG_WAIT:-n},address=$JVM_DEBUG_PORT"
+            echo "Starting with JVM debug address=${JVM_DEBUG_PORT:-4242} suspend=${JVM_DEBUG_WAIT:-n}"
+            JVM_OPTS="$JVM_OPTS -ea -Xdebug -Xnoagent -Xrunjdwp:transport=dt_socket,server=y,suspend=${JVM_DEBUG_WAIT:-n},address=${JVM_DEBUG_PORT:-4242}"
             shift 1
         ;;
         -H)
@@ -222,7 +216,7 @@ while true; do
             break
         ;;
         *)
-            echo "Error parsing arguments!" >&2
+            echo "Error parsing arguments: $1" >&2
             exit 1
         ;;
     esac

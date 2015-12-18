@@ -24,6 +24,7 @@ import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.net.InetAddress;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -200,6 +201,9 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
         }
         if (value instanceof BytesRef) {
             return Numbers.bytesToLong((BytesRef) value);
+        }
+        if (value instanceof InetAddress) {
+            return ipToLong(InetAddresses.toAddrString((InetAddress)value));
         }
         return ipToLong(value.toString());
     }

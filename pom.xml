@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.elassandra</groupId>
     <artifactId>elassandra</artifactId>
-    <version>0.4.2</version>
+    <version>0.5</version>
     <packaging>jar</packaging>
     <description>Elassandra - ElasticSearch for Cassandra</description>
     <inceptionYear>2015</inceptionYear>
@@ -1422,6 +1422,7 @@
                                 <exclude>src/main/java/org/elasticsearch/common/Bytes.java</exclude>
                                 <!-- Elassandra specific classes -->
                                 <exclude>src/main/java/org/elasticsearch/cassandra/*.java</exclude>
+                                <exclude>src/main/java/org/elasticsearch/cassandra/routing/*.java</exclude>
                                 <exclude>src/main/java/org/elasticsearch/discovery/cassandra/*.java</exclude>
                                 <exclude>src/main/java/org/elasticsearch/gateway/cassandra/*.java</exclude>
                                 <exclude>src/main/java/**/*.buk</exclude>

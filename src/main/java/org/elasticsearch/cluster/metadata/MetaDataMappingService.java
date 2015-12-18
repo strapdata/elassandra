@@ -22,11 +22,9 @@ package org.elasticsearch.cluster.metadata;
 import static com.google.common.collect.Maps.newHashMap;
 import static org.elasticsearch.index.mapper.DocumentMapper.MergeFlags.mergeFlags;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,6 +38,7 @@ import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
+import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.component.AbstractComponent;
@@ -355,7 +354,7 @@ public class MetaDataMappingService extends AbstractComponent {
             insertOrder = ++refreshOrUpdateInsertOrder;
             refreshOrUpdateQueue.add(new RefreshTask(index, indexUUID, types));
         }
-        clusterService.submitStateUpdateTask("refresh-mapping [" + index + "][" + Arrays.toString(types) + "]", Priority.HIGH, new ProcessedClusterStateUpdateTask() {
+        clusterService.submitStateUpdateTask("refresh-mapping [" + index + "][" + Arrays.toString(types) + "]", Priority.URGENT, new ProcessedClusterStateUpdateTask() {
             private volatile List<MappingTask> allTasks;
 
             @Override
@@ -393,7 +392,7 @@ public class MetaDataMappingService extends AbstractComponent {
             insertOrder = ++refreshOrUpdateInsertOrder;
             refreshOrUpdateQueue.add(new UpdateTask(index, indexUUID, type, mappingSource, order, nodeId, listener));
         }
-        clusterService.submitStateUpdateTask("update-mapping [" + index + "][" + type + "] / node [" + nodeId + "], order [" + order + "]", Priority.HIGH, new ProcessedClusterStateUpdateTask() {
+        clusterService.submitStateUpdateTask("update-mapping [" + index + "][" + type + "] / node [" + nodeId + "], order [" + order + "]", Priority.URGENT, new ProcessedClusterStateUpdateTask() {
             private volatile List<MappingTask> allTasks;
 
             public void onFailure(String source, Throwable t) {
@@ -429,13 +428,23 @@ public class MetaDataMappingService extends AbstractComponent {
     }
 
     public void removeMapping(final DeleteMappingClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
-        clusterService.submitStateUpdateTask("remove-mapping [" + Arrays.toString(request.types()) + "]", Priority.HIGH,
+        
+        clusterService.submitStateUpdateTask("remove-mapping [" + Arrays.toString(request.types()) + "]", Priority.URGENT,
                 new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, listener) {
                     @Override
                     protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
                         return new ClusterStateUpdateResponse(acknowledged);
                     }
 
+                    public boolean mustAck(DiscoveryNode discoveryNode) {
+                        return true;
+                    }
+                    
+                    @Override
+                    public boolean mustApplyMetaData() {
+                        return true;
+                    }
+                    
                     @Override
                     public ClusterState execute(ClusterState currentState) {
                         if (request.indices().length == 0) {
@@ -480,14 +489,19 @@ public class MetaDataMappingService extends AbstractComponent {
 
     public void putMapping(final PutMappingClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
 
-        clusterService.submitStateUpdateTask("put-mapping [" + request.type() + "]", Priority.HIGH, new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, listener) {
+        clusterService.submitStateUpdateTask("put-mapping [" + request.type() + "]", Priority.URGENT, new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(request, listener) {
 
             
             @Override
             protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
                 return new ClusterStateUpdateResponse(acknowledged);
             }
-
+           
+            @Override
+            public boolean mustApplyMetaData() {
+                return true;
+            }
+            
             @Override
             public ClusterState execute(final ClusterState currentState) throws Exception {
                 //List<String> indicesToClose = Lists.newArrayList();

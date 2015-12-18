@@ -357,5 +357,25 @@ public enum CollectionUtils {
 
     }
 
+    /**
+     * Avoid full sorting on CopyOnArrayList, @see http://www.javacreed.com/sorting-a-copyonwritearraylist/
+     * @param list
+     * @param item
+     * @return
+     */
+    public static <T extends Comparable<T>> int addInOrder(final List<T> list, final T item) {
+        final int insertAt;
+        // The index of the search key, if it is contained in the list; otherwise, (-(insertion point) - 1).
+        final int index = Collections.binarySearch(list, item);
+        if (index < 0) {
+          insertAt = -(index + 1);
+        } else {
+          insertAt = index + 1;
+        }
+
+        list.add(insertAt, item);
+        return insertAt;
+    }
+
 
 }

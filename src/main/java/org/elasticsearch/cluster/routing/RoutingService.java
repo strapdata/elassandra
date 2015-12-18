@@ -71,7 +71,7 @@ public class RoutingService extends AbstractLifecycleComponent<RoutingService> i
         this.clusterService = clusterService;
         //this.allocationService = allocationService;
         this.schedule = componentSettings.getAsTime("schedule", timeValueSeconds(10));
-        clusterService.addFirst(this);
+        //clusterService.addFirst(this);
     }
 
     @Override
@@ -140,18 +140,17 @@ public class RoutingService extends AbstractLifecycleComponent<RoutingService> i
             if (lifecycle.stopped()) {
                 return;
             }
+            /*
             clusterService.submitStateUpdateTask(CLUSTER_UPDATE_TASK_SOURCE, Priority.HIGH, new ClusterStateUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
                     return currentState;
-                    /*
                     RoutingAllocation.Result routingResult = allocationService.reroute(currentState);
                     if (!routingResult.changed()) {
                         // no state changed
                         return currentState;
                     }
                     return ClusterState.builder(currentState).routingResult(routingResult).build();
-                    */
                 }
 
                 @Override
@@ -170,6 +169,7 @@ public class RoutingService extends AbstractLifecycleComponent<RoutingService> i
                 }
             });
             routingTableDirty = false;
+            */
         } catch (Exception e) {
             ClusterState state = clusterService.state();
             logger.warn("Failed to reroute routing table, current state:\n{}", e, state.prettyPrint());

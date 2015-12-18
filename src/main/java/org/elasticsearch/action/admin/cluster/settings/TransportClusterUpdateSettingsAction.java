@@ -142,7 +142,7 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
                 // to the components until the ClusterStateListener instances
                 // have been invoked, but are visible after
                 // the first update task has been completed.
-                clusterService.submitStateUpdateTask("reroute_after_cluster_update_settings", Priority.URGENT, new AckedClusterStateUpdateTask<ClusterUpdateSettingsResponse>(request, listener) {
+                clusterService.submitStateUpdateTask("reroute_after_cluster_update_settings", Priority.HIGH, new AckedClusterStateUpdateTask<ClusterUpdateSettingsResponse>(request, listener) {
 
                     @Override
                     public boolean mustAck(DiscoveryNode discoveryNode) {

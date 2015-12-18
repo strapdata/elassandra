@@ -46,9 +46,16 @@ public abstract class AckedClusterStateUpdateTask<Response> extends TimeoutClust
      * @return true if the node is expected to send ack back, false otherwise
      */
     public boolean mustAck(DiscoveryNode discoveryNode) {
-        // elassandra manage opartion locally, no more distributed
-        // operation.
+        // elassandra manage opartion locally, no acknowleged operation.
         // return true;
+        return false;
+    }
+    
+    /**
+     * Called to determine if we need to wait that the new cluster state is applied on all alive nodes.
+     * @return
+     */
+    public boolean mustApplyMetaData() {
         return false;
     }
 

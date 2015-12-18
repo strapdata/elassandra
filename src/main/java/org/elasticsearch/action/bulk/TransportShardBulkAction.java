@@ -45,6 +45,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -455,7 +456,8 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
         assert deleteRequest.versionType().validateVersionForWrites(deleteRequest.version());
         
         try {
-            elasticSchemaService.deleteRow(request.index(), deleteRequest.type(), deleteRequest.id(), request.consistencyLevel().toCassandraConsistencyLevel() );
+            String mappedKeyspace = this.clusterService.state().metaData().index(request.index()).keyspace();
+            elasticSchemaService.deleteRow((mappedKeyspace == null) ? request.index() : mappedKeyspace, deleteRequest.type(), deleteRequest.id(), request.consistencyLevel().toCassandraConsistencyLevel() );
             DeleteResponse deleteResponse = new DeleteResponse(request.index(), deleteRequest.type(), deleteRequest.id(), delete.version(), true);
             return new WriteResult(deleteResponse, null, true);
         } catch (RequestExecutionException | RequestValidationException | IOException e) {

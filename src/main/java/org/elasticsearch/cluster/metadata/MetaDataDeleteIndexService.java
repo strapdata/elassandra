@@ -19,7 +19,8 @@
 
 package org.elasticsearch.cluster.metadata;
 
-import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -28,13 +29,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.elasticsearch.action.support.master.MasterNodeOperationRequest;
 import org.elasticsearch.cassandra.SchemaService;
+import org.elasticsearch.cassandra.SecondaryIndicesService;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.TimeoutClusterStateUpdateTask;
-import org.elasticsearch.cluster.action.index.NodeIndexDeletedAction;
 import org.elasticsearch.cluster.block.ClusterBlocks;
-import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractComponent;
@@ -43,7 +42,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.FutureUtils;
 import org.elasticsearch.discovery.DiscoveryService;
-import org.elasticsearch.discovery.cassandra.CassandraDiscovery;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.IndexMissingException;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -63,13 +61,14 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
     private final MetaDataService metaDataService;
 
-    private final DiscoveryService discoveryService;
-    
     private final SchemaService elasticSchemaService;
+    
+    private final SecondaryIndicesService secondaryIndicesService;
     
     @Inject
     public MetaDataDeleteIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService, 
-           MetaDataService metaDataService, SchemaService elasticSchemaService, DiscoveryService discoveryService) {
+           MetaDataService metaDataService, SchemaService elasticSchemaService, DiscoveryService discoveryService,
+           SecondaryIndicesService secondaryIndicesService) {
         super(settings);
         this.threadPool = threadPool;
         this.clusterService = clusterService;
@@ -77,7 +76,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
         //this.nodeIndexDeletedAction = nodeIndexDeletedAction;
         this.metaDataService = metaDataService;
         this.elasticSchemaService = elasticSchemaService;
-        this.discoveryService = discoveryService;
+        this.secondaryIndicesService = secondaryIndicesService;
     }
 
     public void deleteIndex(final Request request, final Listener userListener) {
@@ -113,7 +112,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
     private void deleteIndex(final Request request, final Listener userListener, Semaphore mdLock) {
         final DeleteIndexListener listener = new DeleteIndexListener(mdLock, userListener);
-     
+        
         clusterService.submitStateUpdateTask("delete-index [" + request.index + "]", Priority.URGENT, new TimeoutClusterStateUpdateTask() {
 
             @Override
@@ -131,8 +130,8 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 if (!currentState.metaData().hasConcreteIndex(request.index)) {
                     throw new IndexMissingException(new Index(request.index));
                 }
-
-                logger.info("[{}] deleting index", request.index);
+                String ksName = currentState.metaData().index(request.index).settings().get(IndexMetaData.SETTING_KEYSPACE_NAME, request.index);
+                logger.info("[{}] deleting index, keyspace=[{}]", request.index,ksName);
 
                 RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
                 routingTableBuilder.remove(request.index);
@@ -186,33 +185,26 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 };
                 nodeIndexDeletedAction.add(nodeIndexDeleteListener);
                 */
-                
-                final String index = request.index;
-                CassandraDiscovery.ShardStateRemovedListener gossipListener = new CassandraDiscovery.ShardStateRemovedListener() {
-                    @Override
+                MetaDataDeleteIndexService.this.secondaryIndicesService.addDeleteListener(new SecondaryIndicesService.DeleteListener() {
+                    @Override 
                     public String index() {
-                        return index;
+                        return request.index;
                     }
-                    
                     @Override
-                    public void removed() {
-                        try {
-                            MetaDataDeleteIndexService.this.elasticSchemaService.removeIndexKeyspace(index);
-                        } catch (IOException e) {
-                            logger.error("Cannot remove keyspace {}", index,e);
-                        }
+                    public void onIndexDeleted() {
                         listener.onResponse(new Response(true));
+                        MetaDataDeleteIndexService.this.secondaryIndicesService.removeDeleteListener(this);
                     }
-                };
-                discoveryService.addShardStateRemovedListener(gossipListener);
-               
+                });
+                
                 listener.future = threadPool.schedule(request.timeout, ThreadPool.Names.SAME, new Runnable() {
                     @Override
                     public void run() {
                         listener.onResponse(new Response(false));
                     }
                 });
-
+                secondaryIndicesService.dropSecondaryIndices(request.index);
+                
                 return ClusterState.builder(currentState).version(currentState.version() + 1).routingTable(routingTableBuilder).metaData(newMetaData).blocks(blocks).build();
             }
 

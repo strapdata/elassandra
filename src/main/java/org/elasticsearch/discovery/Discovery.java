@@ -21,6 +21,7 @@ package org.elasticsearch.discovery;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.concurrent.TimeUnit;
 
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
@@ -32,6 +33,7 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.LifecycleComponent;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.discovery.cassandra.CassandraDiscovery;
 import org.elasticsearch.node.service.NodeService;
 
@@ -85,7 +87,9 @@ public interface Discovery extends LifecycleComponent<Discovery> {
     
     
     
-
+    
+    
+    
     /**
      * Get indices shard state from gossip endpoints state map.
      * @param address
@@ -107,6 +111,13 @@ public interface Discovery extends LifecycleComponent<Discovery> {
      */
     public void writeIndexShardState(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
     
-    public void addShardStateRemovedListener(CassandraDiscovery.ShardStateRemovedListener listener);
+
+    /**
+     * Block until clusterState.metadata.version < expected version for all alive nodes.
+     * @param version
+     * @param ackTimeout
+     * @throws Exception
+     */
+    public boolean awaitMetaDataVersion(long version, TimeValue ackTimeout) throws Exception;
     
 }
