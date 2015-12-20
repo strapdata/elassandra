@@ -30,7 +30,7 @@ curl -XPUT "http://$NODE:9200/twitter/_mapping/server" -d '
 curl -XGET "http://$NODE:9200/twitter/server/my-server?pretty=true"
 curl -XGET "http://$NODE:9200/twitter/server/localhost?pretty=true"
 
-curl -XGET "http://$NODE:9200/twitter/_search?pretty=true" -d '{ "query":{"match_all":{ }}}'
+curl -XGET "http://$NODE:9200/twitter/server/_search?pretty=true" -d '{ "query":{"match_all":{ }}}'
 
 curl -XGET "http://$NODE:9200/twitter/_search?pretty=true" -d '{ "query":{ "match": {"name":"my-server" } }}'
 curl -XGET "http://$NODE:9200/twitter/_search?pretty=true" -d '{ "query":{ "term": {"name":"localhost" } }}'
@@ -42,7 +42,7 @@ curl -XPUT "http://$NODE:9200/twitter/server/bigserver234" -d '{
     "description234":"my big server"
 }'
 
-curl -XGET "http://$NODE:9200/twitter/_search?pretty=true" -d '{ "query":{"match_all":{ }}}'
+curl -XGET "http://$NODE:9200/twitter/server/_search?pretty=true" -d '{ "query":{"match_all":{ }}}'
 
 curl -XDELETE "http://$NODE:9200/twitter"
 

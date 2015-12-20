@@ -106,27 +106,11 @@ From a Cassandra perspective :
   
 ## Building from source
 
-* Elassandra uses [Maven](http://maven.apache.org) for its build system. Simply run the `mvn clean package -DskipTests` command in the cloned directory. The  distribution will be created under *target/releases*.
-* Install Apache Cassandra version 2.1.8. 
-* Elassandra is currently built from cassandra version 2.1.8 with the following minor changes :
-  * org.apache.cassandra.cql3.QueryOptions includes a new static constructor forInternalCalls().
-  * org.apache.cassandra.service.CassandraDaemon and StorageService to include hooks to start Elasticsearch in the boostrap process.
-  * org.apache.cassandra.service.ElassandraDaemon extends CassandraDaemon with Elasticsearch features.
-* To avoid classloading issue, remove these modified classes from the cassandra-all.jar (elasticassandra-SNAPSHOT-x.x.jar contains the modified version).
-```
-zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/cql3/QueryOptions*'
-zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/CassandraDaemon*'
-zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService$*'
-zip -d cassandra-all-2.1.8.jar 'org/apache/cassandra/service/StorageService.class'
-```
-* Add `target/elasticassandra-SNAPSHOT-x.x.jar` and all its dependencies from `target/lib` in your cassandra lib directory.
-* Add `target/conf/elasticsearch.yml` in the cassandra conf directory.
-* Replace your `bin/cassandra` script by the one provided in `target/bin/cassandra`. The option '-e' to start cassandra with elasticsearch.
-* Add `target/bin/plugin` in your cassandra bin directory.
+* Elassandra uses [Maven](http://maven.apache.org) for its build system. Simply run the `mvn clean package -Dmaven.test.skip=true  -Dcassandra.home=<path/to/cassandra>` command in the cloned directory. The distribution will be created under *target/releases*.
 
 ## Elassandra Tarball Installation
 
-* Install Java version 7 or 8 (check version with `java -version`). Version 8 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.1/cassandra/install/installJdkRHEL.html).
+* Install Java version 7 (check version with `java -version`). Version 7 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.1/cassandra/install/installJdkRHEL.html).
 * Download Elassandra tarbal from [elassandra repository]() and extract files in your installation directory
 * Install the cassandra driver `pip install cassandra-driver` and the cqlsh utility `python pylib/setup.py install`
 * Configure your cassandra cluster (cluster name, sntich, ip address, seed...), see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html). Default Elasticsearch configuration is located in `conf/elasticsearch.yml`.
