@@ -95,7 +95,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             logger.error("error registering MBean {}", MBEAN_NAME, e);
             // Allow the server to start even if the bean can't be registered
         }
-        super.setup(); // start bootstrap CassandraDaemon and call beforeRecover()+beforeBootstrap() to activate ElasticSearch
+        super.setup(); // start bootstrap CassandraDaemon2 and call beforeRecover()+beforeBootstrap() to activate ElasticSearch
         super.start(); // complete cassandra start
         instance.node.start(); // start ElasticSerach public services to complete
     }

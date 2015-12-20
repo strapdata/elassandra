@@ -44,8 +44,6 @@ public class IndexRequestBuilder extends ShardReplicationOperationRequestBuilder
     public IndexRequestBuilder(Client client, @Nullable String index) {
         super(client, new IndexRequest(index));
     }
-    
-    
 
     /**
      * Sets the type to index the document to.
@@ -219,7 +217,7 @@ public class IndexRequestBuilder extends ShardReplicationOperationRequestBuilder
         request.contentType(contentType);
         return this;
     }
-    
+
     /**
      * Sets the type of operation to perform.
      */

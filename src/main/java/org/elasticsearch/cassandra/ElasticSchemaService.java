@@ -102,7 +102,9 @@ import org.apache.cassandra.utils.Pair;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.node.ArrayNode;
+import org.elasticsearch.ElasticsearchTimeoutException;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexRequest.OpType;
 import org.elasticsearch.action.index.XIndexRequest;
@@ -896,22 +898,19 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
      */
     @Override
     public List<ColumnDefinition> getPrimaryKeyColumns(final String ksName, final String cfName) throws ConfigurationException {
-        CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
-        if (metadata != null) {
-            ImmutableList.Builder<ColumnDefinition> builder = new ImmutableList.Builder<ColumnDefinition>().addAll(metadata.partitionKeyColumns());
-            List<ColumnDefinition> clusterKeys = metadata.clusteringColumns();
-            if (clusterKeys != null)
-                builder.addAll(metadata.clusteringColumns());
-            return builder.build();
-        }
-        throw new ConfigurationException("Unknown table " + ksName + "." + cfName);
+        CFMetaData metadata = getCFMetaData(ksName, cfName);
+        ImmutableList.Builder<ColumnDefinition> builder = new ImmutableList.Builder<ColumnDefinition>().addAll(metadata.partitionKeyColumns());
+        List<ColumnDefinition> clusterKeys = metadata.clusteringColumns();
+        if (clusterKeys != null)
+            builder.addAll(metadata.clusteringColumns());
+        return builder.build();
     }
 
 
 
     
     public void buildPrimaryKeyFragment(final String ksName, final String cfName, StringBuilder ptCols, StringBuilder pkCols, StringBuilder pkWhere) throws ConfigurationException {
-        CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
+        CFMetaData metadata = getCFMetaData(ksName, cfName);
         for (ColumnDefinition cd : metadata.partitionKeyColumns()) {
             if (ptCols != null && ptCols.length() > 0) {
                 ptCols.append(',');
@@ -931,10 +930,20 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
             if (pkWhere != null) pkWhere.append('\"').append(cd.name.toString()).append("\" = ?");
         }
     }
+    
+    public CFMetaData getCFMetaData(final String ksName, final String cfName) throws ActionRequestValidationException {
+        CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
+        if (metadata == null) {
+            ActionRequestValidationException arve = new ActionRequestValidationException();
+            arve.addValidationError(ksName+"."+cfName+" table does not exists");;
+            throw arve;
+        }
+        return metadata;
+    }
 
     
     public void buildPartitionKeyFragment(final String ksName, final String cfName, StringBuilder pkCols) throws ConfigurationException {
-        List<ColumnDefinition> pkColumns = Schema.instance.getCFMetaData(ksName, cfName).partitionKeyColumns();
+        List<ColumnDefinition> pkColumns = getCFMetaData(ksName, cfName).partitionKeyColumns();
         for (ColumnDefinition cd : pkColumns) {
             if (pkCols.length() > 0) {
                 pkCols.append(',');
@@ -1249,7 +1258,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
 
     
 
-    private static class MappingUpdateListener implements ActionListener<ClusterStateUpdateResponse> {
+    private class MappingUpdateListener implements ActionListener<ClusterStateUpdateResponse> {
         private final CountDownLatch latch = new CountDownLatch(1);
         private volatile Throwable error = null;
 
@@ -1261,12 +1270,15 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
 
         public void waitForMappingUpdate(TimeValue timeValue) throws Exception {
             if (timeValue.millis() > 0) {
-                latch.await(timeValue.millis(), TimeUnit.MILLISECONDS);
+                if (!latch.await(timeValue.millis(), TimeUnit.MILLISECONDS)) {
+                    throw new ElasticsearchTimeoutException("blocking mapping update timeout");
+                }
             } else {
                 latch.await();
             }
             if (error != null)
                 throw new RuntimeException(error);
+            ElasticSchemaService.this.logger.debug("mapping updated");
         }
 
         @Override
@@ -1275,7 +1287,6 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         }
     }
 
-    
     public void blockingMappingUpdate(IndexService indexService, DocumentMapper mapper ) throws Exception {
         MappingUpdateListener mappingUpdateListener = new MappingUpdateListener();
         MetaDataMappingService metaDataMappingService = ElassandraDaemon.injector().getInstance(MetaDataMappingService.class);
@@ -1313,14 +1324,15 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         Map<String, ObjectMapper> objectMappers = index.docMapper().objectMappers();
         DocumentFieldMappers fieldMappers = index.docMapper().mappers();
 
-        if (logger.isDebugEnabled()) 
-            logger.debug("Insert index=[{}] id=[{}] source={} fieldMappers={} objectMappers={} consistency={} ttl={}", 
+        if (logger.isTraceEnabled()) 
+            logger.trace("Insert index=[{}] id=[{}] source={} fieldMappers={} objectMappers={} consistency={} ttl={}", 
                 indexService.index().name(), request.id(), sourceMap,
                 Arrays.toString(fieldMappers.toArray()), objectMappers, request.consistencyLevel().toCassandraConsistencyLevel(), request.ttl());
 
 
         Map<String, Object> map = new HashMap<String, Object>();
         for (String field : sourceMap.keySet()) {
+            if (field.equals("_token")) continue;
             Object fieldValue = sourceMap.get(field);
             try {
                 ObjectMapper objectMapper = objectMappers.get(field);
@@ -1402,7 +1414,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     public String insertRow(final String ksName, final String cfName, Map<String, Object> map, String id, final boolean ifNotExists, final long ttl, final ConsistencyLevel cl,
             Long writetime, Boolean applied) throws Exception {
         
-        CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
+        CFMetaData metadata = getCFMetaData(ksName, cfName);
         // if the provided columns does not contains all the primary key columns, parse the _id to populate the columns in map.
         boolean buildId = true;
         ArrayNode array = jsonMapper.createArrayNode();
@@ -1423,6 +1435,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
         Object[] values = new Object[map.size()];
         int i=0;
         for (Entry<String,Object> entry : map.entrySet()) {
+            if (entry.getKey().equals("_token")) continue;
             if (columnNames.length() > 0) {
                 columnNames.append(',');
                 questionsMarks.append(',');
@@ -1519,7 +1532,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     public Object[] parseElasticId(final String index, final String cfName, final String id, Map<String, Object> map) throws IOException {
         IndexService indexService = this.indicesService.indexService(index);
         String ksName = indexService.getIndexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
-        CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
+        CFMetaData metadata = getCFMetaData(ksName, cfName);
         List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
         List<ColumnDefinition> clusteringColumns = metadata.clusteringColumns();
         if (partitionColumns.size()+metadata.clusteringColumns().size() > 1) {
@@ -1656,7 +1669,7 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
     @Override
     public void writeMetaDataAsComment(MetaData metadata) throws ConfigurationException, IOException {
         String metadataString = MetaData.builder().toXContent(metadata);
-        CFMetaData cfm = Schema.instance.getCFMetaData(ELASTIC_ADMIN_KEYSPACE, metaDataTableName);
+        CFMetaData cfm = getCFMetaData(ELASTIC_ADMIN_KEYSPACE, metaDataTableName);
         cfm.comment(metadataString);
         MigrationManager.announceColumnFamilyUpdate(cfm, false, false);
     }
@@ -1666,22 +1679,20 @@ public class ElasticSchemaService extends AbstractComponent implements SchemaSer
      */
     @Override
     public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException {
-        CFMetaData cfm = Schema.instance.getCFMetaData(ELASTIC_ADMIN_KEYSPACE, metaDataTableName);
-        if (cfm != null) {
-            try {
-                String metadataString = cfm.getComment();
-                if (metadataString != null && metadataString.length() > 0) {
-                    XContentParser xparser = new JsonXContentParser(new JsonFactory().createParser(metadataString));
-                    MetaData metaData = MetaData.Builder.fromXContent(xparser);
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("recovered metadata from {}.{} = {}", ELASTIC_ADMIN_KEYSPACE, metaDataTableName, MetaData.Builder.toXContent(metaData));
-                    }
-                    return metaData;
+        try {
+            CFMetaData cfm = getCFMetaData(ELASTIC_ADMIN_KEYSPACE, metaDataTableName);
+            String metadataString = cfm.getComment();
+            if (metadataString != null && metadataString.length() > 0) {
+                XContentParser xparser = new JsonXContentParser(new JsonFactory().createParser(metadataString));
+                MetaData metaData = MetaData.Builder.fromXContent(xparser);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("recovered metadata from {}.{} = {}", ELASTIC_ADMIN_KEYSPACE, metaDataTableName, MetaData.Builder.toXContent(metaData));
                 }
-            } catch (Exception e) {
-                throw new NoPersistedMetaDataException(e);
+                return metaData;
             }
-        }
+        } catch (Exception e) {
+            throw new NoPersistedMetaDataException(e);
+        } 
         throw new NoPersistedMetaDataException();
     }
 

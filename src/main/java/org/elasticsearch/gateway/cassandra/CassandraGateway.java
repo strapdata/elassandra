@@ -79,6 +79,9 @@ public class CassandraGateway extends AbstractLifecycleComponent<Gateway> implem
 
         MetaData metadata;
         try {
+            /*
+             * Recovery performed from comment because elatic_admin keyspace won't be available before replaying commmit logs.
+             */
             metadata = elasticSchemaService.readMetaDataAsComment();
         } catch (NoPersistedMetaDataException e) {
             metadata = clusterService.state().metaData();

@@ -35,7 +35,6 @@ public class ShardId implements Serializable, Streamable, Comparable<ShardId> {
     private Index index;
 
     private int shardId;
-    
 
     private int hashCode;
 

@@ -30,5 +30,4 @@ public abstract class ProcessedClusterStateUpdateTask extends ClusterStateUpdate
      * properly by all listeners.
      */
     public abstract void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState);
-    
 }

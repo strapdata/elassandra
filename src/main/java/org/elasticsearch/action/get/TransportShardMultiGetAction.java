@@ -152,34 +152,38 @@ public class TransportShardMultiGetAction extends TransportShardSingleOperationA
             } else {
                 columns = elasticSchemaService.mappedColumns(indexService.index().getName(), item.type());
             }
-            
-            try {
-                UntypedResultSet result = elasticSchemaService.fetchRow(request.index(), item.type(), columns, item.id());
-                if (!result.isEmpty()) {
-                    Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(request.index(), item.type(), result.one());
-                    Map<String, GetField> rowAsFieldMap = elasticSchemaService.flattenGetField(item.fields(), "", rowAsMap, new HashMap<String, GetField>());
-
-                    GetResult getResult = new GetResult(request.index(), item.type(), item.id(), 0L, true, new BytesArray(FBUtilities.json(rowAsMap).getBytes("UTF-8")), rowAsFieldMap);
-                    response.add(request.locations.get(i), new GetResponse(getResult));
-                } else {
-                    // document not found
+            if (columns.size() > 0) {
+                try {
+                    UntypedResultSet result = elasticSchemaService.fetchRow(request.index(), item.type(), columns, item.id());
+                    if (!result.isEmpty()) {
+                        Map<String, Object> rowAsMap = elasticSchemaService.rowAsMap(request.index(), item.type(), result.one());
+                        Map<String, GetField> rowAsFieldMap = elasticSchemaService.flattenGetField(item.fields(), "", rowAsMap, new HashMap<String, GetField>());
+    
+                        GetResult getResult = new GetResult(request.index(), item.type(), item.id(), 0L, true, new BytesArray(FBUtilities.json(rowAsMap).getBytes("UTF-8")), rowAsFieldMap);
+                        response.add(request.locations.get(i), new GetResponse(getResult));
+                    } else {
+                        // document not found
+                        GetResult getResult = new GetResult(request.index(), item.type(), item.id(), 0L, false, null , null);
+                        response.add(request.locations.get(i), new GetResponse(getResult));
+                    }
+                } catch (org.apache.cassandra.exceptions.ConfigurationException | org.apache.cassandra.exceptions.SyntaxException e) {
+                    logger.debug("Failed to read cassandra table [{}]/[{}]/[{}] => doc not found", e, request.index(), item.type(), item.id());
                     GetResult getResult = new GetResult(request.index(), item.type(), item.id(), 0L, false, null , null);
                     response.add(request.locations.get(i), new GetResponse(getResult));
+                    
+                } catch (Throwable t) {
+                    if (TransportActions.isShardNotAvailableException(t)) {
+                        throw (ElasticsearchException) t;
+                    } else {
+                        logger.debug("{} failed to execute multi_get for [{}]/[{}]", t, shardId, item.type(), item.id());
+                        response.add(request.locations.get(i), new MultiGetResponse.Failure(request.index(), item.type(), item.id(), ExceptionsHelper.detailedMessage(t)));
+                    }
                 }
-            } catch (org.apache.cassandra.exceptions.ConfigurationException | org.apache.cassandra.exceptions.SyntaxException e) {
-                logger.debug("Failed to read cassandra table [{}]/[{}]/[{}] => doc not found", e, request.index(), item.type(), item.id());
+            } else {
+                // document not found, table does not exists or has no mapped columns matching the request.
                 GetResult getResult = new GetResult(request.index(), item.type(), item.id(), 0L, false, null , null);
                 response.add(request.locations.get(i), new GetResponse(getResult));
-                
-            } catch (Throwable t) {
-                if (TransportActions.isShardNotAvailableException(t)) {
-                    throw (ElasticsearchException) t;
-                } else {
-                    logger.debug("{} failed to execute multi_get for [{}]/[{}]", t, shardId, item.type(), item.id());
-                    response.add(request.locations.get(i), new MultiGetResponse.Failure(request.index(), item.type(), item.id(), ExceptionsHelper.detailedMessage(t)));
-                }
             }
-            
         }
         
         return response;

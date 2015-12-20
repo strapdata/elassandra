@@ -212,13 +212,13 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
                 String index = it.next();
                 IndexRoutingTable indexRoutingTable = event.state().routingTable().index(index);
                 if (indexRoutingTable.allPrimaryShardsActive()) {
-                    logger.debug("index=[{}] shards Active/Unassigned={}/{} => applying delayed CQL schema update", 
+                    logger.debug("index=[{}] shards Active/Unassigned={}/{} => asynchronous creates secondary index", 
                             index, indexRoutingTable.primaryShardsActive(), indexRoutingTable.primaryShardsUnassigned());
                     IndexMetaData indexMetaData = event.state().metaData().index(index);
                     submitTask(new CreateSecondaryIndexTask(index, indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, index)));
                     this.toUpdateIndices.remove(index);
                 } else {
-                    logger.debug("index=[{}] shards Active/Unassigned={}/{} => waiting next cluster state update", 
+                    logger.debug("index=[{}] shards Active/Unassigned={}/{} => waiting next cluster state to create secondary indices", 
                             index, indexRoutingTable.primaryShardsActive(), indexRoutingTable.primaryShardsUnassigned());
                 }
             }

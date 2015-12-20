@@ -155,7 +155,6 @@ public class RiverClusterService extends AbstractLifecycleComponent<RiverCluster
         @Override
         public void onNewClusterState(final RiverClusterState clusterState) {
             ClusterState state = clusterService.state();
-
             if (state.nodes().localNodeMaster()) {
                 logger.warn("master should not receive new cluster state from [{}]", state.nodes().masterNode());
                 return;

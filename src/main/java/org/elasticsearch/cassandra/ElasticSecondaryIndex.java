@@ -383,12 +383,16 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
             if (mustReadColumns != null) {
                 try {
                     // fetch missing fields from the local cassandra row to update Elasticsearch index
-                    logger.debug(" {}.{} id={} read fields={} docMap={}",metadata.ksName, metadata.cfName, id(), mustReadColumns, docMap);
+                    if (logger.isTraceEnabled()) {
+                        logger.trace(" {}.{} id={} read fields={} docMap={}",metadata.ksName, metadata.cfName, id(), mustReadColumns, docMap);
+                    }
                     SchemaService schemaService = ElassandraDaemon.injector().getInstance(SchemaService.class);
                     Row row = schemaService.fetchRowInternal(metadata.ksName, metadata.cfName, mustReadColumns, pkColumns).one();
                     int putCount = schemaService.rowAsMap(metadata.ksName, metadata.cfName, row, docMap);
                     if (putCount > 0) docLive = true;
-                    logger.debug("{}.{} id={} indexing docMap={}", metadata.ksName, metadata.cfName, id(), docMap);
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("{}.{} id={} indexing docMap={}", metadata.ksName, metadata.cfName, id(), docMap);
+                    }
                 } catch (RequestValidationException | IOException e) {
                     logger.error("Failed to fetch columns {}",mustReadColumns,e);
                 }

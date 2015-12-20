@@ -63,7 +63,3 @@ Copyright 2010, Cedric Beust cedric@beust.com
 HLL++ support provided by stream-lib
 (https://github.com/addthis/stream-lib)
 
-Simple utility methods to make working with bytes (blob) easier from the cassandra java driver
-provided by Datastax (http://www.datastax.com) 
-Copyright (C) 2012-2015 DataStax Inc.
-

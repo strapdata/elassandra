@@ -27,3 +27,9 @@
 
 0.4.2 - 2015-11-23
   * Improve automatic mapping from an existing CQL3 table.
+  
+0.5 - 2015-12-21
+  * Based on cassandra 2.2.4
+  * Improve cassandra secondary index management :
+  ** to map a keyspace to many Elasticserach indices. 
+  ** to create cassandra secondary indices when all shards are started, allowing to index existing data on all nodes.

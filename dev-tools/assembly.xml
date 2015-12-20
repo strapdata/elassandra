@@ -22,6 +22,7 @@
       <include>shortcuts.sh</include>
       <include>../cassandra/bin/nodetool</include>
       <include>../cassandra/bin/cqlsh</include>
+      <include>../cassandra/bin/cqlsh.py</include>
       <include>../cassandra/bin/stop-server</include>
     </includes>
     <lineEnding>unix</lineEnding>
