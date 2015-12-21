@@ -386,8 +386,8 @@ There are many more options to perform search, after all, it's a search product 
 
 ### Shards and Replica
 
-Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace [Replication Factor](http://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html). Elasticsearch *numberOfShards* and *numberOfReplicas* then become meaningless. 
-* When adding a new elasticassandra node, the cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data are automattically indexed and each node update its routing table to distribute search requests according to the ring topology. 
+Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace [Replication Factor](http://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html). Elasticsearch *numberOfShards* then becomes meaningless. 
+* When adding a new elasticassandra node, the cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data are automatically indexed and each node update its routing table to distribute search requests according to the ring topology. 
 * When updating the Replication Factor, you will need to run a [nodetool repair <keyspace>](http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html) on the new node to effectivelly copy and index the data.
 * If a node become unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is red, otherwise cluster status is yellow.  
 

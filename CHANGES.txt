@@ -30,6 +30,6 @@
   
 0.5 - 2015-12-21
   * Based on cassandra 2.2.4
-  * Improve cassandra secondary index management :
-  ** to map a keyspace to many Elasticserach indices. 
-  ** to create cassandra secondary indices when all shards are started, allowing to index existing data on all nodes.
+  * Improve mapping and cassandra secondary index management :
+  ** to map a keyspace to many Elasticserach indices allowing mapping update with zero-downtime.
+  ** to create cassandra secondary indices when all shards are started, thus indexing existing data on all nodes.
