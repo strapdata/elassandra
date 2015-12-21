@@ -619,7 +619,7 @@ curl -XPUT "http://localhost:9200/my_keyspace/_mapping/my_table" -d '{
 }'
 ```
 
-When creating the first Elasticsearch index for a given cassandra table, custom CQL3 secondary indices are created and cassandra asynchronously index all existing data. Later CQL inserts or updates are automatically indexed in Elasticsearch. Then if you add a second or more Elasticsearch indices to an existing indexed table (see (Mapping change with zero downtime)[#Mapping-change-with-zero-downtime], existing data are not automatically indexed because cassandra has already indexed existing data. Rebuild the cassandra index to re-index all existing data in all  Elasticsearch indices.
+When creating the first Elasticsearch index for a given cassandra table, custom CQL3 secondary indices are created when all shards are started. Then cassandra asynchronously build index on all nodes for all existing data. Subsequent CQL inserts or updates are automatically indexed in Elasticsearch. Moreover, if you then add a second or more Elasticsearch indices to an existing indexed table (see (Mapping change with zero downtime)[#Mapping-change-with-zero-downtime], existing data are not automatically indexed because cassandra has already indexed existing data. Rebuild the cassandra index to re-index all existing data in all Elasticsearch indices.
 
 ##  Compound primary key support
 
@@ -648,7 +648,7 @@ curl -XPUT "http://localhost:9200/twitter2/_mapping/tweet" -d '{
 }'
 ``` 
 
-You can the set a specific mapping for **twitter2** and re-index existing data on each cassandra node. Because cassandra rebuild indices from SSTable, we need to flush the table **twitter.tweet** before to rebuild the secondary index that update the Elasticsearch index. This secondary index is named **elatic_<table_name>**. New data inserted to the cassandra table **twitter.tweet** are indexed in **twitter2** as soon as you set the mapping.
+You can the set a specific mapping for **twitter2** and re-index existing data on each cassandra node with the following command (indices are named **elastic_**<table_name>).
 ```
 nodetool rebuild_index twitter tweet elastic_tweet
 ```
