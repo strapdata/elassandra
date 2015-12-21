@@ -22,7 +22,7 @@ For cassandra users, elassandra provides elasicsearch features :
 * Full-Text and spatial search on your cassandra data.
 * Real-time aggregation (does not require Spark or Hadoop to group by)
 * Provide search on multiple keyspace and tables in one query.
-* Provide automatic schema creation and support nested document using User Defined Types.
+* Provide automatic schema creation and support nested document using [User Defined Types](https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
 * Provide a read/write JSON REST access to cassandra data (for indexed data)
 * There are many elasticsearch plugins to import data in cassandra or to visualize your data, with [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) for exemple.
 
@@ -661,7 +661,7 @@ curl -XDELETE "http://localhost:9200/twitter"
 
 ## Object and Nested mapping
 
-By default, Elasticsearch [object or nested types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-object-type.html) are mapped to dynamically created Cassandra User Defined Types. 
+By default, Elasticsearch [object or nested types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-object-type.html) are mapped to dynamically created Cassandra [User Defined Types](https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html). 
 
 ```
 curl -XPUT 'http://localhost:9200/twitter/tweet/1' -d '{
@@ -707,7 +707,7 @@ _id  | message              | user
 
 ### Dynamique mapping of cassandra map
 
-Since version 0.3, nested document can be mapped to *User Defined Type* or to CQL [map](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_map_t.html#toc_pane). In the following example, the cassandra map is automatically mapped with `cql_partial_update:true`, so a partial CQL update cause a read of the whole map to re-index a document in the elasticsearch index. 
+Since version 0.3, nested document can be mapped to [User Defined Type](https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html) or to CQL [map](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_map_t.html#toc_pane). In the following example, the cassandra map is automatically mapped with `cql_partial_update:true`, so a partial CQL update cause a read of the whole map to re-index a document in the elasticsearch index. 
 
 ```
 cqlsh>CREATE KEYSPACE IF NOT EXISTS twitter WITH replication={ 'class':'NetworkTopologyStrategy', 'DC1':'1' };
