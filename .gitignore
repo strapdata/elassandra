@@ -1,0 +1,7 @@
+/tests
+/private
+/lib
+/target
+/build/
+/src/test/
+.*
