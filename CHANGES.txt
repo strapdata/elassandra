@@ -1,0 +1,43 @@
+0.1 - Initial release
+
+0.2 - 2015-10-07
+* Add support for partial document update
+* Add support for Kibana
+* Fix User Defined Type creation
+* Change cassandra StorageService hooks to start Elasticsearch (Fix commitlogs recover)
+
+0.3.2 - 2015-11-05 (Based on cassandra-2.1.8 + elasticsearch 1.5.1)
+* Bug fixes
+ * Fix multiget on a multiple nodes cluster (Allow to save kibana configuration on multi-node cluster).
+ * Fix a bug in cluster state management when restarting. 
+ * Fix CASSANDRA-9912
+ 
+* New features
+ * Add support for compound cassandra keys. 
+ * Add support for partial CQL update of cassandra collection types.
+ * Enhance Elasticsearch put mapping to automatically build mapping from an existing CQL3 table.
+ * Replace the single_value mapping attribute by cql_collection, cql_struct and cql_partial_update. This allow to map nested document to a User Defined Types or to a cassandra map<text,?>.
+
+ 0.4 - 2015-11-11 (Based on cassandra-2.1.8 + elasticsearch 1.5.1)
+  * Fix various bugs
+  * New tarball package.
+  
+0.4.1 - 2015-11-17
+  * Bug fix when indexing inet type (Internet Address).
+
+0.4.2 - 2015-11-23
+  * Improve automatic mapping from an existing CQL3 table.
+  
+0.5 - 2015-12-21
+  * Based on cassandra 2.2.4
+  * Improve mapping and cassandra secondary index management :
+    * to map a keyspace to many Elasticserach indices allowing mapping update with zero-downtime.
+    * to create cassandra secondary indices when all shards are started, thus indexing existing data on all nodes.
+    
+2.1.1 - 2016-01-22
+  * Based on Elasticsearch 2.1.1 and Apache Cassandra 2.2.4
+  * Disable the Elasticserach IndiceTTLService (already managed by Cassandra).
+  * Manage the _token field as an internal metadata field. This is the murmur3 hash of the partition key for cassandra row (an Elasticsearch document).
+  * Index settings number_of_shards and number_of_replicas now dynamically reflects the number of nodes in the ES cluster (in the cassandra datacenter) and the replication factor for an index (a keyspace).
+
+
