@@ -1,6 +1,6 @@
 # Elassandra
 
-Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) version 2.1.1 modified to run on top of [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
+Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run on top of [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
 ![Elassandra architecture](/images/elassandra1.png)
 
@@ -12,7 +12,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
-* **2016-01-22 Release 2.1.1 Based on Elasticsearch 2.1.1 and cassandra 2.2.4**
+* **2016-01-28 Release 2.1.1 based on Elasticsearch 2.1.1 and cassandra 2.2.4**
 * **2015-12-20 Release 0.5 Re-index you data from cassandra 2.2.4 with zero downtime**.
 * **2015-11-15 Release 0.4 New elassandra tarball ready-to-run**.
 
@@ -39,7 +39,7 @@ For Elasticsearch users, elassandra provides usefull features :
 
 ## Kibana + Elassandra
 
-[Kibana](https://www.elastic.co/guide/en/kibana/4.1/introduction.html) version 4.1 can run on Elassandra, providing a visualization tool for cassandra and elasticsearch data. Here is a demo video.
+[Kibana](https://www.elastic.co/guide/en/kibana/4.3/introduction.html) version 4.3 can run on Elassandra, providing a visualization tool for cassandra and elasticsearch data. Here is a demo video.
 
 <a href="http://www.youtube.com/watch?feature=player_embedded&v=yKT96wtjJNg
 " target="_blank"><img src="http://img.youtube.com/vi/yKT96wtjJNg/0.jpg" 
@@ -53,7 +53,7 @@ Because cassandra keyspace, type and table can only contain alphanumeric and und
 q=\'
 # for Kibana 4.1.x
 sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" index.js
-# for Kibana 4.3.x
+# for Kibana 4.3.x (for Elassandra v2.1.1+)
 sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" -e "s/${q}index-pattern${q}: ${q}/settings/objects/savedSearches/'/${q}index_pattern${q}: ${q}/settings/objects/savedSearches/${q}/" optimize/bundles/kibana.bundle.js ./ui/public/index_patterns/*.js src/ui/public/index_patterns/*.js
 ```
 * If you want to load sample data from [Kibana Getting started](https://www.elastic.co/guide/en/kibana/current/getting-started.html), apply the following changes to logstash.jsonl with a sed command. 
@@ -798,6 +798,7 @@ ALL | ALL | Because there is no LOCAL_ALL in cassandra, ALL involve write in all
 * Elasticsearch 
  * tribe, percolate, snapshots and recovery service not tested.
  * Geoshape type not supported.
+ * Parent/child relationship is not supported
  * Any Elasticsearch metadata update require the LOCAL_QUORUM (more than half the number of nodes in the elassandra datacenter)
  * Document version is alaways 1 for all documents (because cassandra index rebuild would increment version many times, document version become meaningless). 
  

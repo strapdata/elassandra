@@ -39,4 +39,3 @@
   * Manage the _token field as an internal metadata field. This is the murmur3 hash of the partition key for cassandra row (an Elasticsearch document).
   * Index settings number_of_shards and number_of_replicas now dynamically reflects the number of nodes in the ES cluster (in the cassandra datacenter) and the replication factor for each index (= keyspace).
 
-
