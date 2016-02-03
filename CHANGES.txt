@@ -41,3 +41,4 @@
 
 2.1.1-1 - 2016-02-03
   * Add support for parent-child relation-ship
+  * Bug fix when indexing inet type (Internet Address).

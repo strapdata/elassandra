@@ -40,6 +40,7 @@ import org.apache.lucene.util.NumericUtils;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -181,7 +182,7 @@ public class IpFieldMapper extends NumberFieldMapper {
                 return null;
             }
             if (value instanceof InetAddress) {
-                return ipToLong( ((InetAddress) value).getHostAddress() );
+                return ipToLong( NetworkAddress.formatAddress((InetAddress)value));
             }
             if (value instanceof Number) {
                 return ((Number) value).longValue();
