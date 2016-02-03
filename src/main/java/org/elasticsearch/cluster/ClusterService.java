@@ -312,6 +312,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
             XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
             builder.startObject();
             for(String field : docMap.keySet()) {
+                if (field.equals("_parent")) continue;
                 FieldMapper fieldMapper = documentMapper.mappers().smartNameFieldMapper(field);
                 if (fieldMapper != null) {
                     toXContent(builder, fieldMapper, field, docMap.get(field));
@@ -369,7 +370,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
 
     public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
-    public String insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, Long writetime, Boolean applied) throws Exception;
+    public String insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString, Boolean applied) throws Exception;
 
     public String insertRow(String index, String type, Map<String, Object> map, String id, boolean ifNotExists, long ttl, ConsistencyLevel cl, Long writetime, Boolean applied)
             throws Exception;

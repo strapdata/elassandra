@@ -12,6 +12,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
+* **2016-02-01 Release 2.1.1-1 Add support for parent-child relationship**
 * **2016-01-28 Release 2.1.1 based on Elasticsearch 2.1.1 and cassandra 2.2.4**
 * **2015-12-20 Release 0.5 Re-index you data from cassandra 2.2.4 with zero downtime**.
 * **2015-11-15 Release 0.4 New elassandra tarball ready-to-run**.
@@ -772,6 +773,102 @@ curl -XGET "http://localhost:9200/twitter/_search?pretty=true" -d '{
     } ]
   }
 }
+```
+
+## Parent-Child Relationship
+
+Elassandra supports [parent-child relationship](https://www.elastic.co/guide/en/elasticsearch/guide/current/parent-child.html) when parent and child document are located on the same cassandra node. This condition is met when running a single node cluster, when the keyspace replication factor equals the number of nodes or when the parent and child documents share the same cassandra partition key, as shown in the folling exemple :
+
+Create an index company (a cassandra keyspace), a cassandra table, insert 2 rows and map this table as document type employee.
+```
+curl -XPUT "http://$NODE:9200/company/"
+
+cqlsh <<EOF
+CREATE TABLE company.employee (
+"_parent" text,
+"_id" text,
+name text,
+dob timestamp,
+hobby text,
+primary key (("_parent"),"_id")
+);
+INSERT INTO company.employee ("_parent","_id",name,dob,hobby) VALUES ('london','1','Alice Smith','1970-10-24','hiking');
+INSERT INTO company.employee ("_parent","_id",name,dob,hobby) VALUES ('london','2','Alice Smith','1990-10-24','hiking');
+EOF
+
+curl -XPUT "http://$NODE:9200/company/_mapping/employee" -d '
+{ "employee" : {
+        "columns_regexp" : ".*",
+         "properties" : {
+                "name" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "cql_collection" : "singleton"
+                }
+            },
+          "_parent": {
+                "type": "branch" 
+            }
+    }
+}'
+```
+
+Now insert documents in the parent type branch.
+```
+curl -XPOST "http://127.0.0.1:9200/company/branch/_bulk" -d '
+{ "index": { "_id": "london" }}
+{ "district": "London Westminster", "city": "London", "country": "UK" }
+{ "index": { "_id": "liverpool" }}
+{ "district": "Liverpool Central", "city": "Liverpool", "country": "UK" }
+{ "index": { "_id": "paris" }}
+{ "district": "Champs Élysées", "city": "Paris", "country": "France" }'
+```
+
+Add employee document setting the *_parent* and *_id* as parameters or as a JSON array.
+```
+curl -XPUT "http://$NODE:9200/company2/employee/3?parent=liverpool" -d '{
+  "name":  "Alice Smith",
+  "dob":   "1990-10-24",
+  "hobby": "windsurfing"
+}'
+curl -XPUT "http://$NODE:9200/company2/employee/\[\"liverpool\",\"4\"\]" -d '{
+  "name":  "Bob robert",
+  "dob":   "1990-10-24",
+  "hobby": "truc"
+}'
+```
+
+Search for documents having chidren document of type *employee* with *dob* date geater than 1980.
+```
+curl -XGET "http://$NODE:9200/company2/branch/_search?pretty=true" -d '{
+  "query": {
+    "has_child": {
+      "type": "employee",
+      "query": {
+        "range": {
+          "dob": {
+            "gte": "1980-01-01"
+          }
+        }
+      }
+    }
+  }
+}'
+```
+
+Search for employee documents having a parent document where *country* match UK.
+```
+curl -XGET "http://$NODE:9200/company2/employee/_search?pretty=true" -d '{
+  "query": {
+    "has_parent": {
+      "parent_type": "branch",
+      "query": {
+        "match": { "country": "UK"
+        }
+      }
+    }
+  }
+}'
 ```
 
 # Consistency Level

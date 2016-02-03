@@ -230,6 +230,9 @@ public abstract class MappedFieldType extends FieldType {
             Objects.equals(normsLoading, fieldType.normsLoading) &&
             Objects.equals(fieldDataType, fieldType.fieldDataType) &&
             Objects.equals(nullValue, fieldType.nullValue) &&
+            Objects.equals(cqlCollection, fieldType.cqlCollection) &&
+            Objects.equals(cqlStruct, fieldType.cqlStruct) &&
+            Objects.equals(cqlPartialUpdate, fieldType.cqlPartialUpdate) &&
             Objects.equals(nullValueAsString, fieldType.nullValueAsString);
     }
 

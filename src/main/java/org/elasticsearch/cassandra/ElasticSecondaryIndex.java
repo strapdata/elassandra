@@ -147,7 +147,12 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                         IndexService indexService = indicesService.indexServiceSafe(index);
                         IndexInfo indexInfo = new IndexInfo(index, indexService, mappingMetaData);
                         this.indices.add(indexInfo);
-                        this.fields.addAll(((Map<String,Object>)mappingMetaData.getSourceAsMap().get("properties")).keySet());
+                        if (mappingMetaData.getSourceAsMap().get("properties") != null) {
+                           this.fields.addAll(((Map<String,Object>)mappingMetaData.getSourceAsMap().get("properties")).keySet());
+                        }
+                        if (mappingMetaData.hasParentField()) {
+                            this.fields.add("_parent");
+                        }
                     } catch (IOException e) {
                         logger.error("Unexpected error", e);
                     }
@@ -444,6 +449,9 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                             .token(this.token)
                             .routing(partitionKey)
                             .timestamp(Long.toString(System.currentTimeMillis()));
+                    if (docMap.get("_parent") != null) {
+                        sourceToParse.parent((String)docMap.get("_parent"));
+                    }
                     if (this.docTtl < Integer.MAX_VALUE) {
                         sourceToParse.ttl(this.docTtl);
                     }
@@ -468,10 +476,10 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                     }
                     
                     if (logger.isDebugEnabled()) {
-                        logger.debug("document CF={}.{} index={} type={} id={} version={} created={} ttl={} refresh={} doc={}", 
+                        logger.debug("document CF={}.{} index={} type={} id={} version={} created={} ttl={} refresh={} parent={} doc={}", 
                             metadata.ksName, metadata.cfName,
                             indexInfo.name, metadata.cfName, 
-                            id(), version, created, docTtl, indexInfo.refresh, builder.string());
+                            id(), version, created, sourceToParse.ttl(), indexInfo.refresh, sourceToParse.parent(), builder.string());
                     }
                 } catch (Throwable e1) {
                     logger.error("Failed to index document id=" + id() + " in index.type=" + indexInfo.name + "." + ElasticSecondaryIndex.this.baseCfs.metadata.cfName, e1);

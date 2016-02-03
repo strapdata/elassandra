@@ -414,26 +414,31 @@ public class FetchPhase implements SearchPhase {
     private void loadStoredFields(SearchContext searchContext, LeafReaderContext readerContext, FieldsVisitor fieldVisitor, int docId) {
         fieldVisitor.reset();
         
-        JustUidFieldsVisitor justUidFieldsVisitor = new JustUidFieldsVisitor();
         try {
-            readerContext.reader().document(docId, justUidFieldsVisitor);
+            readerContext.reader().document(docId, fieldVisitor);
         } catch (IOException e) {
             throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + docId + "]", e);
         }
 
         if (!(fieldVisitor instanceof JustUidFieldsVisitor) ) {
             try {
-                Collection requiredColomns;
-                if (fieldVisitor.loadSource()) {
-                    requiredColomns = this.clusterService.mappedColumns(searchContext.request().index(), justUidFieldsVisitor.uid().type());
+                Set<String> requiredColomns;
+                if (fieldVisitor.requestedFields() != null) {
+                    requiredColomns =  new HashSet<String>(fieldVisitor.requestedFields().size());
+                    requiredColomns.addAll(fieldVisitor.requestedFields());
+                    
                 } else {
-                    requiredColomns = fieldVisitor.requestedFields();
+                    requiredColomns = new HashSet<String>();
                 }
+                
+                if (fieldVisitor.loadSource()) {
+                    requiredColomns.addAll(clusterService.mappedColumns(searchContext.request().index(), fieldVisitor.uid().type()));
+                } 
                 if (requiredColomns.size() >0) {
-                    UntypedResultSet result = clusterService.fetchRowInternal(searchContext.request().index(), justUidFieldsVisitor.uid().type(), 
-                            requiredColomns, justUidFieldsVisitor.uid().id());
+                    UntypedResultSet result = clusterService.fetchRowInternal(searchContext.request().index(), fieldVisitor.uid().type(), 
+                            requiredColomns, fieldVisitor.uid().id());
                     if (!result.isEmpty()) {
-                        Map<String, Object> mapObject = clusterService.rowAsMap(searchContext.request().index(), justUidFieldsVisitor.uid().type(), result.one());
+                        Map<String, Object> mapObject = clusterService.rowAsMap(searchContext.request().index(), fieldVisitor.uid().type(), result.one());
                         if (fieldVisitor.requestedFields() == null || fieldVisitor.requestedFields().size() > 0) {
                             Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
                             clusterService.flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);
@@ -443,17 +448,15 @@ public class FetchPhase implements SearchPhase {
                         }
                         if (fieldVisitor.loadSource()) {
                             // rebuild the source document from the cassandra row.
-                            XContentBuilder builder = ClusterService.Utils.buildDocument(searchContext.mapperService().documentMapper(justUidFieldsVisitor.uid().type()), mapObject);
+                            XContentBuilder builder = ClusterService.Utils.buildDocument(searchContext.mapperService().documentMapper(fieldVisitor.uid().type()), mapObject);
                             fieldVisitor.source(builder.bytes().toBytes());
                         }
                     }
                 }
             } catch (Exception e) {
-                Logger.getLogger(FetchPhase.class).error("Fetch failed id=" + justUidFieldsVisitor.uid().id(), e);
-                throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + justUidFieldsVisitor.uid().id() + "] from cassandra", e);
+                Logger.getLogger(FetchPhase.class).error("Fetch failed id=" + fieldVisitor.uid().id(), e);
+                throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + fieldVisitor.uid().id() + "] from cassandra", e);
             }
         }
-
-        fieldVisitor.uid(justUidFieldsVisitor.uid());
     }
 }

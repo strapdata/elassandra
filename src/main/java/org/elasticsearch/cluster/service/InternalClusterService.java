@@ -1007,7 +1007,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
-    public String insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, Long writetime, Boolean applied) throws Exception {
+    public String insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString, Boolean applied) throws Exception {
         // TODO Auto-generated method stub
         return null;
     }

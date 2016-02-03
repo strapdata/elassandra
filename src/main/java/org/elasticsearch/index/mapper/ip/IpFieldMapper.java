@@ -19,7 +19,16 @@
 
 package org.elasticsearch.index.mapper.ip;
 
-import com.google.common.net.InetAddresses;
+import static org.elasticsearch.index.mapper.MapperBuilders.ipField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
+
 import org.apache.lucene.analysis.NumericTokenStream;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
@@ -46,14 +55,8 @@ import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.core.LongFieldMapper;
 import org.elasticsearch.index.mapper.core.LongFieldMapper.CustomLongNumericField;
 import org.elasticsearch.index.mapper.core.NumberFieldMapper;
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
 
-import static org.elasticsearch.index.mapper.MapperBuilders.ipField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+import com.google.common.net.InetAddresses;
 
 /**
  *
@@ -176,6 +179,9 @@ public class IpFieldMapper extends NumberFieldMapper {
         public Long value(Object value) {
             if (value == null) {
                 return null;
+            }
+            if (value instanceof InetAddress) {
+                return ipToLong( ((InetAddress) value).getHostAddress() );
             }
             if (value instanceof Number) {
                 return ((Number) value).longValue();

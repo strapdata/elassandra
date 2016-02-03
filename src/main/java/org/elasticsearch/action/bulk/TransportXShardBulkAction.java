@@ -42,6 +42,7 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -64,7 +65,11 @@ public class TransportXShardBulkAction extends TransportShardBulkAction {
                  indicesService,  threadPool,  shardStateAction,
                  mappingUpdatedAction,  updateHelper,  actionFilters,
                  indexNameExpressionResolver);
+    }
 
+    @Override
+    protected void shardOperationOnReplica(ShardId shardId, BulkShardRequest request) {
+        
     }
 
     @Override
@@ -84,7 +89,7 @@ public class TransportXShardBulkAction extends TransportShardBulkAction {
 
         Long writetime = new Long(1);
         Boolean applied = new Boolean(true);
-        String id = clusterService.insertDocument(indicesService, indexRequest, clusterState, writetime, applied);
+        String id = clusterService.insertDocument(indicesService, indexRequest, clusterState, indexRequest.timestamp(), applied);
 
         assert indexRequest.versionType().validateVersionForWrites(indexRequest.version());
 

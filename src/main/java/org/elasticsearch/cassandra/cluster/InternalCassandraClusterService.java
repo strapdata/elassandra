@@ -636,7 +636,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 UntypedResultSet result = QueryProcessor.executeInternal("SELECT  column_name,validator FROM system.schema_columns WHERE keyspace_name=? and columnfamily_name=?", 
                         new Object[] { ksName, cfName });
                 for (Row row : result) {
-                    if (row.has("validator") && pattern.matcher(row.getString("column_name")).matches()) {
+                    if (row.has("validator") && pattern.matcher(row.getString("column_name")).matches() && !row.getString("column_name").startsWith("_")) {
                         String columnName = row.getString("column_name");
                         Map<String,Object> props = (Map<String, Object>) properties.get(columnName);
                         if (props == null) {
@@ -755,6 +755,22 @@ public class InternalCassandraClusterService extends InternalClusterService {
               
             }
 
+            // add _parent column if necessary. Parent and child documents should have the same partition key.
+            if (docMapper.parentFieldMapper().active()) {
+                if (newTable) {
+                    // _parent is a JSON arry representation of the parent PK.
+                    columnsList.append(", \"_parent\" text");
+                } else {
+                    try {
+                        String query = String.format("ALTER TABLE \"%s\".\"%s\" ADD \"_parent\" text", ksName, type);
+                        logger.debug(query);
+                        QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+                    } catch (Exception e) {
+                        logger.warn("Cannot alter table {}.{} column _parent with type text", e, ksName, type);
+                    }
+                }
+            }
+            
             if (newTable) {
                 String query = String.format("CREATE TABLE IF NOT EXISTS \"%s\".\"%s\" ( \"%s\" text PRIMARY KEY %s ) WITH COMMENT='Auto-created by Elassandra'", ksName, type,
                         ELASTIC_ID_COLUMN_NAME, columnsList);
@@ -854,6 +870,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
     
     public void buildPrimaryKeyFragment(final String ksName, final String cfName, StringBuilder ptCols, StringBuilder pkCols, StringBuilder pkWhere) throws ConfigurationException {
         CFMetaData metadata = getCFMetaData(ksName, cfName);
+        boolean first = true;
         for (ColumnDefinition cd : metadata.partitionKeyColumns()) {
             if (ptCols != null && ptCols.length() > 0) {
                 ptCols.append(',');
@@ -1036,22 +1053,24 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public String buildFetchQuery(final String index, final String cfName, final Collection<String> requiredColumns) throws ConfigurationException {
         IndexService indexService = this.indicesService.indexService(index);
         String ksName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
-        StringBuilder columns = new StringBuilder();
         StringBuilder ptColums = new StringBuilder();
         StringBuilder pkColums = new StringBuilder();
         StringBuilder pkWhere = new StringBuilder();
         
         buildPrimaryKeyFragment(ksName, cfName, ptColums, pkColums, pkWhere);
+        StringBuilder query = new StringBuilder();
+        query.append("SELECT ");
         for (String c : requiredColumns) {
-            if (columns.length() > 0)
-                columns.append(',');
+            if (query.length() > 7)
+                query.append(',');
             if (c.equals("_token")) {
-                columns.append("token(").append(ptColums).append(") as \"_token\"");
+                query.append("token(").append(ptColums).append(") as \"_token\"");
             } else {
-                columns.append("\"").append(c).append("\"");
+                query.append("\"").append(c).append("\"");
             }
         }
-        return String.format("SELECT %s FROM \"%s\".\"%s\" WHERE %s", columns, ksName, cfName, pkWhere );
+        query.append(" FROM \"").append(ksName).append("\".\"").append(cfName).append("\" WHERE ").append(pkWhere);
+        return query.toString();
     }
 
     @Override
@@ -1253,7 +1272,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * java.lang.Boolean)
      */
     @Override
-    public String insertDocument(final IndicesService indicesService, final IndexRequest request, final ClusterState clusterState, Long writetime, Boolean applied) throws Exception {
+    public String insertDocument(final IndicesService indicesService, final IndexRequest request, final ClusterState clusterState, String timestampString, Boolean applied) throws Exception {
 
         IndexService indexService = indicesService.indexServiceSafe(request.index());
         IndexShard indexShard = indexService.shardSafe(0);
@@ -1267,18 +1286,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 logger.debug("Document source={} require a blocking mapping update of [{}]", request.sourceAsMap(), indexService.index().name());
             // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
             blockingMappingUpdate(indexService, request.type(), new CompressedXContent(update.toString()) );
-            /*
-            try {
-                mappingUpdatedAction.updateMappingOnMasterSynchronously(indexService.index().name(), request.type(), update);
-                operation = indexShard.prepareIndex(sourceToParse, request.version(), request.versionType(), Engine.Operation.Origin.PRIMARY, request.canHaveDuplicates());
-                update = operation.parsedDoc().dynamicMappingsUpdate();
-                if (update != null) {
-                    logger.warn("Dynamics mappings has failed");
-                }
-            } catch (Throwable e) {
-                logger.error("Failed to update mapping", e);
-            }
-            */
         }
 
         // get the docMapper after a potential mapping update
@@ -1289,6 +1296,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
         Map<String, ObjectMapper> objectMappers = docMapper.objectMappers();
         DocumentFieldMappers fieldMappers = docMapper.mappers();
 
+        Long timestamp = new Long(0);
+        if (timestampString != null) {
+            timestamp = docMapper.timestampFieldMapper().fieldType().value(timestampString);
+        }
+        
         if (logger.isTraceEnabled()) 
             logger.trace("Insert index=[{}] id=[{}] source={} fieldMappers={} objectMappers={} consistency={} ttl={}", 
                 indexService.index().name(), request.id(), sourceMap,Lists.newArrayList(fieldMappers.iterator()), objectMappers, 
@@ -1296,6 +1308,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
 
 
         Map<String, Object> map = new HashMap<String, Object>();
+        if (request.parent() != null) {
+            map.put("_parent", request.parent());
+        }
         for (String field : sourceMap.keySet()) {
             if (field.equals("_token")) continue;
             Object fieldValue = sourceMap.get(field);
@@ -1362,7 +1377,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
 
         String keyspaceName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, request.index());
         return insertRow(keyspaceName, request.type(), map, request.id(),
-                (request.opType() == OpType.CREATE), request.ttl(), request.consistencyLevel().toCassandraConsistencyLevel(), writetime, applied);
+                (request.opType() == OpType.CREATE), request.ttl(), request.consistencyLevel().toCassandraConsistencyLevel(), timestamp, applied);
     }
 
     /*
@@ -1409,11 +1424,18 @@ public class InternalCassandraClusterService extends InternalClusterService {
             questionsMarks.append('?');
             values[i++] = entry.getValue();
         }
-        String query = String.format("INSERT INTO \"%s\".\"%s\" (%s) VALUES (%s) %s %s", ksName, cfName, 
-                columnNames.toString(), questionsMarks.toString(), (ifNotExists) ? "IF NOT EXISTS" : "",
-                (ttl > 0) ? "USING TTL " + Long.toString(ttl) : "");
+        
+        StringBuilder query = new StringBuilder();
+        query.append("INSERT INTO \"").append(ksName).append("\".\"").append(cfName)
+             .append("\" (").append(columnNames.toString()).append(") VALUES (").append(questionsMarks.toString()).append(") ");
+        if (ifNotExists) query.append("IF NOT EXISTS ");
+        if (ttl > 0 || writetime>0) query.append("USING ");
+        if (ttl > 0) query.append("TTL ").append(Long.toString(ttl));
+        if (ttl > 0 && writetime > 0) query.append(" AND ");
+        if (writetime > 0) query.append("TIMESTAMP ").append(Long.toString(writetime));
+        
         try {
-            UntypedResultSet result = process(cl, (ifNotExists) ? ConsistencyLevel.LOCAL_SERIAL : null, query, values);
+            UntypedResultSet result = process(cl, (ifNotExists) ? ConsistencyLevel.LOCAL_SERIAL : null, query.toString(), values);
             if (ifNotExists) {
                 if (!result.isEmpty()) {
                     Row row = result.one();
@@ -1501,23 +1523,42 @@ public class InternalCassandraClusterService extends InternalClusterService {
         CFMetaData metadata = getCFMetaData(ksName, cfName);
         List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
         List<ColumnDefinition> clusteringColumns = metadata.clusteringColumns();
-        if (partitionColumns.size()+metadata.clusteringColumns().size() > 1) {
-            if (!(id.startsWith("[") && id.endsWith("]"))) 
-                throw new IOException("Unexpected _id=["+id+"], expecting something like [a,b,c]");
-            
-            Object[] keys = SchemaService.Utils.jsonMapper.readValue(id, Object[].class);
-            Object[] objects = (map != null) ? null : new Object[partitionColumns.size()+clusteringColumns.size()];
-            int i=0;
-            for(ColumnDefinition cd : Iterables.concat(partitionColumns, clusteringColumns)) {
-                AbstractType<?> type = cd.type;
-                if (map == null) {
-                    objects[i] = type.compose( type.fromString(keys[i].toString()) );
-                } else {
-                    map.put(cd.name.toString(), type.compose( type.fromString(keys[i].toString()) ) );
+        int pkSize = partitionColumns.size()+clusteringColumns.size();
+        if (pkSize > 1) {
+            if (id.startsWith("[") && id.endsWith("]")) {
+                // _id is JSON array
+                Object[] keys = SchemaService.Utils.jsonMapper.readValue(id, Object[].class);
+                Object[] objects = (map != null) ? null : new Object[pkSize];
+                int i=0;
+                for(ColumnDefinition cd : Iterables.concat(partitionColumns, clusteringColumns)) {
+                    AbstractType<?> type = cd.type;
+                    if (map == null) {
+                        objects[i] = type.compose( type.fromString(keys[i].toString()) );
+                    } else {
+                        map.put(cd.name.toString(), type.compose( type.fromString(keys[i].toString()) ) );
+                    }
+                    i++;
                 }
-                i++;
+                return objects;
+            } else {
+               // Expect that id id the last colomn of the primary key, and check that previous colomns are set in the map
+               if (map == null) {
+                   throw new IOException("Unexpected _id="+id+", expecting a JSON array or a document that contains all primary key columns but the last one.");
+               }
+               int i=0;
+               for(ColumnDefinition cd : Iterables.concat(partitionColumns, clusteringColumns)) {
+                   AbstractType<?> type = cd.type;
+                   if (i < pkSize-1) {
+                      if (map.get(cd.name.toString()) == null) {
+                          throw new IOException("Unexpected _id="+id+", expecting a value for "+cd.name.toString());
+                      }
+                   } else {
+                       map.put(cd.name.toString(), type.compose( type.fromString(id) ) );
+                   }
+                   i++;
+               }
+               return null;
             }
-            return objects;
         } else {
             if (map == null) {
                 return new Object[] { id };

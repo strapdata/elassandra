@@ -30,24 +30,15 @@ curl -XPUT "http://$NODE:9200/twitter/_mapping/server" -d '
 curl -XGET "http://$NODE:9200/twitter/server/my-server?pretty=true"
 curl -XGET "http://$NODE:9200/twitter/server/localhost?pretty=true"
 
-<<<<<<< HEAD
 
-=======
->>>>>>> bbfeba86cc382b1c74d8451d1ef58a716fdfb5a5
+
 curl -XGET "http://$NODE:9200/twitter/server/_search?pretty=true" -d '{ "query":{"match_all":{ }}}'
 
 curl -XGET "http://$NODE:9200/twitter/_search?pretty=true" -d '{ "query":{ "match": {"name":"my-server" } }}'
 curl -XGET "http://$NODE:9200/twitter/_search?pretty=true" -d '{ "query":{ "term": {"name":"localhost" } }}'
 
-<<<<<<< HEAD
-curl -XPUT "http://$NODE:9200/twitter/server/bigserver" -d '{
-    "ip": "22.22.22.22",
-    "netmask":32,
-    "prod" : true,
-    "description234":"my big server"
-}'
-=======
->>>>>>> bbfeba86cc382b1c74d8451d1ef58a716fdfb5a5
+
+
 curl -XPUT "http://$NODE:9200/twitter/server/bigserver234" -d '{
     "ip": "22.22.22.22",
     "netmask":32,
@@ -57,13 +48,10 @@ curl -XPUT "http://$NODE:9200/twitter/server/bigserver234" -d '{
 
 curl -XGET "http://$NODE:9200/twitter/server/_search?pretty=true" -d '{ "query":{"match_all":{ }}}'
 
-<<<<<<< HEAD
+
 curl -XGET "http://$NODE:9200/twitter/server/bigserver234?pretty=true&fields=description234,netmask"
 
 
-
-=======
->>>>>>> bbfeba86cc382b1c74d8451d1ef58a716fdfb5a5
 curl -XDELETE "http://$NODE:9200/twitter"
 
 curl -XPUT "http://$NODE:9200/twitter" -d '
@@ -78,8 +66,5 @@ curl -XPUT "http://$NODE:9200/twitter" -d '
             }
        }
     }
-<<<<<<< HEAD
 }'
-=======
-}'
->>>>>>> bbfeba86cc382b1c74d8451d1ef58a716fdfb5a5
+

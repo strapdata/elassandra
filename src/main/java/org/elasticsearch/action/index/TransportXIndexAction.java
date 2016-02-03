@@ -88,7 +88,7 @@ public class TransportXIndexAction extends TransportIndexAction {
 
         Long version = new Long(1);
         Boolean applied = new Boolean(true);
-        String id = clusterService.insertDocument(indicesService, request, clusterState, version, applied);
+        String id = clusterService.insertDocument(indicesService, request, clusterState, request.timestamp(), applied);
         request.versionType(request.versionType().versionTypeForReplicationAndRecovery());
         IndexResponse response = new IndexResponse(shardRequest.shardId.getIndex(), request.type(), id, version, applied);
 
