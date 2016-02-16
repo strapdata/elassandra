@@ -227,7 +227,7 @@ while true; do
             shift
         ;;
         -h)
-            echo "Usage: $0 [-f] [-h] [-p pidfile] [-H dumpfile] [-E errorfile]"
+            echo "Usage: $0 [-f] [-h][-e] [-p pidfile] [-H dumpfile] [-E errorfile]"
             exit 0
         ;;
         -v)
@@ -244,8 +244,6 @@ while true; do
             JVM_OPTS="$JVM_OPTS -Djava.library.path=$CASSANDRA_HOME/lib/sigar -Djava.awt.headless=true"
             JVM_OPTS="$JVM_OPTS -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 -XX:+UseCMSInitiatingOccupancyOnly"
             
-            # Fix due to maven-shade-plugin, asm does not set stackmap attribute in bytecode.
-            JVM_OPTS="$JVM_OPTS -XX:-UseSplitVerifier"
             classname="org.apache.cassandra.service.ElassandraDaemon"
             shift 1
         ;;

@@ -12,7 +12,8 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
-* **2016-02-01 Release 2.1.1-1 Add support for parent-child relationship**
+* **2016-02-16 Release 2.1.1-2 Remove build dependency to elasticsearch parent project**.
+* **2016-02-01 Release 2.1.1-1 Add support for parent-child relationship**.
 * **2016-01-28 Release 2.1.1 based on Elasticsearch 2.1.1 and cassandra 2.2.4**
 * **2015-12-20 Release 0.5 Re-index you data from cassandra 2.2.4 with zero downtime**.
 * **2015-11-15 Release 0.4 New elassandra tarball ready-to-run**.
@@ -895,7 +896,6 @@ ALL | ALL | Because there is no LOCAL_ALL in cassandra, ALL involve write in all
 * Elasticsearch 
  * tribe, percolate, snapshots and recovery service not tested.
  * Geoshape type not supported.
- * Parent/child relationship is not supported
  * Any Elasticsearch metadata update require the LOCAL_QUORUM (more than half the number of nodes in the elassandra datacenter)
  * Document version is alaways 1 for all documents (because cassandra index rebuild would increment version many times, document version become meaningless). 
  

@@ -56,13 +56,13 @@
   <logger name="org.elasticsearch" level="TRACE" />
   <logger name="org.elasticsearch.cassandra" level="TRACE" />
 
-  <logger name="org.elasticsearch.http" level="DEBUG"/>
-  <logger name="org.elasticsearch.transport" level="DEBUG"/>
+  <logger name="org.elasticsearch.http" level="WARN"/>
+  <logger name="org.elasticsearch.transport" level="WARN"/>
 
 
   <root level="TRACE">
     <appender-ref ref="FILE" />
-    <appender-ref ref="STDOUT" />
+    <!-- <appender-ref ref="STDOUT" /> -->
   </root>
   
 </configuration>

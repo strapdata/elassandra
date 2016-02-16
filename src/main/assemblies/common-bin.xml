@@ -89,19 +89,7 @@
                 <include>*</include>
             </includes>
         </fileSet>
-        <fileSet>
-            <directory>${cassandra.home}/conf</directory>
-            <outputDirectory>conf</outputDirectory>
-            <lineEnding>unix</lineEnding>
-            <includes>
-                <include>*</include>
-                <include>*/*</include>
-            </includes>
-            <excludes>
-                <exclude>logback.xml</exclude>
-                <exclude>cassandra.yml</exclude>
-            </excludes>
-        </fileSet>
+
         
         <fileSet>
             <filtered>true</filtered>
@@ -111,29 +99,11 @@
             <directoryMode>0755</directoryMode>
             <lineEnding>unix</lineEnding>
             <includes>
-                <include>cassandra</include>
-                <include>plugin</include>
-                <include>shortcuts-env.sh</include>
+                <include>*</include>
+                <include>*/**</include>
             </includes>
         </fileSet>
 
-        <fileSet>
-            <filtered>true</filtered>
-            <directory>${cassandra.home}/bin</directory>
-            <outputDirectory>bin</outputDirectory>
-            <fileMode>0755</fileMode>
-            <directoryMode>0755</directoryMode>
-            <lineEnding>unix</lineEnding>
-            <includes>
-                <include>cqlsh</include>
-                <include>cqlsh.py</include>
-                <include>debug-cql</include>
-                <include>sst*</include>
-                <include>stop-server</include>
-                <include>cassandra.in.sh</include>
-                <include>nodetool</include>
-            </includes>
-        </fileSet>
         
         <fileSet>
             <filtered>true</filtered>
@@ -197,6 +167,10 @@
     <files>
         <file>
             <source>README.md</source>
+            <outputDirectory>/</outputDirectory>
+        </file>
+        <file>
+            <source>CHANGES.txt</source>
             <outputDirectory>/</outputDirectory>
         </file>
         <file>
