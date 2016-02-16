@@ -44,5 +44,5 @@
   * Bug fix when indexing inet type (Internet Address).
 
 2.1.1-2 - 2016-02-16
-  * Elassandra now build as a standelone project.
+  * Elassandra now build as a standalone project.
   * Add a modified bin/cassandra.in.sh without empty element in CLASSPATH (cause a JarHell error)
