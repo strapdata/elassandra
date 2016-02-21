@@ -126,10 +126,12 @@
         </fileSet>
         
         <fileSet>
-            <directory>lib/sigar</directory>
-            <outputDirectory>lib/sigar</outputDirectory>
+            <directory>${cassandra.home}/lib</directory>
+            <outputDirectory>lib</outputDirectory>
             <includes>
-                <include>*</include>
+                <include>jsr223/*/**</include>
+                <include>licenses/*</include>
+                <include>sigar-bin/*</include>
             </includes>
         </fileSet>
         
