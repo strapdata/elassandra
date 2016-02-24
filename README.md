@@ -50,13 +50,13 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 Because cassandra keyspace, type and table can only contain alphanumeric and underscore characters (see [cassandra documentation](http://docs.datastax.com/en/cql/3.1/cql/cql_reference/ref-lexical-valid-chars.html)), the same restriction applies to index and type names. 
 
 * Replace the index name **.kibana** by **kibana** in *config/kibana.yaml*.
-* Replace **'index-pattern'** by **'index_pattern'** in *kibana/src/public/index.js* with the following sed command:
+* Replace **'index-pattern'** by **'index_pattern'** in the source code with the following sed command:
 ```
 q=\'
 # for Kibana 4.1.x
 sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" index.js
 # for Kibana 4.3.x (for Elassandra v2.1.1+)
-sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" -e "s/${q}index-pattern${q}: ${q}/settings/objects/savedSearches/${q}/${q}index_pattern${q}: ${q}/settings/objects/savedSearches/${q}/" optimize/bundles/kibana.bundle.js src/ui/public/index_patterns/*.js src/ui/public/index_patterns/*.js
+sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" -e "s%${q}index-pattern${q}: ${q}/settings/objects/savedSearches/${q}%${q}index_pattern${q}: ${q}/settings/objects/savedSearches/${q}%g" optimize/bundles/kibana.bundle.js src/ui/public/index_patterns/*.js src/ui/public/index_patterns/*.js
 ```
 * If you want to load sample data from [Kibana Getting started](https://www.elastic.co/guide/en/kibana/current/getting-started.html), apply the following changes to logstash.jsonl with a sed command. 
 

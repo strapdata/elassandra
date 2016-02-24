@@ -1431,10 +1431,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
         query.append("INSERT INTO \"").append(ksName).append("\".\"").append(cfName)
              .append("\" (").append(columnNames.toString()).append(") VALUES (").append(questionsMarks.toString()).append(") ");
         if (ifNotExists) query.append("IF NOT EXISTS ");
-        if (ttl > 0 || writetime>0) query.append("USING ");
+        if (ttl > 0 || writetime != null) query.append("USING ");
         if (ttl > 0) query.append("TTL ").append(Long.toString(ttl));
-        if (ttl > 0 && writetime > 0) query.append(" AND ");
-        if (writetime > 0) query.append("TIMESTAMP ").append(Long.toString(writetime));
+        if (ttl > 0 && writetime != null) query.append(" AND ");
+        if (writetime != null) query.append("TIMESTAMP ").append(Long.toString(writetime));
         
         try {
             UntypedResultSet result = process(cl, (ifNotExists) ? ConsistencyLevel.LOCAL_SERIAL : null, query.toString(), values);
