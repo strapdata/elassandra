@@ -1296,7 +1296,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         Map<String, ObjectMapper> objectMappers = docMapper.objectMappers();
         DocumentFieldMappers fieldMappers = docMapper.mappers();
 
-        Long timestamp = new Long(0);
+        Long timestamp = null;
         if (timestampString != null) {
             timestamp = docMapper.timestampFieldMapper().fieldType().value(timestampString);
         }
@@ -1377,7 +1377,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
 
         String keyspaceName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, request.index());
         return insertRow(keyspaceName, request.type(), map, request.id(),
-                (request.opType() == OpType.CREATE), request.ttl(), request.consistencyLevel().toCassandraConsistencyLevel(), timestamp, applied);
+                (request.opType() == OpType.CREATE), request.ttl(), request.consistencyLevel().toCassandraConsistencyLevel(),
+                (request.opType() == OpType.CREATE) ? null : timestamp,
+                applied);
     }
 
     /*

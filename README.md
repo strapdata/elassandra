@@ -56,7 +56,7 @@ q=\'
 # for Kibana 4.1.x
 sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" index.js
 # for Kibana 4.3.x (for Elassandra v2.1.1+)
-sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" -e "s/${q}index-pattern${q}: ${q}/settings/objects/savedSearches/'/${q}index_pattern${q}: ${q}/settings/objects/savedSearches/${q}/" optimize/bundles/kibana.bundle.js ./ui/public/index_patterns/*.js src/ui/public/index_patterns/*.js
+sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" -e "s/${q}index-pattern${q}: ${q}/settings/objects/savedSearches/${q}/${q}index_pattern${q}: ${q}/settings/objects/savedSearches/${q}/" optimize/bundles/kibana.bundle.js src/ui/public/index_patterns/*.js src/ui/public/index_patterns/*.js
 ```
 * If you want to load sample data from [Kibana Getting started](https://www.elastic.co/guide/en/kibana/current/getting-started.html), apply the following changes to logstash.jsonl with a sed command. 
 

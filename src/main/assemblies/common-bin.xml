@@ -136,6 +136,14 @@
         </fileSet>
         
         <fileSet>
+            <directory>distribution/deb/init.d</directory>
+            <outputDirectory>etc</outputDirectory>
+            <includes>
+                <include>*</include>
+            </includes>
+        </fileSet>
+        
+        <fileSet>
         <directory>./</directory>
         <outputDirectory>/logs</outputDirectory>
         <excludes>

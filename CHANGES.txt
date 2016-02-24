@@ -50,5 +50,5 @@
 2.1.1-3 - 2016-02-21
   * Add a start script for Linux Debian provided by Chris Feldmeier.
   * Add sigar binaries in the tarball package.
-  * Fix the buildNumber in cluster information.
+  * Fix the build_hash in the cluster information.
 
