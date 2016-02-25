@@ -20,6 +20,8 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## Benefits of Elassandra
 
+Show short intro: https://www.youtube.com/watch?v=EFZhwrVBTFw
+
 For cassandra users, elassandra provides elasicsearch features :
 * Cassandra update are automatically indexed in Elasticsearch.
 * Full-Text and spatial search on your cassandra data.
