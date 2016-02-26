@@ -1377,7 +1377,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
 
         String keyspaceName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, request.index());
         return insertRow(keyspaceName, request.type(), map, request.id(),
-                (request.opType() == OpType.CREATE), request.ttl(), request.consistencyLevel().toCassandraConsistencyLevel(),
+                (request.opType() != OpType.CREATE), request.ttl(), request.consistencyLevel().toCassandraConsistencyLevel(),
                 (request.opType() == OpType.CREATE) ? null : timestamp,
                 applied);
     }

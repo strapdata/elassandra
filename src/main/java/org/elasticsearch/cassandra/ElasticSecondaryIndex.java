@@ -34,6 +34,7 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.Cell;
 import org.apache.cassandra.db.ColumnFamily;
@@ -382,7 +383,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
             return (tombstoneColumns.contains(cql3name));
         }
         
-        public void complete() {
+        public boolean complete() {
             // add missing or collection columns that should be read before indexing the document.
             Collection<String> mustReadColumns = null;
             for(String fieldName: mappingInfo.fields) {
@@ -405,16 +406,23 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                     if (logger.isTraceEnabled()) {
                         logger.trace(" {}.{} id={} read fields={} docMap={}",metadata.ksName, metadata.cfName, id(), mustReadColumns, docMap);
                     }
-                    Row row = getClusterService().fetchRowInternal(metadata.ksName, metadata.cfName, mustReadColumns, pkColumns).one();
-                    int putCount = getClusterService().rowAsMap(metadata.ksName, metadata.cfName, row, docMap);
-                    if (putCount > 0) docLive = true;
-                    if (logger.isTraceEnabled()) {
-                        logger.trace("{}.{} id={} indexing docMap={}", metadata.ksName, metadata.cfName, id(), docMap);
+                    UntypedResultSet results = getClusterService().fetchRowInternal(metadata.ksName, metadata.cfName, mustReadColumns, pkColumns);
+                    if (!results.isEmpty()) {
+                        Row row = results.one();
+                        int putCount = getClusterService().rowAsMap(metadata.ksName, metadata.cfName, row, docMap);
+                        if (putCount > 0) docLive = true;
+                        if (logger.isTraceEnabled()) {
+                            logger.trace("{}.{} id={} indexing docMap={}", metadata.ksName, metadata.cfName, id(), docMap);
+                        }
+                    } else {
+                        logger.warn("document {}.{} id={} not found",metadata.ksName, metadata.cfName, id());
+                        return false;
                     }
                 } catch (RequestValidationException | IOException e) {
                     logger.error("Failed to fetch columns {}",mustReadColumns,e);
                 }
             }
+            return true;
         }
         
         
@@ -498,9 +506,8 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
         }
         
         public void flush() throws JsonGenerationException, JsonMappingException, IOException {
-            complete();
             if (docLive) {
-                index();
+                if (complete()) index();
             } else {
                 delete();
             }
