@@ -52,4 +52,7 @@
   * Add sigar binaries in the tarball package.
   * Fix the build_hash in the cluster information.
 
+2.1.1-4 - 2016-02-21
+  * Throw a DocumentAlreadyExsistsException when op_type=create failed.
+  * Fix a bug on cassandra timestamp when indexing or deleting documents.
 

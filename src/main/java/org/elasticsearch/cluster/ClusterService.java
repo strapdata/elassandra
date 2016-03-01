@@ -370,9 +370,9 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
 
     public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
-    public String insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString, Boolean applied) throws Exception;
+    public void insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString) throws Exception;
 
-    public String insertRow(String index, String type, Map<String, Object> map, String id, boolean ifNotExists, long ttl, ConsistencyLevel cl, Long writetime, Boolean applied)
+    public boolean insertRow(String index, String type, Map<String, Object> map, String id, boolean ifNotExists, long ttl, ConsistencyLevel cl, Long writetime)
             throws Exception;
 
     public void index(String[] indices, Collection<Range<Token>> tokenRanges);

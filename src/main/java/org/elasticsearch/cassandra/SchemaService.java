@@ -127,7 +127,7 @@ public interface SchemaService extends ClusterService {
 
     public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
-    public String insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, Long writetime, Boolean applied) throws Exception;
+    public void insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, Long writetime) throws Exception;
 
     public String insertRow(String index, String type, Map<String, Object> map, String id, boolean ifNotExists, long ttl, ConsistencyLevel cl, Long writetime, Boolean applied)
             throws Exception;

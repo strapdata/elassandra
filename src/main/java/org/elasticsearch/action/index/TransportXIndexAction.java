@@ -39,6 +39,7 @@ import org.elasticsearch.cluster.metadata.MetaDataCreateIndexService;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.index.engine.DocumentAlreadyExistsException;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndexAlreadyExistsException;
 import org.elasticsearch.indices.IndicesService;
@@ -87,10 +88,10 @@ public class TransportXIndexAction extends TransportIndexAction {
         final IndexRequest request = shardRequest.request;
 
         Long version = new Long(1);
-        Boolean applied = new Boolean(true);
-        String id = clusterService.insertDocument(indicesService, request, clusterState, request.timestamp(), applied);
+        IndexResponse response;
+        clusterService.insertDocument(indicesService, request, clusterState, request.timestamp());
         request.versionType(request.versionType().versionTypeForReplicationAndRecovery());
-        IndexResponse response = new IndexResponse(shardRequest.shardId.getIndex(), request.type(), id, version, applied);
+        response = new IndexResponse(shardRequest.shardId.getIndex(), request.type(), request.id(), version, true);
 
         return new Tuple<>(response, shardRequest.request);
     }

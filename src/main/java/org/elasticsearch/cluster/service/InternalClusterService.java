@@ -1007,15 +1007,13 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
-    public String insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString, Boolean applied) throws Exception {
-        // TODO Auto-generated method stub
-        return null;
+    public void insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString) throws Exception {
     }
 
     @Override
-    public String insertRow(String index, String type, Map<String, Object> map, String id, boolean ifNotExists, long ttl, ConsistencyLevel cl, Long writetime, Boolean applied) throws Exception {
+    public boolean insertRow(String index, String type, Map<String, Object> map, String id, boolean ifNotExists, long ttl, ConsistencyLevel cl, Long writetime) throws Exception {
         // TODO Auto-generated method stub
-        return null;
+        return true;
     }
 
     @Override

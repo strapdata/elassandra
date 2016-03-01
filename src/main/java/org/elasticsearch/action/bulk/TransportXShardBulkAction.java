@@ -88,12 +88,11 @@ public class TransportXShardBulkAction extends TransportShardBulkAction {
         }
 
         Long writetime = new Long(1);
-        Boolean applied = new Boolean(true);
-        String id = clusterService.insertDocument(indicesService, indexRequest, clusterState, indexRequest.timestamp(), applied);
+        clusterService.insertDocument(indicesService, indexRequest, clusterState, indexRequest.timestamp());
 
         assert indexRequest.versionType().validateVersionForWrites(indexRequest.version());
 
-        IndexResponse indexResponse = new IndexResponse(request.index(), indexRequest.type(), id, writetime, applied);
+        IndexResponse indexResponse = new IndexResponse(request.index(), indexRequest.type(), indexRequest.id(), writetime, true);
         return new WriteResult(indexResponse, null);
 
         //return executeIndexRequestOnPrimary(request, indexRequest, indexShard);

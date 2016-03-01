@@ -91,7 +91,6 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexRequest.OpType;
-import org.elasticsearch.action.support.replication.TransportReplicationAction.RetryOnPrimaryException;
 import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
 import org.elasticsearch.cassandra.ElasticSecondaryIndex;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
@@ -101,7 +100,6 @@ import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
-import org.elasticsearch.cluster.ClusterStateObserver.ChangePredicate;
 import org.elasticsearch.cluster.ClusterStateObserver.EventPredicate;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
@@ -120,12 +118,13 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
-import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.ToXContent.Params;
+import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.json.JsonXContentParser;
 import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.engine.DocumentAlreadyExistsException;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.DocumentFieldMappers;
@@ -152,10 +151,10 @@ import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper.Names;
 import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
-import org.elasticsearch.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.settings.NodeSettingsService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -1272,7 +1271,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * java.lang.Boolean)
      */
     @Override
-    public String insertDocument(final IndicesService indicesService, final IndexRequest request, final ClusterState clusterState, String timestampString, Boolean applied) throws Exception {
+    public void insertDocument(final IndicesService indicesService, final IndexRequest request, final ClusterState clusterState, String timestampString) throws Exception {
 
         IndexService indexService = indicesService.indexServiceSafe(request.index());
         IndexShard indexShard = indexService.shardSafe(0);
@@ -1376,10 +1375,14 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
 
         String keyspaceName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, request.index());
-        return insertRow(keyspaceName, request.type(), map, request.id(),
-                (request.opType() != OpType.CREATE), request.ttl(), request.consistencyLevel().toCassandraConsistencyLevel(),
-                (request.opType() == OpType.CREATE) ? null : timestamp,
-                applied);
+        boolean applied = insertRow(keyspaceName, request.type(), map, request.id(),
+                (request.opType() == OpType.CREATE), // if not exists
+                request.ttl(),                       // ttl
+                request.consistencyLevel().toCassandraConsistencyLevel(),   // CL
+                (request.opType() == OpType.CREATE) ? null : timestamp); // writetime, should be null for conditional updates
+        if (!applied) {
+            throw new DocumentAlreadyExistsException(indexShard.shardId(), request.type(), request.id());
+        }
     }
 
     /*
@@ -1393,8 +1396,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * java.lang.Boolean)
      */
     @Override
-    public String insertRow(final String ksName, final String cfName, Map<String, Object> map, String id, final boolean ifNotExists, final long ttl, final ConsistencyLevel cl,
-            Long writetime, Boolean applied) throws Exception {
+    public boolean insertRow(final String ksName, final String cfName, Map<String, Object> map, String id, final boolean ifNotExists, final long ttl, final ConsistencyLevel cl,
+            Long writetime) throws Exception {
         
         CFMetaData metadata = getCFMetaData(ksName, cfName);
         // if the provided columns does not contains all the primary key columns, parse the _id to populate the columns in map.
@@ -1434,7 +1437,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         if (ttl > 0 || writetime != null) query.append("USING ");
         if (ttl > 0) query.append("TTL ").append(Long.toString(ttl));
         if (ttl > 0 && writetime != null) query.append(" AND ");
-        if (writetime != null) query.append("TIMESTAMP ").append(Long.toString(writetime));
+        if (writetime != null) query.append("TIMESTAMP ").append(Long.toString(writetime*1000));
         
         try {
             UntypedResultSet result = process(cl, (ifNotExists) ? ConsistencyLevel.LOCAL_SERIAL : null, query.toString(), values);
@@ -1442,13 +1445,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 if (!result.isEmpty()) {
                     Row row = result.one();
                     if (row.has("[applied]")) {
-                        applied = row.getBoolean("[applied]");
+                         return row.getBoolean("[applied]");
                     }
                 }
-            } else {
-                applied = true;
-            }
-            return id;
+            } 
+            return true;
         } catch (Exception e) {
             logger.error("Failed to process query=" + query + " values=" + Arrays.toString(values), e);
             throw e;
