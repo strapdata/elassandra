@@ -618,7 +618,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                 cellName = cell.name();
                 assert cellName instanceof CompoundSparseCellName;
                 
-                if (cellName.cql3ColumnName(metadata).toString().length()==0) {
+                if (cellName.cql3ColumnName(metadata).toString().length()==0 || !mappingInfo.fields.containsKey(cellName.cql3ColumnName(metadata))) {
                     // ignore fake cell with no CQL3 name.
                     continue;
                 }
@@ -645,14 +645,16 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                                 break;
                             case MAP:
                                 value = deserialize(((MapType)cd.type).getValuesType(), cell.value() );
-                                String key = (String) deserialize(((MapType)cd.type).getKeysType(), cellName.get(cellName.size()-1));
+                                Object key = deserialize(((MapType)cd.type).getKeysType(), cellName.get(cellName.size()-1));
                                 if (logger.isTraceEnabled()) 
                                     logger.trace("map name={} type={} key={} value={}", 
                                             cellName.cql3ColumnName(metadata),
                                             cd.type.asCQL3Type().toString(),
                                             key, 
                                             value);
-                                doc.addMapColumn(cd.name.toString(), key, value, cell.getLocalDeletionTime());
+                                if (key instanceof String) {
+                                    doc.addMapColumn(cd.name.toString(), key, value, cell.getLocalDeletionTime());
+                                }
                                 break;
                             }
 
