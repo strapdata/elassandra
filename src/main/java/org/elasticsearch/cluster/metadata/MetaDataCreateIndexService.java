@@ -337,6 +337,17 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     }
                     // now, put the request settings, so they override templates
                     indexSettingsBuilder.put(request.settings());
+                    indexSettingsBuilder.put(SETTING_NUMBER_OF_SHARDS, MetaDataCreateIndexService.this.clusterService.state().nodes().size());
+                    
+                    String keyspace = (indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE_NAME) == null) ? request.index() : indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE_NAME);
+                    if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
+                        indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
+                    } else {
+                        logger.warn("Cannot get Schema for keyspace [{}] => numberOfReplica = 0", keyspace);
+                        indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, 0);
+                    }
+                    
+                    /*
                     if (request.index().equals(ScriptService.SCRIPT_INDEX)) {
                         indexSettingsBuilder.put(SETTING_NUMBER_OF_SHARDS, settings.getAsInt(SETTING_NUMBER_OF_SHARDS, 1));
                     } else {
@@ -344,6 +355,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                             indexSettingsBuilder.put(SETTING_NUMBER_OF_SHARDS, settings.getAsInt(SETTING_NUMBER_OF_SHARDS, 5));
                         }
                     }
+                    
                     if (request.index().equals(ScriptService.SCRIPT_INDEX)) {
                         indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0));
                         indexSettingsBuilder.put(SETTING_AUTO_EXPAND_REPLICAS, "0-all");
@@ -352,7 +364,8 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                             indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 1));
                         }
                     }
-
+                    */
+                    
                     if (settings.get(SETTING_AUTO_EXPAND_REPLICAS) != null && indexSettingsBuilder.get(SETTING_AUTO_EXPAND_REPLICAS) == null) {
                         indexSettingsBuilder.put(SETTING_AUTO_EXPAND_REPLICAS, settings.get(SETTING_AUTO_EXPAND_REPLICAS));
                     }

@@ -220,20 +220,16 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
             @Override
             public ClusterState execute(ClusterState currentState) {
-                ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
-
-                DiscoveryNodes newDiscoveryNodes = nodes();
-                newStateBuilder.nodes(newDiscoveryNodes);
+                ClusterState.Builder newStateBuilder = ClusterState.builder(currentState).nodes(nodes());
 
                 if (schemaMetaData != null) {
                     newStateBuilder.metaData(schemaMetaData);
                 }
 
-                ClusterState newClusterState = newStateBuilder.build();
+                ClusterState newClusterState = clusterService.updateNumberOfShards( newStateBuilder.build() );
                 RoutingTable newRoutingTable = RoutingTable.builder(clusterService, newClusterState).build();
                 
-                ClusterState newClusterState2 = ClusterState.builder(newClusterState).routingTable(newRoutingTable).build();
-                return newClusterState2;
+                return ClusterState.builder(newClusterState).routingTable(newRoutingTable).build();
             }
 
             @Override

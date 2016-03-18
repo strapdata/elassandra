@@ -1,7 +1,7 @@
-# Elassandra shortcuts
+# Elassandra usefull alias
 
 if [ "x$CASSANDRA_HOME" = "x" ]; then
-    CASSANDRA_HOME=$PWD
+    export CASSANDRA_HOME=$PWD
 fi
 echo "CASSANDRA_HOME=$CASSANDRA_HOME"
 

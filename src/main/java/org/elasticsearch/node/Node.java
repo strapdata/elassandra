@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 
 import org.elasticsearch.Build;
@@ -41,6 +42,13 @@ import org.elasticsearch.client.node.NodeClientModule;
 import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ProcessedClusterStateNonMasterUpdateTask;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.component.Lifecycle;
 import org.elasticsearch.common.component.LifecycleComponent;
@@ -239,7 +247,8 @@ public class Node implements Releasable {
         ClusterService clusterService = injector.getInstance(ClusterService.class);
         clusterService.start();
 
-        injector.getInstance(IndicesService.class).start();
+        IndicesService indiceService = injector.getInstance(IndicesService.class);
+        indiceService.start();
         injector.getInstance(IndexingMemoryController.class).start();
         injector.getInstance(IndicesClusterStateService.class).start();
         injector.getInstance(SecondaryIndicesService.class).start();
@@ -296,7 +305,13 @@ public class Node implements Releasable {
         injector.getInstance(TribeService.class).start();
 
         ClusterService clusterService = injector.getInstance(ClusterService.class);
+        
+        // broadcast shards state over gossip
         clusterService.publishAllShardsState();
+        
+        // update number of shard when all keyspaces are loaded.
+        clusterService.submitNumberOfShardsUpdate();
+        
         logger.debug("Elasticsearch started state={}", clusterService.state().toString());
         return this;
     }

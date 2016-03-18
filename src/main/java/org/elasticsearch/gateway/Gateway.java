@@ -77,8 +77,7 @@ public class Gateway extends AbstractComponent implements ClusterStateListener {
             }
         }
 
-        builder.metaData(metadata);
-        listener.onSuccess(builder.build());
+        listener.onSuccess( clusterService.updateNumberOfShards(builder.metaData(metadata).build()) );
     }
     
     public void reset() throws Exception {

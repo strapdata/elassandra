@@ -21,21 +21,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 
 /**
- * Replicates data on all nodes in specified datacenters.
+ * Replicates data on all nodes on the specified datacenters.
  * 
  * @author vroyer
  *
- */
+ **/
 public class DatacenterReplicationStrategy extends AbstractReplicationStrategy implements IEndpointStateChangeSubscriber {
 
     private static final String DATACENTERS = "datacenters";
     private static final Logger logger = LoggerFactory.getLogger(DatacenterReplicationStrategy.class);
 
     private final Set<String> datacenters = new HashSet<String>();
-    private final Multimap<String, InetAddress> datacenterEndpoints = ArrayListMultimap.create();
+    private final HashMultimap<String, InetAddress> datacenterEndpoints = HashMultimap.create();
 
     public DatacenterReplicationStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions) {
         super(keyspaceName, tokenMetadata, snitch, configOptions);

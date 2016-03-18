@@ -31,3 +31,16 @@ curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=message:elassandra"
 
 curl -XDELETE "http://$NODE:9200/twitter/tweet/1"
 curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=message:elassandra"
+
+curl -XGET "http://$NODE:9200/twitter/tweet/_search?pretty=true" -d '{
+  "size" : 10000,
+  "timeout" : 10000,
+  "post_filter" : {
+    "match_all" : { }
+  },
+  "sort" : [ {
+    "_doc" : {
+      "order" : "asc"
+    }
+  } ]
+}'

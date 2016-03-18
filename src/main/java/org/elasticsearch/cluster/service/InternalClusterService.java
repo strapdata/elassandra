@@ -933,6 +933,18 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
+    public ClusterState updateNumberOfShards(ClusterState currentState) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+    
+    @Override
+    public void submitNumberOfShardsUpdate() {
+        // TODO Auto-generated method stub
+        
+    }
+    
+    @Override
     public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException {
         // TODO Auto-generated method stub
         

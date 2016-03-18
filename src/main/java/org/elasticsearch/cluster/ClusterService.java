@@ -346,6 +346,9 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
 
+    public ClusterState updateNumberOfShards(ClusterState currentState);
+    public void submitNumberOfShardsUpdate();
+    
     public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
     
     public List<ColumnDefinition> getPrimaryKeyColumns(String ksName, String cfName) throws ConfigurationException;

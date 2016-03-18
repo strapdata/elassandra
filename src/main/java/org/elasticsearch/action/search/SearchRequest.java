@@ -588,11 +588,14 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
         }
         requestCache = in.readOptionalBoolean();
         
-        Object[] tokens = (Object[]) in.readGenericValue();
-        this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
-        for (int i = 0; i < tokens.length;) {
-            Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
-            this.tokenRanges.add(range);
+        
+        if (in.available() > 0 && in.readBoolean()) {
+            Object[] tokens = (Object[]) in.readGenericValue();
+            this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+            for (int i = 0; i < tokens.length;) {
+                Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+                this.tokenRanges.add(range);
+            }
         }
     }
 
@@ -629,12 +632,15 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
 
         out.writeOptionalBoolean(requestCache);
         
-        Token[] tokens = new Token[tokenRanges.size() * 2];
-        int i = 0;
-        for (Range<Token> range : tokenRanges) {
-            tokens[i++] = range.left;
-            tokens[i++] = range.right;
+        out.writeBoolean(tokenRanges != null);
+        if (tokenRanges != null) {
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
         }
-        out.writeGenericValue(tokens);
     }
 }

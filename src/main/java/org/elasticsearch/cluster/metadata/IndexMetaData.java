@@ -207,8 +207,6 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     private final int numberOfShards;
     private final int numberOfReplicas;
     private transient final int totalNumberOfShards;
-    
-    private final int replicationFactor;
 
     private final DiscoveryNodeFilters requireFilters;
     private final DiscoveryNodeFilters includeFilters;
@@ -221,8 +219,8 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     private final boolean useTypeForRouting;
 
     private IndexMetaData(String index, long version, State state, Settings settings, ImmutableOpenMap<String, MappingMetaData> mappings, 
-            ImmutableOpenMap<String, AliasMetaData> aliases, ImmutableOpenMap<String, Custom> customs, int numberOfNodes) {
-        /*
+            ImmutableOpenMap<String, AliasMetaData> aliases, ImmutableOpenMap<String, Custom> customs) {
+        
         Integer maybeNumberOfShards = settings.getAsInt(SETTING_NUMBER_OF_SHARDS, null);
         if (maybeNumberOfShards == null) {
             throw new IllegalArgumentException("must specify numberOfShards for index [" + index + "]");
@@ -240,7 +238,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         if (numberOfReplicas < 0) {
             throw new IllegalArgumentException("must specify non-negative number of shards for index [" + index + "]");
         }
-        */
+        
         this.index = index;
         this.version = version;
         this.state = state;
@@ -248,16 +246,15 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         this.mappings = mappings;
         this.customs = customs;
         
-        if (Schema.instance != null && Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace()) != null) {
-            Keyspace ks = Schema.instance.getKeyspaceInstance(keyspace());
-            this.replicationFactor = (ks.getReplicationStrategy() == null) ? 1 : ks.getReplicationStrategy().getReplicationFactor();
-        } else {
-            this.replicationFactor = 1;
-        }
-        
+        /*
         this.numberOfShards = numberOfNodes;
         this.numberOfReplicas = replicationFactor * (numberOfNodes - 1);
         this.totalNumberOfShards = replicationFactor * numberOfNodes;
+        */
+        
+        this.numberOfShards = numberOfShards;
+        this.numberOfReplicas = numberOfReplicas;
+        this.totalNumberOfShards = numberOfShards * (numberOfReplicas + 1);
         this.aliases = aliases;
 
         Map<String, String> requireMap = settings.getByPrefix("index.routing.allocation.require.").getAsMap();
@@ -402,11 +399,6 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public String keyspace() {
         return getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
     }
-
-    public int replicationFactor() {
-        return this.replicationFactor;
-    }
-    
     
     public ImmutableOpenMap<String, AliasMetaData> getAliases() {
         return this.aliases;
@@ -790,15 +782,6 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
 
         public IndexMetaData build() {
             Settings.Builder settingsBuilder = settingsBuilder().put(settings);
-            Discovery dicovery = ElassandraDaemon.injector().getInstance(Discovery.class);
-            int numberOfNodes = (dicovery != null && dicovery.nodes() != null) ? dicovery.nodes().size() : 1;
-            settingsBuilder.put(SETTING_NUMBER_OF_SHARDS, numberOfNodes);
-            
-            String keyspace = settings.get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
-            if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
-                settingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
-            }
-            
             ImmutableOpenMap.Builder<String, AliasMetaData> tmpAliases = aliases;
             Settings tmpSettings = settingsBuilder.build();
 
@@ -810,7 +793,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
                 }
             }
 
-            return new IndexMetaData(index, version, state, tmpSettings, mappings.build(), tmpAliases.build(), customs.build(), numberOfNodes);
+            return new IndexMetaData(index, version, state, tmpSettings, mappings.build(), tmpAliases.build(), customs.build());
         }
 
         public static void toXContent(IndexMetaData indexMetaData, XContentBuilder builder, ToXContent.Params params) throws IOException {

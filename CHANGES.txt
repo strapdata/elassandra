@@ -56,3 +56,9 @@
   * Throw a DocumentAlreadyExsistsException when op_type=create failed.
   * Fix a bug on cassandra timestamp when indexing or deleting documents.
 
+2.1.1-5 - 2016-03-15
+  * Add missing classes from org.elasticsearch.common.logging.
+  * Add index setting number_of_replica in cluster state.
+  * Change elastic_admin keyspace replication strategy to 'DatacenterReplicationStrategy' (RF=Datacenter number of nodes to improve resilancy).
+  * Manage token_range in SearchRequest has an optional field to remain compatible with the Elasticsearch binary protocol.
+  * Set Elasticsearch version to 2.1.1 to remain compatible with some plugins.

@@ -101,6 +101,7 @@ import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.ClusterStateObserver.EventPredicate;
+import org.elasticsearch.cluster.ProcessedClusterStateNonMasterUpdateTask;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -113,6 +114,7 @@ import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.InternalClusterService;
+import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -121,6 +123,7 @@ import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.ToXContent.Params;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.json.JsonXContentParser;
+import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.index.IndexService;
@@ -154,7 +157,6 @@ import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
 import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.shard.IndexShard;
-import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.settings.NodeSettingsService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -657,7 +659,49 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return mapping;
     }
     
+    public ClusterState updateNumberOfShards(ClusterState currentState) {
+        int numberOfNodes = currentState.nodes().size();
+        MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
+        for(Iterator<IndexMetaData> it = currentState.metaData().indices().valuesIt(); it.hasNext(); ) {
+            IndexMetaData indexMetaData = it.next();
+            IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
+            indexMetaDataBuilder.numberOfShards(numberOfNodes);
+            String keyspace = indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME,indexMetaData.getIndex());
+            if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
+                indexMetaDataBuilder.numberOfReplicas( Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
+            } else {
+                indexMetaDataBuilder.numberOfReplicas( 0 );
+            }
+            metaDataBuilder.put(indexMetaDataBuilder.build(), false);
+        }
+        return ClusterState.builder(currentState).metaData(metaDataBuilder.build()).build();
+    }
     
+    /**
+     * Submit an updateTask to update numberOfShard and numberOfReplica of all indices in clusterState.
+     */
+    public void submitNumberOfShardsUpdate() {
+        submitStateUpdateTask("Update numberOfShard and numberOfReplica of all indices" , Priority.URGENT, new ProcessedClusterStateNonMasterUpdateTask() {
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+                return updateNumberOfShards(currentState);
+            }
+    
+            @Override
+            public boolean doPresistMetaData() {
+                return false;
+            }
+    
+            @Override
+            public void onFailure(String source, Throwable t) {
+                logger.error("unexpected failure during [{}]", t, source);
+            }
+    
+            @Override
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+            }
+        });
+    }
 
     /*
      * (non-Javadoc)
@@ -1611,7 +1655,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public void createElasticAdminKeyspace()  {
         if (Schema.instance.getKSMetaData(SchemaService.ELASTIC_ADMIN_KEYSPACE) == null) {
             try {
-                QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };", ELASTIC_ADMIN_KEYSPACE),
+                QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = { 'class' : 'DatacenterReplicationStrategy', 'datacenters' : '%s' };", 
+                        ELASTIC_ADMIN_KEYSPACE, DatabaseDescriptor.getLocalDataCenter()),
                         ConsistencyLevel.LOCAL_ONE);
                 QueryProcessor.process(String.format("CREATE TABLE IF NOT EXISTS %s.\"%s\" ( dc text PRIMARY KEY, owner uuid, version bigint, metadata text);", ELASTIC_ADMIN_KEYSPACE, metaDataTableName),
                         ConsistencyLevel.LOCAL_ONE);
@@ -1723,11 +1768,12 @@ public class InternalCassandraClusterService extends InternalClusterService {
     };
     
     
+    
     @Override
     public void initializeMetaDataAsComment() {
         MetaData metadata = state().metaData();
         try {
-            String metaDataString = MetaData.builder().toXContent(metadata, persistedParams);
+            String metaDataString = MetaData.builder().toXContent(metadata);
             // initialize a first row if needed
             UntypedResultSet result = process(ConsistencyLevel.LOCAL_QUORUM, ConsistencyLevel.LOCAL_SERIAL,
                     String.format("INSERT INTO \"%s\".\"%s\" (dc,owner,version,metadata) VALUES (?,?,?,?) IF NOT EXISTS", ELASTIC_ADMIN_KEYSPACE, metaDataTableName),
@@ -1767,7 +1813,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
             logger.warn("don't push obsolete metadata uuid={} version {} < {}", newMetaData.uuid(), newMetaData.version(), state().metaData().version());
             return;
         }
-        String metaDataString = MetaData.builder().toXContent(newMetaData, InternalCassandraClusterService.persistedParams);
+        String metaDataString = MetaData.builder().toXContent(newMetaData);
         UntypedResultSet result = process(
                 ConsistencyLevel.LOCAL_ONE,
                 ConsistencyLevel.LOCAL_SERIAL,

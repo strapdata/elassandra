@@ -19,6 +19,7 @@ package org.elasticsearch.cassandra.gateway;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.ExtensionPoint;
+import org.elasticsearch.gateway.Gateway;
 
 /**
  *
@@ -27,18 +28,18 @@ public class CassandraGatewayModule extends AbstractModule {
 
     public static final String GATEWAY_TYPE_KEY = "gateway.type";
 
-    private final ExtensionPoint.SelectedType<CassandraGateway> gatewayTypes = new ExtensionPoint.SelectedType<>("gateway", CassandraGateway.class);
+    private final ExtensionPoint.SelectedType<Gateway> gatewayTypes = new ExtensionPoint.SelectedType<>("gateway", Gateway.class);
     private final Settings settings;
 
     public CassandraGatewayModule(Settings settings) {
         this.settings = settings;
-        registerGatewayType("default", CassandraGateway.class);
+        registerGatewayType("default", Gateway.class);
     }
 
     /**
      * Adds a custom Discovery type.
      */
-    public void registerGatewayType(String type, Class<? extends CassandraGateway> clazz) {
+    public void registerGatewayType(String type, Class<? extends Gateway> clazz) {
         gatewayTypes.registerExtension(type, clazz);
     }
 

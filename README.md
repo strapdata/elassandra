@@ -12,6 +12,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
+* **2016-03-18 Release 2.1.1-5 Add support for SQL plugin (from [NLPchina](https://github.com/NLPchina/elasticsearch-sql)) and JDBC driver (from [Anchormen](https://github.com/Anchormen/sql4es))**.
 * **2016-02-16 Release 2.1.1-2 Remove build dependency to elasticsearch parent project**.
 * **2016-02-01 Release 2.1.1-1 Add support for parent-child relationship**.
 * **2016-01-28 Release 2.1.1 based on Elasticsearch 2.1.1 and cassandra 2.2.4**
@@ -60,7 +61,7 @@ q=\'
 # for Kibana 4.1.x
 sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" index.js
 # for Kibana 4.3.x (for Elassandra v2.1.1+)
-sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" -e "s%${q}index-pattern${q}: ${q}/settings/objects/savedSearches/${q}%${q}index_pattern${q}: ${q}/settings/objects/savedSearches/${q}%g" optimize/bundles/kibana.bundle.js src/ui/public/index_patterns/*.js src/ui/public/index_patterns/*.js
+sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" -e "s%${q}index-pattern${q}: ${q}/settings/objects/savedSearches/${q}%${q}index_pattern${q}: ${q}/settings/objects/savedSearches/${q}%g" optimize/bundles/kibana.bundle.js src/ui/public/index_patterns/*.js
 ```
 * If you want to load sample data from [Kibana Getting started](https://www.elastic.co/guide/en/kibana/current/getting-started.html), apply the following changes to logstash.jsonl with a sed command. 
 
