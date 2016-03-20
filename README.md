@@ -12,7 +12,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
-* **2016-03-18 Release 2.1.1-5 Add support for SQL plugin (from [NLPchina](https://github.com/NLPchina/elasticsearch-sql)) and JDBC driver (from [Anchormen](https://github.com/Anchormen/sql4es))**.
+* **2016-03-18 Release 2.1.1-6 Add support for SQL plugin (from [NLPchina](https://github.com/NLPchina/elasticsearch-sql)) and JDBC driver (from [Anchormen](https://github.com/Anchormen/sql4es))**.
 * **2016-02-16 Release 2.1.1-2 Remove build dependency to elasticsearch parent project**.
 * **2016-02-01 Release 2.1.1-1 Add support for parent-child relationship**.
 * **2016-01-28 Release 2.1.1 based on Elasticsearch 2.1.1 and cassandra 2.2.4**

@@ -457,7 +457,9 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
                 }
             } else {
                 DiscoveryNode node = observer.observedState().nodes().get(primary.currentNodeId());
-                transportService.sendRequest(node, actionName, internalRequest.request(), transportOptions, new BaseTransportResponseHandler<Response>() {
+                transportService.sendRequest(node, actionName, 
+                        internalRequest.request().setShardId(new ShardId(internalRequest.request().index(), 0)),
+                        transportOptions, new BaseTransportResponseHandler<Response>() {
 
                     @Override
                     public Response newInstance() {

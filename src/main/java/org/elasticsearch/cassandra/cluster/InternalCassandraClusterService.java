@@ -1340,7 +1340,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         DocumentFieldMappers fieldMappers = docMapper.mappers();
 
         Long timestamp = null;
-        if (timestampString != null) {
+        if (docMapper.timestampFieldMapper().enabled() && timestampString != null) {
             timestamp = docMapper.timestampFieldMapper().fieldType().value(timestampString);
         }
         

@@ -343,8 +343,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
                         indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
                     } else {
-                        logger.warn("Cannot get Schema for keyspace [{}] => numberOfReplica = 0", keyspace);
-                        indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, 0);
+                        indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0));
                     }
                     
                     /*
@@ -364,12 +363,12 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                             indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 1));
                         }
                     }
-                    */
-                    
                     if (settings.get(SETTING_AUTO_EXPAND_REPLICAS) != null && indexSettingsBuilder.get(SETTING_AUTO_EXPAND_REPLICAS) == null) {
                         indexSettingsBuilder.put(SETTING_AUTO_EXPAND_REPLICAS, settings.get(SETTING_AUTO_EXPAND_REPLICAS));
                     }
-
+                    */
+                    
+                    
                     if (indexSettingsBuilder.get(SETTING_VERSION_CREATED) == null) {
                         DiscoveryNodes nodes = currentState.nodes();
                         final Version createdVersion = Version.smallest(version, nodes.smallestNonClientNodeVersion());
