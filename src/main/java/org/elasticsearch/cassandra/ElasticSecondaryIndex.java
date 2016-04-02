@@ -550,7 +550,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                     Iterator<RangeTombstone> it = deletionInfo.rangeIterator();
                     while (it.hasNext()) {
                         RangeTombstone rangeTombstone = it.next();
-                        logger.warn("delete rangeTombstone (not implemented) " + getIndexName() + " cf=" + metadata.ksName + "." + metadata.cfName + " min="+rangeTombstone.min+" max="+rangeTombstone.max);
+                        logger.trace("delete rangeTombstone (not implemented) " + getIndexName() + " cf=" + metadata.ksName + "." + metadata.cfName + " min="+rangeTombstone.min+" max="+rangeTombstone.max);
                     }
                 } else {
                     Document deletedDoc = new Document(mappingInfo, rowKey, cf);

@@ -494,8 +494,13 @@ public class InternalCassandraClusterService extends InternalClusterService {
      */
     @Override
     public String buildUDT(final String ksName, final String cfName, final String name, final ObjectMapper objectMapper) throws RequestExecutionException {
+
         String typeName = cfName + "_" + objectMapper.fullPath().replace('.', '_');
 
+        if (!objectMapper.iterator().hasNext()) {
+            throw new InvalidRequestException("Cannot create an empty nested type (not supported)");
+        }
+        
         // create sub-type first
         for (Iterator<Mapper> it = objectMapper.iterator(); it.hasNext(); ) {
             Mapper mapper = it.next();
@@ -506,7 +511,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
             } 
         }
 
-        Pair<List<String>, List<String>> udt = getUDTInfo(ksName, objectMapper.fullPath().replace('.', '_'));
+        Pair<List<String>, List<String>> udt = getUDTInfo(ksName, typeName);
         if (udt == null) {
             // create new UDT.
             // TODO: Support dynamic mapping by altering UDT
@@ -551,11 +556,47 @@ public class InternalCassandraClusterService extends InternalClusterService {
             }
             create.append(" )");
             if (logger.isDebugEnabled()) {
-                logger.debug(create.toString());
+                logger.debug("create UDT:"+ create.toString());
             }
             QueryProcessor.process(create.toString(), ConsistencyLevel.LOCAL_ONE);
         } else {
-            // update existing UDT.
+            // update existing UDT
+            for (Iterator<Mapper> it = objectMapper.iterator(); it.hasNext(); ) {
+                Mapper mapper = it.next();
+                int lastDotIndex = mapper.name().lastIndexOf('.');
+                String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
+                StringBuilder update = new StringBuilder(String.format("ALTER TYPE \"%s\".\"%s\" ADD \"%s\" ", ksName, typeName,shortName));
+                if (!udt.left.contains(shortName)) {
+                    if (mapper instanceof ObjectMapper) {
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(mapper.cqlCollectionTag()).append("<");
+                        update.append("frozen<")
+                            .append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_'))
+                            .append(">");
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(">");
+                    } else if (mapper instanceof GeoPointFieldMapper) {
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(mapper.cqlCollectionTag()).append("<");
+                        update.append("frozen<")
+                            .append(typeName).append('_').append(shortName)
+                            .append(">");
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(">");
+                    } else {
+                        String cqlType = mapperToCql.get(mapper.getClass());
+                        if (mapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                            update.append(cqlType);
+                        } else {
+                            update.append(mapper.cqlCollectionTag()).append("<");
+                            if (!isNativeCql3Type(cqlType)) update.append("frozen<");
+                            update.append(cqlType);
+                            if (!isNativeCql3Type(cqlType)) update.append(">");
+                            update.append(">");
+                        }
+                    }
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("update UDT: "+update.toString());
+                    }
+                    QueryProcessor.process(update.toString(), ConsistencyLevel.LOCAL_ONE);
+                }
+            }
         }
         return typeName;
     }
@@ -1607,10 +1648,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
                return null;
             }
         } else {
+            AbstractType<?> type = partitionColumns.get(0).type;
             if (map == null) {
-                return new Object[] { id };
+                return new Object[] { type.compose( type.fromString(id) ) };
             } else {
-                map.put(partitionColumns.get(0).name.toString(), id);
+                map.put(partitionColumns.get(0).name.toString(), type.compose( type.fromString(id) ) );
                 return null;
             }
         }
