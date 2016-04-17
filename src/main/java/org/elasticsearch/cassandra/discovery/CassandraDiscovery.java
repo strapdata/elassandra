@@ -249,6 +249,20 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         });
     }
 
+    
+    public MetaData hasNewMetaData() {
+        MetaData currentMetaData = clusterService.state().metaData();
+        MetaData newMetaData = clusterService.readMetaDataAsRow();
+        // TODO: merge metadata ?
+        if (newMetaData.version() > currentMetaData.version()) {
+            logger.debug("updating metadata from uid/version={}/{} to {}/{}", currentMetaData.uuid(), currentMetaData.version(), newMetaData.uuid(), newMetaData.version());
+            return newMetaData;
+        }
+        if (logger.isTraceEnabled())
+            logger.trace("ignoring unchanged metadata uuid/version={}/{}", newMetaData.uuid(), newMetaData.version());
+        return null;
+    }
+    
     /**
      * Update cluster group members from cassandra topology (should only be triggered by IEndpointStateChangeSubscriber events).
      * This should trigger re-sharding of index for new nodes (when token distribution change).
@@ -282,6 +296,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                                     entry.getKey().toString(), dn.getId(), dn.getName(), entry.getValue().isAlive(), entry.getValue().getUpdateTimestamp());
                         }
                         clusterGroup.put(dn.getId(), dn);
+                        if (entry.getValue().getApplicationState(ApplicationState.X1) != null || entry.getValue().getApplicationState(ApplicationState.X2) !=null) {
+                            SystemKeyspace.updatePeerInfo(entry.getKey(), "workload", "elasticsearch");
+                        }
                     } else {
                         // may update DiscoveryNode status.
                         if (!dn.getStatus().equals(status)) {
@@ -294,24 +311,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
     }
 
-    public MetaData hasNewMetaData() {
-        MetaData currentMetaData = clusterService.state().metaData();
-        MetaData newMetaData = clusterService.readMetaDataAsRow();
-        // TODO: merge metadata ?
-        if (newMetaData.version() > currentMetaData.version()) {
-            logger.debug("updating metadata from uid/version={}/{} to {}/{}", currentMetaData.uuid(), currentMetaData.version(), newMetaData.uuid(), newMetaData.version());
-            return newMetaData;
-        }
-        if (logger.isTraceEnabled())
-            logger.trace("ignoring unchanged metadata uuid/version={}/{}", newMetaData.uuid(), newMetaData.version());
-        return null;
-    }
-    
     public void updateNode(InetAddress addr, EndpointState state) {
-        
-        DiscoveryNodeStatus status = (state.isAlive()) ? DiscoveryNode.DiscoveryNodeStatus.ALIVE : DiscoveryNode.DiscoveryNodeStatus.DEAD;
-        boolean updatedNode = false;
         if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(addr).equals(localDc)) {
+            DiscoveryNodeStatus status = (state.isAlive()) ? DiscoveryNode.DiscoveryNodeStatus.ALIVE : DiscoveryNode.DiscoveryNodeStatus.DEAD;
+            boolean updatedNode = false;
             String hostId = state.getApplicationState(ApplicationState.HOST_ID).value;
             DiscoveryNode dn = clusterGroup.get(hostId);
             if (dn == null) {
@@ -325,6 +328,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 dn.status(status);
                 logger.debug("New node soure=updateNode addr_ip={} node_name={} host_id={} status={} timestamp={}", addr.getHostAddress(), dn.getId(), dn.getName(), status, state.getUpdateTimestamp());
                 clusterGroup.members.put(dn.getId(), dn);
+                if (state.getApplicationState(ApplicationState.X1) != null || state.getApplicationState(ApplicationState.X2) !=null) {
+                    SystemKeyspace.updatePeerInfo(addr, "workload", "elasticsearch");
+                }
                 updatedNode = true;
             } else {
                 // may update DiscoveryNode status.
@@ -333,9 +339,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                     updatedNode = true;
                 }
             }
+            if (updatedNode)
+                updateClusterState("update-node-" + addr.getHostAddress(), null);
         }
-        if (updatedNode)
-            updateClusterState("update-node-" + addr.getHostAddress(), null);
     }
 
    
@@ -421,6 +427,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
     @Override
     public void onChange(InetAddress endpoint, ApplicationState state, VersionedValue value) {
+        EndpointState epState = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
+        if (epState == null || Gossiper.instance.isDeadState(epState)) {
+            if (logger.isTraceEnabled()) 
+                logger.trace("Ignoring state change for dead or unknown endpoint: {}", endpoint);
+            return;
+        }
         if (!this.localAddress.equals(endpoint)) {
             switch (state) {
             case SCHEMA: // remote metadata change
@@ -432,11 +444,15 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 }
                 break;
             case X1: // remote shards state change
-                logger.debug("Endpoint={} ApplicationState={} value={} => update routingTable", endpoint, state, value.value);
-                updateClusterState("onChange-" + endpoint + "-" + state.toString()+" X1="+value.value, null);
+                if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
+                    logger.debug("Endpoint={} ApplicationState={} value={} => update routingTable", endpoint, state, value.value);
+                    updateClusterState("onChange-" + endpoint + "-" + state.toString()+" X1="+value.value, null);
+                }
                 break;
-            case X2:
-                checkMetaDataVersion();
+            case X2: // metadata uuid+version
+                if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
+                    checkMetaDataVersion();
+                }
                 break;
             }
         }

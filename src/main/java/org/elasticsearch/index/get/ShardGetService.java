@@ -22,19 +22,18 @@ package org.elasticsearch.index.get;
 import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.elasticsearch.ElasticsearchException;
-import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -53,7 +52,11 @@ import org.elasticsearch.index.fieldvisitor.FieldsVisitor;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
+import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
+import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
 import org.elasticsearch.index.shard.AbstractIndexShardComponent;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.search.fetch.source.FetchSourceContext;
@@ -183,9 +186,9 @@ public final class ShardGetService extends AbstractIndexShardComponent {
         }
 
         fetchSourceContext = normalizeFetchSourceContent(fetchSourceContext, gFields);
-        Collection<String> columns;
+        Set<String> columns;
         if ((gFields != null) && (!fetchSourceContext.fetchSource())) {
-            columns = new ArrayList<String>(gFields.length);
+            columns = new HashSet<String>(gFields.length);
             for (String field : gFields) {
                 int i = field.indexOf('.');
                 String colName = (i > 0) ? field.substring(0, i ) : field;
@@ -193,13 +196,26 @@ public final class ShardGetService extends AbstractIndexShardComponent {
                     columns.add(colName);
             }
         } else {
-            columns = clusterService.mappedColumns(mapperService.index().name(), type);
+            try {
+                columns = clusterService.mappedColumns(mapperService.index().name(), new Uid(type, id) );
+            } catch (IOException e) {
+                throw new ElasticsearchException("Cannot parse id for type [" + type + "] and id [" + id + "]", e);
+            }
         }
 
+        if (docMapper.parentFieldMapper().active()) {
+            columns.add(ParentFieldMapper.NAME);
+        }
+        if (docMapper.timestampFieldMapper().enabled()) {
+            columns.add(TimestampFieldMapper.NAME);
+        }
+        if (docMapper.TTLFieldMapper().enabled()) {
+            columns.add(TTLFieldMapper.NAME);
+        }
         
         Map<String, GetField> fields = null;
-        SearchLookup searchLookup = null;
         /*
+        SearchLookup searchLookup = null;
         try {
             // break between having loaded it from translog (so we only have _source), and having a document to load
             if (get.docIdAndVersion() != null) {

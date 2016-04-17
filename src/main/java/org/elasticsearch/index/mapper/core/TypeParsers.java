@@ -161,6 +161,9 @@ public class TypeParsers {
     public static final String CQL_COLLECTION = "cql_collection";
     public static final String CQL_STRUCT = "cql_struct";
     public static final String CQL_PARTIAL_UPDATE = "cql_partial_update";
+    public static final String CQL_STATIC_COLUMN = "cql_static_column";
+    public static final String CQL_PARTITION_KEY = "cql_partition_key";
+    public static final String CQL_PRIMARY_KEY_ORDER = "cql_primary_key_order";
 
     public static void parseNumberField(NumberFieldMapper.Builder builder, String name, Map<String, Object> numberNode, Mapper.TypeParser.ParserContext parserContext) {
         parseField(builder, name, numberNode, parserContext);
@@ -246,6 +249,15 @@ public class TypeParsers {
                 iterator.remove();
             } else if (propName.equals(CQL_PARTIAL_UPDATE)) {
                 builder.cqlPartialUpdate(nodeBooleanValue(propNode));
+                iterator.remove();
+            } else if (propName.equals(CQL_PARTITION_KEY)) {
+                builder.cqlPartitionKey(nodeBooleanValue(propNode));
+                iterator.remove();
+            } else if (propName.equals(CQL_STATIC_COLUMN)) {
+                builder.cqlStaticColumn(nodeBooleanValue(propNode));
+                iterator.remove();
+            } else if (propName.equals(CQL_PRIMARY_KEY_ORDER)) {
+                builder.cqlPrimaryKeyOrder(nodeIntegerValue(propNode));
                 iterator.remove();
             } else if (propName.equals("omit_norms")) {
                 builder.omitNorms(nodeBooleanValue(propNode));

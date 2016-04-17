@@ -172,6 +172,9 @@ public abstract class MappedFieldType extends FieldType {
     private CqlCollection cqlCollection = CqlCollection.LIST;
     private CqlStruct cqlStruct = CqlStruct.UDT;
     private boolean cqlPartialUpdate = true;
+    private boolean cqlPartitionKey = false;
+    private boolean cqlStaticColumn = false;
+    private int cqlPrimaryKeyOrder = -1;
     
     protected MappedFieldType(MappedFieldType ref) {
         super(ref);
@@ -190,6 +193,9 @@ public abstract class MappedFieldType extends FieldType {
         this.cqlCollection = ref.cqlCollection;
         this.cqlStruct = ref.cqlStruct;
         this.cqlPartialUpdate = ref.cqlPartialUpdate;
+        this.cqlPartitionKey = ref.cqlPartitionKey;
+        this.cqlStaticColumn = ref.cqlStaticColumn;
+        this.cqlPrimaryKeyOrder = ref.cqlPrimaryKeyOrder;
     }
 
     public MappedFieldType() {
@@ -233,6 +239,9 @@ public abstract class MappedFieldType extends FieldType {
             Objects.equals(cqlCollection, fieldType.cqlCollection) &&
             Objects.equals(cqlStruct, fieldType.cqlStruct) &&
             Objects.equals(cqlPartialUpdate, fieldType.cqlPartialUpdate) &&
+            Objects.equals(cqlPartitionKey, fieldType.cqlPartitionKey) &&
+            Objects.equals(cqlStaticColumn, fieldType.cqlStaticColumn) &&
+            Objects.equals(cqlPrimaryKeyOrder, fieldType.cqlPrimaryKeyOrder) &&
             Objects.equals(nullValueAsString, fieldType.nullValueAsString);
     }
 
@@ -267,10 +276,35 @@ public abstract class MappedFieldType extends FieldType {
         this.cqlPartialUpdate = cqlPartialUpdate;
     }
     
+    public boolean cqlPartitionKey() {
+        return this.cqlPartitionKey;
+    }
+    
+    public void cqlPartitionKey(boolean cqlPartitionKey) {
+        this.cqlPartitionKey = cqlPartitionKey;
+    }
+    
+    public boolean cqlStaticColumn() {
+        return this.cqlStaticColumn;
+    }
+    
+    public void cqlStaticColumn(boolean cqlStaticColumn) {
+        this.cqlStaticColumn = cqlStaticColumn;
+    }
+    
+    public int cqlPrimaryKeyOrder() {
+        return this.cqlPrimaryKeyOrder;
+    }
+    
+    public void cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
+        this.cqlPrimaryKeyOrder = cqlPrimaryKeyOrder;
+    }
+    
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), names, boost, docValues, indexAnalyzer, searchAnalyzer, searchQuoteAnalyzer,
-            similarity == null ? null : similarity.name(), normsLoading, fieldDataType, nullValue, nullValueAsString);
+            similarity == null ? null : similarity.name(), normsLoading, fieldDataType, nullValue, nullValueAsString, 
+            cqlCollection, cqlStruct, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder);
     }
 
     // norelease: we need to override freeze() and add safety checks that all settings are actually set

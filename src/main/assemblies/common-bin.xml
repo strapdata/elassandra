@@ -2,81 +2,12 @@
     <dependencySets>
         <dependencySet>
             <outputDirectory>/lib</outputDirectory>
-            
-            
-            <!--  
-            <useTransitiveFiltering>true</useTransitiveFiltering>
-            <includes>
-                <include>org.apache.lucene:lucene*</include>
-                <include>log4j:log4j</include>
-                <include>log4j:apache-log4j-extras</include>
-                <include>net.java.dev.jna:jna</include>
-                <include>com.spatial4j:spatial4j</include>
-                <include>com.vividsolutions:jts</include>
-                <include>org.codehaus.groovy:groovy-all</include>
-                <include>com.google.guava:guava</include>
-                
-                <include>com.carrotsearch:hppc</include>
-                <include>org.codehaus.jackson:jackson-core-asl</include>
-                <include>org.codehaus.jackson:jackson-mapper-asl</include>
-                <include>org.apache.commons:commons-math3</include>
-                <include>org.apache.commons:commons-lang3</include>
-                <include>commons-cli:commons-cli</include>
-                <include>commons-codec:commons-codec</include>
-                <include>com.ning:compress-lzf</include>
-                <include>ch.qos.logback:logback-classic</include>
-                <include>org.javassist:javassist</include>
-            </includes>
-            -->
             <useProjectArtifact>true</useProjectArtifact>
             <useTransitiveDependencies>true</useTransitiveDependencies>
             <excludes>
                 <exclude>org.apache.cassandra:cassandra-all</exclude>
             </excludes>
         </dependencySet>
-        
-        <!--  
-        <dependencySet>
-            <outputDirectory>/lib</outputDirectory>
-            <useTransitiveDependencies>true</useTransitiveDependencies>
-            <useTransitiveFiltering>true</useTransitiveFiltering>
-            <useStrictFiltering>true</useStrictFiltering>
-            <includes>
-                <include>org.apache.cassandra:cassandra-all</include>
-            </includes>
-            <scope>runtime</scope>
-            <unpack>true</unpack>
-            <unpackOptions>
-                <filtered>true</filtered>
-                <excludes>
-                    <exclude>org/apache/cassandra/cql3/QueryOptions*.*</exclude>
-                    <exclude>org/apache/cassandra/service/CassandraDaemon.class</exclude>
-                    <exclude>org/apache/cassandra/service/CassandraDaemon*.class</exclude>
-                    <exclude>org/apache/cassandra/service/StorageService*.*</exclude>
-                    <exclude>org/apache/locator/TokenMetadata*.*</exclude>
-                </excludes>
-            </unpackOptions>
-        </dependencySet>
-    
-        
-        <dependencySet>
-            <outputDirectory>/lib</outputDirectory>
-            <useTransitiveDependencies>false</useTransitiveDependencies>
-            <includes>
-                <include>org.elassandra:elassandra</include>
-                <include>com.carrotsearch:hppc</include>
-                <include>org.codehaus.jackson:jackson-core-asl</include>
-                <include>org.codehaus.jackson:jackson-mapper-asl</include>
-                <include>org.apache.commons:commons-math3</include>
-                <include>org.apache.commons:commons-lang3</include>
-                <include>commons-cli:commons-cli</include>
-                <include>commons-codec:commons-codec</include>
-                <include>com.ning:compress-lzf</include>
-                <include>ch.qos.logback:logback-classic</include>
-                <include>org.javassist:javassist</include>
-            </includes>
-        </dependencySet>
-            -->
             
     </dependencySets>
     

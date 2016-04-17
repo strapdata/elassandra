@@ -69,7 +69,6 @@ import org.codehaus.jackson.node.ArrayNode;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cassandra.ElasticSecondaryIndex;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
-import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
@@ -81,6 +80,7 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.LifecycleComponent;
 import org.elasticsearch.common.compress.CompressedXContent;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -91,9 +91,9 @@ import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper.Names;
-import org.elasticsearch.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.indices.IndicesService;
 
@@ -200,6 +200,23 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public static final String ELASTIC_ADMIN_KEYSPACE = "elastic_admin";
     public static final String ELASTIC_ADMIN_METADATA_TABLE_PREFIX = "metadata_";
 
+    public static class DocPrimaryKey {
+        public String[] names;
+        public Object[] values;
+        public boolean isStaticDocument; // pk = partition key and pk has clustering key.
+        
+        public DocPrimaryKey(String[] names, Object[] values, boolean isStaticDocument) {
+            this.names = names;
+            this.values = values;
+            this.isStaticDocument = isStaticDocument;
+        }
+        
+        public DocPrimaryKey(String[] names, Object[] values) {
+            this.names = names;
+            this.values = values;
+            this.isStaticDocument = false;
+        }
+    }
     
     static class Utils {
         public static final org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
@@ -212,6 +229,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
             else if (typeSerializer instanceof DoubleSerializer) an.add( (Double) value);
             else if (typeSerializer instanceof DecimalSerializer) an.add( (BigDecimal) value);
             else if (typeSerializer instanceof FloatSerializer) an.add( (Float) value);
+            else if (typeSerializer instanceof TimestampSerializer) an.add( ((Date) value).getTime());
             else an.add(stringify(type, value));
             return an;
         }
@@ -308,27 +326,42 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
             }
         }
         
-        public static XContentBuilder buildDocument(DocumentMapper documentMapper, Map<String, Object> docMap) throws IOException {
-            XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
+        public static XContentBuilder buildDocument(DocumentMapper documentMapper, Map<String, Object> docMap, boolean humanReadable) throws IOException {
+            return buildDocument(documentMapper, docMap, humanReadable, false);
+        }
+            
+        public static XContentBuilder buildDocument(DocumentMapper documentMapper, Map<String, Object> docMap, boolean humanReadable, boolean forStaticDocument) throws IOException {
+            XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON).humanReadable(true);
             builder.startObject();
             for(String field : docMap.keySet()) {
                 if (field.equals("_parent")) continue;
                 FieldMapper fieldMapper = documentMapper.mappers().smartNameFieldMapper(field);
                 if (fieldMapper != null) {
+                    if (forStaticDocument) {
+                       if (!isStaticOrPartitionKey(fieldMapper)) continue;
+                    } 
                     toXContent(builder, fieldMapper, field, docMap.get(field));
                 } else {
                     ObjectMapper objectMapper = documentMapper.objectMappers().get(field);
                     if (objectMapper != null) {
-                        toXContent(builder, objectMapper, field, docMap.get(field));
+                         if (forStaticDocument) {
+                            if (!isStaticOrPartitionKey(objectMapper)) continue;
+                         } 
+                         toXContent(builder, objectMapper, field, docMap.get(field));
                     } else {
-                        // no mapping
-                        builder.field(field, docMap.get(field));
+                        Loggers.getLogger(ClusterService.class).error("No mapper found for field "+field);
+                        throw new IOException("No mapper found for field "+field);
                     }
                 }
             }
             builder.endObject();
             return builder;
         }
+            
+        public static boolean isStaticOrPartitionKey(Mapper mapper) {
+            return mapper.cqlStaticColumn() || mapper.cqlPartitionKey();
+        }
+   
     }
     
     public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Object node, Map<String, GetField> flatFields);
@@ -344,6 +377,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public void removeIndexKeyspace(String index) throws IOException;
     
+    public void buildCollectionMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException;
     public String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
 
     public ClusterState updateNumberOfShards(ClusterState currentState);
@@ -353,8 +387,11 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public List<ColumnDefinition> getPrimaryKeyColumns(String ksName, String cfName) throws ConfigurationException;
 
-    public Collection<String> mappedColumns(final String index, final String type);
-    public String[] mappedColumns(final MapperService mapperService, final String type);
+    public Set<String> mappedColumns(final String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
+    public Set<String> mappedColumns(final String index, final String type,final boolean forStaticDocument);
+    public String[] mappedColumns(final MapperService mapperService, final String type, final boolean forStaticDocument);
+    
+    public boolean isStaticDocument(final String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
     
     public UntypedResultSet fetchRow(String index, String type, Collection<String> requiredColumns,String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
             IOException;
@@ -366,7 +403,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
     
     public UntypedResultSet fetchRowInternal(String index, String type, Collection<String> requiredColumns, String id) throws ConfigurationException, IOException;
-    public UntypedResultSet fetchRowInternal(String ksName, String cfName, Collection<String> requiredColumns, Object[] pkColumns) throws ConfigurationException, IOException;
+    public UntypedResultSet fetchRowInternal(String ksName, String cfName, Collection<String> requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
     
     public Map<String, Object> rowAsMap(final String index, final String type, UntypedResultSet.Row row) throws IOException;
     public int rowAsMap(final String index, final String type, UntypedResultSet.Row row, Map<String, Object> map) throws IOException;
@@ -374,9 +411,6 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
     public void insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString) throws Exception;
-
-    public boolean insertRow(String index, String type, Map<String, Object> map, String id, boolean ifNotExists, long ttl, ConsistencyLevel cl, Long writetime)
-            throws Exception;
 
     public void index(String[] indices, Collection<Range<Token>> tokenRanges);
 

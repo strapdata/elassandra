@@ -128,6 +128,21 @@ public abstract class FieldMapper extends Mapper {
             this.fieldType.cqlPartialUpdate(cqlPartialUpdate);
             return builder;
         }
+        
+        public T cqlPartitionKey(boolean cqlPartitionKey) {
+            this.fieldType.cqlPartitionKey(cqlPartitionKey);
+            return builder;
+        }
+        
+        public T cqlStaticColumn(boolean cqlStaticColumn) {
+            this.fieldType.cqlStaticColumn(cqlStaticColumn);
+            return builder;
+        }
+        
+        public T cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
+            this.fieldType.cqlPrimaryKeyOrder(cqlPrimaryKeyOrder);
+            return builder;
+        }
 
         public T storeTermVectors(boolean termVectors) {
             if (termVectors != this.fieldType.storeTermVectors()) {
@@ -466,6 +481,15 @@ public abstract class FieldMapper extends Mapper {
         }
         if (includeDefaults || fieldType().cqlPartialUpdate() != defaultFieldType.cqlPartialUpdate()) {
             builder.field(TypeParsers.CQL_PARTIAL_UPDATE, fieldType().cqlPartialUpdate());
+        }
+        if (includeDefaults || fieldType().cqlPartitionKey() != defaultFieldType.cqlPartitionKey()) {
+            builder.field(TypeParsers.CQL_PARTITION_KEY, fieldType().cqlPartitionKey());
+        }
+        if (includeDefaults || fieldType().cqlStaticColumn() != defaultFieldType.cqlStaticColumn()) {
+            builder.field(TypeParsers.CQL_STATIC_COLUMN, fieldType().cqlStaticColumn());
+        }
+        if (includeDefaults || fieldType().cqlPrimaryKeyOrder() != defaultFieldType.cqlPrimaryKeyOrder()) {
+            builder.field(TypeParsers.CQL_PRIMARY_KEY_ORDER, fieldType().cqlPrimaryKeyOrder());
         }
         
         if (includeDefaults || fieldType().storeTermVectors() != defaultFieldType.storeTermVectors()) {
@@ -806,5 +830,17 @@ public abstract class FieldMapper extends Mapper {
 
     public boolean cqlPartialUpdate() {
         return this.fieldType().cqlPartialUpdate();
+    }
+    
+    public boolean cqlStaticColumn() {
+        return this.fieldType().cqlStaticColumn();
+    }
+    
+    public boolean cqlPartitionKey() {
+        return this.fieldType().cqlPartitionKey();
+    }
+    
+    public int cqlPrimaryKeyOrder() {
+        return this.fieldType().cqlPrimaryKeyOrder();
     }
 }

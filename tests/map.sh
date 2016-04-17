@@ -1,6 +1,6 @@
+curl -XPUT "http://$NODE:9200/twitter/"
 
 cqlsh <<EOF
-CREATE KEYSPACE IF NOT EXISTS twitter WITH replication={ 'class':'NetworkTopologyStrategy', 'DC1':'1' };
 CREATE TABLE twitter.user ( 
 name text,
 attrs map<text,text>,
@@ -10,7 +10,6 @@ insert into twitter.user (name,attrs) VALUES ('alice',{'email':'alice@gmail.com'
 insert into twitter.user (name,attrs) VALUES ('bob',{'email':'bob@gmail.com','firstname':'bob'});
 EOF
 
-curl -XPUT "http://$NODE:9200/twitter/" -d '{ "settings" : { "number_of_shards" : 1, "number_of_replicas" : 0 } }'
 curl -XPUT "http://$NODE:9200/twitter/_mapping/user" -d '
 { "user" : {
         "columns_regexp" : ".*"

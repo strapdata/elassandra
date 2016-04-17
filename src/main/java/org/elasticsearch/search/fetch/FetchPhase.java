@@ -422,18 +422,7 @@ public class FetchPhase implements SearchPhase {
 
         if (!(fieldVisitor instanceof JustUidFieldsVisitor) ) {
             try {
-                Set<String> requiredColomns;
-                if (fieldVisitor.requestedFields() != null) {
-                    requiredColomns =  new HashSet<String>(fieldVisitor.requestedFields().size());
-                    requiredColomns.addAll(fieldVisitor.requestedFields());
-                    
-                } else {
-                    requiredColomns = new HashSet<String>();
-                }
-                
-                if (fieldVisitor.loadSource()) {
-                    requiredColomns.addAll(clusterService.mappedColumns(searchContext.request().index(), fieldVisitor.uid().type()));
-                } 
+                Set<String> requiredColomns = fieldVisitor.requiredColumns(clusterService, searchContext);
                 if (requiredColomns.size() >0) {
                     UntypedResultSet result = clusterService.fetchRowInternal(searchContext.request().index(), fieldVisitor.uid().type(), 
                             requiredColomns, fieldVisitor.uid().id());
@@ -448,7 +437,8 @@ public class FetchPhase implements SearchPhase {
                         }
                         if (fieldVisitor.loadSource()) {
                             // rebuild the source document from the cassandra row.
-                            XContentBuilder builder = ClusterService.Utils.buildDocument(searchContext.mapperService().documentMapper(fieldVisitor.uid().type()), mapObject);
+                            XContentBuilder builder = ClusterService.Utils.buildDocument(searchContext.mapperService().documentMapper(fieldVisitor.uid().type()), mapObject, true, clusterService.isStaticDocument(searchContext.request().index(), fieldVisitor.uid()));
+                            builder.humanReadable(true);
                             fieldVisitor.source(builder.bytes().toBytes());
                         }
                     }

@@ -296,7 +296,7 @@ public class MetaDataMappingService extends AbstractComponent {
                     
                     dirty = true;
                 } catch (Throwable t) {
-                    logger.warn("[{}] failed to update-mapping in cluster state, type [{}]", index, updateTask.type);
+                    logger.warn("[{}] failed to update-mapping in cluster state, type [{}]",t, index, updateTask.type);
                 }
             } else {
                 logger.warn("illegal state, got wrong mapping task type [{}]", task);

@@ -255,7 +255,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
             @Override
             public ClusterState execute(ClusterState currentState) throws Exception {
                 boolean indexCreated = false;
-                //String removalReason = null;
+                String removalReason = null;
                 try {
                     validate(request, currentState);
 
@@ -456,6 +456,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     final IndexMetaData indexMetaData;
                     try {
                         indexMetaData = indexMetaDataBuilder.build();
+                        
                         if (!currentState.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK)) {
                             // don't create a keyspace while cassandra is not fully started.
                             String keyspaceName = indexMetaData.keyspace();
@@ -474,11 +475,13 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                             }
                            
                         }
+                        
                     } catch (Exception e) {
-                        //removalReason = "failed to build index metadata";
+                        removalReason = "failed to build index metadata:"+e.toString();
                         throw e;
                     }
-
+                    
+                    
                     indexService.indicesLifecycle().beforeIndexAddedToCluster(new Index(request.index()),
                             indexMetaData.getSettings());
 
@@ -507,14 +510,13 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(routingTableBuilder).build());
                         updatedState = ClusterState.builder(updatedState).routingResult(routingResult).build();
                     }
-                    // removalReason = "cleaning up after validating index on master";
+                    removalReason = "cleaning up after validating index on master";
                     return updatedState;
-                } catch(Throwable t) {
+                } finally {
                     if (indexCreated) {
                         // Index was already partially created - need to clean up
-                        indicesService.removeIndex(request.index(), "failed to create index");
+                        indicesService.removeIndex(request.index(), removalReason != null ? removalReason : "failed to create index");
                     }
-                    throw t;
                 }
             }
         });

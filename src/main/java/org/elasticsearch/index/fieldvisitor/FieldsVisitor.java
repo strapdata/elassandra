@@ -18,12 +18,23 @@
  */
 package org.elasticsearch.index.fieldvisitor;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
+import static com.google.common.collect.Maps.newHashMap;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.StoredFieldVisitor;
 import org.apache.lucene.util.BytesRef;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.index.mapper.DocumentMapper;
@@ -37,16 +48,10 @@ import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
 import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
 import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
+import org.elasticsearch.search.internal.SearchContext;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import static com.google.common.collect.Maps.newHashMap;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 
 /**
  * Base {@link StoredFieldsVisitor} that retrieves all non-redundant metadata.
@@ -66,6 +71,9 @@ public class FieldsVisitor extends StoredFieldVisitor {
     protected BytesReference source;
     protected Uid uid;
     protected Map<String, List<Object>> fieldsValues;
+    
+    // cached required cassandra columns by type (type is suffixed by "_static" for static documents.
+    private Map<String, Set<String>> requiredColumnsByTypes = new HashMap<String,Set<String>>();
 
     public FieldsVisitor(boolean loadSource) {
         this.loadSource = loadSource;
@@ -87,6 +95,36 @@ public class FieldsVisitor extends StoredFieldVisitor {
 
     public Set<String> requestedFields() {
         return ImmutableSet.of();
+    }
+    
+    // cache the cassandra required columns and return the static+partition columns
+    public Set<String> requiredColumns(ClusterService clusterService, SearchContext searchContext) throws JsonParseException, JsonMappingException, IOException {
+        boolean isStaticDocument = clusterService.isStaticDocument(searchContext.request().index(), uid);
+        Set<String> requiredColumns;
+        if (isStaticDocument) {
+            requiredColumns = requiredColumnsByTypes.get(uid.type()+"_static");
+            if (requiredColumns == null) {
+                requiredColumns = clusterService.mappedColumns(searchContext.request().index(), uid.type(), true);
+                requiredColumnsByTypes.put(uid.type()+"_static", requiredColumns);
+            }
+        } else {
+            requiredColumns = requiredColumnsByTypes.get(uid.type());
+            if (requiredColumns == null) {
+                if (requestedFields() != null) {
+                    requiredColumns =  new HashSet<String>(requestedFields().size());
+                    requiredColumns.addAll(requestedFields());
+                    
+                } else {
+                    requiredColumns = new HashSet<String>();
+                }
+                
+                if (loadSource()) {
+                    requiredColumns.addAll(clusterService.mappedColumns(searchContext.request().index(), uid.type(), false));
+                }
+                requiredColumnsByTypes.put(uid.type(), requiredColumns);
+            }
+        }
+        return requiredColumns;
     }
     
     public boolean loadSource() {

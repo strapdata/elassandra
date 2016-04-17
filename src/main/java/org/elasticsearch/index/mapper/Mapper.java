@@ -190,4 +190,10 @@ public abstract class Mapper implements ToXContent, Iterable<Mapper> {
     public abstract CqlStruct cqlStruct();
     
     public abstract boolean cqlPartialUpdate();
+    
+    public abstract boolean cqlPartitionKey();
+    
+    public abstract boolean cqlStaticColumn();
+    
+    public abstract int cqlPrimaryKeyOrder();
 }

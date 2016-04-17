@@ -43,6 +43,7 @@ import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -51,12 +52,12 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
-import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cassandra.SecondaryIndicesService;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
@@ -105,6 +106,7 @@ import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.settings.NodeSettingsService;
@@ -231,7 +233,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         try {
             createElasticAdminKeyspace();
         } catch (Throwable e) {
-            logger.warn("Cannot create "+SchemaService.ELASTIC_ADMIN_KEYSPACE, e);
+            logger.warn("Cannot create "+ClusterService.ELASTIC_ADMIN_KEYSPACE, e);
         }
         
         add(localNodeMasterListeners);
@@ -927,6 +929,11 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
+    public void buildCollectionMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
+     // TODO Auto-generated method stub
+    }
+    
+    @Override
     public String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException {
         // TODO Auto-generated method stub
         return null;
@@ -957,13 +964,13 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
-    public Collection<String> mappedColumns(String index, String type) {
+    public Set<String> mappedColumns(String index, String type, boolean isStaticDocument) {
         // TODO Auto-generated method stub
         return null;
     }
 
     @Override
-    public String[] mappedColumns(MapperService mapperService, String type) {
+    public String[] mappedColumns(MapperService mapperService, String type, boolean isStaticDocument) {
         // TODO Auto-generated method stub
         return null;
     }
@@ -995,7 +1002,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
-    public UntypedResultSet fetchRowInternal(String ksName, String cfName, Collection<String> requiredColumns, Object[] pkColumns) throws ConfigurationException, IOException {
+    public UntypedResultSet fetchRowInternal(String ksName, String cfName, Collection<String> requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException {
         // TODO Auto-generated method stub
         return null;
     }
@@ -1020,12 +1027,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     @Override
     public void insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString) throws Exception {
-    }
-
-    @Override
-    public boolean insertRow(String index, String type, Map<String, Object> map, String id, boolean ifNotExists, long ttl, ConsistencyLevel cl, Long writetime) throws Exception {
-        // TODO Auto-generated method stub
-        return true;
     }
 
     @Override
@@ -1111,6 +1112,17 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     public void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
         // TODO Auto-generated method stub
         
+    }
+
+    @Override
+    public Set<String> mappedColumns(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public boolean isStaticDocument(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException {
+        return false;
     }
 
 }

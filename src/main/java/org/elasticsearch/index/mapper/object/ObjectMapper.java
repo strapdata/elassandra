@@ -20,6 +20,7 @@
 package org.elasticsearch.index.mapper.object;
 
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeIntegerValue;
 import static org.elasticsearch.index.mapper.MapperBuilders.object;
 import static org.elasticsearch.index.mapper.core.TypeParsers.parsePathType;
 
@@ -78,6 +79,9 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
         public static final CqlCollection CQL_COLLECTION = CqlCollection.LIST;
         public static final CqlStruct CQL_STRUCT = CqlStruct.UDT;
         public static final boolean  CQL_PARTIAL_UPDATE = true; // if true, force read on collection columns when updating a row.
+        public static final boolean  CQL_PARTITION_KEY = false;
+        public static final boolean  CQL_STATIC_COLUMN = false;
+        public static final int  CQL_PRIMARY_KEY_ORDER = -1;
     }
 
     public static enum Dynamic {
@@ -130,6 +134,12 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
 
         protected boolean cqlPartialUpdate = Defaults.CQL_PARTIAL_UPDATE;
         
+        protected boolean cqlPartitionKey = Defaults.CQL_PARTITION_KEY;
+        
+        protected boolean cqlStaticColumn = Defaults.CQL_STATIC_COLUMN;
+        
+        protected int cqlPrimaryKeyOrder = Defaults.CQL_PRIMARY_KEY_ORDER;
+        
         protected Nested nested = Defaults.NESTED;
 
         protected Dynamic dynamic = Defaults.DYNAMIC;
@@ -164,6 +174,22 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
             this.cqlPartialUpdate = cqlPartialUpdate;
             return builder;
         }
+        
+        public T cqlStaticColumn(boolean cqlStaticColumn) {
+            this.cqlStaticColumn = cqlStaticColumn;
+            return builder;
+        }
+        
+        public T cqlPartitionKey(boolean cqlPartitionKey) {
+            this.cqlPartitionKey = cqlPartitionKey;
+            return builder;
+        }
+        
+        public T cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
+            this.cqlPrimaryKeyOrder = cqlPrimaryKeyOrder;
+            return builder;
+        }
+        
         
         public T dynamic(Dynamic dynamic) {
             this.dynamic = dynamic;
@@ -204,14 +230,14 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
             context.path().pathType(origPathType);
             context.path().remove();
 
-            ObjectMapper objectMapper = createMapper(name, context.path().fullPathAsText(name), cqlCollection, cqlStruct, cqlPartialUpdate, enabled, nested, dynamic, pathType, mappers, context.indexSettings());
+            ObjectMapper objectMapper = createMapper(name, context.path().fullPathAsText(name), cqlCollection, cqlStruct, cqlPartialUpdate, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn, enabled, nested, dynamic, pathType, mappers, context.indexSettings());
             objectMapper.includeInAllIfNotSet(includeInAll);
 
             return (Y) objectMapper;
         }
 
-        protected ObjectMapper createMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, boolean cqlPartialUpdate, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers, @Nullable Settings settings) {
-            return new ObjectMapper(name, fullPath, cqlCollection, cqlStruct, cqlPartialUpdate, enabled, nested, dynamic, pathType, mappers);
+        protected ObjectMapper createMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, boolean cqlPartialUpdate, boolean cqlPartitionKey, int cqlPrimaryKeyOrder, boolean cqlStaticColumn,  boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers, @Nullable Settings settings) {
+            return new ObjectMapper(name, fullPath, cqlCollection, cqlStruct, cqlPartialUpdate, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn, enabled, nested, dynamic, pathType, mappers);
         }
     }
 
@@ -245,6 +271,15 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
                 return true;
             } else if (fieldName.equals(TypeParsers.CQL_PARTIAL_UPDATE)) {
                 builder.cqlPartialUpdate(nodeBooleanValue(fieldNode));
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_PARTITION_KEY)) {
+                builder.cqlPartitionKey(nodeBooleanValue(fieldNode));
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_STATIC_COLUMN)) {
+                builder.cqlStaticColumn(nodeBooleanValue(fieldNode));
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_PRIMARY_KEY_ORDER)) {
+                builder.cqlPrimaryKeyOrder(nodeIntegerValue(fieldNode));
                 return true;
             } else if (fieldName.equals(TypeParsers.CQL_COLLECTION)) {
                 String value = StringUtils.lowerCase(fieldNode.toString());
@@ -386,6 +421,9 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
     private final CqlCollection cqlCollection;
     private final CqlStruct cqlStruct;
     private final boolean cqlPartialUpdate;
+    private final boolean cqlPartitionKey;
+    private final boolean cqlStaticColumn;
+    private final int cqlPrimaryKeyOrder;
     
     private final String nestedTypePathAsString;
     private final BytesRef nestedTypePathAsBytes;
@@ -400,12 +438,15 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
 
     private volatile CopyOnWriteHashMap<String, Mapper> mappers;
 
-    ObjectMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, boolean cqlPartialUpdate, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers) {
+    ObjectMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, boolean cqlPartialUpdate, boolean cqlPartitionKey, int cqlPrimaryKeyOrder, boolean cqlStaticColumn, boolean enabled, Nested nested, Dynamic dynamic, ContentPath.Type pathType, Map<String, Mapper> mappers) {
         super(name);
         this.fullPath = fullPath;
         this.cqlCollection = cqlCollection;
         this.cqlStruct = cqlStruct;
         this.cqlPartialUpdate = cqlPartialUpdate;
+        this.cqlPartitionKey = cqlPartitionKey;
+        this.cqlStaticColumn = cqlStaticColumn;
+        this.cqlPrimaryKeyOrder = cqlPrimaryKeyOrder;
         this.enabled = enabled;
         this.nested = nested;
         this.dynamic = dynamic;
@@ -638,6 +679,18 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
             builder.field(TypeParsers.CQL_PARTIAL_UPDATE, cqlPartialUpdate);
         }
         
+        if (cqlPartitionKey != Defaults.CQL_PARTITION_KEY) {
+            builder.field(TypeParsers.CQL_PARTITION_KEY, cqlPartitionKey);
+        }
+        
+        if (cqlPrimaryKeyOrder != Defaults.CQL_PRIMARY_KEY_ORDER) {
+            builder.field(TypeParsers.CQL_PRIMARY_KEY_ORDER, cqlPrimaryKeyOrder);
+        }
+        
+        if (cqlStaticColumn != Defaults.CQL_STATIC_COLUMN) {
+            builder.field(TypeParsers.CQL_STATIC_COLUMN, cqlStaticColumn);
+        }
+        
         if (dynamic != null) {
             builder.field("dynamic", dynamic.name().toLowerCase(Locale.ROOT));
         }
@@ -703,5 +756,20 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
 
     public boolean cqlPartialUpdate() {
         return this.cqlPartialUpdate;
+    }
+
+    @Override
+    public boolean cqlPartitionKey() {
+        return this.cqlPartitionKey;
+    }
+
+    @Override
+    public int cqlPrimaryKeyOrder() {
+        return this.cqlPrimaryKeyOrder;
+    }
+
+    @Override
+    public boolean cqlStaticColumn() {
+        return this.cqlStaticColumn;
     }
 }

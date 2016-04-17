@@ -68,6 +68,13 @@
   * Disable cassandra timestamp update when Elasticsearch _timestamp is disabled (improve insert performance, regression from 2.1.1-4)
   * Fix a bug on flush and refresh operations causing a performance issue with kibana.
   
-2.1.1-7 - 2016-004-02
+2.1.1-7 - 2016-04-02
   * Fix a ClassCastException when indexing a document with single partition key other than a string.
   * Add support for mapping update of nested object (update cassandra UDT).
+  
+2.1.1-8 - 2016-04-18
+  * Add mapping attributes cql_partition_key:boolean and cql_primary_key_order:integer to build cassandra table with composite primary key.
+  * Add support for static column with the mapping attribute cql_static_column:boolean. This give the ability to index static columns in Elasticsearch.
+  * Fix various mapping issues.
+  
+  

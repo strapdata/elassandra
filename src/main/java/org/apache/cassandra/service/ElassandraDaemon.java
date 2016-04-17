@@ -1,7 +1,6 @@
 package org.apache.cassandra.service;
 
 import static com.google.common.collect.Sets.newHashSet;
-import static org.elasticsearch.common.settings.Settings.Builder.EMPTY_SETTINGS;
 
 import java.lang.management.ManagementFactory;
 import java.util.Locale;
@@ -12,17 +11,22 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
 
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
 import org.elasticsearch.bootstrap.Bootstrap;
 import org.elasticsearch.bootstrap.JVMCheck;
-import org.elasticsearch.bootstrap.JarHell;
-import org.elasticsearch.cassandra.SchemaService;
 import org.elasticsearch.cassandra.discovery.CassandraDiscovery;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.common.cli.Terminal;
 import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Injector;
@@ -86,7 +90,23 @@ public class ElassandraDaemon extends CassandraDaemon {
             logger.error("error registering MBean {}", MBEAN_NAME, e);
             // Allow the server to start even if the bean can't be registered
         }
-        super.setup(); // start bootstrap CassandraDaemon2 and call beforeRecover()+beforeBootstrap() to activate ElasticSearch
+        
+        // add a workload column to system.local and system.peer, initialized to "elasticsearch"
+        try {
+            CFMetaData peers = SystemKeyspace.definition().cfMetaData().get(SystemKeyspace.PEERS);
+            peers.addColumnDefinition(ColumnDefinition.regularDef(peers, UTF8Type.instance.fromString("workload"), UTF8Type.instance, Integer.valueOf(0)));
+            peers.rebuild();
+            
+            CFMetaData local = SystemKeyspace.definition().cfMetaData().get(SystemKeyspace.LOCAL);
+            local.addColumnDefinition(ColumnDefinition.regularDef(local, UTF8Type.instance.fromString("workload"), UTF8Type.instance, Integer.valueOf(0)));
+            local.rebuild();
+            QueryProcessor.instance.executeOnceInternal("INSERT INTO system.local (key, workload) VALUES (?,?)" , new Object[] { "local","elasticsearch" });
+            logger.debug("Internal workload set to elasticsearch");
+        } catch (ConfigurationException e) {
+            logger.error("Failed to set internal workload",e);
+        }
+    
+        super.setup(); // start bootstrap CassandraDaemon and call beforeRecover()+beforeBootstrap() to activate ElasticSearch
         super.start(); // complete cassandra start
         instance.node.start(); // start ElasticSerach public services to complete
     }
@@ -96,9 +116,9 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void beforeRecover() {
         try {
-            KSMetaData ksMetaData = Schema.instance.getKSMetaData(SchemaService.ELASTIC_ADMIN_KEYSPACE);
+            KSMetaData ksMetaData = Schema.instance.getKSMetaData(ClusterService.ELASTIC_ADMIN_KEYSPACE);
             if (ksMetaData != null) {
-                logger.debug("Starting ElasticSearch before recovering commitlogs (elastic_admin already keyspace exists)");
+                logger.debug("Starting ElasticSearch before recovering commitlogs (elastic_admin keyspace already  exists)");
                 startElasticSearch();
              }
         } catch(Exception e) {
@@ -169,6 +189,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
 
     private void setup(boolean addShutdownHook, Settings settings, Environment environment) {
+        
         org.elasticsearch.bootstrap.Bootstrap.initializeNatives(environment.tmpFile(),
                           settings.getAsBoolean("bootstrap.mlockall", false),
                           settings.getAsBoolean("bootstrap.seccomp", true),

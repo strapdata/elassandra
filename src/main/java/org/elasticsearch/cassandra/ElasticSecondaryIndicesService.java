@@ -111,7 +111,7 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
                 logger.debug("Creating secondary indices for keyspace [{}]", ksName);
                 clusterService.createSecondaryIndices(ksName);
             } catch (IOException e) {
-                logger.error("Failed to create secondary indices on {}", ksName);
+                logger.error("Failed to create secondary indices on [{}]", e, ksName);
             }
         }
     }

@@ -1,5 +1,7 @@
+curl -XPUT "http://$NODE:9200/composite/"
+
 cqlsh <<EOF
-CREATE KEYSPACE IF NOT EXISTS composite WITH replication={ 'class':'NetworkTopologyStrategy', 'DC1':'1' };
+CREATE KEYSPACE IF NOT EXISTS composite WITH replication={ 'class':'NetworkTopologyStrategy', 'dc1':'1' };
 CREATE TABLE IF NOT EXISTS composite.t1 ( 
 a text,
 b text,
@@ -30,11 +32,6 @@ primary key ((a,b),c)
 insert into composite.t3 (a,b,c,d) VALUES ('a','b3',2,3);
 insert into composite.t3 (a,b,c,d) VALUES ('a','b3',3,3);
 EOF
-
-
-curl -XPUT "http://$NODE:9200/composite/" -d '{ "settings" : { "number_of_replicas" : 0 } }'
-
-
 
 curl -XPUT "http://$NODE:9200/composite/_mapping/t1" -d '{ "t1" : { "columns_regexp" : ".*" }}'
 curl -XPUT "http://$NODE:9200/composite/_mapping/t2" -d '{ "t2" : { "columns_regexp" : ".*" }}'
