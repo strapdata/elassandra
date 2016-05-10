@@ -21,14 +21,14 @@ package org.elasticsearch.index.mapper;
 
 public class ContentPath {
 
+    public static final char delimiter = '.';
+
     public enum Type {
         JUST_NAME,
         FULL,
     }
 
     private Type pathType;
-
-    private final char delimiter;
 
     private final StringBuilder sb;
 
@@ -47,7 +47,6 @@ public class ContentPath {
      * number of path elements to not be included in {@link #pathAsText(String)}.
      */
     public ContentPath(int offset) {
-        this.delimiter = '.';
         this.sb = new StringBuilder();
         this.offset = offset;
         reset();

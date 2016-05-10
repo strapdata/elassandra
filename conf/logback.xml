@@ -40,7 +40,7 @@
   
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
-      <pattern>%-5level %date{HH:mm:ss,SSS} %msg%n</pattern>
+      <pattern>%date{ISO8601} %-5level [%thread] %C.%M\(%F:%L\) %msg%n</pattern>
     </encoder>
   </appender>
   
@@ -53,14 +53,14 @@
   <logger name="org.apache.cassandra.config.DatabaseDescriptor" level="DEBUG" />
   <logger name="org.apache.cassandra.service.CassandraDaemon" level="DEBUG" />
   <logger name="org.apache.cassandra.service.ElassandraDaemon" level="DEBUG" />
-  <logger name="org.elasticsearch" level="TRACE" />
-  <logger name="org.elasticsearch.cassandra" level="TRACE" />
+  <logger name="org.elasticsearch" level="WARN" />
+  <logger name="org.elasticsearch.cassandra" level="DEBUG" />
 
   <logger name="org.elasticsearch.http" level="WARN"/>
   <logger name="org.elasticsearch.transport" level="WARN"/>
 
 
-  <root level="TRACE">
+  <root level="DEBUG">
     <appender-ref ref="FILE" />
     <!-- <appender-ref ref="STDOUT" /> -->
   </root>

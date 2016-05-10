@@ -184,7 +184,9 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public static final String SETTING_DATA_PATH = "index.data_path";
     public static final String SETTING_SHARED_FS_ALLOW_RECOVERY_ON_ANY_NODE = "index.shared_filesystem.recover_on_any_node";
     public static final String INDEX_UUID_NA_VALUE = "_na_";
+    // elassandra specific mapping
     public static final String SETTING_KEYSPACE_NAME = "index.keyspace_name"; 
+    public static final String SETTING_SECONDARY_INDEX_CLASS = "index.secondary_index_class"; 
     
 
     // hard-coded hash function as of 2.0

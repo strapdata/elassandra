@@ -19,7 +19,17 @@
 
 package org.elasticsearch.index.mapper.internal;
 
-import com.google.common.collect.UnmodifiableIterator;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
@@ -35,15 +45,7 @@ import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+import com.google.common.collect.UnmodifiableIterator;
 
 /**
  * A mapper that indexes the field names of a document under <code>_field_names</code>. This mapper is typically useful in order
@@ -236,6 +238,12 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void postCreate(ParseContext context) throws IOException {
+        super.create(context, null);
+    }
+
+    
+    @Override
     public Mapper parse(ParseContext context) throws IOException {
         // we parse in post parse
         return null;
@@ -273,13 +281,19 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
         };
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        parseCreateField( context, null);
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (fieldType().isEnabled() == false) {
             return;
         }
         for (ParseContext.Document document : context.docs()) {
-            final List<String> paths = new ArrayList<>();
+            final Set<String> paths = new HashSet<>();
             for (IndexableField field : document.getFields()) {
                 paths.add(field.name());
             }
@@ -325,4 +339,5 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
     public boolean isGenerated() {
         return true;
     }
+
 }

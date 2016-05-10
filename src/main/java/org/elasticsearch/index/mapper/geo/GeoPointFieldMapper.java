@@ -19,9 +19,21 @@
 
 package org.elasticsearch.index.mapper.geo;
 
-import com.carrotsearch.hppc.ObjectHashSet;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.google.common.collect.Iterators;
+import static org.elasticsearch.index.mapper.MapperBuilders.doubleField;
+import static org.elasticsearch.index.mapper.MapperBuilders.geoPointField;
+import static org.elasticsearch.index.mapper.MapperBuilders.stringField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseMultiField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parsePathType;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.util.BytesRef;
@@ -53,19 +65,9 @@ import org.elasticsearch.index.mapper.core.NumberFieldMapper.CustomNumericDocVal
 import org.elasticsearch.index.mapper.core.StringFieldMapper;
 import org.elasticsearch.index.mapper.object.ArrayValueMapperParser;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.doubleField;
-import static org.elasticsearch.index.mapper.MapperBuilders.geoPointField;
-import static org.elasticsearch.index.mapper.MapperBuilders.stringField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseMultiField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parsePathType;
+import com.carrotsearch.hppc.ObjectHashSet;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.collect.Iterators;
 
 /**
  * Parsing: We handle:
@@ -619,6 +621,60 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
             }
         }
     }
+    
+
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        Map<String,Object> geo_point = (Map<String,Object>) value;
+        GeoPoint point = null;
+        String geohash = (String)geo_point.get(Names.GEOHASH);
+        if (geo_point.get(Names.LAT) != null && geo_point.get(Names.LON) != null) {
+            point = new GeoPoint((Double)geo_point.get(Names.LAT), (Double)geo_point.get(Names.LON));
+            
+            boolean validPoint = false;
+            if (coerce.value() == false && ignoreMalformed.value() == false) {
+                if (point.lat() > 90.0 || point.lat() < -90.0) {
+                    throw new IllegalArgumentException("illegal latitude value [" + point.lat() + "] for " + name());
+                }
+                if (point.lon() > 180.0 || point.lon() < -180) {
+                    throw new IllegalArgumentException("illegal longitude value [" + point.lon() + "] for " + name());
+                }
+                validPoint = true;
+            }
+
+            if (coerce.value() == true && validPoint == false) {
+                // by setting coerce to false we are assuming all geopoints are already in a valid coordinate system
+                // thus this extra step can be skipped
+                // LUCENE WATCH: This will be folded back into Lucene's GeoPointField
+                GeoUtils.normalizePoint(point, true, true);
+            }
+            if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+                Field field = new Field(fieldType().names().indexName(), Double.toString(point.lat()) + ',' + Double.toString(point.lon()), fieldType());
+                context.doc().add(field);
+            }
+            
+            if (fieldType().hasDocValues()) {
+                CustomGeoPointDocValuesField field = (CustomGeoPointDocValuesField) context.doc().getByKey(fieldType().names().indexName());
+                if (field == null) {
+                    field = new CustomGeoPointDocValuesField(fieldType().names().indexName(), point.lat(), point.lon());
+                    context.doc().addWithKey(fieldType().names().indexName(), field);
+                } else {
+                    field.add(point.lat(), point.lon());
+                }
+            }
+        }
+        
+        if (fieldType().isGeohashEnabled()) {
+            if (geohash == null) {
+                geohash = XGeoHashUtils.stringEncode(point.lon(), point.lat());
+            }
+        }
+        if (geohash != null) {
+            addGeohashField(context, geohash);
+        }
+        
+        multiFields.parse(this, context);
+    }
 
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
@@ -753,6 +809,18 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
         return Iterators.concat(super.iterator(), extras.iterator());
     }
 
+    public Map<String, Mapper> mappers() {
+        Map<String,Mapper> mappers = new HashMap<String,Mapper>();
+        if (fieldType().isGeohashEnabled()) {
+            mappers.put(geohashMapper.simpleName(), geohashMapper);
+        }
+        if (fieldType().isLatLonEnabled()) {
+            mappers.put(latMapper.simpleName(), latMapper);
+            mappers.put(lonMapper.simpleName(), lonMapper);
+        }
+        return mappers;
+    }
+    
     @Override
     protected void doXContentBody(XContentBuilder builder, boolean includeDefaults, Params params) throws IOException {
         super.doXContentBody(builder, includeDefaults, params);
@@ -809,4 +877,5 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
             return new BytesRef(bytes);
         }
     }
+
 }

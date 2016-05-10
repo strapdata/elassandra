@@ -142,7 +142,7 @@ public class ParsedDocument {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("Document ").append("uid[").append(uid).append("] doc [").append(documents).append("]");
+        sb.append("Document ").append("uid[").append(uid).append("] docs[").append(documents).append("]");
         return sb.toString();
     }
 }

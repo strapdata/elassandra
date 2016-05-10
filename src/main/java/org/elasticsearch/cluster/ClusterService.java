@@ -67,7 +67,7 @@ import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.node.ArrayNode;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.cassandra.ElasticSecondaryIndex;
+import org.elasticsearch.cassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
@@ -371,7 +371,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public void createIndexKeyspace(String index, int replicationFactor) throws IOException;
     
     public void createSecondaryIndices(String index) throws IOException;
-    public void createSecondaryIndex(String ksName, MappingMetaData mapping) throws IOException;
+    public void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException;
     public void dropSecondaryIndices(String ksName) throws RequestExecutionException;
     public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException;
     
@@ -385,28 +385,29 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
     
-    public List<ColumnDefinition> getPrimaryKeyColumns(String ksName, String cfName) throws ConfigurationException;
-
     public Set<String> mappedColumns(final String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
     public Set<String> mappedColumns(final String index, final String type,final boolean forStaticDocument);
     public String[] mappedColumns(final MapperService mapperService, final String type, final boolean forStaticDocument);
     
     public boolean isStaticDocument(final String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
     
-    public UntypedResultSet fetchRow(String index, String type, Collection<String> requiredColumns,String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
+    public UntypedResultSet fetchRow(String index, String type, String[] requiredColumns,String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
             IOException;
-
-    public UntypedResultSet fetchRow(String index, String type, Collection<String> requiredColumns, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException,
+    public UntypedResultSet fetchRow(String index, String type, String[] requiredColumns, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException,
             RequestValidationException, IOException;
 
     public UntypedResultSet fetchRow(final String index, final String type, final String id) 
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
     
-    public UntypedResultSet fetchRowInternal(String index, String type, Collection<String> requiredColumns, String id) throws ConfigurationException, IOException;
-    public UntypedResultSet fetchRowInternal(String ksName, String cfName, Collection<String> requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
+    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final Collection<String> requiredColumns, final String id) throws ConfigurationException, IOException;
+    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final String[] requiredColumns, String id) throws ConfigurationException, IOException;
+    
+    public UntypedResultSet fetchRowInternal(final String ksName, final String cfName, final Collection<String> requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
+    public UntypedResultSet fetchRowInternal(final String ksName, final String cfName, final String[] requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
     
     public Map<String, Object> rowAsMap(final String index, final String type, UntypedResultSet.Row row) throws IOException;
     public int rowAsMap(final String index, final String type, UntypedResultSet.Row row, Map<String, Object> map) throws IOException;
+    public Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row) throws IOException;
 
     public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 

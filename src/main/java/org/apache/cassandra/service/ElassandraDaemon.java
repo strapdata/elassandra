@@ -3,6 +3,7 @@ package org.apache.cassandra.service;
 import static com.google.common.collect.Sets.newHashSet;
 
 import java.lang.management.ManagementFactory;
+import java.nio.file.Paths;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -229,9 +230,15 @@ public class ElassandraDaemon extends CassandraDaemon {
                 .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
                 .build();
 
+        // path.home set to CASSANDRA_HOME.
+        String cassandra_home = System.getenv("CASSANDRA_HOME");
+        if (cassandra_home == null) {
+            cassandra_home = System.getProperty("cassandra.home", System.getProperty("path.home",Paths.get("").toAbsolutePath().toString()));
+        }
+        logger.info("path.home={}",cassandra_home);
+        
         NodeBuilder nodeBuilder = NodeBuilder.nodeBuilder().settings(nodeSettings);
         nodeBuilder.clusterName(DatabaseDescriptor.getClusterName()).data(true).settings()
-                .put("path.home", System.getenv("CASSANDRA_HOME"))
                 .put("name", CassandraDiscovery.buildNodeName(DatabaseDescriptor.getRpcAddress()))
                 .put("network.host", DatabaseDescriptor.getRpcAddress().getHostAddress())
                 .put("http.netty.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
@@ -254,6 +261,32 @@ public class ElassandraDaemon extends CassandraDaemon {
         return null;
     }
 
+    public static String getHomeDir() {
+        String cassandra_home = System.getenv("CASSANDRA_HOME");
+        if (cassandra_home == null) {
+            cassandra_home = System.getProperty("cassandra.home", System.getProperty("path.home",Paths.get("").toAbsolutePath().toString()));
+        }
+        return cassandra_home;
+    }
+    
+    public static String getConfigDir() {
+        String cassandra_conf = System.getenv("CASSANDRA_CONF");
+        if (cassandra_conf == null) {
+            cassandra_conf = System.getProperty("cassandra.conf", System.getProperty("path.conf",getHomeDir()+"/conf"));
+        }
+        return cassandra_conf;
+    }
+    
+    public static String getElastisearchDataDir() {
+        String cassandra_storagedir = System.getProperty("cassandra_storagedir");
+        if (cassandra_storagedir == null) {
+            cassandra_storagedir = System.getProperty("path.data",getHomeDir()+"/data/elasticsearch.data");
+        } else {
+            cassandra_storagedir = cassandra_storagedir + "/elasticsearch.data";
+        }
+        return cassandra_storagedir;
+    }
+    
     public static void main(String[] args) {
         
         boolean foreground = System.getProperty("cassandra-foreground") != null;
@@ -263,11 +296,13 @@ public class ElassandraDaemon extends CassandraDaemon {
             foreground = false;
         }
 
+        
         try {
             instance.env = InternalSettingsPreparer.prepareEnvironment(
                     Settings.settingsBuilder()
-                        .put("path.home",System.getenv("CASSANDRA_HOME"))
-                        .put("path.conf",System.getenv("CASSANDRA_CONF"))
+                        .put("path.home",getHomeDir())
+                        .put("path.conf",getConfigDir())
+                        .put("path.data",getElastisearchDataDir())
                         .build(), 
                     foreground ? Terminal.DEFAULT : null);
             instance.settings = instance.env.settings();
@@ -292,7 +327,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         String stage = "Initialization";
 
         try {
-            if (!foreground) {
+            if (foreground) {
                 Loggers.disableConsoleLogging();
                 System.out.close();
             }

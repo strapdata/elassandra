@@ -1,4 +1,4 @@
-curl -XPUT "http://$NODE:9200/twitter/" -d '{ "settings" : { "number_of_replicas" : 0 } }'
+curl -XPUT "http://$NODE:9200/twitter/"
 
 cqlsh <<EOF
 CREATE TABLE twitter.server ( 
@@ -36,8 +36,6 @@ curl -XGET "http://$NODE:9200/twitter/server/_search?pretty=true" -d '{ "query":
 
 curl -XGET "http://$NODE:9200/twitter/_search?pretty=true" -d '{ "query":{ "match": {"name":"my-server" } }}'
 curl -XGET "http://$NODE:9200/twitter/_search?pretty=true" -d '{ "query":{ "term": {"name":"localhost" } }}'
-
-
 
 curl -XPUT "http://$NODE:9200/twitter/server/bigserver234" -d '{
     "ip": "22.22.22.22",

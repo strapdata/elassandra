@@ -39,8 +39,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.fielddata.FieldDataType;
-import org.elasticsearch.index.mapper.Mapper.CqlCollection;
-import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.internal.AllFieldMapper;
 import org.elasticsearch.index.similarity.SimilarityLookupService;
@@ -374,12 +372,28 @@ public abstract class FieldMapper extends Mapper {
         multiFields.parse(this, context);
         return null;
     }
+    
+    
+    public Mapper create(ParseContext context, Object value) throws IOException {
+        createField(context, value);
+        multiFields.parse(this, context);
+        return null;
+    }
 
+    public void setBoost(Field field) {
+        if (!customBoost()) {
+            field.setBoost(fieldType().boost());
+        }
+    }
+    
     /**
      * Parse the field value and populate <code>fields</code>.
      */
     protected abstract void parseCreateField(ParseContext context, List<Field> fields) throws IOException;
 
+    public abstract void createField(ParseContext context, Object value) throws IOException;
+    
+    
     /**
      * Derived classes can override it to specify that boost value is set by derived classes.
      */

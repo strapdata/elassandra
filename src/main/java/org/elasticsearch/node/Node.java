@@ -25,30 +25,22 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 
 import org.elasticsearch.Build;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionModule;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
-import org.elasticsearch.cassandra.ElasticSecondaryIndex;
-import org.elasticsearch.cassandra.SecondaryIndicesService;
 import org.elasticsearch.cassandra.discovery.CassandraDiscoveryModule;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayModule;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
+import org.elasticsearch.cassandra.index.BaseElasticSecondaryIndex;
+import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.node.NodeClientModule;
 import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ProcessedClusterStateNonMasterUpdateTask;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.cluster.metadata.MetaData;
-import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.routing.RoutingTable;
-import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.component.Lifecycle;
 import org.elasticsearch.common.component.LifecycleComponent;
@@ -265,7 +257,7 @@ public class Node implements Releasable {
         logger.info("activated ...");
         
         // initialize custom secondary indices.
-        for(ElasticSecondaryIndex esi : ElasticSecondaryIndex.elasticSecondayIndices) {
+        for(BaseElasticSecondaryIndex esi : BaseElasticSecondaryIndex.elasticSecondayIndices) {
             esi.initMapping();
         }
         

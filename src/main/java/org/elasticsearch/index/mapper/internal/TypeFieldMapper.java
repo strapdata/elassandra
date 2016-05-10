@@ -22,6 +22,7 @@ package org.elasticsearch.index.mapper.internal;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.SortedSetDocValuesField;
 import org.apache.lucene.index.IndexOptions;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.PrefixQuery;
@@ -45,6 +46,8 @@ import org.elasticsearch.index.mapper.MergeResult;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.ParseContext.Document;
+import org.elasticsearch.index.mapper.internal.UidFieldMapper.Defaults;
 import org.elasticsearch.index.query.QueryParseContext;
 
 import java.io.IOException;
@@ -179,12 +182,24 @@ public class TypeFieldMapper extends MetadataFieldMapper {
     public void postParse(ParseContext context) throws IOException {
     }
 
+    
     @Override
     public Mapper parse(ParseContext context) throws IOException {
         // we parse in pre parse
         return null;
     }
-
+    
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored()) {
+            return;
+        }
+        context.doc().add(new Field(fieldType().names().indexName(), context.type(), fieldType()));
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedSetDocValuesField(fieldType().names().indexName(), new BytesRef(context.type())));
+        }
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored()) {
@@ -229,4 +244,5 @@ public class TypeFieldMapper extends MetadataFieldMapper {
     public void merge(Mapper mergeWith, MergeResult mergeResult) throws MergeMappingException {
         // do nothing here, no merging, but also no exception
     }
+
 }

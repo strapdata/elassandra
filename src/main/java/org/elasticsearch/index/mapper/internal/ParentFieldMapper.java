@@ -303,6 +303,24 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         }
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        String parentId = (String) value;
+        boolean parent = context.docMapper().isParent(context.type());
+        if (parent) {
+            addJoinFieldIfNeeded(context, parentJoinFieldType, context.id());
+        }
+
+        if (!active()) {
+            return;
+        }
+        
+        context.doc().add(new Field(fieldType().names().indexName(), Uid.createUid(context.stringBuilder(), parentType, parentId), fieldType()));
+        addJoinFieldIfNeeded(context, childJoinFieldType, parentId);
+        // we have parent mapping, yet no value was set, ignore it...
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         boolean parent = context.docMapper().isParent(context.type());
@@ -339,7 +357,13 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         }
         // we have parent mapping, yet no value was set, ignore it...
     }
-
+    
+    private void addJoinFieldIfNeeded(ParseContext context, MappedFieldType fieldType, String id) {
+        if (fieldType.hasDocValues()) {
+            context.doc().add(new SortedDocValuesField(fieldType.names().indexName(), new BytesRef(id)));
+        }
+    }
+    
     private void addJoinFieldIfNeeded(List<Field> fields, MappedFieldType fieldType, String id) {
         if (fieldType.hasDocValues()) {
             fields.add(new SortedDocValuesField(fieldType.names().indexName(), new BytesRef(id)));
@@ -405,5 +429,6 @@ public class ParentFieldMapper extends MetadataFieldMapper {
     public boolean active() {
         return parentType != null;
     }
+
 
 }

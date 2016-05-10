@@ -308,14 +308,34 @@ public class TimestampFieldMapper extends MetadataFieldMapper {
         // nothing to do here, we call the parent in preParse
         return null;
     }
-
+    
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        Long timestamp = (Long)value;
+        if (enabledState.enabled) {
+            /*
+            if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored() && !fieldType().hasDocValues()) {
+                context.ignoredValue(fieldType().names().indexName(), String.valueOf(timestamp));
+            }
+            */
+            if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+                context.doc().add(new LongFieldMapper.CustomLongNumericField(timestamp, fieldType()));
+            }
+            if (fieldType().hasDocValues()) {
+                context.doc().add(new NumericDocValuesField(fieldType().names().indexName(), timestamp));
+            }
+        }
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (enabledState.enabled) {
             long timestamp = context.sourceToParse().timestamp();
+            /*
             if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored() && !fieldType().hasDocValues()) {
                 context.ignoredValue(fieldType().names().indexName(), String.valueOf(timestamp));
             }
+            */
             if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
                 fields.add(new LongFieldMapper.CustomLongNumericField(timestamp, fieldType()));
             }
@@ -407,4 +427,6 @@ public class TimestampFieldMapper extends MetadataFieldMapper {
             }
         }
     }
+
+    
 }

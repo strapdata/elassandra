@@ -9,7 +9,7 @@ c bigint,
 primary key ((a),b)
 );
 insert into composite.t1 (a,b,c) VALUES ('a','b1',1);
-insert into composite.t1 (a,b,c) VALUES ('b','b1',1);
+insert into composite.t1 (a,b,c) VALUES ('b','b1',2);
 
 CREATE TABLE IF NOT EXISTS composite.t2 ( 
 a text,
@@ -48,8 +48,8 @@ curl -XGET "http://$NODE:9200/composite/t3/_search?pretty=true&q=d:3"
 
 curl "$NODE:9200/composite/t1/_mget?pretty=true" -d '{
     "docs" : [
-        { "_id" : "[\"a\",\"b1\",1]" },
-        { "_id" : "[\"b\",\"b1\",1]" }
+        { "_id" : "[\"a\",\"b1\"]" },
+        { "_id" : "[\"b\",\"b1\"]" }
     ]
 }'
 curl "$NODE:9200/composite/t2/_mget?pretty=true" -d '{

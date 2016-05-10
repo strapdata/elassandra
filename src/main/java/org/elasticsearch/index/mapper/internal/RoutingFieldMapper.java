@@ -60,7 +60,7 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
         static {
             FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
             FIELD_TYPE.setTokenized(false);
-            FIELD_TYPE.setStored(true);
+            FIELD_TYPE.setStored(false);        // elassandra does not need to store _routing
             FIELD_TYPE.setOmitNorms(true);
             FIELD_TYPE.setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
             FIELD_TYPE.setSearchAnalyzer(Lucene.KEYWORD_ANALYZER);
@@ -202,15 +202,32 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
         return null;
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        String routing = (String)object;
+        if (routing != null) {
+            /*
+            if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored()) {
+                context.ignoredValue(fieldType().names().indexName(), routing);
+                return;
+            }
+            */
+            context.doc().add(new Field(fieldType().names().indexName(), routing, fieldType()));
+        }
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (context.sourceToParse().routing() != null) {
             String routing = context.sourceToParse().routing();
             if (routing != null) {
+                /*
                 if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored()) {
                     context.ignoredValue(fieldType().names().indexName(), routing);
                     return;
                 }
+                */
                 fields.add(new Field(fieldType().names().indexName(), routing, fieldType()));
             }
         }
@@ -253,4 +270,5 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
     public void merge(Mapper mergeWith, MergeResult mergeResult) throws MergeMappingException {
         // do nothing here, no merging, but also no exception
     }
+
 }

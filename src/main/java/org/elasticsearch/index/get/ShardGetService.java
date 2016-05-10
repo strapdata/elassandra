@@ -302,7 +302,7 @@ public final class ShardGetService extends AbstractIndexShardComponent {
         
         // In elassandra, Engine does not store the source any more, but fetch it from cassandra.
         try {
-            UntypedResultSet result = clusterService.fetchRow(shardId.index().name(), type, columns, id);
+            UntypedResultSet result = clusterService.fetchRow(shardId.index().name(), type, columns.toArray(new String[columns.size()]), id);
             if (result.isEmpty()) {
                 return new GetResult(shardId.index().name(), type, id, -1, false, null, null);
             }

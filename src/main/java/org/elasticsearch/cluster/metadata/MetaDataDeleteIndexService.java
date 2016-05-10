@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.elasticsearch.action.support.master.MasterNodeRequest;
-import org.elasticsearch.cassandra.SecondaryIndicesService;
+import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.TimeoutClusterStateUpdateTask;
@@ -127,7 +127,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                     throw new IndexNotFoundException(request.index);
                 }
 
-                logger.info("[{}] deleting index", request.index);
+                logger.info("deleting index [{}] ", request.index);
 
                 MetaData newMetaData = MetaData.builder(currentState.metaData()).remove(request.index).build();
                 ClusterBlocks newblocks = ClusterBlocks.builder().blocks(currentState.blocks()).removeIndexBlocks(request.index).build();
@@ -186,13 +186,13 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                         //nodeIndexDeletedAction.remove(nodeIndexDeleteListener);
                     }
                 });
-                secondaryIndicesService.dropSecondaryIndices(request.index);
                 
                 return newCurrentState;
             }
 
             @Override
             public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+                logger.debug("index [{}] deleted from cluster state", request.index);
             }
         });
     }

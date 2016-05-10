@@ -201,6 +201,25 @@ public class BooleanFieldMapper extends FieldMapper {
         return (BooleanFieldType) super.fieldType();
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        Boolean value = (Boolean) object;
+        if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored() && !fieldType().hasDocValues()) {
+            return;
+        }
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+               return;
+            }
+            value = fieldType().nullValue();
+        }
+        context.doc().add(new Field(fieldType().names().indexName(), value ? "T" : "F", fieldType()));
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedNumericDocValuesField(fieldType().names().indexName(), value ? 1 : 0));
+        }
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored() && !fieldType().hasDocValues()) {
@@ -240,4 +259,5 @@ public class BooleanFieldMapper extends FieldMapper {
             builder.field("null_value", fieldType().nullValue());
         }
     }
+
 }

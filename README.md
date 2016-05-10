@@ -12,6 +12,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
+* **2016-05-10 Release 2.1.1-9 Upgrade to cassandra 2.2.5**
 * **2016-04-17 Release 2.1.1-8 New feature, index cassandra static columns**
 * **2016-03-18 Release 2.1.1-6 Add support for SQL plugin (from [NLPchina](https://github.com/NLPchina/elasticsearch-sql)) and JDBC driver (from [Anchormen](https://github.com/Anchormen/sql4es)).**
 * **2016-02-16 Release 2.1.1-2 Remove build dependency to elasticsearch parent project.**
@@ -122,7 +123,7 @@ From a Cassandra perspective :
 
 ## Elassandra Tarball Installation
 
-* Install Java version 7 (check version with `java -version`). Version 7 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.1/cassandra/install/installJdkRHEL.html).
+* Install Java version 8 (check version with `java -version`). Version 8 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.1/cassandra/install/installJdkRHEL.html).
 * Download Elassandra tarbal from [elassandra repository]() and extract files in your installation directory
 * Install the cassandra driver `pip install cassandra-driver` and the cqlsh utility `python pylib/setup.py install`
 * Configure your cassandra cluster (cluster name, sntich, ip address, seed...), see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html). Default Elasticsearch configuration is located in `conf/elasticsearch.yml`.
@@ -239,9 +240,9 @@ CREATE TABLE twitter.tweet (
     AND min_index_interval = 128
     AND read_repair_chance = 0.0
     AND speculative_retry = '99.0PERCENTILE';
-CREATE CUSTOM INDEX elastic_tweet_message_idx ON twitter.tweet (message) USING 'org.elasticsearch.cassandra.ElasticSecondaryIndex';
-CREATE CUSTOM INDEX elastic_tweet_postDate_idx ON twitter.tweet ("postDate") USING 'org.elasticsearch.cassandra.ElasticSecondaryIndex';
-CREATE CUSTOM INDEX elastic_tweet_user_idx ON twitter.tweet (user) USING 'org.elasticsearch.cassandra.ElasticSecondaryIndex';
+CREATE CUSTOM INDEX elastic_tweet_message_idx ON twitter.tweet (message) USING 'org.elasticsearch.cassandra.index.ElasticSecondaryIndex';
+CREATE CUSTOM INDEX elastic_tweet_postDate_idx ON twitter.tweet ("postDate") USING 'org.elasticsearch.cassandra.index.ElasticSecondaryIndex';
+CREATE CUSTOM INDEX elastic_tweet_user_idx ON twitter.tweet (user) USING 'org.elasticsearch.cassandra.index.ElasticSecondaryIndex';
 ```
 
 Now, let's see if the information was added by GETting it:

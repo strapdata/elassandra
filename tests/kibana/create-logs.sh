@@ -62,5 +62,5 @@ curl -XPUT http://$NODE:9200/shakespeare -d '
 ';
 
 #curl -XPOST "$NODE:9200/accounts/account/_bulk?pretty" --data-binary @accounts.json
-curl -XPOST "$NODE:9200/shakespeare/_bulk?pretty" --data-binary @shakespeare.json
-#curl -XPOST "$NODE:9200/_bulk?pretty" --data-binary @logs.jsonl10
+#curl -XPOST "$NODE:9200/shakespeare/_bulk?pretty" --data-binary @shakespeare.json
+curl -XPOST "$NODE:9200/_bulk?pretty" --data-binary @logs.jsonl10

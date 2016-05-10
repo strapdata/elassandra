@@ -210,6 +210,40 @@ public class DoubleFieldMapper extends NumberFieldMapper {
         return true;
     }
 
+
+    @Override
+    public void innerCreateField(ParseContext context, Object object) throws IOException {
+        Double value = (Double)object;
+        float boost = fieldType().boost();
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            value = fieldType().nullValue();
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), Double.toString(value), boost);
+        }
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomDoubleNumericField field = new CustomDoubleNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            if (useSortedNumericDocValues) {
+                addDocValue(context, doubleToSortableLong(value));
+            } else {
+                CustomDoubleNumericDocValuesField field = (CustomDoubleNumericDocValuesField) context.doc().getByKey(fieldType().names().indexName());
+                if (field != null) {
+                    field.add(value);
+                } else {
+                    field = new CustomDoubleNumericDocValuesField(fieldType().names().indexName(), value);
+                    context.doc().addWithKey(fieldType().names().indexName(), field);
+                }
+            }
+        }
+    }
+    
     @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         double value;
@@ -372,4 +406,5 @@ public class DoubleFieldMapper extends NumberFieldMapper {
         }
 
     }
+
 }

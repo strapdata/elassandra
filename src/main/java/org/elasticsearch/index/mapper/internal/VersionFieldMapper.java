@@ -27,6 +27,7 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.fielddata.FieldDataType;
+import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
@@ -35,6 +36,7 @@ import org.elasticsearch.index.mapper.MergeResult;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.ParseContext.Document;
+import org.elasticsearch.index.mapper.object.RootObjectMapper;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -127,11 +129,16 @@ public class VersionFieldMapper extends MetadataFieldMapper {
         super(NAME, Defaults.FIELD_TYPE, Defaults.FIELD_TYPE, indexSettings);
     }
 
-    @Override
-    public void preParse(ParseContext context) throws IOException {
-        super.parse(context);
-    }
+   
 
+
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        final Field version = new NumericDocValuesField(NAME, -1L);
+        context.version(version);
+        context.doc().add(version);
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         // see InternalEngine.updateVersion to see where the real version value is set
@@ -147,6 +154,11 @@ public class VersionFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void preParse(ParseContext context) throws IOException {
+        super.parse(context);
+    }
+    
+    @Override
     public void postParse(ParseContext context) throws IOException {
         // In the case of nested docs, let's fill nested docs with version=1 so that Lucene doesn't write a Bitset for documents
         // that don't have the field. This is consistent with the default value for efficiency.
@@ -156,6 +168,17 @@ public class VersionFieldMapper extends MetadataFieldMapper {
         }
     }
 
+    @Override
+    public void postCreate(ParseContext context) throws IOException {
+        // In the case of nested docs, let's fill nested docs with version=1 so that Lucene doesn't write a Bitset for documents
+        // that don't have the field. This is consistent with the default value for efficiency.
+        for (int i = 1; i < context.docs().size(); i++) {
+            final Document doc = context.docs().get(i);
+            doc.add(new NumericDocValuesField(NAME, 1L));
+        }
+    }
+    
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -170,4 +193,5 @@ public class VersionFieldMapper extends MetadataFieldMapper {
     public void merge(Mapper mergeWith, MergeResult mergeResult) throws MergeMappingException {
         // nothing to do
     }
+
 }

@@ -37,19 +37,16 @@ import ConfigParser
 import csv
 import getpass
 import locale
-import multiprocessing as mp
 import optparse
 import os
 import platform
 import sys
-import time
 import traceback
 import warnings
 import webbrowser
-from contextlib import contextmanager
-from functools import partial
-from glob import glob
 from StringIO import StringIO
+from contextlib import contextmanager
+from glob import glob
 from uuid import UUID
 
 if sys.version_info[0] != 2 or sys.version_info[1] != 7:
@@ -142,10 +139,8 @@ except ImportError, e:
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster
 from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata,
-                                TableMetadata, protect_name, protect_names,
-                                protect_value)
+                                TableMetadata, protect_name, protect_names)
 from cassandra.policies import WhiteListRoundRobinPolicy
-from cassandra.protocol import QueryMessage, ResultMessage
 from cassandra.query import SimpleStatement, ordered_dict_factory, TraceUnavailable
 
 # cqlsh should run correctly when run out of a Cassandra source tree,
@@ -154,7 +149,8 @@ cqlshlibdir = os.path.join(CASSANDRA_PATH, 'pylib')
 if os.path.isdir(cqlshlibdir):
     sys.path.insert(0, cqlshlibdir)
 
-from cqlshlib import cql3handling, cqlhandling, pylexotron, sslhandling, copy
+from cqlshlib import cql3handling, cqlhandling, pylexotron, sslhandling
+from cqlshlib.copyutil import ExportTask, ImportTask
 from cqlshlib.displaying import (ANSI_RESET, BLUE, COLUMN_NAME_COLORS, CYAN,
                                  RED, FormattedValue, colorme)
 from cqlshlib.formatting import (DEFAULT_DATE_FORMAT, DEFAULT_NANOTIME_FORMAT,
@@ -169,6 +165,7 @@ DEFAULT_PORT = 9042
 DEFAULT_CQLVER = '3.3.1'
 DEFAULT_PROTOCOL_VERSION = 4
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 5
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 10
 
 DEFAULT_FLOAT_PRECISION = 5
 DEFAULT_MAX_TRACE_WAIT = 10
@@ -213,6 +210,10 @@ parser.add_option('--cqlversion', default=DEFAULT_CQLVER,
 parser.add_option("-e", "--execute", help='Execute the statement and quit.')
 parser.add_option("--connect-timeout", default=DEFAULT_CONNECT_TIMEOUT_SECONDS, dest='connect_timeout',
                   help='Specify the connection timeout in seconds (default: %default seconds).')
+parser.add_option("--request-timeout", default=DEFAULT_REQUEST_TIMEOUT_SECONDS, dest='request_timeout',
+                  help='Specify the default request timeout in seconds (default: %default seconds).')
+parser.add_option("-t", "--tty", action='store_true', dest='tty',
+                  help='Force tty mode (command prompt).')
 
 optvalues = optparse.Values()
 (options, arguments) = parser.parse_args(sys.argv[1:], values=optvalues)
@@ -376,7 +377,7 @@ cqlsh_extra_syntax_rules = r'''
 
 <copyOptionVal> ::= <identifier>
                   | <reserved_identifier>
-                  | <stringLiteral>
+                  | <term>
                   ;
 
 # avoiding just "DEBUG" so that this rule doesn't get treated as a terminal
@@ -457,17 +458,22 @@ def complete_copy_column_names(ctxt, cqlsh):
     return set(colnames[1:]) - set(existcols)
 
 
-COPY_OPTIONS = ['DELIMITER', 'QUOTE', 'ESCAPE', 'HEADER', 'NULL', 'ENCODING',
-                'TIMEFORMAT', 'JOBS', 'PAGESIZE', 'PAGETIMEOUT', 'MAXATTEMPTS']
+COPY_COMMON_OPTIONS = ['DELIMITER', 'QUOTE', 'ESCAPE', 'HEADER', 'NULL', 'DATETIMEFORMAT',
+                       'MAXATTEMPTS', 'REPORTFREQUENCY', 'DECIMALSEP', 'THOUSANDSSEP', 'BOOLSTYLE',
+                       'NUMPROCESSES', 'CONFIGFILE', 'RATEFILE']
+COPY_FROM_OPTIONS = ['CHUNKSIZE', 'INGESTRATE', 'MAXBATCHSIZE', 'MINBATCHSIZE', 'MAXROWS',
+                     'SKIPROWS', 'SKIPCOLS', 'MAXPARSEERRORS', 'MAXINSERTERRORS', 'ERRFILE']
+COPY_TO_OPTIONS = ['ENCODING', 'PAGESIZE', 'PAGETIMEOUT', 'BEGINTOKEN', 'ENDTOKEN', 'MAXOUTPUTSIZE', 'MAXREQUESTS']
 
 
 @cqlsh_syntax_completer('copyOption', 'optnames')
 def complete_copy_options(ctxt, cqlsh):
     optnames = map(str.upper, ctxt.get_binding('optnames', ()))
     direction = ctxt.get_binding('dir').upper()
-    opts = set(COPY_OPTIONS) - set(optnames)
     if direction == 'FROM':
-        opts -= set(['ENCODING', 'TIMEFORMAT', 'JOBS', 'PAGESIZE', 'PAGETIMEOUT', 'MAXATTEMPTS'])
+        opts = set(COPY_COMMON_OPTIONS + COPY_FROM_OPTIONS) - set(optnames)
+    elif direction == 'TO':
+        opts = set(COPY_COMMON_OPTIONS + COPY_TO_OPTIONS) - set(optnames)
     return opts
 
 
@@ -573,23 +579,6 @@ warnings.showwarning = show_warning_without_quoting_line
 warnings.filterwarnings('always', category=cql3handling.UnexpectedTableStructure)
 
 
-def describe_interval(seconds):
-    desc = []
-    for length, unit in ((86400, 'day'), (3600, 'hour'), (60, 'minute')):
-        num = int(seconds) / length
-        if num > 0:
-            desc.append('%d %s' % (num, unit))
-            if num > 1:
-                desc[-1] += 's'
-        seconds %= length
-    words = '%.03f seconds' % seconds
-    if len(desc) > 1:
-        words = ', '.join(desc) + ', and ' + words
-    elif len(desc) == 1:
-        words = desc[0] + ' and ' + words
-    return words
-
-
 def insert_driver_hooks():
     extend_cql_deserialization()
     auto_format_udts()
@@ -656,8 +645,7 @@ class Shell(cmd.Cmd):
     last_hist = None
     shunted_query_out = None
     use_paging = True
-    csv_dialect_defaults = dict(delimiter=',', doublequote=False,
-                                escapechar='\\', quotechar='"')
+
     default_page_size = 100
 
     def __init__(self, hostname, port, color=False,
@@ -672,7 +660,7 @@ class Shell(cmd.Cmd):
                  max_trace_wait=DEFAULT_MAX_TRACE_WAIT,
                  ssl=False,
                  single_statement=None,
-                 client_timeout=10,
+                 request_timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS,
                  protocol_version=DEFAULT_PROTOCOL_VERSION,
                  connect_timeout=DEFAULT_CONNECT_TIMEOUT_SECONDS):
         cmd.Cmd.__init__(self, completekey=completekey)
@@ -697,6 +685,7 @@ class Shell(cmd.Cmd):
                                 auth_provider=self.auth_provider,
                                 ssl_options=sslhandling.ssl_settings(hostname, CONFIG_FILE) if ssl else None,
                                 load_balancing_policy=WhiteListRoundRobinPolicy([self.hostname]),
+                                control_connection_timeout=connect_timeout,
                                 connect_timeout=connect_timeout)
         self.owns_connection = not use_conn
         self.set_expanded_cql_version(cqlver)
@@ -721,7 +710,7 @@ class Shell(cmd.Cmd):
         if not self.conn.metadata.keyspaces:
             self.refresh_schema_metadata_best_effort()
 
-        self.session.default_timeout = client_timeout
+        self.session.default_timeout = request_timeout
         self.session.row_factory = ordered_dict_factory
         self.session.default_consistency_level = cassandra.ConsistencyLevel.ONE
         self.get_connection_versions()
@@ -736,6 +725,8 @@ class Shell(cmd.Cmd):
         self.session.max_trace_wait = max_trace_wait
         if encoding is None:
             encoding = locale.getpreferredencoding()
+            if encoding is None:
+                encoding = 'utf-8'
         self.encoding = encoding
         self.output_codec = codecs.lookup(encoding)
 
@@ -1033,7 +1024,7 @@ class Shell(cmd.Cmd):
 
     def get_input_line(self, prompt=''):
         if self.tty:
-            self.lastcmd = raw_input(prompt)
+            self.lastcmd = raw_input(prompt).decode(self.encoding)
             line = self.lastcmd + '\n'
         else:
             self.lastcmd = self.stdin.readline()
@@ -1132,7 +1123,7 @@ class Shell(cmd.Cmd):
             new_hist = srcstr.replace("\n", " ").rstrip()
 
             if nl_count > 1 and self.last_hist != new_hist:
-                readline.add_history(new_hist)
+                readline.add_history(new_hist.encode(self.encoding))
 
             self.last_hist = new_hist
         cmdword = tokens[0][1]
@@ -1213,7 +1204,7 @@ class Shell(cmd.Cmd):
     def perform_simple_statement(self, statement):
         if not statement:
             return False, None
-        rows = None
+
         while True:
             try:
                 future = self.session.execute_async(statement, trace=self.tracing_enabled)
@@ -1240,7 +1231,7 @@ class Shell(cmd.Cmd):
         elif result:
             # CAS INSERT/UPDATE
             self.writeresult("")
-            self.print_static_result(list(result), self.parse_for_table_meta(statement.query_string))
+            self.print_static_result(result.column_names, list(result), self.parse_for_table_meta(statement.query_string))
         self.flush_output()
         return True, future
 
@@ -1254,7 +1245,7 @@ class Shell(cmd.Cmd):
                 page = result.current_rows
                 if page:
                     num_rows += len(page)
-                    self.print_static_result(page, table_meta)
+                    self.print_static_result(result.column_names, page, table_meta)
                 if result.has_more_pages:
                     raw_input("---MORE---")
                     result.fetch_next_page()
@@ -1263,7 +1254,7 @@ class Shell(cmd.Cmd):
         else:
             rows = list(result)
             num_rows = len(rows)
-            self.print_static_result(rows, table_meta)
+            self.print_static_result(result.column_names, rows, table_meta)
         self.writeresult("(%d rows)" % num_rows)
 
         if self.decoding_errors:
@@ -1273,18 +1264,11 @@ class Shell(cmd.Cmd):
                 self.writeresult('%d more decoding errors suppressed.'
                                  % (len(self.decoding_errors) - 2), color=RED)
 
-    def print_static_result(self, rows, table_meta):
-        if not rows:
-            if not table_meta:
-                return
-            # print header only
-            colnames = table_meta.columns.keys()  # full header
-            formatted_names = [self.myformat_colname(name, table_meta) for name in colnames]
-            self.print_formatted_result(formatted_names, None)
+    def print_static_result(self, column_names, rows, table_meta):
+        if not column_names and not table_meta:
             return
-
-        colnames = rows[0].keys()
-        formatted_names = [self.myformat_colname(name, table_meta) for name in colnames]
+        column_names = column_names or table_meta.columns.keys()
+        formatted_names = [self.myformat_colname(name, table_meta) for name in column_names]
         formatted_values = [map(self.myformat_value, row.values()) for row in rows]
 
         if self.expand_enabled:
@@ -1714,182 +1698,102 @@ class Shell(cmd.Cmd):
           COPY x TO: Exports data from a Cassandra table in CSV format.
 
         COPY <table_name> [ ( column [, ...] ) ]
-             FROM ( '<filename>' | STDIN )
+             FROM ( '<file_pattern_1, file_pattern_2, ... file_pattern_n>' | STDIN )
              [ WITH <option>='value' [AND ...] ];
+
+        File patterns are either file names or valid python glob expressions, e.g. *.csv or folder/*.csv.
 
         COPY <table_name> [ ( column [, ...] ) ]
              TO ( '<filename>' | STDOUT )
              [ WITH <option>='value' [AND ...] ];
 
-        Available options and defaults:
+        Available common COPY options and defaults:
 
           DELIMITER=','           - character that appears between records
           QUOTE='"'               - quoting character to be used to quote fields
           ESCAPE='\'              - character to appear before the QUOTE char when quoted
           HEADER=false            - whether to ignore the first line
           NULL=''                 - string that represents a null value
-          ENCODING='utf8'         - encoding for CSV output (COPY TO only)
-          TIMEFORMAT=             - timestamp strftime format (COPY TO only)
+          DATETIMEFORMAT=         - timestamp strftime format
             '%Y-%m-%d %H:%M:%S%z'   defaults to time_format value in cqlshrc
+          MAXATTEMPTS=5           - the maximum number of attempts per batch or range
+          REPORTFREQUENCY=0.25    - the frequency with which we display status updates in seconds
+          DECIMALSEP='.'          - the separator for decimal values
+          THOUSANDSSEP=''         - the separator for thousands digit groups
+          BOOLSTYLE='True,False'  - the representation for booleans, case insensitive, specify true followed by false,
+                                    for example yes,no or 1,0
+          NUMPROCESSES=n          - the number of worker processes, by default the number of cores minus one
+                                    capped at 16
+          CONFIGFILE=''           - a configuration file with the same format as .cqlshrc (see the Python ConfigParser
+                                    documentation) where you can specify WITH options under the following optional
+                                    sections: [copy], [copy-to], [copy-from], [copy:ks.table], [copy-to:ks.table],
+                                    [copy-from:ks.table], where <ks> is your keyspace name and <table> is your table
+                                    name. Options are read from these sections, in the order specified
+                                    above, and command line options always override options in configuration files.
+                                    Depending on the COPY direction, only the relevant copy-from or copy-to sections
+                                    are used. If no configfile is specified then .cqlshrc is searched instead.
+          RATEFILE=''             - an optional file where to print the output statistics
+
+        Available COPY FROM options and defaults:
+
+          CHUNKSIZE=1000          - the size of chunks passed to worker processes
+          INGESTRATE=100000       - an approximate ingest rate in rows per second
+          MINBATCHSIZE=2          - the minimum size of an import batch
+          MAXBATCHSIZE=20         - the maximum size of an import batch
+          MAXROWS=-1              - the maximum number of rows, -1 means no maximum
+          SKIPROWS=0              - the number of rows to skip
+          SKIPCOLS=''             - a comma separated list of column names to skip
+          MAXPARSEERRORS=-1       - the maximum global number of parsing errors, -1 means no maximum
+          MAXINSERTERRORS=-1      - the maximum global number of insert errors, -1 means no maximum
+          ERRFILE=''              - a file where to store all rows that could not be imported, by default this is
+                                    import_ks_table.err where <ks> is your keyspace and <table> is your table name.
+
+        Available COPY TO options and defaults:
+
+          ENCODING='utf8'          - encoding for CSV output
+          PAGESIZE='1000'          - the page size for fetching results
+          PAGETIMEOUT=10           - the page timeout in seconds for fetching results
+          BEGINTOKEN=''            - the minimum token string to consider when exporting data
+          ENDTOKEN=''              - the maximum token string to consider when exporting data
+          MAXREQUESTS=6            - the maximum number of requests each worker process can work on in parallel
+          MAXOUTPUTSIZE='-1'       - the maximum size of the output file measured in number of lines,
+                                     beyond this maximum the output file will be split into segments,
+                                     -1 means unlimited.
 
         When entering CSV data on STDIN, you can use the sequence "\."
         on a line by itself to end the data input.
         """
+
         ks = self.cql_unprotect_name(parsed.get_binding('ksname', None))
         if ks is None:
             ks = self.current_keyspace
             if ks is None:
                 raise NoKeyspaceError("Not in any keyspace.")
-        cf = self.cql_unprotect_name(parsed.get_binding('cfname'))
+        table = self.cql_unprotect_name(parsed.get_binding('cfname'))
         columns = parsed.get_binding('colnames', None)
         if columns is not None:
             columns = map(self.cql_unprotect_name, columns)
         else:
             # default to all known columns
-            columns = self.get_column_names(ks, cf)
+            columns = self.get_column_names(ks, table)
+
         fname = parsed.get_binding('fname', None)
         if fname is not None:
-            fname = os.path.expanduser(self.cql_unprotect_value(fname))
+            fname = self.cql_unprotect_value(fname)
+
         copyoptnames = map(str.lower, parsed.get_binding('optnames', ()))
         copyoptvals = map(self.cql_unprotect_value, parsed.get_binding('optvals', ()))
-        cleancopyoptvals = [optval.decode('string-escape') for optval in copyoptvals]
-        opts = dict(zip(copyoptnames, cleancopyoptvals))
-
-        print "\nStarting copy of %s.%s with columns %s." % (ks, cf, columns)
-
-        timestart = time.time()
+        opts = dict(zip(copyoptnames, copyoptvals))
 
         direction = parsed.get_binding('dir').upper()
         if direction == 'FROM':
-            rows = self.perform_csv_import(ks, cf, columns, fname, opts)
-            verb = 'imported'
+            task = ImportTask(self, ks, table, columns, fname, opts, DEFAULT_PROTOCOL_VERSION, CONFIG_FILE)
         elif direction == 'TO':
-            rows = self.perform_csv_export(ks, cf, columns, fname, opts)
-            verb = 'exported'
+            task = ExportTask(self, ks, table, columns, fname, opts, DEFAULT_PROTOCOL_VERSION, CONFIG_FILE)
         else:
             raise SyntaxError("Unknown direction %s" % direction)
 
-        timeend = time.time()
-        print "\n%d rows %s in %s." % (rows, verb, describe_interval(timeend - timestart))
-
-    def perform_csv_import(self, ks, cf, columns, fname, opts):
-        csv_options, dialect_options, unrecognized_options = copy.parse_options(self, opts)
-        if unrecognized_options:
-            self.printerr('Unrecognized COPY FROM options: %s'
-                          % ', '.join(unrecognized_options.keys()))
-            return 0
-        nullval, header = csv_options['nullval'], csv_options['header']
-
-        if fname is None:
-            do_close = False
-            print "[Use \. on a line by itself to end input]"
-            linesource = self.use_stdin_reader(prompt='[copy] ', until=r'\.')
-        else:
-            do_close = True
-            try:
-                linesource = open(fname, 'rb')
-            except IOError, e:
-                self.printerr("Can't open %r for reading: %s" % (fname, e))
-                return 0
-
-        current_record = None
-        processes, pipes = [], [],
-        try:
-            if header:
-                linesource.next()
-            reader = csv.reader(linesource, **dialect_options)
-
-            num_processes = copy.get_num_processes(cap=4)
-
-            for i in range(num_processes):
-                parent_conn, child_conn = mp.Pipe()
-                pipes.append(parent_conn)
-                processes.append(ImportProcess(self, child_conn, ks, cf, columns, nullval))
-
-            for process in processes:
-                process.start()
-
-            meter = copy.RateMeter(10000)
-            for current_record, row in enumerate(reader, start=1):
-                # write to the child process
-                pipes[current_record % num_processes].send((current_record, row))
-
-                # update the progress and current rate periodically
-                meter.increment()
-
-                # check for any errors reported by the children
-                if (current_record % 100) == 0:
-                    if self._check_import_processes(current_record, pipes):
-                        # no errors seen, continue with outer loop
-                        continue
-                    else:
-                        # errors seen, break out of outer loop
-                        break
-        except Exception, exc:
-            if current_record is None:
-                # we failed before we started
-                self.printerr("\nError starting import process:\n")
-                self.printerr(str(exc))
-                if self.debug:
-                    traceback.print_exc()
-            else:
-                self.printerr("\n" + str(exc))
-                self.printerr("\nAborting import at record #%d. "
-                              "Previously inserted records and some records after "
-                              "this number may be present."
-                              % (current_record,))
-                if self.debug:
-                    traceback.print_exc()
-        finally:
-            # send a message that indicates we're done
-            for pipe in pipes:
-                pipe.send((None, None))
-
-            for process in processes:
-                process.join()
-
-            self._check_import_processes(current_record, pipes)
-
-            for pipe in pipes:
-                pipe.close()
-
-            if do_close:
-                linesource.close()
-            elif self.tty:
-                print
-
-        return current_record
-
-    def _check_import_processes(self, current_record, pipes):
-        for pipe in pipes:
-            if pipe.poll():
-                try:
-                    (record_num, error) = pipe.recv()
-                    self.printerr("\n" + str(error))
-                    self.printerr(
-                        "Aborting import at record #%d. "
-                        "Previously inserted records are still present, "
-                        "and some records after that may be present as well."
-                        % (record_num,))
-                    return False
-                except EOFError:
-                    # pipe is closed, nothing to read
-                    self.printerr("\nChild process died without notification, "
-                                  "aborting import at record #%d. Previously "
-                                  "inserted records are probably still present, "
-                                  "and some records after that may be present "
-                                  "as well." % (current_record,))
-                    return False
-        return True
-
-    def perform_csv_export(self, ks, cf, columns, fname, opts):
-        csv_options, dialect_options, unrecognized_options = copy.parse_options(self, opts)
-        if unrecognized_options:
-            self.printerr('Unrecognized COPY TO options: %s' % ', '.join(unrecognized_options.keys()))
-            return 0
-
-        return copy.ExportTask(self, ks, cf, columns, fname, csv_options, dialect_options,
-                               DEFAULT_PROTOCOL_VERSION, CONFIG_FILE).run()
+        task.run()
 
     def do_show(self, parsed):
         """
@@ -2146,6 +2050,7 @@ class Shell(cmd.Cmd):
                        auth_provider=auth_provider,
                        ssl_options=self.conn.ssl_options,
                        load_balancing_policy=WhiteListRoundRobinPolicy([self.hostname]),
+                       control_connection_timeout=self.conn.connect_timeout,
                        connect_timeout=self.conn.connect_timeout)
 
         if self.current_keyspace:
@@ -2291,192 +2196,6 @@ class Shell(cmd.Cmd):
         self.writeresult(text, color, newline=newline, out=sys.stderr)
 
 
-class ImportProcess(mp.Process):
-
-    def __init__(self, parent, pipe, ks, cf, columns, nullval):
-        mp.Process.__init__(self)
-        self.pipe = pipe
-        self.nullval = nullval
-        self.ks = ks
-        self.cf = cf
-
-        # validate we can fetch metdata but don't store it since win32 needs to pickle
-        parent.get_table_meta(ks, cf)
-
-        self.columns = columns
-        self.consistency_level = parent.consistency_level
-        self.connect_timeout = parent.conn.connect_timeout
-        self.hostname = parent.hostname
-        self.port = parent.port
-        self.ssl = parent.ssl
-        self.auth_provider = parent.auth_provider
-        self.cql_version = parent.conn.cql_version
-        self.debug = parent.debug
-
-    def run(self):
-        new_cluster = Cluster(
-            contact_points=(self.hostname,),
-            port=self.port,
-            cql_version=self.cql_version,
-            protocol_version=DEFAULT_PROTOCOL_VERSION,
-            auth_provider=self.auth_provider,
-            ssl_options=sslhandling.ssl_settings(self.hostname, CONFIG_FILE) if self.ssl else None,
-            load_balancing_policy=WhiteListRoundRobinPolicy([self.hostname]),
-            compression=None,
-            connect_timeout=self.connect_timeout)
-        session = new_cluster.connect(self.ks)
-        conn = session._pools.values()[0]._connection
-
-        table_meta = new_cluster.metadata.keyspaces[self.ks].tables[self.cf]
-
-        pk_cols = [col.name for col in table_meta.primary_key]
-        cqltypes = [table_meta.columns[name].cql_type for name in self.columns]
-        pk_indexes = [self.columns.index(col.name) for col in table_meta.primary_key]
-        is_counter_table = ("counter" in cqltypes)
-
-        if is_counter_table:
-            query = 'UPDATE %s.%s SET %%s WHERE %%s' % (
-                protect_name(table_meta.keyspace_name),
-                protect_name(table_meta.name))
-        else:
-            query = 'INSERT INTO %s.%s (%s) VALUES (%%s)' % (
-                protect_name(table_meta.keyspace_name),
-                protect_name(table_meta.name),
-                ', '.join(protect_names(self.columns)))
-
-        # we need to handle some types specially
-        should_escape = [t in ('ascii', 'text', 'timestamp', 'date', 'time', 'inet') for t in cqltypes]
-
-        insert_timestamp = int(time.time() * 1e6)
-
-        def callback(record_num, response):
-            # This is the callback we register for all inserts.  Because this
-            # is run on the event-loop thread, we need to hold a lock when
-            # adjusting in_flight.
-            with conn.lock:
-                conn.in_flight -= 1
-
-            if not isinstance(response, ResultMessage):
-                # It's an error. Notify the parent process and let it send
-                # a stop signal to all child processes (including this one).
-                self.pipe.send((record_num, str(response)))
-                if isinstance(response, Exception) and self.debug:
-                    traceback.print_exc(response)
-
-        current_record = 0
-        insert_num = 0
-        try:
-            while True:
-                # To avoid totally maxing out the connection,
-                # defer to the reactor thread when we're close
-                # to capacity
-                if conn.in_flight > (conn.max_request_id * 0.9):
-                    conn._readable = True
-                    time.sleep(0.05)
-                    continue
-
-                try:
-                    (current_record, row) = self.pipe.recv()
-                except EOFError:
-                    # the pipe was closed and there's nothing to receive
-                    sys.stdout.write('Failed to read from pipe:\n\n')
-                    sys.stdout.flush()
-                    conn._writable = True
-                    conn._readable = True
-                    break
-
-                # see if the parent process has signaled that we are done
-                if (current_record, row) == (None, None):
-                    conn._writable = True
-                    conn._readable = True
-                    self.pipe.close()
-                    break
-
-                # format the values in the row
-                for i, value in enumerate(row):
-                    if value != self.nullval:
-                        if should_escape[i]:
-                            row[i] = protect_value(value)
-                    elif i in pk_indexes:
-                        # By default, nullval is an empty string. See CASSANDRA-7792 for details.
-                        message = "Cannot insert null value for primary key column '%s'." % (pk_cols[i],)
-                        if self.nullval == '':
-                            message += " If you want to insert empty strings, consider using " \
-                                       "the WITH NULL=<marker> option for COPY."
-                        self.pipe.send((current_record, message))
-                        return
-                    else:
-                        row[i] = 'null'
-                if is_counter_table:
-                    where_clause = []
-                    set_clause = []
-                    for i, value in enumerate(row):
-                        if i in pk_indexes:
-                            where_clause.append("%s=%s" % (self.columns[i], value))
-                        else:
-                            set_clause.append("%s=%s+%s" % (self.columns[i], self.columns[i], value))
-                    full_query = query % (','.join(set_clause), ' AND '.join(where_clause))
-                else:
-                    full_query = query % (','.join(row),)
-                query_message = QueryMessage(
-                    full_query, self.consistency_level, serial_consistency_level=None,
-                    fetch_size=None, paging_state=None, timestamp=insert_timestamp)
-
-                request_id = conn.get_request_id()
-                conn.send_msg(query_message, request_id=request_id, cb=partial(callback, current_record))
-
-                with conn.lock:
-                    conn.in_flight += 1
-
-                # every 50 records, clear the pending writes queue and read
-                # any responses we have
-                if insert_num % 50 == 0:
-                    conn._writable = True
-                    conn._readable = True
-
-                insert_num += 1
-        except Exception, exc:
-            self.pipe.send((current_record, str(exc)))
-        finally:
-            # wait for any pending requests to finish
-            while conn.in_flight > 0:
-                conn._readable = True
-                time.sleep(0.1)
-
-            new_cluster.shutdown()
-
-    def stop(self):
-        self.terminate()
-
-
-class RateMeter(object):
-
-    def __init__(self, log_rate):
-        self.log_rate = log_rate
-        self.last_checkpoint_time = time.time()
-        self.current_rate = 0.0
-        self.current_record = 0
-
-    def increment(self):
-        self.current_record += 1
-
-        if (self.current_record % self.log_rate) == 0:
-            new_checkpoint_time = time.time()
-            new_rate = self.log_rate / (new_checkpoint_time - self.last_checkpoint_time)
-            self.last_checkpoint_time = new_checkpoint_time
-
-            # smooth the rate a bit
-            if self.current_rate == 0.0:
-                self.current_rate = new_rate
-            else:
-                self.current_rate = (self.current_rate + new_rate) / 2.0
-
-            output = 'Processed %s rows; Write: %.2f rows/s\r' % \
-                     (self.current_record, self.current_rate)
-            sys.stdout.write(output)
-            sys.stdout.flush()
-
-
 class SwitchCommand(object):
     command = None
     description = None
@@ -2605,9 +2324,10 @@ def read_options(cmdlineargs, environment):
     optvalues.ssl = False
     optvalues.encoding = None
 
-    optvalues.tty = sys.stdin.isatty()
+    optvalues.tty = option_with_default(configs.getboolean, 'ui', 'tty', sys.stdin.isatty())
     optvalues.cqlversion = option_with_default(configs.get, 'cql', 'version', DEFAULT_CQLVER)
     optvalues.connect_timeout = option_with_default(configs.getint, 'connection', 'timeout', DEFAULT_CONNECT_TIMEOUT_SECONDS)
+    optvalues.request_timeout = option_with_default(configs.getint, 'connection', 'request_timeout', DEFAULT_REQUEST_TIMEOUT_SECONDS)
     optvalues.execute = None
 
     (options, arguments) = parser.parse_args(cmdlineargs, values=optvalues)
@@ -2618,14 +2338,14 @@ def read_options(cmdlineargs, environment):
     try:
         options.connect_timeout = int(options.connect_timeout)
     except ValueError:
-        parser.error('"%s" is not a valid timeout.' % (options.connect_timeout,))
+        parser.error('"%s" is not a valid connect timeout.' % (options.connect_timeout,))
         options.connect_timeout = DEFAULT_CONNECT_TIMEOUT_SECONDS
 
-    options.client_timeout = option_with_default(configs.get, 'connection', 'client_timeout', '10')
-    if options.client_timeout.lower() == 'none':
-        options.client_timeout = None
-    else:
-        options.client_timeout = int(options.client_timeout)
+    try:
+        options.request_timeout = int(options.request_timeout)
+    except ValueError:
+        parser.error('"%s" is not a valid request timeout.' % (options.request_timeout,))
+        options.request_timeout = DEFAULT_REQUEST_TIMEOUT_SECONDS
 
     hostname = environment.get('CQLSH_HOST', hostname)
     port = environment.get('CQLSH_PORT', port)
@@ -2735,7 +2455,7 @@ def main(options, hostname, port):
                       max_trace_wait=options.max_trace_wait,
                       ssl=options.ssl,
                       single_statement=options.execute,
-                      client_timeout=options.client_timeout,
+                      request_timeout=options.request_timeout,
                       connect_timeout=options.connect_timeout,
                       encoding=options.encoding)
     except KeyboardInterrupt:

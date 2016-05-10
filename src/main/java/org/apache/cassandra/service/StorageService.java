@@ -51,7 +51,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import javax.management.JMX;
 import javax.management.MBeanServer;
 import javax.management.NotificationBroadcasterSupport;
@@ -59,6 +58,29 @@ import javax.management.ObjectName;
 import javax.management.openmbean.TabularData;
 import javax.management.openmbean.TabularDataSupport;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Collections2;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.Uninterruptibles;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.jmx.JMXConfiguratorMBean;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.Appender;
 import org.apache.cassandra.auth.AuthKeyspace;
 import org.apache.cassandra.auth.AuthMigrationListener;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
@@ -149,30 +171,6 @@ import org.apache.cassandra.utils.WrappedRunnable;
 import org.apache.cassandra.utils.progress.ProgressEvent;
 import org.apache.cassandra.utils.progress.ProgressEventType;
 import org.apache.cassandra.utils.progress.jmx.JMXProgressSupport;
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.classic.jmx.JMXConfiguratorMBean;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.Appender;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Predicate;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Collections2;
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.Uninterruptibles;
 
 /**
  * This abstraction contains the token/identifier of this node
@@ -272,6 +270,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
     // true when keeping strict consistency while bootstrapping
     private boolean useStrictConsistency = Boolean.parseBoolean(System.getProperty("cassandra.consistent.rangemovement", "true"));
+    private static final boolean allowSimultaneousMoves = Boolean.valueOf(System.getProperty("cassandra.consistent.simultaneousmoves.allow","false"));
     private boolean replacing;
 
     private final StreamStateStore streamStateStore = new StreamStateStore();
@@ -509,7 +508,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     {
         logger.info("Gathering node replacement information for {}", DatabaseDescriptor.getReplaceAddress());
         if (!MessagingService.instance().isListening())
-            MessagingService.instance().listen(FBUtilities.getLocalAddress());
+            MessagingService.instance().listen();
 
         // make magic happen
         Gossiper.instance.doShadowRound();
@@ -540,7 +539,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     {
         logger.debug("Starting shadow gossip round to check for endpoint collision");
         if (!MessagingService.instance().isListening())
-            MessagingService.instance().listen(FBUtilities.getLocalAddress());
+            MessagingService.instance().listen();
         Gossiper.instance.doShadowRound();
         if (!Gossiper.instance.isSafeForBootstrap(FBUtilities.getBroadcastAddress()))
         {
@@ -548,7 +547,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                                                      "Use cassandra.replace_address if you want to replace this node.",
                                                      FBUtilities.getBroadcastAddress()));
         }
-        if (useStrictConsistency)
+        if (useStrictConsistency && !allowSimultaneousMoves())
         {
             for (Map.Entry<InetAddress, EndpointState> entry : Gossiper.instance.getEndpointStates())
             {
@@ -565,6 +564,11 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         Gossiper.instance.resetEndpointStateMap();
     }
 
+    private boolean allowSimultaneousMoves()
+    {
+        return allowSimultaneousMoves && DatabaseDescriptor.getNumTokens() == 1;
+    }
+
     // for testing only
     public void unsafeInitialize() throws ConfigurationException
     {
@@ -573,7 +577,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         Gossiper.instance.start((int) (System.currentTimeMillis() / 1000)); // needed for node-ring gathering.
         Gossiper.instance.addLocalApplicationState(ApplicationState.NET_VERSION, valueFactory.networkVersion());
         if (!MessagingService.instance().isListening())
-            MessagingService.instance().listen(FBUtilities.getLocalAddress());
+            MessagingService.instance().listen();
     }
 
     public synchronized void initServer() throws ConfigurationException
@@ -637,7 +641,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     return; // drained already
 
                 if (daemon != null)
-                    shutdownClientServers();
+                	shutdownClientServers();
                 ScheduledExecutors.optionalTasks.shutdown();
                 Gossiper.instance.stop();
 
@@ -781,7 +785,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             Schema.instance.updateVersionAndAnnounce(); // Ensure we know our own actual Schema UUID in preparation for updates
 
             if (!MessagingService.instance().isListening())
-                MessagingService.instance().listen(FBUtilities.getLocalAddress());
+                MessagingService.instance().listen();
             LoadBroadcaster.instance.startBroadcasting();
 
             HintedHandOffManager.instance.start();
@@ -1034,18 +1038,6 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         MigrationManager.instance.register(new AuthMigrationListener());
     }
 
-    private void maybeAddTable(CFMetaData cfm)
-    {
-        try
-        {
-            MigrationManager.announceNewColumnFamily(cfm);
-        }
-        catch (AlreadyExistsException e)
-        {
-            logger.debug("Attempted to create new table {}, but it already exists", cfm.cfName);
-        }
-    }
-
     private void maybeAddKeyspace(KSMetaData ksm)
     {
         try
@@ -1072,14 +1064,17 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         // version of the schema, the one the node will be expecting.
 
         KSMetaData defined = Schema.instance.getKSMetaData(expected.name);
+        // If the keyspace doesn't exist, create it
         if (defined == null)
         {
-            // The keyspace doesn't exist, create it
             maybeAddKeyspace(expected);
-            return;
+            defined = Schema.instance.getKSMetaData(expected.name);
         }
 
         // While the keyspace exists, it might miss table or have outdated one
+        // There is also the potential for a race, as schema migrations add the bare
+        // keyspace into Schema.instance before adding its tables, so double check that
+        // all the expected tables are present
         for (CFMetaData expectedTable : expected.cfMetaData().values())
         {
             CFMetaData definedTable = defined.cfMetaData().get(expectedTable.cfName);
@@ -1090,7 +1085,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
     public boolean isJoined()
     {
-        return joined && !isSurveyMode;
+        return tokenMetadata.isMember(FBUtilities.getBroadcastAddress());
     }
 
     public void rebuild(String sourceDc)
@@ -1151,6 +1146,18 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         return DatabaseDescriptor.getStreamThroughputOutboundMegabitsPerSec();
     }
 
+    public void setInterDCStreamThroughputMbPerSec(int value)
+    {
+        DatabaseDescriptor.setInterDCStreamThroughputOutboundMegabitsPerSec(value);
+        logger.info("setinterdcstreamthroughput: throttle set to {}", value);
+    }
+
+    public int getInterDCStreamThroughputMbPerSec()
+    {
+        return DatabaseDescriptor.getInterDCStreamThroughputOutboundMegabitsPerSec();
+    }
+
+
     public int getCompactionThroughputMbPerSec()
     {
         return DatabaseDescriptor.getCompactionThroughputMbPerSec();
@@ -1159,6 +1166,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     public void setCompactionThroughputMbPerSec(int value)
     {
         DatabaseDescriptor.setCompactionThroughputMbPerSec(value);
+        CompactionManager.instance.setRate(value);
     }
 
     public boolean isIncrementalBackupsEnabled()
@@ -1395,7 +1403,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             keyspace = Schema.instance.getNonSystemKeyspaces().get(0);
 
         Map<List<String>, List<String>> map = new HashMap<>();
-        for (Map.Entry<Range<Token>, Collection<InetAddress>> entry : tokenMetadata.getPendingRanges(keyspace).entrySet())
+        for (Map.Entry<Range<Token>, Collection<InetAddress>> entry : tokenMetadata.getPendingRangesMM(keyspace).asMap().entrySet())
         {
             List<InetAddress> l = new ArrayList<>(entry.getValue());
             map.put(entry.getKey().asList(), stringify(l));
@@ -4032,30 +4040,34 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     public LinkedHashMap<InetAddress, Float> effectiveOwnership(String keyspace) throws IllegalStateException
     {
 
-     if (keyspace != null)
-     {
-      Keyspace keyspaceInstance = Schema.instance.getKeyspaceInstance(keyspace);
-      if(keyspaceInstance == null)
-           throw new IllegalArgumentException("The keyspace " + keyspace + ", does not exist");
+    	if (keyspace != null)
+    	{
+            Keyspace keyspaceInstance = Schema.instance.getKeyspaceInstance(keyspace);
+            if(keyspaceInstance == null)
+                throw new IllegalArgumentException("The keyspace " + keyspace + ", does not exist");
 
-      if(keyspaceInstance.getReplicationStrategy() instanceof LocalStrategy)
-          throw new IllegalStateException("Ownership values for keyspaces with LocalStrategy are meaningless");
-     }
-     else
-     {
-         List<String> nonSystemKeyspaces = Schema.instance.getNonSystemKeyspaces();
+            if(keyspaceInstance.getReplicationStrategy() instanceof LocalStrategy)
+                throw new IllegalStateException("Ownership values for keyspaces with LocalStrategy are meaningless");
+    	}
+    	else
+    	{
+            List<String> nonSystemKeyspaces = Schema.instance.getNonSystemKeyspaces();
 
-         //system_traces is a non-system keyspace however it needs to be counted as one for this process
-         int specialTableCount = 0;
-         if (nonSystemKeyspaces.contains("system_traces"))
-         {
-            specialTableCount += 1;
-         }
-         if (nonSystemKeyspaces.size() > specialTableCount)
-          throw new IllegalStateException("Non-system keyspaces don't have the same replication settings, effective ownership information is meaningless");
+            //system_traces is a non-system keyspace however it needs to be counted as one for this process
+            int specialTableCount = 0;
+            if (nonSystemKeyspaces.contains("system_traces"))
+            {
+                specialTableCount += 1;
+            }
+            if (nonSystemKeyspaces.size() > specialTableCount)
+                throw new IllegalStateException("Non-system keyspaces don't have the same replication settings, effective ownership information is meaningless");
 
-         keyspace = "system_traces";
-     }
+            keyspace = "system_traces";
+
+            Keyspace keyspaceInstance = Schema.instance.getKeyspaceInstance(keyspace);
+            if(keyspaceInstance == null)
+                throw new IllegalArgumentException("The node does not have " + keyspace + " yet, probably still bootstrapping");
+        }
 
         TokenMetadata metadata = tokenMetadata.cloneOnlyTokenMap();
 

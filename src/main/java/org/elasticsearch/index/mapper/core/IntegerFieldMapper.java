@@ -43,6 +43,8 @@ import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.core.LongFieldMapper.CustomLongNumericField;
+
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
@@ -223,6 +225,30 @@ public class IntegerFieldMapper extends NumberFieldMapper {
     }
 
     @Override
+    public void innerCreateField(ParseContext context, Object object) throws IOException {
+        Integer value = (Integer)object;
+        float boost = fieldType().boost();
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            value = fieldType().nullValue();
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), Integer.toString(value), boost);
+        }
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomIntegerNumericField field = new CustomIntegerNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
+    }
+    
+    
+    @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         int value;
         float boost = fieldType().boost();
@@ -304,7 +330,8 @@ public class IntegerFieldMapper extends NumberFieldMapper {
             addDocValue(context, fields, value);
         }
     }
-
+    
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -350,4 +377,6 @@ public class IntegerFieldMapper extends NumberFieldMapper {
             return Integer.toString(number);
         }
     }
+
+
 }

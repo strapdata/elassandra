@@ -20,6 +20,7 @@
 package org.elasticsearch.index.mapper.core;
 
 import com.carrotsearch.hppc.LongArrayList;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.NumericTokenStream;
 import org.apache.lucene.analysis.TokenStream;
@@ -46,6 +47,7 @@ import org.elasticsearch.index.mapper.internal.AllFieldMapper;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.sql.Date;
 import java.util.List;
 
 /**
@@ -222,8 +224,40 @@ public abstract class NumberFieldMapper extends FieldMapper implements AllFieldM
         }
     }
 
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        RuntimeException e = null;
+        try {
+            innerCreateField(context, value);
+        } catch (IllegalArgumentException e1) {
+            e = e1;
+        } catch (MapperParsingException e2) {
+            e = e2;
+        }
+
+        if (e != null && !ignoreMalformed.value()) {
+            throw e;
+        }
+    }
+    
     protected abstract void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException;
 
+    protected abstract void innerCreateField(ParseContext context, Object value) throws IOException;
+ 
+    protected final void addDocValue(ParseContext context, long value) {
+        if (useSortedNumericDocValues) {
+            context.doc().add(new SortedNumericDocValuesField(fieldType().names().indexName(), value));
+        } else {
+            CustomLongNumericDocValuesField field = (CustomLongNumericDocValuesField) context.doc().getByKey(fieldType().names().indexName());
+            if (field != null) {
+                field.add(value);
+            } else {
+                field = new CustomLongNumericDocValuesField(fieldType().names().indexName(), value);
+                context.doc().addWithKey(fieldType().names().indexName(), field);
+            }
+        }
+    }
+    
     protected final void addDocValue(ParseContext context, List<Field> fields, long value) {
         if (useSortedNumericDocValues) {
             fields.add(new SortedNumericDocValuesField(fieldType().names().indexName(), value));

@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
@@ -65,6 +66,9 @@ import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.util.CloseableThreadLocal;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.node.ArrayNode;
@@ -78,21 +82,35 @@ import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.lucene.all.AllEntries;
 import org.elasticsearch.common.lucene.uid.Versions;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.VersionType;
+import org.elasticsearch.index.analysis.AnalysisService;
 import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.mapper.ContentPath;
 import org.elasticsearch.index.mapper.DocumentMapper;
+import org.elasticsearch.index.mapper.DocumentMapperForType;
+import org.elasticsearch.index.mapper.DocumentMapperParser;
+import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
+import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.index.mapper.SourceToParse;
+import org.elasticsearch.index.mapper.ParseContext.Document;
 import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
+import org.elasticsearch.index.mapper.internal.UidFieldMapper;
+import org.elasticsearch.index.mapper.object.RootObjectMapper;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.indices.IndicesService;
@@ -105,32 +123,278 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
  * @author vroyer
  *
  */
-public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements ClusterStateListener {
-    private static final ESLogger logger = Loggers.getLogger(ElasticSecondaryIndex.class);
+public class OptimizedElasticSecondaryIndex extends PerRowSecondaryIndex implements ClusterStateListener {
+    private static final ESLogger logger = Loggers.getLogger(OptimizedElasticSecondaryIndex.class);
 
-    public static Set<ElasticSecondaryIndex> elasticSecondayIndices = new HashSet<ElasticSecondaryIndex>();
+    public static Set<OptimizedElasticSecondaryIndex> elasticSecondayIndices = new HashSet<OptimizedElasticSecondaryIndex>();
     
-    public static short CQL_PARTIAL_UPDATE = 0x01;
-    public static short CQL_STATIC_COLUMN = 0x02;
+    private CloseableThreadLocal<CassandraParseContext> cache = new CloseableThreadLocal<CassandraParseContext>() {
+        @Override
+        protected CassandraParseContext initialValue() {
+            return new CassandraParseContext(indexSettings, docMapper, new ContentPath(0));
+        }
+    };
+    
+    public static class CassandraParseContext extends ParseContext {
+        private final DocumentMapper docMapper;
+        private final ContentPath path;
+        
+        @Nullable
+        private final Settings indexSettings;
+        private final MapperService mapperService;
+        private final AnalysisService analysisService;
+        
+        private Document document;
+        private List<Document> documents = new ArrayList<>();
+
+        private String id;
+        private Field uid, version, token;
+        private StringBuilder stringBuilder = new StringBuilder();
+        private Map<String, String> ignoredValues = new HashMap<>();
+        private AllEntries allEntries = new AllEntries();
+        private float docBoost = 1.0f;
+        private Mapper dynamicMappingsUpdate = null;
+        
+        public CassandraParseContext(Settings indexSettings, DocumentMapper docMapper, ContentPath path, MapperService mapperService, AnalysisService analysisService) {
+            this.docMapper = docMapper;
+            this.path = path;
+            this.indexSettings = indexSettings;
+            this.mapperService = mapperService;
+            this.analysisService = analysisService;
+        }
+        
+        @Override
+        public boolean flyweight() {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public DocumentMapperParser docMapperParser() {
+            return null;
+        }
+
+        @Override
+        public String index() {
+            return null;
+        }
+
+        @Override
+        public Settings indexSettings() {
+            return indexSettings;
+        }
+
+        @Override
+        public String type() {
+            return docMapper.type();
+        }
+
+        @Override
+        public SourceToParse sourceToParse() {
+            return null;
+        }
+
+        @Override
+        public BytesReference source() {
+            return null;
+        }
+
+        @Override
+        public void source(BytesReference source) {
+        }
+
+        @Override
+        public ContentPath path() {
+            return this.path;
+        }
+
+        @Override
+        public XContentParser parser() {
+            return null;
+        }
+
+        @Override
+        public Document rootDoc() {
+            return null;
+        }
+
+        @Override
+        public List<Document> docs() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public Document doc() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public void addDoc(Document doc) {
+            // TODO Auto-generated method stub
+            
+        }
+
+        @Override
+        public RootObjectMapper root() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public DocumentMapper docMapper() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public AnalysisService analysisService() {
+            return this.analysisService;
+        }
+
+        @Override
+        public MapperService mapperService() {
+            return this.mapperService;
+        }
+
+        @Override
+        public String id() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public void ignoredValue(String indexName, String value) {
+            // TODO Auto-generated method stub
+            
+        }
+
+        @Override
+        public String ignoredValue(String indexName) {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public void id(String id) {
+            // TODO Auto-generated method stub
+            
+        }
+
+        @Override
+        public Field uid() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public void uid(Field uid) {
+            // TODO Auto-generated method stub
+            
+        }
+
+        @Override
+        public Field version() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public void version(Field version) {
+            // TODO Auto-generated method stub
+            
+        }
+
+        @Override
+        public Field token() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public void token(Field token) {
+            // TODO Auto-generated method stub
+            
+        }
+
+        @Override
+        public AllEntries allEntries() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public float docBoost() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public void docBoost(float docBoost) {
+            // TODO Auto-generated method stub
+            
+        }
+
+        @Override
+        public StringBuilder stringBuilder() {
+            return stringBuilder;
+        }
+
+        @Override
+        public void addDynamicMappingsUpdate(Mapper update) {
+            // TODO Auto-generated method stub
+            
+        }
+
+        @Override
+        public Mapper dynamicMappingsUpdate() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+    }
+    
     
     class MappingInfo {
-        class IndexInfo {
+        class IndexInfo  {
             String     name;
             boolean    refresh;
             IndexService indexService;
             Map<String,Object> mapping;
+            DocumentMapperForType docMapper;
+            
+            private final DocumentMapper docMapper;
+            private final ContentPath path;
+            
+            private Document document;
+            private List<Document> documents = new ArrayList<>();
+
+            private String id;
+            private Field uid, version, token;
+            private StringBuilder stringBuilder = new StringBuilder();
+            private Map<String, String> ignoredValues = new HashMap<>();
+            private AllEntries allEntries = new AllEntries();
+            private float docBoost = 1.0f;
+            private Mapper dynamicMappingsUpdate = null;
+            
             
             public IndexInfo(String name, IndexService indexService, MappingMetaData mappingMetaData) throws IOException {
                 this.name = name;
                 this.indexService = indexService;
                 this.mapping = mappingMetaData.sourceAsMap();
                 this.refresh = false;
+                this.docMapper = docMapper;
+                this.path = path;
             }
+
         }
         
 
-        List<IndexInfo> indices = new ArrayList<IndexInfo>();
-        Map<String, Boolean> fields = new HashMap<String, Boolean>();   // map<fieldName, cql_partial_update> for all ES indices.
+        final List<IndexInfo> indices = new ArrayList<IndexInfo>();
+        final Map<String, Boolean> fields = new HashMap<String, Boolean>();   // map<fieldName, cql_partial_update> for all ES indices.
+        final CFMetaData metadata = baseCfs.metadata;
+        final List<ColumnDefinition> clusteringColumns = baseCfs.metadata.clusteringColumns();
+        final List<ColumnDefinition> partitionKeyColumns = baseCfs.metadata.partitionKeyColumns();
         
         MappingInfo(ClusterState state) {
             if (state.blocks().hasGlobalBlock(ClusterBlockLevel.WRITE)) {
@@ -145,14 +409,16 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                 ClusterBlockException clusterBlockException = state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, index);
                 if (clusterBlockException == null && 
                     state.routingTable().isLocalShardsStarted(index) &&
-                    ( ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(index) || 
-                      ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME))) &&
-                    ((mappingMetaData = indexMetaData.mapping(ElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null)
+                    ( OptimizedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(index) || 
+                      OptimizedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME))) &&
+                    ((mappingMetaData = indexMetaData.mapping(OptimizedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null)
                    ) {
                     try {
                         IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
                         IndexService indexService = indicesService.indexServiceSafe(index);
                         IndexInfo indexInfo = new IndexInfo(index, indexService, mappingMetaData);
+                        indexInfo.docMapper = indexService.mapperService().documentMapperWithAutoCreate(OptimizedElasticSecondaryIndex.this.baseCfs.metadata.cfName);
+                        
                         this.indices.add(indexInfo);
                         if (mappingMetaData.getSourceAsMap().get("properties") != null) {
                             Map<String,Object> props = (Map<String,Object>)mappingMetaData.getSourceAsMap().get("properties");
@@ -187,18 +453,15 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
             return sb.toString();
         }
         
-        final CFMetaData metadata = baseCfs.metadata;
-        final List<ColumnDefinition> clusteringColumns = baseCfs.metadata.clusteringColumns();
-        final List<ColumnDefinition> partitionKeyColumns = baseCfs.metadata.partitionKeyColumns();
         
-        class DocumentFactory {
+        class DocumentFactory  {
             final ByteBuffer rowKey;
             final ColumnFamily cf;
             final Long token;
             final ArrayNode an;
             final Object[] ptCols;
             final String partitionKey;
-            Document doc = null;
+            RowDocument doc = null;
             
             public DocumentFactory(final ByteBuffer rowKey, final ColumnFamily cf) throws JsonGenerationException, JsonMappingException, IOException {
                 this.rowKey = rowKey;
@@ -212,23 +475,22 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                 for(int i=0; i<composite.size(); i++) {
                     ByteBuffer bb = composite.get(i);
                     AbstractType<?> type = ctype.subtype(i);
-                    Object value = type.compose(bb);
-                    ptCols[i] = value;
-                    ClusterService.Utils.addToJsonArray(type, value, an);
+                    ptCols[i] = type.compose(bb);
+                    ClusterService.Utils.addToJsonArray(type, ptCols[i], an);
                 }
                 this.partitionKey = ClusterService.Utils.writeValueAsString(an);  // JSON string  of the partition key.
             }
             
            
             public void index(Iterator<Cell> cellIterator) throws IOException {
-                Document doc = new Document(cellIterator.next());
+                RowDocument doc = new RowDocument(cellIterator.next());
                 while (cellIterator.hasNext()) {
                     Cell cell = cellIterator.next();
                     CellName cellName = cell.name();
                     assert cellName instanceof CompoundSparseCellName;
-                    if (metadata.getColumnDefinition(cell.name()) == null && cellName.clusteringSize() > 0)  {
+                    if (metadata.getColumnDefinition(cellName) == null && cellName.clusteringSize() > 0)  {
                         doc.flush();
-                        doc = new Document(cell);
+                        doc = new RowDocument(cell);
                     } else {
                         doc.readCellValue(cell);
                     }
@@ -260,24 +522,35 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                 logger.warn("delete row not implemented");
             }
                 
-            class Document {
-                final Map<String, Object> docMap = new Hashtable<String, Object>(fields.size());
+            class RowDocument {
+                //final Map<String, Object> docMap = new HashMap<String, Object>(fields.size());
+                ParseContext[] contexts;
                 String id = null;
+                Field uid, version, type;
                 Collection<String> tombstoneColumns = null;
-                boolean wideRow=false;
+                boolean wideRow = false;
                 boolean hasStaticUpdate = false;
                 boolean docLive = false;
                 int     docTtl = Integer.MAX_VALUE;
                 
                 // init document with clustering columns stored in cellName, or cell value for non-clustered columns (regular with no clustering key or static columns).
-                public Document(Cell cell) throws IOException {
+                public RowDocument(Cell cell) throws IOException {
                     CellName cellName = cell.name();
                     assert cellName instanceof CompoundSparseCellName;
                     if (cell.isLive()) this.docLive = true;
-                    
+                    initParseContexts();
                     for(int i=0; i < ptCols.length; i++) {
                         String colName = partitionKeyColumns.get(i).name.toString();
+                        int j=0;
+                        for(IndexInfo ii : MappingInfo.this.indices) {
+                            Mapper mapper = ii.docMapper.getDocumentMapper().mappers().smartNameFieldMapper(colName);
+                            if (mapper != null) {
+                                DocumentParser.parseObjectOrField(contexts[j].externalValue(), mapper);
+                                documents[j++].add(mapper.);
+                            }
+                        }
                         if (fields.get(colName) != null) {
+                            
                             docMap.put(colName, ptCols[i]);
                         }
                     }
@@ -296,13 +569,211 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                             ClusterService.Utils.addToJsonArray(ccd.type, colValue, an2);
                         }
                         id = ClusterService.Utils.writeValueAsString(an2);
+                        uid = new Field(UidFieldMapper.NAME, "", UidFieldMapper.Defaults.FIELD_TYPE);
+                        type = new Field(TypeFieldMapper.NAME, "", TypeFieldMapper.Defaults.FIELD_TYPE);
                     } else {
                         id = partitionKey;
                         readCellValue(cell);
                     }
                 }
                
-                
+                public void initParseContexts() {
+                    ParseContext[] contexts = new ParseContext[MappingInfo.this.indices.size()];
+                    int i=0;
+                    for(IndexInfo ii : MappingInfo.this.indices) {
+                        final IndexInfo indexInfo = ii;
+                        contexts[i++] = new ParseContext() {
+                            ContentPath path = new ContentPath();
+                            Document rootDoc;
+                            Object externalValue = null;
+                            
+                            @Override
+                            public boolean flyweight() {
+                                return false;
+                            }
+
+                            @Override
+                            public DocumentMapperParser docMapperParser() {
+                                return null;
+                            }
+
+                            @Override
+                            public String index() {
+                                return indexInfo.name;
+                            }
+
+                            @Override
+                            public Settings indexSettings() {
+                                return indexInfo.indexService.indexSettings();
+                            }
+
+                            @Override
+                            public String type() {
+                                return MappingInfo.this.metadata.cfName;
+                            }
+
+                            @Override
+                            public SourceToParse sourceToParse() {
+                                return null;
+                            }
+
+                            @Override
+                            public BytesReference source() {
+                                return null;
+                            }
+
+                            @Override
+                            public void source(BytesReference source) {
+                            }
+
+                            @Override
+                            public ContentPath path() {
+                                return path;
+                            }
+
+                            @Override
+                            public XContentParser parser() {
+                                return null;
+                            }
+
+                            @Override
+                            public Document rootDoc() {
+                                return this.rootDoc;
+                            }
+
+                            @Override
+                            public List<Document> docs() {
+                                return Collections.singletonList(this.rootDoc);
+                            }
+
+                            @Override
+                            public Document doc() {
+                                return this.rootDoc;
+                            }
+
+                            @Override
+                            public void addDoc(Document doc) {
+                            }
+
+                            @Override
+                            public RootObjectMapper root() {
+                                return null;
+                            }
+
+                            @Override
+                            public DocumentMapper docMapper() {
+                                // TODO Auto-generated method stub
+                                return indexInfo.indexService.mapperService().documentMapper(MappingInfo.this.metadata.cfName);
+                            }
+
+                            @Override
+                            public AnalysisService analysisService() {
+                                return indexInfo.indexService.analysisService();
+                            }
+
+                            @Override
+                            public MapperService mapperService() {
+                                return indexInfo.indexService.mapperService();
+                            }
+
+                            @Override
+                            public String id() {
+                                return id;
+                            }
+
+                            @Override
+                            public void ignoredValue(String indexName, String value) {
+                                // TODO Auto-generated method stub
+                                
+                            }
+
+                            @Override
+                            public String ignoredValue(String indexName) {
+                                // TODO Auto-generated method stub
+                                return null;
+                            }
+
+                            @Override
+                            public void id(String id) {
+                            }
+
+                            @Override
+                            public Field uid() {
+                                return uid;
+                            }
+
+                            @Override
+                            public void uid(Field uid) {
+                            }
+
+                            @Override
+                            public Field version() {
+                                return version;
+                            }
+
+                            @Override
+                            public void version(Field version) {
+                            }
+
+                            @Override
+                            public Field token() {
+                                return token;
+                            }
+
+                            @Override
+                            public void token(Field token) {
+                            }
+
+                            @Override
+                            public AllEntries allEntries() {
+                                // TODO Auto-generated method stub
+                                return null;
+                            }
+
+                            @Override
+                            public float docBoost() {
+                                // TODO Auto-generated method stub
+                                return 0;
+                            }
+
+                            @Override
+                            public void docBoost(float docBoost) {
+                                // TODO Auto-generated method stub
+                                
+                            }
+
+                            @Override
+                            public StringBuilder stringBuilder() {
+                                return this.s;
+                            }
+
+                            @Override
+                            public void addDynamicMappingsUpdate(Mapper update) {
+                                // TODO Auto-generated method stub
+                                
+                            }
+
+                            @Override
+                            public Mapper dynamicMappingsUpdate() {
+                                // TODO Auto-generated method stub
+                                return null;
+                            }
+                            
+                            public boolean externalValueSet() {
+                                return true;
+                            }
+
+                            public Object externalValue() {
+                                return this.externalValue;
+                            }
+                            
+                            public void externalValue(Object o) {
+                                this.externalValue = o;
+                            }
+                        };
+                    }
+                    this.contexts = contexts;
+                }
                 public void readCellValue(Cell cell) throws IOException {
                     CellName cellName = cell.name();
                     String cellNameString = cellName.cql3ColumnName(metadata).toString();
@@ -476,6 +947,17 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                     }
                 }
                 
+                public Engine.Index prepareIndex(DocumentMapperForType docMapper, SourceToParse source, long version, VersionType versionType, Engine.Operation.Origin origin, boolean canHaveDuplicates) {
+                    long startTime = System.nanoTime();
+                    DocumentMapperForType docMapper = 
+                    ParsedDocument doc = docMapper.getDocumentMapper().parse(source);
+                    
+                    if (docMapper.getMapping() != null) {
+                        doc.addDynamicMappingsUpdate(docMapper.getMapping());
+                    }
+                    return new Engine.Index(docMapper.getDocumentMapper().uidMapper().term(doc.uid().stringValue()), doc, version, versionType, origin, startTime, canHaveDuplicates);
+                }
+                
                 public void index(boolean forStaticDocument) {
                     for (MappingInfo.IndexInfo indexInfo : indices) {
                         try {
@@ -523,7 +1005,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                                     id(), version, created, sourceToParse.ttl(), indexInfo.refresh, sourceToParse.parent(), builder.string());
                             }
                         } catch (Throwable e1) {
-                            logger.error("Failed to index document id=" + id() + " in index.type=" + indexInfo.name + "." + ElasticSecondaryIndex.this.baseCfs.metadata.cfName, e1);
+                            logger.error("Failed to index document id=" + id() + " in index.type=" + indexInfo.name + "." + OptimizedElasticSecondaryIndex.this.baseCfs.metadata.cfName, e1);
                         }
                     }
                 }
@@ -546,6 +1028,240 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
                     }
                 }
             }
+
+            @Override
+            public boolean flyweight() {
+                return false;
+            }
+
+
+            @Override
+            public DocumentMapperParser docMapperParser() {
+                return null;
+            }
+
+
+            @Override
+            public String index() {
+                return IndexInfo.this.indexService.index().name();
+            }
+
+
+            @Override
+            public Settings indexSettings() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public String type() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public SourceToParse sourceToParse() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public BytesReference source() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public void source(BytesReference source) {
+                // TODO Auto-generated method stub
+                
+            }
+
+
+            @Override
+            public ContentPath path() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public XContentParser parser() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public Document rootDoc() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public List<Document> docs() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public Document doc() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public void addDoc(Document doc) {
+                // TODO Auto-generated method stub
+                
+            }
+
+
+            @Override
+            public RootObjectMapper root() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public DocumentMapper docMapper() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public AnalysisService analysisService() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public MapperService mapperService() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public String id() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public void ignoredValue(String indexName, String value) {
+                // TODO Auto-generated method stub
+                
+            }
+
+
+            @Override
+            public String ignoredValue(String indexName) {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public void id(String id) {
+                // TODO Auto-generated method stub
+                
+            }
+
+
+            @Override
+            public Field uid() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public void uid(Field uid) {
+                // TODO Auto-generated method stub
+                
+            }
+
+
+            @Override
+            public Field version() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public void version(Field version) {
+                // TODO Auto-generated method stub
+                
+            }
+
+
+            @Override
+            public Field token() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public void token(Field token) {
+                // TODO Auto-generated method stub
+                
+            }
+
+
+            @Override
+            public AllEntries allEntries() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public float docBoost() {
+                // TODO Auto-generated method stub
+                return 0;
+            }
+
+
+            @Override
+            public void docBoost(float docBoost) {
+                // TODO Auto-generated method stub
+                
+            }
+
+
+            @Override
+            public StringBuilder stringBuilder() {
+                // TODO Auto-generated method stub
+                return null;
+            }
+
+
+            @Override
+            public void addDynamicMappingsUpdate(Mapper update) {
+                // TODO Auto-generated method stub
+                
+            }
+
+
+            @Override
+            public Mapper dynamicMappingsUpdate() {
+                // TODO Auto-generated method stub
+                return null;
+            }
         }
     }
 
@@ -559,7 +1275,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
     private ReadWriteLock lock = new ReentrantReadWriteLock();
     private ClusterService clusterService = null;
     
-    public ElasticSecondaryIndex() {
+    public OptimizedElasticSecondaryIndex() {
         super();
     }
 
@@ -625,13 +1341,6 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
              return type.compose(bb);
         }
     }
-    
-    
-    
-    
-    
-    
-    
 
     
     /**
@@ -639,20 +1348,13 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
      */
     @Override
     public void index(ByteBuffer rowKey, ColumnFamily cf)  {
-        MappingInfo mappingInfo = this.mappingAtomicReference.get();
-        if (mappingInfo.indices.size() == 0) {
-            logger.warn("No Elasticsearch index ready");
-            return;
-        }
-
-        if (logger.isTraceEnabled()) {
-            CFMetaData metadata = cf.metadata();
-            CType ctype = metadata.getKeyValidatorAsCType();
-            Composite composite = ctype.fromByteBuffer(rowKey);
-            logger.debug("index=" + getIndexName() + " cf=" + metadata.ksName + "." + metadata.cfName + " composite=" + composite + " cf=" + cf.toString()+" key="+rowKey);
-        }
-
         try {
+            MappingInfo mappingInfo = this.mappingAtomicReference.get();
+            if (mappingInfo == null || mappingInfo.indices.size() == 0) {
+                logger.trace("No Elasticsearch index ready");
+                return;
+            }
+
             MappingInfo.DocumentFactory docFactory = mappingInfo.new DocumentFactory(rowKey, cf);
             Iterator<Cell> cellIterator = cf.iterator();
             if (cellIterator.hasNext()) {
@@ -680,6 +1382,7 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
             logger.warn("Elastic node not ready, cannot delete document");
             return;
         }
+        
         Token token = key.getToken();
         Long  token_long = (Long) token.getTokenValue();
         logger.debug("deleting (not imlemented) document with _token = " + token_long);
@@ -723,9 +1426,9 @@ public class ElasticSecondaryIndex extends PerRowSecondaryIndex implements Clust
         if (ElassandraDaemon.injector() != null) {
            getClusterService().addLast(this);
             this.mappingAtomicReference.set(new MappingInfo(getClusterService().state()));
-            logger.debug("index=[{}.{}] initialized mappingAtomicReference = {}", this.baseCfs.metadata.ksName, index_name, mappingAtomicReference.get());
+            logger.debug("index=[{}.{}] initialized,  mappingAtomicReference = {}", this.baseCfs.metadata.ksName, index_name, this.mappingAtomicReference.get());
         } else {
-            logger.error("Failed to initialize index=[{}.{}] mappingAtomicReference", this.baseCfs.metadata.ksName, index_name);
+            logger.error("Failed to initialize index=[{}.{}], cluster service not available.", this.baseCfs.metadata.ksName, index_name);
         }
     }
     

@@ -195,6 +195,31 @@ public class BinaryFieldMapper extends FieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        if (!fieldType().stored() && !fieldType().hasDocValues()) {
+            return;
+        }
+        byte[] value = (byte[])object;
+        if (value == null) {
+            return;
+        }
+        
+        if (fieldType().stored()) {
+            context.doc().add(new Field(fieldType().names().indexName(), value, fieldType()));
+        }
+
+        if (fieldType().hasDocValues()) {
+            CustomBinaryDocValuesField field = (CustomBinaryDocValuesField) context.doc().getByKey(fieldType().names().indexName());
+            if (field == null) {
+                field = new CustomBinaryDocValuesField(fieldType().names().indexName(), value);
+                context.doc().addWithKey(fieldType().names().indexName(), field);
+            } else {
+                field.add(value);
+            }
+        }
+    }
+    
+    @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (!fieldType().stored() && !fieldType().hasDocValues()) {
             return;

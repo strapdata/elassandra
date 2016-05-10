@@ -220,6 +220,11 @@ public class AllFieldMapper extends MetadataFieldMapper {
     public void postParse(ParseContext context) throws IOException {
         super.parse(context);
     }
+    
+    @Override
+    public void postCreate(ParseContext context) throws IOException {
+        super.create(context, null);
+    }
 
     @Override
     public Mapper parse(ParseContext context) throws IOException {
@@ -227,6 +232,18 @@ public class AllFieldMapper extends MetadataFieldMapper {
         return null;
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        if (!enabledState.enabled) {
+            return;
+        }
+        // reset the entries
+        context.allEntries().reset();
+        Analyzer analyzer = findAnalyzer(context);
+        context.doc().add(new AllField(fieldType().names().indexName(), context.allEntries(), analyzer, fieldType()));
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (!enabledState.enabled) {
@@ -321,4 +338,5 @@ public class AllFieldMapper extends MetadataFieldMapper {
     public boolean isGenerated() {
         return true;
     }
+
 }

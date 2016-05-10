@@ -19,7 +19,14 @@
 
 package org.elasticsearch.index.mapper.internal;
 
-import com.google.common.collect.Iterables;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
@@ -38,11 +45,13 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.lucene.BytesRefs;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.xcontent.ToXContent.Params;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.Mapper.BuilderContext;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.MergeMappingException;
 import org.elasticsearch.index.mapper.MergeResult;
@@ -51,13 +60,7 @@ import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.query.QueryParseContext;
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+import com.google.common.collect.Iterables;
 
 /**
  * 
@@ -273,6 +276,19 @@ public class IdFieldMapper extends MetadataFieldMapper {
         }
         // it either get built in the preParse phase, or get parsed...
     }
+    
+
+    @Override
+    public void createField(ParseContext context, Object _id) throws IOException {
+        String id = (String) _id;
+        context.id(id);
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            context.doc().add(new Field(fieldType().names().indexName(), context.id(), fieldType()));
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new BinaryDocValuesField(fieldType().names().indexName(), new BytesRef(context.id())));
+        }
+    }
 
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
@@ -335,4 +351,6 @@ public class IdFieldMapper extends MetadataFieldMapper {
     public void merge(Mapper mergeWith, MergeResult mergeResult) throws MergeMappingException {
         // do nothing here, no merging, but also no exception
     }
+
+
 }

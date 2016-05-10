@@ -235,21 +235,6 @@ public class CassandraDaemon
         
         Keyspace.setInitialized();
 
-        if (!Boolean.getBoolean("cassandra.ignore_rack"))
-        {
-            String storedRack = SystemKeyspace.getRack();
-            if (storedRack != null)
-            {
-                String currentRack = DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastAddress());
-                if (!storedRack.equals(currentRack))
-                {
-                    logger.error("Cannot start node if snitch's rack differs from previous rack. " +
-                                 "Please fix the snitch or decommission and rebootstrap this node.");
-                    System.exit(100);
-                }
-            }
-        }
-
         // initialize keyspaces
         for (String keyspaceName : Schema.instance.getKeyspaces())
         {
@@ -397,25 +382,27 @@ public class CassandraDaemon
 
     private void logSystemInfo()
     {
-     if (logger.isInfoEnabled())
-     {
-         try
-         {
-             logger.info("Hostname: {}", InetAddress.getLocalHost().getHostName());
-         }
-         catch (UnknownHostException e1)
-         {
-             logger.info("Could not resolve local host");
-         }
+    	if (logger.isInfoEnabled())
+    	{
+	        try
+	        {
+	            logger.info("Hostname: {}", InetAddress.getLocalHost().getHostName());
+	        }
+	        catch (UnknownHostException e1)
+	        {
+	            logger.info("Could not resolve local host");
+	        }
 
-         logger.info("JVM vendor/version: {}/{}", System.getProperty("java.vm.name"), System.getProperty("java.version"));
-         logger.info("Heap size: {}/{}", Runtime.getRuntime().totalMemory(), Runtime.getRuntime().maxMemory());
+	        logger.info("JVM vendor/version: {}/{}", System.getProperty("java.vm.name"), System.getProperty("java.version"));
+	        logger.info("Heap size: {}/{}", Runtime.getRuntime().totalMemory(), Runtime.getRuntime().maxMemory());
 
-         for(MemoryPoolMXBean pool: ManagementFactory.getMemoryPoolMXBeans())
-             logger.info("{} {}: {}", pool.getName(), pool.getType().toString(), pool.getPeakUsage().toString());
+	        for(MemoryPoolMXBean pool: ManagementFactory.getMemoryPoolMXBeans())
+	            logger.info("{} {}: {}", pool.getName(), pool.getType(), pool.getPeakUsage());
 
-         logger.info("Classpath: {}", System.getProperty("java.class.path"));
-     }
+	        logger.info("Classpath: {}", System.getProperty("java.class.path"));
+
+            logger.info("JVM Arguments: {}", ManagementFactory.getRuntimeMXBean().getInputArguments());
+    	}
     }
 
     /**
@@ -585,6 +572,7 @@ public class CassandraDaemon
         }
     }
 
+    
     /**
      * This is a hook for concrete daemons to initialize themselves suitably.
      * Subclasses should override this to initialize before cassandra bootstrap

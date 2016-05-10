@@ -153,7 +153,7 @@ case "`uname -s`" in
             which ldconfig > /dev/null 2>&1
             if [ $? = 0 ] ; then
                 # e.g. for CentOS
-                dirs="/lib64 /lib /usr/lib64 /usr/lib `ldconfig -v 2>/dev/null | grep -v ^$'\t' | sed 's/^\([^:]*\):.*$/\1/'`"
+                dirs="/lib64 /lib /usr/lib64 /usr/lib `ldconfig -v 2>/dev/null | grep -v '^\s' | sed 's/^\([^:]*\):.*$/\1/'`"
             else
                 # e.g. for Debian, OpenSUSE
                 dirs="/lib64 /lib /usr/lib64 /usr/lib `cat /etc/ld.so.conf /etc/ld.so.conf.d/*.conf | grep '^/'`"
@@ -241,7 +241,7 @@ while true; do
         -e)
             echo "Starting with Elasticsearch enabled."
             echo "CLASSPATH=$CLASSPATH"
-            JVM_OPTS="$JVM_OPTS -Djava.library.path=$CASSANDRA_HOME/lib/sigar -Djava.awt.headless=true"
+            JVM_OPTS="$JVM_OPTS -Djava.library.path=$CASSANDRA_HOME/lib/sigar-bin -Djava.awt.headless=true"
             JVM_OPTS="$JVM_OPTS -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 -XX:+UseCMSInitiatingOccupancyOnly"
             
             classname="org.apache.cassandra.service.ElassandraDaemon"

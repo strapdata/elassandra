@@ -129,18 +129,6 @@ public class TokenFieldMapper extends MetadataFieldMapper {
 
     @Override
     public void preParse(ParseContext context) throws IOException {
-        super.parse(context);
-    }
-
-    @Override
-    protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
-        if (context.sourceToParse().token() != null) {
-            Long token = context.sourceToParse().token();
-            if (token != null) {
-                fields.add(new LongFieldMapper.CustomLongNumericField(token, fieldType()));
-                fields.add(new SortedNumericDocValuesField(fieldType().names().indexName(), token));
-            }
-        }
     }
 
     @Override
@@ -153,6 +141,28 @@ public class TokenFieldMapper extends MetadataFieldMapper {
         super.parse(context);
     }
 
+    
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        Long token = (Long) object;
+        if (token != null) {
+            context.doc().add(new LongFieldMapper.CustomLongNumericField(token, fieldType()));
+            context.doc().add(new SortedNumericDocValuesField(fieldType().names().indexName(), token));
+        }
+    }
+    
+    @Override
+    protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
+        if (context.sourceToParse().token() != null) {
+            Long token = context.sourceToParse().token();
+            if (token != null) {
+                fields.add(new LongFieldMapper.CustomLongNumericField(token, fieldType()));
+                fields.add(new SortedNumericDocValuesField(fieldType().names().indexName(), token));
+            }
+        }
+    }
+
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -167,4 +177,5 @@ public class TokenFieldMapper extends MetadataFieldMapper {
     public void merge(Mapper mergeWith, MergeResult mergeResult) throws MergeMappingException {
         // nothing to do
     }
+
 }

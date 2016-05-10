@@ -38,7 +38,8 @@ cassandra_storagedir="$CASSANDRA_HOME/data"
 #JAVA_HOME=/usr/local/jdk6
 
 # The java classpath (required)
-#CLASSPATH="$CASSANDRA_CONF:$cassandra_bin"
+# CLASSPATH="$CASSANDRA_CONF:$cassandra_bin"
+# Warning: JarHell in Elasticsearch reject empty classpath element.
 CLASSPATH="$CASSANDRA_CONF"
 
 for jar in "$CASSANDRA_HOME"/lib/*.jar; do
@@ -49,7 +50,6 @@ done
 #for jsr223jar in "$CASSANDRA_HOME"/lib/jsr223/*/*.jar; do
 #    CLASSPATH="$CLASSPATH:$jsr223jar"
 #done
-
 # JSR223/JRuby - set ruby lib directory
 if [ -d "$CASSANDRA_HOME"/lib/jsr223/jruby/ruby ] ; then
     export JVM_OPTS="$JVM_OPTS -Djruby.lib=$CASSANDRA_HOME/lib/jsr223/jruby"

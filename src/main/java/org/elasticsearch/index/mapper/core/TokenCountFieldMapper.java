@@ -150,9 +150,11 @@ public class TokenCountFieldMapper extends IntegerFieldMapper {
             }
             addIntegerFields(context, fields, count, valueAndBoost.boost());
         }
+        /*
         if (fields.isEmpty()) {
             context.ignoredValue(fieldType().names().indexName(), valueAndBoost.value());
         }
+        */
     }
 
     /**

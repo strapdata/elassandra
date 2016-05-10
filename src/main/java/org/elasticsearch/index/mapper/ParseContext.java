@@ -21,6 +21,9 @@ package org.elasticsearch.index.mapper;
 
 import com.carrotsearch.hppc.ObjectObjectHashMap;
 import com.carrotsearch.hppc.ObjectObjectMap;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterators;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
@@ -53,13 +56,25 @@ public abstract class ParseContext {
         private final List<IndexableField> fields;
         private ObjectObjectMap<Object, IndexableField> keyedFields;
 
-        private Document(String path, Document parent) {
+        public Document(String path, Document parent) {
             fields = new ArrayList<>();
             this.path = path;
             this.prefix = path.isEmpty() ? "" : path + ".";
             this.parent = parent;
         }
-
+        
+        /*
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("\n path=").append(path).append(" prefix=").append(prefix).append(" fields=[\n");
+            for(IndexableField f : this) {
+                sb.append(f).append("\n");
+            }
+            sb.append("] keyedFields=").append(keyedFields);
+            return sb.toString();
+        }
+        */
+        
         public Document() {
             this("", null);
         }
@@ -175,6 +190,34 @@ public abstract class ParseContext {
 
     }
 
+    static abstract class FilterableDocument extends ParseContext.Document implements Predicate<IndexableField> {
+        boolean applyFilter = false; 
+        
+        public FilterableDocument(String path, Document parent) {
+            super(path, parent);
+        }
+        
+        public FilterableDocument() {
+            super();
+        }
+        
+        public void applyFilter(boolean apply) {
+            applyFilter = apply;
+        }
+        
+        @Override
+        abstract public boolean apply(IndexableField input);
+        
+        @Override
+        public Iterator<IndexableField> iterator() {
+            if (applyFilter) {
+                return Iterators.filter(super.iterator(), this);
+            } else {
+                return super.iterator();
+            }
+        }
+    }
+    
     private static class FilterParseContext extends ParseContext {
 
         private final ParseContext in;
@@ -288,6 +331,7 @@ public abstract class ParseContext {
             return in.id();
         }
 
+        /*
         @Override
         public void ignoredValue(String indexName, String value) {
             in.ignoredValue(indexName, value);
@@ -297,7 +341,8 @@ public abstract class ParseContext {
         public String ignoredValue(String indexName) {
             return in.ignoredValue(indexName);
         }
-
+         */
+        
         @Override
         public void id(String id) {
             in.id(id);
@@ -323,17 +368,6 @@ public abstract class ParseContext {
             in.version(version);
         }
 
-        @Override
-        public Field token() {
-            return in.token();
-        }
-
-        @Override
-        public void token(Field token) {
-            in.token(token);
-        }
-
-        
         @Override
         public AllEntries allEntries() {
             return in.allEntries();
@@ -397,7 +431,7 @@ public abstract class ParseContext {
 
         private String id;
 
-        private Field uid, version, token;
+        private Field uid, version;
 
         private StringBuilder stringBuilder = new StringBuilder();
 
@@ -534,6 +568,7 @@ public abstract class ParseContext {
             return id;
         }
 
+        /*
         @Override
         public void ignoredValue(String indexName, String value) {
             ignoredValues.put(indexName, value);
@@ -543,7 +578,8 @@ public abstract class ParseContext {
         public String ignoredValue(String indexName) {
             return ignoredValues.get(indexName);
         }
-
+         */
+        
         /**
          * Really, just the id mapper should set this.
          */
@@ -615,15 +651,6 @@ public abstract class ParseContext {
             return dynamicMappingsUpdate;
         }
 
-        @Override
-        public Field token() {
-            return this.token;
-        }
-
-        @Override
-        public void token(Field token) {
-            this.token = token;
-        }
     }
 
     public abstract boolean flyweight();
@@ -661,7 +688,7 @@ public abstract class ParseContext {
     /**
      * Return a new context that will be used within a nested document.
      */
-    public final ParseContext createNestedContext(String fullPath) {
+    public ParseContext createNestedContext(String fullPath) {
         final Document doc = new Document(fullPath, doc());
         addDoc(doc);
         return switchDoc(doc);
@@ -731,9 +758,9 @@ public abstract class ParseContext {
 
     public abstract String id();
 
-    public abstract void ignoredValue(String indexName, String value);
+    //public abstract void ignoredValue(String indexName, String value);
 
-    public abstract String ignoredValue(String indexName);
+    //public abstract String ignoredValue(String indexName);
 
     /**
      * Really, just the id mapper should set this.
@@ -750,10 +777,6 @@ public abstract class ParseContext {
     public abstract Field version();
     
     public abstract void version(Field version);
-
-    public abstract Field token();
-
-    public abstract void token(Field token);
 
     
     public final boolean includeInAll(Boolean includeInAll, FieldMapper mapper) {

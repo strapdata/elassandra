@@ -58,7 +58,7 @@ import org.elasticsearch.Version;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
-import org.elasticsearch.cassandra.SecondaryIndicesService;
+import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
@@ -118,7 +118,7 @@ import com.google.common.collect.Iterables;
 /**
  *
  */
-public class InternalClusterService extends AbstractLifecycleComponent<ClusterService> implements ClusterService {
+public abstract class InternalClusterService extends AbstractLifecycleComponent<ClusterService> implements ClusterService {
 
     public static final String SETTING_CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD = "cluster.service.slow_task_logging_threshold";
     public static final String SETTING_CLUSTER_SERVICE_RECONNECT_INTERVAL = "cluster.service.reconnect_interval";
@@ -875,254 +875,141 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
-    public Map<String, GetField> flattenGetField(String[] fieldFilter, String path, Object node, Map<String, GetField> flatFields) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract Map<String, GetField> flattenGetField(String[] fieldFilter, String path, Object node, Map<String, GetField> flatFields);
 
     @Override
-    public Map<String, List<Object>> flattenTree(Set<String> neededFiedls, String path, Object node, Map<String, List<Object>> fields) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract Map<String, List<Object>> flattenTree(Set<String> neededFiedls, String path, Object node, Map<String, List<Object>> fields);
 
     @Override
-    public void createElasticAdminKeyspace() throws Exception {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract void createElasticAdminKeyspace() throws Exception;
 
     @Override
-    public void createIndexKeyspace(String index, int replicationFactor) throws IOException {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public void createSecondaryIndices(String index) throws IOException {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public void createSecondaryIndex(String ksName, MappingMetaData mapping) throws IOException {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public void dropSecondaryIndices(String ksName) throws RequestExecutionException {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public void removeIndexKeyspace(String index) throws IOException {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public void buildCollectionMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
-     // TODO Auto-generated method stub
-    }
+    public abstract void createIndexKeyspace(String index, int replicationFactor) throws IOException;
     
     @Override
-    public String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract void createSecondaryIndices(String index) throws IOException;
 
     @Override
-    public ClusterState updateNumberOfShards(ClusterState currentState) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException;
+
+    @Override
+    public abstract void dropSecondaryIndices(String ksName) throws RequestExecutionException;
+
+    @Override
+    public abstract void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException;
+
+    @Override
+    public abstract void removeIndexKeyspace(String index) throws IOException;
+
+    @Override
+    public abstract void buildCollectionMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException;
     
     @Override
-    public void submitNumberOfShardsUpdate() {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
+
+    @Override
+    public abstract ClusterState updateNumberOfShards(ClusterState currentState);
     
     @Override
-    public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract void submitNumberOfShardsUpdate();
+    
+    @Override
+    public abstract void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
 
     @Override
-    public List<ColumnDefinition> getPrimaryKeyColumns(String ksName, String cfName) throws ConfigurationException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract Set<String> mappedColumns(String index, String type, boolean isStaticDocument);
 
     @Override
-    public Set<String> mappedColumns(String index, String type, boolean isStaticDocument) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract String[] mappedColumns(MapperService mapperService, String type, boolean isStaticDocument);
 
     @Override
-    public String[] mappedColumns(MapperService mapperService, String type, boolean isStaticDocument) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract UntypedResultSet fetchRow(String index, String type, String[] requiredColumns, String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
+            IOException;
 
     @Override
-    public UntypedResultSet fetchRow(String index, String type, Collection<String> requiredColumns, String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
-            IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract UntypedResultSet fetchRow(String index, String type, String[] requiredColumns, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException,
+            RequestValidationException, IOException;
 
     @Override
-    public UntypedResultSet fetchRow(String index, String type, Collection<String> requiredColumns, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException,
-            RequestValidationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract UntypedResultSet fetchRow(String index, String type, String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
     @Override
-    public UntypedResultSet fetchRow(String index, String type, String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract UntypedResultSet fetchRowInternal(String index, String type, String[] requiredColumns, String id) throws ConfigurationException, IOException;
 
     @Override
-    public UntypedResultSet fetchRowInternal(String index, String type, Collection<String> requiredColumns, String id) throws ConfigurationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract UntypedResultSet fetchRowInternal(String ksName, String cfName, String[] requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
 
     @Override
-    public UntypedResultSet fetchRowInternal(String ksName, String cfName, Collection<String> requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract UntypedResultSet fetchRowInternal(String index, String cfName, Collection<String> requiredColumns, String id) throws ConfigurationException, IOException;
 
     @Override
-    public Map<String, Object> rowAsMap(String index, String type, Row row) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract UntypedResultSet fetchRowInternal(String ksName, String cfName, Collection<String> requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException,
+            IOException;
+    
+    @Override
+    public abstract Map<String, Object> rowAsMap(String index, String type, Row row) throws IOException;
 
     @Override
-    public int rowAsMap(String index, String type, Row row, Map<String, Object> map) throws IOException {
-        // TODO Auto-generated method stub
-        return 0;
-    }
+    public abstract Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row) throws IOException;
+    
+    @Override
+    public abstract int rowAsMap(String index, String type, Row row, Map<String, Object> map) throws IOException;
 
     @Override
-    public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
     @Override
-    public void insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString) throws Exception {
-    }
+    public abstract void insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString) throws Exception;
 
     @Override
-    public void index(String[] indices, Collection<Range<Token>> tokenRanges) {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract void index(String[] indices, Collection<Range<Token>> tokenRanges);
 
     @Override
-    public void blockingMappingUpdate(IndexService indexService, String type, CompressedXContent source) throws Exception {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract void blockingMappingUpdate(IndexService indexService, String type, CompressedXContent source) throws Exception;
 
     @Override
-    public Token getToken(ByteBuffer rowKey, ColumnFamily cf) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract Token getToken(ByteBuffer rowKey, ColumnFamily cf);
+    
+    @Override
+    public abstract void writeMetaDataAsComment(String metadataString) throws ConfigurationException, IOException;
 
     @Override
-    public void writeMetaDataAsComment(String metadataString) throws ConfigurationException, IOException {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract void initializeMetaDataAsComment();
 
     @Override
-    public void initializeMetaDataAsComment() {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract MetaData readMetaDataAsComment() throws NoPersistedMetaDataException;
 
     @Override
-    public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract MetaData readMetaDataAsRow() throws NoPersistedMetaDataException;
 
     @Override
-    public MetaData readMetaDataAsRow() throws NoPersistedMetaDataException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
+            RequestValidationException;
 
     @Override
-    public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
-            RequestValidationException {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract Map<String, Object> expandTableMapping(String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
 
     @Override
-    public Map<String, Object> expandTableMapping(String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract Map<String, Object> expandTableMapping(String ksName, String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
 
     @Override
-    public Map<String, Object> expandTableMapping(String ksName, String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract void waitShardsStarted();
 
     @Override
-    public void waitShardsStarted() {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract void publishAllShardsState();
 
     @Override
-    public void publishAllShardsState() {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract ShardRoutingState readIndexShardState(InetAddress address, String index, ShardRoutingState defaultState);
 
     @Override
-    public ShardRoutingState readIndexShardState(InetAddress address, String index, ShardRoutingState defaultState) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
 
     @Override
-    public void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
-        // TODO Auto-generated method stub
-        
-    }
+    public abstract Set<String> mappedColumns(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
 
     @Override
-    public Set<String> mappedColumns(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
+    public abstract boolean isStaticDocument(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
 
-    @Override
-    public boolean isStaticDocument(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException {
-        return false;
-    }
+
 
 }

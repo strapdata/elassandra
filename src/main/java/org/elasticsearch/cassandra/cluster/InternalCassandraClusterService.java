@@ -20,6 +20,7 @@ import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -81,6 +82,7 @@ import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.transport.messages.ResultMessage;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
@@ -93,9 +95,9 @@ import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexRequest.OpType;
 import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
-import org.elasticsearch.cassandra.ElasticSecondaryIndex;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
-import org.elasticsearch.cassandra.SecondaryIndicesService;
+import org.elasticsearch.cassandra.index.ElasticSecondaryIndex;
+import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
@@ -117,6 +119,7 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.InternalClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.compress.CompressedXContent;
+import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
@@ -181,13 +184,16 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public static String MAPPING_UPDATE_TIMEOUT = "cassandra.mapping_update.timeout";
     public static String PERSISTED_METADATA = "cassandra.pertisted.metadata";
 
+    protected static Class defaultSecondaryIndexClass = org.elasticsearch.cassandra.index.ElasticSecondaryIndex.class;
+    
     private final IndicesService indicesService;
     private final DiscoveryService discoveryService;
     private final TimeValue mappingUpdateTimeout;
 
     protected final MappingUpdatedAction mappingUpdatedAction;
     
-    public Map<String, String> cqlMapping = new ImmutableMap.Builder<String,String>()
+    
+    public static Map<String, String> cqlMapping = new ImmutableMap.Builder<String,String>()
             .put("text", "string")
             .put("ascii", "string")
             .put("varchar", "string")
@@ -202,7 +208,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
             .build();
     
 
-    public Map<Class, String> mapperToCql = new java.util.HashMap<Class, String>() {
+    public static Map<Class, String> mapperToCql = new java.util.HashMap<Class, String>() {
         {
             put(StringFieldMapper.class, "text");
             put(DateFieldMapper.class, "timestamp");
@@ -219,6 +225,22 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     };
 
+    public static Map<String,Class> cqlToMapperBuilder = new java.util.HashMap<String, Class>() {
+        {
+            put("text", StringFieldMapper.Builder.class);
+            put("ascii", StringFieldMapper.Builder.class);
+            put("timestamp", DateFieldMapper.Builder.class);
+            put("double", DoubleFieldMapper.Builder.class);
+            put("float" , FloatFieldMapper.Builder.class);
+            put("int", IntegerFieldMapper.Builder.class);
+            put("bigint", LongFieldMapper.Builder.class);
+            put("smallint", ShortFieldMapper.Builder.class);
+            put("boolean", BooleanFieldMapper.Builder.class);
+            put("blob", BinaryFieldMapper.Builder.class);
+            put("inet", IpFieldMapper.Builder.class);
+        }
+    };
+    
     public boolean isNativeCql3Type(String cqlType) {
         return cqlMapping.keySet().contains(cqlType) && !cqlType.startsWith("geo_");
     }
@@ -375,35 +397,69 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * @return
      * @throws SyntaxException
      * @throws ConfigurationException
+     * @throws CharacterCodingException 
      */
     public ByteBuffer serializeType(final String ksName, final String cfName, final AbstractType type, final String name, final Object value, final Mapper mapper) 
-            throws SyntaxException, ConfigurationException {
+            throws SyntaxException, ConfigurationException, CharacterCodingException {
         if (value == null) {
             return null;
         }
         if (type instanceof UserType) {
-            List<ByteBuffer> components = new ArrayList<ByteBuffer>();
             UserType udt = (UserType) type;
-            Map<String, Object> mapValue = (Map<String, Object>) value;
-            for (int j = 0; j < udt.size(); j++) {
-                String subName = UTF8Type.instance.compose(udt.fieldName(j));
-                AbstractType<?> subType = udt.fieldType(j);
-                Mapper subMapper = ((ObjectMapper) mapper).getMapper(subName);
-                Object subValue = mapValue.get(subName);
-                components.add(serializeType(ksName, cfName, subType, subName, subValue, subMapper));
+            ByteBuffer[] components = new ByteBuffer[udt.size()];
+            int i=0;
+            
+            if (GEO_POINT_TYPE.equals(ByteBufferUtil.string(udt.name))) {
+                logger.trace(" geo_point value=[{}]" , value);
+                GeoPoint geoPoint = new GeoPoint();
+                if (value instanceof String) {
+                    // parse from string lat,lon (ex: "41.12,-71.34") or geohash (ex:"drm3btev3e86")
+                    geoPoint.resetFromString((String)value);
+                } else {
+                    // parse from lat, lon fields as map
+                    Map<String, Object> mapValue = (Map<String, Object>) value;
+                    geoPoint.reset((Double)mapValue.get(GeoPointFieldMapper.Names.LAT), (Double)mapValue.get(GeoPointFieldMapper.Names.LON));
+                }
+                components[i++]=serializeType(ksName, cfName, udt.fieldType(0), GeoPointFieldMapper.Names.LAT, geoPoint.lat(), null);
+                components[i++]=serializeType(ksName, cfName, udt.fieldType(1), GeoPointFieldMapper.Names.LON, geoPoint.lon(), null);
+            } else {
+                Map<String, Object> mapValue = (Map<String, Object>) value;
+                for (int j = 0; j < udt.size(); j++) {
+                    String subName = UTF8Type.instance.compose(udt.fieldName(j));
+                    AbstractType<?> subType = udt.fieldType(j);
+                    Object subValue = mapValue.get(subName);
+                    Mapper subMapper = ((ObjectMapper) mapper).getMapper(subName);
+                    components[i++]=serializeType(ksName, cfName, subType, subName, subValue, subMapper);
+                }
             }
-            return TupleType.buildValue(components.toArray(new ByteBuffer[components.size()]));
+            return TupleType.buildValue(components);
         } else if (type instanceof MapType) {
             MapType mapType = getMapType(ksName, cfName, name);
             MapSerializer serializer = mapType.getSerializer();
-            List<ByteBuffer> buffers = serializer.serializeValues((Map<String, Object>)value);
-            return TupleType.buildValue(buffers.toArray(new ByteBuffer[buffers.size()]));
+            Map map = (Map)value;
+            List<ByteBuffer> buffers = serializer.serializeValues((Map)value);
+            return CollectionSerializer.pack(buffers, map.size(), Server.VERSION_3);
         } else if (type instanceof CollectionType) {
             AbstractType elementType = (type instanceof ListType) ? ((ListType)type).getElementsType() : ((SetType)type).getElementsType();
+            
+            if (elementType instanceof UserType && GEO_POINT_TYPE.equals(ByteBufferUtil.string(((UserType)elementType).name)) && value instanceof List && ((List)value).get(0) instanceof Double) {
+                // geo_point as array of double lon,lat like [1.2, 1.3]
+                UserType udt = (UserType)elementType;
+                List<Double> values = (List<Double>)value;
+                ByteBuffer[] elements = new ByteBuffer[] {
+                        serializeType(ksName, cfName, udt.fieldType(0), GeoPointFieldMapper.Names.LAT, values.get(1), null),
+                        serializeType(ksName, cfName, udt.fieldType(1), GeoPointFieldMapper.Names.LON, values.get(0), null)
+                };
+                ByteBuffer geo_point = TupleType.buildValue(elements);
+                return CollectionSerializer.pack(ImmutableList.of(geo_point), 1, Server.VERSION_3);
+            } 
+            
             if (!(value instanceof Collection)) {
+                // singleton list
                 ByteBuffer bb = serializeType(ksName, cfName, elementType, name, value, mapper);
                 return CollectionSerializer.pack(ImmutableList.of(bb), 1, Server.VERSION_3);
-            } 
+            }
+            // list of elementType
             List<ByteBuffer> elements = new ArrayList<ByteBuffer>();
             for(Object v : (Collection) value) {
                 ByteBuffer bb = serializeType(ksName, cfName, elementType, name, v, mapper);
@@ -411,8 +467,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
             }
             return CollectionSerializer.pack(elements, elements.size(), Server.VERSION_3);
         } else {
-            // Native cassandra type,
-            return type.decompose( value((FieldMapper) mapper, value) );
+            // Native cassandra type, encoded with mapper if available.
+            if (mapper != null) {
+                return type.decompose( value((FieldMapper) mapper, value) );
+            } 
+            return type.decompose( value );
         }
     }
 
@@ -458,7 +517,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
             if (mapper instanceof ObjectMapper) {
                 buildCql(ksName, cfName, mapper.simpleName(), (ObjectMapper) mapper);
             } else if (mapper instanceof GeoPointFieldMapper) {
-                buildGeoPointType(ksName, typeName+'_'+mapper.simpleName());
+                buildGeoPointType(ksName);
             } 
         }
 
@@ -488,7 +547,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 } else if (mapper instanceof GeoPointFieldMapper) {
                     if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(mapper.cqlCollectionTag()).append("<");
                     create.append("frozen<")
-                        .append(typeName).append('_').append(shortName)
+                        .append(GEO_POINT_TYPE)
                         .append(">");
                     if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(">");
                 } else {
@@ -526,7 +585,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     } else if (mapper instanceof GeoPointFieldMapper) {
                         if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(mapper.cqlCollectionTag()).append("<");
                         update.append("frozen<")
-                            .append(typeName).append('_').append(shortName)
+                            .append(GEO_POINT_TYPE)
                             .append(">");
                         if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(">");
                     } else {
@@ -551,8 +610,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return typeName;
     }
 
-    public void buildGeoPointType(String ksName, String typeName) throws RequestExecutionException {
-        String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( %s double, %s double )", ksName, typeName,Names.LAT,Names.LON);
+    public static String GEO_POINT_TYPE = "geo_point";
+    public void buildGeoPointType(String ksName) throws RequestExecutionException {
+        String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( %s double, %s double)", ksName, GEO_POINT_TYPE,Names.LAT,Names.LON);
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
     }
 
@@ -564,7 +624,15 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public void buildNativeOrUdtMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
         CQL3Type cql3type = type.asCQL3Type();
         if (cql3type instanceof CQL3Type.Native) {
-            mapping.put("type", cqlMapping.get(cql3type.toString()));
+            String esType = cqlMapping.get(cql3type.toString());
+            if (esType != null) {
+                mapping.put("type", esType);
+                if (esType.equals("string")) {
+                    mapping.put("index","not_analyzed");
+                }
+            } else {
+                logger.error("CQL type "+cql3type.toString()+" not supported");
+            }
         } else if (cql3type instanceof CQL3Type.UserDefined) {
             mapping.put("type", ObjectMapper.NESTED_CONTENT_TYPE);
             mapping.put(TypeParsers.CQL_STRUCT, "udt");
@@ -757,17 +825,18 @@ public class InternalCassandraClusterService extends InternalClusterService {
                         }
                     }
                     if (fieldMapper instanceof GeoPointFieldMapper) {
-                        cqlType = fieldMapper.name().replace('.', '_');
+                        cqlType = GEO_POINT_TYPE;
+                        buildGeoPointType(ksName);
                     } else {
                         cqlType = mapperToCql.get(fieldMapper.getClass());
                     }
                     
+                    
+                    if (!isNativeCql3Type(cqlType)) {
+                        cqlType = "frozen<" + cqlType + ">";
+                    }
                     if (!fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
-                        if (isNativeCql3Type(cqlType)) {
-                            cqlType = fieldMapper.cqlCollectionTag()+"<" + cqlType + ">";
-                        } else {
-                            cqlType = fieldMapper.cqlCollectionTag()+"<frozen<" + cqlType + ">>";
-                        }
+                        cqlType = fieldMapper.cqlCollectionTag()+"<" + cqlType + ">";
                     }
                     isStatic = fieldMapper.cqlStaticColumn();
                 } else {
@@ -832,7 +901,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                             // TODO: do this check for collection
                             if (!cdef.type.isCollection()) {
                                 // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
-                                if (!cdef.type.asCQL3Type().toString().equals(cqlType)) {
+                                if (!cdef.type.asCQL3Type().toString().equals(cqlType) && !cqlType.equals("frozen<"+cdef.type.asCQL3Type().toString()+">")) {
                                     throw new IOException("Existing column "+column+" mismatch type "+cqlType);
                                 }
                             }
@@ -891,15 +960,16 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public void createSecondaryIndices(String index) throws IOException {
         IndexService indexService = this.indicesService.indexService(index);
         String ksName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, index);
+        String className = indexService.indexSettings().get(IndexMetaData.SETTING_SECONDARY_INDEX_CLASS, defaultSecondaryIndexClass.getName());
         IndexMetaData indexMetaData = state().metaData().index(index);
         for(ObjectCursor<MappingMetaData> cursor: indexMetaData.getMappings().values()) {
-            createSecondaryIndex(ksName, cursor.value);
+            createSecondaryIndex(ksName, cursor.value, className);
         }
     }
    
     // build secondary indices when shard is started and mapping applied
     @Override
-    public void createSecondaryIndex(String ksName, MappingMetaData mapping) throws IOException {
+    public void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException {
         CFMetaData cfm = Schema.instance.getCFMetaData(ksName, mapping.type());
         if (cfm != null) {
             try {
@@ -909,10 +979,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     }
                     ColumnDefinition cdef = (cfm == null) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
                     if ((cdef != null) && !cdef.isIndexed() && !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY )) {
-                        logger.debug("CREATE CUSTOM INDEX IF NOT EXISTS {} ON {}.{} ({})", buildIndexName(mapping.type(), column), ksName, mapping.type(), column);
-                        QueryProcessor.process(String.format("CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s'",
-                            buildIndexName(mapping.type(), column), ksName, mapping.type(), column, org.elasticsearch.cassandra.ElasticSecondaryIndex.class.getName()), 
-                            ConsistencyLevel.LOCAL_ONE);
+                        String query = String.format("CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s'",
+                                buildIndexName(mapping.type(), column), ksName, mapping.type(), column, className);
+                        logger.debug(query);
+                        QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
                     } 
                 }
             } catch (Throwable e) {
@@ -1097,7 +1167,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
     @Override
     public UntypedResultSet fetchRow(final String index, final String type, final String id) 
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        return fetchRow(index, type, mappedColumns(index, new Uid(type, id)), id, ConsistencyLevel.LOCAL_ONE);
+        Set<String> mappedColumns = mappedColumns(index, new Uid(type, id));
+        return fetchRow(index, type, mappedColumns.toArray(new String[mappedColumns.size()]), id, ConsistencyLevel.LOCAL_ONE);
     }
     
     /*
@@ -1108,7 +1179,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * , java.lang.String, java.lang.String, java.util.List)
      */
     @Override
-    public UntypedResultSet fetchRow(final String index, final String type, final Collection<String> requiredColumns, final String id) throws InvalidRequestException, RequestExecutionException,
+    public UntypedResultSet fetchRow(final String index, final String type, final String[] requiredColumns, final String id) throws InvalidRequestException, RequestExecutionException,
             RequestValidationException, IOException {
         return fetchRow(index, type, requiredColumns, id, ConsistencyLevel.LOCAL_ONE);
     }
@@ -1117,7 +1188,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * Fetch from the coordinator node.
      */
     @Override
-    public UntypedResultSet fetchRow(final String index, final String cfName, final Collection<String> requiredColumns, final String id, final ConsistencyLevel cl) throws InvalidRequestException,
+    public UntypedResultSet fetchRow(final String index, final String cfName, final String[] requiredColumns, final String id, final ConsistencyLevel cl) throws InvalidRequestException,
             RequestExecutionException, RequestValidationException, IOException {
         DocPrimaryKey docPk = parseElasticId(index, cfName, id);
         return process(cl, buildFetchQuery(index,cfName,requiredColumns, docPk.isStaticDocument), docPk.values);
@@ -1139,15 +1210,28 @@ public class InternalCassandraClusterService extends InternalClusterService {
     @Override
     public UntypedResultSet fetchRowInternal(final String index, final String cfName, final Collection<String> requiredColumns, final String id) throws ConfigurationException, IOException  {
         DocPrimaryKey docPk = parseElasticId(index, cfName, id);
+        return fetchRowInternal(index, cfName, requiredColumns.toArray(new String[requiredColumns.size()]), docPk.values, docPk.isStaticDocument);
+    }
+    
+
+    @Override
+    public UntypedResultSet fetchRowInternal(String ksName, String cfName, final Collection<String> requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException,
+            IOException {
+        return fetchRowInternal(ksName, cfName, requiredColumns.toArray(new String[requiredColumns.size()]), pkColumns, forStaticDocument);
+    }
+    
+    @Override
+    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final String[] requiredColumns, final String id) throws ConfigurationException, IOException  {
+        DocPrimaryKey docPk = parseElasticId(index, cfName, id);
         return fetchRowInternal(index, cfName, requiredColumns, docPk.values, docPk.isStaticDocument);
     }
     
     @Override
-    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final Collection<String> requiredColumns, final Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException  {
+    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final String[] requiredColumns, final Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException  {
         return QueryProcessor.instance.executeInternal(buildFetchQuery(index,cfName,requiredColumns, forStaticDocument), pkColumns);
     }
     
-    public String buildFetchQuery(final String index, final String cfName, final Collection<String> requiredColumns, boolean forStaticDocument) throws ConfigurationException {
+    public String buildFetchQuery(final String index, final String cfName, final String requiredColumns[], boolean forStaticDocument) throws ConfigurationException {
         IndexService indexService = this.indicesService.indexService(index);
         String ksName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
         StringBuilder ptColums = new StringBuilder();
@@ -1189,71 +1273,75 @@ public class InternalCassandraClusterService extends InternalClusterService {
         rowAsMap(index, type, row, mapObject);
         return mapObject;
     }
-
+    
     @Override
     public int rowAsMap(final String index, final String type, UntypedResultSet.Row row, Map<String, Object> mapObject) throws IOException {
-        int putCount = 0;
+        Object[] values = rowAsArray(index, type, row);
+        int i=0;
+        int j=0;
+        for(ColumnSpecification colSpec: row.getColumns()) {
+            if (values[i] != null) {
+                mapObject.put(colSpec.name.toString(), values[i]);
+                j++;
+            }
+            i++;
+        }
+        return j;
+    }
+    
+    @Override
+    public Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row) throws IOException {
+        Object values[] = new Object[row.getColumns().size()];
         List<ColumnSpecification> columnSpecs = row.getColumns();
         
         IndexService indexService = indicesService.indexServiceSafe(index);
         DocumentMapper documentMapper = indexService.mapperService().documentMapper(type);
+        
         
         for (int columnIndex = 0; columnIndex < columnSpecs.size(); columnIndex++) {
             ColumnSpecification colSpec = columnSpecs.get(columnIndex);
             String columnName = colSpec.name.toString();
             CQL3Type cql3Type = colSpec.type.asCQL3Type();
             
-            FieldMapper fieldMapper = documentMapper.mappers().smartNameFieldMapper(columnName);
-            if (fieldMapper == null && columnName.equals("_token")) {
-                fieldMapper = documentMapper.tokenFieldMapper();
-            }
-            
             if (!row.has(colSpec.name.toString()))
                 continue;
 
             if (cql3Type instanceof CQL3Type.Native) {
+                DocumentFieldMappers docFieldMappers = documentMapper.mappers();
+                FieldMapper fieldMapper = docFieldMappers.smartNameFieldMapper(columnName);
                 switch ((CQL3Type.Native) cql3Type) {
                 case ASCII:
                 case TEXT:
                 case VARCHAR:
-                    mapObject.put(columnName, row.getString(colSpec.name.toString()));
-                    putCount++;
+                    values[columnIndex] = row.getString(colSpec.name.toString());
                     break;
                 case TIMEUUID:
                 case UUID:
-                    mapObject.put(columnName, row.getUUID(colSpec.name.toString()).toString() );
-                    putCount++;
+                    values[columnIndex] = row.getUUID(colSpec.name.toString()).toString();
                     break;
                 case TIMESTAMP:
-                    mapObject.put(columnName, fieldMapper.fieldType().valueForSearch( row.getTimestamp(colSpec.name.toString()).getTime()));
-                    putCount++;
+                    values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getTimestamp(colSpec.name.toString()).getTime());
                     break;
                 case INT:
-                    mapObject.put(columnName, fieldMapper.fieldType().valueForSearch( row.getInt(colSpec.name.toString())) );
-                    putCount++;
+                    values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getInt(colSpec.name.toString()));
                     break;
                 case BIGINT:
-                    mapObject.put(columnName, fieldMapper.fieldType().valueForSearch( row.getLong(colSpec.name.toString())) );
-                    putCount++;
+                    values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getLong(colSpec.name.toString()));
                     break;
                 case DECIMAL:
                 case DOUBLE:
-                    mapObject.put(columnName, fieldMapper.fieldType().valueForSearch( row.getDouble(colSpec.name.toString())));
-                    putCount++;
+                    values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getDouble(colSpec.name.toString()));
                     break;
                 case BLOB:
-                    mapObject.put(columnName, fieldMapper.fieldType().valueForSearch( row.getBytes(colSpec.name.toString())));
-                    putCount++;
+                    values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getBytes(colSpec.name.toString()));
                     break;
                 case BOOLEAN:
-                    mapObject.put(columnName, fieldMapper.fieldType().valueForSearch( row.getBoolean(colSpec.name.toString())));
-                    putCount++;
+                    values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getBoolean(colSpec.name.toString()));
                     break;
                 case COUNTER:
                     break;
                 case INET:
-                    mapObject.put(columnName, fieldMapper.fieldType().valueForSearch( row.getInetAddress(colSpec.name.toString()).getHostAddress()));
-                    putCount++;
+                    values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getInetAddress(colSpec.name.toString()).getHostAddress());
                     break;
                 default:
                     logger.warn("Ignoring unsupported type {}", cql3Type);
@@ -1273,8 +1361,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     } else {
                         list = row.getList(colSpec.name.toString(), elementType);
                     }
-                    mapObject.put(columnName, (list.size() == 1) ? list.get(0) : list);
-                    putCount++;
+                    values[columnIndex] =  (list.size() == 1) ? list.get(0) : list;
                     break;
                 case SET :
                     Set set;
@@ -1288,8 +1375,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     } else {
                         set = row.getSet(colSpec.name.toString(), elementType);
                     }
-                    mapObject.put(columnName, (set.size() == 1) ? set.iterator().next() : set);
-                    putCount++;
+                    values[columnIndex] =  (set.size() == 1) ? set.iterator().next() : set;
                     break;
                 case MAP :
                     Map map;
@@ -1307,19 +1393,17 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     } else {
                         map = row.getMap(colSpec.name.toString(), keyType, elementType);
                     }
-                    mapObject.put(columnName, map);
-                    putCount++;
+                    values[columnIndex] =  map;
                     break;
                 }
             } else if (colSpec.type instanceof UserType) {
                 ByteBuffer bb = row.getBytes(colSpec.name.toString());
-                mapObject.put(columnName, ElasticSecondaryIndex.deserialize(colSpec.type, bb));
-                putCount++;
+                values[columnIndex] = ElasticSecondaryIndex.deserialize(colSpec.type, bb);
             } else if (cql3Type instanceof CQL3Type.Custom) {
                 logger.warn("CQL3.Custum type not supported for column "+columnName);
             }
         }
-        return putCount;
+        return values;
     }
 
     
@@ -1799,7 +1883,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     }
 
-    private static final String updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE dc = ? IF owner = ? AND version = ?", 
+    private static final String updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE dc = ? IF version < ?", 
             new Object[] {ELASTIC_ADMIN_KEYSPACE, metaDataTableName });
 
     /*
@@ -1824,19 +1908,19 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 ConsistencyLevel.LOCAL_ONE,
                 ConsistencyLevel.LOCAL_SERIAL,
                 updateMetaDataQuery,
-                new Object[] { UUID.fromString(localNode().id()), newMetaData.version(), metaDataString, DatabaseDescriptor.getLocalDataCenter(),
-                        UUID.fromString(oldMetaData.uuid()), oldMetaData.version() });
+                new Object[] { UUID.fromString(localNode().id()), newMetaData.version(), metaDataString, DatabaseDescriptor.getLocalDataCenter(), newMetaData.version() });
         Row row = result.one();
         boolean applied = false;
         if (row.has("[applied]")) {
             applied = row.getBoolean("[applied]");
         }
         if (applied) {
-            logger.debug("Succefully update metadata source={} newMetaData={}", source, metaDataString);
+            logger.debug("PAXOS Succefully update metadata source={} newMetaData={} in datacenter {}", source, metaDataString, DatabaseDescriptor.getLocalDataCenter());
             writeMetaDataAsComment(metaDataString);
             return;
         } else {
-            logger.warn("Failed to update metadata source={} oldMetadata={}/{} currentMetaData={}/{}", source, oldMetaData.uuid(), oldMetaData.version(), row.getUUID("owner"), row.getLong("version"));
+            logger.warn("PAXOS Failed to update metadata source={} oldMetadata={}/{} currentMetaData={}/{} in datacenter {}", 
+                    source, oldMetaData.uuid(), oldMetaData.version(), row.getUUID("owner"), row.getLong("version"), DatabaseDescriptor.getLocalDataCenter());
             throw new ConcurrentMetaDataUpdateException(row.getUUID("owner"), row.getLong("version"));
         }
     }
@@ -1919,5 +2003,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
             logger.error("Interrupred before local shards started", e);
         }
     }
+
 
 }

@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper.geo;
 import com.spatial4j.core.shape.Point;
 import com.spatial4j.core.shape.Shape;
 import com.spatial4j.core.shape.jts.JtsGeometry;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.spatial.prefix.PrefixTreeStrategy;
@@ -467,6 +468,10 @@ public class GeoShapeFieldMapper extends FieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+    }
+    
+    @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
     }
 
@@ -523,4 +528,6 @@ public class GeoShapeFieldMapper extends FieldMapper {
     protected String contentType() {
         return CONTENT_TYPE;
     }
+
+
 }

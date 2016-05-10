@@ -481,6 +481,41 @@ public class DateFieldMapper extends NumberFieldMapper {
         return true;
     }
 
+
+    @Override
+    public void innerCreateField(ParseContext context, Object object) throws IOException {
+        Date date = (Date) object;
+        String dateAsString = null;
+        Long value = null;
+        float boost = fieldType().boost();
+        if (date == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            dateAsString = fieldType().nullValueAsString();
+            if (dateAsString != null) {
+                value = fieldType().parseStringValue(dateAsString);
+            }
+        } else {
+            value = date.getTime();
+            dateAsString = fieldType().dateTimeFormatter.printer().print(value);
+        }
+        if (dateAsString != null) {
+            if (context.includeInAll(includeInAll, this)) {
+                context.allEntries().addText(fieldType().names().fullName(), dateAsString, boost);
+            }
+        }
+        
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomLongNumericField field = new CustomLongNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
+    }
+    
     @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         String dateAsString = null;
@@ -578,4 +613,5 @@ public class DateFieldMapper extends NumberFieldMapper {
             }
         }
     }
+
 }

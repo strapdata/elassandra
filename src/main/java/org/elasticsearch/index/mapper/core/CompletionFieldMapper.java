@@ -20,6 +20,7 @@ package org.elasticsearch.index.mapper.core;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.codecs.PostingsFormat;
@@ -553,6 +554,11 @@ public class CompletionFieldMapper extends FieldMapper {
         return builder.endObject();
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
     }
@@ -592,4 +598,5 @@ public class CompletionFieldMapper extends FieldMapper {
                 return false;
         }
     }
+
 }

@@ -17,29 +17,30 @@
  * under the License.
  */
 
-package org.elasticassandra.common.logging.logback;
+package org.elasticsearch.index.mapper;
 
+import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.common.io.stream.StreamInput;
 
-
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import org.slf4j.LoggerFactory;
-import org.elasticassandra.common.logging.ESLogger;
-import org.elasticassandra.common.logging.ESLoggerFactory;
+import java.io.IOException;
 
 /**
  *
  */
-public class LogbackESLoggerFactory extends ESLoggerFactory {
-
-    @Override
-    protected ESLogger rootLogger() {
-        return new LogbackESLogger(null, (ch.qos.logback.classic.Logger)LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME));
+public class MapperException extends ElasticsearchException {
+    public MapperException(StreamInput in) throws IOException {
+        super(in);
     }
 
-    @Override
-    protected ESLogger newInstance(String prefix, String name) {
-        final ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(name);
-        return new LogbackESLogger(prefix, logger);
+    public MapperException(String message) {
+        super(message);
+    }
+
+    public MapperException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public MapperException(String message, Throwable cause, Object... args) {
+        super(message, cause, args);
     }
 }

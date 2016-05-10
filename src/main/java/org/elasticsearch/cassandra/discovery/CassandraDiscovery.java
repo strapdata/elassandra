@@ -435,7 +435,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         }
         if (!this.localAddress.equals(endpoint)) {
             switch (state) {
-            case SCHEMA: // remote metadata change
+            case SCHEMA: // read metadata (read LOCAL_QUORUM elastic_admin.metadata_<DC>)
                 MetaData metadata = hasNewMetaData();
                 if (metadata != null) {
                     logger.debug("Endpoint={} ApplicationState={} value={} => update metaData {}/{}", 

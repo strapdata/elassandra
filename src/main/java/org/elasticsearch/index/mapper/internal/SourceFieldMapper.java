@@ -72,7 +72,7 @@ public class SourceFieldMapper extends MetadataFieldMapper {
 
     public static class Defaults {
         public static final String NAME = SourceFieldMapper.NAME;
-        public static final boolean ENABLED = true;
+        public static final boolean ENABLED = false;        // default is false with elassandra
         public static final long COMPRESS_THRESHOLD = -1;
         public static final String FORMAT = null; // default format is to use the one provided
 
@@ -80,7 +80,7 @@ public class SourceFieldMapper extends MetadataFieldMapper {
 
         static {
             FIELD_TYPE.setIndexOptions(IndexOptions.NONE); // not indexed
-            FIELD_TYPE.setStored(false);                   // no more stored in elassandra
+            FIELD_TYPE.setStored(true);                    // disabled by default, but stored in lucene if enabled.
             FIELD_TYPE.setOmitNorms(true);
             FIELD_TYPE.setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
             FIELD_TYPE.setSearchAnalyzer(Lucene.KEYWORD_ANALYZER);
@@ -303,6 +303,11 @@ public class SourceFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        // Nothing to, _source should be disabled in elassandra.
+    }
+    
+    @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (!enabled) {
             return;
@@ -463,4 +468,5 @@ public class SourceFieldMapper extends MetadataFieldMapper {
             }
         }
     }
+
 }

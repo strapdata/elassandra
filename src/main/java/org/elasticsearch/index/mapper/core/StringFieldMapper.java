@@ -291,7 +291,43 @@ public class StringFieldMapper extends FieldMapper implements AllFieldMapper.Inc
 
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
-        ValueAndBoost valueAndBoost = parseCreateFieldForString(context, fieldType().nullValueAsString(), fieldType().boost());
+        parseCreateField(context, fields, parseCreateFieldForString(context, fieldType().nullValueAsString(), fieldType().boost()));
+    }
+    
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        ValueAndBoost valueAndBoost = new ValueAndBoost((String)object, fieldType().boost());
+        if (valueAndBoost.value() == null) {
+            return;
+        }
+        if (ignoreAbove > 0 && valueAndBoost.value().length() > ignoreAbove) {
+            return;
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), valueAndBoost.value(), valueAndBoost.boost());
+        }
+
+        boolean hasField = false;
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            Field field = new Field(fieldType().names().indexName(), valueAndBoost.value(), fieldType());
+            field.setBoost(valueAndBoost.boost());
+            context.doc().add(field);
+            hasField = true;
+        }
+        if (fieldType().hasDocValues()) {
+            Field field = new SortedSetDocValuesField(fieldType().names().indexName(), new BytesRef(valueAndBoost.value()));
+            this.setBoost(field);
+            context.doc().add(field);
+            hasField = true;
+        }
+        /*
+        if (!hasField) {
+            context.ignoredValue(fieldType().names().indexName(), valueAndBoost.value());
+        }
+        */
+    }
+    
+    protected void parseCreateField(ParseContext context, List<Field> fields, ValueAndBoost valueAndBoost) throws IOException {
         if (valueAndBoost.value() == null) {
             return;
         }
@@ -310,10 +346,15 @@ public class StringFieldMapper extends FieldMapper implements AllFieldMapper.Inc
         if (fieldType().hasDocValues()) {
             fields.add(new SortedSetDocValuesField(fieldType().names().indexName(), new BytesRef(valueAndBoost.value())));
         }
+        /*
         if (fields.isEmpty()) {
             context.ignoredValue(fieldType().names().indexName(), valueAndBoost.value());
         }
+        */
     }
+    
+
+   
 
     /**
      * Parse a field as though it were a string.
@@ -430,4 +471,5 @@ public class StringFieldMapper extends FieldMapper implements AllFieldMapper.Inc
             return boost;
         }
     }
+
 }

@@ -77,6 +77,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
     //private final ShardShuffler shuffler;
 
     final public static  UnassignedInfo UNASSIGNED_INFO_NODE_LEFT = new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "cassandra node left");
+    final public static  UnassignedInfo UNASSIGNED_INFO_KEYSPACE_UNAVAILABLE = new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "cassandra keyspace unavailable");
     final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_CREATED = new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, "");
     
     // note, we assume that when the index routing is created, ShardRoutings are created for all possible number of
@@ -478,7 +479,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
                             shardRoutingState = clusterService.readIndexShardState(node.getInetAddress(), index, shardRoutingState);
 
                             ShardRouting shardRouting = new ShardRouting(index, i, node.id(), true, shardRoutingState, // We assume shard is started on alive nodes...
-                                                                        currentState.version(), null, token_ranges);
+                                  currentState.version(), (shardRoutingState == ShardRoutingState.STARTED) ? null : UNASSIGNED_INFO_KEYSPACE_UNAVAILABLE, token_ranges);
                             
 
                             shardRoutingList = new ArrayList<ShardRouting>();
@@ -502,7 +503,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
                     }
                 }
 
-                if (!topologyResult.isConsistent()) {
+                if (!topologyResult.isConsistent() && unreachableEndpoints.size() > 0) {
                     // add a unassigned primary IndexShardRoutingTable to reflect missing data (red status).
                     ShardRouting shardRouting = new ShardRouting(index, i, currentState.nodes().findByInetAddress(unreachableEndpoints.iterator().next()).id(), true, ShardRoutingState.UNASSIGNED, currentState
                             .version(), UNASSIGNED_INFO_NODE_LEFT, topologyResult.getOrphanTokenRanges());

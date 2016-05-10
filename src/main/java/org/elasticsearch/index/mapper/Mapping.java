@@ -89,6 +89,10 @@ public final class Mapping implements ToXContent {
         return root;
     }
 
+    public MetadataFieldMapper[] metadataMappers() {
+        return this.metadataMappers;
+    }
+    
     /**
      * Generate a mapping update for the given root object mapper.
      */

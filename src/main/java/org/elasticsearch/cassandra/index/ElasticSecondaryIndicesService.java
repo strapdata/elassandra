@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.elasticsearch.cassandra;
+package org.elasticsearch.cassandra.index;
 
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
@@ -209,6 +209,10 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
             for(Iterator<String> it = this.toUpdateIndices.iterator(); it.hasNext(); ) {
                 String index = it.next();
                 IndexRoutingTable indexRoutingTable = event.state().routingTable().index(index);
+                if (indexRoutingTable == null) {
+                    logger.warn("index [{}] not in routing table, keyspace may be deleted.",index);
+                    continue;
+                }
                 if (indexRoutingTable.allPrimaryShardsActive()) {
                     logger.debug("index=[{}] shards Active/Unassigned={}/{} => asynchronous creates secondary index", 
                             index, indexRoutingTable.primaryShardsActive(), indexRoutingTable.primaryShardsUnassigned());

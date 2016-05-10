@@ -252,6 +252,35 @@ public class IpFieldMapper extends NumberFieldMapper {
         return ipToLong(value.toString());
     }
 
+
+    @Override
+    protected void innerCreateField(ParseContext context, Object object) throws IOException {
+        InetAddress addr = (InetAddress)object;
+        if (addr == null) {
+            String ipAsString = fieldType().nullValueAsString();
+            if (ipAsString == null) {
+                return;
+            }
+            if (com.google.common.net.InetAddresses.isInetAddress(ipAsString)) {
+                addr = com.google.common.net.InetAddresses.forString(ipAsString);
+            }
+        }
+        // TODO Auto-generated method stub
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), addr.getHostAddress(), fieldType().boost());
+        }
+
+        final long value = com.google.common.net.InetAddresses.coerceToInteger(addr);
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomLongNumericField field = new CustomLongNumericField(value, fieldType());
+            field.setBoost(fieldType().boost());
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
+    }
+    
     @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         String ipAsString;
@@ -334,4 +363,5 @@ public class IpFieldMapper extends NumberFieldMapper {
             tokenStream.setLongValue(ipToLong(value));
         }
     }
+
 }

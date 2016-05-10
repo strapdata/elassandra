@@ -76,5 +76,13 @@
   * Add mapping attributes cql_partition_key:boolean and cql_primary_key_order:integer to build cassandra table with composite primary key.
   * Add support for static column with the mapping attribute cql_static_column:boolean. This give the ability to index static columns in Elasticsearch.
   * Fix various mapping issues.
-  
+
+2.1.1-9 - 2016-05-10
+  * Upgrade to cassandra 2.2.5
+  * Change the default elasticsearch data directory to ${cassandra_storagedir}/data/elasticsearch.data.
+  * Provides various cassandra secondary index implementations with better performances by removing json generation and parsing.
+  * Improve cluster metadata management (fix a bug when deleting an index).
+  * Fix a mapping bug when indexing a cassandra map as a nested document.
+  * Mapping of cassandra text columns are now index with index=not_analyzed by default.
+  * Improve support for geo_point.
   

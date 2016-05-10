@@ -1,6 +1,5 @@
-package org.elasticsearch.cassandra;
+package org.elasticsearch.cassandra.index;
 
-import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.common.component.LifecycleComponent;
 
