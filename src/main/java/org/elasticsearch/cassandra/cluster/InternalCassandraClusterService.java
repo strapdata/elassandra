@@ -1328,9 +1328,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 case BIGINT:
                     values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getLong(colSpec.name.toString()));
                     break;
-                case DECIMAL:
                 case DOUBLE:
                     values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getDouble(colSpec.name.toString()));
+                    break;
+                case FLOAT:
+                    values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getFloat(colSpec.name.toString()));
                     break;
                 case BLOB:
                     values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getBytes(colSpec.name.toString()));
@@ -1339,6 +1341,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getBoolean(colSpec.name.toString()));
                     break;
                 case COUNTER:
+                    logger.warn("Ignoring unsupported counter {}", cql3Type);
                     break;
                 case INET:
                     values[columnIndex] = fieldMapper.fieldType().valueForSearch( row.getInetAddress(colSpec.name.toString()).getHostAddress());

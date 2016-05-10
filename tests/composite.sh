@@ -6,10 +6,11 @@ CREATE TABLE IF NOT EXISTS composite.t1 (
 a text,
 b text,
 c bigint,
+f float,
 primary key ((a),b)
 );
-insert into composite.t1 (a,b,c) VALUES ('a','b1',1);
-insert into composite.t1 (a,b,c) VALUES ('b','b1',2);
+insert into composite.t1 (a,b,c,f) VALUES ('a','b1',1, 1.2);
+insert into composite.t1 (a,b,c,f) VALUES ('b','b1',2, 5);
 
 CREATE TABLE IF NOT EXISTS composite.t2 ( 
 a text,
