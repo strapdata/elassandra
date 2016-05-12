@@ -81,7 +81,7 @@
   * Upgrade to cassandra 2.2.5
   * Change the default elasticsearch data directory to ${cassandra_storagedir}/data/elasticsearch.data.
   * Provides various cassandra secondary index implementations with better performances by removing json generation and parsing.
-  * Mapping of cassandra text columns are now index with index=not_analyzed by default.
+  * Change the default to index=not_analyzed for text columns.
   * Improve cluster metadata management (fix a bug when deleting an index).
   * Fix a mapping bug when indexing a cassandra map as a nested document.
   * Fix issue #16 with geo_point.

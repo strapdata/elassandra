@@ -114,7 +114,19 @@ From a Cassandra perspective :
 * By default, Elasticsearch document fields are multivalued, so every field is backed by a list. Single valued document field can be mapped to a basic types by setting 'cql_collection: singleton' in our type mapping. See [Elasticsearch document mapping](Elasticsearch-document-mapping) for details.
 * Nested documents are stored using cassandra [User Defined Type](http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html) or [map](http://docs.datastax.com/en/cql/3.0/cql/cql_using/use_map_t.html).
 * Elasticsearch provides a JSON-REST API to cassandra, see [Elasticsearch API](https://www.elastic.co/guide/en/elasticsearch/reference/1.5/index.html).
- 
+
+### Concept mapping
+
+Elasticsearch | Cassandra | Description
+--- | --- | ---
+Cluster | Virtual Datacenter | All nodes of a datacenter forms an Elasticsearch cluster
+Shard | Node | Each cassandra node is an elasticsearch shard for each indexed keyspace.
+Index | Keyspace | An elasticsearch index is backed by a keyspace
+Type | Table | Each elasticsearch document type is backed by a cassandra table
+Document | Row | 
+Field | Column | Each indexed field is backed by a cassandra column.
+Object or nested field | User Defined Type | Automatically create User Defined Type to store elasticsearch object.
+
 # Getting Started
   
 ## Building from source
@@ -126,7 +138,8 @@ From a Cassandra perspective :
 * Install Java version 8 (check version with `java -version`). Version 8 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.1/cassandra/install/installJdkRHEL.html).
 * Download Elassandra tarbal from [elassandra repository]() and extract files in your installation directory
 * Install the cassandra driver `pip install cassandra-driver` and the cqlsh utility `python pylib/setup.py install`
-* Configure your cassandra cluster (cluster name, sntich, ip address, seed...), see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html). Default Elasticsearch configuration is located in `conf/elasticsearch.yml`.
+* Configure your cassandra cluster (cluster name, sntich, ip address, seed...), see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html). Default Elasticsearch configuration is located in `conf/elasticsearch.yml`, but you should NOT use it, everything is inherited from the cassandra.yml (cluster name, listen adress, paths, etc...). 
+* Configure cassandra and elasticsearch logging in conf/logback.xml, see [logback framework](http://logback.qos.ch/).
 
 ## Run Elassandra
 
