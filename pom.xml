@@ -699,7 +699,8 @@
                                         <exclude>org/apache/cassandra/cql3/UntypedResultSet*.class</exclude>
                                         <exclude>org/apache/cassandra/cql3/statements/CreateIndexStatement*.class</exclude>
                                         <exclude>org/apache/cassandra/service/CassandraDaemon*.class</exclude>
-                                        <exclude>org/apache/cassandra/service/StorageService*.class</exclude>
+                                        <exclude>org/apache/cassandra/service/StorageService$*.class</exclude>
+                                        <exclude>org/apache/cassandra/service/StorageService.class</exclude>
                                         <exclude>org/apache/cassandra/db/index/SecondaryIndexManager*.class</exclude>
                                    </excludes>
                                 </filter>

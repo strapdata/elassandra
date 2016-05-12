@@ -337,13 +337,13 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     }
                     // now, put the request settings, so they override templates
                     indexSettingsBuilder.put(request.settings());
-                    indexSettingsBuilder.put(SETTING_NUMBER_OF_SHARDS, MetaDataCreateIndexService.this.clusterService.state().nodes().size());
                     
                     String keyspace = (indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE_NAME) == null) ? request.index() : indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE_NAME);
                     if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
                         indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
                     } else {
-                        indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0));
+                        int number_of_replicas = Math.min( request.settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0)) , MetaDataCreateIndexService.this.clusterService.state().nodes().size());
+                        indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, number_of_replicas);
                     }
                     
                     /*
