@@ -123,7 +123,11 @@ Cluster | Virtual Datacenter | All nodes of a datacenter forms an Elasticsearch 
 Shard | Node | Each cassandra node is an elasticsearch shard for each indexed keyspace.
 Index | Keyspace | An elasticsearch index is backed by a keyspace
 Type | Table | Each elasticsearch document type is backed by a cassandra table
+<<<<<<< HEAD
 Document | Row | An elasticsearch document is backed by a cassandra row. 
+=======
+Document | Row | 
+>>>>>>> c5a51f94148e46b6316efcff11386bebbb20ffe1
 Field | Column | Each indexed field is backed by a cassandra column.
 Object or nested field | User Defined Type | Automatically create User Defined Type to store elasticsearch object.
 
