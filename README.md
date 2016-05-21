@@ -123,11 +123,7 @@ Cluster | Virtual Datacenter | All nodes of a datacenter forms an Elasticsearch 
 Shard | Node | Each cassandra node is an elasticsearch shard for each indexed keyspace.
 Index | Keyspace | An elasticsearch index is backed by a keyspace
 Type | Table | Each elasticsearch document type is backed by a cassandra table
-<<<<<<< HEAD
 Document | Row | An elasticsearch document is backed by a cassandra row. 
-=======
-Document | Row | 
->>>>>>> c5a51f94148e46b6316efcff11386bebbb20ffe1
 Field | Column | Each indexed field is backed by a cassandra column.
 Object or nested field | User Defined Type | Automatically create User Defined Type to store elasticsearch object.
 
@@ -140,6 +136,7 @@ Object or nested field | User Defined Type | Automatically create User Defined T
 ## Elassandra Tarball Installation
 
 * Install Java version 8 (check version with `java -version`). Version 8 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.1/cassandra/install/installJdkRHEL.html).
+* Apply OS settings for cassandra, see [Recommended production settings for Linux](http://docs.datastax.com/en/cassandra/2.2/cassandra/install/installRecommendSettings.html)
 * Download Elassandra tarbal from [elassandra repository]() and extract files in your installation directory
 * Install the cassandra driver `pip install cassandra-driver` and the cqlsh utility `python pylib/setup.py install`
 * Configure your cassandra cluster (cluster name, sntich, ip address, seed...), see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html). Default Elasticsearch configuration is located in `conf/elasticsearch.yml`, but you should NOT use it, everything is inherited from the cassandra.yml (cluster name, listen adress, paths, etc...). 
