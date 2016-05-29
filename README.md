@@ -648,7 +648,7 @@ curl -XPUT "http://localhost:9200/my_keyspace/_mapping/my_table" -d '{
 }'
 ```
 
-When creating the first Elasticsearch index for a given cassandra table, custom CQL3 secondary indices are created when all shards are started. Then cassandra asynchronously build index on all nodes for all existing data. Subsequent CQL inserts or updates are automatically indexed in Elasticsearch. Moreover, if you then add a second or more Elasticsearch indices to an existing indexed table (see (Mapping change with zero downtime)[#mapping-change-with-zero-downtime], existing data are not automatically indexed because cassandra has already indexed existing data. Rebuild the cassandra index to re-index all existing data in all Elasticsearch indices.
+When creating the first Elasticsearch index for a given cassandra table, custom CQL3 secondary indices are created when all shards are started. Then cassandra asynchronously build index on all nodes for all existing data. Subsequent CQL inserts or updates are automatically indexed in Elasticsearch. Moreover, if you then add a second or more Elasticsearch indices to an existing indexed table, see (Mapping change with zero downtime)[#mapping-change-with-zero-downtime], existing data are not automatically indexed because cassandra has already indexed existing data. Rebuild the cassandra index to re-index all existing data in all Elasticsearch indices.
 
 ##  Compound primary key support
 
