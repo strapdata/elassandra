@@ -37,7 +37,7 @@ For cassandra users, elassandra provides elasicsearch features :
 * There are many elasticsearch plugins to import data in cassandra or to visualize your data, with [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) for exemple.
 
 For Elasticsearch users, elassandra provides usefull features :
-* Change the mapping and re-index you data from cassandra with zero downtime, see [Mapping change with zero downtime](Mapping-change-with-zero-downtime)
+* Change the mapping and re-index you data from cassandra with zero downtime, see [Mapping change with zero downtime](#Mapping-change-with-zero-downtime)
 * Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Source documents are now stored in Cassandra, reducing disk space if you need a noSql database and elasticsearch.
 * In elassandra, Elasticsearch is masterless and split-brain resistant because cluster state is now managed within a [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
 * Write operations are not more restricted to one primary shards, but distributed on all cassandra nodes in a virtual datacenter. Number of shards does not limit your write throughput, just add some elassandra nodes to increase both read and write throughput.
@@ -754,7 +754,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
     } ]
 ``` 
 
-#Mapping-change-with-zero-downtime
+
 ## Mapping-change-with-zero-downtime
 
 You can map servral Elasticsearch indices with different mapping to the same cassandra keyspace. By default, an index is mapped to a keyspace with the same name, but you can specify a target keyspace. 
