@@ -125,6 +125,7 @@ From a Cassandra perspective :
 * Nested documents are stored using cassandra [User Defined Type](http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html) or [map](http://docs.datastax.com/en/cql/3.0/cql/cql_using/use_map_t.html).
 * Elasticsearch provides a JSON-REST API to cassandra, see [Elasticsearch API](https://www.elastic.co/guide/en/elasticsearch/reference/1.5/index.html).
 
+
 # Getting Started
   
 ## Building from source
@@ -133,11 +134,11 @@ From a Cassandra perspective :
 
 ## Elassandra Tarball Installation
 
-* Install Java version 8 (check version with `java -version`). Version 8 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.2/cassandra/install/installJdkRHEL.html).
+* Install Java version 8 (check version with `java -version`). Version 8 is recommanded, see [Installing Oracle JDK on RHEL-based Systems](http://docs.datastax.com/en/cassandra/2.1/cassandra/install/installJdkRHEL.html).
 * Apply OS settings for cassandra, see [Recommended production settings for Linux](http://docs.datastax.com/en/cassandra/2.2/cassandra/install/installRecommendSettings.html)
-* For linux, install jemalloc (yum install jemalloc).
-* Download Elassandra tarball from [elassandra repository](https://github.com/vroyer/elassandra/releases) and extract files in your installation directory.
-* Install the cassandra driver `pip install cassandra-driver` and the cqlsh utility `python pylib/setup.py install`.
+* Install jemalloc library (yum install jemalloc).
+* Download Elassandra tarbal from [elassandra repository]() and extract files in your installation directory
+* Install the cassandra driver `pip install cassandra-driver` and the cqlsh utility `python pylib/setup.py install`
 * Configure your cassandra cluster (cluster name, sntich, ip address, seed...), see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html). Default Elasticsearch configuration is located in `conf/elasticsearch.yml`, but you should NOT use it, everything is inherited from the cassandra.yml (cluster name, listen adress, paths, etc...). 
 * Configure cassandra and elasticsearch logging in conf/logback.xml, see [logback framework](http://logback.qos.ch/).
 
@@ -754,7 +755,6 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
 ``` 
 
 #Mapping-change-with-zero-downtime
-
 ## Mapping-change-with-zero-downtime
 
 You can map servral Elasticsearch indices with different mapping to the same cassandra keyspace. By default, an index is mapped to a keyspace with the same name, but you can specify a target keyspace. 
