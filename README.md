@@ -6,8 +6,8 @@ Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch
 
 Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes. A demo video is available on youtube.
 
-<a href="http://www.youtube.com/watch?feature=player_embedded&v=a4sjX15OOrA
-" target="_blank"><img src="http://img.youtube.com/vi/a4sjX15OOrA/0.jpg" 
+<a href="http://www.youtube.com/watch?feature=player_embedded&v=SHncUmuvH58
+" target="_blank"><img src="http://img.youtube.com/vi/SHncUmuvH58/0.jpg" 
 alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
