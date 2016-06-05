@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.cassandra.dht.Murmur3Partitioner.LongToken;
 import org.apache.cassandra.dht.Range;
@@ -42,8 +43,8 @@ public abstract class AbstractSearchStrategy {
 
     public static final Collection<Range<Token>> EMPTY_RANGE_TOKEN = ImmutableList.<Range<Token>> of();
 
-    public abstract AbstractSearchStrategy.Result topology(String ksName);
-
+    public abstract AbstractSearchStrategy.Result topology(String ksName, Collection<InetAddress> startedShards);
+    
     public class Result {
         Map<Range<Token>, List<InetAddress>> rangesMap;
         Map<InetAddress, Collection<Range<Token>>> searchTopology;

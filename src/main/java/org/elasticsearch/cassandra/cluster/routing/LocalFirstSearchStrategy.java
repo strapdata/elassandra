@@ -47,7 +47,7 @@ public class LocalFirstSearchStrategy extends AbstractSearchStrategy {
     private static final Logger logger = LoggerFactory.getLogger(AbstractSearchStrategy.class);
 
     @Override
-    public AbstractSearchStrategy.Result topology(String ksName) {
+    public AbstractSearchStrategy.Result topology(String ksName, Collection<InetAddress> staredShard) {
         Keyspace.open(ksName);
 
         Set<InetAddress> liveNodes = Gossiper.instance.getLiveTokenOwners();
