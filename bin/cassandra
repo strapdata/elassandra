@@ -231,7 +231,7 @@ while true; do
             exit 0
         ;;
         -v)
-            "$JAVA" -cp "$CLASSPATH" org.apache.cassandra.tools.GetVersion
+            "$JAVA" -cp "$CLASSPATH" "-Dlogback.configurationFile=logback-tools.xml" org.apache.cassandra.tools.GetVersion
             exit 0
         ;;
         -D)
@@ -240,10 +240,7 @@ while true; do
         ;;
         -e)
             echo "Starting with Elasticsearch enabled."
-            echo "CLASSPATH=$CLASSPATH"
-            JVM_OPTS="$JVM_OPTS -Djava.library.path=$CASSANDRA_HOME/lib/sigar-bin -Djava.awt.headless=true"
-            JVM_OPTS="$JVM_OPTS -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 -XX:+UseCMSInitiatingOccupancyOnly"
-            
+            JVM_OPTS="$JVM_OPTS -Djava.awt.headless=true"
             classname="org.apache.cassandra.service.ElassandraDaemon"
             shift 1
         ;;
