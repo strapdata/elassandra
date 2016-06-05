@@ -108,7 +108,10 @@ public class PercolateContext extends SearchContext {
     private final long originNanoTime = System.nanoTime();
     private final long startTime;
     private String[] types;
-
+    
+    private String cqlFetchQuery;
+    private String cqlFetchQueryStatic;
+    
     private Engine.Searcher docSearcher;
     private Engine.Searcher engineSearcher;
     private ContextIndexSearcher searcher;
@@ -755,5 +758,25 @@ public class PercolateContext extends SearchContext {
     @Override
     public Map<Class<?>, Collector> queryCollectors() {
         return queryCollectors;
+    }
+
+    @Override
+    public String cqlFetchQuery() {
+        return this.cqlFetchQuery;
+    }
+
+    @Override
+    public void cqlFetchQuery(String query) {
+        this.cqlFetchQuery = query;
+    }
+    
+    @Override
+    public String cqlFetchQueryStatic() {
+        return this.cqlFetchQueryStatic;
+    }
+
+    @Override
+    public void cqlFetchQueryStatic(String query) {
+        this.cqlFetchQueryStatic = query;
     }
 }

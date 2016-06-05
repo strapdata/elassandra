@@ -18,6 +18,7 @@ package org.elasticsearch.cassandra.discovery;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
@@ -81,9 +82,6 @@ import com.google.common.collect.Maps;
  *
  */
 public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> implements Discovery, IEndpointStateChangeSubscriber {
-
-    private static final DiscoveryNode[] NO_MEMBERS = new DiscoveryNode[0];
-
     private final TransportService transportService;
     private final ClusterService clusterService;
     private final DiscoveryNodeService discoveryNodeService;
@@ -96,10 +94,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     private final AtomicBoolean initialStateSent = new AtomicBoolean();
     private final CopyOnWriteArrayList<InitialStateDiscoveryListener> initialStateListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<MetaDataVersionListener> metaDataVersionListeners = new CopyOnWriteArrayList<>();
-    
-    
-    
-    private AllocationService allocationService;
 
     private DiscoveryNode localNode;
 
@@ -253,7 +247,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     public MetaData hasNewMetaData() {
         MetaData currentMetaData = clusterService.state().metaData();
         MetaData newMetaData = clusterService.readMetaDataAsRow();
-        // TODO: merge metadata ?
+        if (newMetaData == null) {
+            return null;
+        }
         if (newMetaData.version() > currentMetaData.version()) {
             logger.debug("updating metadata from uid/version={}/{} to {}/{}", currentMetaData.uuid(), currentMetaData.version(), newMetaData.uuid(), newMetaData.version());
             return newMetaData;
@@ -517,7 +513,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
      * TODO: cache all enpoint.X1 state to avoid many JSON parsing.
      */
     @Override
-    public ShardRoutingState readIndexShardState(InetAddress address, String index, ShardRoutingState defaultState) {
+    public ShardRoutingState getShardRoutingState(final InetAddress address, final String index, final ShardRoutingState defaultState) {
         EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(address);
         if (state != null) {
             VersionedValue value = state.getApplicationState(ELASTIC_SHARDS_STATES);
@@ -538,6 +534,36 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     }
 
     /**
+     * Return a set of remote started shards according t the gossip state map.
+     * @param index
+     * @return a set of remote started shards according t the gossip state map.
+     */
+    @Override
+    public Set<InetAddress> getStartedShard(String index) {
+        Set<InetAddress> startedShards = new HashSet<InetAddress>(this.clusterGroup.members.size());
+        for(Entry<InetAddress,EndpointState> entry :  Gossiper.instance.getEndpointStates()) {
+            InetAddress addr = entry.getKey();
+            EndpointState state = entry.getValue();
+            if (!addr.equals(this.localAddress) && state != null) {
+                VersionedValue value = state.getApplicationState(ELASTIC_SHARDS_STATES);
+                if (value != null) {
+                    try {
+                        Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(value.value, indexShardStateTypeReference);
+                        ShardRoutingState shardState = shardsStateMap.get(index);
+                        if (shardState != null && shardState.equals(ShardRoutingState.STARTED)) {
+                            startedShards.add(addr);
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Failed to parse gossip index shard state", e);
+                    }
+                }
+            }
+        }
+        return startedShards;
+    }
+    
+    
+    /**
      * add local index shard state to local application state.
      * @param index
      * @param shardRoutingState
@@ -546,7 +572,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
      * @throws IOException
      */
     @Override
-    public synchronized void writeIndexShardState(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
+    public synchronized void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
         if (Gossiper.instance.isEnabled()) {
             Map<String, ShardRoutingState> shardsStateMap = null;
             EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(FBUtilities.getBroadcastAddress());
