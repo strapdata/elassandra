@@ -36,6 +36,24 @@ function cleanlogs() {
 	rm -rf $CASSANDRA_HOME/logs/*.log*
 }
 
+function get() {
+   curl -XGET "http://$NODE:9200/$1" $2 $2 $4 $5
+}
+function put() {
+   curl -XPUT "http://$NODE:9200/$1" $2 $2 $4 $5
+}
+function post() {
+   curl -XPOST "http://$NODE:9200/$1" $2 $2 $4 $5
+}
+function delete() {
+   curl -XDELETE "http://$NODE:9200/$1" $2 $2 $4 $5
+}
+
+alias get='get'
+alias put='put'
+alias post='post'
+alias delete='delete'
+
 # Start Cassandra
 alias cstart='$CASSANDRA_HOME/bin/cassandra'
 alias cdebug='$CASSANDRA_HOME/bin/cassandra -d'
@@ -58,6 +76,10 @@ alias status='curl -XGET http://$NODE:9200/_status/?pretty=true'
 alias stats='curl -XGET http://$NODE:9200/_stats?pretty=true'
 alias shards='curl -XGET http://$NODE:9200/_cat/shards?v'
 alias indices='curl -XGET http://$NODE:9200/_cat/indices?v'
+alias fielddata='curl -XGET http://$NODE:9200/_cat/fielddata/body,text?v'
+alias nodes='curl -XGET http://$NODE:9200/_cat/nodes?h=id,ip,heapPercent,ramPercent,fileDescriptorPercent,segmentsCount,segmentsMemory'
+
 alias nodes='curl -XGET http://$NODE:9200/_nodes/_all/_all?pretty=true'
 alias settings='curl -XGET http://$NODE:9200/_cluster/settings?pretty=true'
+
 
