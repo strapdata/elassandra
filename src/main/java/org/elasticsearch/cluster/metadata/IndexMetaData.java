@@ -32,12 +32,10 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.service.ElassandraDaemon;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
+import org.elasticsearch.cassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.Diffable;
 import org.elasticsearch.cluster.DiffableUtils;
@@ -60,7 +58,6 @@ import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.warmer.IndexWarmersMetaData;
@@ -187,6 +184,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     // elassandra specific mapping
     public static final String SETTING_KEYSPACE_NAME = "index.keyspace_name"; 
     public static final String SETTING_SECONDARY_INDEX_CLASS = "index.secondary_index_class"; 
+    public static final String SETTING_SEARCH_STRATEGY_CLASS = "index.search_strategy_class"; 
     
 
     // hard-coded hash function as of 2.0
@@ -400,6 +398,10 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     
     public String keyspace() {
         return getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
+    }
+    
+    public String searchStrategyClass() {
+        return getSettings().get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS);
     }
     
     public ImmutableOpenMap<String, AliasMetaData> getAliases() {
