@@ -20,30 +20,32 @@ import org.apache.cassandra.gms.VersionedValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 
 /**
  * Replicates data on all nodes on the specified datacenters.
+ * Extends NetworkTopoloyStrategy to be compatible with ConsistencyLevel.validateForCasCommit().
  * 
  * @author vroyer
- *
  **/
-public class DatacenterReplicationStrategy extends AbstractReplicationStrategy implements IEndpointStateChangeSubscriber {
+public class DatacenterReplicationStrategy extends AbstractReplicationStrategy implements IEndpointStateChangeSubscriber, IDistributedReplicationStrategy  {
 
-    private static final String DATACENTERS = "datacenters";
     private static final Logger logger = LoggerFactory.getLogger(DatacenterReplicationStrategy.class);
 
+    public  static final String DATACENTERS = "datacenters";
+    
+    private final IEndpointSnitch snitch;
     private final Set<String> datacenters = new HashSet<String>();
     private final HashMultimap<String, InetAddress> datacenterEndpoints = HashMultimap.create();
 
     public DatacenterReplicationStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions) {
         super(keyspaceName, tokenMetadata, snitch, configOptions);
-
+        this.snitch = snitch;
+        
         for (String dc : this.configOptions.get(DATACENTERS).split(",")) {
             datacenters.add(dc);
-
         }
         datacenterEndpoints.put(this.snitch.getDatacenter(DatabaseDescriptor.getListenAddress()), DatabaseDescriptor.getListenAddress());
 
@@ -80,19 +82,18 @@ public class DatacenterReplicationStrategy extends AbstractReplicationStrategy i
         return datacenterEndpoints.keySet();
     }
 
+    public Collection<InetAddress> getEndpoints() {
+        return this.datacenterEndpoints.values();
+    }
+    
+    public Collection<InetAddress> getAliveEndpoints() {
+        return Sets.intersection(Gossiper.instance.getLiveTokenOwners(), Sets.newHashSet(this.datacenterEndpoints.values()) );
+    }
+    
     @Override
     public void validateOptions() throws ConfigurationException {
         if (this.configOptions.get(DATACENTERS) == null)
             throw new ConfigurationException(DATACENTERS + " option is required for DatacenterReplicationStrategy");
-
-        /*
-         * Multimap<String, InetAddress> allDatacenter =
-         * tokenMetadata.cachedOnlyTokenMap
-         * ().getTopology().getDatacenterEndpoints(); for(String dc :
-         * this.configOptions.get(DATACENTERS).split(",") ) { if
-         * (!allDatacenter.containsKey(dc)) { throw new
-         * ConfigurationException("Unknown datacenter "+dc); } }
-         */
     }
 
     public void addEndpoint(InetAddress addr) {
@@ -107,15 +108,17 @@ public class DatacenterReplicationStrategy extends AbstractReplicationStrategy i
         String dc = this.snitch.getDatacenter(addr);
         if (datacenters.contains(dc)) {
             this.datacenterEndpoints.remove(dc, addr);
-            logger.debug("DatacenterReplicationStrategy endpoint removed keyspace={} datacenters={} endpoints={}", keyspaceName, datacenters,
-                    datacenterEndpoints);
+            logger.debug("DatacenterReplicationStrategy endpoint removed keyspace={} datacenters={} endpoints={}", 
+                    keyspaceName, datacenters, datacenterEndpoints);
         }
     }
 
     @Override
     public void beforeChange(InetAddress arg0, EndpointState arg1, ApplicationState arg2, VersionedValue arg3) {
-        // TODO Auto-generated method stub
+    }
 
+    @Override
+    public void onChange(InetAddress arg0, ApplicationState arg1, VersionedValue arg2) {
     }
 
     @Override
@@ -123,17 +126,10 @@ public class DatacenterReplicationStrategy extends AbstractReplicationStrategy i
         logger.debug("onAlive addr=" + arg0 + " EndpointState=" + arg1);
         addEndpoint(arg0);
     }
-
-    @Override
-    public void onChange(InetAddress arg0, ApplicationState arg1, VersionedValue arg2) {
-        // TODO Auto-generated method stub
-
-    }
-
+    
     @Override
     public void onDead(InetAddress arg0, EndpointState arg1) {
         logger.debug("onDead addr=" + arg0 + " EndpointState=" + arg1);
-        removeEndpoint(arg0);
     }
 
     @Override
