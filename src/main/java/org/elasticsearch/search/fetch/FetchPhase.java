@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.log4j.Logger;
 import org.apache.lucene.index.LeafReaderContext;
@@ -41,6 +42,7 @@ import org.apache.lucene.search.Filter;
 import org.apache.lucene.util.BitSet;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterService.DocPrimaryKey;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
@@ -138,16 +140,11 @@ public class FetchPhase implements SearchPhase {
                     if (context.getObjectMapper(fieldName) != null) {
                         throw new IllegalArgumentException("field [" + fieldName + "] isn't a leaf field");
                     }
-                } else if (fieldType.stored()) {
+                } else {
                     if (fieldNames == null) {
                         fieldNames = new HashSet<>();
                     }
                     fieldNames.add(fieldType.names().indexName());
-                } else {
-                    if (extractFieldNames == null) {
-                        extractFieldNames = new ArrayList<>();
-                    }
-                    extractFieldNames.add(fieldName);
                 }
             }
             if (loadAllStored) {
@@ -422,10 +419,23 @@ public class FetchPhase implements SearchPhase {
 
         if (!(fieldVisitor instanceof JustUidFieldsVisitor) ) {
             try {
-                Set<String> requiredColomns = fieldVisitor.requiredColumns(clusterService, searchContext);
-                if (requiredColomns.size() >0) {
-                    UntypedResultSet result = clusterService.fetchRowInternal(searchContext.request().index(), fieldVisitor.uid().type(), 
-                            requiredColomns, fieldVisitor.uid().id());
+                DocPrimaryKey docPk = clusterService.parseElasticId(searchContext.request().index(), fieldVisitor.uid().type(), fieldVisitor.uid().id());
+                String cqlQuery = (docPk.isStaticDocument) ? searchContext.cqlFetchQueryStatic() : searchContext.cqlFetchQuery();
+                if (cqlQuery == null) {
+                    Set<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
+                    if (requiredColumns.size() > 0) {
+                        cqlQuery = clusterService.buildFetchQuery(searchContext.request().index(), fieldVisitor.uid().type(),
+                                requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument);
+                        if (docPk.isStaticDocument) {
+                            searchContext.cqlFetchQueryStatic(cqlQuery);
+                        } else {
+                            searchContext.cqlFetchQuery(cqlQuery);
+                        }
+                    }
+                }
+                
+                if (cqlQuery != null) {
+                    UntypedResultSet result = QueryProcessor.executeInternal(cqlQuery,docPk.values);
                     if (!result.isEmpty()) {
                         Map<String, Object> mapObject = clusterService.rowAsMap(searchContext.request().index(), fieldVisitor.uid().type(), result.one());
                         if (fieldVisitor.requestedFields() == null || fieldVisitor.requestedFields().size() > 0) {
