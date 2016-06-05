@@ -21,6 +21,7 @@ package org.elasticsearch.action.search.type;
 
 import static org.elasticsearch.action.search.type.TransportSearchHelper.internalSearchRequest;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -64,6 +65,8 @@ import org.elasticsearch.search.query.QuerySearchResultProvider;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import com.carrotsearch.hppc.IntArrayList;
+
+import org.apache.cassandra.dht.Token;
 
 /**
  *
@@ -146,15 +149,40 @@ public abstract class TransportSearchTypeAction extends TransportAction<SearchRe
             for (final ShardIterator shardIt : shardsIts) {
                 shardIndex++;
                 final ShardRouting shard = shardIt.nextOrNull();
+                boolean ignoreShard = false;
                 if (shard != null) {
-                    // add tokenRanges to search request.
-                    if (!tokenRangesSpecified)
+                    if (!tokenRangesSpecified) {
+                        // add shard tokenRanges to search request.
                         request.tokenRanges(shard.tokenRanges());
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("preference = [{}], searching on [{}] tokenRanges={}", request.preference(),
-                                shard.shortSummary(), request.tokenRanges());
+                    } else {
+                        if (TransportSearchTypeAction.this.clusterService.tokenRangesIntersec(shard.tokenRanges(), request.tokenRanges())) {
+                            // skip the shard, token ranges does not intersec.
+                            break;
+                        }
                     }
-                    performFirstPhase(shardIndex, shardIt, shard);
+                    if (request.routing() != null) {
+                        boolean tokenMatch = false;
+                        for(String type : request.types()) {
+                            try {
+                                Token token = TransportSearchTypeAction.this.clusterService.getToken(shard.index(), type, request.routing());
+                                if (token != null && TransportSearchTypeAction.this.clusterService.tokenRangesContains(shard.tokenRanges(), token)) {
+                                    tokenMatch = true;
+                                    break;
+                                }
+                            } catch (IOException e) {
+                                logger.warn("Failed to parse _routing="+request.routing()+" on "+shard.index()+"."+type);
+                            }
+                        }
+                        if (!tokenMatch) 
+                            ignoreShard = true;
+                    }
+                    if (!ignoreShard) {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("preference = [{}], searching on [{}] tokenRanges={} _routing={}", 
+                                    request.preference(), shard.shortSummary(), request.tokenRanges(), request.routing());
+                        }
+                        performFirstPhase(shardIndex, shardIt, shard);
+                    }
                 } else {
                     // really, no shards active in this group
                     onFirstPhaseResult(shardIndex, null, null, shardIt, new NoShardAvailableActionException(shardIt.shardId()));
