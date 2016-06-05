@@ -23,12 +23,13 @@ import static com.google.common.collect.Maps.newHashMap;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.StoredFieldVisitor;
 import org.apache.lucene.util.BytesRef;
@@ -72,9 +73,6 @@ public class FieldsVisitor extends StoredFieldVisitor {
     protected Uid uid;
     protected Map<String, List<Object>> fieldsValues;
     
-    // cached required cassandra columns by type (type is suffixed by "_static" for static documents.
-    private Map<String, Set<String>> requiredColumnsByTypes = new HashMap<String,Set<String>>();
-
     public FieldsVisitor(boolean loadSource) {
         this.loadSource = loadSource;
         requiredFields = new HashSet<>();
@@ -100,29 +98,28 @@ public class FieldsVisitor extends StoredFieldVisitor {
     // cache the cassandra required columns and return the static+partition columns
     public Set<String> requiredColumns(ClusterService clusterService, SearchContext searchContext) throws JsonParseException, JsonMappingException, IOException {
         boolean isStaticDocument = clusterService.isStaticDocument(searchContext.request().index(), uid);
-        Set<String> requiredColumns;
-        if (isStaticDocument) {
-            requiredColumns = requiredColumnsByTypes.get(uid.type()+"_static");
-            if (requiredColumns == null) {
-                requiredColumns = clusterService.mappedColumns(searchContext.request().index(), uid.type(), true);
-                requiredColumnsByTypes.put(uid.type()+"_static", requiredColumns);
-            }
-        } else {
-            requiredColumns = requiredColumnsByTypes.get(uid.type());
-            if (requiredColumns == null) {
-                if (requestedFields() != null) {
-                    requiredColumns =  new HashSet<String>(requestedFields().size());
-                    requiredColumns.addAll(requestedFields());
-                    
+        CFMetaData metadata = (isStaticDocument) ? clusterService.getCFMetaData(searchContext.request().index(), uid.type()) : null;
+        Set<String> requiredColumns =  new HashSet<String>();
+        
+        if (requestedFields() != null) {
+            for(String field : requestedFields()) {
+                int i = field.indexOf('.');
+                String columnName = (i > 0) ? field.substring(0, i) : field;
+                if (isStaticDocument) {
+                    for(ColumnDefinition cd : metadata.staticColumns()) {
+                        if (cd.name.toString().equals(columnName)) {
+                            requiredColumns.add(columnName);
+                            break;
+                        }
+                    }
                 } else {
-                    requiredColumns = new HashSet<String>();
+                    requiredColumns.add(columnName);
                 }
-                
-                if (loadSource()) {
-                    requiredColumns.addAll(clusterService.mappedColumns(searchContext.request().index(), uid.type(), false));
-                }
-                requiredColumnsByTypes.put(uid.type(), requiredColumns);
             }
+        }
+        if (loadSource()) {
+            for(String s : clusterService.mappedColumns(searchContext.request().index(), uid.type(), isStaticDocument))
+                requiredColumns.add(s); 
         }
         return requiredColumns;
     }
