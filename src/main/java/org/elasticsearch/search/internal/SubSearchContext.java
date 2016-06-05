@@ -68,6 +68,9 @@ public class SubSearchContext extends FilteredSearchContext {
 
     private InnerHitsContext innerHitsContext;
 
+    private String cqlFetchQuery;
+    private String cqlFetchQueryStatic;
+    
     public SubSearchContext(SearchContext context) {
         super(context);
         this.fetchSearchResult = new FetchSearchResult();
@@ -334,5 +337,25 @@ public class SubSearchContext extends FilteredSearchContext {
     @Override
     public InnerHitsContext innerHits() {
         return innerHitsContext;
+    }
+
+    @Override
+    public String cqlFetchQuery() {
+        return cqlFetchQuery;
+    }
+
+    @Override
+    public void cqlFetchQuery(String query) {
+        this.cqlFetchQuery = query;
+    }
+    
+    @Override
+    public String cqlFetchQueryStatic() {
+        return cqlFetchQueryStatic;
+    }
+
+    @Override
+    public void cqlFetchQueryStatic(String query) {
+        this.cqlFetchQueryStatic = query;
     }
 }

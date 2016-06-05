@@ -149,6 +149,9 @@ public class DefaultSearchContext extends SearchContext {
     private volatile long lastAccessTime = -1;
     private InnerHitsContext innerHitsContext;
 
+    private String cqlFetchQuery;
+    private String cqlFetchQueryStatic;
+    
     private final Map<String, FetchSubPhaseContext> subPhaseContexts = new HashMap<>();
     private final Map<Class<?>, Collector> queryCollectors = new HashMap<>();
 
@@ -219,7 +222,7 @@ public class DefaultSearchContext extends SearchContext {
         
         Query tokenRangeQuery = null;
         if (this.request.tokenRanges() != null) {
-            Loggers.getLogger(DefaultSearchContext.class).debug("serach within tokenRanges = {}",this.request.tokenRanges());
+            Loggers.getLogger(DefaultSearchContext.class).debug("search within tokenRanges = {}",this.request.tokenRanges());
             switch(this.request.tokenRanges().size()){
                 case 0: break;
                 case 1: 
@@ -244,17 +247,20 @@ public class DefaultSearchContext extends SearchContext {
             if (Queries.isConstantMatchAllQuery(query())) {
                 Query q = new ConstantScoreQuery(searchFilter);
                 q.setBoost(query().getBoost());
-                Query q2 = Queries.filtered(q, tokenRangeQuery);
-                parsedQuery(new ParsedQuery(q2, parsedQuery()));
+                if (tokenRangeQuery != null)  {
+                    q = Queries.filtered(q, tokenRangeQuery);
+                }
+                parsedQuery(new ParsedQuery(q, parsedQuery()));
             } else {
-                BooleanQuery.Builder filtered = new BooleanQuery.Builder()
-                    .add(query(), Occur.MUST)
-                    .add(searchFilter, Occur.FILTER);
+                BooleanQuery.Builder filtered = new BooleanQuery.Builder().add(query(), Occur.MUST).add(searchFilter, Occur.FILTER);
                 if (tokenRangeQuery != null)  {
                     filtered.add(tokenRangeQuery, Occur.FILTER);
                 }
                 parsedQuery(new ParsedQuery(filtered.build(), parsedQuery()));
             }
+        } else if (tokenRangeQuery != null) {
+            BooleanQuery.Builder filtered = new BooleanQuery.Builder().add(query(), Occur.MUST).add(tokenRangeQuery, Occur.FILTER);
+            parsedQuery(new ParsedQuery(filtered.build(), parsedQuery()));
         }
         try {
             this.query = searcher().rewrite(this.query);
@@ -279,6 +285,26 @@ public class DefaultSearchContext extends SearchContext {
         return new ConstantScoreQuery(bq.build());
     }
 
+    @Override
+    public String cqlFetchQuery() {
+        return cqlFetchQuery;
+    }
+    
+    @Override
+    public void cqlFetchQuery(String query) {
+        this.cqlFetchQuery = query;
+    }
+
+    @Override
+    public String cqlFetchQueryStatic() {
+        return cqlFetchQueryStatic;
+    }
+    
+    @Override
+    public void cqlFetchQueryStatic(String query) {
+        this.cqlFetchQueryStatic = query;
+    }
+    
     @Override
     public long id() {
         return this.id;
