@@ -41,8 +41,13 @@ public enum ShardRoutingState {
     /**
      * The shard is in the process being relocated.
      */
-    RELOCATING((byte) 4);
+    RELOCATING((byte) 4),
 
+    /**
+     * The shard is in the process being relocated.
+     */
+    UNAVAILABLE((byte) 5);
+    
     private byte value;
 
     ShardRoutingState(byte value) {
@@ -67,6 +72,8 @@ public enum ShardRoutingState {
                 return STARTED;
             case 4:
                 return RELOCATING;
+            case 5:
+                return UNAVAILABLE;
             default:
                 throw new IllegalStateException("No routing state mapped for [" + value + "]");
         }

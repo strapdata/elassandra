@@ -28,12 +28,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.gms.Gossiper;
 import org.apache.lucene.util.CollectionUtil;
+import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
-import org.elasticsearch.cassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.cluster.AbstractDiffable;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
@@ -77,7 +77,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
     //private final ShardShuffler shuffler;
 
     final public static  UnassignedInfo UNASSIGNED_INFO_NODE_LEFT = new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "cassandra node left");
-    final public static  UnassignedInfo UNASSIGNED_INFO_KEYSPACE_UNAVAILABLE = new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "cassandra keyspace unavailable");
+    final public static  UnassignedInfo UNASSIGNED_INFO_KEYSPACE_UNAVAILABLE = new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "cassandra keyspace unavailable");
     final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_CREATED = new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, "");
     
     // note, we assume that when the index routing is created, ShardRoutings are created for all possible number of
@@ -419,20 +419,26 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         
         public Builder(String index, ClusterService clusterService, ClusterState currentState, RoutingNodes newRoutingNodes) {
             this.index = index;
-            
-            AbstractSearchStrategy.Result topologyResult = null;
+            IndexMetaData indexMetaData = currentState.metaData().index(index);
             try {
-                Set<InetAddress> aliveEndpoints = Gossiper.instance.getLiveMembers();
-                Set<InetAddress> unreachableEndpoints = Gossiper.instance.getUnreachableMembers();
-                String ksName = currentState.metaData().index(index).keyspace();
-                topologyResult = new PrimaryFirstSearchStrategy().topology(ksName);
-
+                String ksName = indexMetaData.keyspace();
+                if (Schema.instance.getKeyspaceInstance(ksName) == null) {
+                    Loggers.getLogger(getClass()).warn("Keyspace [{}] not available for index=[{}] => shard relocating", ksName, this.index);
+                    ShardRouting localPrimaryShardRouting = new ShardRouting(index, 0, clusterService.localNode().id(), true, 
+                            ShardRoutingState.UNAVAILABLE, currentState.version(), UNASSIGNED_INFO_KEYSPACE_UNAVAILABLE, AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
+                    shards.put(0, new IndexShardRoutingTable(new ShardId(index, 0), ImmutableList.of(localPrimaryShardRouting)));
+                    return;
+                }
+                
+                Set<InetAddress> startedShard = clusterService.getStartedShard(index);
                 ShardRouting localPrimaryShardRouting = null;
                 RoutingNodes routingNodes = (newRoutingNodes != null) ? newRoutingNodes : currentState.getRoutingNodes();
                 for(ShardRouting sr : routingNodes.node(clusterService.localNode().id())) {
                     if (index.equals(sr.getIndex())) {
                         localPrimaryShardRouting = sr;
-                        localPrimaryShardRouting.tokenRanges(topologyResult.getTokenRanges(clusterService.localNode().getInetAddress()));
+                        if (sr.started()) {
+                            startedShard.add(clusterService.localNode().getInetAddress());
+                        }
                         break;
                     }
                 }
@@ -441,6 +447,12 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
                     localPrimaryShardRouting = new ShardRouting(index, 0, clusterService.localNode().id(), true, 
                             ShardRoutingState.INITIALIZING, currentState.version(), UNASSIGNED_INFO_INDEX_CREATED, AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
                 }
+                startedShard.add(clusterService.localNode().getInetAddress());
+                
+                AbstractSearchStrategy.Result topologyResult = clusterService.searchStrategy(indexMetaData, startedShard);
+                Set<InetAddress> unreachableEndpoints = topologyResult.getUnreachableTokenOwners();
+                Collection<Range<Token>> localTokenRanges = topologyResult.getTokenRanges(clusterService.localNode().getInetAddress());
+                localPrimaryShardRouting.tokenRanges(localTokenRanges);
                 
                 int i = 0;
                 List<ShardRouting> shardRoutingList = new ArrayList<ShardRouting>();
@@ -476,7 +488,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
                             }
 
                             // get state from gossip state
-                            shardRoutingState = clusterService.readIndexShardState(node.getInetAddress(), index, shardRoutingState);
+                            shardRoutingState = clusterService.getShardRoutingState(node.getInetAddress(), index, shardRoutingState);
 
                             ShardRouting shardRouting = new ShardRouting(index, i, node.id(), true, shardRoutingState, // We assume shard is started on alive nodes...
                                   currentState.version(), (shardRoutingState == ShardRoutingState.STARTED) ? null : UNASSIGNED_INFO_KEYSPACE_UNAVAILABLE, token_ranges);
@@ -598,7 +610,9 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
          */
          public Builder initializeEmpty(IndexMetaData indexMetaData, UnassignedInfo unassignedInfo) {
              IndexShardRoutingTable oldShard = shards.get(0);
-             oldShard.getPrimaryShardRouting().updateUnassignedInfo(unassignedInfo);
+             if (oldShard !=null && oldShard.getPrimaryShardRouting() != null ) {
+                 oldShard.getPrimaryShardRouting().updateUnassignedInfo(unassignedInfo);
+             }
              return this;
         }
 

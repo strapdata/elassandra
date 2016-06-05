@@ -127,8 +127,15 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
     public boolean isLocalShardsStarted() {
         for (IndexRoutingTable indexRoutingTable : this) {
             IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shards().get(0);
-            if ((indexShardRoutingTable.getPrimaryShardRouting() == null) || (indexShardRoutingTable.getPrimaryShardRouting().state() != ShardRoutingState.STARTED)) {
-                return false;
+            if (indexShardRoutingTable != null & indexShardRoutingTable.getPrimaryShardRouting() != null) {
+                switch(indexShardRoutingTable.getPrimaryShardRouting().state()) {
+                case UNASSIGNED:
+                case INITIALIZING:
+                case RELOCATING:
+                        return false;
+                case STARTED :
+                case UNAVAILABLE: // ignore RELOCATING = keyspace unavailable for some reason.
+                }
             }
         }
         return true;

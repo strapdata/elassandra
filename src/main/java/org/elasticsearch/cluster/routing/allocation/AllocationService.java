@@ -95,7 +95,7 @@ public class AllocationService extends AbstractComponent {
             for (ShardRouting shard : routingNode) {
                 if (this.clusterService.localNode().getId().equals(shard.currentNodeId())) {
                     try {
-                        clusterService.writeIndexShardSate(shard.index(), shard.state());
+                        clusterService.putShardRoutingState(shard.index(), shard.state());
                         logger.debug("gossip index shard state updated index={} state={}", shard.index(), shard.state());
                     } catch (Exception e) {
                         logger.warn("Failed to set gossip index shard state index={} state={}", shard.index(), shard.state());
