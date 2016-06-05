@@ -15,18 +15,21 @@
  */
 package org.elasticsearch.cassandra;
 
-import java.util.UUID;
-
 import org.elasticsearch.ElasticsearchException;
 
 public class NoPersistedMetaDataException extends ElasticsearchException {
 
+    /**
+     * 
+     */
+    private static final long serialVersionUID = 6343514139588332455L;
+
     public NoPersistedMetaDataException() {
-        super("No MetaData as comment");
+        super("Failed to read MetaData");
     }
 
     public NoPersistedMetaDataException(Exception e) {
-        super("Failed to read MetaData as comment", e);
+        super("Failed to read MetaData", e);
     }
 
 }
