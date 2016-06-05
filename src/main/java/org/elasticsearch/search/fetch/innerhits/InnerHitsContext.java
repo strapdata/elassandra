@@ -67,6 +67,8 @@ public final class InnerHitsContext {
 
         protected final ParsedQuery query;
         private final InnerHitsContext childInnerHits;
+        private String cqlFetchQuery;
+        private String cqlFetchQueryStatic;
 
         protected BaseInnerHits(SearchContext context, ParsedQuery query, Map<String, BaseInnerHits> childInnerHits) {
             super(context);
@@ -95,6 +97,25 @@ public final class InnerHitsContext {
             return childInnerHits;
         }
 
+        @Override
+        public String cqlFetchQuery() {
+            return cqlFetchQuery;
+        }
+        
+        @Override
+        public void cqlFetchQuery(String query) {
+            this.cqlFetchQuery = query;
+        }
+        
+        @Override
+        public String cqlFetchQueryStatic() {
+            return cqlFetchQueryStatic;
+        }
+        
+        @Override
+        public void cqlFetchQueryStatic(String query) {
+            this.cqlFetchQueryStatic = query;
+        }
     }
 
     public static final class NestedInnerHits extends BaseInnerHits {
