@@ -21,6 +21,7 @@ package org.elasticsearch.discovery;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Set;
 
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
@@ -88,7 +89,15 @@ public interface Discovery extends LifecycleComponent<Discovery> {
      * @throws JsonMappingException
      * @throws IOException
      */
-    ShardRoutingState readIndexShardState(InetAddress address, String index, ShardRoutingState defaultState);
+    ShardRoutingState getShardRoutingState(final InetAddress address, final String index, ShardRoutingState defaultState);
+    
+    
+    /**
+     * Return a set of remote started shards according t the gossip state map.
+     * @param index
+     * @return a set of remote started shards according t the gossip state map.
+     */
+    Set<InetAddress> getStartedShard(String index);
     
     /**
      * Set index shard state in the gossip endpoint map (must be synchronized).
@@ -98,7 +107,7 @@ public interface Discovery extends LifecycleComponent<Discovery> {
      * @throws JsonMappingException
      * @throws IOException
      */
-    void writeIndexShardState(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
+    void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
     
 
     /**
@@ -107,6 +116,6 @@ public interface Discovery extends LifecycleComponent<Discovery> {
      * @param ackTimeout
      * @throws Exception
      */
-    boolean awaitMetaDataVersion(long version, TimeValue ackTimeout) throws Exception;
+    boolean awaitMetaDataVersion(final long version, final TimeValue ackTimeout) throws Exception;
     
 }

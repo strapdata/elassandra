@@ -19,6 +19,13 @@
 
 package org.elasticsearch.discovery;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
@@ -33,12 +40,6 @@ import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.Random;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 /**
  *
@@ -155,9 +156,10 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
      * @throws JsonParseException
      * @throws JsonMappingException
      * @throws IOException
+     * 
      */
-    public ShardRoutingState readIndexShardState(InetAddress address, String index, ShardRoutingState defaultState) {
-        return this.discovery.readIndexShardState(address, index, defaultState);
+    public ShardRoutingState getShardRoutingState(final InetAddress address, final String index, final ShardRoutingState defaultState) {
+        return this.discovery.getShardRoutingState(address, index, defaultState);
     }
 
     
@@ -169,19 +171,29 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
      * @throws JsonMappingException
      * @throws IOException
      */
-    public void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
-        this.discovery.writeIndexShardState(index, shardRoutingState);
+    public void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
+        this.discovery.putShardRoutingState(index, shardRoutingState);
     }
 
-    public void removeIndexShardState(String index) throws JsonGenerationException, JsonMappingException, IOException {
-        this.discovery.writeIndexShardState(index, null);
+    /**
+     * Return a set of remote started shards according t the gossip state map.
+     * @param index
+     * @return a set of remote started shards according t the gossip state map.
+     */
+    public Set<InetAddress> getStartedShard(String index) {
+        return this.discovery.getStartedShard(index);
+    }
+    
+    
+    public void removeIndexShardState(final String index) throws JsonGenerationException, JsonMappingException, IOException {
+        this.discovery.putShardRoutingState(index, null);
     }
     
     /**
      * Publish cluster metadata uuid and version in gossip state.
      * @param clusterState
      */
-    public void publish(ClusterState clusterState) {
+    public void publish(final ClusterState clusterState) {
         this.discovery.publish(clusterState);
     }
 
