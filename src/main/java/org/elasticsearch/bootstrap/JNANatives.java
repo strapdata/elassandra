@@ -50,6 +50,7 @@ class JNANatives {
     // otherwise they are only inherited for new threads (ES app threads)
     static boolean LOCAL_SECCOMP_ALL = false;
 
+    /*
     static void tryMlockall() {
         int errno = Integer.MIN_VALUE;
         String errMsg = null;
@@ -103,18 +104,19 @@ class JNANatives {
             }
         }
     }
-    
+       
     static String rlimitToString(long value) {
         assert Constants.LINUX || Constants.MAC_OS_X;
         if (value == JNACLibrary.RLIM_INFINITY) {
             return "unlimited";
         } else {
             // TODO, on java 8 use Long.toUnsignedString, since thats what it is.
-            return Long.toString(value);
+            return Long.toUnsignedString(value);
         }
     }
 
     /** Returns true if user is root, false if not, or if we don't know */
+    /*
     static boolean definitelyRunningAsRoot() {
         if (Constants.WINDOWS) {
             return false; // don't know
@@ -127,6 +129,8 @@ class JNANatives {
         }
     }
 
+    */
+ 
     static void tryVirtualLock() {
         JNAKernel32Library kernel = JNAKernel32Library.getInstance();
         Pointer process = null;
@@ -179,6 +183,8 @@ class JNANatives {
     }
 
     static void trySeccomp(Path tmpFile) {
+        logger.warn("Secomp disabled");
+        /*
         try {
             int ret = Seccomp.init(tmpFile);
             LOCAL_SECCOMP = true;
@@ -193,5 +199,6 @@ class JNANatives {
             }
             logger.warn("unable to install syscall filter: " + t.getMessage());
         }
+        */
     }
 }
