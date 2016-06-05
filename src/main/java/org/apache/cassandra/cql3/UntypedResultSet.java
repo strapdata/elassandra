@@ -214,121 +214,225 @@ public abstract class UntypedResultSet implements Iterable<UntypedResultSet.Row>
 
     public static class Row
     {
-        private final Map<String, ByteBuffer> data = new HashMap<>();
-        private final List<ColumnSpecification> columns = new ArrayList<>();
-
+        final ByteBuffer[] colValues;
+        final String[]     colNames;
+        final List<ColumnSpecification> colSpec;
+        
         public Row(Map<String, ByteBuffer> data)
         {
-            this.data.putAll(data);
+            this.colNames = data.keySet().toArray(new String[data.size()]);
+            this.colValues = new ByteBuffer[data.size()];
+            int i=0;
+            for(String key : colNames) {
+                colValues[i++] = data.get(key);
+            }
+            this.colSpec = null;
         }
 
         public Row(List<ColumnSpecification> names, List<ByteBuffer> columns)
         {
-            this.columns.addAll(names);
+            this.colSpec = names;
+            this.colValues = columns.toArray(new ByteBuffer[columns.size()]);
+            this.colNames = new String[names.size()];
             for (int i = 0; i < names.size(); i++)
-                data.put(names.get(i).name.toString(), columns.get(i));
+                this.colNames[i] = names.get(i).name.toString();
         }
 
+        public ByteBuffer get(String name) {
+            for(int i=0; i<colNames.length; i++) {
+                if (colNames[i].equals(name)) {
+                    return colValues[i];
+                }
+            }
+            return null;
+        }
+        
         public boolean has(String column)
         {
             // Note that containsKey won't work because we may have null values
-            return data.get(column) != null;
+            return get(column) != null;
+        }
+        
+        public boolean has(int i)
+        {
+            // Note that containsKey won't work because we may have null values
+            return colValues[i] != null;
         }
 
         public ByteBuffer getBlob(String column)
         {
-            return data.get(column);
+            return get(column);
+        }
+        
+        public ByteBuffer getBlob(int i)
+        {
+            return colValues[i];
         }
 
         public String getString(String column)
         {
-            return UTF8Type.instance.compose(data.get(column));
+            return UTF8Type.instance.compose(get(column));
         }
 
+        public String getString(int i)
+        {
+            return UTF8Type.instance.compose(colValues[i]);
+        }
+        
         public boolean getBoolean(String column)
         {
-            return BooleanType.instance.compose(data.get(column));
+            return BooleanType.instance.compose(get(column));
+        }
+        
+        public boolean getBoolean(int i)
+        {
+            return BooleanType.instance.compose(colValues[i]);
         }
 
         public byte getByte(String column)
         {
-            return ByteType.instance.compose(data.get(column));
+            return ByteType.instance.compose(get(column));
+        }
+        
+        public byte getByte(int i)
+        {
+            return ByteType.instance.compose(colValues[i]);
         }
 
         public short getShort(String column)
         {
-            return ShortType.instance.compose(data.get(column));
+            return ShortType.instance.compose(get(column));
+        }
+        
+        public short getShort(int i)
+        {
+            return ShortType.instance.compose(colValues[i]);
         }
 
         public int getInt(String column)
         {
-            return Int32Type.instance.compose(data.get(column));
+            return Int32Type.instance.compose(get(column));
         }
 
+        public int getInt(int i)
+        {
+            return Int32Type.instance.compose(colValues[i]);
+        }
+        
         public double getDouble(String column)
         {
-            return DoubleType.instance.compose(data.get(column));
+            return DoubleType.instance.compose(get(column));
+        }
+        
+        public double getDouble(int i)
+        {
+            return DoubleType.instance.compose(colValues[i]);
         }
 
         public ByteBuffer getBytes(String column)
         {
-            return data.get(column);
+            return get(column);
+        }
+        
+        public ByteBuffer getBytes(int i)
+        {
+            return colValues[i];
         }
 
         public InetAddress getInetAddress(String column)
         {
-            return InetAddressType.instance.compose(data.get(column));
+            return InetAddressType.instance.compose(get(column));
+        }
+        
+        public InetAddress getInetAddress(int i)
+        {
+            return InetAddressType.instance.compose(colValues[i]);
         }
 
         public UUID getUUID(String column)
         {
-            return UUIDType.instance.compose(data.get(column));
+            return UUIDType.instance.compose(get(column));
         }
 
+        public UUID getUUID(int i)
+        {
+            return UUIDType.instance.compose(colValues[i]);
+        }
+        
         public Date getTimestamp(String column)
         {
-            return TimestampType.instance.compose(data.get(column));
+            return TimestampType.instance.compose(get(column));
+        }
+        
+        public Date getTimestamp(int i)
+        {
+            return TimestampType.instance.compose(colValues[i]);
         }
 
         public long getLong(String column)
         {
-            return LongType.instance.compose(data.get(column));
+            return LongType.instance.compose(get(column));
+        }
+        
+        public long getLong(int i)
+        {
+            return LongType.instance.compose(colValues[i]);
         }
         
         // add support for float (2016/05/10 vroyer)
         public float getFloat(String column)
         {
-            return FloatType.instance.compose(data.get(column));
+            return FloatType.instance.compose(get(column));
         }
         
+        public float getFloat(int i)
+        {
+            return FloatType.instance.compose(colValues[i]);
+        }
 
         public <T> Set<T> getSet(String column, AbstractType<T> type)
         {
-            ByteBuffer raw = data.get(column);
+            ByteBuffer raw = get(column);
             return raw == null ? null : SetType.getInstance(type, true).compose(raw);
+        }
+        
+        public <T> Set<T> getSet(int i, AbstractType<T> type)
+        {
+            return colValues[i] == null ? null : SetType.getInstance(type, true).compose(colValues[i]);
         }
 
         public <T> List<T> getList(String column, AbstractType<T> type)
         {
-            ByteBuffer raw = data.get(column);
+            ByteBuffer raw = get(column);
             return raw == null ? null : ListType.getInstance(type, true).compose(raw);
+        }
+        
+        public <T> List<T> getList(int i, AbstractType<T> type)
+        {
+            return colValues[i] == null ? null : ListType.getInstance(type, true).compose(colValues[i]);
         }
 
         public <K, V> Map<K, V> getMap(String column, AbstractType<K> keyType, AbstractType<V> valueType)
         {
-            ByteBuffer raw = data.get(column);
+            ByteBuffer raw = get(column);
             return raw == null ? null : MapType.getInstance(keyType, valueType, true).compose(raw);
+        }
+        
+        public <K, V> Map<K, V> getMap(int i, AbstractType<K> keyType, AbstractType<V> valueType)
+        {
+            return colValues[i] == null ? null : MapType.getInstance(keyType, valueType, true).compose(colValues[i]);
         }
 
         public List<ColumnSpecification> getColumns()
         {
-            return columns;
+            return colSpec;
         }
 
         @Override
         public String toString()
         {
-            return data.toString();
+            return toString();
         }
     }
+    
 }
