@@ -230,9 +230,6 @@ public class CassandraDaemon
                 ColumnFamilyStore.scrubDataDirectories(cfm);
         }
 
-        // Elassandra hook.
-        beforeRecover();
-        
         Keyspace.setInitialized();
 
         // initialize keyspaces
@@ -271,6 +268,9 @@ public class CassandraDaemon
             logger.warn("Unable to start GCInspector (currently only supported on the Sun JVM)");
         }
 
+        // Elassandra hook.
+        beforeCommitLogRecover();
+        
         // replay the log if necessary
         try
         {
@@ -578,7 +578,7 @@ public class CassandraDaemon
      * Subclasses should override this to initialize before cassandra bootstrap
      * (called once from CassandraDaemon2.setup()).
      */
-    public void beforeRecover() {
+    public void beforeCommitLogRecover() {
     }
 
     /**

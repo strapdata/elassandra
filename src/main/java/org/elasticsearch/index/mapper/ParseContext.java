@@ -63,17 +63,6 @@ public abstract class ParseContext {
             this.parent = parent;
         }
         
-        /*
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("\n path=").append(path).append(" prefix=").append(prefix).append(" fields=[\n");
-            for(IndexableField f : this) {
-                sb.append(f).append("\n");
-            }
-            sb.append("] keyedFields=").append(keyedFields);
-            return sb.toString();
-        }
-        */
         
         public Document() {
             this("", null);

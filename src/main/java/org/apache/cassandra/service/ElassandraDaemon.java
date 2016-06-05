@@ -109,13 +109,17 @@ public class ElassandraDaemon extends CassandraDaemon {
     
         super.setup(); // start bootstrap CassandraDaemon and call beforeRecover()+beforeBootstrap() to activate ElasticSearch
         super.start(); // complete cassandra start
-        instance.node.start(); // start ElasticSerach public services to complete
+        if (instance.node != null) {
+            instance.node.start(); // start ElasticSerach public services to complete
+        } else {
+            logger.error("Cannot start elasticsearch, initialization failed. You are probably using the CassandraDeamon.class form Apache Cassandra rather than the one provided with Elassandra. Please check you classpth.");
+        }
     }
 
    
  
     @Override
-    public void beforeRecover() {
+    public void beforeCommitLogRecover() {
         try {
             KSMetaData ksMetaData = Schema.instance.getKSMetaData(ClusterService.ELASTIC_ADMIN_KEYSPACE);
             if (ksMetaData != null) {
@@ -139,7 +143,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void beforeStartupComplete() {
         if (instance.node == null) {
-            logger.debug("Starting ElasticSearch before startup complete (create elastic_admin keyspace, but no boostrap)");
+            logger.debug("Starting ElasticSearch before startup complete (create elastic_admin keyspace if needed, but no boostrap)");
             startElasticSearch();
         } 
     }
@@ -229,13 +233,6 @@ public class ElassandraDaemon extends CassandraDaemon {
                 .put(settings)
                 .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
                 .build();
-
-        // path.home set to CASSANDRA_HOME.
-        String cassandra_home = System.getenv("CASSANDRA_HOME");
-        if (cassandra_home == null) {
-            cassandra_home = System.getProperty("cassandra.home", System.getProperty("path.home",Paths.get("").toAbsolutePath().toString()));
-        }
-        logger.info("path.home={}",cassandra_home);
         
         NodeBuilder nodeBuilder = NodeBuilder.nodeBuilder().settings(nodeSettings);
         nodeBuilder.clusterName(DatabaseDescriptor.getClusterName()).data(true).settings()

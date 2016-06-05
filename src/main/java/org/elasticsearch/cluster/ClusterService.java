@@ -32,7 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ConsistencyLevel;
@@ -66,10 +66,12 @@ import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.node.ArrayNode;
+import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.cassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
+import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
 import org.elasticsearch.cluster.block.ClusterBlock;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -85,6 +87,7 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.DocumentMapper;
@@ -198,7 +201,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
 
     
     public static final String ELASTIC_ADMIN_KEYSPACE = "elastic_admin";
-    public static final String ELASTIC_ADMIN_METADATA_TABLE_PREFIX = "metadata_";
+    public static final String ELASTIC_ADMIN_METADATA_TABLE = "metadata";
 
     public static class DocPrimaryKey {
         public String[] names;
@@ -364,6 +367,8 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
    
     }
     
+    public AbstractSearchStrategy.Result searchStrategy(IndexMetaData indexMetaData, Collection<InetAddress> startedShards);
+    
     public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Object node, Map<String, GetField> flatFields);
     public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> fields);
 
@@ -380,13 +385,16 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public void buildCollectionMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException;
     public String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
 
+    public String buildFetchQuery(final String index, final String cfName, final String[] requiredColumns, boolean forStaticDocument) throws ConfigurationException, IndexNotFoundException;
+    public DocPrimaryKey parseElasticId(final String index, final String cfName, final String id) throws JsonParseException, JsonMappingException, IOException;
+    
     public ClusterState updateNumberOfShards(ClusterState currentState);
     public void submitNumberOfShardsUpdate();
     
     public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
     
-    public Set<String> mappedColumns(final String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
-    public Set<String> mappedColumns(final String index, final String type,final boolean forStaticDocument);
+    public String[] mappedColumns(final String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
+    public String[] mappedColumns(final String index, final String type,final boolean forStaticDocument);
     public String[] mappedColumns(final MapperService mapperService, final String type, final boolean forStaticDocument);
     
     public boolean isStaticDocument(final String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
@@ -399,16 +407,14 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public UntypedResultSet fetchRow(final String index, final String type, final String id) 
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
     
-    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final Collection<String> requiredColumns, final String id) throws ConfigurationException, IOException;
-    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final String[] requiredColumns, String id) throws ConfigurationException, IOException;
-    
-    public UntypedResultSet fetchRowInternal(final String ksName, final String cfName, final Collection<String> requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
+    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final String[] requiredColumns, final String id) throws ConfigurationException, IOException;
     public UntypedResultSet fetchRowInternal(final String ksName, final String cfName, final String[] requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
     
     public Map<String, Object> rowAsMap(final String index, final String type, UntypedResultSet.Row row) throws IOException;
     public int rowAsMap(final String index, final String type, UntypedResultSet.Row row, Map<String, Object> map) throws IOException;
     public Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row) throws IOException;
-
+    public Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row, boolean valueForSearch) throws IOException;
+    
     public void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
     public void insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString) throws Exception;
@@ -419,17 +425,17 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
 
     public void blockingMappingUpdate(IndexService indexService, String type, CompressedXContent source) throws Exception;
     
+    public CFMetaData getCFMetaData(final String ksName, final String cfName) throws ActionRequestValidationException;
     
     public Token getToken(ByteBuffer rowKey, ColumnFamily cf);
-
+    public Token getToken(String index, String type, String routing) throws JsonParseException, JsonMappingException, IOException;
+    public boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Collection<Range<Token>> requestTokenRange);
+    public boolean tokenRangesContains(Collection<Range<Token>> shardTokenRanges, Token token);
+    
     public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException;
-
     public void initializeMetaDataAsComment();
-
     public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException;
-
     public MetaData readMetaDataAsRow() throws NoPersistedMetaDataException;
-
     public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
             RequestValidationException;
     
@@ -458,7 +464,8 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
      * @throws JsonMappingException
      * @throws IOException
      */
-    public ShardRoutingState readIndexShardState(InetAddress address, String index, ShardRoutingState defaultState);
+    public ShardRoutingState getShardRoutingState(final InetAddress address, final String index, ShardRoutingState defaultState);
+    
     
     /**
      * Set index shard state in the gossip endpoint map (must be synchronized).
@@ -468,5 +475,13 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
      * @throws JsonMappingException
      * @throws IOException
      */
-    public void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
+    public void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
+    
+    /**
+     * Return a set of remote started shards according t the gossip state map.
+     * @param index
+     * @return a set of remote started shards according t the gossip state map.
+     */
+    public Set<InetAddress> getStartedShard(String index);
+    
 }

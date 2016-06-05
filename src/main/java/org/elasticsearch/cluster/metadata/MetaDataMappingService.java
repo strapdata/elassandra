@@ -290,10 +290,11 @@ public class MetaDataMappingService extends AbstractComponent {
                     MappingMetaData mappingMetaData2 = new MappingMetaData(updatedMapper);
                     builder.putMapping(mappingMetaData2);
                     
-                    Set<String> columns = ((Map<String, Object>) mappingMetaData2.sourceAsMap().get("properties")).keySet();
-                    logger.debug("Updating CQL3 schema {}.{} columns={}", index, type, columns);
-                    clusterService.updateTableSchema(index, type, columns, updatedMapper);
-                    
+                    if (!mappingMetaData2.type().equals(MapperService.DEFAULT_MAPPING)) {
+                        Set<String> columns = ((Map<String, Object>) mappingMetaData2.sourceAsMap().get("properties")).keySet();
+                        logger.debug("Updating CQL3 schema {}.{} columns={}", index, type, columns);
+                        clusterService.updateTableSchema(index, type, columns, updatedMapper);
+                    }
                     dirty = true;
                 } catch (Throwable t) {
                     logger.warn("[{}] failed to update-mapping in cluster state, type [{}]",t, index, updateTask.type);
@@ -566,7 +567,7 @@ public class MetaDataMappingService extends AbstractComponent {
                             builder.put(IndexMetaData.builder(indexMetaData).putMapping(mappingMd));
                         }
                         
-                        if (mappingMd.sourceAsMap().get("properties") != null) {
+                        if (!mappingMd.type().equals(MapperService.DEFAULT_MAPPING) && mappingMd.sourceAsMap().get("properties") != null) {
                             Set<String> columns = ((Map<String, Object>) mappingMd.sourceAsMap().get("properties")).keySet();
                             logger.debug("Update CQL3 schema {}.{} columns={}", indexName, mappingMd.type(), columns);
                             clusterService.updateTableSchema(indexName, mappingMd.type(), columns, 

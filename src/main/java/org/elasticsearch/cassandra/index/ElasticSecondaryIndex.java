@@ -124,7 +124,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         
 
         List<IndexInfo> indices = new ArrayList<IndexInfo>();
-        Map<String, Boolean> fields = new HashMap<String, Boolean>();   // map<fieldName, cql_partial_update> for all ES indices.
+        Map<String, Boolean> fieldsMap = new HashMap<String, Boolean>();   // map<fieldName, cql_partial_update> for all ES indices.
         
         MappingInfo(ClusterState state) {
             if (state.blocks().hasGlobalBlock(ClusterBlockLevel.WRITE)) {
@@ -137,11 +137,16 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 String index = indexMetaData.getIndex();
                 MappingMetaData mappingMetaData; 
                 ClusterBlockException clusterBlockException = state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, index);
-                if (clusterBlockException == null && 
-                    state.routingTable().isLocalShardsStarted(index) &&
-                    ( ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(index) || 
-                      ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME))) &&
-                    ((mappingMetaData = indexMetaData.mapping(ElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null)
+                if (clusterBlockException != null) {
+                    logger.debug("ignore, index=[{}] blocked blocks={}", index, clusterBlockException.blocks());
+                    continue;
+                }
+                if (!state.routingTable().isLocalShardsStarted(index)) {
+                    logger.debug("ignore, local shard not started for index=[{}]", index);
+                    continue;
+                }
+                if ( (ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(index) || ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace())) &&
+                     ((mappingMetaData = indexMetaData.mapping(ElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null)
                    ) {
                     try {
                         IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
@@ -153,21 +158,19 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             for(String fieldName : props.keySet() ) {
                                 Map<String,Object> fieldMap = (Map<String,Object>)props.get(fieldName);
                                 boolean partialUpdate = (fieldMap.get(TypeParsers.CQL_PARTIAL_UPDATE) == null || (Boolean)fieldMap.get(TypeParsers.CQL_PARTIAL_UPDATE));
-                                if (fields.get(fieldName) != null) {
-                                    partialUpdate = partialUpdate || fields.get(fieldName);
+                                if (fieldsMap.get(fieldName) != null) {
+                                    partialUpdate = partialUpdate || fieldsMap.get(fieldName);
                                 }
-                                fields.put(fieldName, partialUpdate);
+                                fieldsMap.put(fieldName, partialUpdate);
                             }
                         }
                         if (mappingMetaData.hasParentField()) {
-                            this.fields.put(ParentFieldMapper.NAME,true);
+                            this.fieldsMap.put(ParentFieldMapper.NAME,true);
                         }
                     } catch (IOException e) {
                         logger.error("Unexpected error", e);
                     }
-                } else {
-                    logger.debug("index blocked or not mapped ");
-                }
+                } 
             }
         }
         
@@ -254,7 +257,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
                 
             class Document {
-                final Map<String, Object> docMap = new HashMap<String, Object>(fields.size());
+                final Map<String, Object> docMap = new HashMap<String, Object>(fieldsMap.size());
                 String id = null;
                 Collection<String> tombstoneColumns = null;
                 boolean wideRow = false;
@@ -270,7 +273,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     
                     for(int i=0; i < ptCols.length; i++) {
                         String colName = partitionKeyColumns.get(i).name.toString();
-                        if (fields.get(colName) != null) {
+                        if (fieldsMap.get(colName) != null) {
                             docMap.put(colName, ptCols[i]);
                         }
                     }
@@ -283,7 +286,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             ColumnDefinition ccd = clusteringColumns.get(i);
                             String colName = ccd.name.toString();
                             Object colValue = deserialize(ccd.type, cellName.get(i));
-                            if (fields.get(colName) != null) {
+                            if (fieldsMap.get(colName) != null) {
                                 docMap.put(colName, colValue);
                             }
                             ClusterService.Utils.addToJsonArray(ccd.type, colValue, an2);
@@ -304,7 +307,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         //ignore cell, (probably clustered keys in cellnames only) 
                         return;
                     }
-                    if (cell.isLive() && fields.get(cellNameString) != null) {
+                    if (cell.isLive() && fieldsMap.get(cellNameString) != null) {
                         docLive = true;
                         docTtl = Math.min(cell.getLocalDeletionTime(), docTtl);
                         
@@ -370,7 +373,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
                 
                 public void addTombstoneColumn(String cql3name) {
-                    if (fields.get(cql3name) != null) {
+                    if (fieldsMap.get(cql3name) != null) {
                         if (tombstoneColumns == null) {
                             tombstoneColumns = new HashSet<String>();
                         }
@@ -390,8 +393,8 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 public boolean complete() {
                     // add missing or collection columns that should be read before indexing the document.
                     // read missing static columns (with limit 1) or regular columns if  
-                    Collection<String> mustReadColumns = null;
-                    for(String fieldName: fields.keySet()) {
+                    Set<String> mustReadColumns = null;
+                    for(String fieldName: fieldsMap.keySet()) {
                         if (metadata.getColumnDefinition(new ColumnIdentifier(fieldName,true)).kind == ColumnDefinition.Kind.STATIC) {
                             if (!this.hasStaticUpdate) {
                                 // ignore static columns, we got only regular columns.
@@ -404,16 +407,16 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             }
                         }
                         
-                        if (fields.get(fieldName)) {
+                        if (fieldsMap.get(fieldName)) {
                             Object value = docMap.get(fieldName);
                             if (value == null) {
                                 if (!isTombstone(fieldName)) {
-                                    if (mustReadColumns == null) mustReadColumns = new ArrayList<String>();
+                                    if (mustReadColumns == null) mustReadColumns = new HashSet<String>();
                                     mustReadColumns.add(fieldName);
                                 }
                             } else {
                                 if (value instanceof Set || value instanceof Map) {
-                                    if (mustReadColumns == null) mustReadColumns = new ArrayList<String>();
+                                    if (mustReadColumns == null) mustReadColumns = new HashSet<String>();
                                     mustReadColumns.add(fieldName);
                                 }
                             }
@@ -425,7 +428,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             if (logger.isTraceEnabled()) {
                                 logger.trace(" {}.{} id={} read fields={} docMap={}",metadata.ksName, metadata.cfName, id(), mustReadColumns, docMap);
                             }
-                            UntypedResultSet results = getClusterService().fetchRowInternal(metadata.ksName, metadata.cfName, mustReadColumns, ptCols, hasStaticUpdate);
+                            UntypedResultSet results = getClusterService().fetchRowInternal(metadata.ksName, metadata.cfName, mustReadColumns.toArray(new String[mustReadColumns.size()]), ptCols, hasStaticUpdate);
                             if (!results.isEmpty()) {
                                 int putCount = getClusterService().rowAsMap(metadata.ksName, metadata.cfName, results.one(), docMap);
                                 if (putCount > 0) docLive = true;
@@ -546,82 +549,11 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
         }
     }
-
-    
-    String index_name;
-    IPartitioner partitioner = DatabaseDescriptor.getPartitioner();
-    
- 
     // updated when create/open/close/remove an ES index.
     private AtomicReference<MappingInfo> mappingAtomicReference = new AtomicReference();
-    private ReadWriteLock lock = new ReentrantReadWriteLock();
-    private ClusterService clusterService = null;
     
     public ElasticSecondaryIndex() {
         super();
-    }
-
-    public ClusterService getClusterService() {
-        if (this.clusterService == null) {
-            if (ElassandraDaemon.injector() == null || 
-                (this.clusterService=ElassandraDaemon.injector().getInstance(ClusterService.class)) == null ) {
-                throw new ElasticsearchException("ClusterService not available");
-            }
-        }
-        return this.clusterService;
-    }
-    
-    public static Object deserialize(AbstractType<?> type, ByteBuffer bb) {
-        if (type instanceof UserType) {
-            UserType utype = (UserType) type;
-            Map<String, Object> mapValue = new HashMap<String, Object>();
-            ByteBuffer[] components = utype.split(bb);
-            for (int i = 0; i < components.length; i++) {
-                String fieldName = UTF8Type.instance.compose(utype.fieldName(i));
-                AbstractType<?> ctype = utype.type(i);
-                Object value = (components[i] == null) ? null : deserialize(ctype, components[i]);
-                mapValue.put(fieldName, value);
-            }
-            return mapValue;
-        } else if (type instanceof ListType) {
-            ListType ltype = (ListType)type;
-            ByteBuffer input = bb.duplicate();
-            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
-            List list = new ArrayList(size);
-            for (int i = 0; i < size; i++) {
-                list.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, Server.VERSION_3) ));
-            }
-            if (input.hasRemaining())
-                throw new MarshalException("Unexpected extraneous bytes after map value");
-            return list;
-        } else if (type instanceof SetType) {
-            SetType ltype = (SetType)type;
-            ByteBuffer input = bb.duplicate();
-            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
-            Set set = new HashSet(size);
-            for (int i = 0; i < size; i++) {
-                set.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, Server.VERSION_3) ));
-            }
-            if (input.hasRemaining())
-                throw new MarshalException("Unexpected extraneous bytes after map value");
-            return set;
-        } else if (type instanceof MapType) {
-            MapType ltype = (MapType)type;
-            ByteBuffer input = bb.duplicate();
-            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
-            Map map = new LinkedHashMap(size);
-            for (int i = 0; i < size; i++) {
-                ByteBuffer kbb = CollectionSerializer.readValue(input, Server.VERSION_3);
-                ByteBuffer vbb = CollectionSerializer.readValue(input, Server.VERSION_3);
-                String key = (String) ltype.getKeysType().compose(kbb);
-                map.put(key, deserialize(ltype.getValuesType(), vbb));
-            }
-            if (input.hasRemaining())
-                throw new MarshalException("Unexpected extraneous bytes after map value");
-            return map;
-        } else {
-             return type.compose(bb);
-        }
     }
 
     
@@ -691,17 +623,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         */
     }
 
-    @Override
-    public void init() {
-        lock.writeLock().lock();
-        try {
-            index_name = "elastic_"+this.baseCfs.name;
-            elasticSecondayIndices.add(this);
-            initMapping();
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
+
 
     
     public synchronized void initMapping() {
@@ -710,43 +632,10 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             this.mappingAtomicReference.set(new MappingInfo(getClusterService().state()));
             logger.debug("index=[{}.{}] initialized,  mappingAtomicReference = {}", this.baseCfs.metadata.ksName, index_name, this.mappingAtomicReference.get());
         } else {
-            logger.error("Failed to initialize index=[{}.{}], cluster service not available.", this.baseCfs.metadata.ksName, index_name);
+            logger.warn("Cannot initialize index=[{}.{}], cluster service not available.", this.baseCfs.metadata.ksName, index_name);
         }
     }
     
-    
-    /**
-     * Reload an existing index following a change to its configuration, or that
-     * of the indexed column(s). Differs from init() in that we expect expect
-     * new resources (such as CFS for a KEYS index) to be created by init() but
-     * not here
-     */
-    @Override
-    public void reload() {
-    }
-
-    @Override
-    public void validateOptions() throws ConfigurationException {
-        for (ColumnDefinition cd : getColumnDefs()) {
-            for (String optionKey : cd.getIndexOptions().keySet()) {
-                if (!(optionKey.equals(CUSTOM_INDEX_OPTION_NAME))) {
-                    logger.warn("Ignore elastic secondary index options: " + optionKey);
-                }
-            }
-        }
-    }
-
-    
-    @Override
-    public String getIndexName() {
-        return index_name;
-    }
-
-    @Override
-    protected SecondaryIndexSearcher createSecondaryIndexSearcher(Set<ByteBuffer> columns) {
-        return new ElasticSecondaryIndexSearcher(this.baseCfs.indexManager, columns);
-    }
-
     /**
      * Cassandra index flush => Elasticsearch flush => lucene commit and disk
      * sync.
@@ -777,55 +666,6 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         } finally {
             lock.writeLock().unlock();
         }
-    }
-
-    
-    @Override
-    public ColumnFamilyStore getIndexCfs() {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public void removeIndex(ByteBuffer columnName) {
-        
-    }
-
-    @Override
-    public void invalidate() {
-        // TODO Auto-generated method stub
-        //logger.warn("invalidate");
-    }
-
-    @Override
-    public void truncateBlocking(long truncatedAt) {
-        // TODO implements truncate
-        logger.warn("truncateBlocking at [{}], not implemented", truncatedAt);
-    } 
-
-    /**
-     * Returns true if the provided cell name is indexed by this secondary
-     * index.
-     */
-    @Override
-    public boolean indexes(CellName name) {
-        ColumnDefinition cdef = this.baseCfs.metadata.getColumnDefinition(name);
-        if ((cdef != null) && (cdef.getIndexOptions() != null) && (this.getClass().getCanonicalName().equals(cdef.getIndexOptions().get(CUSTOM_INDEX_OPTION_NAME)))) {
-            return true;
-        }
-        /*
-         * ..However, some type of COMPACT STORAGE layout do not store the CQL3
-         * column name in the cell name and so this part can be null => return
-         * true
-         */
-        ColumnIdentifier cql3Name = name.cql3ColumnName(this.baseCfs.metadata);
-        return ((cql3Name != null) && (ByteBufferUtil.EMPTY_BYTE_BUFFER.compareTo(cql3Name.bytes) == 0));
-    }
-    
-    @Override
-    public long estimateResultRows() {
-        // TODO Auto-generated method stub
-        return 0;
     }
 
     

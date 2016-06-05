@@ -30,6 +30,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.ParseFieldMatcher;
 import org.elasticsearch.common.Strings;
@@ -245,7 +246,7 @@ public class DocumentMapperParser {
         }
         
         try {
-            this.clusterService.expandTableMapping(this.mapperService.index().getName(), root);
+            this.clusterService.expandTableMapping(this.indexSettings.get(IndexMetaData.SETTING_KEYSPACE_NAME, this.mapperService.index().getName()), root);
         } catch (SyntaxException | ConfigurationException | IOException e) {
             logger.error("Failed to expand mapping", e);
         }

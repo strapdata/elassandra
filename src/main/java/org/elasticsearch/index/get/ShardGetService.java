@@ -186,9 +186,8 @@ public final class ShardGetService extends AbstractIndexShardComponent {
         }
 
         fetchSourceContext = normalizeFetchSourceContent(fetchSourceContext, gFields);
-        Set<String> columns;
+        Set<String> columns = new HashSet<String>();
         if ((gFields != null) && (!fetchSourceContext.fetchSource())) {
-            columns = new HashSet<String>(gFields.length);
             for (String field : gFields) {
                 int i = field.indexOf('.');
                 String colName = (i > 0) ? field.substring(0, i ) : field;
@@ -197,7 +196,8 @@ public final class ShardGetService extends AbstractIndexShardComponent {
             }
         } else {
             try {
-                columns = clusterService.mappedColumns(mapperService.index().name(), new Uid(type, id) );
+                for(String s : clusterService.mappedColumns(mapperService.index().name(), new Uid(type, id) ))
+                    columns.add(s);
             } catch (IOException e) {
                 throw new ElasticsearchException("Cannot parse id for type [" + type + "] and id [" + id + "]", e);
             }

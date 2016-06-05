@@ -17,7 +17,9 @@ package org.elasticsearch.cassandra.index;
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
@@ -78,13 +80,10 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     
     abstract class Task extends PrioritizedRunnable {
         private final long creationTime;
-        final String index;
         final String ksName;
-        
        
-        public Task(final String index, final String ksName) {
+        public Task(final String ksName) {
             super(Priority.NORMAL);
-            this.index = index;
             this.ksName = ksName;
             this.creationTime = System.currentTimeMillis();
         }
@@ -102,8 +101,8 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     }
     
     class CreateSecondaryIndexTask extends Task {
-        public CreateSecondaryIndexTask(final String index, final String ksName) {
-            super(index, ksName);
+        public CreateSecondaryIndexTask(final String ksName) {
+            super(ksName);
         }
         @Override
         public void execute() {
@@ -117,31 +116,17 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     }
     
     class DropSecondaryIndexTask extends Task {
-        public DropSecondaryIndexTask(final String index, final String ksName) {
-            super(index, ksName);
+        public DropSecondaryIndexTask(final String ksName) {
+            super(ksName);
         }
         @Override
         public void execute() {
-            boolean isLastRemainingIndex = true;
-            for(Iterator<IndexService> it = indicesService.iterator(); it.hasNext(); ) {
-                IndexService indexService2 = it.next();
-                if (ksName.equals(indexService2.index().name())) {
-                    continue;
-                }
-                if (ksName.equals(indexService2.indexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, indexService2.index().name()))) {
-                    isLastRemainingIndex = false;
-                }
+            try {
+                logger.debug("Dropping secondary indices for keyspace [{}]", ksName);
+                clusterService.dropSecondaryIndices(ksName);
+            } catch (RequestExecutionException e) {
+                logger.error("Failed to create secondary indices on {}", ksName);
             }
-            
-            if (isLastRemainingIndex) {
-                try {
-                    logger.debug("Dropping secondary indices for keyspace [{}]", ksName);
-                    clusterService.dropSecondaryIndices(ksName);
-                } catch (RequestExecutionException e) {
-                    logger.error("Failed to create secondary indices on {}", ksName);
-                }
-            }
-           
         }
     }
     
@@ -149,7 +134,7 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
         if (!lifecycle.started()) {
             return;
         }
-        logger.debug("submit new task task class={} ", task.getClass().getName());
+        logger.debug("submit new task class={} ", task.getClass().getName());
         try {
             tasksExecutor.execute(task);
         } catch (EsRejectedExecutionException e) {
@@ -183,15 +168,6 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     protected void doClose() throws ElasticsearchException {
     }
 
-    /**
-     * Asynchronously remove secondary indices.
-     */
-    public void dropSecondaryIndices(String index) {
-        IndexService indexService = this.indicesService.indexService(index);
-        String ksName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, indexService.index().name() );
-        submitTask(new DropSecondaryIndexTask(index, ksName));
-    }
-
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
         boolean toUpdateIndicesChanged = false;
@@ -217,7 +193,7 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
                     logger.debug("index=[{}] shards Active/Unassigned={}/{} => asynchronous creates secondary index", 
                             index, indexRoutingTable.primaryShardsActive(), indexRoutingTable.primaryShardsUnassigned());
                     IndexMetaData indexMetaData = event.state().metaData().index(index);
-                    submitTask(new CreateSecondaryIndexTask(index, indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, index)));
+                    submitTask(new CreateSecondaryIndexTask(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, index)));
                     this.toUpdateIndices.remove(index);
                 } else {
                     logger.debug("index=[{}] shards Active/Unassigned={}/{} => waiting next cluster state to create secondary indices", 
@@ -227,10 +203,23 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
         }
         
         // notify listeners that all shards are deleted.
+        Set<String> unindexableKeyspace = new HashSet<String>();
         for(DeleteListener deleteListener : this.deleteListeners) {
             if (!event.state().routingTable().hasIndex(deleteListener.index())) {
+                // all shard are inactive => notify listeners
                 deleteListener.onIndexDeleted();
+                unindexableKeyspace.add(deleteListener.keyspace());
             }
+        }
+        
+        // check if there is still some index pointing on the unindexed keyspace
+        for(Iterator<IndexMetaData> i = event.state().metaData().iterator(); i.hasNext(); ) {
+            IndexMetaData indexMetaData = i.next();
+            unindexableKeyspace.remove(indexMetaData.keyspace());
+        }
+        for(String keyspace : unindexableKeyspace) {
+            logger.debug("asynchronous dropping secondary index for keyspace=[{}]", keyspace);
+            submitTask(new DropSecondaryIndexTask(keyspace));
         }
     }
 

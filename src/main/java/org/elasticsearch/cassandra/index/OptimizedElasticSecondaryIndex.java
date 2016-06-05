@@ -48,7 +48,6 @@ import org.apache.cassandra.db.composites.CType;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.composites.CompoundSparseCellName;
-import org.apache.cassandra.db.index.PerRowSecondaryIndex;
 import org.apache.cassandra.db.index.SecondaryIndexSearcher;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CollectionType;
@@ -82,15 +81,12 @@ import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
-import org.elasticsearch.common.logging.ESLogger;
-import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.all.AllEntries;
 import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.common.settings.Settings;
@@ -137,12 +133,17 @@ import com.google.common.collect.Sets;
 /**
  * Custom secondary index for CQL3 only, should be created when mapping is applied and local shard started.
  * Index row as document when Elasticsearch clusterState has no write blocks and local shard is started.
+ * 
+ * OptmizedElasticSecondaryIndex directly build lucene fields without building a JSON document parsed by Elasticsearch.
+ * 
+ * OptmizedElasticSecondaryIndex should allocate contexts to build ES documents on the stack, avoiding later GC for better performances.
+ * see Espace Analysis, http://www.ibm.com/developerworks/java/library/j-jtp09275/index.html 
+ * 
  * @author vroyer
  *
  */
 public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     private final static SourceToParse EMPTY_SOURCE_TO_PARSE= SourceToParse.source((XContentParser)null);
-   
     
     abstract class FilterableDocument extends ParseContext.Document implements Predicate<IndexableField> {
         boolean applyFilter = false; 
@@ -187,7 +188,6 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
 
             class Context extends ParseContext {
-                private final IndexInfo indexInfo;
                 private final ContentPath path;
                 private DocumentMapper docMapper;
                 private Document document;
@@ -203,10 +203,9 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 private boolean hasStaticField = false;
                 private boolean finalized = false;
                 
-                public Context(IndexInfo ii, Uid uid) {
-                    this.indexInfo = ii;
+                public Context(Uid uid) {
                     this.path = new ContentPath(0);
-                    this.docMapper = ii.indexService.mapperService().documentMapper(baseCfs.metadata.cfName);
+                    this.docMapper = IndexInfo.this.indexService.mapperService().documentMapper(baseCfs.metadata.cfName);
                     this.document = (baseCfs.metadata.hasStaticColumns()) ? new StaticDocument("",null, uid) : new Document();
                     this.documents.add(this.document);
                 }
@@ -240,14 +239,14 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     if (mapper instanceof FieldMapper) {
                         ((FieldMapper)mapper).createField(this, value);
                     } else if (mapper instanceof ObjectMapper) {
-                        ObjectMapper objectMapper = (ObjectMapper)mapper;
-                        ObjectMapper.Nested nested = objectMapper.nested();
+                        final ObjectMapper objectMapper = (ObjectMapper)mapper;
+                        final ObjectMapper.Nested nested = objectMapper.nested();
                         //see https://www.elastic.co/guide/en/elasticsearch/guide/current/nested-objects.html
                         // code from DocumentParser.parseObject()
                         if (nested.isNested()) {
                             beginNestedDocument(objectMapper.fullPath(),new Uid(baseCfs.metadata.cfName, id));
-                            ParseContext.Document nestedDoc = doc();
-                            ParseContext.Document parentDoc = nestedDoc.getParent();
+                            final ParseContext.Document nestedDoc = doc();
+                            final ParseContext.Document parentDoc = nestedDoc.getParent();
                             // pre add the uid field if possible (id was already provided)
                             IndexableField uidField = parentDoc.getField(UidFieldMapper.NAME);
                             if (uidField != null) {
@@ -303,7 +302,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                             String mappingUpdate = builder.string();
                                             logger.info("updating mapping={}",mappingUpdate);
                                             
-                                            getClusterService().blockingMappingUpdate(indexInfo.indexService, baseCfs.metadata.cfName, new CompressedXContent(mappingUpdate) );
+                                            getClusterService().blockingMappingUpdate(IndexInfo.this.indexService, baseCfs.metadata.cfName, new CompressedXContent(mappingUpdate) );
                                             subMapper = objectMapper.getMapper(entry.getKey());
                                             addField(subMapper, entry.getValue());
                                         } catch (Exception e) {
@@ -319,8 +318,8 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         // restore the enable path flag
                         path().pathType(origPathType);
                         if (nested.isNested()) {
-                            ParseContext.Document nestedDoc = doc();
-                            ParseContext.Document parentDoc = nestedDoc.getParent();
+                            final ParseContext.Document nestedDoc = doc();
+                            final ParseContext.Document parentDoc = nestedDoc.getParent();
                             if (nested.isIncludeInParent()) {
                                 for (IndexableField field : nestedDoc.getFields()) {
                                     if (field.name().equals(UidFieldMapper.NAME) || field.name().equals(TypeFieldMapper.NAME)) {
@@ -366,7 +365,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         }
                         // apply doc boost
                         if (docBoost() != 1.0f) {
-                            Set<String> encounteredFields = Sets.newHashSet();
+                            final Set<String> encounteredFields = Sets.newHashSet();
                             for (ParseContext.Document doc : this.documents) {
                                 encounteredFields.clear();
                                 for (IndexableField field : doc) {
@@ -390,9 +389,70 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     this.hasStaticField = hasStaticField;
                 }
 
-                /**
-                 * Return a new context that will be used within a nested document.
-                 */
+                public void index(RowcumentFactory factory, RowcumentFactory.Rowcument row, boolean staticDocumentOnly, long indexTime, long ttl) {
+                    Field uid = this.uid();
+                    if (staticDocumentOnly) {
+                        uid = new Field(UidFieldMapper.NAME, Uid.createUid(baseCfs.metadata.cfName, factory.partitionKey), Defaults.FIELD_TYPE);
+                        for(Document doc : docs()) {
+                            if (doc instanceof IndexInfo.Context.StaticDocument) {
+                                ((IndexInfo.Context.StaticDocument)doc).applyFilter(staticDocumentOnly);
+                            }
+                        }
+                    }
+                    finalize();
+                    final ParsedDocument parsedDoc = new ParsedDocument(
+                            uid, 
+                            version(), 
+                            (staticDocumentOnly) ? factory.partitionKey : id(), 
+                            type(), 
+                            factory.partitionKey, // routing
+                            System.currentTimeMillis(), // timstamp
+                            ttl,
+                            factory.token.longValue(), 
+                            docs(), 
+                            (BytesReference)null, // source 
+                            (Mapping)null); // mappingUpdate
+                    
+                    
+                    // TODO: could be a part of the primary key (not only the partition key)
+                    if ( indexOf(ParentFieldMapper.NAME) == -1) {
+                        try {
+                            docMapper.parentFieldMapper().createField(this, factory.partitionKey);
+                        } catch (IOException e) {
+                            logger.error("Failed to add _parent id",e);
+                        }
+                    }
+                    
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("parsedDoc id={} type={} uid={} routing={} docs={}", parsedDoc.id(), parsedDoc.type(), parsedDoc.uid(), parsedDoc.routing(), parsedDoc.docs());
+                    }
+                    final IndexShard indexShard = IndexInfo.this.indexService.shardSafe(0);
+                    final Engine.Index operation = new Engine.Index(docMapper.uidMapper().term(uid.stringValue()), 
+                            parsedDoc, 
+                            Versions.MATCH_ANY, 
+                            VersionType.INTERNAL, 
+                            Engine.Operation.Origin.PRIMARY, 
+                            indexTime, 
+                            false);
+                    
+                    final boolean created = operation.execute(indexShard);
+                    final long version = operation.version();
+
+                    if (IndexInfo.this.refresh) {
+                        try {
+                            indexShard.refresh("refresh_flag_index");
+                        } catch (Throwable e) {
+                            logger.error("error", e);
+                        }
+                    }
+                    
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("document CF={}.{} index={} type={} id={} version={} created={} ttl={} refresh={} parent={} ", 
+                            baseCfs.metadata.ksName, baseCfs.metadata.cfName,
+                            IndexInfo.this.name, baseCfs.metadata.cfName, 
+                            id, version, created, ttl, IndexInfo.this.refresh, (docMapper.parentFieldMapper().active()) ? factory.partitionKey :"", parsedDoc.toString());
+                    }
+                }
                 
                 
                 @Override
@@ -595,7 +655,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         final BitSet fieldsIsStatic;
         final boolean[] indexedPkColumns;
         
-        MappingInfo(ClusterState state) {
+        MappingInfo(final ClusterState state) {
             if (state.blocks().hasGlobalBlock(ClusterBlockLevel.WRITE)) {
                 logger.debug("global write blocked");
                 this.fields = null;
@@ -605,47 +665,46 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 return;
             }
             
-          
-            
-            Map<String, Boolean> fieldsMap = new HashMap<String, Boolean>();   // map<fieldName, cql_partial_update> for all ES indices.
+            Map<String, Boolean> fieldsMap = new HashMap<String, Boolean>();
             for(Iterator<IndexMetaData> indexMetaDataIterator = state.metaData().iterator(); indexMetaDataIterator.hasNext(); ) {
                 IndexMetaData indexMetaData = indexMetaDataIterator.next();
                 String index = indexMetaData.getIndex();
                 MappingMetaData mappingMetaData; 
                 ClusterBlockException clusterBlockException = state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, index);
-                if (clusterBlockException == null && 
-                    state.routingTable().isLocalShardsStarted(index) &&
-                    ( OptimizedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(index) || 
-                      OptimizedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME))) &&
-                    ((mappingMetaData = indexMetaData.mapping(OptimizedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null)
+                if (clusterBlockException != null) {
+                    logger.debug("ignore, index=[{}] blocked blocks={}", index, clusterBlockException.blocks());
+                    continue;
+                }
+                if (!state.routingTable().isLocalShardsStarted(index)) {
+                    logger.debug("ignore, local shard not started for index=[{}]", index);
+                    continue;
+                }
+                
+                if ( (OptimizedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(index) || OptimizedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace())) &&
+                     ((mappingMetaData = indexMetaData.mapping(OptimizedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null)
                    ) {
                     try {
                         IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
                         IndexService indexService = indicesService.indexServiceSafe(index);
-                        if (indexService.mapperService().documentMapper(baseCfs.metadata.cfName).mapping().root().isEnabled())  {
-                            IndexInfo indexInfo = new IndexInfo(index, indexService, mappingMetaData);
-                            
-                            this.indices.add(indexInfo);
-                            if (mappingMetaData.getSourceAsMap().get("properties") != null) {
-                                Map<String,Object> props = (Map<String,Object>)mappingMetaData.getSourceAsMap().get("properties");
-                                for(String fieldName : props.keySet() ) {
-                                    Map<String,Object> fieldMap = (Map<String,Object>)props.get(fieldName);
-                                    boolean partialUpdate = (fieldMap.get(TypeParsers.CQL_PARTIAL_UPDATE) == null || (Boolean)fieldMap.get(TypeParsers.CQL_PARTIAL_UPDATE));
-                                    if (fieldsMap.get(fieldName) != null) {
-                                        partialUpdate = partialUpdate || fieldsMap.get(fieldName);
-                                    }
-                                    fieldsMap.put(fieldName, partialUpdate);
+                        IndexInfo indexInfo = new IndexInfo(index, indexService, mappingMetaData);
+                        this.indices.add(indexInfo);
+                        if (mappingMetaData.getSourceAsMap().get("properties") != null) {
+                            Map<String,Object> props = (Map<String,Object>)mappingMetaData.getSourceAsMap().get("properties");
+                            for(String fieldName : props.keySet() ) {
+                                Map<String,Object> fieldMap = (Map<String,Object>)props.get(fieldName);
+                                boolean partialUpdate = (fieldMap.get(TypeParsers.CQL_PARTIAL_UPDATE) == null || (Boolean)fieldMap.get(TypeParsers.CQL_PARTIAL_UPDATE));
+                                if (fieldsMap.get(fieldName) != null) {
+                                    partialUpdate = partialUpdate || fieldsMap.get(fieldName);
                                 }
+                                fieldsMap.put(fieldName, partialUpdate);
                             }
-                            if (mappingMetaData.hasParentField()) {
-                                fieldsMap.put(ParentFieldMapper.NAME,true);
-                            }
+                        }
+                        if (mappingMetaData.hasParentField()) {
+                            fieldsMap.put(ParentFieldMapper.NAME,true);
                         }
                     } catch (IOException e) {
                         logger.error("Unexpected error", e);
                     }
-                } else {
-                    logger.debug("index [{}] blocked or not mapped ", index);
                 }
             }
             
@@ -691,8 +750,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
             return -1;
         }
-        
-        
+
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
@@ -703,7 +761,6 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             return sb.toString();
         }
         
-        
         class RowcumentFactory  {
             final ByteBuffer rowKey;
             final ColumnFamily cf;
@@ -712,9 +769,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             final Object[] pkCols = new Object[baseCfs.metadata.partitionKeyColumns().size()+baseCfs.metadata.clusteringColumns().size()];
             final String partitionKey;
             final Uid uid;
-            
-            MappingInfo.IndexInfo.Context[] contexts;
-            
+            final MappingInfo.IndexInfo.Context[] contexts;
             
             public RowcumentFactory(final ByteBuffer rowKey, final ColumnFamily cf) throws JsonGenerationException, JsonMappingException, IOException {
                 this.rowKey = rowKey;
@@ -732,11 +787,10 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
                 this.partitionKey = ClusterService.Utils.writeValueAsString(an);  // JSON string  of the partition key.
                 this.uid = (baseCfs.metadata.hasStaticColumns()) ? new Uid(baseCfs.metadata.cfName, this.partitionKey) : null;
-                
                 this.contexts = new IndexInfo.Context[MappingInfo.this.indices.size()];
                 int k = 0;
                 for(IndexInfo ii : MappingInfo.this.indices) {
-                    contexts[k] = ii.new Context(ii, uid);
+                    contexts[k] = ii.new Context(uid);
                     k++;
                 }
             }
@@ -745,8 +799,8 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             public void index(Iterator<Cell> cellIterator) throws IOException {
                 Rowcument doc = new Rowcument(cellIterator.next());
                 while (cellIterator.hasNext()) {
-                    Cell cell = cellIterator.next();
-                    CellName cellName = cell.name();
+                    final Cell cell = cellIterator.next();
+                    final CellName cellName = cell.name();
                     assert cellName instanceof CompoundSparseCellName;
                     if (baseCfs.metadata.getColumnDefinition(cellName) == null && cellName.clusteringSize() > 0)  {
                         doc.flush();
@@ -787,13 +841,12 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 logger.warn("delete row not implemented");
             }
             
-            final Field version = new NumericDocValuesField(VersionFieldMapper.NAME, -1L);
-
+            
             
             class Rowcument {
                 final Object[] values = new Object[fields.length];
-                BitSet fieldsNotNull = new BitSet();
-                BitSet tombstoneColumns = new BitSet();
+                final BitSet fieldsNotNull = new BitSet();
+                final BitSet tombstoneColumns = new BitSet();
                 String id = null;
                 final boolean wideRow;
                 final boolean hasMissingClusteringKeys;
@@ -802,7 +855,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 
                 // init document with clustering columns stored in cellName, or cell value for non-clustered columns (regular with no clustering key or static columns).
                 public Rowcument(Cell cell) throws IOException {
-                    CellName cellName = cell.name();
+                    final CellName cellName = cell.name();
                     assert cellName instanceof CompoundSparseCellName;
                     
                     for(MappingInfo.IndexInfo.Context context : contexts) {
@@ -813,8 +866,8 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         context.docMapper.tokenFieldMapper().createField(context, token);
                         context.docMapper.routingFieldMapper().createField(context, partitionKey);
                         context.docMapper.typeMapper().createField(context, baseCfs.metadata.cfName);
-                        context.version(version);
-                        context.doc().add(version);
+                        context.version(DEFAULT_VERSION);
+                        context.doc().add(DEFAULT_VERSION);
                     }
                     
                     // copy the indexed columns of partition key in values
@@ -832,7 +885,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         wideRow = true;
                         int i=0;
                         for(ColumnDefinition ccd : baseCfs.metadata.clusteringColumns()) {
-                            Object value = deserialize(ccd.type, cellName.get(i));
+                            final Object value = deserialize(ccd.type, cellName.get(i));
                             pkCols[baseCfs.metadata.partitionKeyColumns().size()+i] = value;
                             if (indexedPkColumns[baseCfs.metadata.partitionKeyColumns().size()+i]) {
                                 values[x++] = value;
@@ -846,7 +899,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         id = partitionKey;
                         readCellValue(cell);
                     }
-                    Uid uid = new Uid(baseCfs.metadata.cfName, id);
+                    final Uid uid = new Uid(baseCfs.metadata.cfName, id);
                     for(MappingInfo.IndexInfo.Context context : contexts) {
                         context.docMapper.idFieldMapper().createField(context, id);
                         context.docMapper.uidMapper().createField(context, uid);
@@ -856,8 +909,6 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                
                 // for each ES index, add top level field if mapped.
                 public void addField(int idx) throws IOException {
-                    if (logger.isDebugEnabled())
-                        logger.debug("ks.cf.id=[{}.{}.{}] field=[{}] value=[{}]",baseCfs.metadata.ksName, baseCfs.metadata.cfName, id, fields[idx], values[idx]);
                     int j = 0;
                     for(MappingInfo.IndexInfo.Context context : contexts) {
                         Mapper mapper = context.docMapper.mappers().smartNameFieldMapper(fields[idx]);
@@ -874,8 +925,8 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
 
                 public void readCellValue(Cell cell) throws IOException {
-                    CellName cellName = cell.name();
-                    String cellNameString = cellName.cql3ColumnName(baseCfs.metadata).toString();
+                    final CellName cellName = cell.name();
+                    final String cellNameString = cellName.cql3ColumnName(baseCfs.metadata).toString();
                     int idx  = indexOf(cellNameString);
                     if (idx == - 1) {
                         //ignore cell, (probably clustered keys in cellnames only) 
@@ -937,7 +988,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             }
                             fieldsNotNull.set(idx, value != null);
                         } else {
-                            Object value = deserialize(cd.type, cell.value() );
+                            final Object value = deserialize(cd.type, cell.value() );
                             if (logger.isTraceEnabled()) 
                                 logger.trace("name={} kind={} type={} value={}", cellNameString, cd.kind, cd.type.asCQL3Type().toString(), value);
                             values[idx] = value;
@@ -960,12 +1011,12 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 public boolean complete() {
                     // add missing or collection columns that should be read before indexing the document.
                     // read missing static columns (with limit 1) or regular columns if  
-                    BitSet mustUpdateFields = (BitSet)fieldsToRead.clone();
+                    final BitSet mustUpdateFields = (BitSet)fieldsToRead.clone();
                     mustUpdateFields.andNot(fieldsNotNull);
                     mustUpdateFields.andNot(tombstoneColumns);
                     if (mustUpdateFields.cardinality() > 0) {
-                        String[] mustReadColumns = new String[mustUpdateFields.cardinality()];
-                        int[]    mustReadColumnsPosition = new int[mustUpdateFields.cardinality()];
+                        final String[] mustReadColumns = new String[mustUpdateFields.cardinality()];
+                        final int[]    mustReadColumnsPosition = new int[mustUpdateFields.cardinality()];
                         int x = 0;
                         for(int i=0; i < fields.length; i++) {
                             if (fieldsIsStatic != null && fieldsIsStatic.get(i)) {
@@ -980,9 +1031,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 }
                             }
                             if (mustUpdateFields.get(i) && !tombstoneColumns.get(i)) {
-                                String fieldName = fields[i];
-                                Object value = values[i];
-                                if (value == null || value instanceof Set || value instanceof Map) {
+                                if ( values[i] == null ||  values[i] instanceof Set ||  values[i] instanceof Map) {
                                     // List must be fully updated, but set or map can be partially updated without having duplicate entry. 
                                     mustReadColumns[x] = fields[i];
                                     mustReadColumnsPosition[x] = i;
@@ -991,14 +1040,19 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             }
                         }
                         if (x > 0)  {
-                            String[] missingColumns = new String[x];
+                            final String[] missingColumns = new String[x];
                             System.arraycopy(mustReadColumns, 0, missingColumns, 0, x);
+                            Object[] pk = pkCols;
+                            if (hasMissingClusteringKeys) {
+                                pk = new Object[baseCfs.metadata.partitionKeyColumns().size()];
+                                System.arraycopy(pkCols, 0, pk, 0, baseCfs.metadata.partitionKeyColumns().size());
+                            }
                             try {
                                 // fetch missing fields from the local cassandra row to update Elasticsearch index
                                 if (logger.isTraceEnabled()) {
-                                    logger.trace(" {}.{} id={} missing columns names={}",baseCfs.metadata.ksName, baseCfs.metadata.cfName, id, missingColumns);
+                                    logger.trace(" {}.{} id={} missing columns names={} hasMissingClusteringKeys={}",baseCfs.metadata.ksName, baseCfs.metadata.cfName, id, missingColumns, hasMissingClusteringKeys);
                                 }
-                                UntypedResultSet results = getClusterService().fetchRowInternal(baseCfs.metadata.ksName, baseCfs.metadata.cfName, missingColumns, pkCols, hasStaticUpdate);
+                                UntypedResultSet results = getClusterService().fetchRowInternal(baseCfs.metadata.ksName, baseCfs.metadata.cfName, missingColumns, pk, hasStaticUpdate);
                                 if (!results.isEmpty()) {
                                     Object[] missingValues = getClusterService().rowAsArray(baseCfs.metadata.ksName, baseCfs.metadata.cfName, results.one());
                                     for(int i=0; i < x; i++) {
@@ -1016,16 +1070,18 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     }
                     // add all fields to contexts.
                     for(int i=0; i < values.length; i++) {
-                        try {
-                            addField(i);
-                        } catch (IOException e) {
-                            logger.error("error", e);
+                        if (values[i] != null) {
+                            try {
+                                addField(i);
+                            } catch (IOException e) {
+                                logger.error("error", e);
+                            }
                         }
                     }
                     
                     // postCreate for all metadata fields.
                     for(OptimizedElasticSecondaryIndex.MappingInfo.IndexInfo.Context context : contexts) {
-                        Mapping mapping = context.docMapper.mapping();
+                        final Mapping mapping = context.docMapper.mapping();
                         for (MetadataFieldMapper metadataMapper : mapping.metadataMappers()) {
                             try {
                                 metadataMapper.postCreate(context);
@@ -1049,79 +1105,12 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     }
                 }
                 
-                
-                
                 public void index(boolean staticDocumentOnly) {
-                    long startTime = System.nanoTime();
-                    long ttl = (long)((this.docTtl < Integer.MAX_VALUE) ? this.docTtl : 0);
-                    
-                    
+                    final long indexTime = System.nanoTime();
+                    final long ttl = (long)((this.docTtl < Integer.MAX_VALUE) ? this.docTtl : 0);
                     for(OptimizedElasticSecondaryIndex.MappingInfo.IndexInfo.Context context : contexts) {
                         if (staticDocumentOnly && !context.hasStaticField()) continue;
-                        
-                        Field uid = context.uid();
-                        if (staticDocumentOnly) {
-                            uid = new Field(UidFieldMapper.NAME, Uid.createUid(baseCfs.metadata.cfName, partitionKey), Defaults.FIELD_TYPE);
-                            for(Document doc : context.docs()) {
-                                if (doc instanceof IndexInfo.Context.StaticDocument) {
-                                    ((IndexInfo.Context.StaticDocument)doc).applyFilter(staticDocumentOnly);
-                                }
-                            }
-                            
-                        }
-                        context.finalize();
-                        ParsedDocument parsedDoc = new ParsedDocument(
-                                uid, 
-                                context.version(), 
-                                (staticDocumentOnly) ? partitionKey : context.id(), 
-                                context.type(), 
-                                partitionKey, // routing
-                                System.currentTimeMillis(), // timstamp
-                                ttl,
-                                token.longValue(), 
-                                context.docs(), 
-                                (BytesReference)null, // source 
-                                (Mapping)null); // mappingUpdate
-                        
-                        
-                        // TODO: could be a part of the primary key (not only the partition key)
-                        if ( indexOf(ParentFieldMapper.NAME) == -1) {
-                            try {
-                                context.docMapper.parentFieldMapper().createField(context, partitionKey);
-                            } catch (IOException e) {
-                                logger.error("Failed to add _parent id",e);
-                            }
-                        }
-                        
-                        if (logger.isTraceEnabled()) {
-                            logger.trace("parsedDoc id={} type={} uid={} routing={} docs={}", parsedDoc.id(), parsedDoc.type(), parsedDoc.uid(), parsedDoc.routing(), parsedDoc.docs());
-                        }
-                        IndexShard indexShard = context.indexInfo.indexService.shardSafe(0);
-                        Engine.Index operation = new Engine.Index(context.docMapper.uidMapper().term(uid.stringValue()), 
-                                parsedDoc, 
-                                Versions.MATCH_ANY, 
-                                VersionType.INTERNAL, 
-                                Engine.Operation.Origin.PRIMARY, 
-                                startTime, 
-                                false);
-                        
-                        boolean created = operation.execute(indexShard);
-                        long version = operation.version();
-
-                        if (context.indexInfo.refresh) {
-                            try {
-                                indexShard.refresh("refresh_flag_index");
-                            } catch (Throwable e) {
-                                logger.error("error", e);
-                            }
-                        }
-                        
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("document CF={}.{} index={} type={} id={} version={} created={} ttl={} refresh={} parent={} ", 
-                                baseCfs.metadata.ksName, baseCfs.metadata.cfName,
-                                context.indexInfo.name, baseCfs.metadata.cfName, 
-                                id, version, created, ttl, context.indexInfo.refresh, (context.docMapper.parentFieldMapper().active()) ? partitionKey :"", parsedDoc.toString());
-                        }
+                        context.index(RowcumentFactory.this, this, staticDocumentOnly, indexTime, ttl);
                     }
                 }
                 
@@ -1141,95 +1130,18 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     } else {
                         delete();
                     }
-                    
                 }
             }
 
         }
     }
-
-    
-    String index_name;
-    IPartitioner partitioner = DatabaseDescriptor.getPartitioner();
-    
- 
     // updated when create/open/close/remove an ES index.
     private AtomicReference<MappingInfo> mappingAtomicReference = new AtomicReference();
-    private ReadWriteLock lock = new ReentrantReadWriteLock();
-    private ClusterService clusterService = null;
     
     public OptimizedElasticSecondaryIndex() {
         super();
     }
-
-    public ClusterService getClusterService() {
-        if (this.clusterService == null) {
-            lock.writeLock().lock();
-            try {
-                if (ElassandraDaemon.injector() == null || 
-                    (this.clusterService=ElassandraDaemon.injector().getInstance(ClusterService.class)) == null ) {
-                    throw new ElasticsearchException("ClusterService not available");
-                }
-            } finally {
-                lock.writeLock().unlock();
-            }
-        }
-        return this.clusterService;
-    }
     
-    public static Object deserialize(AbstractType<?> type, ByteBuffer bb) {
-        if (type instanceof UserType) {
-            UserType utype = (UserType) type;
-            Map<String, Object> mapValue = new HashMap<String, Object>();
-            ByteBuffer[] components = utype.split(bb);
-            for (int i = 0; i < components.length; i++) {
-                String fieldName = UTF8Type.instance.compose(utype.fieldName(i));
-                AbstractType<?> ctype = utype.type(i);
-                Object value = (components[i] == null) ? null : deserialize(ctype, components[i]);
-                mapValue.put(fieldName, value);
-            }
-            return mapValue;
-        } else if (type instanceof ListType) {
-            ListType ltype = (ListType)type;
-            ByteBuffer input = bb.duplicate();
-            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
-            List list = new ArrayList(size);
-            for (int i = 0; i < size; i++) {
-                list.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, Server.VERSION_3) ));
-            }
-            if (input.hasRemaining())
-                throw new MarshalException("Unexpected extraneous bytes after map value");
-            return list;
-        } else if (type instanceof SetType) {
-            SetType ltype = (SetType)type;
-            ByteBuffer input = bb.duplicate();
-            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
-            Set set = new HashSet(size);
-            for (int i = 0; i < size; i++) {
-                set.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, Server.VERSION_3) ));
-            }
-            if (input.hasRemaining())
-                throw new MarshalException("Unexpected extraneous bytes after map value");
-            return set;
-        } else if (type instanceof MapType) {
-            MapType ltype = (MapType)type;
-            ByteBuffer input = bb.duplicate();
-            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
-            Map map = new LinkedHashMap(size);
-            for (int i = 0; i < size; i++) {
-                ByteBuffer kbb = CollectionSerializer.readValue(input, Server.VERSION_3);
-                ByteBuffer vbb = CollectionSerializer.readValue(input, Server.VERSION_3);
-                String key = (String) ltype.getKeysType().compose(kbb);
-                map.put(key, deserialize(ltype.getValuesType(), vbb));
-            }
-            if (input.hasRemaining())
-                throw new MarshalException("Unexpected extraneous bytes after map value");
-            return map;
-        } else {
-             return type.compose(bb);
-        }
-    }
-
     
     /**
      * Index a mutation. Set empty field for deleted cells.
@@ -1243,18 +1155,21 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 return;
             }
 
-            MappingInfo.RowcumentFactory docFactory = mappingInfo.new RowcumentFactory(rowKey, cf);
-            MappingInfo.IndexInfo.Context[] contexts = new MappingInfo.IndexInfo.Context[mappingInfo.indices.size()];
-            int i = 0;
-            for(MappingInfo.IndexInfo ii : mappingInfo.indices) {
-                contexts[i++] = ii.new Context(ii, docFactory.uid);
-            }
-            
-            Iterator<Cell> cellIterator = cf.iterator();
-            if (cellIterator.hasNext()) {
-                docFactory.index(cellIterator);
-            } else {
-                docFactory.prune();
+            {
+                // block for stack allocation
+                final MappingInfo.RowcumentFactory docFactory = mappingInfo.new RowcumentFactory(rowKey, cf);
+                final MappingInfo.IndexInfo.Context[] contexts = new MappingInfo.IndexInfo.Context[mappingInfo.indices.size()];
+                int i = 0;
+                for(MappingInfo.IndexInfo ii : mappingInfo.indices) {
+                    contexts[i++] = ii.new Context(docFactory.uid);
+                }
+                
+                final Iterator<Cell> cellIterator = cf.iterator();
+                if (cellIterator.hasNext()) {
+                    docFactory.index(cellIterator);
+                } else {
+                    docFactory.prune();
+                }
             }
         } catch (Throwable e) {
             logger.error("error:", e);
@@ -1303,18 +1218,7 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         */
     }
 
-    @Override
-    public void init() {
-        lock.writeLock().lock();
-        try {
-            index_name = "elastic_"+this.baseCfs.name;
-            elasticSecondayIndices.add(this);
-            initMapping();
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-
+   
     
     public synchronized void initMapping() {
         if (ElassandraDaemon.injector() != null) {
@@ -1322,41 +1226,8 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             this.mappingAtomicReference.set(new MappingInfo(getClusterService().state()));
             logger.debug("index=[{}.{}] initialized,  mappingAtomicReference = {}", this.baseCfs.metadata.ksName, index_name, this.mappingAtomicReference.get());
         } else {
-            logger.error("Failed to initialize index=[{}.{}], cluster service not available.", this.baseCfs.metadata.ksName, index_name);
+            logger.warn("Cannot initialize index=[{}.{}], cluster service not available.", this.baseCfs.metadata.ksName, index_name);
         }
-    }
-    
-    
-    /**
-     * Reload an existing index following a change to its configuration, or that
-     * of the indexed column(s). Differs from init() in that we expect expect
-     * new resources (such as CFS for a KEYS index) to be created by init() but
-     * not here
-     */
-    @Override
-    public void reload() {
-    }
-
-    @Override
-    public void validateOptions() throws ConfigurationException {
-        for (ColumnDefinition cd : getColumnDefs()) {
-            for (String optionKey : cd.getIndexOptions().keySet()) {
-                if (!(optionKey.equals(CUSTOM_INDEX_OPTION_NAME))) {
-                    logger.warn("Ignore elastic secondary index options: " + optionKey);
-                }
-            }
-        }
-    }
-
-    
-    @Override
-    public String getIndexName() {
-        return index_name;
-    }
-
-    @Override
-    protected SecondaryIndexSearcher createSecondaryIndexSearcher(Set<ByteBuffer> columns) {
-        return new ElasticSecondaryIndexSearcher(this.baseCfs.indexManager, columns);
     }
 
     /**
@@ -1391,54 +1262,6 @@ public class OptimizedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         }
     }
 
-    
-    @Override
-    public ColumnFamilyStore getIndexCfs() {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public void removeIndex(ByteBuffer columnName) {
-        
-    }
-
-    @Override
-    public void invalidate() {
-        // TODO Auto-generated method stub
-        //logger.warn("invalidate");
-    }
-
-    @Override
-    public void truncateBlocking(long truncatedAt) {
-        // TODO implements truncate
-        logger.warn("truncateBlocking at [{}], not implemented", truncatedAt);
-    } 
-
-    /**
-     * Returns true if the provided cell name is indexed by this secondary
-     * index.
-     */
-    @Override
-    public boolean indexes(CellName name) {
-        ColumnDefinition cdef = this.baseCfs.metadata.getColumnDefinition(name);
-        if ((cdef != null) && (cdef.getIndexOptions() != null) && (this.getClass().getCanonicalName().equals(cdef.getIndexOptions().get(CUSTOM_INDEX_OPTION_NAME)))) {
-            return true;
-        }
-        /*
-         * ..However, some type of COMPACT STORAGE layout do not store the CQL3
-         * column name in the cell name and so this part can be null => return
-         * true
-         */
-        ColumnIdentifier cql3Name = name.cql3ColumnName(this.baseCfs.metadata);
-        return ((cql3Name != null) && (ByteBufferUtil.EMPTY_BYTE_BUFFER.compareTo(cql3Name.bytes) == 0));
-    }
-    
-    @Override
-    public long estimateResultRows() {
-        // TODO Auto-generated method stub
-        return 0;
-    }
 
     
     @Override

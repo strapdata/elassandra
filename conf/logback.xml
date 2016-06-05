@@ -50,17 +50,17 @@
   <logger name="org.apache.cassandra" level="WARN" />
   <logger name="org.apache.cassandra.db.commitlog" level="WARN" />
   <logger name="org.apache.cassandra.db.compaction" level="WARN" />
-  <logger name="org.apache.cassandra.config.DatabaseDescriptor" level="DEBUG" />
-  <logger name="org.apache.cassandra.service.CassandraDaemon" level="DEBUG" />
+  <logger name="org.apache.cassandra.config.DatabaseDescriptor" level="WARN" />
+  <logger name="org.apache.cassandra.service.CassandraDaemon" level="WARN" />
   <logger name="org.apache.cassandra.service.ElassandraDaemon" level="DEBUG" />
   <logger name="org.elasticsearch" level="WARN" />
-  <logger name="org.elasticsearch.cassandra" level="DEBUG" />
+  <logger name="org.elasticsearch.cassandra" level="WARN" />
 
   <logger name="org.elasticsearch.http" level="WARN"/>
   <logger name="org.elasticsearch.transport" level="WARN"/>
 
 
-  <root level="DEBUG">
+  <root level="INFO">
     <appender-ref ref="FILE" />
     <!-- <appender-ref ref="STDOUT" /> -->
   </root>

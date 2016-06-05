@@ -467,7 +467,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                             // create a cassandra table per type.
                             for (ObjectObjectCursor<String,MappingMetaData> cursor : indexMetaData.getMappings()) {
                                 MappingMetaData mappingMd = cursor.value;
-                                if (mappingMd.sourceAsMap().get("properties") != null) {
+                                if (!mappingMd.type().equals(MapperService.DEFAULT_MAPPING) && mappingMd.sourceAsMap().get("properties") != null) {
                                     Set<String> columns = ((Map<String, Object>) mappingMd.sourceAsMap().get("properties")).keySet();
                                     logger.debug("Update CQL3 schema {}.{} columns={}", indexMetaData.getIndex(), mappingMd.type(), columns);
                                     clusterService.updateTableSchema(indexMetaData.getIndex(), mappingMd.type(), columns, 

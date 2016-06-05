@@ -60,6 +60,7 @@ import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
+import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterChangedEvent;
@@ -72,8 +73,10 @@ import org.elasticsearch.cluster.LocalNodeMasterListener;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.TimeoutClusterStateListener;
 import org.elasticsearch.cluster.TimeoutClusterStateUpdateTask;
+import org.elasticsearch.cluster.ClusterService.DocPrimaryKey;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlocks;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
@@ -102,6 +105,7 @@ import org.elasticsearch.common.util.concurrent.PrioritizedEsThreadPoolExecutor;
 import org.elasticsearch.common.util.concurrent.PrioritizedRunnable;
 import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoveryService;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.DocumentMapper;
@@ -875,6 +879,9 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     }
 
     @Override
+    public abstract AbstractSearchStrategy.Result searchStrategy(IndexMetaData indexMetaData, Collection<InetAddress> startedShards);
+    
+    @Override
     public abstract Map<String, GetField> flattenGetField(String[] fieldFilter, String path, Object node, Map<String, GetField> flatFields);
 
     @Override
@@ -908,6 +915,12 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
 
     @Override
+    public abstract String buildFetchQuery(final String index, final String cfName, final String[] requiredColumns, boolean forStaticDocument) throws ConfigurationException, IndexNotFoundException;
+    
+    @Override
+    public abstract DocPrimaryKey parseElasticId(final String index, final String cfName, final String id) throws JsonParseException, JsonMappingException, IOException;
+    
+    @Override
     public abstract ClusterState updateNumberOfShards(ClusterState currentState);
     
     @Override
@@ -917,10 +930,13 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
 
     @Override
-    public abstract Set<String> mappedColumns(String index, String type, boolean isStaticDocument);
+    public abstract String[] mappedColumns(String index, String type, boolean isStaticDocument);
 
     @Override
     public abstract String[] mappedColumns(MapperService mapperService, String type, boolean isStaticDocument);
+
+    @Override
+    public abstract String[] mappedColumns(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
 
     @Override
     public abstract UntypedResultSet fetchRow(String index, String type, String[] requiredColumns, String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
@@ -940,17 +956,13 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract UntypedResultSet fetchRowInternal(String ksName, String cfName, String[] requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
 
     @Override
-    public abstract UntypedResultSet fetchRowInternal(String index, String cfName, Collection<String> requiredColumns, String id) throws ConfigurationException, IOException;
-
-    @Override
-    public abstract UntypedResultSet fetchRowInternal(String ksName, String cfName, Collection<String> requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException,
-            IOException;
-    
-    @Override
     public abstract Map<String, Object> rowAsMap(String index, String type, Row row) throws IOException;
 
     @Override
     public abstract Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row) throws IOException;
+    
+    @Override
+    public abstract Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row, boolean valueForSearch) throws IOException;
     
     @Override
     public abstract int rowAsMap(String index, String type, Row row, Map<String, Object> map) throws IOException;
@@ -999,14 +1011,12 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract void publishAllShardsState();
 
     @Override
-    public abstract ShardRoutingState readIndexShardState(InetAddress address, String index, ShardRoutingState defaultState);
+    public abstract ShardRoutingState getShardRoutingState(InetAddress address, String index, ShardRoutingState defaultState);
 
     @Override
-    public abstract void writeIndexShardSate(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
+    public abstract void putShardRoutingState(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
 
-    @Override
-    public abstract Set<String> mappedColumns(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
-
+    
     @Override
     public abstract boolean isStaticDocument(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
 

@@ -598,6 +598,10 @@ localhost/127.0.0.1
   HOST_ID:74ae1629-0149-4e65-b790-cd25c7406675
 ```
 
+### Routing
+
+
+
 (#Elasticsearch-document-mapping)
 
 # Elasticsearch document mapping

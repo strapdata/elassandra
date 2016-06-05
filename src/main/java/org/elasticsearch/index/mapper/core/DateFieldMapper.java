@@ -484,11 +484,10 @@ public class DateFieldMapper extends NumberFieldMapper {
 
     @Override
     public void innerCreateField(ParseContext context, Object object) throws IOException {
-        Date date = (Date) object;
         String dateAsString = null;
         Long value = null;
         float boost = fieldType().boost();
-        if (date == null) {
+        if (object == null) {
             if (fieldType().nullValue() == null) {
                 return;
             }
@@ -497,7 +496,11 @@ public class DateFieldMapper extends NumberFieldMapper {
                 value = fieldType().parseStringValue(dateAsString);
             }
         } else {
-            value = date.getTime();
+            if (object instanceof Date) {
+                value = ((Date)object).getTime();
+            } else {
+                value = (Long)object;
+            }
             dateAsString = fieldType().dateTimeFormatter.printer().print(value);
         }
         if (dateAsString != null) {

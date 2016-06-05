@@ -3,17 +3,10 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <!--
-    <parent>
-        <groupId>org.elasticsearch</groupId>
-        <artifactId>parent</artifactId>
-        <version>2.1.1-SNAPSHOT</version>
-    </parent>
-    -->
     
     <groupId>org.elassandra</groupId>
     <artifactId>elassandra</artifactId>
-    <version>2.1.1-10</version>
+    <version>2.1.1-11</version>
     <name>Elassandra</name>
     <description>Elassandra - ElasticSearch for Cassandra</description>
 
@@ -36,8 +29,8 @@
         <!-- elasticsearch stack -->
         <elasticsearch.version>${project.version}</elasticsearch.version>
         <jvm.executable>${java.home}${file.separator}bin${file.separator}java</jvm.executable>
-        <maven.compiler.source>1.7</maven.compiler.source>
-        <maven.compiler.target>1.7</maven.compiler.target>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
 
         <!-- libraries -->
         <lucene.version>5.3.1</lucene.version>
@@ -469,7 +462,7 @@
         <dependency>
             <groupId>org.apache.cassandra</groupId>
             <artifactId>cassandra-all</artifactId>
-            <version>2.2.5</version>
+            <version>2.2.6</version>
         </dependency>
         <dependency>
             <groupId>com.github.tjake</groupId>
@@ -483,6 +476,31 @@
             <version>3.20.0-GA</version>
         </dependency>
         
+        <!-- Upgrade with care, version 4.0.27 => 100% CPU -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+            <version>4.0.23.Final</version>
+        </dependency>
+
+
+        <!-- for cassandra UDF -->
+        <dependency>
+            <groupId>com.datastax.cassandra</groupId>
+            <artifactId>cassandra-driver-core</artifactId>
+            <version>2.2.0-rc3</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>netty-handler</artifactId>
+                    <groupId>io.netty</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>metrics-core</artifactId>
+                    <groupId>com.codahale.metrics</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -698,10 +716,15 @@
                                         <exclude>org/apache/cassandra/cql3/QueryOptions*.class</exclude>
                                         <exclude>org/apache/cassandra/cql3/UntypedResultSet*.class</exclude>
                                         <exclude>org/apache/cassandra/cql3/statements/CreateIndexStatement*.class</exclude>
+                                        <exclude>org/apache/cassandra/cql3/functions/Functions*.class</exclude>
+                                        <exclude>org/apache/cassandra/config/CFMetaData*.class</exclude>
                                         <exclude>org/apache/cassandra/service/CassandraDaemon*.class</exclude>
                                         <exclude>org/apache/cassandra/service/StorageService$*.class</exclude>
                                         <exclude>org/apache/cassandra/service/StorageService.class</exclude>
+                                        <exclude>org/apache/cassandra/utils/CLibrary*.class</exclude>
+                                        <exclude>org/apache/cassandra/db/ConsistencyLevel*.class</exclude>
                                         <exclude>org/apache/cassandra/db/index/SecondaryIndexManager*.class</exclude>
+                                        <exclude>org/apache/cassandra/locator/NetworkTopologyStrategy*.class</exclude>
                                    </excludes>
                                 </filter>
                            </filters>

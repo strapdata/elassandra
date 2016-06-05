@@ -38,9 +38,9 @@ curl -XPUT "http://$NODE:9200/composite/_mapping/t1" -d '{ "t1" : { "columns_reg
 curl -XPUT "http://$NODE:9200/composite/_mapping/t2" -d '{ "t2" : { "columns_regexp" : ".*" }}'
 curl -XPUT "http://$NODE:9200/composite/_mapping/t3" -d '{ "t3" : { "columns_regexp" : ".*" }}'
 
-curl -XGET "http://$NODE:9200/composite/t1/\[\"a\",\"b1\"\]" 
-curl -XGET "http://$NODE:9200/composite/t2/\[\"a\",\"b2\",2\]" 
-curl -XGET "http://$NODE:9200/composite/t3/\[\"a\",\"b3\",2\]" 
+curl -XGET "http://$NODE:9200/composite/t1/\[\"a\",\"b1\"\]?pretty=true" 
+curl -XGET "http://$NODE:9200/composite/t2/\[\"a\",\"b2\",2\]?pretty=true"
+curl -XGET "http://$NODE:9200/composite/t3/\[\"a\",\"b3\",2\]?pretty=true"
 
 
 curl -XGET "http://$NODE:9200/composite/t1/_search?pretty=true&q=c:1"

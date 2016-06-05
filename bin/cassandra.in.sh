@@ -75,4 +75,4 @@ then
 fi
 
 # Added sigar-bin to the java.library.path CASSANDRA-7838
-JAVA_OPTS="$JAVA_OPTS:-Djava.library.path=$CASSANDRA_HOME/lib/sigar-bin"
+JVM_OPTS="$JVM_OPTS -Djava.library.path=$CASSANDRA_HOME/lib/sigar-bin"
