@@ -190,7 +190,7 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
                     continue;
                 }
                 if (indexRoutingTable.allPrimaryShardsActive()) {
-                    logger.debug("index=[{}] shards Active/Unassigned={}/{} => asynchronous creates secondary index", 
+                    logger.debug("index=[{}] shards Active/Unassigned={}/{} => asynchronously creates secondary index", 
                             index, indexRoutingTable.primaryShardsActive(), indexRoutingTable.primaryShardsUnassigned());
                     IndexMetaData indexMetaData = event.state().metaData().index(index);
                     submitTask(new CreateSecondaryIndexTask(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, index)));
@@ -218,7 +218,7 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
             unindexableKeyspace.remove(indexMetaData.keyspace());
         }
         for(String keyspace : unindexableKeyspace) {
-            logger.debug("asynchronous dropping secondary index for keyspace=[{}]", keyspace);
+            logger.debug("asynchronously dropping secondary index for keyspace=[{}]", keyspace);
             submitTask(new DropSecondaryIndexTask(keyspace));
         }
     }
