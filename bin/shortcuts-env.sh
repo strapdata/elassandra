@@ -49,6 +49,17 @@ function delete() {
    curl -XDELETE "http://$NODE:9200/$1" $2 $2 $4 $5
 }
 
+function close() {
+   curl -XPOST "http://$NODE:9200/$1/_close"
+}
+
+function open() {
+   curl -XPOST "http://$NODE:9200/$1/_open"
+}
+
+alias open='open'
+alias close='close'
+
 alias get='get'
 alias put='put'
 alias post='post'
@@ -77,9 +88,11 @@ alias stats='curl -XGET http://$NODE:9200/_stats?pretty=true'
 alias shards='curl -XGET http://$NODE:9200/_cat/shards?v'
 alias indices='curl -XGET http://$NODE:9200/_cat/indices?v'
 alias fielddata='curl -XGET http://$NODE:9200/_cat/fielddata/body,text?v'
+alias thread_pool='curl -XGET http://$NODE:9200/_cat/thread_pool?v'
+alias pending_tasks='curl -XGET http://$NODE:9200/_cat/pending_tasks?v'
+alias segments='curl -XGET http://$NODE:9200/_cat/segments?v'
+alias allocation='curl -XGET http://$NODE:9200/_cat/allocation?v'
 alias nodes='curl -XGET http://$NODE:9200/_cat/nodes?h=id,ip,heapPercent,ramPercent,fileDescriptorPercent,segmentsCount,segmentsMemory'
-
-alias nodes='curl -XGET http://$NODE:9200/_nodes/_all/_all?pretty=true'
 alias settings='curl -XGET http://$NODE:9200/_cluster/settings?pretty=true'
 
 
