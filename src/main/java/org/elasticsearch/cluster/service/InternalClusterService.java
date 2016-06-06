@@ -38,7 +38,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.ColumnFamily;
@@ -58,10 +57,10 @@ import org.elasticsearch.Version;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
-import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
+import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
@@ -73,7 +72,6 @@ import org.elasticsearch.cluster.LocalNodeMasterListener;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.TimeoutClusterStateListener;
 import org.elasticsearch.cluster.TimeoutClusterStateUpdateTask;
-import org.elasticsearch.cluster.ClusterService.DocPrimaryKey;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -81,6 +79,7 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNodeService;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.OperationRouting;
@@ -463,14 +462,15 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
                 logger.debug("processing [{}]: ignoring, cluster_service not started", source);
                 return;
             }
-            logger.debug("processing [{}]: execute", source);
+            if (logger.isDebugEnabled())
+                logger.debug("processing [{}]: execute", source);
             ClusterState previousClusterState = clusterState;
             ClusterState newClusterState;
             long startTimeNS = System.nanoTime();
             try {
                 newClusterState = updateTask.execute(previousClusterState);
-                String newClusterStateMetaDataString = MetaData.builder().toXContent(newClusterState.metaData(), InternalCassandraClusterService.persistedParams);
-                String previousClusterStateMetaDataString = MetaData.builder().toXContent(previousClusterState.metaData(), InternalCassandraClusterService.persistedParams);
+                String newClusterStateMetaDataString = MetaData.Builder.toXContent(newClusterState.metaData(), InternalCassandraClusterService.persistedParams);
+                String previousClusterStateMetaDataString = MetaData.Builder.toXContent(previousClusterState.metaData(), InternalCassandraClusterService.persistedParams);
                 if (!newClusterStateMetaDataString.equals(previousClusterStateMetaDataString) && !newClusterState.blocks().disableStatePersistence() && updateTask.doPresistMetaData()) {
                     // update MeteData.version+cluster_uuid
                     newClusterState = ClusterState.builder(newClusterState)
@@ -520,7 +520,8 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
                     ((ProcessedClusterStateUpdateTask) updateTask).clusterStateProcessed(source, previousClusterState, newClusterState);
                 }
                 TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
-                logger.debug("processing [{}]: took {} no change in cluster_state", source, executionTime);
+                if (logger.isDebugEnabled()) 
+                    logger.debug("processing [{}]: took {} no change in cluster_state", source, executionTime);
                 warnAboutSlowTaskIfNeeded(executionTime, source);
                 return;
             }
@@ -561,17 +562,19 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
 
                 // update the current cluster state
                 clusterState = newClusterState;
-                logger.debug("set local clusterState version={} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
+                if (logger.isTraceEnabled())
+                    logger.trace("set local clusterState version={} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
                 
                 // publish in gossip state the applied metadata.uuid and version
-                discoveryService.publish(newClusterState);// publish in gossip state the applied metadata.uuid and version
+                discoveryService.publish(newClusterState);
              
                 // wait for acknowledgment
                 if (updateTask instanceof AckedClusterStateUpdateTask) {
                     final AckedClusterStateUpdateTask ackedUpdateTask = (AckedClusterStateUpdateTask) updateTask;
                     if (ackedUpdateTask.mustApplyMetaData() && newClusterState.nodes().size() > 1) {
                         try {
-                            logger.info("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
+                            if (logger.isInfoEnabled())
+                                logger.info("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
                             if (!discoveryService.awaitMetaDataVersion(newClusterState.metaData().version(), ackedUpdateTask.ackTimeout())) {
                                 logger.warn("Timeout waiting metadata version = {}", newClusterState.metaData().version());
                             }
@@ -617,7 +620,8 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
                 }
 
                 TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
-                logger.debug("processing [{}]: took {} done applying updated cluster_state (version: {}, uuid: {})", source, executionTime, newClusterState.version(), newClusterState.stateUUID());
+                if (logger.isDebugEnabled()) 
+                    logger.debug("processing [{}]: took {} done applying updated cluster_state (version: {}, uuid: {})", source, executionTime, newClusterState.version(), newClusterState.stateUUID());
                 warnAboutSlowTaskIfNeeded(executionTime, source);
             } catch (Throwable t) {
                 TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
@@ -722,7 +726,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     }
 
     private boolean nodeRequiresConnection(DiscoveryNode node) {
-        return localNode().shouldConnectTo(node);
+        return localNode().shouldConnectTo(node) && node.status().equals(DiscoveryNodeStatus.ALIVE);
     }
 
     private static class LocalNodeMasterListeners implements ClusterStateListener {
@@ -992,8 +996,11 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract MetaData readMetaDataAsComment() throws NoPersistedMetaDataException;
 
     @Override
-    public abstract MetaData readMetaDataAsRow() throws NoPersistedMetaDataException;
+    public abstract MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException;
 
+    @Override
+    public abstract MetaData checkForNewMetaData(Long version) throws NoPersistedMetaDataException;
+    
     @Override
     public abstract void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
             RequestValidationException;

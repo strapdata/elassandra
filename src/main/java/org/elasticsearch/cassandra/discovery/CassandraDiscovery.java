@@ -54,11 +54,9 @@ import org.elasticsearch.cluster.ProcessedClusterStateNonMasterUpdateTask;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
-import org.elasticsearch.cluster.node.DiscoveryNodeService;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -68,7 +66,6 @@ import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.discovery.Discovery;
-import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.discovery.InitialStateDiscoveryListener;
 import org.elasticsearch.node.service.NodeService;
 import org.elasticsearch.transport.TransportService;
@@ -84,12 +81,8 @@ import com.google.common.collect.Maps;
 public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> implements Discovery, IEndpointStateChangeSubscriber {
     private final TransportService transportService;
     private final ClusterService clusterService;
-    private final DiscoveryNodeService discoveryNodeService;
     private final ClusterName clusterName;
     private final Version version;
-    private final DiscoverySettings discoverySettings;
-
-    //private final PublishClusterStateAction publishClusterStateAction;
 
     private final AtomicBoolean initialStateSent = new AtomicBoolean();
     private final CopyOnWriteArrayList<InitialStateDiscoveryListener> initialStateListeners = new CopyOnWriteArrayList<>();
@@ -100,8 +93,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     @Nullable
     private NodeService nodeService;
 
-    private volatile boolean master = true;
-
     private static final ConcurrentMap<ClusterName, ClusterGroup> clusterGroups = ConcurrentCollections.newConcurrentMap();
 
     private final ClusterGroup clusterGroup;
@@ -110,15 +101,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     private String localDc = null;
     
     @Inject
-    public CassandraDiscovery(Settings settings, ClusterName clusterName, TransportService transportService, ClusterService clusterService, DiscoveryNodeService discoveryNodeService, 
-            Version version, DiscoverySettings discoverySettings) {
+    public CassandraDiscovery(Settings settings, ClusterName clusterName, TransportService transportService, ClusterService clusterService, Version version) {
         super(settings);
         this.clusterName = clusterName;
         this.clusterService = clusterService;
         this.transportService = transportService;
-        this.discoveryNodeService = discoveryNodeService;
         this.version = version;
-        this.discoverySettings = discoverySettings;
         
         this.clusterGroup = new ClusterGroup();
         clusterGroups.put(clusterName, clusterGroup);
@@ -170,7 +158,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 localNode = new DiscoveryNode(buildNodeName(localAddress), hostId, transportService.boundAddress().publishAddress(), attrs, version);
                 localNode.status(DiscoveryNodeStatus.ALIVE);
                 this.transportService.setLocalNode(localNode); // clusterService start before DiscoveryService.
-                master = true;
                 clusterGroup.put(this.localNode.getId(), this.localNode);
                 logger.info("localNode name={} id={}", this.localNode.getName(), this.localNode.getId());
             }
@@ -243,21 +230,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         });
     }
 
-    
-    public MetaData hasNewMetaData() {
-        MetaData currentMetaData = clusterService.state().metaData();
-        MetaData newMetaData = clusterService.readMetaDataAsRow();
-        if (newMetaData == null) {
-            return null;
-        }
-        if (newMetaData.version() > currentMetaData.version()) {
-            logger.debug("updating metadata from uid/version={}/{} to {}/{}", currentMetaData.uuid(), currentMetaData.version(), newMetaData.uuid(), newMetaData.version());
-            return newMetaData;
-        }
-        if (logger.isTraceEnabled())
-            logger.trace("ignoring unchanged metadata uuid/version={}/{}", newMetaData.uuid(), newMetaData.version());
-        return null;
-    }
     
     /**
      * Update cluster group members from cassandra topology (should only be triggered by IEndpointStateChangeSubscriber events).
@@ -349,6 +321,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     }
     
     
+    /**
+     * Release listeners who have reached the expected metadat version.
+     */
     public void checkMetaDataVersion() {
         for(Iterator<MetaDataVersionListener> it = this.metaDataVersionListeners.iterator(); it.hasNext(); ) {
             MetaDataVersionListener listener = it.next();
@@ -422,7 +397,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     }
 
     @Override
-    public void onChange(InetAddress endpoint, ApplicationState state, VersionedValue value) {
+    public void onChange(InetAddress endpoint, ApplicationState state, VersionedValue versionValue) {
         EndpointState epState = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
         if (epState == null || Gossiper.instance.isDeadState(epState)) {
             if (logger.isTraceEnabled()) 
@@ -431,25 +406,34 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         }
         if (!this.localAddress.equals(endpoint)) {
             switch (state) {
-            case SCHEMA: // read metadata (read LOCAL_QUORUM elastic_admin.metadata_<DC>)
-                MetaData metadata = hasNewMetaData();
-                if (metadata != null) {
-                    logger.debug("Endpoint={} ApplicationState={} value={} => update metaData {}/{}", 
-                            endpoint, state, value.value, metadata.uuid(), metadata.version());
-                    updateClusterState("onChange-" + endpoint + "-" + state.toString()+" metadata="+metadata.uuid()+"/"+metadata.version(), metadata);
-                }
-                break;
             case X1: // remote shards state change
                 if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
-                    logger.debug("Endpoint={} ApplicationState={} value={} => update routingTable", endpoint, state, value.value);
-                    updateClusterState("onChange-" + endpoint + "-" + state.toString()+" X1="+value.value, null);
+                    if (logger.isTraceEnabled())
+                        logger.trace("Endpoint={} ApplicationState={} value={} => update routingTable", endpoint, state, versionValue.value);
+                    updateClusterState("onChange-" + endpoint + "-" + state.toString()+" X1="+versionValue.value, null);
                 }
                 break;
             case X2: // metadata uuid+version
-                if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
+                if (versionValue != null) {
+                    int i = versionValue.value.lastIndexOf('/');
+                    if (i > 0) {
+                        Long version = Long.valueOf(versionValue.value.substring(i+1));
+                        if (version > this.clusterService.state().metaData().version()) {
+                            MetaData metadata = clusterService.checkForNewMetaData(version);
+                            if (metadata != null) {
+                                if (logger.isTraceEnabled()) 
+                                    logger.trace("Endpoint={} ApplicationState={} value={} => update metaData {}/{}", 
+                                        endpoint, state, versionValue.value, metadata.uuid(), metadata.version());
+                                updateClusterState("onChange-" + endpoint + "-" + state.toString()+" metadata="+metadata.uuid()+"/"+metadata.version(), metadata);
+                            }
+                        }
+                    }
+                }
+                if (metaDataVersionListeners.size() > 0 && DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
                     checkMetaDataVersion();
                 }
                 break;
+            default: // ignore.
             }
         }
     }
@@ -505,8 +489,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     private static final ApplicationState ELASTIC_SHARDS_STATES = ApplicationState.X1;
     private static final ApplicationState ELASTIC_META_DATA = ApplicationState.X2;
     private static final ObjectMapper jsonMapper = new ObjectMapper();
-    private static final TypeReference<Map<String, ShardRoutingState>> indexShardStateTypeReference = new TypeReference<Map<String, ShardRoutingState>>() {
-    };
+    private static final TypeReference<Map<String, ShardRoutingState>> indexShardStateTypeReference = new TypeReference<Map<String, ShardRoutingState>>() {};
 
     /**
      * read the remote shard state from gossiper the X1 field.
@@ -626,9 +609,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         this.initialStateListeners.remove(listener);
     }
 
-
-
-
     
     @Override
     public String nodeDescription() {
@@ -677,8 +657,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
     @Override
     public void publish(ClusterChangedEvent clusterChangedEvent, AckListener ackListener) {
-        // TODO Auto-generated method stub
-        
     }
 
 }

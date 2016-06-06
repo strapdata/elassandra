@@ -435,7 +435,9 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException;
     public void initializeMetaDataAsComment();
     public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException;
-    public MetaData readMetaDataAsRow() throws NoPersistedMetaDataException;
+    public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException;
+    public MetaData checkForNewMetaData(Long version) throws NoPersistedMetaDataException;
+    
     public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
             RequestValidationException;
     

@@ -790,7 +790,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public ClusterState updateNumberOfShards(ClusterState currentState) {
         int numberOfNodes = currentState.nodes().size();
         MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
-        for(Iterator<IndexMetaData> it = currentState.metaData().indices().valuesIt(); it.hasNext(); ) {
+        for(Iterator<IndexMetaData> it = currentState.metaData().iterator(); it.hasNext(); ) {
             IndexMetaData indexMetaData = it.next();
             IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
             indexMetaDataBuilder.numberOfShards(numberOfNodes);
@@ -831,6 +831,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         });
     }
 
+    
     /*
      * (non-Javadoc)
      * 
@@ -1930,23 +1931,42 @@ public class InternalCassandraClusterService extends InternalClusterService {
         throw new NoPersistedMetaDataException();
     }
 
+    private static final String selectMetadataQuery = String.format("SELECT metadata FROM \"%s\".\"%s\" WHERE cluster_name = ?", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE);
+    private static final String insertMetadataQuery = String.format("INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version,metadata) VALUES (?,?,?,?) IF NOT EXISTS", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE);
+    private static final String updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE cluster_name = ? IF version < ?", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE);
+
+    /**
+     * Try to read fresher metadata from cassandra.
+     * @param version extected version
+     * @return
+     */
     @Override
-    public MetaData readMetaDataAsRow() throws NoPersistedMetaDataException {
+    public MetaData checkForNewMetaData(Long expectedVersion) throws NoPersistedMetaDataException {
+        MetaData localMetaData = readMetaDataAsRow(ConsistencyLevel.ONE);
+        if (localMetaData != null && localMetaData.version() >= expectedVersion) {
+           return localMetaData;
+        }
+        MetaData quorumMetaData = readMetaDataAsRow(this.metadataReadCL);
+        if (quorumMetaData.version() >= expectedVersion) {
+            return quorumMetaData;
+        }
+        return null;
+    }
+    
+    @Override
+    public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException {
         UntypedResultSet result;
         try {
-            result = process(this.metadataReadCL,
-                    String.format("SELECT metadata FROM \"%s\".\"%s\" WHERE cluster_name = ?", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE),
-                    DatabaseDescriptor.getClusterName());
+            result = process(cl, selectMetadataQuery, DatabaseDescriptor.getClusterName());
+            Row row = result.one();
+            if (row != null && row.has("metadata")) {
+                return parseMetaDataString(row.getString("metadata"));
+            }
         } catch (UnavailableException e) {
-            // metadataReadCL not reached => read ONE
-            logger.warn("Cannot read metadata, consistency "+this.metadataReadCL+" not reached",e);
+            logger.warn("Cannot read metadata with consistency="+cl,e);
             return null;
         } catch (Exception e) {
             throw new NoPersistedMetaDataException(e);
-        }
-        Row row = result.one();
-        if (row != null && row.has("metadata")) {
-            return parseMetaDataString(row.getString("metadata"));
         }
         throw new NoPersistedMetaDataException();
     }
@@ -1988,8 +2008,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
         try {
             String metaDataString = MetaData.Builder.toXContent(metadata);
             // initialize a first row if needed
-            UntypedResultSet result = process(ConsistencyLevel.LOCAL_QUORUM, ConsistencyLevel.LOCAL_SERIAL,
-                    String.format("INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version,metadata) VALUES (?,?,?,?) IF NOT EXISTS", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE),
+            UntypedResultSet result = process(ConsistencyLevel.LOCAL_QUORUM, ConsistencyLevel.LOCAL_SERIAL, 
+                    insertMetadataQuery,
                     DatabaseDescriptor.getClusterName(), UUID.fromString(StorageService.instance.getLocalHostId()), metadata.version(), metaDataString);
             Row row = result.one();
             boolean applied = false;
@@ -2005,9 +2025,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     }
 
-    private static final String updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE cluster_name = ? IF version < ?", 
-            new Object[] {ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE });
-
+    
     private boolean checkConsistency(String ksName, ConsistencyLevel cl) {
         Keyspace adminKeypsace = Schema.instance.getKeyspaceInstance(ksName);
         DatacenterReplicationStrategy replicationStrategy = (DatacenterReplicationStrategy)adminKeypsace.getReplicationStrategy();
