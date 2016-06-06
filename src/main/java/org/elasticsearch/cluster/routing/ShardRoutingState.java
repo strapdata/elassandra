@@ -44,7 +44,7 @@ public enum ShardRoutingState {
     RELOCATING((byte) 4),
 
     /**
-     * The shard is in the process being relocated.
+     * The shard for an unavailable keyspace.
      */
     UNAVAILABLE((byte) 5);
     
