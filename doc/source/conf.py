@@ -123,7 +123,7 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 html_theme = 'basicstrap'
-html_theme_path = []
+html_theme_path = [better_theme_path]
 
 
 
