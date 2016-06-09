@@ -30,8 +30,7 @@ import os
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinxjp.themes.basicstrap',
-    'rst2pdf.pdfbuilder'
+    'sphinxjp.themes.basicstrap'
 ]
 
 pdf_documents = [
