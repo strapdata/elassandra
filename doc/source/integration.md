@@ -1,5 +1,8 @@
 # Integration
 
+## Integration with an existing cassandra cluster
+
+
 ## Kibana + Elassandra
 
 [Kibana](https://www.elastic.co/guide/en/kibana/4.3/introduction.html) version 4.3 can run on Elassandra, providing a visualization tool for cassandra and elasticsearch data. Here is a demo video.
