@@ -30,7 +30,6 @@ import os
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.githubpages',
     'sphinxjp.themes.basicstrap',
     'rst2pdf.pdfbuilder'
 ]
