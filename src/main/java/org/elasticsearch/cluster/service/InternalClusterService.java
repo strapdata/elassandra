@@ -236,7 +236,8 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
         try {
             createElasticAdminKeyspace();
         } catch (Throwable e) {
-            logger.warn("Cannot create "+ClusterService.ELASTIC_ADMIN_KEYSPACE, e);
+            logger.error("Cannot create "+ClusterService.ELASTIC_ADMIN_KEYSPACE, e);
+            System.exit(-1);
         }
         
         add(localNodeMasterListeners);

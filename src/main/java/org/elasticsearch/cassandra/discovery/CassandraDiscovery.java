@@ -32,12 +32,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.gms.ApplicationState;
 import org.apache.cassandra.gms.EndpointState;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
 import org.apache.cassandra.gms.VersionedValue;
+import org.apache.cassandra.locator.DatacenterReplicationStrategy;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 import org.codehaus.jackson.JsonGenerationException;
@@ -97,8 +100,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
     private final ClusterGroup clusterGroup;
 
-    private InetAddress localAddress = null;
-    private String localDc = null;
+    private InetAddress localAddress;
+    private String localDc;
     
     @Inject
     public CassandraDiscovery(Settings settings, ClusterName clusterName, TransportService transportService, ClusterService clusterService, Version version) {
@@ -349,8 +352,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         }
     }
     
-    
-    
     public class MetaDataVersionListener  {
         final long expectedVersion;
         final CountDownLatch countDownLatch = new CountDownLatch(1);
@@ -405,15 +406,13 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
             return;
         }
         if (!this.localAddress.equals(endpoint)) {
-            switch (state) {
-            case X1: // remote shards state change
-                if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
-                    if (logger.isTraceEnabled())
-                        logger.trace("Endpoint={} ApplicationState={} value={} => update routingTable", endpoint, state, versionValue.value);
-                    updateClusterState("onChange-" + endpoint + "-" + state.toString()+" X1="+versionValue.value, null);
-                }
-                break;
-            case X2: // metadata uuid+version
+            if (state == ApplicationState.X1 && DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
+                // X1: update local shard state
+                if (logger.isTraceEnabled())
+                    logger.trace("Endpoint={} ApplicationState={} value={} => update routingTable", endpoint, state, versionValue.value);
+                updateClusterState("onChange-" + endpoint + "-" + state.toString()+" X1="+versionValue.value, null);
+            } else if (state == ApplicationState.X2 && clusterService.isDatacenterGroupMember(endpoint)) {
+                // X2 from datacenter.group: update metadata if metadata version is higher than our.
                 if (versionValue != null) {
                     int i = versionValue.value.lastIndexOf('/');
                     if (i > 0) {
@@ -432,8 +431,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 if (metaDataVersionListeners.size() > 0 && DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
                     checkMetaDataVersion();
                 }
-                break;
-            default: // ignore.
             }
         }
     }

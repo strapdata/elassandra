@@ -196,6 +196,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public static String MAPPING_UPDATE_TIMEOUT = "cassandra.mapping_update.timeout";
     public static String PERSISTED_METADATA = "cassandra.pertisted.metadata";
 
+    public static String SETTING_DATACENTER_GROUP = "datacenter.group";
+    
+    // dynamic cluster settings
     public static String SETTING_CLUSTER_DEFAULT_SECONDARY_INDEX_CLASS = "cluster.default_secondary_index_class";
     public static String SETTING_CLUSTER_DEFAULT_SEARCH_STRATEGY_CLASS = "cluster.default_search_strategy_class";
     
@@ -261,6 +264,14 @@ public class InternalCassandraClusterService extends InternalClusterService {
     private ConsistencyLevel metadataReadCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.read.cl","QUORUM"));
     private ConsistencyLevel metadataSerialCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.serial.cl","SERIAL"));
     
+    public  final String datacenterGroup;
+    private final String elasticAdminKeyspaceName;
+    private final String selectMetadataQuery;
+    private final String insertMetadataQuery;
+    private final String updateMetaDataQuery;
+
+    private DatacenterReplicationStrategy datacenterReplicationStrategy;
+    
     @Inject
     public InternalCassandraClusterService(Settings settings, DiscoveryService discoveryService, OperationRouting operationRouting, TransportService transportService, NodeSettingsService nodeSettingsService,
             ThreadPool threadPool, ClusterName clusterName, DiscoveryNodeService discoveryNodeService, Version version, 
@@ -286,6 +297,13 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 logger.error("Cannot load " + SETTING_CLUSTER_DEFAULT_SEARCH_STRATEGY_CLASS, e);
             }
         }
+        
+        datacenterGroup = settings.get(SETTING_DATACENTER_GROUP,"default");
+        logger.info("Starting with datacenter.group=[{}]", datacenterGroup);
+        elasticAdminKeyspaceName = String.format("%s_%s", ELASTIC_ADMIN_KEYSPACE,datacenterGroup);
+        selectMetadataQuery = String.format("SELECT metadata FROM \"%s\".\"%s\" WHERE cluster_name = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        insertMetadataQuery = String.format("INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version,metadata) VALUES (?,?,?,?) IF NOT EXISTS", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE cluster_name = ? IF version < ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
     }
     
     public boolean isNativeCql3Type(String cqlType) {
@@ -1777,7 +1795,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
     
     @Override
     public Token getToken(ByteBuffer rowKey, ColumnFamily cf) {
-        IPartitioner partitioner = StorageService.instance.getPartitioner();
+        IPartitioner partitioner = StorageService.getPartitioner();
         CType ctype = cf.metadata().getKeyValidatorAsCType();
         if (ctype.isCompound()) {
             Composite composite = ctype.fromByteBuffer(rowKey);
@@ -1843,25 +1861,25 @@ public class InternalCassandraClusterService extends InternalClusterService {
      */
     @Override
     public void createElasticAdminKeyspace()  {
-        KSMetaData  elasticAdminKeyspace = Schema.instance.getKSMetaData(ClusterService.ELASTIC_ADMIN_KEYSPACE);
-        if (elasticAdminKeyspace == null) {
+        KSMetaData  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
+        if (elasticAdminMetadata == null) {
             try {
-                QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = { 'class' : '%s', 'datacenters' : '%s' };", 
-                        ELASTIC_ADMIN_KEYSPACE, DatacenterReplicationStrategy.class.getName(), DatabaseDescriptor.getLocalDataCenter()),
+                QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s' };", 
+                        this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName(), DatabaseDescriptor.getLocalDataCenter()),
                         ConsistencyLevel.LOCAL_ONE);
-                QueryProcessor.process(String.format("CREATE TABLE IF NOT EXISTS %s.\"%s\" ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text);", 
-                        ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE),
+                QueryProcessor.process(String.format("CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text);", 
+                        this.elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE),
                         ConsistencyLevel.LOCAL_ONE);
             } catch (RequestExecutionException e) {
-                logger.error("Failed to create keyspace {}",ClusterService.ELASTIC_ADMIN_KEYSPACE, e);
+                logger.error("Failed to create keyspace {} or table {}",e, elasticAdminMetadata, ELASTIC_ADMIN_METADATA_TABLE);
             }
         } else {
-            if (elasticAdminKeyspace.strategyClass != DatacenterReplicationStrategy.class) {
-                throw new ConfigurationException(ELASTIC_ADMIN_KEYSPACE+" should use "+DatacenterReplicationStrategy.class.getName()+" replication strategy");
+            if (elasticAdminMetadata.strategyClass != DatacenterReplicationStrategy.class) {
+                throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+DatacenterReplicationStrategy.class.getName()+" replication strategy");
             }
-            String datacentersOption = elasticAdminKeyspace.strategyOptions.get(DatacenterReplicationStrategy.DATACENTERS);
+            String datacentersOption = elasticAdminMetadata.strategyOptions.get(DatacenterReplicationStrategy.DATACENTERS);
             if (datacentersOption == null) {
-                throw new ConfigurationException("Missing "+DatacenterReplicationStrategy.DATACENTERS+" option in "+DatacenterReplicationStrategy.class.getName());
+                throw new ConfigurationException("Missing ["+DatacenterReplicationStrategy.DATACENTERS+"] option in "+DatacenterReplicationStrategy.class.getName());
             }
             boolean localDcFound = false;
             for(String datacenter: datacentersOption.split(",")) {
@@ -1872,13 +1890,13 @@ public class InternalCassandraClusterService extends InternalClusterService {
             }
             if (!localDcFound) {
                 try {
-                    QueryProcessor.process(String.format("ALTER KEYSPACE %s WITH replication = { 'class' : '%s', 'datacenters' : '%s,%s' };", 
-                            ELASTIC_ADMIN_KEYSPACE, DatacenterReplicationStrategy.class.getName(), datacentersOption, DatabaseDescriptor.getLocalDataCenter()),
+                    QueryProcessor.process(String.format("ALTER KEYSPACE \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s,%s' };", 
+                            this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName(), datacentersOption, DatabaseDescriptor.getLocalDataCenter()),
                             ConsistencyLevel.LOCAL_ONE);
-                    logger.info("Add local datacenter {} in {} for keyspace {}", 
-                            DatabaseDescriptor.getLocalDataCenter(),DatacenterReplicationStrategy.class.getName(), ClusterService.ELASTIC_ADMIN_KEYSPACE);
+                    logger.info("Add local datacenter {} in {} for keyspace [{}]", 
+                            DatabaseDescriptor.getLocalDataCenter(),DatacenterReplicationStrategy.class.getName(), this.elasticAdminKeyspaceName);
                 } catch (RequestExecutionException e) {
-                    logger.error("Failed to alter keyspace {}",ClusterService.ELASTIC_ADMIN_KEYSPACE, e);
+                    logger.error("Failed to alter keyspace [{}]",e, this.elasticAdminKeyspaceName);
                     throw e;
                 }
             }
@@ -1886,8 +1904,22 @@ public class InternalCassandraClusterService extends InternalClusterService {
     }
 
     @Override
+    public boolean isDatacenterGroupMember(InetAddress endpoint) {
+        String endpointDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint);
+        KSMetaData  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
+        if (elasticAdminMetadata != null && endpointDc != null) {
+            String datacenters = elasticAdminMetadata.strategyOptions.get(DatacenterReplicationStrategy.DATACENTERS);
+            for (String dc : datacenters.split(",")) {
+                if (dc.equals(endpointDc)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    @Override
     public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException {
-        CFMetaData cfm = getCFMetaData(ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE);
+        CFMetaData cfm = getCFMetaData(elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         cfm.comment(metaDataString);
         MigrationManager.announceColumnFamilyUpdate(cfm, false, false);
     }
@@ -1898,13 +1930,13 @@ public class InternalCassandraClusterService extends InternalClusterService {
     @Override
     public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException {
         try {
-            CFMetaData cfm = getCFMetaData(ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE);
+            CFMetaData cfm = getCFMetaData(elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
             String metadataString = cfm.getComment();
             if (metadataString != null && metadataString.length() > 0) {
                 XContentParser xparser = new JsonXContentParser(new JsonFactory().createParser(metadataString));
                 MetaData metaData = MetaData.Builder.fromXContent(xparser);
                 if (logger.isDebugEnabled()) {
-                    logger.debug("recovered metadata from {}.{} = {}", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE, MetaData.Builder.toXContent(metaData));
+                    logger.debug("recovered metadata from {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, MetaData.Builder.toXContent(metaData));
                 }
                 return metaData;
             }
@@ -1921,7 +1953,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 XContentParser xparser = new JsonXContentParser(new JsonFactory().createParser(metadataString));
                 metaData = MetaData.Builder.fromXContent(xparser);
                 if (logger.isTraceEnabled()) {
-                    logger.trace("recovered metadata from {}.{} = {}", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE, MetaData.Builder.toXContent(metaData));
+                    logger.trace("recovered metadata from {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, MetaData.Builder.toXContent(metaData));
                 }
             } catch (IOException e) {
                 throw new NoPersistedMetaDataException(e);
@@ -1930,10 +1962,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
         throw new NoPersistedMetaDataException();
     }
-
-    private static final String selectMetadataQuery = String.format("SELECT metadata FROM \"%s\".\"%s\" WHERE cluster_name = ?", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE);
-    private static final String insertMetadataQuery = String.format("INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version,metadata) VALUES (?,?,?,?) IF NOT EXISTS", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE);
-    private static final String updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE cluster_name = ? IF version < ?", ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE);
 
     /**
      * Try to read fresher metadata from cassandra.

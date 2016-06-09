@@ -485,5 +485,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
      * @return a set of remote started shards according t the gossip state map.
      */
     public Set<InetAddress> getStartedShard(String index);
+
+    boolean isDatacenterGroupMember(InetAddress endpoint);
     
 }
