@@ -1,3 +1,14 @@
+2.1.1-12 - 2016-06-08
+  * Add datacenter group replication (breaking change)
+  * Fix index open/close operation
+  * Optimize search operation with _routing (send the search request to a node hosting the corresponding token, issue #23)
+  * Avoid useless reads of metadata with consistency quorum for better performance.
+  * Add caching of CQL query on fetch phase.
+  * Fix bug when SERIAL consistency not met on restart
+  * Fix a bug when searching with no type filter.
+  * Change Elasticserach JNA to rely on cassandra JNA classe.
+  * Fix a bug during shard initialization and a bug when a keyspace is unavailable
+
 2.1.1-11 - 2016-05-20
   * Improve secondary index implementation.
   * Add a cluster setting cluster.default_secondary_index_class.
