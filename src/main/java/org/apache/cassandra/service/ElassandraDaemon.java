@@ -25,6 +25,7 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
 import org.elasticsearch.bootstrap.Bootstrap;
 import org.elasticsearch.bootstrap.JVMCheck;
+import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.discovery.CassandraDiscovery;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.ClusterService;
@@ -101,7 +102,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             CFMetaData local = SystemKeyspace.definition().cfMetaData().get(SystemKeyspace.LOCAL);
             local.addColumnDefinition(ColumnDefinition.regularDef(local, UTF8Type.instance.fromString("workload"), UTF8Type.instance, Integer.valueOf(0)));
             local.rebuild();
-            QueryProcessor.instance.executeOnceInternal("INSERT INTO system.local (key, workload) VALUES (?,?)" , new Object[] { "local","elasticsearch" });
+            QueryProcessor.executeOnceInternal("INSERT INTO system.local (key, workload) VALUES (?,?)" , new Object[] { "local","elasticsearch" });
             logger.debug("Internal workload set to elasticsearch");
         } catch (ConfigurationException e) {
             logger.error("Failed to set internal workload",e);
@@ -235,7 +236,13 @@ public class ElassandraDaemon extends CassandraDaemon {
                 .build();
         
         NodeBuilder nodeBuilder = NodeBuilder.nodeBuilder().settings(nodeSettings);
-        nodeBuilder.clusterName(DatabaseDescriptor.getClusterName()).data(true).settings()
+        
+        String clusterName = DatabaseDescriptor.getClusterName();
+        String datacenterGroup = settings.get(InternalCassandraClusterService.SETTING_DATACENTER_GROUP);
+        if (datacenterGroup != null) {
+            clusterName = DatabaseDescriptor.getClusterName() + "/"+datacenterGroup.trim();
+        }
+        nodeBuilder.clusterName(clusterName).data(true).settings()
                 .put("name", CassandraDiscovery.buildNodeName(DatabaseDescriptor.getRpcAddress()))
                 .put("network.host", DatabaseDescriptor.getRpcAddress().getHostAddress())
                 .put("http.netty.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())

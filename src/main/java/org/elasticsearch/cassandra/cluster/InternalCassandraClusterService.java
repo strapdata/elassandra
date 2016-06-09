@@ -264,7 +264,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
     private ConsistencyLevel metadataReadCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.read.cl","QUORUM"));
     private ConsistencyLevel metadataSerialCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.serial.cl","SERIAL"));
     
-    public  final String datacenterGroup;
     private final String elasticAdminKeyspaceName;
     private final String selectMetadataQuery;
     private final String insertMetadataQuery;
@@ -298,9 +297,13 @@ public class InternalCassandraClusterService extends InternalClusterService {
             }
         }
         
-        datacenterGroup = settings.get(SETTING_DATACENTER_GROUP,"default");
-        logger.info("Starting with datacenter.group=[{}]", datacenterGroup);
-        elasticAdminKeyspaceName = String.format("%s_%s", ELASTIC_ADMIN_KEYSPACE,datacenterGroup);
+        String datacenterGroup = settings.get(SETTING_DATACENTER_GROUP);
+        if (datacenterGroup != null && datacenterGroup.length() > 0) {
+            logger.info("Starting with datacenter.group=[{}]", datacenterGroup.trim().toLowerCase());
+            elasticAdminKeyspaceName = String.format("%s_%s", ELASTIC_ADMIN_KEYSPACE,datacenterGroup.trim().toLowerCase());
+        } else {
+            elasticAdminKeyspaceName = ELASTIC_ADMIN_KEYSPACE;
+        }
         selectMetadataQuery = String.format("SELECT metadata FROM \"%s\".\"%s\" WHERE cluster_name = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         insertMetadataQuery = String.format("INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version,metadata) VALUES (?,?,?,?) IF NOT EXISTS", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE cluster_name = ? IF version < ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
