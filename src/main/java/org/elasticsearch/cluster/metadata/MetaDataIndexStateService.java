@@ -124,14 +124,16 @@ public class MetaDataIndexStateService extends AbstractComponent {
 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocksBuilder).build();
 
-                RoutingTable.Builder rtBuilder = RoutingTable.builder(MetaDataIndexStateService.this.clusterService, currentState);
+                RoutingTable.Builder rtBuilder = RoutingTable.builder(MetaDataIndexStateService.this.clusterService, updatedState);
+                /*
                 for (String index : indicesToClose) {
                     rtBuilder.remove(index);
                 }
-
+                
                 RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(rtBuilder).build());
+                */
                 //no explicit wait for other nodes needed as we use AckedClusterStateUpdateTask
-                return ClusterState.builder(updatedState).incrementVersion().routingResult(routingResult).build();
+                return ClusterState.builder(updatedState).incrementVersion().routingTable(rtBuilder).build();
             }
         });
     }
@@ -187,13 +189,15 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocksBuilder).build();
 
                 RoutingTable.Builder rtBuilder = RoutingTable.builder(MetaDataIndexStateService.this.clusterService, updatedState);
+                /*
                 for (String index : indicesToOpen) {
                     rtBuilder.addAsFromCloseToOpen(updatedState.metaData().index(index));
                 }
 
                 RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(rtBuilder).build());
+                */
                 //no explicit wait for other nodes needed as we use AckedClusterStateUpdateTask
-                return ClusterState.builder(updatedState).routingResult(routingResult).build();
+                return ClusterState.builder(updatedState).incrementVersion().routingTable(rtBuilder).build();
             }
         });
     }
