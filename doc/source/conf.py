@@ -13,7 +13,6 @@
 # serve to show the default.
 
 from recommonmark.parser import CommonMarkParser
-from better import better_theme_path
 import sys
 import os
 
@@ -123,7 +122,6 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 html_theme = 'basicstrap'
-html_theme_path = [better_theme_path]
 
 
 
