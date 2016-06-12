@@ -246,7 +246,7 @@ public class DocumentMapperParser {
         }
         
         try {
-            this.clusterService.expandTableMapping(this.indexSettings.get(IndexMetaData.SETTING_KEYSPACE_NAME, this.mapperService.index().getName()), root);
+            this.clusterService.expandTableMapping(this.indexSettings.get(IndexMetaData.SETTING_KEYSPACE, this.mapperService.index().getName()), root);
         } catch (SyntaxException | ConfigurationException | IOException e) {
             logger.error("Failed to expand mapping", e);
         }
