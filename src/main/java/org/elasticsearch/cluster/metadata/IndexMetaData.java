@@ -182,7 +182,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public static final String SETTING_SHARED_FS_ALLOW_RECOVERY_ON_ANY_NODE = "index.shared_filesystem.recover_on_any_node";
     public static final String INDEX_UUID_NA_VALUE = "_na_";
     // elassandra specific mapping
-    public static final String SETTING_KEYSPACE_NAME = "index.keyspace_name"; 
+    public static final String SETTING_KEYSPACE = "index.keyspace"; 
     public static final String SETTING_SECONDARY_INDEX_CLASS = "index.secondary_index_class"; 
     public static final String SETTING_SEARCH_STRATEGY_CLASS = "index.search_strategy_class"; 
     
@@ -397,7 +397,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     }
     
     public String keyspace() {
-        return getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
+        return getSettings().get(IndexMetaData.SETTING_KEYSPACE,index);
     }
     
     public String searchStrategyClass() {
@@ -675,7 +675,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         }
         
         public String keyspace() {
-            return settings.get(IndexMetaData.SETTING_KEYSPACE_NAME,index);
+            return settings.get(IndexMetaData.SETTING_KEYSPACE,index);
         }
 
         public Builder numberOfShards(int numberOfShards) {
