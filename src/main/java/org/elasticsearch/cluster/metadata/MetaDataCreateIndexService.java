@@ -339,7 +339,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     indexSettingsBuilder.put(request.settings());
                     indexSettingsBuilder.put(SETTING_NUMBER_OF_SHARDS, MetaDataCreateIndexService.this.clusterService.state().nodes().size());
                     
-                    String keyspace = (indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE_NAME) == null) ? request.index() : indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE_NAME);
+                    String keyspace = (indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE) == null) ? request.index() : indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE);
                     if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
                         indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
                     } else {

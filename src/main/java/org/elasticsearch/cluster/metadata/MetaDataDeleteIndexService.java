@@ -167,7 +167,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 };
                 nodeIndexDeletedAction.add(nodeIndexDeleteListener);
                 */
-                final String keyspace = currentState.metaData().index(request.index).getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, request.index);
+                final String keyspace = currentState.metaData().index(request.index).getSettings().get(IndexMetaData.SETTING_KEYSPACE, request.index);
                 MetaDataDeleteIndexService.this.secondaryIndicesService.addDeleteListener(new SecondaryIndicesService.DeleteListener() {
                     @Override 
                     public String index() {
