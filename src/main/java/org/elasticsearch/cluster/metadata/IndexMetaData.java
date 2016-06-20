@@ -185,6 +185,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public static final String SETTING_KEYSPACE = "index.keyspace"; 
     public static final String SETTING_SECONDARY_INDEX_CLASS = "index.secondary_index_class"; 
     public static final String SETTING_SEARCH_STRATEGY_CLASS = "index.search_strategy_class"; 
+    public static final String SETTING_PARTITION_FUNCTION = "index.partition_function"; 
     
 
     // hard-coded hash function as of 2.0
@@ -245,12 +246,6 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         this.settings = settings;
         this.mappings = mappings;
         this.customs = customs;
-        
-        /*
-        this.numberOfShards = numberOfNodes;
-        this.numberOfReplicas = replicationFactor * (numberOfNodes - 1);
-        this.totalNumberOfShards = replicationFactor * numberOfNodes;
-        */
         
         this.numberOfShards = numberOfShards;
         this.numberOfReplicas = numberOfReplicas;
@@ -398,6 +393,23 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     
     public String keyspace() {
         return getSettings().get(IndexMetaData.SETTING_KEYSPACE,index);
+    }
+    
+    /**
+     * name = partition function name.
+     * pattern = MessageFormat (@see MessageFormat)
+     * colX = CQL column names.
+     * @return name pattern col1 col2...colN
+     */
+    public String[] partitionFunction() {
+        String dynamicEntry = getSettings().get(IndexMetaData.SETTING_PARTITION_FUNCTION);
+        if (dynamicEntry != null) {
+            String[] args = dynamicEntry.split(" ");
+            if (args.length > 0) {
+                return args;
+            }
+        }
+        return null;
     }
     
     public String searchStrategyClass() {
