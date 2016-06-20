@@ -1,6 +1,11 @@
 Architecture
 ============
 
+Elassandra tightly integrates elasticsearch within cassandra as a secondary index, allowing near-realtime search with all existing elasticsearch APIs, plugins and tools like Kibana.
+
+When you index a document, the JSON document is stored as a row in a cassandra table and synchronously indexed in elasticsearch. 
+
+.. image:: images/elassandra1.jpeg
 
 Concepts Mapping
 ----------------
@@ -48,6 +53,12 @@ From a Cassandra perspective :
 * Nested documents are stored using cassandra `User Defined Type <http://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html>`_ or `map <http://docs.datastax.com/en/cql/3.0/cql/cql_using/use_map_t.html>`_.
 * Elasticsearch provides a JSON-REST API to cassandra, see `Elasticsearch API <https://www.elastic.co/guide/en/elasticsearch/reference/1.5/index.html>`_.
 
+Durability
+----------
+
+All writes to a cassandra node are recorded both in a memory table and in a commit log. When a memtable flush occurs, it flushs the elasticsearch secondary index on disk. 
+When restarting after a failure, cassandra replays commitlogs and re-index elasticsearch document that were no flushed by elasticsearch. 
+This the reason why `elasticsearch translog <https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-translog.html#index-modules-translog>`_ is disabled in elassandra.   
 
 Shards and Replica
 ------------------
@@ -58,7 +69,9 @@ Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter,
 * When updating the Replication Factor, you will need to run a `nodetool repair <keyspace> <http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html>`_ on the new node to effectivelly copy and index the data.
 * If a node become unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is red, otherwise cluster status is yellow.  
 
-After starting a new Elassandra node, data and elasticsearch indices are distributed on 2 nodes (with no replication).:: 
+After starting a new Elassandra node, data and elasticsearch indices are distributed on 2 nodes (with no replication).
+
+.. code::
 
     nodetool status twitter
     Datacenter: DC1
@@ -69,7 +82,9 @@ After starting a new Elassandra node, data and elasticsearch indices are distrib
     UN  127.0.0.1  156,9 KB   2       70,3%             74ae1629-0149-4e65-b790-cd25c7406675  RAC1
     UN  127.0.0.2  129,01 KB  2       29,7%             e5df0651-8608-4590-92e1-4e523e4582b9  RAC2
 
-The routing table now distributes search request on 2 elasticassandra nodes covering 100% of the ring.::
+The routing table now distributes search request on 2 elasticassandra nodes covering 100% of the ring.
+
+.. code::
 
     curl -XGET 'http://localhost:9200/_cluster/state/?pretty=true'
     {
@@ -197,7 +212,9 @@ The routing table now distributes search request on 2 elasticassandra nodes cove
       "allocations" : [ ]
     }
 
-Internally, each node broadcasts its local shard status in the gossip application state X1 ( "twitter":3 stands for STARTED ) and its current metadata UUID/version in application state X2.::
+Internally, each node broadcasts its local shard status in the gossip application state X1 ( "twitter":STARTED ) and its current metadata UUID/version in application state X2.
+
+.. code::
 
     nodetool gossipinfo
     127.0.0.2/127.0.0.2

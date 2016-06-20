@@ -273,7 +273,7 @@ public class Node implements Releasable {
         logger.info("starting ...");
 
         // initilize if needed metadata in cassandra schema.
-        injector.getInstance(ClusterService.class).initializeMetaDataAsComment();
+        injector.getInstance(ClusterService.class).initializeMetaData();
 
         // Cassandra started => release metadata update blocks.
         injector.getInstance(CassandraGatewayService.class).enableMetaDataPersictency();
@@ -282,7 +282,7 @@ public class Node implements Releasable {
             injector.getInstance(plugin).start();
         }
 
-        injector.getInstance(IndicesTTLService.class).start();
+        //injector.getInstance(IndicesTTLService.class).start();
         injector.getInstance(SnapshotsService.class).start();
         injector.getInstance(SnapshotShardsService.class).start();
         injector.getInstance(SearchService.class).start();
@@ -327,7 +327,7 @@ public class Node implements Releasable {
         injector.getInstance(IndicesClusterStateService.class).stop();
         // we close indices first, so operations won't be allowed on it
         injector.getInstance(IndexingMemoryController.class).stop();
-        injector.getInstance(IndicesTTLService.class).stop();
+        //injector.getInstance(IndicesTTLService.class).stop();
         //injector.getInstance(RoutingService.class).stop();
         injector.getInstance(ClusterService.class).stop();
         injector.getInstance(DiscoveryService.class).stop();
