@@ -19,10 +19,21 @@
 
 package org.elasticsearch.index.engine;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexWriter.IndexReaderWarmer;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriter.IndexReaderWarmer;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
@@ -44,7 +55,6 @@ import org.apache.lucene.store.LockObtainFailedException;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.InfoStream;
-import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.cluster.routing.DjbHashFunction;
 import org.elasticsearch.common.Nullable;
@@ -69,25 +79,10 @@ import org.elasticsearch.index.search.nested.IncludeNestedDocsQuery;
 import org.elasticsearch.index.shard.ElasticsearchMergePolicy;
 import org.elasticsearch.index.shard.MergeSchedulerConfig;
 import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.index.shard.TranslogRecoveryPerformer;
 import org.elasticsearch.index.translog.Translog;
-import org.elasticsearch.index.translog.TranslogConfig;
 import org.elasticsearch.index.translog.TranslogCorruptedException;
 import org.elasticsearch.indices.IndicesWarmer;
-import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  *
@@ -190,7 +185,21 @@ public class InternalEngine extends Engine {
         }
         logger.trace("created new InternalEngine");
     }
+    
+    private Translog openTranslog(EngineConfig engineConfig, IndexWriter writer, boolean createNew) throws IOException {
+        boolean success = false;
+        try {
+            commitIndexWriter(writer, translog);
+            success = true;
+        } finally {
+            if (success == false) {
+                IOUtils.closeWhileHandlingException(translog);
+            }
+        }
+        return Translog.DUMMY_TRANSLOG;
+    }
 
+    /*
     private Translog openTranslog(EngineConfig engineConfig, IndexWriter writer, boolean createNew) throws IOException {
         final Translog.TranslogGeneration generation = loadTranslogIdFromCommit(writer);
         final TranslogConfig translogConfig = engineConfig.getTranslogConfig();
@@ -225,14 +234,17 @@ public class InternalEngine extends Engine {
         }
         return translog;
     }
-
+    */
+    
     @Override
     public Translog getTranslog() {
         ensureOpen();
         return translog;
     }
 
+    
     protected void recoverFromTranslog(EngineConfig engineConfig, Translog.TranslogGeneration translogGeneration) throws IOException {
+        /*
         int opsRecovered = 0;
         final TranslogRecoveryPerformer handler = engineConfig.getTranslogRecoveryPerformer();
         try (Translog.Snapshot snapshot = translog.newSnapshot()) {
@@ -263,6 +275,7 @@ public class InternalEngine extends Engine {
         } else if (translog.isCurrent(translogGeneration) == false){
             commitIndexWriter(indexWriter, translog, lastCommittedSegmentInfos.getUserData().get(Engine.SYNC_COMMIT_ID));
         }
+        */
     }
 
     /**
@@ -273,6 +286,7 @@ public class InternalEngine extends Engine {
     private Translog.TranslogGeneration loadTranslogIdFromCommit(IndexWriter writer) throws IOException {
         // commit on a just opened writer will commit even if there are no changes done to it
         // we rely on that for the commit data translog id key
+        /*
         final Map<String, String> commitUserData = writer.getCommitData();
         if (commitUserData.containsKey("translog_id")) {
             assert commitUserData.containsKey(Translog.TRANSLOG_UUID_KEY) == false : "legacy commit contains translog UUID";
@@ -285,6 +299,7 @@ public class InternalEngine extends Engine {
             final long translogGen = Long.parseLong(commitUserData.get(Translog.TRANSLOG_GENERATION_KEY));
             return new Translog.TranslogGeneration(translogUUID, translogGen);
         }
+        */
         return null;
     }
 
@@ -550,7 +565,8 @@ public class InternalEngine extends Engine {
                     indexWriter.updateDocument(index.uid(), index.docs().get(0));
                 }
             }
-            Translog.Location translogLocation = translog.add(new Translog.Index(index));
+            //Translog.Location translogLocation = translog.add(new Translog.Index(index));
+            Translog.Location translogLocation = translog.add(null);
 
             versionMap.putUnderLock(index.uid().bytes(), new VersionValue(updatedVersion, translogLocation));
             index.setTranslogLocation(translogLocation);
@@ -1244,6 +1260,7 @@ public class InternalEngine extends Engine {
 
     private void commitIndexWriter(IndexWriter writer, Translog translog, String syncId) throws IOException {
         try {
+            /*
             Translog.TranslogGeneration translogGeneration = translog.getGeneration();
             logger.trace("committing writer with translog id [{}]  and sync id [{}] ", translogGeneration.translogFileGeneration, syncId);
             Map<String, String> commitData = new HashMap<>(2);
@@ -1253,6 +1270,7 @@ public class InternalEngine extends Engine {
                 commitData.put(Engine.SYNC_COMMIT_ID, syncId);
             }
             indexWriter.setCommitData(commitData);
+            */
             writer.commit();
         } catch (Throwable ex) {
             failEngine("lucene commit failed", ex);
