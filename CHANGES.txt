@@ -1,13 +1,22 @@
 2.1.1-12 - 2016-06-08
-  * Add datacenter group replication (breaking change)
-  * Fix index open/close operation
+  * Add a configurable cross-datacenters mapping replication.
+  * Add support for index partitioning (see index setting index.partition_function)
   * Optimize search operation with _routing (send the search request to a node hosting the corresponding token, issue #23)
-  * Avoid useless reads of metadata with consistency quorum for better performance.
+  * Avoid useless reads of metadata with consistency quorum for better performances.
+  * Remove translog for better performances (durability ensured by cassandra commitlogs)
+  * Disable the TTService (see cassandra TTL and index partitioning)
   * Add caching of CQL query on fetch phase.
-  * Fix bug when SERIAL consistency not met on restart
+  * Add a native CQL function toJsonArray() to cassandra.
+  * Change Elasticserach JNA to rely on cassandra JNA class.
+  * Map the cassandra TTL and WRITETIME to _ttl and _timestamp meta attributes.
+  * Improve parent-child relationship management with a new mapping parmeter pk_columns.
+  * Fix bug when SERIAL consistency not met on elassandra restart.
   * Fix a bug when searching with no type filter.
-  * Change Elasticserach JNA to rely on cassandra JNA classe.
-  * Fix a bug during shard initialization and a bug when a keyspace is unavailable
+  * Fix index open/close operation
+  * Fix a bug during shard initialization and a bug when a keyspace is unavailable.
+  * [breaking change] Rename the mapping attribute "columns_regexp" by "discover".
+  * [breaking change] Rename the index setting "keyspace_name" by "keyspace".
+  * [breaking change] Rename the field mapping parameter "cql_partial_update" by "cql_mandatory".
 
 2.1.1-11 - 2016-05-20
   * Improve secondary index implementation.

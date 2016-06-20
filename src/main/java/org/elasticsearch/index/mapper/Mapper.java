@@ -19,8 +19,12 @@
 
 package org.elasticsearch.index.mapper;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 
+import net.jpountz.util.ByteBufferUtils;
+
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.ParseFieldMatcher;
@@ -167,6 +171,7 @@ public abstract class Mapper implements ToXContent, Iterable<Mapper> {
     }
 
     private final String simpleName;
+    private ByteBuffer   cqlName;
 
     public Mapper(String simpleName) {
         this.simpleName = simpleName;
@@ -180,8 +185,18 @@ public abstract class Mapper implements ToXContent, Iterable<Mapper> {
 
     /** Returns the canonical name which uniquely identifies the mapper against other mappers in a type. */
     public abstract String name();
-
+    
     public abstract void merge(Mapper mergeWith, MergeResult mergeResult) throws MergeMappingException;
+    
+    /**
+     * @return cql column name as a ByteBuffer
+     */
+    public ByteBuffer cqlName() {
+        if (cqlName == null) {
+            cqlName = ByteBufferUtil.bytes(this.simpleName);
+        }
+        return cqlName;
+    }
     
     public abstract CqlCollection cqlCollection();
     

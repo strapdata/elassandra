@@ -494,7 +494,7 @@ public abstract class FieldMapper extends Mapper {
             }
         }
         if (includeDefaults || fieldType().cqlPartialUpdate() != defaultFieldType.cqlPartialUpdate()) {
-            builder.field(TypeParsers.CQL_PARTIAL_UPDATE, fieldType().cqlPartialUpdate());
+            builder.field(TypeParsers.CQL_MANDATORY, fieldType().cqlPartialUpdate());
         }
         if (includeDefaults || fieldType().cqlPartitionKey() != defaultFieldType.cqlPartitionKey()) {
             builder.field(TypeParsers.CQL_PARTITION_KEY, fieldType().cqlPartitionKey());

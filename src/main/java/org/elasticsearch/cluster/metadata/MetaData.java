@@ -39,6 +39,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.service.StorageService;
 import org.apache.lucene.util.CollectionUtil;
 import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.Diffable;
@@ -836,7 +837,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, Fr
         private final ImmutableOpenMap.Builder<String, Custom> customs;
 
         public Builder() {
-            clusterUUID = "_na_";
+            clusterUUID = SystemKeyspace.getLocalHostId().toString();
             indices = ImmutableOpenMap.builder();
             templates = ImmutableOpenMap.builder();
             customs = ImmutableOpenMap.builder();

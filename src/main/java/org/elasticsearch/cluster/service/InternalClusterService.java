@@ -72,6 +72,7 @@ import org.elasticsearch.cluster.LocalNodeMasterListener;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.TimeoutClusterStateListener;
 import org.elasticsearch.cluster.TimeoutClusterStateUpdateTask;
+import org.elasticsearch.cluster.ClusterService.DocPrimaryKey;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -106,11 +107,13 @@ import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
+import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.settings.NodeSettingsService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -232,14 +235,6 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
 
     @Override
     protected void doStart() {
-        // try to create if not exists elastic_admin keyspace and initialize persisted metadata
-        try {
-            createElasticAdminKeyspace();
-        } catch (Throwable e) {
-            logger.error("Cannot create "+ClusterService.ELASTIC_ADMIN_KEYSPACE, e);
-            System.exit(-1);
-        }
-        
         add(localNodeMasterListeners);
         this.clusterState = ClusterState.builder(clusterState).blocks(initialBlocks).build();
         this.updateTasksExecutor = EsExecutors.newSinglePrioritizing(UPDATE_THREAD_NAME, daemonThreadFactory(settings, UPDATE_THREAD_NAME));
@@ -253,6 +248,14 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
         DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder().put(localNode).localNodeId(localNode.id());
         this.clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).blocks(initialBlocks).build();
         this.transportService.setLocalNode(localNode);
+        
+        // try to create if not exists elastic_admin keyspace and initialize persisted metadata
+        try {
+            createElasticAdminKeyspace(this.clusterState.metaData());
+        } catch (Throwable e) {
+            logger.error("Cannot create "+InternalCassandraClusterService.ELASTIC_ADMIN_KEYSPACE, e);
+            System.exit(-1);
+        }
         addLast(this.secondaryIndicesService);
     }
 
@@ -470,8 +473,8 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
             long startTimeNS = System.nanoTime();
             try {
                 newClusterState = updateTask.execute(previousClusterState);
-                String newClusterStateMetaDataString = MetaData.Builder.toXContent(newClusterState.metaData(), InternalCassandraClusterService.persistedParams);
-                String previousClusterStateMetaDataString = MetaData.Builder.toXContent(previousClusterState.metaData(), InternalCassandraClusterService.persistedParams);
+                String newClusterStateMetaDataString = MetaData.Builder.toXContent(newClusterState.metaData(), ClusterService.persistedParams);
+                String previousClusterStateMetaDataString = MetaData.Builder.toXContent(previousClusterState.metaData(), ClusterService.persistedParams);
                 if (!newClusterStateMetaDataString.equals(previousClusterStateMetaDataString) && !newClusterState.blocks().disableStatePersistence() && updateTask.doPresistMetaData()) {
                     // update MeteData.version+cluster_uuid
                     newClusterState = ClusterState.builder(newClusterState)
@@ -893,34 +896,17 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract Map<String, List<Object>> flattenTree(Set<String> neededFiedls, String path, Object node, Map<String, List<Object>> fields);
 
     @Override
-    public abstract void createElasticAdminKeyspace() throws Exception;
+    public abstract void createElasticAdminKeyspace(MetaData metadata) throws Exception;
 
     @Override
     public abstract void createIndexKeyspace(String index, int replicationFactor) throws IOException;
     
     @Override
-    public abstract void createSecondaryIndices(String index) throws IOException;
+    public abstract void createSecondaryIndices(final IndexMetaData indexMetaData) throws IOException;
 
     @Override
-    public abstract void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException;
-
-    @Override
-    public abstract void dropSecondaryIndices(String ksName) throws RequestExecutionException;
-
-    @Override
-    public abstract void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException;
-
-    @Override
-    public abstract void removeIndexKeyspace(String index) throws IOException;
-
-    @Override
-    public abstract void buildCollectionMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException;
+    public abstract void dropSecondaryIndices(final IndexMetaData indexMetaData) throws RequestExecutionException;
     
-    @Override
-    public abstract String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
-
-    @Override
-    public abstract String buildFetchQuery(final String index, final String cfName, final String[] requiredColumns, boolean forStaticDocument) throws ConfigurationException, IndexNotFoundException;
     
     @Override
     public abstract DocPrimaryKey parseElasticId(final String index, final String cfName, final String id) throws JsonParseException, JsonMappingException, IOException;
@@ -938,27 +924,43 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract String[] mappedColumns(String index, String type, boolean isStaticDocument);
 
     @Override
+    public abstract String[] mappedColumns(final String index, final String type, final boolean forStaticDocument, final boolean includeMeta);
+    
+    @Override
     public abstract String[] mappedColumns(MapperService mapperService, String type, boolean isStaticDocument);
 
     @Override
     public abstract String[] mappedColumns(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
 
     @Override
-    public abstract UntypedResultSet fetchRow(String index, String type, String[] requiredColumns, String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
-            IOException;
+    public abstract boolean rowExists(String ksName, String table, String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
+    
+    @Override
+    public abstract UntypedResultSet fetchRow(final String ksName, final String index, final String type, final String id, final String[] columns) 
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
     @Override
-    public abstract UntypedResultSet fetchRow(String index, String type, String[] requiredColumns, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException,
-            RequestValidationException, IOException;
-
+    public abstract UntypedResultSet fetchRow(final String ksName, final String index, final String cfName, final String id, final String[] columns, final ConsistencyLevel cl) 
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
+    
     @Override
-    public abstract UntypedResultSet fetchRow(String index, String type, String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
-
+    public abstract UntypedResultSet fetchRow(final String ksName, final String index, final String cfName, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl) 
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
+    
     @Override
-    public abstract UntypedResultSet fetchRowInternal(String index, String type, String[] requiredColumns, String id) throws ConfigurationException, IOException;
-
+    public abstract Engine.GetResult fetchSourceInternal(String ksName, String index, String type, String id) throws IOException;
+    
     @Override
-    public abstract UntypedResultSet fetchRowInternal(String ksName, String cfName, String[] requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
+    public abstract String buildFetchQuery(final String ksName, final String index, final String cfName, final String[] requiredColumns, boolean forStaticDocument) throws ConfigurationException, IndexNotFoundException, IOException;
+    
+    @Override
+    public abstract UntypedResultSet fetchRowInternal(final String ksName, final String index, final String cfName, final String id, final String[] columns) throws ConfigurationException, IOException;
+    
+    @Override
+    public abstract UntypedResultSet fetchRowInternal(final String ksName, final String index, final String cfName, final  DocPrimaryKey docPk, final String[] columns) throws ConfigurationException, IOException;
+    
+    @Override
+    public abstract UntypedResultSet fetchRowInternal(final String ksName, final String index, String cfName, String[] requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
 
     @Override
     public abstract Map<String, Object> rowAsMap(String index, String type, Row row) throws IOException;
@@ -990,9 +992,11 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     @Override
     public abstract void writeMetaDataAsComment(String metadataString) throws ConfigurationException, IOException;
 
+    
     @Override
-    public abstract void initializeMetaDataAsComment();
-
+    public abstract void initializeMetaData();
+    
+    
     @Override
     public abstract MetaData readMetaDataAsComment() throws NoPersistedMetaDataException;
 
@@ -1007,10 +1011,10 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
             RequestValidationException;
 
     @Override
-    public abstract Map<String, Object> expandTableMapping(String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
+    public abstract Map<String, Object> discoverTableMapping(String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
 
     @Override
-    public abstract Map<String, Object> expandTableMapping(String ksName, String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
+    public abstract Map<String, Object> discoverTableMapping(String ksName, String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
 
     @Override
     public abstract void waitShardsStarted();

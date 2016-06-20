@@ -35,6 +35,7 @@ import org.apache.lucene.index.StoredFieldVisitor;
 import org.apache.lucene.util.BytesRef;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
+import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -98,7 +99,7 @@ public class FieldsVisitor extends StoredFieldVisitor {
     // cache the cassandra required columns and return the static+partition columns
     public Set<String> requiredColumns(ClusterService clusterService, SearchContext searchContext) throws JsonParseException, JsonMappingException, IOException {
         boolean isStaticDocument = clusterService.isStaticDocument(searchContext.request().index(), uid);
-        CFMetaData metadata = (isStaticDocument) ? clusterService.getCFMetaData(searchContext.request().index(), uid.type()) : null;
+        CFMetaData metadata = (isStaticDocument) ? InternalCassandraClusterService.getCFMetaData(searchContext.request().index(), uid.type()) : null;
         Set<String> requiredColumns =  new HashSet<String>();
         
         if (requestedFields() != null) {

@@ -207,13 +207,13 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
     public void createField(ParseContext context, Object object) throws IOException {
         String routing = (String)object;
         if (routing != null) {
-            /*
             if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored()) {
                 context.ignoredValue(fieldType().names().indexName(), routing);
                 return;
             }
-            */
-            context.doc().add(new Field(fieldType().names().indexName(), routing, fieldType()));
+            Field field = new Field(fieldType().names().indexName(), routing, fieldType());
+            setBoost(field);
+            context.doc().add(field);
         }
     }
     
@@ -222,12 +222,10 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
         if (context.sourceToParse().routing() != null) {
             String routing = context.sourceToParse().routing();
             if (routing != null) {
-                /*
                 if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored()) {
                     context.ignoredValue(fieldType().names().indexName(), routing);
                     return;
                 }
-                */
                 fields.add(new Field(fieldType().names().indexName(), routing, fieldType()));
             }
         }

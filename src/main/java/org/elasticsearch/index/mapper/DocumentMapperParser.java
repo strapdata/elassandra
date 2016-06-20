@@ -29,6 +29,7 @@ import java.util.Map;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.elasticsearch.Version;
+import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Nullable;
@@ -166,7 +167,7 @@ public class DocumentMapperParser {
                     throw new MapperParsingException("Transform must be an object or an array but was:  " + fieldNode);
                 }
                 iterator.remove();
-            } else if ("columns_regexp".equals(fieldName)) {
+            } else if (InternalCassandraClusterService.DISCOVER.equals(fieldName)) {
                 iterator.remove();
             } else {
                 MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
@@ -246,7 +247,7 @@ public class DocumentMapperParser {
         }
         
         try {
-            this.clusterService.expandTableMapping(this.indexSettings.get(IndexMetaData.SETTING_KEYSPACE, this.mapperService.index().getName()), root);
+            this.clusterService.discoverTableMapping(this.indexSettings.get(IndexMetaData.SETTING_KEYSPACE, this.mapperService.index().getName()), root);
         } catch (SyntaxException | ConfigurationException | IOException e) {
             logger.error("Failed to expand mapping", e);
         }

@@ -239,7 +239,7 @@ public abstract class UntypedResultSet implements Iterable<UntypedResultSet.Row>
         }
 
         public ByteBuffer get(String name) {
-            for(int i=0; i<colNames.length; i++) {
+            for(int i=0; i < colNames.length; i++) {
                 if (colNames[i].equals(name)) {
                     return colValues[i];
                 }

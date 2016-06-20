@@ -2,6 +2,7 @@ package org.apache.cassandra.service;
 
 import static com.google.common.collect.Sets.newHashSet;
 
+import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Paths;
 import java.util.Locale;
@@ -122,7 +123,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void beforeCommitLogRecover() {
         try {
-            KSMetaData ksMetaData = Schema.instance.getKSMetaData(ClusterService.ELASTIC_ADMIN_KEYSPACE);
+            KSMetaData ksMetaData = Schema.instance.getKSMetaData(InternalCassandraClusterService.ELASTIC_ADMIN_KEYSPACE);
             if (ksMetaData != null) {
                 logger.debug("Starting ElasticSearch before recovering commitlogs (elastic_admin keyspace already  exists)");
                 startElasticSearch();
@@ -136,7 +137,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void beforeBootstrap() {
         if (instance.node == null) {
-            logger.debug("Starting ElasticSearch before bootstraping (create elastic_admin keyspace)");
+            logger.debug("Starting ElasticSearch before bootstraping (create elastic_admin keyspace, if not exits)");
             startElasticSearch();
         } 
     }
@@ -144,7 +145,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void beforeStartupComplete() {
         if (instance.node == null) {
-            logger.debug("Starting ElasticSearch before startup complete (create elastic_admin keyspace if needed, but no boostrap)");
+            logger.debug("Starting ElasticSearch before startup complete (create elastic_admin keyspace if not exits, but no boostrap)");
             startElasticSearch();
         } 
     }
@@ -238,9 +239,9 @@ public class ElassandraDaemon extends CassandraDaemon {
         NodeBuilder nodeBuilder = NodeBuilder.nodeBuilder().settings(nodeSettings);
         
         String clusterName = DatabaseDescriptor.getClusterName();
-        String datacenterGroup = settings.get(InternalCassandraClusterService.SETTING_DATACENTER_GROUP);
+        String datacenterGroup = settings.get(InternalCassandraClusterService.SETTING_CLUSTER_DATACENTER_GROUP);
         if (datacenterGroup != null) {
-            clusterName = DatabaseDescriptor.getClusterName() + "/"+datacenterGroup.trim();
+            clusterName = DatabaseDescriptor.getClusterName() + "@" + datacenterGroup.trim();
         }
         nodeBuilder.clusterName(clusterName).data(true).settings()
                 .put("name", CassandraDiscovery.buildNodeName(DatabaseDescriptor.getRpcAddress()))

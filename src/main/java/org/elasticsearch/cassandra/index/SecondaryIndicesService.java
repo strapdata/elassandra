@@ -1,6 +1,7 @@
 package org.elasticsearch.cassandra.index;
 
 import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.component.LifecycleComponent;
 
 
@@ -10,8 +11,7 @@ public interface SecondaryIndicesService extends LifecycleComponent<SecondaryInd
     public void removeDeleteListener(DeleteListener listener);
     
     public interface DeleteListener {
-        public String index();
-        public String keyspace();
+        public IndexMetaData mapping();
         public void onIndexDeleted();
     }
     

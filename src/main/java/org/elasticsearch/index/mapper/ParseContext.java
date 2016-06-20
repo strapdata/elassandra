@@ -320,7 +320,7 @@ public abstract class ParseContext {
             return in.id();
         }
 
-        /*
+        
         @Override
         public void ignoredValue(String indexName, String value) {
             in.ignoredValue(indexName, value);
@@ -330,7 +330,7 @@ public abstract class ParseContext {
         public String ignoredValue(String indexName) {
             return in.ignoredValue(indexName);
         }
-         */
+        
         
         @Override
         public void id(String id) {
@@ -557,7 +557,6 @@ public abstract class ParseContext {
             return id;
         }
 
-        /*
         @Override
         public void ignoredValue(String indexName, String value) {
             ignoredValues.put(indexName, value);
@@ -567,7 +566,7 @@ public abstract class ParseContext {
         public String ignoredValue(String indexName) {
             return ignoredValues.get(indexName);
         }
-         */
+
         
         /**
          * Really, just the id mapper should set this.
@@ -747,9 +746,9 @@ public abstract class ParseContext {
 
     public abstract String id();
 
-    //public abstract void ignoredValue(String indexName, String value);
+    public abstract void ignoredValue(String indexName, String value);
 
-    //public abstract String ignoredValue(String indexName);
+    public abstract String ignoredValue(String indexName);
 
     /**
      * Really, just the id mapper should set this.

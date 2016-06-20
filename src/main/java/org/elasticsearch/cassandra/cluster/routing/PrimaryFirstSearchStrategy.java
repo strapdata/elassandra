@@ -88,15 +88,17 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
             for (InetAddress node : localUnreachableNodes) {
                 for (Range<Token> orphanRange : StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, node)) {
                     List<InetAddress> replicaEndPoints = allRanges.get(orphanRange);
-                    replicaEndPoints.removeAll(localUnreachableNodes);
-                    if (replicaEndPoints.size() == 0) {
-                        consistent = false;
-                        orphanRanges.add(orphanRange);
-                        logger.warn("Inconsistent search for keyspace {}, no alive node for range {}", ksName, orphanRange);
-                    } else {
-                        InetAddress liveReplica = replicaEndPoints.get(rnd.nextInt(replicaEndPoints.size()));
-                        topo.put(liveReplica, orphanRange);
-                        logger.debug("orphanRanges {} available on = {} ", orphanRanges, liveReplica);
+                    if (replicaEndPoints != null) {
+                        replicaEndPoints.removeAll(localUnreachableNodes);
+                        if (replicaEndPoints.size() == 0) {
+                            consistent = false;
+                            orphanRanges.add(orphanRange);
+                            logger.warn("Inconsistent search for keyspace {}, no alive node for range {}", ksName, orphanRange);
+                        } else {
+                            InetAddress liveReplica = replicaEndPoints.get(rnd.nextInt(replicaEndPoints.size()));
+                            topo.put(liveReplica, orphanRange);
+                            logger.debug("orphanRanges {} available on = {} ", orphanRanges, liveReplica);
+                        }
                     }
                 }
             }

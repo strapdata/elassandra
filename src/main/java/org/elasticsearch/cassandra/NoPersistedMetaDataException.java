@@ -24,12 +24,12 @@ public class NoPersistedMetaDataException extends ElasticsearchException {
      */
     private static final long serialVersionUID = 6343514139588332455L;
 
-    public NoPersistedMetaDataException() {
-        super("Failed to read MetaData");
+    public NoPersistedMetaDataException(String msg) {
+        super(msg);
     }
 
-    public NoPersistedMetaDataException(Exception e) {
-        super("Failed to read MetaData", e);
+    public NoPersistedMetaDataException(String msg, Exception e) {
+        super(msg, e);
     }
 
 }

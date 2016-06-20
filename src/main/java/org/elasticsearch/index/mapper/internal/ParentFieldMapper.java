@@ -55,7 +55,8 @@ public class ParentFieldMapper extends MetadataFieldMapper {
 
     public static final String NAME = "_parent";
     public static final String CONTENT_TYPE = "_parent";
-
+    public static final String CQL_PARENT_PK = "cql_parent_pk";
+    
     public static class Defaults {
         public static final String NAME = ParentFieldMapper.NAME;
 
@@ -85,6 +86,8 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         protected String indexName;
 
         private final String documentType;
+        
+        private String pkColumns;
 
         private final MappedFieldType parentJoinFieldType = Defaults.JOIN_FIELD_TYPE.clone();
 
@@ -102,6 +105,11 @@ public class ParentFieldMapper extends MetadataFieldMapper {
             return builder;
         }
 
+        public Builder pkColumns(String columns) {
+            this.pkColumns = columns;
+            return builder;
+        }
+        
         @Override
         public Builder fieldDataSettings(Settings fieldDataSettings) {
             Settings settings = Settings.builder().put(childJoinFieldType.fieldDataType().getSettings()).put(fieldDataSettings).build();
@@ -123,7 +131,7 @@ public class ParentFieldMapper extends MetadataFieldMapper {
                 parentJoinFieldType.setHasDocValues(false);
                 parentJoinFieldType.setDocValuesType(DocValuesType.NONE);
             }
-            return new ParentFieldMapper(fieldType, parentJoinFieldType, childJoinFieldType, parentType, context.indexSettings());
+            return new ParentFieldMapper(fieldType, parentJoinFieldType, childJoinFieldType, parentType, pkColumns, context.indexSettings());
         }
     }
 
@@ -137,6 +145,9 @@ public class ParentFieldMapper extends MetadataFieldMapper {
                 Object fieldNode = entry.getValue();
                 if (fieldName.equals("type")) {
                     builder.type(fieldNode.toString());
+                    iterator.remove();
+                } else if (fieldName.equals(CQL_PARENT_PK)) {
+                    builder.pkColumns(fieldNode.toString());
                     iterator.remove();
                 } else if (fieldName.equals("postings_format") && parserContext.indexVersionCreated().before(Version.V_2_0_0_beta1)) {
                     // ignore before 2.0, reject on and after 2.0
@@ -156,7 +167,7 @@ public class ParentFieldMapper extends MetadataFieldMapper {
 
         @Override
         public MetadataFieldMapper getDefault(Settings indexSettings, MappedFieldType fieldType, String parentType) {
-            return new ParentFieldMapper(indexSettings, fieldType, parentType);
+            return new ParentFieldMapper(indexSettings, fieldType, parentType, null);
         }
     }
 
@@ -247,14 +258,16 @@ public class ParentFieldMapper extends MetadataFieldMapper {
     }
 
     private final String parentType;
+    private final String parentPkColumns;
     // determines the field data settings
     private MappedFieldType childJoinFieldType;
     // has no impact of field data settings, is just here for creating a join field, the parent field mapper in the child type pointing to this type determines the field data settings for this join field
     private final MappedFieldType parentJoinFieldType;
 
-    private ParentFieldMapper(MappedFieldType fieldType, MappedFieldType parentJoinFieldType, MappedFieldType childJoinFieldType, String parentType, Settings indexSettings) {
+    private ParentFieldMapper(MappedFieldType fieldType, MappedFieldType parentJoinFieldType, MappedFieldType childJoinFieldType, String parentType, String parentPkColumns, Settings indexSettings) {
         super(NAME, fieldType, Defaults.FIELD_TYPE, indexSettings);
         this.parentType = parentType;
+        this.parentPkColumns = parentPkColumns;
         this.parentJoinFieldType = parentJoinFieldType;
         this.parentJoinFieldType.freeze();
         this.childJoinFieldType = childJoinFieldType;
@@ -263,8 +276,8 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         }
     }
 
-    private ParentFieldMapper(Settings indexSettings, MappedFieldType existing, String parentType) {
-        this(existing == null ? Defaults.FIELD_TYPE.clone() : existing.clone(), joinFieldTypeForParentType(parentType, indexSettings), null, null, indexSettings);
+    private ParentFieldMapper(Settings indexSettings, MappedFieldType existing, String parentType, String parentPkColumns) {
+        this(existing == null ? Defaults.FIELD_TYPE.clone() : existing.clone(), joinFieldTypeForParentType(parentType, indexSettings), null, null, null, indexSettings);
     }
 
     private static MappedFieldType joinFieldTypeForParentType(String parentType, Settings indexSettings) {
@@ -292,6 +305,10 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         return parentType;
     }
 
+    public String pkColumns() {
+        return parentPkColumns;
+    }
+    
     @Override
     public void preParse(ParseContext context) throws IOException {
     }
@@ -316,7 +333,9 @@ public class ParentFieldMapper extends MetadataFieldMapper {
             return;
         }
         
-        context.doc().add(new Field(fieldType().names().indexName(), Uid.createUid(context.stringBuilder(), parentType, parentId), fieldType()));
+        Field field = new Field(fieldType().names().indexName(), Uid.createUid(context.stringBuilder(), parentType, parentId), fieldType());
+        setBoost(field);
+        context.doc().add(field);
         addJoinFieldIfNeeded(context, childJoinFieldType, parentId);
         // we have parent mapping, yet no value was set, ignore it...
     }
@@ -336,7 +355,8 @@ public class ParentFieldMapper extends MetadataFieldMapper {
             // we are in the parsing of _parent phase
             String parentId = context.parser().text();
             context.sourceToParse().parent(parentId);
-            fields.add(new Field(fieldType().names().indexName(), Uid.createUid(context.stringBuilder(), parentType, parentId), fieldType()));
+            Field field = new Field(fieldType().names().indexName(), Uid.createUid(context.stringBuilder(), parentType, parentId), fieldType());
+            fields.add(field);
             addJoinFieldIfNeeded(fields, childJoinFieldType, parentId);
         } else {
             // otherwise, we are running it post processing of the xcontent
@@ -348,7 +368,8 @@ public class ParentFieldMapper extends MetadataFieldMapper {
                         throw new MapperParsingException("No parent id provided, not within the document, and not externally");
                     }
                     // we did not add it in the parsing phase, add it now
-                    fields.add(new Field(fieldType().names().indexName(), Uid.createUid(context.stringBuilder(), parentType, parentId), fieldType()));
+                    Field field = new Field(fieldType().names().indexName(), Uid.createUid(context.stringBuilder(), parentType, parentId), fieldType());
+                    fields.add(field);
                     addJoinFieldIfNeeded(fields, childJoinFieldType, parentId);
                 } else if (parentId != null && !parsedParentId.equals(Uid.createUid(context.stringBuilder(), parentType, parentId))) {
                     throw new MapperParsingException("Parent id mismatch, document value is [" + Uid.createUid(parsedParentId).id() + "], while external value is [" + parentId + "]");
@@ -392,6 +413,11 @@ public class ParentFieldMapper extends MetadataFieldMapper {
 
         builder.startObject(CONTENT_TYPE);
         builder.field("type", parentType);
+        
+        if (this.parentPkColumns != null) {
+            builder.field(CQL_PARENT_PK, parentPkColumns);
+        }
+        
         if (includeDefaults || joinFieldHasCustomFieldDataSettings()) {
             builder.field("fielddata", (Map) childJoinFieldType.fieldDataType().getSettings().getAsMap());
         }

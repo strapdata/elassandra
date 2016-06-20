@@ -22,22 +22,17 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.Cell;
 import org.apache.cassandra.db.ColumnFamily;
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionInfo;
 import org.apache.cassandra.db.RangeTombstone;
@@ -45,42 +40,30 @@ import org.apache.cassandra.db.composites.CType;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.composites.CompoundSparseCellName;
-import org.apache.cassandra.db.index.PerRowSecondaryIndex;
-import org.apache.cassandra.db.index.SecondaryIndexSearcher;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CollectionType;
 import org.apache.cassandra.db.marshal.ListType;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.marshal.SetType;
-import org.apache.cassandra.db.marshal.UTF8Type;
-import org.apache.cassandra.db.marshal.UserType;
-import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.RequestValidationException;
-import org.apache.cassandra.serializers.CollectionSerializer;
-import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.service.ElassandraDaemon;
-import org.apache.cassandra.transport.Server;
-import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.node.ArrayNode;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
+import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
-import org.elasticsearch.common.logging.ESLogger;
-import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.IndexService;
@@ -113,6 +96,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             boolean    refresh;
             IndexService indexService;
             Map<String,Object> mapping;
+            String[] pkColumns;
             
             public IndexInfo(String name, IndexService indexService, MappingMetaData mappingMetaData) throws IOException {
                 this.name = name;
@@ -153,19 +137,28 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         IndexService indexService = indicesService.indexServiceSafe(index);
                         IndexInfo indexInfo = new IndexInfo(index, indexService, mappingMetaData);
                         this.indices.add(indexInfo);
-                        if (mappingMetaData.getSourceAsMap().get("properties") != null) {
-                            Map<String,Object> props = (Map<String,Object>)mappingMetaData.getSourceAsMap().get("properties");
+                        
+                        Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
+                        if (mappingMap.get("properties") != null) {
+                            Map<String,Object> props = (Map<String,Object>)mappingMap.get("properties");
                             for(String fieldName : props.keySet() ) {
                                 Map<String,Object> fieldMap = (Map<String,Object>)props.get(fieldName);
-                                boolean partialUpdate = (fieldMap.get(TypeParsers.CQL_PARTIAL_UPDATE) == null || (Boolean)fieldMap.get(TypeParsers.CQL_PARTIAL_UPDATE));
+                                boolean mandatory = (fieldMap.get(TypeParsers.CQL_MANDATORY) == null || (Boolean)fieldMap.get(TypeParsers.CQL_MANDATORY));
                                 if (fieldsMap.get(fieldName) != null) {
-                                    partialUpdate = partialUpdate || fieldsMap.get(fieldName);
+                                    mandatory = mandatory || fieldsMap.get(fieldName);
                                 }
-                                fieldsMap.put(fieldName, partialUpdate);
+                                fieldsMap.put(fieldName, mandatory);
                             }
                         }
                         if (mappingMetaData.hasParentField()) {
-                            this.fieldsMap.put(ParentFieldMapper.NAME,true);
+                            Map<String,Object> props = (Map<String,Object>)mappingMap.get(ParentFieldMapper.NAME);
+                            if (props.get(ParentFieldMapper.CQL_PARENT_PK) == null) {
+                                fieldsMap.put(ParentFieldMapper.NAME,true);
+                            } else {
+                                indexInfo.pkColumns = ((String)props.get(ParentFieldMapper.CQL_PARENT_PK)).split(",");
+                                for(String colName : indexInfo.pkColumns)
+                                    fieldsMap.put(colName, true);
+                            }
                         }
                     } catch (IOException e) {
                         logger.error("Unexpected error", e);
@@ -285,7 +278,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         for(int i=0; i < clusteringColumns.size() ; i++) {
                             ColumnDefinition ccd = clusteringColumns.get(i);
                             String colName = ccd.name.toString();
-                            Object colValue = deserialize(ccd.type, cellName.get(i));
+                            Object colValue = InternalCassandraClusterService.deserialize(ccd.type, cellName.get(i));
                             if (fieldsMap.get(colName) != null) {
                                 docMap.put(colName, colValue);
                             }
@@ -320,7 +313,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                   
                             switch (ctype.kind) {
                             case LIST: 
-                                value = deserialize(((ListType)cd.type).getElementsType(), cell.value() );
+                                value = InternalCassandraClusterService.deserialize(((ListType)cd.type).getElementsType(), cell.value() );
                                 if (logger.isTraceEnabled()) 
                                     logger.trace("list name={} kind={} type={} value={}", cellNameString, cd.kind, cd.type.asCQL3Type().toString(), value);
                                 List l = (List) docMap.get(cellNameString);
@@ -331,7 +324,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 l.add(value);
                                 break;
                             case SET:
-                                value = deserialize(((SetType)cd.type).getElementsType(), cell.value() );
+                                value = InternalCassandraClusterService.deserialize(((SetType)cd.type).getElementsType(), cell.value() );
                                 if (logger.isTraceEnabled()) 
                                     logger.trace("set name={} kind={} type={} value={}", cellNameString, cd.kind, cd.type.asCQL3Type().toString(), value);
                                 Set s = (Set) docMap.get(cellNameString);
@@ -342,8 +335,8 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 s.add(value);
                                 break;
                             case MAP:
-                                value = deserialize(((MapType)cd.type).getValuesType(), cell.value() );
-                                Object key = deserialize(((MapType)cd.type).getKeysType(), cellName.get(cellName.size()-1));
+                                value = InternalCassandraClusterService.deserialize(((MapType)cd.type).getValuesType(), cell.value() );
+                                Object key = InternalCassandraClusterService.deserialize(((MapType)cd.type).getKeysType(), cellName.get(cellName.size()-1));
                                 if (logger.isTraceEnabled()) 
                                     logger.trace("map name={} kind={} type={} key={} value={}", 
                                             cellNameString, cd.kind, 
@@ -361,7 +354,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 break;
                             }
                         } else {
-                            Object value = deserialize(cd.type, cell.value() );
+                            Object value = InternalCassandraClusterService.deserialize(cd.type, cell.value() );
                             if (logger.isTraceEnabled()) 
                                 logger.trace("name={} kind={} type={} value={}", cellNameString, cd.kind, cd.type.asCQL3Type().toString(), value);
                             docMap.put(cd.name.toString(), value);
@@ -428,7 +421,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             if (logger.isTraceEnabled()) {
                                 logger.trace(" {}.{} id={} read fields={} docMap={}",metadata.ksName, metadata.cfName, id(), mustReadColumns, docMap);
                             }
-                            UntypedResultSet results = getClusterService().fetchRowInternal(metadata.ksName, metadata.cfName, mustReadColumns.toArray(new String[mustReadColumns.size()]), ptCols, hasStaticUpdate);
+                            UntypedResultSet results = getClusterService().fetchRowInternal(metadata.ksName, null, metadata.cfName, mustReadColumns.toArray(new String[mustReadColumns.size()]), ptCols, hasStaticUpdate);
                             if (!results.isEmpty()) {
                                 int putCount = getClusterService().rowAsMap(metadata.ksName, metadata.cfName, results.one(), docMap);
                                 if (putCount > 0) docLive = true;
@@ -486,8 +479,18 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                     .token(DocumentFactory.this.token)
                                     .routing(partitionKey)
                                     .timestamp(Long.toString(System.currentTimeMillis()));
+                            
+                            
                             if (docMap.get(ParentFieldMapper.NAME) != null) {
                                 sourceToParse.parent((String)docMap.get(ParentFieldMapper.NAME));
+                            } else {
+                                if (indexInfo.pkColumns != null && indexInfo.pkColumns.length > 0) {
+                                    ArrayNode an = ClusterService.Utils.jsonMapper.createArrayNode();
+                                    for(String f : indexInfo.pkColumns) {
+                                        ClusterService.Utils.addToJsonArray(docMap.get(f), an);
+                                    }
+                                    sourceToParse.parent(ClusterService.Utils.writeValueAsString(an));
+                                }
                             }
                             if (this.docTtl < Integer.MAX_VALUE) {
                                 sourceToParse.ttl(this.docTtl);
@@ -681,7 +684,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     IndexMetaData indexMetaData = cursor.value;
                     String indexName = indexMetaData.getIndex();
                     if ((indexName.equals(this.baseCfs.metadata.ksName)) || 
-                         indexName.equals(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME)) &&
+                         indexName.equals(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE)) &&
                         (event.indexRoutingTableChanged(indexMetaData.getIndex()) || 
                          event.indexMetaDataChanged(indexMetaData))) {
                             updateMapping = true;

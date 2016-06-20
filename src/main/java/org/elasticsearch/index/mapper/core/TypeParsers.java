@@ -160,7 +160,7 @@ public class TypeParsers {
 
     public static final String CQL_COLLECTION = "cql_collection";
     public static final String CQL_STRUCT = "cql_struct";
-    public static final String CQL_PARTIAL_UPDATE = "cql_partial_update";
+    public static final String CQL_MANDATORY = "cql_mandatory";
     public static final String CQL_STATIC_COLUMN = "cql_static_column";
     public static final String CQL_PARTITION_KEY = "cql_partition_key";
     public static final String CQL_PRIMARY_KEY_ORDER = "cql_primary_key_order";
@@ -247,7 +247,7 @@ public class TypeParsers {
                 case "tuple" : builder.cqlStruct(CqlStruct.TUPLE); break;
                 }
                 iterator.remove();
-            } else if (propName.equals(CQL_PARTIAL_UPDATE)) {
+            } else if (propName.equals(CQL_MANDATORY)) {
                 builder.cqlPartialUpdate(nodeBooleanValue(propNode));
                 iterator.remove();
             } else if (propName.equals(CQL_PARTITION_KEY)) {

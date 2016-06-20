@@ -31,10 +31,12 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterService.DocPrimaryKey;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
@@ -165,8 +167,7 @@ public final class ShardGetService extends AbstractIndexShardComponent {
             try {
                 for (String typeX : mapperService.types() ) {
                     // search for the matching type (table)
-                    UntypedResultSet result = clusterService.fetchRow(shardId.index().name(), typeX, id);
-                    if (!result.isEmpty()) {
+                    if (clusterService.rowExists(shardId.index().name(), typeX, id)) {
                         type = typeX;
                         break;
                     }
@@ -302,7 +303,9 @@ public final class ShardGetService extends AbstractIndexShardComponent {
         
         // In elassandra, Engine does not store the source any more, but fetch it from cassandra.
         try {
-            UntypedResultSet result = clusterService.fetchRow(shardId.index().name(), type, columns.toArray(new String[columns.size()]), id);
+            UntypedResultSet result = clusterService.fetchRow(
+                    clusterService.state().metaData().index(shardId.index().name()).keyspace(),
+                    shardId.index().name(), type, id, columns.toArray(new String[columns.size()]));
             if (result.isEmpty()) {
                 return new GetResult(shardId.index().name(), type, id, -1, false, null, null);
             }
@@ -376,7 +379,12 @@ public final class ShardGetService extends AbstractIndexShardComponent {
         if (fieldVisitor != null) {
             try {
                 // fetch source from cassandra
-                Map<String, Object> sourceMap = clusterService.rowAsMap(shardId.index().name(), type, clusterService.fetchRow(shardId.index().name(), type, id).one());
+                DocPrimaryKey docPk = clusterService.parseElasticId(shardId.index().name(), type, id);
+                String[] columns = clusterService.mappedColumns(shardId.index().name(), type, docPk.isStaticDocument);
+                UntypedResultSet result = clusterService.fetchRow(
+                        clusterService.state().metaData().index(shardId.index().name()).keyspace(),
+                        shardId.index().name(), type, docPk, columns, ConsistencyLevel.LOCAL_ONE);
+                Map<String, Object> sourceMap = clusterService.rowAsMap(shardId.index().name(), type, result.one());
                 source = XContentFactory.contentBuilder(XContentType.JSON).map(sourceMap).bytes();
                 fieldVisitor.source( source.toBytes() );
                 //docIdAndVersion.context.reader().document(docIdAndVersion.docId, fieldVisitor);

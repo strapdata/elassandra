@@ -17,9 +17,9 @@ package org.elasticsearch.cassandra.index;
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
 import java.io.IOException;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
@@ -38,9 +38,6 @@ import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.util.concurrent.PrioritizedEsThreadPoolExecutor;
 import org.elasticsearch.common.util.concurrent.PrioritizedRunnable;
-import org.elasticsearch.index.IndexService;
-import org.elasticsearch.indices.IndicesLifecycle;
-import org.elasticsearch.indices.IndicesService;
 
 
 /**
@@ -57,17 +54,12 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     private final CopyOnWriteArraySet<String> toUpdateIndices = new CopyOnWriteArraySet<>();
     private final CopyOnWriteArrayList<SecondaryIndicesService.DeleteListener> deleteListeners = new CopyOnWriteArrayList<SecondaryIndicesService.DeleteListener>();
     
-    private final IndicesService indicesService;
-    private final IndicesLifecycle indicesLifecycle;
     private final ClusterService clusterService;
     
     @Inject
-    public ElasticSecondaryIndicesService(Settings settings,  ClusterService clusterService,
-            IndicesService indicesService, IndicesLifecycle indicesLifecycle) {
+    public ElasticSecondaryIndicesService(Settings settings,  ClusterService clusterService) {
         super(settings);
         this.clusterService = clusterService;
-        this.indicesService = indicesService;
-        this.indicesLifecycle = indicesLifecycle;
     }
     
     public void addDeleteListener(DeleteListener listener) {
@@ -79,13 +71,15 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     }
     
     abstract class Task extends PrioritizedRunnable {
-        private final long creationTime;
-        final String ksName;
+        final long creationTime;
+        final ClusterService clusterService;
+        final IndexMetaData indexMetaData;
        
-        public Task(final String ksName) {
+        public Task(final IndexMetaData indexMetaData) {
             super(Priority.NORMAL);
-            this.ksName = ksName;
+            this.indexMetaData = indexMetaData;
             this.creationTime = System.currentTimeMillis();
+            this.clusterService = ElasticSecondaryIndicesService.this.clusterService;
         }
 
         @Override
@@ -101,31 +95,31 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     }
     
     class CreateSecondaryIndexTask extends Task {
-        public CreateSecondaryIndexTask(final String ksName) {
-            super(ksName);
+        public CreateSecondaryIndexTask(final IndexMetaData indexMetaData) {
+            super(indexMetaData);
         }
         @Override
         public void execute() {
             try {
-                logger.debug("Creating secondary indices for keyspace [{}]", ksName);
-                clusterService.createSecondaryIndices(ksName);
+                logger.debug("Creating secondary indices for keyspace [{}]", indexMetaData.keyspace());
+                this.clusterService.createSecondaryIndices(indexMetaData);
             } catch (IOException e) {
-                logger.error("Failed to create secondary indices on [{}]", e, ksName);
+                logger.error("Failed to create secondary indices on [{}]", e, indexMetaData.keyspace());
             }
         }
     }
     
     class DropSecondaryIndexTask extends Task {
-        public DropSecondaryIndexTask(final String ksName) {
-            super(ksName);
+        public DropSecondaryIndexTask(final IndexMetaData indexMetaData) {
+            super(indexMetaData);
         }
         @Override
         public void execute() {
             try {
-                logger.debug("Dropping secondary indices for keyspace [{}]", ksName);
-                clusterService.dropSecondaryIndices(ksName);
+                logger.debug("Dropping secondary indices for keyspace [{}]", indexMetaData.keyspace());
+                clusterService.dropSecondaryIndices(indexMetaData);
             } catch (RequestExecutionException e) {
-                logger.error("Failed to create secondary indices on {}", ksName);
+                logger.error("Failed to create secondary indices on {}", indexMetaData.keyspace());
             }
         }
     }
@@ -148,14 +142,12 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     
     @Override
     protected void doStart() throws ElasticsearchException {
-        // TODO Auto-generated method stub
         this.tasksExecutor = EsExecutors.newSinglePrioritizing("SecondaryIndicesService",daemonThreadFactory(settings, TASK_THREAD_NAME));
         logger.debug("{} started.",TASK_THREAD_NAME);
     }
 
     @Override
     protected void doStop() throws ElasticsearchException {
-        // TODO Auto-generated method stub
         tasksExecutor.shutdown();
         try {
             tasksExecutor.awaitTermination(10, TimeUnit.SECONDS);
@@ -193,7 +185,7 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
                     logger.debug("index=[{}] shards Active/Unassigned={}/{} => asynchronously creates secondary index", 
                             index, indexRoutingTable.primaryShardsActive(), indexRoutingTable.primaryShardsUnassigned());
                     IndexMetaData indexMetaData = event.state().metaData().index(index);
-                    submitTask(new CreateSecondaryIndexTask(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE_NAME, index)));
+                    submitTask(new CreateSecondaryIndexTask(indexMetaData));
                     this.toUpdateIndices.remove(index);
                 } else {
                     logger.debug("index=[{}] shards Active/Unassigned={}/{} => waiting next cluster state to create secondary indices", 
@@ -203,12 +195,12 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
         }
         
         // notify listeners that all shards are deleted.
-        Set<String> unindexableKeyspace = new HashSet<String>();
+        Map<String, IndexMetaData> unindexableKeyspace = new HashMap<String, IndexMetaData>();
         for(DeleteListener deleteListener : this.deleteListeners) {
-            if (!event.state().routingTable().hasIndex(deleteListener.index())) {
+            if (!event.state().routingTable().hasIndex(deleteListener.mapping().getIndex())) {
                 // all shard are inactive => notify listeners
                 deleteListener.onIndexDeleted();
-                unindexableKeyspace.add(deleteListener.keyspace());
+                unindexableKeyspace.put(deleteListener.mapping().keyspace(), deleteListener.mapping());
             }
         }
         
@@ -217,9 +209,9 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
             IndexMetaData indexMetaData = i.next();
             unindexableKeyspace.remove(indexMetaData.keyspace());
         }
-        for(String keyspace : unindexableKeyspace) {
+        for(String keyspace : unindexableKeyspace.keySet()) {
             logger.debug("asynchronously dropping secondary index for keyspace=[{}]", keyspace);
-            submitTask(new DropSecondaryIndexTask(keyspace));
+            submitTask(new DropSecondaryIndexTask(unindexableKeyspace.get(keyspace)));
         }
     }
 

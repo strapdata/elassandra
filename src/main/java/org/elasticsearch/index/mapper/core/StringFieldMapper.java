@@ -320,11 +320,9 @@ public class StringFieldMapper extends FieldMapper implements AllFieldMapper.Inc
             context.doc().add(field);
             hasField = true;
         }
-        /*
         if (!hasField) {
             context.ignoredValue(fieldType().names().indexName(), valueAndBoost.value());
         }
-        */
     }
     
     protected void parseCreateField(ParseContext context, List<Field> fields, ValueAndBoost valueAndBoost) throws IOException {

@@ -78,7 +78,7 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
         
         public static final CqlCollection CQL_COLLECTION = CqlCollection.LIST;
         public static final CqlStruct CQL_STRUCT = CqlStruct.UDT;
-        public static final boolean  CQL_PARTIAL_UPDATE = true; // if true, force read on collection columns when updating a row.
+        public static final boolean  CQL_MANDATORY = true; // if true, force a read if field is missing when indexing.
         public static final boolean  CQL_PARTITION_KEY = false;
         public static final boolean  CQL_STATIC_COLUMN = false;
         public static final int  CQL_PRIMARY_KEY_ORDER = -1;
@@ -132,7 +132,7 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
 
         protected CqlStruct cqlStruct = Defaults.CQL_STRUCT;
 
-        protected boolean cqlPartialUpdate = Defaults.CQL_PARTIAL_UPDATE;
+        protected boolean cqlMandatory = Defaults.CQL_MANDATORY;
         
         protected boolean cqlPartitionKey = Defaults.CQL_PARTITION_KEY;
         
@@ -171,7 +171,7 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
         }
         
         public T cqlPartialUpdate(boolean cqlPartialUpdate) {
-            this.cqlPartialUpdate = cqlPartialUpdate;
+            this.cqlMandatory = cqlPartialUpdate;
             return builder;
         }
         
@@ -230,7 +230,7 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
             context.path().pathType(origPathType);
             context.path().remove();
 
-            ObjectMapper objectMapper = createMapper(name, context.path().fullPathAsText(name), cqlCollection, cqlStruct, cqlPartialUpdate, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn, enabled, nested, dynamic, pathType, mappers, context.indexSettings());
+            ObjectMapper objectMapper = createMapper(name, context.path().fullPathAsText(name), cqlCollection, cqlStruct, cqlMandatory, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn, enabled, nested, dynamic, pathType, mappers, context.indexSettings());
             objectMapper.includeInAllIfNotSet(includeInAll);
 
             return (Y) objectMapper;
@@ -269,7 +269,7 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
             } else if (fieldName.equals("enabled")) {
                 builder.enabled(nodeBooleanValue(fieldNode));
                 return true;
-            } else if (fieldName.equals(TypeParsers.CQL_PARTIAL_UPDATE)) {
+            } else if (fieldName.equals(TypeParsers.CQL_MANDATORY)) {
                 builder.cqlPartialUpdate(nodeBooleanValue(fieldNode));
                 return true;
             } else if (fieldName.equals(TypeParsers.CQL_PARTITION_KEY)) {
@@ -675,8 +675,8 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
                 builder.field(TypeParsers.CQL_COLLECTION, "singleton");
             }
         }
-        if (cqlPartialUpdate != Defaults.CQL_PARTIAL_UPDATE) {
-            builder.field(TypeParsers.CQL_PARTIAL_UPDATE, cqlPartialUpdate);
+        if (cqlPartialUpdate != Defaults.CQL_MANDATORY) {
+            builder.field(TypeParsers.CQL_MANDATORY, cqlPartialUpdate);
         }
         
         if (cqlPartitionKey != Defaults.CQL_PARTITION_KEY) {

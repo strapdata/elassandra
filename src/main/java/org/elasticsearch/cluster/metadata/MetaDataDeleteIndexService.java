@@ -137,45 +137,11 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 newCurrentState = ClusterState.builder(newCurrentState).incrementVersion().blocks(newblocks).metaData(newMetaData).routingTable(routingTableBuilder).build();
                 if (logger.isTraceEnabled()) logger.trace("newClusterState = {}", newCurrentState);
                 
-                /*
-                // wait for events from all nodes that it has been removed from their respective metadata...
-                int count = currentState.nodes().size();
-                // add the notifications that the store was deleted from *data* nodes
-                count += currentState.nodes().dataNodes().size();
-                final AtomicInteger counter = new AtomicInteger(count);
-                // this listener will be notified once we get back a notification based on the cluster state change below.
-                final NodeIndexDeletedAction.Listener nodeIndexDeleteListener = new NodeIndexDeletedAction.Listener() {
-                    @Override
-                    public void onNodeIndexDeleted(String index, String nodeId) {
-                        if (index.equals(request.index)) {
-                            if (counter.decrementAndGet() == 0) {
-                                listener.onResponse(new Response(true));
-                                nodeIndexDeletedAction.remove(this);
-                            }
-                        }
-                    }
-
-                    @Override
-                    public void onNodeIndexStoreDeleted(String index, String nodeId) {
-                        if (index.equals(request.index)) {
-                            if (counter.decrementAndGet() == 0) {
-                                listener.onResponse(new Response(true));
-                                nodeIndexDeletedAction.remove(this);
-                            }
-                        }
-                    }
-                };
-                nodeIndexDeletedAction.add(nodeIndexDeleteListener);
-                */
-                final String keyspace = currentState.metaData().index(request.index).getSettings().get(IndexMetaData.SETTING_KEYSPACE, request.index);
+                final IndexMetaData indexMetaData = currentState.metaData().index(request.index);
                 MetaDataDeleteIndexService.this.secondaryIndicesService.addDeleteListener(new SecondaryIndicesService.DeleteListener() {
                     @Override 
-                    public String index() {
-                        return request.index;
-                    }
-                    @Override 
-                    public String keyspace() {
-                        return keyspace;
+                    public IndexMetaData mapping() {
+                        return indexMetaData;
                     }
                     @Override
                     public void onIndexDeleted() {
@@ -188,7 +154,6 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                     @Override
                     public void run() {
                         listener.onResponse(new Response(false));
-                        //nodeIndexDeletedAction.remove(nodeIndexDeleteListener);
                     }
                 });
                 
