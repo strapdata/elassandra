@@ -19,11 +19,29 @@
 
 package org.elasticsearch.search.fetch.innerhits;
 
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.ConstantScoreScorer;
+import org.apache.lucene.search.ConstantScoreWeight;
+import org.apache.lucene.search.DocIdSet;
+import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopDocsCollector;
+import org.apache.lucene.search.TopFieldCollector;
+import org.apache.lucene.search.TopScoreDocCollector;
+import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.join.BitSetProducer;
 import org.apache.lucene.util.BitSet;
 import org.elasticsearch.ExceptionsHelper;
@@ -41,9 +59,6 @@ import org.elasticsearch.search.fetch.FetchSubPhase;
 import org.elasticsearch.search.internal.FilteredSearchContext;
 import org.elasticsearch.search.internal.InternalSearchHit;
 import org.elasticsearch.search.internal.SearchContext;
-
-import java.io.IOException;
-import java.util.Map;
 
 /**
  */
@@ -67,8 +82,7 @@ public final class InnerHitsContext {
 
         protected final ParsedQuery query;
         private final InnerHitsContext childInnerHits;
-        private String cqlFetchQuery;
-        private String cqlFetchQueryStatic;
+        private Map<String,String> cqlQueryCache = new HashMap<String,String>();
 
         protected BaseInnerHits(SearchContext context, ParsedQuery query, Map<String, BaseInnerHits> childInnerHits) {
             super(context);
@@ -98,23 +112,13 @@ public final class InnerHitsContext {
         }
 
         @Override
-        public String cqlFetchQuery() {
-            return cqlFetchQuery;
+        public String getCqlFetchQuery(String type) {
+            return cqlQueryCache.get(type);
         }
         
         @Override
-        public void cqlFetchQuery(String query) {
-            this.cqlFetchQuery = query;
-        }
-        
-        @Override
-        public String cqlFetchQueryStatic() {
-            return cqlFetchQueryStatic;
-        }
-        
-        @Override
-        public void cqlFetchQueryStatic(String query) {
-            this.cqlFetchQueryStatic = query;
+        public void putFetchQuery(String type, String query) {
+            cqlQueryCache.put(type, query);
         }
     }
 

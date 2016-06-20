@@ -420,17 +420,16 @@ public class FetchPhase implements SearchPhase {
         if (!(fieldVisitor instanceof JustUidFieldsVisitor) ) {
             try {
                 DocPrimaryKey docPk = clusterService.parseElasticId(searchContext.request().index(), fieldVisitor.uid().type(), fieldVisitor.uid().id());
-                String cqlQuery = (docPk.isStaticDocument) ? searchContext.cqlFetchQueryStatic() : searchContext.cqlFetchQuery();
+                String typeKey = (docPk.isStaticDocument) ? fieldVisitor.uid().type()+"_static" : fieldVisitor.uid().type();
+                String cqlQuery = searchContext.getCqlFetchQuery( typeKey );
                 if (cqlQuery == null) {
                     Set<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
                     if (requiredColumns.size() > 0) {
-                        cqlQuery = clusterService.buildFetchQuery(searchContext.request().index(), fieldVisitor.uid().type(),
+                        cqlQuery = clusterService.buildFetchQuery(
+                                clusterService.state().metaData().index(searchContext.request().index()).keyspace(),
+                                searchContext.request().index(), fieldVisitor.uid().type(),
                                 requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument);
-                        if (docPk.isStaticDocument) {
-                            searchContext.cqlFetchQueryStatic(cqlQuery);
-                        } else {
-                            searchContext.cqlFetchQuery(cqlQuery);
-                        }
+                        searchContext.putFetchQuery(typeKey, cqlQuery);
                     }
                 }
                 
