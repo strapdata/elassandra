@@ -559,8 +559,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
             if (state != null) {
                 VersionedValue value = state.getApplicationState(ELASTIC_SHARDS_STATES);
                 if (value != null) {
-                    shardsStateMap = (Map<String, ShardRoutingState>) jsonMapper.readValue(value.value, new TypeReference<Map<String, ShardRoutingState>>() {
-                    });
+                    shardsStateMap = (Map<String, ShardRoutingState>) jsonMapper.readValue(value.value, indexShardStateTypeReference);
                 }
             }
             if (shardsStateMap == null) {
@@ -573,7 +572,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                     shardsStateMap.remove(index);
                 }
             }
-            Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(jsonMapper.writeValueAsString(shardsStateMap)));
+            String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(shardsStateMap);
+            Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
         } else {
             logger.warn("Gossiper not enabled to publish shard state");
         }
