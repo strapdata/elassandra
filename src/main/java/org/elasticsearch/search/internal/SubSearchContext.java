@@ -18,6 +18,12 @@
  */
 package org.elasticsearch.search.internal;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
@@ -33,10 +39,6 @@ import org.elasticsearch.search.lookup.SearchLookup;
 import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.rescore.RescoreSearchContext;
 import org.elasticsearch.search.suggest.SuggestionSearchContext;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 /**
  */
@@ -68,8 +70,7 @@ public class SubSearchContext extends FilteredSearchContext {
 
     private InnerHitsContext innerHitsContext;
 
-    private String cqlFetchQuery;
-    private String cqlFetchQueryStatic;
+    private Map<String,String> cqlQueryCache = new HashMap<String,String>();
     
     public SubSearchContext(SearchContext context) {
         super(context);
@@ -340,22 +341,12 @@ public class SubSearchContext extends FilteredSearchContext {
     }
 
     @Override
-    public String cqlFetchQuery() {
-        return cqlFetchQuery;
-    }
-
-    @Override
-    public void cqlFetchQuery(String query) {
-        this.cqlFetchQuery = query;
+    public String getCqlFetchQuery(String type) {
+        return cqlQueryCache.get(type);
     }
     
     @Override
-    public String cqlFetchQueryStatic() {
-        return cqlFetchQueryStatic;
-    }
-
-    @Override
-    public void cqlFetchQueryStatic(String query) {
-        this.cqlFetchQueryStatic = query;
+    public void putFetchQuery(String type, String query) {
+        cqlQueryCache.put(type, query);
     }
 }

@@ -149,8 +149,7 @@ public class DefaultSearchContext extends SearchContext {
     private volatile long lastAccessTime = -1;
     private InnerHitsContext innerHitsContext;
 
-    private String cqlFetchQuery;
-    private String cqlFetchQueryStatic;
+    private Map<String,String> cqlQueryCache = new HashMap<String,String>();
     
     private final Map<String, FetchSubPhaseContext> subPhaseContexts = new HashMap<>();
     private final Map<Class<?>, Collector> queryCollectors = new HashMap<>();
@@ -286,23 +285,13 @@ public class DefaultSearchContext extends SearchContext {
     }
 
     @Override
-    public String cqlFetchQuery() {
-        return cqlFetchQuery;
+    public String getCqlFetchQuery(String type) {
+        return cqlQueryCache.get(type);
     }
     
     @Override
-    public void cqlFetchQuery(String query) {
-        this.cqlFetchQuery = query;
-    }
-
-    @Override
-    public String cqlFetchQueryStatic() {
-        return cqlFetchQueryStatic;
-    }
-    
-    @Override
-    public void cqlFetchQueryStatic(String query) {
-        this.cqlFetchQueryStatic = query;
+    public void putFetchQuery(String type, String query) {
+        cqlQueryCache.put(type, query);
     }
     
     @Override

@@ -18,7 +18,12 @@
  */
 package org.elasticsearch.percolator;
 
-import com.carrotsearch.hppc.ObjectObjectAssociativeContainer;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
 
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexableField;
@@ -78,12 +83,7 @@ import org.elasticsearch.search.rescore.RescoreSearchContext;
 import org.elasticsearch.search.scan.ScanContext;
 import org.elasticsearch.search.suggest.SuggestionSearchContext;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
+import com.carrotsearch.hppc.ObjectObjectAssociativeContainer;
 
 /**
  */
@@ -109,8 +109,7 @@ public class PercolateContext extends SearchContext {
     private final long startTime;
     private String[] types;
     
-    private String cqlFetchQuery;
-    private String cqlFetchQueryStatic;
+    private Map<String,String> cqlQueryCache = new HashMap<String,String>();
     
     private Engine.Searcher docSearcher;
     private Engine.Searcher engineSearcher;
@@ -761,22 +760,12 @@ public class PercolateContext extends SearchContext {
     }
 
     @Override
-    public String cqlFetchQuery() {
-        return this.cqlFetchQuery;
-    }
-
-    @Override
-    public void cqlFetchQuery(String query) {
-        this.cqlFetchQuery = query;
+    public String getCqlFetchQuery(String type) {
+        return cqlQueryCache.get(type);
     }
     
     @Override
-    public String cqlFetchQueryStatic() {
-        return this.cqlFetchQueryStatic;
-    }
-
-    @Override
-    public void cqlFetchQueryStatic(String query) {
-        this.cqlFetchQueryStatic = query;
+    public void putFetchQuery(String type, String query) {
+        cqlQueryCache.put(type, query);
     }
 }

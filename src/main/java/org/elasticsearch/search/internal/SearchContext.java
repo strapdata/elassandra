@@ -311,10 +311,9 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
 
     public abstract FetchSearchResult fetchResult();
 
-    public abstract String cqlFetchQuery();
-    public abstract void cqlFetchQuery(String query);
-    public abstract String cqlFetchQueryStatic();
-    public abstract void cqlFetchQueryStatic(String query);
+    public abstract String getCqlFetchQuery(String type);
+    public abstract void   putFetchQuery(String type, String query);
+
     
     /**
      * Schedule the release of a resource. The time when {@link Releasable#close()} will be called on this object
