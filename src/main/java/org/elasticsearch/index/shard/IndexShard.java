@@ -605,6 +605,11 @@ public class IndexShard extends AbstractIndexShardComponent {
         readAllowed();
         return engine().get(get);
     }
+    
+    public Engine.GetResult get(ClusterService clusterService, String type, String id) throws IOException {
+        readAllowed();
+        return clusterService.fetchSourceInternal(this.indexSettings.get(IndexMetaData.SETTING_KEYSPACE, shardId.index().name()), shardId.index().name(), type, id);
+    }
 
     public void refresh(String source) {
         verifyNotClosed();
@@ -1163,12 +1168,14 @@ public class IndexShard extends AbstractIndexShardComponent {
                     IndexShard.this.flushOnClose = flushOnClose;
                 }
 
+                /*
                 TranslogWriter.Type type = TranslogWriter.Type.fromString(settings.get(TranslogConfig.INDEX_TRANSLOG_FS_TYPE, translogConfig.getType().name()));
                 if (type != translogConfig.getType()) {
                     logger.info("updating type from [{}] to [{}]", translogConfig.getType(), type);
                     translogConfig.setType(type);
                 }
-
+                */
+                
                 final Translog.Durabilty durabilty = getFromSettings(logger, settings, translogConfig.getDurabilty());
                 if (durabilty != translogConfig.getDurabilty()) {
                     logger.info("updating durability from [{}] to [{}]", translogConfig.getDurabilty(), durabilty);
@@ -1528,13 +1535,7 @@ public class IndexShard extends AbstractIndexShardComponent {
     }
 
     private static Translog.Durabilty getFromSettings(ESLogger logger, Settings settings, Translog.Durabilty defaultValue) {
-        final String value = settings.get(TranslogConfig.INDEX_TRANSLOG_DURABILITY, defaultValue.name());
-        try {
-            return Translog.Durabilty.valueOf(value.toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            logger.warn("Can't apply {} illegal value: {} using {} instead, use one of: {}", TranslogConfig.INDEX_TRANSLOG_DURABILITY, value, defaultValue, Arrays.toString(Translog.Durabilty.values()));
-            return defaultValue;
-        }
+        return Translog.Durabilty.ASYNC; // dummy settings
     }
 
 }
