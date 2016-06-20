@@ -144,6 +144,11 @@ public class ClusterModule extends AbstractModule {
     }
 
     private void registerBuiltinClusterSettings() {
+        // elassandra cluster dynamic settings
+        registerClusterDynamicSetting(InternalCassandraClusterService.SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT, Validator.TIME);
+        registerClusterDynamicSetting(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_SECONDARY_INDEX_CLASS, Validator.EMPTY);
+        registerClusterDynamicSetting(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_SEARCH_STRATEGY_CLASS, Validator.EMPTY);
+        
         registerClusterDynamicSetting(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTES, Validator.EMPTY);
         registerClusterDynamicSetting(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_FORCE_GROUP + "*", Validator.EMPTY);
         registerClusterDynamicSetting(BalancedShardsAllocator.SETTING_INDEX_BALANCE_FACTOR, Validator.FLOAT);
@@ -163,7 +168,7 @@ public class ClusterModule extends AbstractModule {
         registerClusterDynamicSetting(FilterAllocationDecider.CLUSTER_ROUTING_REQUIRE_GROUP + "*", Validator.EMPTY);
         registerClusterDynamicSetting(IndicesStore.INDICES_STORE_THROTTLE_TYPE, Validator.EMPTY);
         registerClusterDynamicSetting(IndicesStore.INDICES_STORE_THROTTLE_MAX_BYTES_PER_SEC, Validator.BYTES_SIZE);
-        registerClusterDynamicSetting(IndicesTTLService.INDICES_TTL_INTERVAL, Validator.TIME);
+//        registerClusterDynamicSetting(IndicesTTLService.INDICES_TTL_INTERVAL, Validator.TIME);
         registerClusterDynamicSetting(MappingUpdatedAction.INDICES_MAPPING_DYNAMIC_TIMEOUT, Validator.TIME);
         registerClusterDynamicSetting(MetaData.SETTING_READ_ONLY, Validator.EMPTY);
         registerClusterDynamicSetting(RecoverySettings.INDICES_RECOVERY_FILE_CHUNK_SIZE, Validator.POSITIVE_BYTES_SIZE);
@@ -209,6 +214,9 @@ public class ClusterModule extends AbstractModule {
     }
 
     private void registerBuiltinIndexSettings() {
+        // elassandra index dynamic settings
+        registerIndexDynamicSetting(IndexMetaData.SETTING_PARTITION_FUNCTION, Validator.EMPTY);
+        
         registerIndexDynamicSetting(IndexStore.INDEX_STORE_THROTTLE_MAX_BYTES_PER_SEC, Validator.BYTES_SIZE);
         registerIndexDynamicSetting(IndexStore.INDEX_STORE_THROTTLE_TYPE, Validator.EMPTY);
         registerIndexDynamicSetting(MergeSchedulerConfig.MAX_THREAD_COUNT, Validator.EMPTY);
@@ -222,8 +230,8 @@ public class ClusterModule extends AbstractModule {
         registerIndexDynamicSetting(DisableAllocationDecider.INDEX_ROUTING_ALLOCATION_DISABLE_ALLOCATION, Validator.EMPTY);
         registerIndexDynamicSetting(DisableAllocationDecider.INDEX_ROUTING_ALLOCATION_DISABLE_NEW_ALLOCATION, Validator.EMPTY);
         registerIndexDynamicSetting(DisableAllocationDecider.INDEX_ROUTING_ALLOCATION_DISABLE_REPLICA_ALLOCATION, Validator.EMPTY);
-        registerIndexDynamicSetting(TranslogConfig.INDEX_TRANSLOG_FS_TYPE, Validator.EMPTY);
-        registerIndexDynamicSetting(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, Validator.NON_NEGATIVE_INTEGER);
+        //registerIndexDynamicSetting(TranslogConfig.INDEX_TRANSLOG_FS_TYPE, Validator.EMPTY);
+        //registerIndexDynamicSetting(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, Validator.NON_NEGATIVE_INTEGER);
         registerIndexDynamicSetting(IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS, Validator.EMPTY);
         registerIndexDynamicSetting(IndexMetaData.SETTING_READ_ONLY, Validator.EMPTY);
         registerIndexDynamicSetting(IndexMetaData.SETTING_BLOCKS_READ, Validator.EMPTY);

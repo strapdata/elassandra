@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ConsistencyLevel;
@@ -84,16 +85,20 @@ import org.elasticsearch.common.component.LifecycleComponent;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.xcontent.ToXContent;
+import org.elasticsearch.common.xcontent.ToXContent.Params;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper.Names;
@@ -199,10 +204,54 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
      */
     TimeValue getMaxTaskWaitTime();
 
+    public static ConsistencyLevel consistencyLevelFromString(String value) {
+        switch(value.toUpperCase()) {
+        case "ANY": return ConsistencyLevel.ANY;
+        case "ONE": return ConsistencyLevel.ONE;
+        case "TWO": return ConsistencyLevel.TWO;
+        case "THREE": return ConsistencyLevel.THREE;
+        case "QUORUM": return ConsistencyLevel.QUORUM;
+        case "ALL": return ConsistencyLevel.ALL;
+        case "LOCAL_QUORUM": return ConsistencyLevel.LOCAL_QUORUM;
+        case "EACH_QUORUM": return ConsistencyLevel.EACH_QUORUM;
+        case "SERIAL": return ConsistencyLevel.SERIAL;
+        case "LOCAL_SERIAL": return ConsistencyLevel.LOCAL_SERIAL;
+        case "LOCAL_ONE": return ConsistencyLevel.LOCAL_ONE;
+        default :
+            throw new IllegalArgumentException("No write consistency match [" + value + "]");
+        }
+    }
     
-    public static final String ELASTIC_ADMIN_KEYSPACE = "elastic_admin";
-    public static final String ELASTIC_ADMIN_METADATA_TABLE = "metadata";
+    /**
+     * Persisted metadata should not include number_of_shards nor number_of_replica.
+     */
+    public static String PERSISTED_METADATA = "cassandra.pertisted.metadata";
+    public static ToXContent.Params persistedParams = new Params() {
+        @Override
+        public String param(String key) {
+            if (PERSISTED_METADATA.equals(key)) return "true";
+            return null;
+        }
 
+        @Override
+        public String param(String key, String defaultValue) {
+            if (PERSISTED_METADATA.equals(key)) return "true";
+            return defaultValue;
+        }
+
+        @Override
+        public boolean paramAsBoolean(String key, boolean defaultValue) {
+            if (PERSISTED_METADATA.equals(key)) return true;
+            return defaultValue;
+        }
+
+        @Override
+        public Boolean paramAsBoolean(String key, Boolean defaultValue) {
+            if (PERSISTED_METADATA.equals(key)) return new Boolean(true);
+            return defaultValue;
+        }
+    };
+    
     public static class DocPrimaryKey {
         public String[] names;
         public Object[] values;
@@ -221,6 +270,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
         }
     }
     
+    
     static class Utils {
         public static final org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
         
@@ -234,6 +284,18 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
             else if (typeSerializer instanceof FloatSerializer) an.add( (Float) value);
             else if (typeSerializer instanceof TimestampSerializer) an.add( ((Date) value).getTime());
             else an.add(stringify(type, value));
+            return an;
+        }
+        
+        public static ArrayNode addToJsonArray(final Object v, ArrayNode an) {
+            if (v instanceof Boolean) an.add( (Boolean) v);
+            else if (v instanceof Integer) an.add( (Integer) v);
+            else if (v instanceof Long) an.add( (Long) v);
+            else if (v instanceof Double) an.add( (Double) v);
+            else if (v instanceof BigDecimal) an.add( (BigDecimal) v);
+            else if (v instanceof Float) an.add( (Float) v);
+            else if (v instanceof Date) an.add( ((Date) v).getTime());
+            else an.add( v.toString() );
             return an;
         }
         
@@ -321,10 +383,12 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
                builder.endObject();
             } else {
                FieldMapper fieldMapper = (FieldMapper)mapper;
-               if (field != null) {
-                   builder.field(field, (fieldMapper==null) ? value : fieldMapper.fieldType().valueForSearch(value));
-               } else {
-                   builder.value((fieldMapper==null) ? value : fieldMapper.fieldType().valueForSearch(value));
+               if (!(fieldMapper instanceof MetadataFieldMapper)) {
+                   if (field != null) {
+                       builder.field(field, (fieldMapper==null) ? value : fieldMapper.fieldType().valueForSearch(value));
+                   } else {
+                       builder.value((fieldMapper==null) ? value : fieldMapper.fieldType().valueForSearch(value));
+                   }
                }
             }
         }
@@ -372,20 +436,12 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Object node, Map<String, GetField> flatFields);
     public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> fields);
 
-    public void createElasticAdminKeyspace() throws Exception;
+    public void createElasticAdminKeyspace(MetaData metadata) throws Exception;
     public void createIndexKeyspace(String index, int replicationFactor) throws IOException;
     
-    public void createSecondaryIndices(String index) throws IOException;
-    public void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException;
-    public void dropSecondaryIndices(String ksName) throws RequestExecutionException;
-    public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException;
-    
-    public void removeIndexKeyspace(String index) throws IOException;
-    
-    public void buildCollectionMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException;
-    public String buildUDT(String ksName, String cfName, String name, ObjectMapper objectMapper) throws RequestExecutionException;
-
-    public String buildFetchQuery(final String index, final String cfName, final String[] requiredColumns, boolean forStaticDocument) throws ConfigurationException, IndexNotFoundException;
+    public void createSecondaryIndices(final IndexMetaData indexMetaData) throws IOException;
+    public void dropSecondaryIndices(final IndexMetaData indexMetaData) throws RequestExecutionException;
+     
     public DocPrimaryKey parseElasticId(final String index, final String cfName, final String id) throws JsonParseException, JsonMappingException, IOException;
     
     public ClusterState updateNumberOfShards(ClusterState currentState);
@@ -393,22 +449,31 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
     
+    public String[] mappedColumns(final String index, final String type, final boolean forStaticDocument, final boolean includeMeta);
     public String[] mappedColumns(final String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
     public String[] mappedColumns(final String index, final String type,final boolean forStaticDocument);
     public String[] mappedColumns(final MapperService mapperService, final String type, final boolean forStaticDocument);
     
     public boolean isStaticDocument(final String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
-    
-    public UntypedResultSet fetchRow(String index, String type, String[] requiredColumns,String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
-            IOException;
-    public UntypedResultSet fetchRow(String index, String type, String[] requiredColumns, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException,
-            RequestValidationException, IOException;
+    public boolean rowExists(String ksName, String table, String id) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
-    public UntypedResultSet fetchRow(final String index, final String type, final String id) 
+    
+    public UntypedResultSet fetchRow(final String ksName, final String index, final String type, final String id, final String[] columns) 
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
+
+    public UntypedResultSet fetchRow(final String ksName, final String index, final String cfName, final String id, final String[] columns, final ConsistencyLevel cl) 
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
     
-    public UntypedResultSet fetchRowInternal(final String index, final String cfName, final String[] requiredColumns, final String id) throws ConfigurationException, IOException;
-    public UntypedResultSet fetchRowInternal(final String ksName, final String cfName, final String[] requiredColumns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
+    public UntypedResultSet fetchRow(final String ksName, final String index, final String cfName, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl) 
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
+    
+    public String buildFetchQuery(final String ksName, final String index, final String cfName, final String[] requiredColumns, boolean forStaticDocument) throws ConfigurationException, IndexNotFoundException, IOException;
+    
+    public UntypedResultSet fetchRowInternal(final String ksName, final String index, final String cfName, final String id, final String[] columns) throws ConfigurationException, IOException;
+    public UntypedResultSet fetchRowInternal(final String ksName, final String index, final String cfName, final  DocPrimaryKey docPk, final String[] columns) throws ConfigurationException, IOException;
+    public UntypedResultSet fetchRowInternal(final String ksName, final String index, final String cfName, final String[] columns, Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException;
+    
+    public Engine.GetResult fetchSourceInternal(String ksName, String index, String type, String id) throws IOException;
     
     public Map<String, Object> rowAsMap(final String index, final String type, UntypedResultSet.Row row) throws IOException;
     public int rowAsMap(final String index, final String type, UntypedResultSet.Row row, Map<String, Object> map) throws IOException;
@@ -425,24 +490,21 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
 
     public void blockingMappingUpdate(IndexService indexService, String type, CompressedXContent source) throws Exception;
     
-    public CFMetaData getCFMetaData(final String ksName, final String cfName) throws ActionRequestValidationException;
-    
     public Token getToken(ByteBuffer rowKey, ColumnFamily cf);
     public Token getToken(String index, String type, String routing) throws JsonParseException, JsonMappingException, IOException;
     public boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Collection<Range<Token>> requestTokenRange);
     public boolean tokenRangesContains(Collection<Range<Token>> shardTokenRanges, Token token);
     
     public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException;
-    public void initializeMetaDataAsComment();
+    public void initializeMetaData();
     public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException;
     public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException;
     public MetaData checkForNewMetaData(Long version) throws NoPersistedMetaDataException;
-    
     public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
             RequestValidationException;
     
-    public Map<String, Object> expandTableMapping(final String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
-    public Map<String, Object> expandTableMapping(final String ksName, final String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
+    public Map<String, Object> discoverTableMapping(final String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
+    public Map<String, Object> discoverTableMapping(final String ksName, final String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
 
 
     /**
@@ -487,5 +549,6 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public Set<InetAddress> getStartedShard(String index);
 
     boolean isDatacenterGroupMember(InetAddress endpoint);
+
     
 }

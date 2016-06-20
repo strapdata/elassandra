@@ -31,7 +31,7 @@ curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&preference=_only_local
 curl -XPOST "http://$NODE:9200/twitter/_flush"
 
 
-curl -XPUT "http://$NODE:9200/twitter2/" -d '{ "settings" : { "number_of_replicas" : 0, "keyspace_name" : "twitter" } }'
+curl -XPUT "http://$NODE:9200/twitter2/" -d '{ "settings" : { "number_of_replicas" : 0, "keyspace" : "twitter" } }'
 curl -XPUT "http://$NODE:9200/twitter2/_mapping/tweet" -d '
 { 
     "tweet" : {
