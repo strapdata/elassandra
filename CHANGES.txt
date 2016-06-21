@@ -1,6 +1,6 @@
-2.1.1-12 - 2016-06-08
-  * Add a configurable cross-datacenters mapping replication.
-  * Add support for index partitioning (see index setting index.partition_function)
+2.1.1-12 - 2016-06-21
+  * Add a configurable cross-datacenters replication.
+  * Add support for index partitioning (see index.partition_function)
   * Optimize search operation with _routing (send the search request to a node hosting the corresponding token, issue #23)
   * Avoid useless reads of metadata with consistency quorum for better performances.
   * Remove translog for better performances (durability ensured by cassandra commitlogs)
@@ -17,6 +17,7 @@
   * [breaking change] Rename the mapping attribute "columns_regexp" by "discover".
   * [breaking change] Rename the index setting "keyspace_name" by "keyspace".
   * [breaking change] Rename the field mapping parameter "cql_partial_update" by "cql_mandatory".
+  * [breaking change] Rename the ThreadLocalOptimizedElasticSecondary class by ExtendedElasticSecondaryIndex.
 
 2.1.1-11 - 2016-05-20
   * Improve secondary index implementation.

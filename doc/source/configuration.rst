@@ -86,6 +86,21 @@ Index settings
 * ``index.search_strategy_class`` : Set the search strategy class overiding the default cluster search strategy.
 
 
+Sizing and tunning
+------------------
+
+Roughly, Elassandra write throughput should be half the cassandra write throughput if you index all columns. If you only index a subset of columns, performance would be better. 
+
+Recommanded production setting for Apache cassandra and Elasticsearch can be applied to Elassandra :
+* Configure less than half the total memory of your server and up to 30.5Gb. Minimum recommended DRAM for production deployments is 32Gb.
+* Increase number of Elassandra node or use index partitionning to keep shards size below 50Gb.
+* Avoid huge wide rows, locking on a wide row can dramatically affect performance.
+* During indexing, if you don't need search, disable refresh (default is every second). 
+.. code::
+
+   PUT /<my_index>/_settings -d '{ "index" : { "refresh_interval" : "-1" } }'
+
+* Configure off_heap memory for cassandra memtables (elassandra default configuration)
 
 
 
