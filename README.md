@@ -6,8 +6,8 @@ Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch
 
 Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes. A demo video is available on youtube.
 
-<a href="http://www.youtube.com/watch?feature=player_embedded&v=a4sjX15OOrA
-" target="_blank"><img src="http://img.youtube.com/vi/a4sjX15OOrA/0.jpg" 
+<a href="http://www.youtube.com/watch?feature=player_embedded&v=SHncUmuvH58
+" target="_blank"><img src="http://img.youtube.com/vi/SHncUmuvH58/0.jpg" 
 alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
@@ -26,8 +26,8 @@ New project documentation available at [doc.elassandra.io](doc.elassandra.io).
 
 ## Benefits of Elassandra
 
-Show short intro: <a href="http://www.youtube.com/watch?feature=player_embedded&v=EFZhwrVBTFw
-" target="_blank"><img src="http://img.youtube.com/vi/EFZhwrVBTFw/0.jpg" 
+Show short intro: <a href="http://www.youtube.com/watch?feature=player_embedded&v=2H6RIBjSwcM
+" target="_blank"><img src="http://img.youtube.com/vi/2H6RIBjSwcM/0.jpg" 
 alt="Elassandra short intro" width="240" height="180" border="10" /></a>
 
 For cassandra users, elassandra provides elasicsearch features :
