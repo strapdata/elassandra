@@ -56,8 +56,8 @@ public abstract class BaseElasticSecondaryIndex extends PerRowSecondaryIndex imp
     protected volatile ClusterService clusterService = null;
     protected IPartitioner partitioner = DatabaseDescriptor.getPartitioner();
     
-    // init and flush write lock
-    protected ReadWriteLock lock = new ReentrantReadWriteLock();
+    // init write lock
+    private ReadWriteLock initLock = new ReentrantReadWriteLock();
     
     @Override
     public ColumnFamilyStore getIndexCfs() {
@@ -97,13 +97,13 @@ public abstract class BaseElasticSecondaryIndex extends PerRowSecondaryIndex imp
 
     @Override
     public void init() {
-        lock.writeLock().lock();
+        initLock.writeLock().lock();
         try {
             index_name = "elastic_"+this.baseCfs.name;
             elasticSecondayIndices.add(this);
             initMapping();
         } finally {
-            lock.writeLock().unlock();
+            initLock.writeLock().unlock();
         }
     }
     

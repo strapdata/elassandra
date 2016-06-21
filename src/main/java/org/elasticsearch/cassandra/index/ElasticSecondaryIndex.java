@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
@@ -55,6 +57,7 @@ import org.codehaus.jackson.node.ArrayNode;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
+import org.elasticsearch.cassandra.index.ExtendedElasticSecondaryIndex.MappingInfo;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
@@ -552,8 +555,10 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
         }
     }
+    
     // updated when create/open/close/remove an ES index.
     private AtomicReference<MappingInfo> mappingAtomicReference = new AtomicReference();
+    protected ReadWriteLock mappingInfoLock = new ReentrantReadWriteLock();
     
     public ElasticSecondaryIndex() {
         super();
@@ -645,60 +650,56 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
      */
     @Override
     public void forceBlockingFlush() {
-        lock.writeLock().lock();
-        try {
-            MappingInfo mappingInfo = this.mappingAtomicReference.get();
-            if (mappingInfo == null || mappingInfo.indices.size() == 0) {
-                logger.warn("Elasticsearch not ready, cannot flush Elasticsearch index");
-                return;
-            }
-            for(MappingInfo.IndexInfo indexInfo : mappingInfo.indices) {
-                try {
-                    IndexShard indexShard = indexInfo.indexService.shardSafe(0);
-                    logger.debug("Flushing Elasticsearch index=[{}] state=[{}]",indexInfo.name, indexShard.state());
-                    if (indexShard.state() == IndexShardState.STARTED)  {
-                        indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
-                        logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
-                    } else {
-                        logger.warn("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
-                    }
-                } catch (ElasticsearchException e) {
-                    logger.error("Unexpected error",e);
+        MappingInfo mappingInfo = this.mappingAtomicReference.get();
+        if (mappingInfo == null || mappingInfo.indices.size() == 0) {
+            logger.warn("Elasticsearch not ready, cannot flush Elasticsearch index");
+            return;
+        }
+        for(MappingInfo.IndexInfo indexInfo : mappingInfo.indices) {
+            try {
+                IndexShard indexShard = indexInfo.indexService.shardSafe(0);
+                logger.debug("Flushing Elasticsearch index=[{}] state=[{}]",indexInfo.name, indexShard.state());
+                if (indexShard.state() == IndexShardState.STARTED)  {
+                    indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
+                    logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
+                } else {
+                    logger.warn("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
                 }
+            } catch (ElasticsearchException e) {
+                logger.error("Error while flushing index {}",e,indexInfo.name);
             }
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
     
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
-        lock.writeLock().lock();
-        try {
-            boolean updateMapping = false;
-            if (event.blocksChanged()) {
-                updateMapping = true;
-            } else {
-                for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
-                    IndexMetaData indexMetaData = cursor.value;
-                    String indexName = indexMetaData.getIndex();
-                    if ((indexName.equals(this.baseCfs.metadata.ksName)) || 
-                         indexName.equals(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE)) &&
-                        (event.indexRoutingTableChanged(indexMetaData.getIndex()) || 
-                         event.indexMetaDataChanged(indexMetaData))) {
-                            updateMapping = true;
-                            break;
-                        }
-                }
+        boolean updateMapping = false;
+        if (event.blocksChanged()) {
+            updateMapping = true;
+        } else {
+            for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
+                IndexMetaData indexMetaData = cursor.value;
+                String indexName = indexMetaData.getIndex();
+                if ((indexName.equals(this.baseCfs.metadata.ksName)) || 
+                     indexName.equals(indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE)) &&
+                    (event.indexRoutingTableChanged(indexMetaData.getIndex()) || 
+                     event.indexMetaDataChanged(indexMetaData))) {
+                        updateMapping = true;
+                        break;
+                    }
             }
-            if (updateMapping) {
-                if (logger.isTraceEnabled()) logger.trace("state = {}", event.state());
+        }
+        if (updateMapping) {
+            if (logger.isTraceEnabled()) logger.trace("state = {}", event.state());
+            mappingInfoLock.writeLock().lock();
+            try {
                 this.mappingAtomicReference.set(new MappingInfo(event.state()));
-                logger.debug("index=[{}.{}] new mappingInfo = {}",this.baseCfs.metadata.ksName, this.index_name, this.mappingAtomicReference.get() );
+                logger.debug("index=[{}.{}] metadata.version={} new mappingInfo = {}",
+                        this.baseCfs.metadata.ksName, this.index_name, event.state().metaData().version(), this.mappingAtomicReference.get() );
+            } finally {
+                mappingInfoLock.writeLock().unlock();
             }
-        } finally {
-            lock.writeLock().unlock();
         }
     }
     

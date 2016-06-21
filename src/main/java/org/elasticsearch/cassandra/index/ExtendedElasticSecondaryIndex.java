@@ -1279,9 +1279,11 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
             
             
-            mappingInfoLock.readLock().lock();
+            
             if (logger.isDebugEnabled())
                 logger.debug("mappingInfo.metadataVersion={} indices={}", mappingInfo.metadataVersion, mappingInfo.indices.keySet());
+            
+            mappingInfoLock.readLock().lock();
             try {
                 // block for stack allocation
                 final MappingInfo.RowcumentFactory docFactory = mappingInfo.new RowcumentFactory(rowKey, cf);
@@ -1364,28 +1366,23 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
      */
     @Override
     public void forceBlockingFlush() {
-        lock.writeLock().lock();
-        try {
-            if (mappingInfo == null || mappingInfo.indices.size() == 0) {
-                logger.warn("Elasticsearch not ready, cannot flush Elasticsearch index");
-                return;
-            }
-            for(MappingInfo.IndexInfo indexInfo : mappingInfo.indices.values()) {
-                try {
-                    IndexShard indexShard = indexInfo.indexService.shardSafe(0);
-                    logger.debug("Flushing Elasticsearch index=[{}] state=[{}]",indexInfo.name, indexShard.state());
-                    if (indexShard.state() == IndexShardState.STARTED)  {
-                        indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
-                        logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
-                    } else {
-                        logger.warn("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
-                    }
-                } catch (ElasticsearchException e) {
-                    logger.error("Unexpected error",e);
+        if (mappingInfo == null || mappingInfo.indices.size() == 0) {
+            logger.warn("Elasticsearch not ready, cannot flush Elasticsearch index");
+            return;
+        }
+        for(MappingInfo.IndexInfo indexInfo : mappingInfo.indices.values()) {
+            try {
+                IndexShard indexShard = indexInfo.indexService.shardSafe(0);
+                logger.debug("Flushing Elasticsearch index=[{}] state=[{}]",indexInfo.name, indexShard.state());
+                if (indexShard.state() == IndexShardState.STARTED)  {
+                    indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
+                    logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
+                } else {
+                    logger.warn("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
                 }
+            } catch (ElasticsearchException e) {
+                logger.error("Error while flushing index {}",e,indexInfo.name);
             }
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
