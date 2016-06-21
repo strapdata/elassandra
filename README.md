@@ -12,6 +12,9 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
+New project documentation available at [doc.elassandra.io](doc.elassandra.io).
+
+* **2016-06-21 Release 2.1.1-12 Add support for index partitionning and cross-datacenter mapping replication**
 * **2016-05-10 Release 2.1.1-9 Upgrade to cassandra 2.2.5**
 * **2016-04-17 Release 2.1.1-8 New feature, index cassandra static columns**
 * **2016-03-18 Release 2.1.1-6 Add support for SQL plugin (from [NLPchina](https://github.com/NLPchina/elasticsearch-sql)) and JDBC driver (from [Anchormen](https://github.com/Anchormen/sql4es)).**
