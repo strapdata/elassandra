@@ -33,6 +33,7 @@ The overall procedure is similar the cassandra one describe on <https://docs.dat
    nodetool rebuild <source-datacenter-name>
 
 After rebuild on all your new nodes, you should see the same number of document for each indices in your new and existing datacenters.
+
 * Set ``auto_bootstrap: true`` (default value) in your **conf/cassandra.yaml** 
 * Create new elasticsearch index or map some existing cassandra tables.
 

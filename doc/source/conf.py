@@ -121,7 +121,10 @@ todo_include_todos = False
 # a list of builtin themes.
 html_theme = 'basicstrap'
 
-
+html_theme_options = {
+  'header_inverse': True,
+  'relbar_inverse': True,
+}
 
 
 # Theme options are theme-specific and customize the look and feel of a theme

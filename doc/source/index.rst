@@ -17,8 +17,8 @@ Contents:
    architecture
    installation
    configuration
-   operations
    mapping
+   operations
    integration
    performance
    

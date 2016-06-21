@@ -5,7 +5,7 @@ Elassandra tightly integrates elasticsearch within cassandra as a secondary inde
 
 When you index a document, the JSON document is stored as a row in a cassandra table and synchronously indexed in elasticsearch. 
 
-.. image:: images/elassandra1.jpeg
+.. image:: images/elassandra1.jpg
 
 Concepts Mapping
 ----------------
