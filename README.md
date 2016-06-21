@@ -12,7 +12,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
-New project documentation available at [doc.elassandra.io](doc.elassandra.io).
+New project documentation available at [doc.elassandra.io](http://doc.elassandra.io).
 
 * **2016-06-21 Release 2.1.1-12 Add support for index partitionning and cross-datacenter mapping replication**
 * **2016-05-10 Release 2.1.1-9 Upgrade to cassandra 2.2.5**
