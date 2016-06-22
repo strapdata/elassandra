@@ -2,7 +2,7 @@
 
 Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run on top of [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
-![Elassandra architecture](/images/elassandra1.ppg)
+![Elassandra architecture](/images/elassandra1.jpg)
 
 Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes. A demo video is available on youtube.
 
