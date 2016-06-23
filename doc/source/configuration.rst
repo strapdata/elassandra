@@ -55,6 +55,8 @@ By default, all elassandra datacenters share the same Elasticsearch cluster name
 
 .. image:: images/elassandra-datacenter-replication.jpg
 
+|
+
 If you want to manage distincts Elasticsearch clusters inside a cassandra cluster (when indexing differents tables in differents datacenter), you can set a ``datacenter.group`` in **conf/elasticsearch.yml** and thus, all elassandra datacenters sharing the same datacenter group name will share the same mapping. 
 Those elasticsearch cluster will be named <cluster_name>@<datacenter.group> and mapping will be stored in a dedicated keyspace.table ``elastic_admin_<datacenter.group>.metadata``.
 
@@ -95,7 +97,7 @@ Recommanded production setting for Apache cassandra and Elasticsearch can be app
 
 * Configure less than half the total memory of your server and up to 30.5Gb. Minimum recommended DRAM for production deployments is 32Gb.
 * Increase number of Elassandra node or use index partitionning to keep shards size below 50Gb.
-* Avoid huge wide rows, locking on a wide row can dramatically affect performance.
+* Avoid huge wide rows, write-lock on a wide row can dramatically affect write performance.
 * During indexing, if you don't need search, disable **index.refresh** (default is every second). 
 * Configure off_heap memory for cassandra memtables (elassandra default configuration).
 
