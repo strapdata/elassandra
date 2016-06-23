@@ -44,8 +44,8 @@ After rebuild on all your new nodes, you should see the same number of document 
    * nodetool removenode <id-of-node-to-remove>
    * clear data, commitlogs and saved_cache directory.
 
-Upgarde an existing datacenter to Elassandra
-............................................
+Upgarding an existing datacenter to Elassandra
+..............................................
 
 Rather than creating a new datacenter, you can replace cassandra binaries with elassandra ones. 
 
@@ -60,16 +60,16 @@ Rather than creating a new datacenter, you can replace cassandra binaries with e
 
 * Create new elasticsearch index or map some existing cassandra tables.
 
-Install Elasticsearch plugins
------------------------------
+Installing Elasticsearch plugins
+--------------------------------
 
 Elasticsearch plugin installation remins unchanged, see elasticsearch `plugin installation <https://www.elastic.co/guide/en/elasticsearch/plugins/2.3/installation.html>`_.
 
 * bin/plugin install <url>
 
 
-Kibana + Elassandra
--------------------
+Running Kibana with Elassandra
+------------------------------
 
 `Kibana <https://www.elastic.co/guide/en/kibana/4.3/introduction.html>'_ version 4.3 can run with Elassandra, providing a visualization tool for cassandra and elasticsearch data. 
 
