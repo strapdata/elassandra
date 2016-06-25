@@ -15,6 +15,7 @@
 package org.elasticsearch.cassandra.cluster.routing;
 
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -87,18 +88,22 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
             Random rnd = new Random();
             for (InetAddress node : localUnreachableNodes) {
                 for (Range<Token> orphanRange : StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, node)) {
-                    List<InetAddress> replicaEndPoints = allRanges.get(orphanRange);
-                    if (replicaEndPoints != null) {
-                        replicaEndPoints.removeAll(localUnreachableNodes);
-                        if (replicaEndPoints.size() == 0) {
-                            consistent = false;
-                            orphanRanges.add(orphanRange);
-                            logger.warn("Inconsistent search for keyspace {}, no alive node for range {}", ksName, orphanRange);
-                        } else {
-                            InetAddress liveReplica = replicaEndPoints.get(rnd.nextInt(replicaEndPoints.size()));
-                            topo.put(liveReplica, orphanRange);
-                            logger.debug("orphanRanges {} available on = {} ", orphanRanges, liveReplica);
+                    Set<InetAddress> replicaEndPoints = new HashSet<InetAddress>();
+                    for(Range range : allRanges.keySet()) {
+                        if (range.contains(orphanRange)) {
+                            replicaEndPoints.addAll( allRanges.get(range) );
                         }
+                    }
+                    replicaEndPoints.removeAll(localUnreachableNodes);
+                    if (replicaEndPoints.size() == 0) {
+                        consistent = false;
+                        orphanRanges.add(orphanRange);
+                        logger.warn("Inconsistent search for keyspace {}, no alive node having range {}", ksName, orphanRange);
+                    } else {
+                        InetAddress[] replicas = replicaEndPoints.toArray( new InetAddress[replicaEndPoints.size()] );
+                        InetAddress liveReplica = replicas[rnd.nextInt(replicas.length)];
+                        topo.put(liveReplica, orphanRange);
+                        logger.debug("orphanRanges {} available on = {} ", orphanRanges, liveReplica);
                     }
                 }
             }
