@@ -19,22 +19,21 @@
 
 package org.elasticsearch.gateway;
 
-import com.carrotsearch.hppc.ObjectFloatHashMap;
-import com.carrotsearch.hppc.ObjectHashSet;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
+import java.nio.file.Path;
 
 import org.apache.lucene.util.IOUtils;
-import org.elasticsearch.action.FailedNodeException;
+import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
-import org.elasticsearch.cluster.*;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterName;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.NodeEnvironment;
-
-import java.nio.file.Path;
 
 /**
  *
@@ -70,7 +69,7 @@ public class Gateway extends AbstractComponent implements ClusterStateListener {
              * Recovery performed from comment because elatic_admin keyspace won't be available before replaying commmit logs.
              */
             metadata = clusterService.readMetaDataAsComment();
-        } catch (NoPersistedMetaDataException e) {
+        } catch (NoPersistedMetaDataException |ActionRequestValidationException e) {
             logger.trace("Failed to read metadata from table comment", e);
             metadata = clusterService.state().metaData();
             if (metadata.uuid().equals("_na_")) {

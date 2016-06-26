@@ -37,9 +37,11 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
 import org.apache.lucene.util.NumericUtils;
+import org.elasticsearch.cassandra.index.BaseElasticSecondaryIndex;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.Fuzziness;
@@ -255,6 +257,9 @@ public class IpFieldMapper extends NumberFieldMapper {
 
     @Override
     protected void innerCreateField(ParseContext context, Object object) throws IOException {
+        if (!(object instanceof InetAddress)) {
+            Loggers.getLogger(BaseElasticSecondaryIndex.class).error("Unexpected type for field name={}",this.name());
+        }
         InetAddress addr = (InetAddress)object;
         if (addr == null) {
             String ipAsString = fieldType().nullValueAsString();

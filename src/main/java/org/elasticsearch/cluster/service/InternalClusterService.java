@@ -249,13 +249,6 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
         this.clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).blocks(initialBlocks).build();
         this.transportService.setLocalNode(localNode);
         
-        // try to create if not exists elastic_admin keyspace and initialize persisted metadata
-        try {
-            createElasticAdminKeyspace(this.clusterState.metaData());
-        } catch (Throwable e) {
-            logger.error("Cannot create "+InternalCassandraClusterService.ELASTIC_ADMIN_KEYSPACE, e);
-            System.exit(-1);
-        }
         addLast(this.secondaryIndicesService);
     }
 
@@ -896,7 +889,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract Map<String, List<Object>> flattenTree(Set<String> neededFiedls, String path, Object node, Map<String, List<Object>> fields);
 
     @Override
-    public abstract void createElasticAdminKeyspace(MetaData metadata) throws Exception;
+    public abstract void createOrUpdateElasticAdminKeyspace() throws Exception;
 
     @Override
     public abstract void createIndexKeyspace(String index, int replicationFactor) throws IOException;
@@ -991,11 +984,6 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     
     @Override
     public abstract void writeMetaDataAsComment(String metadataString) throws ConfigurationException, IOException;
-
-    
-    @Override
-    public abstract void initializeMetaData();
-    
     
     @Override
     public abstract MetaData readMetaDataAsComment() throws NoPersistedMetaDataException;

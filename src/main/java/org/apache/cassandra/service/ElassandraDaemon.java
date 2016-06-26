@@ -137,7 +137,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void beforeBootstrap() {
         if (instance.node == null) {
-            logger.debug("Starting ElasticSearch before bootstraping (create elastic_admin keyspace, if not exits)");
+            logger.debug("Starting ElasticSearch before bootstraping");
             startElasticSearch();
         } 
     }
@@ -145,9 +145,15 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void beforeStartupComplete() {
         if (instance.node == null) {
-            logger.debug("Starting ElasticSearch before startup complete (create elastic_admin keyspace if not exits, but no boostrap)");
+            logger.debug("Starting ElasticSearch before startup complete (no boostrap)");
             startElasticSearch();
         } 
+    }
+    
+    @Override
+    public void afterStartupComplet() {
+        logger.debug("Create elastic_admin[_datacenter.group] keyspace if not exits.");
+        instance.node.cassandraStartupComplete();
     }
     
     private void startElasticSearch() {

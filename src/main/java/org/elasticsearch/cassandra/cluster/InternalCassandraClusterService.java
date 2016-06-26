@@ -1855,54 +1855,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     }
     
-    /**
-     * Create or alter elastic_admin keyspace with the DatacenterReplicationStrategy.
-     * @throws IOException 
-     */
-    @Override
-    public void createElasticAdminKeyspace(MetaData metadata) throws IOException  {
-        KSMetaData  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
-        if (elasticAdminMetadata == null) {
-            try {
-                QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s' };", 
-                        this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName(), DatabaseDescriptor.getLocalDataCenter()),
-                        ConsistencyLevel.LOCAL_ONE);
-                QueryProcessor.process(String.format("CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';", 
-                        this.elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, MetaData.Builder.toXContent(metadata)),
-                        ConsistencyLevel.LOCAL_ONE);
-            } catch (RequestExecutionException e) {
-                logger.error("Failed to create keyspace {} or table {}",e, elasticAdminMetadata, ELASTIC_ADMIN_METADATA_TABLE);
-            }
-        } else {
-            if (elasticAdminMetadata.strategyClass != DatacenterReplicationStrategy.class) {
-                throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+DatacenterReplicationStrategy.class.getName()+" replication strategy");
-            }
-            String datacentersOption = elasticAdminMetadata.strategyOptions.get(DatacenterReplicationStrategy.DATACENTERS);
-            if (datacentersOption == null) {
-                throw new ConfigurationException("Missing ["+DatacenterReplicationStrategy.DATACENTERS+"] option in "+DatacenterReplicationStrategy.class.getName());
-            }
-            boolean localDcFound = false;
-            for(String datacenter: datacentersOption.split(",")) {
-                if (DatabaseDescriptor.getLocalDataCenter().equals(datacenter)) {
-                    localDcFound = true;
-                    break;
-                }
-            }
-            if (!localDcFound) {
-                try {
-                    QueryProcessor.process(String.format("ALTER KEYSPACE \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s,%s' };", 
-                            this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName(), datacentersOption, DatabaseDescriptor.getLocalDataCenter()),
-                            ConsistencyLevel.LOCAL_ONE);
-                    logger.info("Add local datacenter {} in {} for keyspace [{}]", 
-                            DatabaseDescriptor.getLocalDataCenter(),DatacenterReplicationStrategy.class.getName(), this.elasticAdminKeyspaceName);
-                } catch (RequestExecutionException e) {
-                    logger.error("Failed to alter keyspace [{}]",e, this.elasticAdminKeyspaceName);
-                    throw e;
-                }
-            }
-        }
-    }
-
+    
     @Override
     public boolean isDatacenterGroupMember(InetAddress endpoint) {
         String endpointDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint);
@@ -1990,27 +1943,68 @@ public class InternalCassandraClusterService extends InternalClusterService {
         throw new NoPersistedMetaDataException("Unexpected error");
     }
     
-    
 
+    /**
+     * Create or alter elastic_admin keyspace with the DatacenterReplicationStrategy.
+     * @returns true if admin keyspace created.
+     * @throws IOException 
+     */
     @Override
-    public void initializeMetaData() {
+    public void createOrUpdateElasticAdminKeyspace() throws IOException  {
         MetaData metadata = state().metaData();
-        try {
-            String metaDataString = MetaData.Builder.toXContent(metadata);
-            // initialize a first row if needed
-            UntypedResultSet result = process(this.metadataWriteCL, this.metadataSerialCL, insertMetadataQuery,
-                    DatabaseDescriptor.getClusterName(), UUID.fromString(StorageService.instance.getLocalHostId()), metadata.version(), metaDataString);
-            Row row = result.one();
-            boolean applied = false;
-            if (row.has("[applied]")) {
-                applied = row.getBoolean("[applied]");
+        KSMetaData  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
+        if (elasticAdminMetadata == null) {
+            try {
+                QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s' };", 
+                        this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName(), DatabaseDescriptor.getLocalDataCenter()),
+                        ConsistencyLevel.LOCAL_ONE);
+                QueryProcessor.process(String.format("CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';", 
+                        this.elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, MetaData.Builder.toXContent(metadata)),
+                        ConsistencyLevel.LOCAL_ONE);
+                
+                String metaDataString = MetaData.Builder.toXContent(metadata);
+                // initialize a first row if needed
+                UntypedResultSet result = process(this.metadataWriteCL, this.metadataSerialCL, insertMetadataQuery,
+                        DatabaseDescriptor.getClusterName(), UUID.fromString(StorageService.instance.getLocalHostId()), metadata.version(), metaDataString);
+                Row row = result.one();
+                boolean applied = false;
+                if (row.has("[applied]")) {
+                    applied = row.getBoolean("[applied]");
+                }
+                if (applied) {
+                    logger.debug("Succefully initialize metadata metaData={}", metadata);
+                    writeMetaDataAsComment(metaDataString);
+                }
+            } catch (Exception e) {
+                logger.error("Failed to initialize keyspace {} or table {}",e, elasticAdminMetadata, ELASTIC_ADMIN_METADATA_TABLE);
             }
-            if (applied) {
-                logger.debug("Succefully initialize metadata metaData={}", metadata);
-                writeMetaDataAsComment(metaDataString);
+        } else {
+            if (elasticAdminMetadata.strategyClass != DatacenterReplicationStrategy.class) {
+                throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+DatacenterReplicationStrategy.class.getName()+" replication strategy");
             }
-        } catch (Exception e) {
-            logger.error("Failed to initialize persisted metadata", e);
+            String datacentersOption = elasticAdminMetadata.strategyOptions.get(DatacenterReplicationStrategy.DATACENTERS);
+            if (datacentersOption == null) {
+                throw new ConfigurationException("Missing ["+DatacenterReplicationStrategy.DATACENTERS+"] option in "+DatacenterReplicationStrategy.class.getName());
+            }
+            boolean localDcFound = false;
+            for(String datacenter: datacentersOption.split(",")) {
+                if (DatabaseDescriptor.getLocalDataCenter().equals(datacenter)) {
+                    localDcFound = true;
+                    break;
+                }
+            }
+            if (!localDcFound) {
+                try {
+                    QueryProcessor.process(String.format("ALTER KEYSPACE \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s,%s' };", 
+                            this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName(), datacentersOption, DatabaseDescriptor.getLocalDataCenter()),
+                            ConsistencyLevel.LOCAL_ONE);
+                    logger.info("Add local datacenter {} in {} for keyspace [{}]", 
+                            DatabaseDescriptor.getLocalDataCenter(),DatacenterReplicationStrategy.class.getName(), this.elasticAdminKeyspaceName);
+                } catch (RequestExecutionException e) {
+                    logger.error("Failed to alter keyspace [{}]",e, this.elasticAdminKeyspaceName);
+                    throw e;
+                }
+            }
         }
     }
     

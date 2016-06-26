@@ -272,9 +272,6 @@ public class Node implements Releasable {
         ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
         logger.info("starting ...");
 
-        // initilize if needed metadata in cassandra schema.
-        injector.getInstance(ClusterService.class).initializeMetaData();
-
         // Cassandra started => release metadata update blocks.
         injector.getInstance(CassandraGatewayService.class).enableMetaDataPersictency();
 
@@ -306,6 +303,16 @@ public class Node implements Releasable {
         
         logger.debug("Elasticsearch started state={}", clusterService.state().toString());
         return this;
+    }
+    
+    public void cassandraStartupComplete() {
+        ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
+        try {
+            ClusterService clusterService = injector.getInstance(ClusterService.class);
+            clusterService.createOrUpdateElasticAdminKeyspace();
+        } catch (Exception e) {
+            logger.error("Unexpected error", e);
+        }
     }
     
     private Node stop() {

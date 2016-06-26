@@ -597,6 +597,12 @@ public class CassandraDaemon
     public void beforeStartupComplete() {
     }
     
+    /**
+     * This is a hook for concrete daemons to initialize themselves suitably.
+     * Subclasses should override this to initialize after cassandra start
+     */
+    public void afterStartupComplet() {
+    }
     
     private void waitForGossipToSettle()
     {
@@ -642,6 +648,8 @@ public class CassandraDaemon
             logger.info("Gossip settled after {} extra polls; proceeding", totalPolls - GOSSIP_SETTLE_POLL_SUCCESSES_REQUIRED);
         else
             logger.info("No gossip backlog; proceeding");
+        
+        afterStartupComplet();
     }
 
     public static void stop(String[] args)

@@ -737,6 +737,8 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             }
             logger.info("Not joining ring as requested. Use JMX (StorageService->joinRing()) to initiate ring joining");
         }
+        
+        this.daemon.afterStartupComplet();
     }
 
     /**
