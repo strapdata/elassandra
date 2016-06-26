@@ -132,7 +132,7 @@ public class ThreadPool extends AbstractComponent {
         map.put(Names.WARMER, ThreadPoolType.SCALING);
         map.put(Names.SNAPSHOT, ThreadPoolType.SCALING);
         map.put(Names.FORCE_MERGE, ThreadPoolType.FIXED);
-        map.put(Names.FETCH_SHARD_STARTED, ThreadPoolType.SCALING);
+        //map.put(Names.FETCH_SHARD_STARTED, ThreadPoolType.SCALING);
         map.put(Names.FETCH_SHARD_STORE, ThreadPoolType.SCALING);
         THREAD_POOL_TYPES = Collections.unmodifiableMap(map);
     }
@@ -221,7 +221,7 @@ public class ThreadPool extends AbstractComponent {
         add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.WARMER).size(halfProcMaxAt5).keepAlive("5m"));
         add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.SNAPSHOT).size(halfProcMaxAt5).keepAlive("5m"));
         add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.FORCE_MERGE).size(1));
-        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.FETCH_SHARD_STARTED).size(availableProcessors * 2).keepAlive("5m"));
+        //add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.FETCH_SHARD_STARTED).size(availableProcessors * 2).keepAlive("5m"));
         add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.FETCH_SHARD_STORE).size(availableProcessors * 2).keepAlive("5m"));
 
         this.defaultExecutorTypeSettings = ImmutableMap.copyOf(defaultExecutorTypeSettings);
