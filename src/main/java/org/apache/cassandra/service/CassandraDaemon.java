@@ -649,7 +649,6 @@ public class CassandraDaemon
         else
             logger.info("No gossip backlog; proceeding");
         
-        afterStartupComplet();
     }
 
     public static void stop(String[] args)
