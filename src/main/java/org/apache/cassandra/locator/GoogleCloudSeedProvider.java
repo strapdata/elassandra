@@ -30,9 +30,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Provide seed hostnames from Google Cloud project metadata (property
- * seed-<region_name>)
- * 
+ * Provide seed hostnames from Google Cloud project metadata (property seed-<region_name> available at http://metadata.google.internal/computeMetadata/v1/project/attributes/seed-%s ).
+ * Configure yoyr seed provider in conf/cassandra.yaml :
+<pre>
+seed_provider:
+  - class_name: org.apache.cassandra.locator.GoogleCloudSeedProvider
+</pre>
+ *
  * @author vroyer
  *
  */
