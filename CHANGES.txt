@@ -1,4 +1,4 @@
-2.1.1-13 - 2016-06-27
+2.1.1-13 - 2016-06-29
   * Limit CQL schema update from the coordinator node only.
   * Fix a bug in routing table with vnode and one or more unavailable nodes.
   
