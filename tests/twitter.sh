@@ -1,4 +1,4 @@
-curl -XPUT "http://$NODE:9200/twitter/" -d '{ "index.secondary_index_class" : "org.elasticsearch.cassandra.index.ThreadLocalOptimizedElasticSecondaryIndex" }'
+curl -XPUT "http://$NODE:9200/twitter/"
 
 curl -XPUT "http://$NODE:9200/twitter/tweet/1?consistency=one" -d '{
     "user" : "vince",

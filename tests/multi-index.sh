@@ -2,36 +2,36 @@ curl -XPUT "http://$NODE:9200/twitter/" -d '{ "number_of_replicas" : 0 } }'
 curl -XPUT "http://$NODE:9200/twitter/tweet/1" -d '{
     "user" : "bob",
     "post_date" : "2009-11-15T14:12:12",
-    "message" : "look at Elasticassandra !!",
+    "message" : "look at Elassandra !!",
     "size": 50
 }'
 curl -XPUT "http://$NODE:9200/twitter/tweet/2" -d '{
     "user" : "alice",
     "post_date" : "2009-11-15T14:12:12",
-    "message" : "look at Elasticassandra !!",
+    "message" : "look at Elassandra !!",
     "size" : 200
 }'
 curl -XPUT "http://$NODE:9200/twitter/tweet/3" -d '{
     "user" : "bob",
     "post_date" : "2009-11-15T14:12:12",
-    "message" : "trying out Elasticassandra !!",
+    "message" : "trying out Elassandra !!",
     "size" : 150
 }'
 curl -XPUT "http://$NODE:9200/twitter/tweet/4" -d '{
     "user" : "dave",
     "post_date" : "2009-11-15T14:12:12",
-    "message" : "look at Elasticassandra !!",
+    "message" : "look at Elassandra !!",
     "size": 100
 }'
 
 sleep 2
-curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=message:elasticassandra"
-curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&preference=_only_local" -d '{"fields" : ["message","_token","post_date","user"],"query":{"match":{"message":"elasticassandra" }}}'
+curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=message:Elassandra"
+curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&preference=_only_local" -d '{"fields" : ["message","_token","post_date","user"],"query":{"match":{"message":"Elassandra" }}}'
 
 curl -XPOST "http://$NODE:9200/twitter/_flush"
 
 
-curl -XPUT "http://$NODE:9200/twitter2/" -d '{ "settings" : { "number_of_replicas" : 0, "keyspace" : "twitter" } }'
+curl -XPUT "http://$NODE:9200/twitter2/" -d '{ "settings" : { "keyspace" : "twitter" } }'
 curl -XPUT "http://$NODE:9200/twitter2/_mapping/tweet" -d '
 { 
     "tweet" : {
@@ -62,7 +62,7 @@ curl -XGET "http://$NODE:9200/twitter2/_search?pretty=true" -d '{"fields" : ["me
 curl -XPUT "http://$NODE:9200/twitter2/tweet/5" -d '{
     "user" : "robert",
     "post_date" : "2009-11-15",
-    "message" : "look at Elasticassandra !!",
+    "message" : "look at Elassandra !!",
     "size": 100
 }'
 
