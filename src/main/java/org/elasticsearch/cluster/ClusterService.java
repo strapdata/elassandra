@@ -436,7 +436,9 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Object node, Map<String, GetField> flatFields);
     public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> fields);
 
-    public void createOrUpdateElasticAdminKeyspace() throws Exception;
+    public void createElasticAdminKeyspace() throws Exception;
+    public void updateElasticAdminKeyspace() throws IOException;
+    
     public void createIndexKeyspace(String index, int replicationFactor) throws IOException;
     
     public void createSecondaryIndices(final IndexMetaData indexMetaData) throws IOException;

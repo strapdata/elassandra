@@ -1665,7 +1665,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         if (writetime != null) query.append("TIMESTAMP ").append(Long.toString(writetime*1000));
         
         try {
-            UntypedResultSet result = process(cl, (ifNotExists) ? ConsistencyLevel.LOCAL_SERIAL : null, query.toString(), values);
+            UntypedResultSet result = process(cl, (ifNotExists) ? ConsistencyLevel.SERIAL : null, query.toString(), values);
             if (ifNotExists) {
                 if (!result.isEmpty()) {
                     Row row = result.one();
@@ -1945,20 +1945,20 @@ public class InternalCassandraClusterService extends InternalClusterService {
     
 
     /**
-     * Create or alter elastic_admin keyspace with the DatacenterReplicationStrategy.
-     * @returns true if admin keyspace created.
+     * Create elastic_admin keyspace if not exists with the DatacenterReplicationStrategy.
      * @throws IOException 
      */
     @Override
-    public void createOrUpdateElasticAdminKeyspace() throws IOException  {
-        MetaData metadata = state().metaData();
+    public void createElasticAdminKeyspace() throws IOException  {
         KSMetaData  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
         if (elasticAdminMetadata == null) {
+            MetaData metadata = state().metaData();
             try {
-                QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s' };", 
+                logger.debug("Initializing elatic_admin[_datacenter.group].metadata = ", metadata);
+                QueryProcessor.process(String.format("CREATE KEYSPACE \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s' };", 
                         this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName(), DatabaseDescriptor.getLocalDataCenter()),
                         ConsistencyLevel.LOCAL_ONE);
-                QueryProcessor.process(String.format("CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';", 
+                QueryProcessor.process(String.format("CREATE TABLE \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';", 
                         this.elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, MetaData.Builder.toXContent(metadata)),
                         ConsistencyLevel.LOCAL_ONE);
                 
@@ -1978,7 +1978,17 @@ public class InternalCassandraClusterService extends InternalClusterService {
             } catch (Exception e) {
                 logger.error("Failed to initialize keyspace {} or table {}",e, elasticAdminMetadata, ELASTIC_ADMIN_METADATA_TABLE);
             }
-        } else {
+        }
+    }
+    
+    /**
+     * Update DatacenterReplicationStrategy of elastic_admin keyspace if exists.
+     * @throws IOException 
+     */
+    @Override
+    public void updateElasticAdminKeyspace() throws IOException  {
+        KSMetaData  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
+        if (elasticAdminMetadata != null) {
             if (elasticAdminMetadata.strategyClass != DatacenterReplicationStrategy.class) {
                 throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+DatacenterReplicationStrategy.class.getName()+" replication strategy");
             }

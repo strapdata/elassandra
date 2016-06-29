@@ -31,6 +31,7 @@ import java.util.Set;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
+import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
@@ -63,6 +64,7 @@ public class MetaDataMappingService extends AbstractComponent {
 
     private final ClusterService clusterService;
     private final IndicesService indicesService;
+    private final SecondaryIndicesService secondaryIndicesService;
 
     // the mutex protect all the refreshOrUpdate variables!
     private final Object refreshOrUpdateMutex = new Object();
@@ -71,10 +73,11 @@ public class MetaDataMappingService extends AbstractComponent {
     private long refreshOrUpdateProcessedInsertOrder;
 
     @Inject
-    public MetaDataMappingService(Settings settings, ClusterService clusterService, IndicesService indicesService) {
+    public MetaDataMappingService(Settings settings, ClusterService clusterService, IndicesService indicesService, SecondaryIndicesService secondaryIndicesService) {
         super(settings);
         this.clusterService = clusterService;
         this.indicesService = indicesService;
+        this.secondaryIndicesService = secondaryIndicesService;
     }
 
     static class MappingTask {
@@ -573,8 +576,9 @@ public class MetaDataMappingService extends AbstractComponent {
                             clusterService.updateTableSchema(indexName, mappingMd.type(), columns, 
                                     indicesService.indexService(indexName).mapperService().documentMapper(mappingMd.type()));
                         }
+                        secondaryIndicesService.monitorIndex(indexName);
                     }
-
+                    
                     return ClusterState.builder(currentState).incrementVersion().metaData(builder).build();
                 } finally {
                     /*

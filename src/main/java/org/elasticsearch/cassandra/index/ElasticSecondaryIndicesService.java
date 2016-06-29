@@ -51,6 +51,7 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     public static String TASK_THREAD_NAME = "secondaryIndiceService#taskExecutor";
     
     private volatile PrioritizedEsThreadPoolExecutor tasksExecutor;
+    private final CopyOnWriteArraySet<String> toMonitorIndices = new CopyOnWriteArraySet<>();
     private final CopyOnWriteArraySet<String> toUpdateIndices = new CopyOnWriteArraySet<>();
     private final CopyOnWriteArrayList<SecondaryIndicesService.DeleteListener> deleteListeners = new CopyOnWriteArrayList<SecondaryIndicesService.DeleteListener>();
     
@@ -68,6 +69,10 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     
     public void removeDeleteListener(DeleteListener listener) {
         deleteListeners.remove(listener);
+    }
+    
+    public void monitorIndex(String index) {
+        toMonitorIndices.add(index);
     }
     
     abstract class Task extends PrioritizedRunnable {
@@ -164,18 +169,17 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
     public void clusterChanged(ClusterChangedEvent event) {
         boolean toUpdateIndicesChanged = false;
         if (event.metaDataChanged()) {
-            for(Iterator<String> it = event.state().metaData().indices().keysIt(); it.hasNext(); ) {
-                String index = it.next();
-                if (event.indexMetaDataChanged(event.state().metaData().index(index)) && event.state().metaData().index(index).getMappings().size() > 0) {
+            for(String index: toMonitorIndices) {
+                if (event.state().metaData().index(index).getMappings().size() > 0 && event.indexMetaDataChanged(event.state().metaData().index(index))) {
                     this.toUpdateIndices.add(index);
                     toUpdateIndicesChanged = true;
                 }
             }
+            this.toMonitorIndices.removeAll(toUpdateIndices);
         }
         
         if (event.routingTableChanged() || toUpdateIndicesChanged) {
-            for(Iterator<String> it = this.toUpdateIndices.iterator(); it.hasNext(); ) {
-                String index = it.next();
+            for(String index : toUpdateIndices) {
                 IndexRoutingTable indexRoutingTable = event.state().routingTable().index(index);
                 if (indexRoutingTable == null) {
                     logger.warn("index [{}] not in routing table, keyspace may be deleted.",index);
@@ -195,23 +199,29 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
         }
         
         // notify listeners that all shards are deleted.
-        Map<String, IndexMetaData> unindexableKeyspace = new HashMap<String, IndexMetaData>();
+        Map<String, IndexMetaData> unindexableKeyspace = null;
         for(DeleteListener deleteListener : this.deleteListeners) {
             if (!event.state().routingTable().hasIndex(deleteListener.mapping().getIndex())) {
                 // all shard are inactive => notify listeners
                 deleteListener.onIndexDeleted();
+                if (unindexableKeyspace == null)
+                    unindexableKeyspace = new HashMap<String, IndexMetaData>();
                 unindexableKeyspace.put(deleteListener.mapping().keyspace(), deleteListener.mapping());
             }
         }
         
-        // check if there is still some index pointing on the unindexed keyspace
-        for(Iterator<IndexMetaData> i = event.state().metaData().iterator(); i.hasNext(); ) {
-            IndexMetaData indexMetaData = i.next();
-            unindexableKeyspace.remove(indexMetaData.keyspace());
-        }
-        for(String keyspace : unindexableKeyspace.keySet()) {
-            logger.debug("asynchronously dropping secondary index for keyspace=[{}]", keyspace);
-            submitTask(new DropSecondaryIndexTask(unindexableKeyspace.get(keyspace)));
+        // check if there is still some indices pointing on the unindexed keyspace
+        if (unindexableKeyspace != null) {
+            for(Iterator<IndexMetaData> i = event.state().metaData().iterator(); i.hasNext(); ) {
+                IndexMetaData indexMetaData = i.next();
+                unindexableKeyspace.remove(indexMetaData.keyspace());
+            }
+            if (logger.isTraceEnabled())
+                logger.trace("unindexableKeyspace = {}", unindexableKeyspace);
+            for(String keyspace : unindexableKeyspace.keySet()) {
+                logger.debug("asynchronously dropping secondary index for keyspace=[{}]", keyspace);
+                submitTask(new DropSecondaryIndexTask(unindexableKeyspace.get(keyspace)));
+            }
         }
     }
 

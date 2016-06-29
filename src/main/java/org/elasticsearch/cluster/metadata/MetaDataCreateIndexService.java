@@ -51,6 +51,7 @@ import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.admin.indices.alias.Alias;
 import org.elasticsearch.action.admin.indices.create.CreateIndexClusterStateUpdateRequest;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
+import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
@@ -111,6 +112,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
     private final ThreadPool threadPool;
     private final ClusterService clusterService;
     private final IndicesService indicesService;
+    private final SecondaryIndicesService secondaryIndicesService;
     private final AllocationService allocationService;
     private final MetaDataService metaDataService;
     private final Version version;
@@ -120,7 +122,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
     private final Environment env;
 
     @Inject
-    public MetaDataCreateIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService,
+    public MetaDataCreateIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService, SecondaryIndicesService secondaryIndicesService,
                                       IndicesService indicesService, AllocationService allocationService, MetaDataService metaDataService,
                                       Version version, AliasValidator aliasValidator,
                                       Set<IndexTemplateFilter> indexTemplateFilters, Environment env,
@@ -129,6 +131,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
         this.threadPool = threadPool;
         this.clusterService = clusterService;
         this.indicesService = indicesService;
+        this.secondaryIndicesService = secondaryIndicesService;
         this.allocationService = allocationService;
         this.metaDataService = metaDataService;
         this.version = version;
@@ -512,6 +515,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         updatedState = ClusterState.builder(updatedState).routingResult(routingResult).build();
                     }
                     removalReason = "cleaning up after validating index on master";
+                    secondaryIndicesService.monitorIndex(request.index());
                     return updatedState;
                 } finally {
                     if (indexCreated) {

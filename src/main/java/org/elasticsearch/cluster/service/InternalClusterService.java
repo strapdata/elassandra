@@ -249,9 +249,15 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
         this.clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).blocks(initialBlocks).build();
         this.transportService.setLocalNode(localNode);
         
+        try {
+            updateElasticAdminKeyspace();
+        } catch (Exception e) {
+            logger.error("Failed to update elastic_admin keyspace", e);
+        }
+        
         addLast(this.secondaryIndicesService);
     }
-
+    
     @Override
     protected void doStop() {
         FutureUtils.cancel(this.reconnectToNodes);
@@ -889,8 +895,11 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract Map<String, List<Object>> flattenTree(Set<String> neededFiedls, String path, Object node, Map<String, List<Object>> fields);
 
     @Override
-    public abstract void createOrUpdateElasticAdminKeyspace() throws Exception;
+    public abstract void createElasticAdminKeyspace() throws Exception;
 
+    @Override
+    public abstract void updateElasticAdminKeyspace() throws IOException;
+    
     @Override
     public abstract void createIndexKeyspace(String index, int replicationFactor) throws IOException;
     
