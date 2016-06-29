@@ -14,5 +14,4 @@ notifications:
 before_install:
   - ulimit -u 65535
 
-script:
-  - mvn -Dmaven.test.skip=true compile
+script: mvn compile
