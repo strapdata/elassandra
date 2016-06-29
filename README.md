@@ -12,6 +12,8 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
+[![Build Status](https://travis-ci.org/strapdata/elassandra.svg?branch=master)](https://travis-ci.org/strapdata/elassandra)
+
 New project documentation available at [doc.elassandra.io](http://doc.elassandra.io).
 
 * **2016-06-21 Release 2.1.1-12 Add support for index partitionning and cross-datacenter mapping replication**
