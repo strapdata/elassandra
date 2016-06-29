@@ -309,7 +309,7 @@ public class Node implements Releasable {
         ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
         try {
             ClusterService clusterService = injector.getInstance(ClusterService.class);
-            clusterService.createOrUpdateElasticAdminKeyspace();
+            clusterService.createElasticAdminKeyspace();
         } catch (Exception e) {
             logger.error("Unexpected error", e);
         }
