@@ -574,8 +574,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
             }
             String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(shardsStateMap);
             Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
-        } else {
-            logger.warn("Gossiper not enabled to publish shard state");
         }
     }
 
