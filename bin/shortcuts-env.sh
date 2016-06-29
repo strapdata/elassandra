@@ -57,28 +57,18 @@ function open() {
    curl -XPOST "http://$NODE:9200/$1/_open"
 }
 
-alias open='open'
-alias close='close'
-
-alias get='get'
-alias put='put'
-alias post='post'
-alias delete='delete'
-
-# Start Cassandra
+# Cassandra aliases
 alias cstart='$CASSANDRA_HOME/bin/cassandra'
 alias cdebug='$CASSANDRA_HOME/bin/cassandra -d'
+alias cstop='$CASSANDRA_HOME/bin/nodetool -p $NODETOOL_JMX_PORT -h $NODE stopdaemon'
+alias cqlsh='$CASSANDRA_HOME/bin/cqlsh $NODE'
+alias nodetool='$CASSANDRA_HOME/bin/nodetool -p $NODETOOL_JMX_PORT'
+
+alias clog='less $CASSANDRA_LOGS/system.log'
 
 # Start Elassandra
 alias ecstart='$CASSANDRA_HOME/bin/cassandra -e'
 alias ecdebug='$CASSANDRA_HOME/bin/cassandra -d -e'
-
-alias clog='less $CASSANDRA_LOGS/system.log'
-
-# Cassandra aliases
-alias nodetool='$CASSANDRA_HOME/bin/nodetool -p $NODETOOL_JMX_PORT'
-alias cstop='$CASSANDRA_HOME/bin/nodetool -p $NODETOOL_JMX_PORT -h $NODE stopdaemon'
-alias cqlsh='$CASSANDRA_HOME/bin/cqlsh $NODE'
 
 # Elasticsearch aliases
 alias health='curl -XGET http://$NODE:9200/_cluster/health/?pretty=true'
@@ -95,4 +85,9 @@ alias allocation='curl -XGET http://$NODE:9200/_cat/allocation?v'
 alias nodes='curl -XGET http://$NODE:9200/_cat/nodes?h=id,ip,heapPercent,ramPercent,fileDescriptorPercent,segmentsCount,segmentsMemory'
 alias settings='curl -XGET http://$NODE:9200/_cluster/settings?pretty=true'
 
-
+alias open='open'
+alias close='close'
+alias get='get'
+alias put='put'
+alias post='post'
+alias delete='delete'
