@@ -1,0 +1,6 @@
+language: java
+
+mvn -Dmaven.test.skip=true compile
+
+jdk:
+  - oraclejdk8
