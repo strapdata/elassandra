@@ -57,7 +57,6 @@ import org.codehaus.jackson.node.ArrayNode;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
-import org.elasticsearch.cassandra.index.ExtendedElasticSecondaryIndex.MappingInfo;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;

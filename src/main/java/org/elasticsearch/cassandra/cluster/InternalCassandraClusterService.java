@@ -80,7 +80,9 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.exceptions.UnavailableException;
+import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.DatacenterReplicationStrategy;
+import org.apache.cassandra.locator.IDistributedReplicationStrategy;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MapSerializer;
 import org.apache.cassandra.serializers.MarshalException;
@@ -107,11 +109,12 @@ import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
 import org.elasticsearch.cassandra.cluster.routing.PrimaryFirstSearchStrategy;
-import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cassandra.index.ExtendedElasticSecondaryIndex;
+import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterService.DocPrimaryKey;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.ClusterStateObserver.EventPredicate;
@@ -261,10 +264,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     };
     
+    private final TimeValue mappingUpdateTimeout;
     private final IndicesService indicesService;
     private final DiscoveryService discoveryService;
-    private final TimeValue mappingUpdateTimeout;
-    
+    private final SecondaryIndicesService secondaryIndicesService;
     protected final MappingUpdatedAction mappingUpdatedAction;
     
     protected Class defaultSecondaryIndexClass = ExtendedElasticSecondaryIndex.class;
@@ -286,9 +289,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
             SecondaryIndicesService secondaryIndicesService, IndicesService indicesService, MappingUpdatedAction mappingUpdatedAction) {
         super(settings, discoveryService, operationRouting, transportService, nodeSettingsService, threadPool, clusterName, discoveryNodeService, version, secondaryIndicesService, indicesService);
         this.mappingUpdateTimeout = settings.getAsTime(SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT, TimeValue.timeValueSeconds(30));
-        this.indicesService = indicesService;
-        this.discoveryService = discoveryService;
         this.mappingUpdatedAction = mappingUpdatedAction;
+        this.indicesService = indicesService;
+        this.secondaryIndicesService = secondaryIndicesService;
+        this.discoveryService = discoveryService;
         
         if (settings.get(SETTING_CLUSTER_DEFAULT_SECONDARY_INDEX_CLASS) != null) {
             try {
@@ -708,7 +712,12 @@ public class InternalCassandraClusterService extends InternalClusterService {
             indexMetaDataBuilder.numberOfShards(numberOfNodes);
             String keyspace = indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE,indexMetaData.getIndex());
             if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
-                indexMetaDataBuilder.numberOfReplicas( Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
+                AbstractReplicationStrategy replicationStrategy = Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy();
+                if (replicationStrategy instanceof IDistributedReplicationStrategy) {
+                    indexMetaDataBuilder.numberOfReplicas( ((IDistributedReplicationStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter()) - 1 );
+                } else {
+                    indexMetaDataBuilder.numberOfReplicas( replicationStrategy.getReplicationFactor() - 1 );
+                }
             } else {
                 indexMetaDataBuilder.numberOfReplicas( 0 );
             }
@@ -913,7 +922,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 logger.debug(query);
                 QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
             }
-
+            secondaryIndicesService.monitorIndex(index);
         } catch (Throwable e) {
             throw new IOException(e.getMessage(), e);
         }
@@ -949,6 +958,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
             } catch (Throwable e) {
                 throw new IOException("Failed to process query=["+query+"]:"+e.getMessage(), e);
             }
+        } else {
+            logger.warn("Cannot create SECONDARY INDEX, [{}.{}] does not exist",ksName, mapping.type());
         }
     }
     
@@ -1324,7 +1335,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         final Object values[] = new Object[row.getColumns().size()];
         final List<ColumnSpecification> columnSpecs = row.getColumns();
         
-        final IndexService indexService = indicesService.indexServiceSafe(index);
+        final IndexService indexService = this.indicesService.indexServiceSafe(index);
         final DocumentMapper documentMapper = indexService.mapperService().documentMapper(type);
         final DocumentFieldMappers docFieldMappers = documentMapper.mappers();
         
@@ -1357,6 +1368,12 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 case INT:
                     values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getInt(columnIndex)) : fieldType.value( row.getInt(columnIndex));
                     break;
+                case SMALLINT:
+                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getShort(columnIndex)) : fieldType.value( row.getShort(columnIndex));
+                    break;
+                case TINYINT:
+                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getByte(columnIndex)) : fieldType.value( row.getByte(columnIndex));
+                    break;
                 case BIGINT:
                     values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getLong(columnIndex)) : fieldType.value( row.getLong(columnIndex));
                     break;
@@ -1373,13 +1390,13 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getBoolean(columnIndex)) : fieldType.value( row.getBoolean(columnIndex));
                     break;
                 case COUNTER:
-                    logger.warn("Ignoring unsupported counter {}", cql3Type);
+                    logger.warn("Ignoring unsupported counter {} for column {}", cql3Type, columnName);
                     break;
                 case INET:
                     values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getInetAddress(columnIndex).getHostAddress()) : fieldType.value( row.getInetAddress(columnIndex).getHostAddress());
                     break;
                 default:
-                    logger.error("Ignoring unsupported type {}", cql3Type);
+                    logger.error("Ignoring unsupported type {} for column {}", cql3Type, columnName);
                 }
             } else if (cql3Type.isCollection()) {
                 AbstractType<?> elementType;

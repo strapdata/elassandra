@@ -6,7 +6,7 @@
     
     <groupId>org.elassandra</groupId>
     <artifactId>elassandra</artifactId>
-    <version>2.1.1-13</version>
+    <version>2.1.1-14</version>
     <name>Elassandra</name>
     <description>Elassandra - ElasticSearch for Cassandra</description>
 

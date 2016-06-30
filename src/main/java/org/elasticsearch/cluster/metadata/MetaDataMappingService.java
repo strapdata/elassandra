@@ -576,7 +576,6 @@ public class MetaDataMappingService extends AbstractComponent {
                             clusterService.updateTableSchema(indexName, mappingMd.type(), columns, 
                                     indicesService.indexService(indexName).mapperService().documentMapper(mappingMd.type()));
                         }
-                        secondaryIndicesService.monitorIndex(indexName);
                     }
                     
                     return ClusterState.builder(currentState).incrementVersion().metaData(builder).build();

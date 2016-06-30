@@ -2,7 +2,6 @@ package org.apache.cassandra.service;
 
 import static com.google.common.collect.Sets.newHashSet;
 
-import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Paths;
 import java.util.Locale;
@@ -29,7 +28,6 @@ import org.elasticsearch.bootstrap.JVMCheck;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.discovery.CassandraDiscovery;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.common.cli.Terminal;
 import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Injector;

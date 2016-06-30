@@ -133,7 +133,7 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
         if (!lifecycle.started()) {
             return;
         }
-        logger.debug("submit new task class={} ", task.getClass().getName());
+        logger.debug("submit new task class={} for index={} type={}", task.getClass().getName(), task.indexMetaData.getIndex(), task.indexMetaData.getMappings());
         try {
             tasksExecutor.execute(task);
         } catch (EsRejectedExecutionException e) {
@@ -167,18 +167,16 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
 
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
-        boolean toUpdateIndicesChanged = false;
-        if (event.metaDataChanged()) {
-            for(String index: toMonitorIndices) {
-                if (event.state().metaData().index(index).getMappings().size() > 0 && event.indexMetaDataChanged(event.state().metaData().index(index))) {
-                    this.toUpdateIndices.add(index);
-                    toUpdateIndicesChanged = true;
-                }
-            }
-            this.toMonitorIndices.removeAll(toUpdateIndices);
-        }
+        logger.debug("toMonitorIndices={} toUpdateIndices={}",toMonitorIndices, toUpdateIndices);
         
-        if (event.routingTableChanged() || toUpdateIndicesChanged) {
+        for(String index: toMonitorIndices) {
+            if (event.state().metaData().index(index).getMappings().size() > 0 && event.indexMetaDataChanged(event.state().metaData().index(index))) {
+                this.toUpdateIndices.add(index);
+            }
+        }
+        this.toMonitorIndices.removeAll(toUpdateIndices);
+        
+        if (toUpdateIndices.size() > 0) {
             for(String index : toUpdateIndices) {
                 IndexRoutingTable indexRoutingTable = event.state().routingTable().index(index);
                 if (indexRoutingTable == null) {

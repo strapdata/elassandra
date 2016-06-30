@@ -515,7 +515,6 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         updatedState = ClusterState.builder(updatedState).routingResult(routingResult).build();
                     }
                     removalReason = "cleaning up after validating index on master";
-                    secondaryIndicesService.monitorIndex(request.index());
                     return updatedState;
                 } finally {
                     if (indexCreated) {

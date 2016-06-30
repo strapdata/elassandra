@@ -1,3 +1,8 @@
+2.1.1-14 - 2016-07-01
+  * Fix an erroneous number_of_replica in a multidatacenter configuration.
+  * Fix a bug when partialy updating a row indexed in an index different from the keyspace name.
+  * Fix a bug on CQL schema update.
+
 2.1.1-13 - 2016-06-29
   * Limit CQL schema update from the coordinator node only.
   * Fix a bug in routing table with vnode and one or more unavailable nodes.

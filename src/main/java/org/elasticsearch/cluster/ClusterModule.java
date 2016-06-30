@@ -24,9 +24,9 @@ import java.util.Collections;
 import java.util.List;
 
 import org.elasticsearch.action.support.DestructiveOperations;
+import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.index.ElasticSecondaryIndicesService;
 import org.elasticsearch.cassandra.index.SecondaryIndicesService;
-import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.action.index.NodeIndexDeletedAction;
 import org.elasticsearch.cluster.action.index.NodeMappingRefreshAction;

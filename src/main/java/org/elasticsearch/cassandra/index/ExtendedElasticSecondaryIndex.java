@@ -29,13 +29,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.cql3.ColumnSpecification;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.Cell;
 import org.apache.cassandra.db.ColumnFamily;
@@ -47,13 +48,18 @@ import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.composites.CompoundSparseCellName;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.CollectionType;
+import org.apache.cassandra.db.marshal.DecimalType;
 import org.apache.cassandra.db.marshal.ListType;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.marshal.SetType;
+import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Field;
@@ -684,13 +690,13 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                      ((mappingMetaData = indexMetaData.mapping(ExtendedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null)
                    ) {
                     try {
-                        IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
-                        IndexService indexService = indicesService.indexServiceSafe(index);
-                        IndexInfo indexInfo = new IndexInfo(index, indexService, mappingMetaData);
-                        this.indices.put(index, indexInfo);
-                        
                         Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
                         if (mappingMap.get("properties") != null) {
+                            IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
+                            IndexService indexService = indicesService.indexServiceSafe(index);
+                            IndexInfo indexInfo = new IndexInfo(index, indexService, mappingMetaData);
+                            this.indices.put(index, indexInfo);
+                            
                             Map<String,Object> props = (Map<String,Object>)mappingMap.get("properties");
                             for(String fieldName : props.keySet() ) {
                                 Map<String,Object> fieldMap = (Map<String,Object>)props.get(fieldName);
@@ -700,22 +706,22 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 }
                                 fieldsMap.put(fieldName, mandartory);
                             }
-                        }
-                        if (mappingMetaData.hasParentField()) {
-                            Map<String,Object> props = (Map<String,Object>)mappingMap.get(ParentFieldMapper.NAME);
-                            String pkColumns = (String)props.get(ParentFieldMapper.CQL_PARENT_PK);
-                            if (pkColumns == null) {
-                                fieldsMap.put(ParentFieldMapper.NAME,true);
-                            } else {
-                                for(String colName : pkColumns.split(","))
-                                    fieldsMap.put(colName, true);
+                            if (mappingMetaData.hasParentField()) {
+                                Map<String,Object> parentsProps = (Map<String,Object>)mappingMap.get(ParentFieldMapper.NAME);
+                                String pkColumns = (String)parentsProps.get(ParentFieldMapper.CQL_PARENT_PK);
+                                if (pkColumns == null) {
+                                    fieldsMap.put(ParentFieldMapper.NAME,true);
+                                } else {
+                                    for(String colName : pkColumns.split(","))
+                                        fieldsMap.put(colName, true);
+                                }
                             }
-                        }
-                        
-                        String[] partitionFunction = indexMetaData.partitionFunction();
-                        if (partitionFunction != null) {
-                            PartitionFunction func = new PartitionFunction(partitionFunction);
-                            partFuncs.put(func.name, func);
+                            
+                            String[] partitionFunction = indexMetaData.partitionFunction();
+                            if (partitionFunction != null) {
+                                PartitionFunction func = new PartitionFunction(partitionFunction);
+                                partFuncs.put(func.name, func);
+                            }
                         }
                     } catch (IOException e) {
                         logger.error("Unexpected error", e);
@@ -934,10 +940,10 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         //ignore cell, (probably clustered keys in cellnames only) 
                         return;
                     }
-                    ColumnDefinition cd = baseCfs.metadata.getColumnDefinition(cell.name());
                     if (cell.isLive() && idx >= 0) {
                         docTtl = Math.min(cell.getLocalDeletionTime(), docTtl);
                         
+                        ColumnDefinition cd = baseCfs.metadata.getColumnDefinition(cell.name());
                         if (cd.kind == ColumnDefinition.Kind.STATIC) {
                             hasStaticUpdate = true;
                         }
@@ -1002,6 +1008,135 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     }
                 }
                 
+                public Object[] rowAsArray(UntypedResultSet.Row row) throws IOException {
+                    final Object values[] = new Object[row.getColumns().size()];
+                    final List<ColumnSpecification> columnSpecs = row.getColumns();
+                    
+                    for (int idx = 0; idx < columnSpecs.size(); idx++) {
+                        if (!row.has(idx) || ByteBufferUtil.EMPTY_BYTE_BUFFER.equals(row.getBlob(idx)) ) {
+                            values[idx] = null;
+                            continue;
+                        }
+                        
+                        ColumnSpecification colSpec = columnSpecs.get(idx);
+                        String columnName = colSpec.name.toString();
+                        CQL3Type cql3Type = colSpec.type.asCQL3Type();
+                        
+                        if (cql3Type instanceof CQL3Type.Native) {
+                            switch ((CQL3Type.Native) cql3Type) {
+                            case ASCII:
+                            case TEXT:
+                            case VARCHAR:
+                                values[idx] = row.getString(idx);
+                                break;
+                            case TIMEUUID:
+                            case UUID:
+                                values[idx] = row.getUUID(idx).toString();
+                                break;
+                            case TIMESTAMP:
+                                values[idx] = row.getTimestamp(idx).getTime();
+                                break;
+                            case INT:
+                                values[idx] = row.getInt(idx);
+                                break;
+                            case SMALLINT:
+                                values[idx] = row.getShort(idx);
+                                break;
+                            case TINYINT:
+                                values[idx] = row.getByte(idx);
+                                break;
+                            case BIGINT:
+                                values[idx] = row.getLong(idx);;
+                                break;
+                            case DOUBLE:
+                                values[idx] = row.getDouble(idx);
+                                break;
+                            case DECIMAL:
+                                values[idx] = DecimalType.instance.compose(row.getBlob(idx));
+                                break;
+                            case FLOAT:
+                                values[idx] = row.getFloat(idx);
+                                break;
+                            case BLOB:
+                                values[idx] = row.getBytes(idx);
+                                break;
+                            case BOOLEAN:
+                                values[idx] = row.getBoolean(idx);
+                                break;
+                            case INET:
+                                values[idx] = row.getInetAddress(idx).getHostAddress();
+                                break;
+                            case COUNTER:
+                                logger.warn("Ignoring unsupported counter for column {}", columnName);
+                                break;
+                            default:
+                                logger.error("Ignoring unsupported type={} for column {}", cql3Type, columnName);
+                            }
+                        } else if (cql3Type.isCollection()) {
+                            AbstractType<?> elementType;
+                            CollectionType ctype = (CollectionType) colSpec.type;
+                            switch (ctype.kind) {
+                            case LIST: 
+                                List list;
+                                elementType = ((ListType<?>) ctype).getElementsType();
+                                if (elementType instanceof UserType) {
+                                    final List<ByteBuffer> lbb = row.getList(idx, BytesType.instance);
+                                    list = new ArrayList(lbb.size());
+                                    for (ByteBuffer bb : lbb) {
+                                        list.add(InternalCassandraClusterService.deserialize(elementType, bb));
+                                    }
+                                } else {
+                                    list = row.getList(idx, elementType);
+                                }
+                                values[idx] =  (list.size() == 1) ? list.get(0) : list;
+                                break;
+                            case SET:
+                                Set set;
+                                elementType = ((SetType<?>) colSpec.type).getElementsType();
+                                if (elementType instanceof UserType) {
+                                    final Set<ByteBuffer> lbb = row.getSet(idx, BytesType.instance);
+                                    set = new HashSet(lbb.size());
+                                    for (ByteBuffer bb : lbb) {
+                                        set.add(InternalCassandraClusterService.deserialize(elementType, bb));
+                                    }
+                                } else {
+                                    set = row.getSet(idx, elementType);
+                                }
+                                values[idx] =  (set.size() == 1) ? set.iterator().next() : set;
+                                break;
+                            case MAP:
+                                Map map;
+                                if (((MapType<?,?>) ctype).getKeysType().asCQL3Type() != CQL3Type.Native.TEXT) {
+                                    throw new IOException("Only support map<text,?>, bad type for column "+columnName);
+                                }
+                                UTF8Type keyType = (UTF8Type) ((MapType<?,?>) colSpec.type).getKeysType();
+                                elementType = ((MapType<?,?>) colSpec.type).getValuesType();
+                                if (elementType instanceof UserType) {
+                                    final Map<String, ByteBuffer> lbb = row.getMap(idx, keyType, BytesType.instance);
+                                    map = new HashMap<String , Map<String, Object>>(lbb.size());
+                                    for(String key : lbb.keySet()) {
+                                        map.put(key, InternalCassandraClusterService.deserialize(elementType, lbb.get(key)));
+                                    }
+                                } else {
+                                    Map<String,Object> map2 = (Map<String,Object>) row.getMap(idx, keyType, elementType);
+                                    map = new HashMap<String, Object>(map2.size());
+                                    for(String key : map2.keySet()) {
+                                        map.put(key,  map2.get(key));
+                                    }
+                                }
+                                values[idx] =  map;
+                                break;
+                            }
+                        } else if (colSpec.type instanceof UserType) {
+                            ByteBuffer bb = row.getBytes(idx);
+                            values[idx] = InternalCassandraClusterService.deserialize(colSpec.type, bb);
+                        } else if (cql3Type instanceof CQL3Type.Custom) {
+                            logger.warn("CQL3.Custom type not supported for column "+columnName);
+                        }
+                    }
+                    return values;
+                }
+                
                 public void addTombstoneColumn(String cql3name) {
                     int idx = indexOf(cql3name);
                     if (idx >= 0) {
@@ -1056,7 +1191,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 }
                                 UntypedResultSet results = getClusterService().fetchRowInternal(baseCfs.metadata.ksName, null, baseCfs.metadata.cfName, missingColumns, pk, hasStaticUpdate);
                                 if (!results.isEmpty()) {
-                                    Object[] missingValues = getClusterService().rowAsArray(baseCfs.metadata.ksName, baseCfs.metadata.cfName, results.one(), false);
+                                    Object[] missingValues = rowAsArray(results.one());
                                     for(int i=0; i < x; i++) {
                                         values[ mustReadColumnsPosition[i] ] = missingValues[i];
                                     }
@@ -1111,11 +1246,11 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     // add _parent
                     ParentFieldMapper parentMapper = context.docMapper.parentFieldMapper();
                     if (parentMapper.active() && indexOf(ParentFieldMapper.NAME) == -1) {
-                        Object parent = null;
+                        String parent = null;
                         if (parentMapper.pkColumns() != null) {
                             String[] cols = parentMapper.pkColumns().split(",");
                             if (cols.length == 1) {
-                                parent = values[indexOf(cols[0])];
+                                parent = (String) values[indexOf(cols[0])];
                             } else {
                                 // build a json array
                                 ArrayNode an = ClusterService.Utils.jsonMapper.createArrayNode();
@@ -1126,7 +1261,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         } else {
                             int parentIdx = indexOf(ParentFieldMapper.NAME);
                             if (parentIdx != -1 && values[parentIdx] instanceof String)
-                                parent = values[parentIdx];
+                                parent = (String) values[parentIdx];
                         }
                         if (parent != null) {
                             //parent = parentMapper.type() + Uid.DELIMITER + parent;
