@@ -717,7 +717,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 if (replicationStrategy instanceof IDistributedReplicationStrategy) {
                     rf = ((IDistributedReplicationStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter());
                 } 
-                indexMetaDataBuilder.numberOfReplicas( Math.max(0,  rf -1) );
+                indexMetaDataBuilder.numberOfReplicas( Math.max(0, rf - 1) );
             } else {
                 indexMetaDataBuilder.numberOfReplicas( 0 );
             }
