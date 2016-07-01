@@ -713,11 +713,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
             String keyspace = indexMetaData.getSettings().get(IndexMetaData.SETTING_KEYSPACE,indexMetaData.getIndex());
             if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
                 AbstractReplicationStrategy replicationStrategy = Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy();
+                int rf = replicationStrategy.getReplicationFactor();
                 if (replicationStrategy instanceof IDistributedReplicationStrategy) {
-                    indexMetaDataBuilder.numberOfReplicas( ((IDistributedReplicationStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter()) - 1 );
-                } else {
-                    indexMetaDataBuilder.numberOfReplicas( replicationStrategy.getReplicationFactor() - 1 );
-                }
+                    rf = ((IDistributedReplicationStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter());
+                } 
+                indexMetaDataBuilder.numberOfReplicas( Math.max(0,  rf -1) );
             } else {
                 indexMetaDataBuilder.numberOfReplicas( 0 );
             }
