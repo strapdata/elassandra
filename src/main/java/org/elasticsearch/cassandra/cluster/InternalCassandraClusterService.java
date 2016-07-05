@@ -705,6 +705,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
     
     public ClusterState updateNumberOfShards(ClusterState currentState) {
         int numberOfNodes = currentState.nodes().size();
+        assert numberOfNodes > 0;
         MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
         for(Iterator<IndexMetaData> it = currentState.metaData().iterator(); it.hasNext(); ) {
             IndexMetaData indexMetaData = it.next();

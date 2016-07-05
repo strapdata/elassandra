@@ -1,3 +1,7 @@
+2.1.1-15 - 2016-07-01
+  * Add a per-index logging level
+  * Fix a parent-child mapping issue.
+
 2.1.1-14 - 2016-07-01
   * Fix an erroneous number_of_replica in a multidatacenter configuration.
   * Fix a bug when partialy updating a row indexed in an index different from the keyspace name.

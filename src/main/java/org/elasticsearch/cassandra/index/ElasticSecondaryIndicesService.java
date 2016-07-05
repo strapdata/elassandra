@@ -33,6 +33,8 @@ import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.logging.ESLogger;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
@@ -47,6 +49,7 @@ import org.elasticsearch.common.util.concurrent.PrioritizedRunnable;
  *
  */
 public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<SecondaryIndicesService> implements SecondaryIndicesService {
+    ESLogger logger = Loggers.getLogger(ElasticSecondaryIndicesService.class);
     
     public static String TASK_THREAD_NAME = "secondaryIndiceService#taskExecutor";
     

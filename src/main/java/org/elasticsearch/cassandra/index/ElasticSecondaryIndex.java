@@ -635,7 +635,10 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     
     public synchronized void initMapping() {
         if (ElassandraDaemon.injector() != null) {
-           getClusterService().addLast(this);
+            if (!registred) {
+                getClusterService().addLast(this);
+                registred = true;
+            }
             this.mappingAtomicReference.set(new MappingInfo(getClusterService().state()));
             logger.debug("index=[{}.{}] initialized,  mappingAtomicReference = {}", this.baseCfs.metadata.ksName, index_name, this.mappingAtomicReference.get());
         } else {
@@ -656,13 +659,14 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         }
         for(MappingInfo.IndexInfo indexInfo : mappingInfo.indices) {
             try {
-                IndexShard indexShard = indexInfo.indexService.shardSafe(0);
-                logger.debug("Flushing Elasticsearch index=[{}] state=[{}]",indexInfo.name, indexShard.state());
-                if (indexShard.state() == IndexShardState.STARTED)  {
-                    indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
-                    logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
-                } else {
-                    logger.warn("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
+                IndexShard indexShard = indexInfo.indexService.shard(0);
+                if (indexShard != null) {
+                    if (indexShard.state() == IndexShardState.STARTED)  {
+                        indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
+                        logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
+                    } else {
+                        logger.warn("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
+                    }
                 }
             } catch (ElasticsearchException e) {
                 logger.error("Error while flushing index {}",e,indexInfo.name);

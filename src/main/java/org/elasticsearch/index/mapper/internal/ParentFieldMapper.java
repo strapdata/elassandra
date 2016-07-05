@@ -19,6 +19,7 @@
 package org.elasticsearch.index.mapper.internal;
 
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.SortedDocValuesField;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.IndexOptions;
@@ -35,6 +36,7 @@ import org.elasticsearch.common.settings.loader.SettingsLoader;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.ParseContext.Document;
 import org.elasticsearch.index.query.QueryParseContext;
 
 import java.io.IOException;
@@ -320,7 +322,7 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         }
     }
 
-
+    
     @Override
     public void createField(ParseContext context, Object value) throws IOException {
         String parentId = (String) value;
@@ -381,7 +383,11 @@ public class ParentFieldMapper extends MetadataFieldMapper {
     
     private void addJoinFieldIfNeeded(ParseContext context, MappedFieldType fieldType, String id) {
         if (fieldType.hasDocValues()) {
-            context.doc().add(new SortedDocValuesField(fieldType.names().indexName(), new BytesRef(id)));
+            Field field = new SortedDocValuesField(fieldType.names().indexName(), new BytesRef(id));
+            if (!customBoost()) {
+                field.setBoost(fieldType().boost());
+            }
+            context.doc().add(field);
         }
     }
     

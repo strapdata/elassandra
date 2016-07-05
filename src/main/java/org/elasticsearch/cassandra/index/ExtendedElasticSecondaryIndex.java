@@ -127,12 +127,9 @@ import com.ibm.icu.text.MessageFormat;
 
 /**
  * Custom secondary index for CQL3 only, should be created when mapping is applied and local shard started.
- * Index row as document when Elasticsearch clusterState has no write blocks and local shard is started.
+ * Index rows as documents when Elasticsearch clusterState has no write blocks and local shard is started.
  * 
- * OptmizedElasticSecondaryIndex directly build lucene fields without building a JSON document parsed by Elasticsearch.
- *  
- * ExtendedElasticSecondaryIndex allocates contexts to build ES documents in a per thread cache for later reuse.
- * This approch may consume more memory if a keyspace is mapped to many indices (one context per index).
+ * ExtendedElasticSecondaryIndex directly build lucene fields without building a JSON document parsed by Elasticsearch.
  * 
  * @author vroyer
  *
@@ -183,6 +180,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         private Document document;
         private StringBuilder stringBuilder = new StringBuilder();
         private String id;
+        private String parent;
         private Field version, uid;
         private final List<Document> documents = new ArrayList<Document>();
         private AllEntries allEntries = new AllEntries();
@@ -213,6 +211,8 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             this.allEntries = new AllEntries();
             this.docBoost = 1.0f;
             this.dynamicMappingsUpdate = null;
+            this.parent = null;
+            this.version = BaseElasticSecondaryIndex.DEFAULT_VERSION;
         }
     
         // recusivelly add fields
@@ -265,7 +265,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         // dynamic field in top level map => update mapping and add the field.
                         ColumnDefinition cd = baseCfs.metadata.getColumnDefinition(mapper.cqlName());
                         if (cd != null && cd.type.isCollection() && cd.type instanceof MapType) {
-                            logger.debug("updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
+                            logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
                             CollectionType ctype = (CollectionType) cd.type;
                             if (ctype.kind == CollectionType.Kind.MAP && ((MapType)ctype).getKeysType().asCQL3Type().toString().equals("text")) {
                                 try {
@@ -495,6 +495,14 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             this.id = id;
         }
     
+        public String parent() {
+            return parent;
+        }
+        
+        public void parent(String parent) {
+            this.parent = parent;
+        }
+        
         @Override
         public Field uid() {
             return this.uid;
@@ -686,9 +694,8 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     continue;
                 }
                 
-                if ( (ExtendedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(index) || ExtendedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace())) &&
-                     ((mappingMetaData = indexMetaData.mapping(ExtendedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null)
-                   ) {
+                if ( ExtendedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace()) &&
+                     (mappingMetaData = indexMetaData.mapping(ExtendedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null) {
                     try {
                         Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
                         if (mappingMap.get("properties") != null) {
@@ -724,10 +731,22 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             }
                         }
                     } catch (IOException e) {
-                        logger.error("Unexpected error", e);
+                        logger.error("Unexpected error index=[{}]", e, index);
                     }
                 }
             }
+            
+            if (indices.size() == 0) {
+                if (logger.isTraceEnabled())
+                    logger.trace("no active elasticsearch index for keyspace.table {}.{}",baseCfs.metadata.ksName, baseCfs.name);
+                this.fields = null;
+                this.fieldsToRead = null;
+                this.fieldsIsStatic = null;
+                this.indexedPkColumns = null;
+                this.partitionFunctions = null;
+                return;
+            }
+
             
             // order fields with pk columns first
             this.fields = new String[fieldsMap.size()];
@@ -755,7 +774,6 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
             
             this.fieldsToRead = new BitSet(fields.length);
-            
             this.fieldsIsStatic = (baseCfs.metadata.hasStaticColumns()) ? new BitSet() : null;
             for(int i=0; i < fields.length; i++) {
                 this.fieldsToRead.set(i, fieldsMap.get(fields[i]));
@@ -1243,6 +1261,16 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         }
                     }
                     
+                    // postCreate for all metadata fields.
+                    Mapping mapping = context.docMapper.mapping();
+                    for (MetadataFieldMapper metadataMapper : mapping.metadataMappers()) {
+                        try {
+                            metadataMapper.postCreate(context);
+                        } catch (IOException e) {
+                           logger.error("error", e);
+                        }
+                    }
+                    
                     // add _parent
                     ParentFieldMapper parentMapper = context.docMapper.parentFieldMapper();
                     if (parentMapper.active() && indexOf(ParentFieldMapper.NAME) == -1) {
@@ -1268,17 +1296,12 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             if (logger.isDebugEnabled())
                                 logger.debug("add _parent={}", parent);
                             parentMapper.createField(context, parent);
+                            context.parent(parent);
                         }
                     }
-                    
-                    // postCreate for all metadata fields.
-                    Mapping mapping = context.docMapper.mapping();
-                    for (MetadataFieldMapper metadataMapper : mapping.metadataMappers()) {
-                        try {
-                            metadataMapper.postCreate(context);
-                        } catch (IOException e) {
-                           logger.error("error", e);
-                        }
+                    if (!parentMapper.active()) {
+                        // need to call this for parent types
+                        parentMapper.createField(context, null);
                     }
                     return context;
                 }
@@ -1328,35 +1351,42 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                     (BytesReference)null, // source 
                                     (Mapping)null); // mappingUpdate
                             
+                            parsedDoc.parent(context.parent());
+
                             if (logger.isTraceEnabled()) {
                                 logger.trace("index={} id={} type={} uid={} routing={} docs={}", context.indexInfo.name, parsedDoc.id(), parsedDoc.type(), parsedDoc.uid(), parsedDoc.routing(), parsedDoc.docs());
                             }
-                            final IndexShard indexShard = context.indexInfo.indexService.shardSafe(0);
-                            final Engine.Index operation = new Engine.Index(context.docMapper.uidMapper().term(uid.stringValue()), 
-                                    parsedDoc, 
-                                    Versions.MATCH_ANY, 
-                                    VersionType.INTERNAL, 
-                                    Engine.Operation.Origin.PRIMARY, 
-                                    startTime, 
-                                    false);
-                            
-                            final boolean created = operation.execute(indexShard);
-                            final long version = operation.version();
-
-                            if (context.indexInfo.refresh) {
-                                try {
-                                    indexShard.refresh("refresh_flag_index");
-                                } catch (Throwable e) {
-                                    logger.error("error", e);
+                            final IndexShard indexShard = context.indexInfo.indexService.shard(0);
+                            if (indexShard == null) {
+                                if (logger.isTraceEnabled())
+                                    logger.trace("No such shard {}.0", context.indexInfo.name);
+                            } else {
+                                final Engine.Index operation = new Engine.Index(context.docMapper.uidMapper().term(uid.stringValue()), 
+                                        parsedDoc, 
+                                        Versions.MATCH_ANY, 
+                                        VersionType.INTERNAL, 
+                                        Engine.Operation.Origin.PRIMARY, 
+                                        startTime, 
+                                        false);
+                                
+                                final boolean created = operation.execute(indexShard);
+                                final long version = operation.version();
+                                
+                                if (context.indexInfo.refresh) {
+                                    try {
+                                        indexShard.refresh("refresh_flag_index");
+                                    } catch (Throwable e) {
+                                        logger.error("error", e);
+                                    }
                                 }
-                            }
-                            
-                            if (logger.isDebugEnabled()) {
-                                logger.debug("document CF={}.{} index={} type={} id={} version={} created={} ttl={} refresh={} ", 
-                                    baseCfs.metadata.ksName, baseCfs.metadata.cfName,
-                                    context.indexInfo.name, baseCfs.metadata.cfName,
-                                    id, version, created, ttl, context.indexInfo.refresh);
-                            }
+                                
+                                if (logger.isDebugEnabled()) {
+                                    logger.debug("document CF={}.{} index={} type={} id={} version={} created={} ttl={} refresh={} ", 
+                                        baseCfs.metadata.ksName, baseCfs.metadata.cfName,
+                                        context.indexInfo.name, baseCfs.metadata.cfName,
+                                        id, version, created, ttl, context.indexInfo.refresh);
+                                }
+                             }
                         } catch (IOException e) {
                             logger.error("error", e);
                         }
@@ -1481,10 +1511,14 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     public void initMapping() {
         mappingInfoLock.writeLock().lock();
         try {
-            if (mappingInfo==null && ElassandraDaemon.injector() != null) {
-               getClusterService().addLast(this);
+            if (ElassandraDaemon.injector() != null) {
+               if (!registred) {
+                   getClusterService().addLast(this);
+                   registred = true;
+               }
                mappingInfo = new MappingInfo(getClusterService().state());
-               logger.debug("index=[{}.{}] initialized,  mappingAtomicReference = {}", this.baseCfs.metadata.ksName, index_name, mappingInfo);
+               logger.debug("Secondary index=[{}.{}] initialized, metadata.version={} mappingInfo.indices={}", 
+                       this.baseCfs.metadata.ksName, index_name, mappingInfo.metadataVersion,  mappingInfo.indices.keySet());
             } else {
                 logger.warn("Cannot initialize index=[{}.{}], cluster service not available.", this.baseCfs.metadata.ksName, index_name);
             }
@@ -1502,21 +1536,22 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     @Override
     public void forceBlockingFlush() {
         if (mappingInfo == null || mappingInfo.indices.size() == 0) {
-            logger.warn("Elasticsearch not ready, cannot flush Elasticsearch index");
+            logger.trace("Elasticsearch not ready, cannot flush Elasticsearch index");
             return;
         }
         for(MappingInfo.IndexInfo indexInfo : mappingInfo.indices.values()) {
             try {
-                IndexShard indexShard = indexInfo.indexService.shardSafe(0);
-                logger.debug("Flushing Elasticsearch index=[{}] state=[{}]",indexInfo.name, indexShard.state());
-                if (indexShard.state() == IndexShardState.STARTED)  {
-                    indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
-                    logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
-                } else {
-                    logger.warn("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
+                IndexShard indexShard = indexInfo.indexService.shard(0);
+                if (indexShard != null) {
+                    if (indexShard.state() == IndexShardState.STARTED)  {
+                        indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
+                        logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
+                    } else {
+                        logger.warn("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
+                    }
                 }
             } catch (ElasticsearchException e) {
-                logger.error("Error while flushing index {}",e,indexInfo.name);
+                logger.error("Error while flushing index=[{}]",e,indexInfo.name);
             }
         }
     }
@@ -1533,6 +1568,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
                 IndexMetaData indexMetaData = cursor.value;
                 if (indexMetaData.keyspace().equals(this.baseCfs.metadata.ksName) && 
+                    indexMetaData.mapping(this.baseCfs.name) != null &&
                    (event.indexRoutingTableChanged(indexMetaData.getIndex()) || event.indexMetaDataChanged(indexMetaData))) {
                     updateMapping = true;
                     break;
@@ -1543,8 +1579,8 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             mappingInfoLock.writeLock().lock();
             try {
                 mappingInfo = new MappingInfo(event.state());
-                logger.debug("index=[{}.{}] metadata.version={} mappingInfo = {}",
-                        this.baseCfs.metadata.ksName, this.index_name, event.state().metaData().version(), mappingInfo );
+                logger.debug("index=[{}.{}] metadata.version={} mappingInfo.indices={}",
+                        this.baseCfs.metadata.ksName, this.index_name, event.state().metaData().version(), mappingInfo.indices.keySet() );
             } finally {
                 mappingInfoLock.writeLock().unlock();
             }

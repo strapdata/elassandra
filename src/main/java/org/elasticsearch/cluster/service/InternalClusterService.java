@@ -249,6 +249,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
             logger.error("Failed to update elastic_admin keyspace", e);
         }
         
+        // addPost because 2i shoukd be created/deleted after that cassandra indices have taken the new mapping.
         addLast(this.secondaryIndicesService);
     }
     
@@ -296,7 +297,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public void add(ClusterStateListener listener) {
         clusterStateListeners.add(listener);
     }
-
+    
     @Override
     public void remove(ClusterStateListener listener) {
         clusterStateListeners.remove(listener);

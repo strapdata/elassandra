@@ -372,13 +372,6 @@ public abstract class FieldMapper extends Mapper {
         multiFields.parse(this, context);
         return null;
     }
-    
-    
-    public Mapper create(ParseContext context, Object value) throws IOException {
-        createField(context, value);
-        multiFields.parse(this, context);
-        return null;
-    }
 
     public void setBoost(Field field) {
         if (!customBoost()) {

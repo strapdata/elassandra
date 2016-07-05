@@ -47,6 +47,9 @@ curl -XPUT "http://$NODE:9200/twitter2/_mapping/tweet" -d '
               "size" : {
                 "type" : "long"
               },
+              "size2" : {
+                "type" : "long"
+              },
               "post_date" : {
                 "format": "yyyy-MM-dd",
                 "type" : "date"

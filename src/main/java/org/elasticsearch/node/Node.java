@@ -256,10 +256,6 @@ public class Node implements Releasable {
         clusterService.waitShardsStarted();
         logger.info("activated ...");
         
-        // initialize custom secondary indices.
-        for(BaseElasticSecondaryIndex esi : BaseElasticSecondaryIndex.elasticSecondayIndices) {
-            esi.initMapping();
-        }
         
         return this;
     }
@@ -294,6 +290,11 @@ public class Node implements Releasable {
         injector.getInstance(TribeService.class).start();
 
         ClusterService clusterService = injector.getInstance(ClusterService.class);
+        
+        // initialize custom secondary indices.
+        for(BaseElasticSecondaryIndex esi : BaseElasticSecondaryIndex.elasticSecondayIndices.values()) {
+            esi.initMapping();
+        }
         
         // broadcast shards state over gossip
         clusterService.publishAllShardsState();

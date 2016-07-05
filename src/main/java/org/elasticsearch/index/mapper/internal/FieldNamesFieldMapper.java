@@ -237,11 +237,6 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
         super.parse(context);
     }
 
-    @Override
-    public void postCreate(ParseContext context) throws IOException {
-        super.create(context, null);
-    }
-
     
     @Override
     public Mapper parse(ParseContext context) throws IOException {

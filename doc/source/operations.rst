@@ -23,7 +23,7 @@ Let's try and index some *twitter* like information (demo from `Elasticsearch <h
    }'
 
 
-You now have two rows in the cassandra *twitter.tweet* table.
+You now have two rows in the cassandra **twitter.tweet** table.
 
 .. code::
 
@@ -69,8 +69,8 @@ Now, let's see if the information was added by GETting it:
    curl -XGET 'http://localhost:9200/twitter/tweet/1?pretty=true'
    curl -XGET 'http://localhost:9200/twitter/tweet/2?pretty=true'
 
-Elasticsearch state now show reflect the new twitter index. Because we are currently running on one node, the *token_ranges* routing 
-attribute match 100% of the ring Long.MIN_VALUE to Long.MAX_VALUE.
+Elasticsearch state now show reflect the new twitter index. Because we are currently running on one node, the **token_ranges** routing 
+attribute match 100% of the ring from Long.MIN_VALUE to Long.MAX_VALUE.
 
 .. code::
 
@@ -218,3 +218,47 @@ We can also do range search (the 'postDate' was automatically identified as date
 
 
 There are many more options to perform search, after all, it's a search product no? All the familiar Lucene queries are available through the JSON query language, or through the query parser.
+
+
+Create, delete and rebuild index
+________________________________
+
+In order to create an Elasticsearch index from an existing cassandra table, you can specify the underlying keyspace. In the following exemple, all columns but *message* is automatically mapped
+with the default mapping, and the *message* is explicitly mapped with a custom mapping.
+
+.. code::
+
+   curl -XGET 'http://localhost:9200/twitter_index' -d '{
+       "settings": { "keyspace":"twitter" }
+       "mappings": { 
+           "tweet" : {
+               "discover":"^(?!message).*",
+               "properties" : {
+                  "message" : { "type":"string", "index":"analyzed", "cql_collection":"singleton" }
+               }
+               
+           }
+       }
+   }'
+
+Deleting an Elasticsearch index does not remove any cassandra data, it keeps the underlying cassandra tables but remove elasticsearch index files.
+
+.. code::
+
+   curl -XDELETE 'http://localhost:9200/twitter_index'
+
+To re-index your existing data, for exemple after a mapping change to index a new column, run a **nodetool rebuild_index** as follow :
+
+.. code::
+
+   nodetool rebuild_index <keyspace> <table> elastic_<table>
+
+.. TIP::
+   Re-index extisting data rely on the cassandra compaction manager. You can trigger a `cassandra compaction <http://docs.datastax.com/en/cassandra/2.0/cassandra/operations/ops_configure_compaction_t.html>`_ when :
+   
+   * Creating the first Elasticsearch index on a cassandra table with existing data, 
+   * Running a `nodetool rebuild_index <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRebuildIndex.html>`_  command,
+   * Running a `nodetool repair <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRepair.html>`_ on a keyspace having indexed tables (a repair actually creates new SSTables triggering index build).
+   
+   If the compaction manager is busy, secondary index rebuild is added as a pending task and played later on. You can check current running compactions with a **nodetool compactionstats** and check pending compaction tasks with a **nodetool tpstats**. 
+

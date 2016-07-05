@@ -47,6 +47,8 @@ Logging configuration
 The cassandra logs in ``logs/system.log`` includes elasticsearch logs according to the your ``conf/logback.conf`` settings. 
 See `cassandra logging configuration <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configLoggingLevels_r.html>`_.
 
+Per keyspace (or per table logging) level can be configured using the logger name ``org.elasticsearch.cassandra.index.ExtendedElasticSecondaryIndex.<keyspace>.<table>``.
+
 
 Multi datacenter configuration
 ------------------------------
@@ -91,15 +93,16 @@ Index settings
 Sizing and tunning
 ------------------
 
-Roughly, Elassandra write throughput should be half the cassandra write throughput if you index all columns. If you only index a subset of columns, performance would be better. 
+Elassandra write throughput should be half the cassandra write throughput if you index all columns. If you only index a subset of columns, performance would be better. 
 
 Recommanded production setting for Apache cassandra and Elasticsearch can be applied to Elassandra :
 
-* Configure less than half the total memory of your server and up to 30.5Gb. Minimum recommended DRAM for production deployments is 32Gb.
-* Increase number of Elassandra node or use index partitionning to keep shards size below 50Gb.
+* Configure less than half the total memory of your server and up to 30.5Gb. Minimum recommended DRAM for production deployments is 32Gb. If you are not aggregating on analyzed string fields, you can probably use less memory to improve file system cache used by Doc Values (See this `excelent blog <https://www.elastic.co/fr/blog/support-in-the-wild-my-biggest-elasticsearch-problem-at-scale>`_ post by Chris Earle).
+* Increase number of Elassandra node or use partitioned index to keep shards size below 50Gb.
 * Avoid huge wide rows, write-lock on a wide row can dramatically affect write performance.
 * During indexing, if you don't need search, disable **index.refresh** (default is every second). 
 * Configure off_heap memory for cassandra memtables (elassandra default configuration).
+* Choose the right compaction strategy to fit your workload (See this `blog <https://www.instaclustr.com/blog/2016/01/27/apache-cassandra-compaction/>`_ post by Justin Cameron)
 
 
 

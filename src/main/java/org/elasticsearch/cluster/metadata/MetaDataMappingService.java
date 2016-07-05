@@ -434,7 +434,7 @@ public class MetaDataMappingService extends AbstractComponent {
             
             @Override
             public ClusterState execute(final ClusterState currentState) throws Exception {
-                //List<String> indicesToClose = new ArrayList<>();
+                List<String> indicesToClose = new ArrayList<>();
                 try {
                     for (String index : request.indices()) {
                         if (!currentState.metaData().hasIndex(index)) {
@@ -449,7 +449,7 @@ public class MetaDataMappingService extends AbstractComponent {
                         }
                         final IndexMetaData indexMetaData = currentState.metaData().index(index);
                         IndexService indexService = indicesService.createIndex(indexMetaData.getIndex(), indexMetaData.getSettings(), clusterService.localNode().id());
-                        //indicesToClose.add(indexMetaData.getIndex());
+                        indicesToClose.add(indexMetaData.getIndex());
                         // make sure to add custom default mapping if exists
                         if (indexMetaData.getMappings().containsKey(MapperService.DEFAULT_MAPPING)) {
                             indexService.mapperService().merge(MapperService.DEFAULT_MAPPING, indexMetaData.getMappings().get(MapperService.DEFAULT_MAPPING).source(), false, request.updateAllTypes());
@@ -580,11 +580,9 @@ public class MetaDataMappingService extends AbstractComponent {
                     
                     return ClusterState.builder(currentState).incrementVersion().metaData(builder).build();
                 } finally {
-                    /*
                     for (String index : indicesToClose) {
                         indicesService.removeIndex(index, "created for mapping processing");
                     }
-                    */
                 }
             }
         });

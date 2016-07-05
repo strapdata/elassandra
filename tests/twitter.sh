@@ -24,15 +24,20 @@ curl -XPUT "http://$NODE:9200/twitter/tweet/4" -d '{
     "message" : "look at Elassandra !!",
     "size": 100
 }'
-curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=message:elassandra"
+curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=user:vince"
 
 echo "echo \"select * from twitter.tweet;\" | cqlsh $NODE" 
 echo "select * from twitter.tweet;" | bin/cqlsh $NODE
-echo curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=message:elassandra"
-curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=message:elassandra"
+echo curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=user:vince"
+curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=user:vince"
 
 curl -XDELETE "http://$NODE:9200/twitter/tweet/1"
-curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=message:elassandra"
+curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=user:vince"
 
 
-curl -XGET "http://$NODE:9200/pat1_metadata/_search?pretty=true&q=*:*"
+curl -XPUT "http://$NODE:9200/twitter3/" -d '{
+    "settings": { "keyspace":"twitter" },
+    "mappings": { "tweet": { "discover":".*"} }
+}'
+
+curl -XGET "http://$NODE:9200/twitter2/_search?pretty=true&q=*:*"

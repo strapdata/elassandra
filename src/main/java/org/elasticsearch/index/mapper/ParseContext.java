@@ -68,6 +68,10 @@ public abstract class ParseContext {
             this("", null);
         }
 
+        public String toString() {
+            return "path="+path+" prefix="+prefix+" fields="+fields+" parent="+parent;
+        }
+        
         /**
          * Return the path associated with this document.
          */
