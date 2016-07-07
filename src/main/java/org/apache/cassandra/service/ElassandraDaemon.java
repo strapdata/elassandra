@@ -172,8 +172,8 @@ public class ElassandraDaemon extends CassandraDaemon {
      * hook for JSVC
      */
     public void stop() {
-        node.close();
         super.stop();
+        node.close();
     }
 
     /**
@@ -189,7 +189,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     public void activate() {
         node.activate();
     }
-
+    
     /**
      * hook for JSVC
      */
@@ -219,7 +219,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                 }
             });
         }
-
+      
         // look for jar hell
         /*
         try {

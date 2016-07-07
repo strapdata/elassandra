@@ -686,14 +686,10 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 MappingMetaData mappingMetaData; 
                 ClusterBlockException clusterBlockException = state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, index);
                 if (clusterBlockException != null) {
-                    logger.debug("ignore, index=[{}] blocked blocks={}", index, clusterBlockException.blocks());
+                    logger.warn("ignore, index=[{}] blocked blocks={}", index, clusterBlockException.blocks());
                     continue;
                 }
-                if (!state.routingTable().isLocalShardsStarted(index)) {
-                    logger.debug("ignore, local shard not started for index=[{}]", index);
-                    continue;
-                }
-                
+
                 if ( ExtendedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace()) &&
                      (mappingMetaData = indexMetaData.mapping(ExtendedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null) {
                     try {
@@ -738,7 +734,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             
             if (indices.size() == 0) {
                 if (logger.isTraceEnabled())
-                    logger.trace("no active elasticsearch index for keyspace.table {}.{}",baseCfs.metadata.ksName, baseCfs.name);
+                    logger.warn("no active elasticsearch index for keyspace.table {}.{}",baseCfs.metadata.ksName, baseCfs.name);
                 this.fields = null;
                 this.fieldsToRead = null;
                 this.fieldsIsStatic = null;
@@ -805,7 +801,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 if (this.indices.get(indexName) != null) {
                     targetIndices.add( this.indices.get(indexName) );
                 } else {
-                    if (logger.isDebugEnabled())
+                    if (logger.isWarnEnabled())
                         logger.warn("No target for index=[{}] partition function name=[{}] pattern=[{}] indices={}", indexName, func.name, func.pattern, this.indices);
                 }
             }
@@ -1149,7 +1145,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             ByteBuffer bb = row.getBytes(idx);
                             values[idx] = InternalCassandraClusterService.deserialize(colSpec.type, bb);
                         } else if (cql3Type instanceof CQL3Type.Custom) {
-                            logger.warn("CQL3.Custom type not supported for column "+columnName);
+                            logger.error("CQL3.Custom type not supported for column "+columnName);
                         }
                     }
                     return values;
@@ -1358,8 +1354,9 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             }
                             final IndexShard indexShard = context.indexInfo.indexService.shard(0);
                             if (indexShard == null) {
-                                if (logger.isTraceEnabled())
-                                    logger.trace("No such shard {}.0", context.indexInfo.name);
+                                logger.warn("No such shard {}.0", context.indexInfo.name);
+                            } else if (indexShard.state() != IndexShardState.STARTED) {
+                                logger.warn("Shard {}.0 not started", context.indexInfo.name);
                             } else {
                                 final Engine.Index operation = new Engine.Index(context.docMapper.uidMapper().term(uid.stringValue()), 
                                         parsedDoc, 
@@ -1433,20 +1430,18 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     public void index(ByteBuffer rowKey, ColumnFamily cf)  {
         try {
             if (mappingInfo == null) {
-                if (logger.isTraceEnabled())  
-                    logger.trace("No Elasticsearch index ready");
+                if (logger.isInfoEnabled())  
+                    logger.warn("No Elasticsearch index ready");
                 return;
             }
             if (mappingInfo.indices.size() == 0) {
                 if (logger.isTraceEnabled())  
-                    logger.trace("No Elasticsearch index configured");
+                    logger.warn("No Elasticsearch index configured");
                 return;
             }
             
-            
-            
-            if (logger.isDebugEnabled())
-                logger.debug("mappingInfo.metadataVersion={} indices={}", mappingInfo.metadataVersion, mappingInfo.indices.keySet());
+            if (logger.isTraceEnabled())
+                logger.trace("mappingInfo.metadataVersion={} indices={}", mappingInfo.metadataVersion, mappingInfo.indices.keySet());
             
             mappingInfoLock.readLock().lock();
             try {

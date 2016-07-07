@@ -321,7 +321,7 @@ public class Node implements Releasable {
             return this;
         }
         ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
-        logger.info("stopping ...");
+        logger.warn("stopping ...");
 
         injector.getInstance(TribeService.class).stop();
         injector.getInstance(ResourceWatcherService.class).stop();
@@ -361,15 +361,15 @@ public class Node implements Releasable {
     // to close() has already set some lifecycles to stopped. In this case the process will be terminated even if the first call to close() has not finished yet.
     @Override
     public synchronized void close() {
+        ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
+        logger.warn("closing ...");
+        
         if (lifecycle.started()) {
             stop();
         }
         if (!lifecycle.moveToClosed()) {
             return;
         }
-
-        ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
-        logger.info("closing ...");
 
         StopWatch stopWatch = new StopWatch("node_close");
         stopWatch.start("tribe");

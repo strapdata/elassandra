@@ -1,5 +1,5 @@
-2.1.1-15 - 2016-07-01
-  * Add a per-index logging level
+2.1.1-15 - 2016-07-06
+  * Add a per-index logging level.
   * Fix a parent-child mapping issue.
 
 2.1.1-14 - 2016-07-01
