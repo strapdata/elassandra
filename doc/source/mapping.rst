@@ -189,6 +189,9 @@ All those indices will be mapped to the keyspace **logs**, and all columns of th
      }
    }'
 
+.. TIP::
+   When creating the first elasticsearch index for a cassandra table, elassandra may create some cassandra secondary indice.  Only the first created secondary index trigger a compaction to index the existing data.  So, if you create a partitionned index on a table having some data, the index rebuild may start before all partition are created, and some rows could be ignored if matching a not yet created partitioned index. To avoid this situation, create partitioned indices before injecting data or rebuild the secondary index entirely. 
+
 To remove an old indicies.
 
 .. code::
