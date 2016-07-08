@@ -3,7 +3,7 @@ Architecture
 
 Elassandra tightly integrates elasticsearch within cassandra as a secondary index, allowing near-realtime search with all existing elasticsearch APIs, plugins and tools like Kibana.
 
-When you index a document, the JSON document is stored as a row in a cassandra table and synchronously indexed in elasticsearch. 
+When you index a document, the JSON document is stored as a row in a cassandra table and synchronously indexed in elasticsearch.
 
 .. image:: images/elassandra1.jpg
 
@@ -35,12 +35,12 @@ From an Elasticsearch perspective :
 * An Elasticsearch cluster is a Cassandra virtual datacenter.
 * Every Elassandra node is a master primary data node.
 * Each node only index local data and acts as a primary local shard.
-* Elasticsearch data is not more stored in lucene indices, but in cassandra tables. 
+* Elasticsearch data is not more stored in lucene indices, but in cassandra tables.
 
-  * An Elasticsearch index is mapped to a cassandra keyspace, 
+  * An Elasticsearch index is mapped to a cassandra keyspace,
   * Elasticsearch document type is mapped to a cassandra table.
-  * Elasticsearch document *_id* is a string representation of the cassandra primary key. 
-  
+  * Elasticsearch document *_id* is a string representation of the cassandra primary key.
+
 * Elasticsearch discovery now rely on the cassandra `gossip protocol <https://wiki.apache.org/cassandra/ArchitectureGossip>`_. When a node join or leave the cluster, or when a schema change occurs, each nodes update nodes status and its local routing table.
 * Elasticsearch `gateway <https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html>`_ now store metadata in a cassandra table and in the cassandra schema. Metadata updates are played sequentially through a `cassandra lightweight transaction <http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html>`_. Metadata UUID is the cassandra hostId of the last modifier node.
 * Elasticsearch REST and java API remain unchanged.
@@ -56,18 +56,18 @@ From a Cassandra perspective :
 Durability
 ----------
 
-All writes to a cassandra node are recorded both in a memory table and in a commit log. When a memtable flush occurs, it flushs the elasticsearch secondary index on disk. 
-When restarting after a failure, cassandra replays commitlogs and re-index elasticsearch document that were no flushed by elasticsearch. 
-This the reason why `elasticsearch translog <https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-translog.html#index-modules-translog>`_ is disabled in elassandra.   
+All writes to a cassandra node are recorded both in a memory table and in a commit log. When a memtable flush occurs, it flushes the elasticsearch secondary index on disk.
+When restarting after a failure, cassandra replays commitlogs and re-index elasticsearch document that were no flushed by elasticsearch.
+This the reason why `elasticsearch translog <https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-translog.html#index-modules-translog>`_ is disabled in elassandra.
 
 Shards and Replica
 ------------------
 
 Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and number of replica is defined by your keyspace `Replication Factor <http://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html>`_ . Elasticsearch *numberOfShards* is just an information about number of nodes.
- 
-* When adding a new elasticassandra node, the cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data are automatically indexed and each node update its routing table to distribute search requests according to the ring topology. 
-* When updating the Replication Factor, you will need to run a `nodetool repair <keyspace> <http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html>`_ on the new node to effectivelly copy and index the data.
-* If a node become unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is red, otherwise cluster status is yellow.  
+
+* When adding a new elasticassandra node, the cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data are automatically indexed and each node update its routing table to distribute search requests according to the ring topology.
+* When updating the Replication Factor, you will need to run a `nodetool repair <keyspace> <http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html>`_ on the new node to effectively copy and index the data.
+* If a node become unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is red, otherwise cluster status is yellow.
 
 After starting a new Elassandra node, data and elasticsearch indices are distributed on 2 nodes (with no replication).
 
