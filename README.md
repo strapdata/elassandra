@@ -61,7 +61,7 @@ For Elasticsearch users, elassandra provides usefull features :
  * tribe, percolate, snapshots and recovery service not tested.
  * Geoshape type not supported.
  * Any Elasticsearch metadata update require the LOCAL_QUORUM (more than half the number of nodes in the elassandra datacenter)
- * Document version is alaways 1 for all documents (because cassandra index rebuild would increment version many times, document version become meaningless). 
+ * Document version is always 1 for all documents (because cassandra index rebuild would increment version many times, document version become meaningless). 
  
 # Contribute
 
