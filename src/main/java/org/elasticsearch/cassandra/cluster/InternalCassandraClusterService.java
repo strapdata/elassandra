@@ -1077,27 +1077,29 @@ public class InternalCassandraClusterService extends InternalClusterService {
             if (mappingMetaData != null) {
                 try {
                     Map<String, Object> mapping = ((Map<String, Object>)mappingMetaData.sourceAsMap().get("properties"));
-                    Set<String> cols = new HashSet<String>(mapping.size());
-                    for(String s : mapping.keySet()) {
-                        int x = s.indexOf('.');
-                        String colName = (x > 0) ? s.substring(0,x) : s;
-                        if (forStaticDocument) {
-                            Map<String, Object> fieldMapping = (Map<String, Object>)mapping.get(colName);
-                            if ((fieldMapping.get(TypeParsers.CQL_STATIC_COLUMN) != null && fieldMapping.get(TypeParsers.CQL_STATIC_COLUMN).equals(true)) || 
-                                 fieldMapping.get(TypeParsers.CQL_PARTITION_KEY) != null && fieldMapping.get(TypeParsers.CQL_PARTITION_KEY).equals(true)) {
-                                cols.add( colName );
+                    if (mapping != null && mapping.size() > 0)  {
+                        Set<String> cols = new HashSet<String>(mapping.size());
+                        for(String s : mapping.keySet()) {
+                            int x = s.indexOf('.');
+                            String colName = (x > 0) ? s.substring(0,x) : s;
+                            if (forStaticDocument) {
+                                Map<String, Object> fieldMapping = (Map<String, Object>)mapping.get(colName);
+                                if ((fieldMapping.get(TypeParsers.CQL_STATIC_COLUMN) != null && fieldMapping.get(TypeParsers.CQL_STATIC_COLUMN).equals(true)) || 
+                                     fieldMapping.get(TypeParsers.CQL_PARTITION_KEY) != null && fieldMapping.get(TypeParsers.CQL_PARTITION_KEY).equals(true)) {
+                                    cols.add( colName );
+                                }
+                            } else {
+                               cols.add( colName );
                             }
-                        } else {
-                           cols.add( colName );
                         }
+                        if (includeMeta) {
+                            cols.add(RoutingFieldMapper.NAME);
+                            cols.add(ParentFieldMapper.NAME);
+                            cols.add(TTLFieldMapper.NAME);
+                            cols.add(TimestampFieldMapper.NAME);
+                        }
+                        return cols.toArray(new String[cols.size()]);
                     }
-                    if (includeMeta) {
-                        cols.add(RoutingFieldMapper.NAME);
-                        cols.add(ParentFieldMapper.NAME);
-                        cols.add(TTLFieldMapper.NAME);
-                        cols.add(TimestampFieldMapper.NAME);
-                    }
-                    return cols.toArray(new String[cols.size()]);
                 } catch (IOException e) {
                     logger.error("error", e);
                 }
@@ -1331,6 +1333,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return rowAsArray(index, type, row, true);
     }
     
+    // TODO: return raw values if no mapper found.
     @Override
     public Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row, boolean valueForSearch) throws IOException {
         final Object values[] = new Object[row.getColumns().size()];

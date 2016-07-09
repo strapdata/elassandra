@@ -1540,9 +1540,11 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 if (indexShard != null) {
                     if (indexShard.state() == IndexShardState.STARTED)  {
                         indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
-                        logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
+                        if (logger.isDebugEnabled())
+                            logger.debug("Elasticsearch index=[{}] flushed",indexInfo.name);
                     } else {
-                        logger.warn("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
+                        if (logger.isDebugEnabled())
+                            logger.debug("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());
                     }
                 }
             } catch (ElasticsearchException e) {

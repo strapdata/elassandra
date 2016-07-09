@@ -4,16 +4,31 @@ Integration
 Integration with an existing cassandra cluster
 ----------------------------------------------
 
-Elassandra is currently based on cassandra version 2.2, so you can deploy-it within a existing cassandra cluster running version 2.2.x. 
-(Merging differents cassandra major version is not possible due to transport protocol changes).
+Elassandra include a modified version of cassandra 2.2, so **all nodes of a cluster should run elassandra binaries** [1] However, you can start a node with or without the elasticsearch support. 
+Obviously, all nodes of a datacenter should run cassandra only or cassandra with elasticsearch.
 
-Setup a new elassandra datacenter
-.................................
+[1] This is mainly because the ``DatacenterReplicationStrategy`` (a replication strategy replicating to all nodes of a datacenter, whatever the number of nodes) cannot subclass the ``NetworkTopologyStrategy``.
+
+Rolling upgrade to elassandra
+.............................
+
+Before starting any elassandra node with elasticsearch enable, do a rolling replace of the cassandra binaries by the elassandra ones. For each node :
+
+* Install elassandra.
+* Replace the elassandra configuration files by the one from your existing cluster (cassandra.yml and sntich configuration file) 
+* Stop you cassandra ndoe.
+* Restart cassandra ``elassandra bin/cassandra`` or cassandra with elasticsearch enable ``elassandra bin/cassandra -e``
+
+
+Create a new elassandra datacenter
+..................................
 
 The overall procedure is similar the cassandra one describe on <https://docs.datastax.com/en/cassandra/2.1/cassandra/operations/ops_add_dc_to_cluster_t.html>_.
 
+For earch nodes in your new datacenter :
+* Install elassandra.
 * Set ``auto_bootstrap: false`` in your **conf/cassandra.yaml**.
-* Start cassandra nodes in your new datacenter and check that all nodes join the cluster.
+* Start cassandra-only nodes in your new datacenter and check that all nodes join the cluster.
 
 .. code::
    
@@ -44,21 +59,6 @@ After rebuild on all your new nodes, you should see the same number of document 
    * nodetool removenode <id-of-node-to-remove>
    * clear data, commitlogs and saved_cache directory.
 
-Upgarding an existing datacenter to Elassandra
-..............................................
-
-Rather than creating a new datacenter, you can replace cassandra binaries with elassandra ones. 
-
-* Install elassandra
-* Configure paths for *data*, *commitlogs* and *saved_cache* in ``bin/cassandra.yaml``
-* Stop cassandra 
-* Start elassandra 
-
-.. code::
-
-   bin/cassandra -e
-
-* Create new elasticsearch index or map some existing cassandra tables.
 
 Installing Elasticsearch plugins
 --------------------------------
