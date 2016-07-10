@@ -16,6 +16,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 New project documentation available at [doc.elassandra.io](http://doc.elassandra.io).
 
+* **2016-07-10 Release 2.1.1-15 Bug fix**
 * **2016-06-21 Release 2.1.1-12 Add support for index partitionning and cross-datacenter mapping replication**
 * **2016-05-10 Release 2.1.1-9 Upgrade to cassandra 2.2.5**
 * **2016-04-17 Release 2.1.1-8 New feature, index cassandra static columns**
@@ -32,17 +33,17 @@ Show short intro: <a href="http://www.youtube.com/watch?feature=player_embedded&
 " target="_blank"><img src="http://img.youtube.com/vi/2H6RIBjSwcM/0.jpg" 
 alt="Elassandra short intro" width="240" height="180" border="10" /></a>
 
-For cassandra users, elassandra provides elasicsearch features :
+For cassandra users, elassandra provides elasticsearch features :
 * Cassandra update are automatically indexed in Elasticsearch.
 * Full-Text and spatial search on your cassandra data.
 * Real-time aggregation (does not require Spark or Hadoop to group by)
 * Provide search on multiple keyspace and tables in one query.
 * Provide automatic schema creation and support nested document using [User Defined Types](https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
 * Provide a read/write JSON REST access to cassandra data (for indexed data)
-* There are many elasticsearch plugins to import data in cassandra or to visualize your data, with [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) for exemple.
+* There are many elasticsearch plugins to import data in cassandra or to visualize your data, with [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) for example.
 
-For Elasticsearch users, elassandra provides usefull features :
-* Change the mapping and re-index you data from cassandra with zero downtime, see [Mapping change with zero downtime](#mapping-change-with-zero-downtime).
+For Elasticsearch users, elassandra provides useful features :
+* Change the mapping and re-index your data from cassandra with zero downtime, see [Mapping change with zero downtime](#mapping-change-with-zero-downtime).
 * Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Source documents are now stored in Cassandra, reducing disk space if you need a noSql database and elasticsearch.
 * In elassandra, Elasticsearch is masterless and split-brain resistant because cluster state is now managed within a [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
 * Write operations are not more restricted to one primary shards, but distributed on all cassandra nodes in a virtual datacenter. Number of shards does not limit your write throughput, just add some elassandra nodes to increase both read and write throughput.

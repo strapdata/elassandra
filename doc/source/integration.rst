@@ -26,22 +26,23 @@ Create a new elassandra datacenter
 The overall procedure is similar the cassandra one describe on <https://docs.datastax.com/en/cassandra/2.1/cassandra/operations/ops_add_dc_to_cluster_t.html>_.
 
 For earch nodes in your new datacenter :
+
 * Install elassandra.
 * Set ``auto_bootstrap: false`` in your **conf/cassandra.yaml**.
 * Start cassandra-only nodes in your new datacenter and check that all nodes join the cluster.
 
 .. code::
-   
+
    bin/cassandra
 
 * Restart all nodes in your new datacenter with elasticsearch enable. You should see started shards but empty indices.
 
 .. code::
-   
+
    bin/cassandra -e
 
-* Set the replication factor of indexed keyspaces to one or more in your newdatacenter.
-* Run **nodetool rebuild ** to pull data from your existaing datacenter. 
+* Set the replication factor of indexed keyspaces to one or more in your new datacenter.
+* Pull data from your existaing datacenter. 
 
 .. code::
    
@@ -49,7 +50,7 @@ For earch nodes in your new datacenter :
 
 After rebuild on all your new nodes, you should see the same number of document for each indices in your new and existing datacenters.
 
-* Set ``auto_bootstrap: true`` (default value) in your **conf/cassandra.yaml** 
+* Set ``auto_bootstrap: true`` (default value) in your **conf/cassandra.yaml**
 * Create new elasticsearch index or map some existing cassandra tables.
 
 .. TIP::
@@ -63,7 +64,7 @@ After rebuild on all your new nodes, you should see the same number of document 
 Installing Elasticsearch plugins
 --------------------------------
 
-Elasticsearch plugin installation remins unchanged, see elasticsearch `plugin installation <https://www.elastic.co/guide/en/elasticsearch/plugins/2.3/installation.html>`_.
+Elasticsearch plugin installation remains unchanged, see elasticsearch `plugin installation <https://www.elastic.co/guide/en/elasticsearch/plugins/2.3/installation.html>`_.
 
 * bin/plugin install <url>
 
@@ -71,11 +72,9 @@ Elasticsearch plugin installation remins unchanged, see elasticsearch `plugin in
 Running Kibana with Elassandra
 ------------------------------
 
-`Kibana <https://www.elastic.co/guide/en/kibana/4.3/introduction.html>'_ version 4.3 can run with Elassandra, providing a visualization tool for cassandra and elasticsearch data. 
+`Kibana <https://www.elastic.co/guide/en/kibana/4.3/introduction.html>'_ version 4.3 can run with Elassandra, providing a visualization tool for cassandra and elasticsearch data.
 
-Because cassandra keyspace, type and table can only contain alphanumeric and underscore characters 
-(see `cassandra documentation <http://docs.datastax.com/en/cql/3.1/cql/cql_reference/ref-lexical-valid-chars.html>`_), 
-the same restriction applies to index and type names.
+Because cassandra keyspace, type and table can only contain alphanumeric and underscore characters (see `cassandra documentation <http://docs.datastax.com/en/cql/3.1/cql/cql_reference/ref-lexical-valid-chars.html>`_), the same restriction applies to index and type names.
 
 * Replace the index name **.kibana** by **kibana** in *config/kibana.yaml*.
 * Replace **'index-pattern'** by **'index_pattern'** in the source code with the following sed command:
@@ -88,7 +87,7 @@ the same restriction applies to index and type names.
    # for Kibana 4.3.x (for Elassandra v2.1.1+)
    sed -i .bak -e "s/type: ${q}index-pattern${q}/type: ${q}index_pattern${q}/g" -e "s/type = ${q}index-pattern${q}/type = ${q}index_pattern${q}/g" -e "s%${q}index-pattern${q}: ${q}/settings/objects/savedSearches/${q}%${q}index_pattern${q}: ${q}/settings/objects/savedSearches/${q}%g" optimize/bundles/kibana.bundle.js src/ui/public/index_patterns/*.js
 
-* If you want to load sample data from Kibana Getting started](https://www.elastic.co/guide/en/kibana/current/getting-started.html), apply the following changes to logstash.jsonl with a sed command. 
+* If you want to load sample data from Kibana Getting started](https://www.elastic.co/guide/en/kibana/current/getting-started.html), apply the following changes to logstash.jsonl with a sed command.
 
 .. code::
 
@@ -119,7 +118,7 @@ the same restriction applies to index and type names.
 JDBC Driver sql4es + Elassandra
 -------------------------------
 
-The `Elasticsearch JDBC driver <https://github.com/Anchormen/sql4es>`_. can be used with elassandra. Here is a code exemple :
+The `Elasticsearch JDBC driver <https://github.com/Anchormen/sql4es>`_. can be used with elassandra. Here is a code example :
 
 .. code:: java
 
