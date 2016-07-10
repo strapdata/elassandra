@@ -9,12 +9,20 @@ Install with RPM (Fedora,RHEL, CentOS)
 
 .. warning:: You should pay attention to this bug Bug1_
 
-.. warning:: If you had  install elassandra before, with a version < 2.1.1-14, you should uninstall it prior to  install this version...
+.. warning:: If you had  install elassandra before, with a version < 2.1.1-14, you should uninstall it prior to  install this version.
+   Once  the new version of Elassandra has been installed, check that all the files are owned by the user cassandra.
+
+   .. code:: bash
+
+      apt-get remove elassandra
+      ...
+      apt-get install elassandra
+      ...
+      find /opt/elassandra \! -user cassandra -exec chown cassandra:cassandra {} \; -ls
 
 .. _Bug1: https://docs.datastax.com/en/cassandra/2.1/cassandra/troubleshooting/trblshootFetuxWaitBug.html[ Nodes appear unresponsive due to a Linux futex_wait() kernel bug]
 
-.. contents:: Table of contents
-    :depth: 2
+.. contents:: :depth: 3
 
 Installation
 ============
@@ -109,8 +117,8 @@ Switch to elassandra administrator user
 
    su - cassandra
 
-Configuration for cluster mode
-------------------------------
+Set Cluster Name
+----------------
 
 .. code:: bash
 
@@ -120,7 +128,7 @@ Configuration for cluster mode
 Setting seed adress
 -------------------
 
-If you want to run an elassandra cluster, you must set seeds, with at least one members address, preferably two :
+You must set seeds, with at least one members address, preferably two in case of a cluster setup
 
 .. code:: bash
 
@@ -136,57 +144,38 @@ Installation should have set rpc_interface and listen_interface to the NIC where
 
 If you prefer you can use listen_address and rpc_address.
 
-   
 Manage Elassandra
 =================
 
 .. note:: You will need to be root, or use sudo to run these commands
+
+.. note:: These commands work for systemd enabled systems (RHEL and CentOS > 7).
 
 Start Elassandra
 ----------------
 
 .. code:: bash
 
-   [root@cos7-2 logs]# systemctl start elassandra
-   [root@cos7-2 logs]# systemctl status elassandra
-   ● elassandra.service - Elassandra (Cassandra with ElasticSearch integration)  service
-      Loaded: loaded (/usr/lib/systemd/system/elassandra.service; disabled; vendor preset: disabled)
-      Active: active (running) since dim. 2016-05-22 03:19:44 CEST; 3s ago
-      Docs: https://github.com/vroyer/elassandra
-      Main PID: 4499 (elassandra)
-      CGroup: /system.slice/elassandra.service
-           └─4499 /bin/bash /opt/elassandra/bin/elassandra start
-   mai 22 03:19:44 cos7-2.xcourmont.org systemd[1]: Started Elassandra (Cassandra  with ElasticSearch integration) service.
-   mai 22 03:19:44 cos7-2.xcourmont.org systemd[1]: Starting Elassandra (Cassandra with ElasticSearch integration) service...
-   mai 22 03:19:44 cos7-2.xcourmont.org su[4500]: (to esandra) root on none
+   systemctl start elassandra
+
+Review Elassandra Status
+------------------------
+
+.. code:: bash
+
+   systemctl status elassandra
 
 Stop elassandra
 ---------------
 
 .. code:: bash
 
-   [root@cos7-2 logs]# systemctl stop elassandra
-   [root@cos7-2 logs]# systemctl status elassandra
-   ● elassandra.service - Elassandra (Cassandra with ElasticSearch integration)  service
-      Loaded: loaded (/usr/lib/systemd/system/elassandra.service; disabled; vendor        preset: disabled)
-      Active: inactive (dead)
-      Docs: https://github.com/vroyer/elassandra
-      mai 22 03:18:17 cos7-2.xcourmont.org elassandra[4216]: [34B blob data]
-      mai 22 03:18:36 cos7-2.xcourmont.org systemd[1]: Stopping Elassandra    (Cassandra with ElasticSearch integration) service...
-      mai 22 03:18:38 cos7-2.xcourmont.org systemd[1]: Stopped Elassandra (Cassandra with ElasticSearch integration) service.
-      mai 22 03:18:52 cos7-2.xcourmont.org systemd[1]: Stopped Elassandra (Cassandra with ElasticSearch integration) service.
-      mai 22 03:19:44 cos7-2.xcourmont.org systemd[1]: Started Elassandra (Cassandra with ElasticSearch integration) service.
-      mai 22 03:19:44 cos7-2.xcourmont.org systemd[1]: Starting Elassandra (Cassandra with ElasticSearch integration) service...
-      mai 22 03:19:44 cos7-2.xcourmont.org su[4500]: (to esandra) root on none
-      mai 22 03:19:50 cos7-2.xcourmont.org elassandra[4499]: [34B blob data]
-      mai 22 03:20:13 cos7-2.xcourmont.org systemd[1]: Stopping Elassandra (Cassandra with ElasticSearch integration) service...
-      mai 22 03:20:15 cos7-2.xcourmont.org systemd[1]: Stopped Elassandra (Cassandra with ElasticSearch integration) service.
+   systemctl stop elassandra
 
 Enable elassandra at boot time
 ------------------------------
 
 .. code:: bash
 
-   [root@cos7-1 ~]# systemctl enable elassandra
-   Created symlink from /etc/systemd/system/multi-     user.target.wants/elassandra.service to    /usr/lib/systemd/system/elassandra.service.
+   systemctl enable elassandra
 
