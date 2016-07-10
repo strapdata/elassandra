@@ -16,11 +16,11 @@
 
 ## Install for RPM based systems (RHEL, CentOS, Fedora...)
 
-See [Install Elassandra with RPM](install_rpm.rst)
+See [Install Elassandra with RPM](install_rpm.html)
 
 ## Install for DEB based systems (Debian, Ubuntu...)
 
-See [Install Elassandra with DEB](install_deb.rst)
+See [Install Elassandra with DEB](install_deb.html)
 
  
  
