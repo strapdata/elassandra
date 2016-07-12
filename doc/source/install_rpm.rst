@@ -111,7 +111,7 @@ Configuration
 Switch to elassandra administrator user
 ----------------------------------------
 
-.. note:: Elassandra administrator user has been change to cassandra to be compliant with cassandra tools
+.. note:: Elassandra administrator user has been changed to cassandra to be compliant with cassandra tools
 
 .. code:: bash
 
