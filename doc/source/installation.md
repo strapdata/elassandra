@@ -24,4 +24,4 @@ See [Install Elassandra with DEB](install_deb.html)
 
 ## Run Elassandra within a docker container
 
-See [Running Elassandra within a docker container](docker.html)
+See [Elassandra Docker image](docker.html)
