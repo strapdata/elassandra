@@ -47,21 +47,21 @@ Start an Elassandra server instance
 
 Witch dockerhub access, starting an Elassandra instance is simple:
 
-.. code$:: bash
+.. code:: bash
 
     docker run --name my-elassandra-node1 -d -P xawcourmont/elassandra:tag
 
 
 Where my-elassandra-node1 is the name you want to assign to your container and tag is the tag specifying the elassandra docker image version you want.
+
 .. note:: If you not specify *tag*, lastest will be used.
-bash
 
 .. note:: the datas will be stored in container's "space", which should not be appropriated if you have a consequent amount of data to deal with. Instead, you may want to mount a data volume in your container. Elassandra exposes the volume /var/lib/cassandra.
 
 .. note:: "-P" is use to expose elassandra needed tcp ports. Doing so, docker will use "dynamic" port mapping.
    You can set wanted host ports values with
 
-.. code:: bash
+   .. code:: bash
 
       -p %{host_port}:%{cassandra_port}.
 
@@ -82,7 +82,7 @@ You can view the status of your ElasticSearch node with :
 
 %{host_port} is the port linked to the 9200 port in the container. if you use "dynamic" mapping, you can find it with :
 
-..  code:: bash
+.. code:: bash
 
    docker inspect --format='{{ (index (index .NetworkSettings.Ports "9200/tcp") 0).HostPort }}' my-elassandra-node1
 
@@ -100,7 +100,7 @@ Connect to Elassandra from an application in another Docker container
 
 This image exposes the standard elassandra ports, so container linking makes the ELassandra instance available to other application containers. Start your application container like this in order to link it to the Elassandra container:
 
-..code:: bash
+.. code:: bash
 
   docker run --name my-app-container --link my-elassandra-node1:elassandra -d image-which-use-elassandra
 
@@ -153,7 +153,7 @@ Then start a Elassandra container on the second machine, with the exposed gossip
 
 For example, with firewalld
 +++++++++++++++++++++++++++
-..  code:: bash
+.. code:: bash
 
    firewall-cmd  --new-service=elassandra
    firewall-cmd  --permanent --new-service=elassandra
