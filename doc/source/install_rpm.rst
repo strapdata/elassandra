@@ -20,7 +20,7 @@ Install with RPM (Fedora,RHEL, CentOS)
       ...
       find /opt/elassandra \! -user cassandra -exec chown cassandra:cassandra {} \; -ls
 
-.. _Bug1: https://docs.datastax.com/en/cassandra/2.1/cassandra/troubleshooting/trblshootFetuxWaitBug.html[ Nodes appear unresponsive due to a Linux futex_wait() kernel bug]
+.. _Bug1: https://support.datastax.com/hc/en-us/articles/206259833-Nodes-appear-unresponsive-due-to-a-Linux-futex-wait-kernel-bug[ Nodes appear unresponsive due to a Linux futex_wait() kernel bug]
 
 .. contents:: :depth: 3
 
