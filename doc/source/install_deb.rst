@@ -36,8 +36,9 @@ Put this lines in a file in /etc/apt/sources.list.d (for example testint.list)
    deb     http://ftp.us.debian.org/debian/    testing main contrib non-free
    _EOF_
 
-Enable elassandra repository
-----------------------------
+Enable elassandra repository or download.
+-----------------------------------------
+If your server don't have access to internet, you can download the packages on http://packages.elassandra.io/deb.
 
 Put this lines in a file in /etc/apt/sources.list.d (for example elassandra.list)
 

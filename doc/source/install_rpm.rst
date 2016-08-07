@@ -66,8 +66,10 @@ Set Alternative
    *  2           /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.91-  0.b14.el7_2.x86_64/jre/bin/java
    Enter to keep the current selection[+], or type selection number:
 
-Declare Elassandra repository
------------------------------
+Declare Elassandra repository or download
+-----------------------------------------
+
+If your server don't have access to internet, you can download the packages on http://packages.elassandra.io/rpm/elassandra.
 
 .. code:: bash
 
