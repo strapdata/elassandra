@@ -92,9 +92,9 @@ By default, all text columns are mapped with ``"index":"not_analyzed"``.
 
    .. code::
 
-      nodetool rebuild_index <keyspace> <table> elastic_<table>
+      nodetool rebuild_index <keyspace_name> <table_name> elastic_<table_name>
 
-   When deleting an elasticsearch index, elasticsearch index files are removed form the data/elasticsearch.data directory, but cassandra secondary indices remains until the last associated elasticsearch index is removed.
+   When deleting an elasticsearch index, elasticsearch index files are removed form the data/elasticsearch.data directory, but cassandra secondary indices remains in the CQL schema until the last associated elasticsearch index is removed. Cassandra keyspace and tables are never removed when deleting the elasticsearch mapping.
 
 Meta-Fields
 -----------
@@ -533,4 +533,71 @@ Search for rows where meta.region=west, returns only the partition key and stati
          }
        } ]
 
+Using elassandra as a JSON-REST Gateway
+---------------------------------------
 
+When dynamic mapping is disabled and a mapping type has no indexed field, elassandra nodes can act as a JSON-REST gateway for cassandra to get, set or delete a cassandra row without any indexing overhead.
+In this case, the mapping may be use to cast types or format date fields, as show below.
+
+.. code::
+
+   CREATE TABLE twitter.tweet (
+       "_id" text PRIMARY KEY,
+       message list<text>,
+       post_date list<timestamp>,
+       size list<bigint>,
+       user list<text>
+   )
+   
+   curl -XPUT "http://$NODE:9200/twitter/" -d'{ 
+      "settings":{ "index.mapper.dynamic":false }, 
+      "mappings":{
+         "tweet":{ 
+            "properties":{ 
+               "size":     { "type":"long", "index":"no" },
+               "post_date":{ "type":"date", "index":"no", "format" : "strict_date_optional_time||epoch_millis" }
+             }
+         }
+      }
+   }'
+
+As the result, you can index, get or delete a cassandra row, including any column of your cassandra table.
+
+.. code::
+
+   curl -XPUT "http://localhost:9200/twitter/tweet/1?consistency=one" -d '{
+        "user" : "vince",
+        "post_date" : "2009-11-15T14:12:12",
+        "message" : "look at Elassandra !!",
+        "size": 50
+   }'
+   {"_index":"twitter","_type":"tweet","_id":"1","_version":1,"_shards":{"total":1,"successful":1,"failed":0},"created":true}
+   
+   $ curl -XGET "http://localhost:9200/twitter/tweet/1?pretty=true&fields=message,user,size,post_date'
+   {
+     "_index" : "twitter",
+     "_type" : "tweet",
+     "_id" : "1",
+     "_version" : 1,
+     "found" : true,
+     "fields" : {
+       "size" : [ 50 ],
+       "post_date" : [ "2009-11-15T14:12:12.000Z" ],
+       "message" : [ "look at Elassandra !!" ],
+       "user" : [ "vince" ]
+     }
+   }
+
+   $ curl -XDELETE "http://localhost:9200/twitter/tweet/1?pretty=true'
+   {
+     "found" : true,
+     "_index" : "twitter",
+     "_type" : "tweet",
+     "_id" : "1",
+     "_version" : 0,
+     "_shards" : {
+       "total" : 1,
+       "successful" : 1,
+       "failed" : 0
+     }
+   }

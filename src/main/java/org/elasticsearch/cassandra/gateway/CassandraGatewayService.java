@@ -60,7 +60,7 @@ public class CassandraGatewayService extends GatewayService {
                 // remove the block, since we recovered from gateway
                 ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks()).removeGlobalBlock(NO_CASSANDRA_RING_BLOCK);
 
-                RoutingTable newRoutingTable = RoutingTable.builder(clusterService, currentState).build();
+                RoutingTable newRoutingTable = RoutingTable.build(clusterService, currentState);
 
                 // update the state to reflect 
                 ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).routingTable(newRoutingTable).build();
@@ -88,21 +88,24 @@ public class CassandraGatewayService extends GatewayService {
     
     @Override
     protected void checkStateMeetsSettingsAndMaybeRecover(ClusterState state) {
+    	/*
         if (state.nodes().localNodeMaster() == false) {
             // not our job to recover
             return;
         }
+        */
         if (state.blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
             // already recovered
             return;
         }
-
+		
         performStateRecovery();
     }
     
     private void performStateRecovery() {
         final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener();
-
+        gateway.performStateRecovery(recoveryListener);
+        /*
         if (recovered.compareAndSet(false, true)) {
             threadPool.generic().execute(new Runnable() {
                 @Override
@@ -111,6 +114,7 @@ public class CassandraGatewayService extends GatewayService {
                 }
             });
         }
+        */
     }
 
     class GatewayRecoveryListener implements Gateway.GatewayStateRecoveredListener {
@@ -122,7 +126,7 @@ public class CassandraGatewayService extends GatewayService {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
                     assert currentState.metaData().indices().isEmpty();
-
+                    
                     // remove the block, since we recovered from gateway
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder()
                             .blocks(currentState.blocks())
@@ -141,7 +145,8 @@ public class CassandraGatewayService extends GatewayService {
                         metaDataBuilder.put(indexMetaData, false);
                         blocks.addBlocks(indexMetaData);
                     }
-
+                    
+                    
                     // update the state to reflect the new metadata and routing
                     ClusterState updatedState = ClusterState.builder(currentState)
                             .blocks(blocks)
@@ -149,17 +154,8 @@ public class CassandraGatewayService extends GatewayService {
                             .build();
 
                     // initialize all index routing tables as empty
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(CassandraGatewayService.this.clusterService, updatedState);
-                    for (ObjectCursor<IndexMetaData> cursor : updatedState.metaData().indices().values()) {
-                        routingTableBuilder.addAsRecovery(cursor.value);
-                    }
-                    // start with 0 based versions for routing table
-                    routingTableBuilder.version(0);
-
-                    // now, reroute
-                    RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(routingTableBuilder).build());
-
-                    return ClusterState.builder(updatedState).routingResult(routingResult).build();
+                    RoutingTable routingTable = RoutingTable.build(CassandraGatewayService.this.clusterService, updatedState);
+                    return ClusterState.builder(updatedState).incrementVersion().routingTable(routingTable).build();
                 }
 
                 @Override

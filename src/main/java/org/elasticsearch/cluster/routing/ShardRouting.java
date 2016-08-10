@@ -76,6 +76,10 @@ public final class ShardRouting implements Streamable, ToXContent {
         this(copy.index(), copy.id(), copy.currentNodeId(), copy.relocatingNodeId(), copy.restoreSource(), copy.primary(), copy.state(), version, copy.unassignedInfo(), copy.allocationId(), true, copy.getExpectedShardSize(), null);
     }
 
+    public ShardRouting(String index, int shardId, String currentNodeId, boolean primary, ShardRoutingState state) {
+       this(index, shardId,currentNodeId, null, null, primary, state, 0, null, AllocationId.newInitializing(), true, UNAVAILABLE_EXPECTED_SHARD_SIZE, null);
+   }
+    
     public ShardRouting(String index, int shardId, String currentNodeId,
              boolean primary, ShardRoutingState state, long version, UnassignedInfo unassignedInfo, Collection<Range<Token>> tokenRanges) {
         this(index, shardId,currentNodeId, null, null, primary, state, version, unassignedInfo, AllocationId.newInitializing(), true, UNAVAILABLE_EXPECTED_SHARD_SIZE, tokenRanges);

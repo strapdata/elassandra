@@ -178,7 +178,7 @@ Let's find all the tweets that *kimchy* posted:
 
 .. code::
 
-curl -XGET 'http://localhost:9200/twitter/tweet/_search?q=user:kimchy&pretty=true'
+   curl -XGET 'http://localhost:9200/twitter/tweet/_search?q=user:kimchy&pretty=true'
 
 We can also use the JSON query language Elasticsearch provides instead of a query string:
 
@@ -260,5 +260,121 @@ To re-index your existing data, for exemple after a mapping change to index a ne
    * Running a `nodetool rebuild_index <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRebuildIndex.html>`_  command,
    * Running a `nodetool repair <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRepair.html>`_ on a keyspace having indexed tables (a repair actually creates new SSTables triggering index build).
    
-   If the compaction manager is busy, secondary index rebuild is added as a pending task and played later on. You can check current running compactions with a **nodetool compactionstats** and check pending compaction tasks with a **nodetool tpstats**. 
+   If the compaction manager is busy, secondary index rebuild is added as a pending task and executed later on. You can check current running compactions with a **nodetool compactionstats** and check pending compaction tasks with a **nodetool tpstats**. 
+
+
+Open, close, index
+__________________
+
+Open and close operations allow to close and open an elasticsearch index. Even if the cassandra secondary index remains in the CQL schema while the index is closed, it has no overhead, it's just a dummy function call.
+Obviously, when several elasticsearch indices are associated to the same cassandra table, data are indexed in opened indices, but not in closed ones.
+
+.. code::
+
+      curl -XPOST 'localhost:9200/my_index/_close'
+      curl -XPOST 'localhost:9200/my_index/_open'
+      
+
+Flush, refresh index
+____________________
+
+A refresh makes all index updates performed since the last refresh available for search. By default, refresh is scheduled every second. By design, setting refresh=true on a index operation
+has no effect on elassandra, because write operations are converted to CQL queries and documents are indexed later by a custom secondary index. So, the per-index refresh interval should be set carfully according to your needs.
+
+.. code::
+
+      curl -XPOST 'localhost:9200/my_index/_refresh'
+      
+A flush basically write a lucene index on disk. Because document _source is stored in cassandra table in elassandra, it make sense to execute 
+a ``nodetool flush <keyspace> <table>`` to flush both cassandra memtables to SSTables and lucene files for all associated elasticsearch indices. 
+Moreover, remember that a ``nodetool snapshot``  also involve a flush before creating the snapshot.
+
+.. code::
+
+      curl -XPOST 'localhost:9200/my_index/_flush'
+
+
+Backup and restore
+__________________
+
+By design, Elassandra sychronously update elasticsearch indices on cassandra write path and flushing a cassandra table invlove a flush of all associated elasticsearch indices. Therefore,
+elassandra can backup data by taking a snapshot of cassandra SSTables and Elasticsearch Lucene files on the same time on each node, as follow :
+
+1. ``nodetool snapshot --tag <snapshot_name> <keyspace_name>``
+2. For all indices associated to <keyspace_name>
+   
+   ``cp -al $CASSANDRA_DATA/elasticsearch.data/<cluster_name>/nodes/0/indices/<index_name>/0/index/(_*|segement*) $CASSANDRA_DATA/elasticsearch.data/snapshots/<index_name>/<snapshot_name>/``
+
+Of course, rebuilding elasticsearch indices after a cassandra restore is another option.
+
+Restoring a snapshot
+--------------------
+
+Restoring cassandra SSTable and elasticsearch lucene files allow to recover a keyspace and its associated elasticsearch indices without stopping any node.
+(but it is not intended to duplicate data to another virtual datacenter or cluster)
+
+To perform a hot restore of cassandra keyspace and its elasticsearch indices :
+
+1. Close all elasticsearch indices associated to the keyspace
+2. Trunacte all cassandra tables of the keyspace (because of delete operation later than the snapshot)
+3. Restore the cassandra table with your snapshot on each node
+4. Restore elasticsearch snapshot on each nodes (if ES index is open during nodetool refresh, this cause elasticsearch index rebuild by the compaction manager, usually 2 threads).
+5. Open all indices associated to the keyspace
+
+Point in time recovery
+----------------------
+
+Point-in-time recovery is intended to recover the data at any time. This require a restore of the last available cassandra and elasticsearch snapshot before your recovery point and then apply 
+the commitlogs from this restore point to the recovery point. In this case, replaying commitlogs on startup also re-index data in elasticsearch indices, ensuring consistency at the recovery point.
+
+Of course, when stopping a production cluster is not possible, you should restore on a temporary cluster, make a full snapshot, and restore it on your production cluster as describe by the hot restore procedure.
+
+To perform a point-in-time-recovery of a cassandra keyspace and its elasticsearch indices, for all nodes in the same time :
+
+1. Stop all the datacenter nodes.
+2. Restore the last cassandra snapshot before the restore point and commitlogs from that point to the restore point
+3. Restore the last elasticsearch snapshot before the restore point.
+4. Restart your nodes
+
+Restoring to a different cluster
+--------------------------------
+
+It is possible to restore a cassandra keyspace and its associated elasticsearch indices to another cluster.
+
+1. On the target cluster, create the same cassandra schema without any custom secondary indices
+2. From the source cluster, extract the mapping of your associated indices and apply it to your destination cluster. Your keyspace and indices should be open and empty at this step.
+
+If you are restoring into a new cluster having the same number of nodes, configure it with the same token ranges 
+(see https://docs.datastax.com/en/cassandra/2.1/cassandra/operations/ops_snapshot_restore_new_cluster.html). In this case, 
+you can restore from cassandra and elasticsearch snapshots as describe in step 1, 3 and 4 of the snapshot restore procedure. 
+
+Otherwise, when the number of node and the token ranges from the source and desination cluster does not match, use the sstableloader to restore your cassandra snapshots 
+(see https://docs.datastax.com/en/cassandra/2.0/cassandra/tools/toolsBulkloader_t.html ). This approach is much time-and-io-consuming because all rows
+are read from the sstables and injected into the cassandra cluster, causing an full elasticsearch index rebuild.
+
+How to change the elassandra cluster name
+_________________________________________
+
+Because the cluster name is a part of the elasticsearch directory structure, managing snapshots with shell scripts could be a nightmare when cluster name contains space caracters. 
+Therfore, it is recommanded to avoid space caraters in your elassandra cluster name.
+ 
+On all nodes:
+
+1. In a cqlsh, **UPDATE system.local SET cluster_name = '<new_cluster_name>' where key='local'**;
+2. Update the cluster_name parameter with the same value in your conf/cassandra.yaml
+3. Run a ``nodetool flush system`` (this flush your system keyspace on disk)
+
+Then:
+
+4. On one node only, change the primary key of your cluster metadata in the elastic_admin.metadata table, using cqlsh :
+
+   - **COPY elastic_admin.metadata (cluster_name, metadata, owner, version) TO 'metadata.csv'**;
+   - Update the cluster name in the file metadata.csv (first field in the JSON document).
+   - **COPY elastic_admin.metadata (cluster_name, metadata, owner, version) FROM 'metadata.csv'**;
+   - **DELETE FROM elastic_admin.metadata WHERE cluster_name='<old_cluster_name>'**;
+   
+5. Stop all nodes in the cluster
+6. On all nodes, in you cassandra data directory, move elasticsearch.data/<old_cluster_name> to elasticsearch.data/<new_cluster_name>
+7. Restart all nodes
+8. Check the cluster name in the elasticsearch cluster state and that you can update the mapping.
 

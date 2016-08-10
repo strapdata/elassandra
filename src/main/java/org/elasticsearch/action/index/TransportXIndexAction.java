@@ -19,29 +19,24 @@
 
 package org.elasticsearch.action.index;
 
-import org.elasticsearch.ExceptionsHelper;
-import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.admin.indices.create.CreateIndexClusterStateUpdateRequest;
-import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
-import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
+import java.util.Collections;
+
 import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
-import org.elasticsearch.cluster.block.ClusterBlockException;
-import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MetaDataCreateIndexService;
+import org.elasticsearch.cluster.routing.PlainShardIterator;
+import org.elasticsearch.cluster.routing.ShardIterator;
+import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.engine.DocumentAlreadyExistsException;
 import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.indices.IndexAlreadyExistsException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -67,12 +62,12 @@ public class TransportXIndexAction extends TransportIndexAction {
     
     @Inject
     public TransportXIndexAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                IndicesService indicesService, ThreadPool threadPool,
                                 TransportCreateIndexAction createIndexAction, MappingUpdatedAction mappingUpdatedAction,
                                 ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                 AutoCreateIndex autoCreateIndex, MetaDataCreateIndexService createIndexService) {
         super( settings,  transportService,  clusterService,
-                 indicesService,  threadPool,  shardStateAction,
+                 indicesService,  threadPool,
                  createIndexAction,  mappingUpdatedAction,
                  actionFilters,  indexNameExpressionResolver,
                  autoCreateIndex);
@@ -82,6 +77,14 @@ public class TransportXIndexAction extends TransportIndexAction {
         this.clusterService = clusterService;
     }
 
+    /**
+     * Fake shard iterator to execute locally only for elassandra.
+     */
+    @Override
+    protected ShardIterator shards(ClusterState clusterState, InternalRequest request) {
+    	ShardRouting primaryShardRouting  = new ShardRouting(request.concreteIndex(), 0, clusterService.localNode().id(), true, ShardRoutingState.STARTED);
+    	return new PlainShardIterator(primaryShardRouting.shardId(), Collections.singletonList(primaryShardRouting));
+    }
     
     @Override
     protected Tuple<IndexResponse, IndexRequest> shardOperationOnPrimary(ClusterState clusterState, PrimaryOperationRequest shardRequest) throws Throwable {

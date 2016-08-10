@@ -20,6 +20,7 @@
 package org.elasticsearch.action.bulk;
 
 import java.io.IOException;
+import java.util.Collections;
 
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
@@ -34,9 +35,12 @@ import org.elasticsearch.action.update.UpdateHelper;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.cluster.routing.PlainShardIterator;
+import org.elasticsearch.cluster.routing.ShardIterator;
+import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.engine.Engine;
@@ -57,15 +61,24 @@ public class TransportXShardBulkAction extends TransportShardBulkAction {
    
     @Inject
     public TransportXShardBulkAction(Settings settings, TransportService transportService, ClusterService clusterService,
-            IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+            IndicesService indicesService, ThreadPool threadPool,
             MappingUpdatedAction mappingUpdatedAction, UpdateHelper updateHelper, ActionFilters actionFilters,
             IndexNameExpressionResolver indexNameExpressionResolver) {
         super( settings,  transportService,  clusterService,
-                 indicesService,  threadPool,  shardStateAction,
+                 indicesService,  threadPool,
                  mappingUpdatedAction,  updateHelper,  actionFilters,
                  indexNameExpressionResolver);
     }
 
+    /**
+     * Fake shard iterator to execute locally only for elassandra.
+     */
+    @Override
+    protected ShardIterator shards(ClusterState clusterState, InternalRequest request) {
+    	ShardRouting primaryShardRouting  = new ShardRouting(request.concreteIndex(), 0, clusterService.localNode().id(), true, ShardRoutingState.STARTED);
+    	return new PlainShardIterator(primaryShardRouting.shardId(), Collections.singletonList(primaryShardRouting));
+    }
+    
     @Override
     protected void shardOperationOnReplica(ShardId shardId, BulkShardRequest request) {
         

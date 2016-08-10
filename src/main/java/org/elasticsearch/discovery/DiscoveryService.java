@@ -50,6 +50,7 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
     public static final String SETTING_DISCOVERY_SEED = "discovery.id.seed";
 
 
+    /*
     private static class InitialStateListener implements InitialStateDiscoveryListener {
 
         private final CountDownLatch latch = new CountDownLatch(1);
@@ -68,10 +69,11 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
             return initialStateReceived;
         }
     }
-
+	*/
+    
     private final TimeValue initialStateTimeout;
     private final Discovery discovery;
-    private InitialStateListener initialStateListener;
+    //private InitialStateListener initialStateListener;
     private final DiscoverySettings discoverySettings;
 
     @Inject
@@ -88,12 +90,13 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
 
     @Override
     protected void doStart() {
-        initialStateListener = new InitialStateListener();
-        discovery.addListener(initialStateListener);
+        //initialStateListener = new InitialStateListener();
+        //discovery.addListener(initialStateListener);
         discovery.start();
         logger.info(discovery.nodeDescription());
     }
 
+    /*
     public void waitForInitialState() {
         try {
             if (!initialStateListener.waitForInitialState(initialStateTimeout)) {
@@ -104,12 +107,15 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
             throw new ElasticsearchTimeoutException("Interrupted while waiting for initial discovery state");
         }
     }
-
+	*/
+    
     @Override
     protected void doStop() {
+    	/*
         if (initialStateListener != null) {
             discovery.removeListener(initialStateListener);
         }
+        */
         discovery.stop();
     }
 
@@ -193,8 +199,16 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
      * Publish cluster metadata uuid and version in gossip state.
      * @param clusterState
      */
-    public void publish(final ClusterState clusterState) {
-        this.discovery.publish(clusterState);
+    public void publishX2(final ClusterState clusterState) {
+        this.discovery.publishX2(clusterState);
+    }
+    
+    /**
+     * Publish local routingShard state in gossip state.
+     * @param clusterState
+     */
+    public void publishX1(final ClusterState clusterState) {
+        this.discovery.publishX1(clusterState);
     }
 
     public boolean awaitMetaDataVersion(long version, TimeValue ackTimeout) throws Exception  {

@@ -19,6 +19,10 @@
 
 package org.elasticsearch.cluster.metadata;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.close.CloseIndexClusterStateUpdateRequest;
 import org.elasticsearch.action.admin.indices.open.OpenIndexClusterStateUpdateRequest;
@@ -33,8 +37,6 @@ import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -43,10 +45,6 @@ import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.indices.IndexPrimaryShardNotAllocatedException;
 import org.elasticsearch.rest.RestStatus;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * Service responsible for submitting open/close index requests
@@ -57,15 +55,12 @@ public class MetaDataIndexStateService extends AbstractComponent {
 
     private final ClusterService clusterService;
 
-    private final AllocationService allocationService;
-
     private final MetaDataIndexUpgradeService metaDataIndexUpgradeService;
 
     @Inject
-    public MetaDataIndexStateService(Settings settings, ClusterService clusterService, AllocationService allocationService, MetaDataIndexUpgradeService metaDataIndexUpgradeService) {
+    public MetaDataIndexStateService(Settings settings, ClusterService clusterService, MetaDataIndexUpgradeService metaDataIndexUpgradeService) {
         super(settings);
         this.clusterService = clusterService;
-        this.allocationService = allocationService;
         this.metaDataIndexUpgradeService = metaDataIndexUpgradeService;
     }
 
@@ -124,7 +119,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocksBuilder).build();
 
-                RoutingTable.Builder rtBuilder = RoutingTable.builder(MetaDataIndexStateService.this.clusterService, updatedState);
+                RoutingTable routingTable = RoutingTable.build(MetaDataIndexStateService.this.clusterService, updatedState);
                 /*
                 for (String index : indicesToClose) {
                     rtBuilder.remove(index);
@@ -133,7 +128,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(rtBuilder).build());
                 */
                 //no explicit wait for other nodes needed as we use AckedClusterStateUpdateTask
-                return ClusterState.builder(updatedState).incrementVersion().routingTable(rtBuilder).build();
+                return ClusterState.builder(updatedState).incrementVersion().routingTable(routingTable).build();
             }
         });
     }
@@ -188,7 +183,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocksBuilder).build();
 
-                RoutingTable.Builder rtBuilder = RoutingTable.builder(MetaDataIndexStateService.this.clusterService, updatedState);
+                RoutingTable rtBuilder = RoutingTable.build(MetaDataIndexStateService.this.clusterService, updatedState);
                 /*
                 for (String index : indicesToOpen) {
                     rtBuilder.addAsFromCloseToOpen(updatedState.metaData().index(index));

@@ -674,7 +674,7 @@ public class InternalEngine extends Engine {
             }
 
             indexWriter.deleteDocuments(query);
-            translog.add(new Translog.DeleteByQuery(delete));
+            //translog.add(new Translog.DeleteByQuery(delete));
         } catch (Throwable t) {
             maybeFailEngine("delete_by_query", t);
             throw new DeleteByQueryFailedEngineException(shardId, delete, t);

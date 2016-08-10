@@ -16,8 +16,9 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 New project documentation available at [doc.elassandra.io](http://doc.elassandra.io).
 
+* **2016-08-12 Release 2.1.1-16 Upgrade to cassandra 2.2.7**
 * **2016-07-10 Release 2.1.1-15 Bug fix**
-* **2016-06-21 Release 2.1.1-12 Add support for index partitionning and cross-datacenter mapping replication**
+* **2016-06-21 Release 2.1.1-12 Add support for index partitioning and cross-datacenter mapping replication**
 * **2016-05-10 Release 2.1.1-9 Upgrade to cassandra 2.2.5**
 * **2016-04-17 Release 2.1.1-8 New feature, index cassandra static columns**
 * **2016-03-18 Release 2.1.1-6 Add support for SQL plugin (from [NLPchina](https://github.com/NLPchina/elasticsearch-sql)) and JDBC driver (from [Anchormen](https://github.com/Anchormen/sql4es)).**
@@ -43,7 +44,7 @@ For cassandra users, elassandra provides elasticsearch features :
 * There are many elasticsearch plugins to import data in cassandra or to visualize your data, with [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html) for example.
 
 For Elasticsearch users, elassandra provides useful features :
-* Change the mapping and re-index your data from cassandra with zero downtime, see [Mapping change with zero downtime](#mapping-change-with-zero-downtime).
+* Change the mapping and re-index your data from cassandra with zero downtime.
 * Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Source documents are now stored in Cassandra, reducing disk space if you need a noSql database and elasticsearch.
 * In elassandra, Elasticsearch is masterless and split-brain resistant because cluster state is now managed within a [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
 * Write operations are not more restricted to one primary shards, but distributed on all cassandra nodes in a virtual datacenter. Number of shards does not limit your write throughput, just add some elassandra nodes to increase both read and write throughput.

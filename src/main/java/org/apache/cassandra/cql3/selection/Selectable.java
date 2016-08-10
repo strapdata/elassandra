@@ -80,7 +80,6 @@ public abstract class Selectable
             ColumnDefinition def = cfm.getColumnDefinition(id);
             if (def == null)
                 throw new InvalidRequestException(String.format("Undefined name %s in selection clause", id));
-            
             if (def.isPrimaryKeyColumn())
                 throw new InvalidRequestException(
                         String.format("Cannot use selection function %s on PRIMARY KEY part %s",

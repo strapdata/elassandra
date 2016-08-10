@@ -40,4 +40,4 @@ curl -XPUT "http://$NODE:9200/twitter3/" -d '{
     "mappings": { "tweet": { "discover":".*"} }
 }'
 
-curl -XGET "http://$NODE:9200/twitter2/_search?pretty=true&q=*:*"
+curl -XGET "http://$NODE:9200/twitter3/_search?pretty=true&q=*:*"

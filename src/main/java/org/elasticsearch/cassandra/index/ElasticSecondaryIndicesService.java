@@ -44,7 +44,7 @@ import org.elasticsearch.common.util.concurrent.PrioritizedRunnable;
 
 /**
  * Create cassandra secondary indices when all shards are started and metadata applied on all nodes.
- * Remove cassandra secondary indices 
+ * Remove cassandra secondary indices.
  * @author vroyer
  *
  */
@@ -173,7 +173,8 @@ public class ElasticSecondaryIndicesService extends AbstractLifecycleComponent<S
         logger.debug("toMonitorIndices={} toUpdateIndices={}",toMonitorIndices, toUpdateIndices);
         
         for(String index: toMonitorIndices) {
-            if (event.state().metaData().index(index).getMappings().size() > 0 && event.indexMetaDataChanged(event.state().metaData().index(index))) {
+        	IndexMetaData indexMetaData = event.state().metaData().index(index);
+            if (indexMetaData != null && indexMetaData.getMappings().size() > 0 && event.indexMetaDataChanged(indexMetaData)) {
                 this.toUpdateIndices.add(index);
             }
         }

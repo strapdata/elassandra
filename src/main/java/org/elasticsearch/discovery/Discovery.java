@@ -45,10 +45,11 @@ public interface Discovery extends LifecycleComponent<Discovery> {
 
     DiscoveryNode localNode();
 
+    /*
     void addListener(InitialStateDiscoveryListener listener);
-
     void removeListener(InitialStateDiscoveryListener listener);
-
+	*/
+    
     String nodeDescription();
 
     /**
@@ -71,7 +72,8 @@ public interface Discovery extends LifecycleComponent<Discovery> {
      */
     void publish(ClusterChangedEvent clusterChangedEvent, AckListener ackListener);
 
-    void publish(ClusterState clusterState);
+    void publishX1(ClusterState clusterState);
+    void publishX2(ClusterState clusterState);
 
     public static interface AckListener {
         void onNodeAck(DiscoveryNode node, @Nullable Throwable t);

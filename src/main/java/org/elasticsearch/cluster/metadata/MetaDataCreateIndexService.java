@@ -19,7 +19,6 @@
 
 package org.elasticsearch.cluster.metadata;
 
-import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_CREATION_DATE;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_INDEX_UUID;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
@@ -39,12 +38,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.config.Schema;
 import org.apache.lucene.util.CollectionUtil;
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.ElasticsearchTimeoutException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRunnable;
@@ -55,15 +56,13 @@ import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData.Custom;
-import org.elasticsearch.cluster.metadata.IndexMetaData.State;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
@@ -76,6 +75,7 @@ import org.elasticsearch.common.io.PathUtils;
 import org.elasticsearch.common.io.Streams;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -91,7 +91,6 @@ import org.elasticsearch.indices.IndexAlreadyExistsException;
 import org.elasticsearch.indices.IndexCreationException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.InvalidIndexNameException;
-import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
@@ -113,7 +112,6 @@ public class MetaDataCreateIndexService extends AbstractComponent {
     private final ClusterService clusterService;
     private final IndicesService indicesService;
     private final SecondaryIndicesService secondaryIndicesService;
-    private final AllocationService allocationService;
     private final MetaDataService metaDataService;
     private final Version version;
     private final AliasValidator aliasValidator;
@@ -123,7 +121,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
 
     @Inject
     public MetaDataCreateIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService, SecondaryIndicesService secondaryIndicesService,
-                                      IndicesService indicesService, AllocationService allocationService, MetaDataService metaDataService,
+                                      IndicesService indicesService, MetaDataService metaDataService,
                                       Version version, AliasValidator aliasValidator,
                                       Set<IndexTemplateFilter> indexTemplateFilters, Environment env,
                                       NodeEnvironment nodeEnv) {
@@ -132,7 +130,6 @@ public class MetaDataCreateIndexService extends AbstractComponent {
         this.clusterService = clusterService;
         this.indicesService = indicesService;
         this.secondaryIndicesService = secondaryIndicesService;
-        this.allocationService = allocationService;
         this.metaDataService = metaDataService;
         this.version = version;
         this.aliasValidator = aliasValidator;
@@ -150,29 +147,6 @@ public class MetaDataCreateIndexService extends AbstractComponent {
             }
             this.indexTemplateFilter = new IndexTemplateFilter.Compound(templateFilters);
         }
-    }
-
-    public void createIndex(final CreateIndexClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
-
-        // we lock here, and not within the cluster service callback since we don't want to
-        // block the whole cluster state handling
-        final Semaphore mdLock = metaDataService.indexMetaDataLock(request.index());
-
-        // quick check to see if we can acquire a lock, otherwise spawn to a thread pool
-        if (mdLock.tryAcquire()) {
-            createIndex(request, listener, mdLock);
-            return;
-        }
-        threadPool.executor(ThreadPool.Names.MANAGEMENT).execute(new ActionRunnable(listener) {
-            @Override
-            public void doRun() throws InterruptedException {
-                if (!mdLock.tryAcquire(request.masterNodeTimeout().nanos(), TimeUnit.NANOSECONDS)) {
-                    listener.onFailure(new ProcessClusterEventTimeoutException(request.masterNodeTimeout(), "acquire index lock"));
-                    return;
-                }
-                createIndex(request, listener, mdLock);
-            }
-        });
     }
 
     public void validateIndexName(String index, ClusterState state) {
@@ -214,6 +188,32 @@ public class MetaDataCreateIndexService extends AbstractComponent {
         }
     }
 
+    
+    public void createIndex(final CreateIndexClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
+
+        // we lock here, and not within the cluster service callback since we don't want to
+        // block the whole cluster state handling
+        final Semaphore mdLock = metaDataService.indexMetaDataLock(request.index());
+
+        // quick check to see if we can acquire a lock, otherwise spawn to a thread pool
+        if (mdLock.tryAcquire()) {
+            createIndex(request, listener, mdLock);
+        } else {
+	        threadPool.executor(ThreadPool.Names.MANAGEMENT).execute(new ActionRunnable(listener) {
+	            @Override
+	            public void doRun() throws InterruptedException {
+	                if (!mdLock.tryAcquire(request.masterNodeTimeout().nanos(), TimeUnit.NANOSECONDS)) {
+	                    listener.onFailure(new ProcessClusterEventTimeoutException(request.masterNodeTimeout(), "acquire index lock"));
+	                    return;
+	                }
+	                createIndex(request, listener, mdLock);
+	            }
+	        });
+        }
+ 
+    }
+
+    
     private void createIndex(final CreateIndexClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener, final Semaphore mdLock) {
 
         Settings.Builder updatedSettingsBuilder = Settings.settingsBuilder();
@@ -508,22 +508,27 @@ public class MetaDataCreateIndexService extends AbstractComponent {
 
                     ClusterState updatedState = ClusterState.builder(currentState).incrementVersion().blocks(blocks).metaData(newMetaData).build();
 
+                    /*
+                    // update routing table after the index is created by the CassandraIndicesClusterStateService
                     if (request.state() == State.OPEN) {
-                        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, updatedState)
-                                .addAsNew(updatedState.metaData().index(request.index()));
-                        RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(routingTableBuilder).build());
-                        updatedState = ClusterState.builder(updatedState).routingResult(routingResult).build();
+                        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, updatedState).addAsNew(updatedState.metaData().index(request.index()));
+                        updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder).build();
                     }
-                    removalReason = "cleaning up after validating index on master";
+                    */
+                    
+                    
+                    
                     return updatedState;
                 } finally {
-                    if (indexCreated) {
+                    if (indexCreated && removalReason != null) {
                         // Index was already partially created - need to clean up
-                        indicesService.removeIndex(request.index(), removalReason != null ? removalReason : "failed to create index");
+                        indicesService.removeIndex(request.index(), removalReason);
                     }
                 }
             }
         });
+        
+        
     }
 
     private Map<String, Object> parseMapping(String mappingSource) throws Exception {

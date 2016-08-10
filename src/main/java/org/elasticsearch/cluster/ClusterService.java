@@ -277,12 +277,12 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
         public static ArrayNode addToJsonArray(final AbstractType<?> type, final Object value, ArrayNode an) {
             TypeSerializer<?> typeSerializer = type.getSerializer();
             if (typeSerializer instanceof BooleanSerializer) an.add((Boolean)value); 
-            else if ((typeSerializer instanceof IntegerSerializer) || (typeSerializer instanceof Int32Serializer)) an.add((Integer)value);
-            else if (typeSerializer instanceof LongSerializer) an.add( (Long) value);
-            else if (typeSerializer instanceof DoubleSerializer) an.add( (Double) value);
-            else if (typeSerializer instanceof DecimalSerializer) an.add( (BigDecimal) value);
-            else if (typeSerializer instanceof FloatSerializer) an.add( (Float) value);
-            else if (typeSerializer instanceof TimestampSerializer) an.add( ((Date) value).getTime());
+            else if ((typeSerializer instanceof IntegerSerializer) || (typeSerializer instanceof Int32Serializer)) an.add( Integer.parseInt(value.toString() ));
+            else if (typeSerializer instanceof LongSerializer) an.add( Long.parseLong(value.toString()) );
+            else if (typeSerializer instanceof DoubleSerializer) an.add( Double.parseDouble(value.toString()) );
+            else if (typeSerializer instanceof DecimalSerializer) an.add( new BigDecimal(value.toString()) );
+            else if (typeSerializer instanceof FloatSerializer) an.add( Float.parseFloat(value.toString()) );
+            else if (typeSerializer instanceof TimestampSerializer) an.add( ((Date) value).getTime() );
             else an.add(stringify(type, value));
             return an;
         }
@@ -436,8 +436,8 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Object node, Map<String, GetField> flatFields);
     public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> fields);
 
-    public void createElasticAdminKeyspace() throws Exception;
-    public void updateElasticAdminKeyspace() throws IOException;
+    public void createElasticAdminKeyspace();
+    public void updateElasticAdminKeyspace();
     
     public void createIndexKeyspace(String index, int replicationFactor) throws IOException;
     
@@ -448,6 +448,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public ClusterState updateNumberOfShards(ClusterState currentState);
     public void submitNumberOfShardsUpdate();
+    public void updateRoutingTable();
     
     public void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
     
@@ -506,19 +507,6 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public Map<String, Object> discoverTableMapping(final String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
     public Map<String, Object> discoverTableMapping(final String ksName, final String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
-
-
-    /**
-     * Block until all local shards are STARTED.
-     * @param startingLatch
-     */
-    public void waitShardsStarted();
-    
-    /**
-     * Write local primary shard states in Gossip.X2
-     */
-    public void publishAllShardsState();
-    
     
     /**
      * Get indices shard state from gossip endpoints state map.
@@ -547,9 +535,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
      * @param index
      * @return a set of remote started shards according t the gossip state map.
      */
-    public Set<InetAddress> getStartedShard(String index);
+    public Set<InetAddress> getRemoteStartedShard(String index);
 
     boolean isDatacenterGroupMember(InetAddress endpoint);
-
-    
 }

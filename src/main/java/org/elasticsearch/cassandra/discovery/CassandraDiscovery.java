@@ -32,15 +32,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.KSMetaData;
-import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.gms.ApplicationState;
 import org.apache.cassandra.gms.EndpointState;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
 import org.apache.cassandra.gms.VersionedValue;
-import org.apache.cassandra.locator.DatacenterReplicationStrategy;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 import org.codehaus.jackson.JsonGenerationException;
@@ -53,12 +50,15 @@ import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ProcessedClusterStateNonMasterUpdateTask;
+import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.routing.IndexRoutingTable;
+import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
@@ -69,7 +69,6 @@ import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.discovery.Discovery;
-import org.elasticsearch.discovery.InitialStateDiscoveryListener;
 import org.elasticsearch.node.service.NodeService;
 import org.elasticsearch.transport.TransportService;
 
@@ -88,7 +87,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     private final Version version;
 
     private final AtomicBoolean initialStateSent = new AtomicBoolean();
-    private final CopyOnWriteArrayList<InitialStateDiscoveryListener> initialStateListeners = new CopyOnWriteArrayList<>();
+    //private final CopyOnWriteArrayList<InitialStateDiscoveryListener> initialStateListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<MetaDataVersionListener> metaDataVersionListeners = new CopyOnWriteArrayList<>();
 
     private DiscoveryNode localNode;
@@ -189,7 +188,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
 
             Gossiper.instance.register(this);
             updateClusterGroupsFromGossiper();
-            updateClusterState("starting-cassandra-discovery", null);
+            updateRoutingTable("starting-cassandra-discovery");
         }
     }
     
@@ -198,6 +197,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         return this.clusterGroup.nodes();
     }
 
+    /*
     private void updateClusterState(String source, MetaData newMetadata) {
         final MetaData schemaMetaData = newMetadata;
         clusterService.submitStateUpdateTask(source, (schemaMetaData==null) ? Priority.NORMAL : Priority.URGENT, new ProcessedClusterStateNonMasterUpdateTask() {
@@ -211,9 +211,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 }
 
                 ClusterState newClusterState = clusterService.updateNumberOfShards( newStateBuilder.build() );
-                RoutingTable newRoutingTable = RoutingTable.builder(clusterService, newClusterState).build();
+                //RoutingTable newRoutingTable = RoutingTable.builder(clusterService, newClusterState).build();
                 
-                return ClusterState.builder(newClusterState).routingTable(newRoutingTable).build();
+                return ClusterState.builder(newClusterState).build();
             }
 
             @Override
@@ -229,6 +229,59 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
             @Override
             public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 sendInitialStateEventIfNeeded();
+            }
+        });
+    }
+*/
+    
+    private void updateMetadata(String source, MetaData newMetadata) {
+        final MetaData schemaMetaData = newMetadata;
+        clusterService.submitStateUpdateTask(source, Priority.URGENT, new ProcessedClusterStateUpdateTask() {
+
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+                ClusterState.Builder newStateBuilder = ClusterState.builder(currentState).nodes(nodes());
+
+                if (schemaMetaData != null) {
+                    newStateBuilder.metaData(schemaMetaData);
+                }
+
+                ClusterState newClusterState = clusterService.updateNumberOfShards( newStateBuilder.build() );
+                return ClusterState.builder(newClusterState).incrementVersion().build();
+            }
+
+            @Override
+            public void onFailure(String source, Throwable t) {
+                logger.error("unexpected failure during [{}]", t, source);
+            }
+
+            @Override
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+               // sendInitialStateEventIfNeeded();
+            }
+        });
+    }
+    
+    private void updateRoutingTable(String source) {
+        clusterService.submitStateUpdateTask(source,Priority.NORMAL, new ProcessedClusterStateUpdateTask() {
+
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+                ClusterState.Builder newStateBuilder = ClusterState.builder(currentState).nodes(nodes());
+                ClusterState newClusterState = clusterService.updateNumberOfShards( newStateBuilder.build() );
+                RoutingTable newRoutingTable = RoutingTable.build(clusterService, newClusterState);
+                return ClusterState.builder(newClusterState).incrementVersion().routingTable(newRoutingTable).build();
+            }
+
+
+            @Override
+            public void onFailure(String source, Throwable t) {
+                logger.error("unexpected failure during [{}]", t, source);
+            }
+
+            @Override
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+                //sendInitialStateEventIfNeeded();
             }
         });
     }
@@ -311,7 +364,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 }
             }
             if (updatedNode)
-                updateClusterState("update-node-" + addr.getHostAddress(), null);
+                updateRoutingTable("update-node-" + addr.getHostAddress());
         }
     }
 
@@ -410,7 +463,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 // X1: update local shard state
                 if (logger.isTraceEnabled())
                     logger.trace("Endpoint={} ApplicationState={} value={} => update routingTable", endpoint, state, versionValue.value);
-                updateClusterState("onChange-" + endpoint + "-" + state.toString()+" X1="+versionValue.value, null);
+                updateRoutingTable("onChange-" + endpoint + "-" + state.toString()+" X1="+versionValue.value);
             } else if (state == ApplicationState.X2 && clusterService.isDatacenterGroupMember(endpoint)) {
                 // X2 from datacenter.group: update metadata if metadata version is higher than our.
                 if (versionValue != null) {
@@ -423,7 +476,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                                 if (logger.isTraceEnabled()) 
                                     logger.trace("Endpoint={} ApplicationState={} value={} => update metaData {}/{}", 
                                         endpoint, state, versionValue.value, metadata.uuid(), metadata.version());
-                                updateClusterState("onChange-" + endpoint + "-" + state.toString()+" metadata="+metadata.uuid()+"/"+metadata.version(), metadata);
+                                updateMetadata("onChange-" + endpoint + "-" + state.toString()+" metadata="+metadata.uuid()+"/"+metadata.version(), metadata);
                             }
                         }
                     }
@@ -578,7 +631,30 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     }
 
     @Override
-    public void publish(ClusterState clusterState) {
+    public void publishX1(ClusterState clusterState) {
+        if (Gossiper.instance.isEnabled()) {
+        	Map<String, ShardRoutingState> shardsStateMap = new HashMap<String, ShardRoutingState>();
+        	for(IndexRoutingTable irt : clusterState.routingTable()) {
+        		IndexShardRoutingTable isrt = irt.shard(0);
+        		if (isrt != null) {
+	        		ShardRouting shardRouting = isrt.getPrimaryShardRouting();
+	        		if (shardRouting != null)
+	        			shardsStateMap.put(irt.getIndex(), shardRouting.state());
+        		}
+        	}
+        	String newValue;
+			try {
+				newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(shardsStateMap);
+				Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
+			} catch (IOException e) {
+				logger.error("Unxepected error", e);
+			}
+            
+        }
+    }
+    
+    @Override
+    public void publishX2(ClusterState clusterState) {
         if (Gossiper.instance.isEnabled()) {
             String clusterStateSting = clusterState.metaData().uuid() + '/' + clusterState.metaData().version();
             Gossiper.instance.addLocalApplicationState(ELASTIC_META_DATA, StorageService.instance.valueFactory.datacenter(clusterStateSting));
@@ -594,6 +670,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         return localNode;
     }
 
+    /*
     @Override
     public void addListener(InitialStateDiscoveryListener listener) {
         this.initialStateListeners.add(listener);
@@ -603,13 +680,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     public void removeListener(InitialStateDiscoveryListener listener) {
         this.initialStateListeners.remove(listener);
     }
-
+	*/
     
     @Override
     public String nodeDescription() {
         return clusterName.value() + "/" + localNode.id();
     }
 
+    /*
     private void sendInitialStateEventIfNeeded() {
         if (initialStateSent.compareAndSet(false, true)) {
             for (InitialStateDiscoveryListener listener : initialStateListeners) {
@@ -617,7 +695,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
             }
         }
     }
-
+	*/
+    
     private class ClusterGroup {
 
         private Map<String, DiscoveryNode> members = ConcurrentCollections.newConcurrentMap();

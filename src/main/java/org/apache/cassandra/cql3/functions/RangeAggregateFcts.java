@@ -17,7 +17,8 @@ import org.apache.cassandra.db.marshal.TimestampType;
 public class RangeAggregateFcts {
 
     /**
-     * The AVG function for decimal values.
+     * groupbytime(time, timestamp_col_name, value_col_name)
+     * ex: groupbytime(300, date, val).
      */
     public static final AggregateFunction rangeAggregationFunctionForTimestampToDouble =
             new NativeAggregateFunction("groupbytime", MapType.getInstance(TimestampType.instance, DoubleType.instance, true), IntegerType.instance, TimestampType.instance, DoubleType.instance )

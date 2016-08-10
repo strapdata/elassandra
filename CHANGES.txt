@@ -1,3 +1,11 @@
+2.1.1-16 - 2016-08-12
+  * Upgrade to cassandra 2.2.7
+  * Provide a JSON-REST access to cassandra rows (get/index/delete without indexing in elasticsearch).
+  * Fix a bug when using cassandra index (issue #41)
+  * Implement the delete document in elaticsearch indices (issue #36), and nodetool cleanup effectively remove documents.
+  * [breaking change] Change the DatacenterReplicationStrategy options to be compatible with the standard apache cassandra 2.2.7.
+  * Write documentation about backup and restore.
+  
 2.1.1-15 - 2016-07-10
   * Add a per-index logging level.
   * Fix a parent-child mapping issue.
@@ -5,7 +13,7 @@
 
 2.1.1-14 - 2016-07-01
   * Fix an erroneous number_of_replica in a multidatacenter configuration.
-  * Fix a bug when partialy updating a row indexed in an index different from the keyspace name.
+  * Fix a bug when partially updating a row indexed in an index different from the keyspace name.
   * Fix a bug on CQL schema update.
 
 2.1.1-13 - 2016-06-29

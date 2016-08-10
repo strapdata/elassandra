@@ -82,7 +82,7 @@ import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.exceptions.UnavailableException;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.DatacenterReplicationStrategy;
-import org.apache.cassandra.locator.IDistributedReplicationStrategy;
+import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MapSerializer;
 import org.apache.cassandra.serializers.MarshalException;
@@ -111,13 +111,10 @@ import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
 import org.elasticsearch.cassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.cassandra.index.ExtendedElasticSecondaryIndex;
 import org.elasticsearch.cassandra.index.SecondaryIndicesService;
-import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cassandra.shard.CassandraShardStateObserver;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.ClusterService.DocPrimaryKey;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateObserver;
-import org.elasticsearch.cluster.ClusterStateObserver.EventPredicate;
 import org.elasticsearch.cluster.ProcessedClusterStateNonMasterUpdateTask;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
@@ -129,6 +126,7 @@ import org.elasticsearch.cluster.node.DiscoveryNodeService;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.OperationRouting;
+import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.InternalClusterService;
 import org.elasticsearch.common.Priority;
@@ -143,7 +141,6 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.json.JsonXContentParser;
 import org.elasticsearch.discovery.DiscoveryService;
-import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.DocumentAlreadyExistsException;
@@ -185,7 +182,9 @@ import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.translog.Translog;
+import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.indices.InternalIndicesLifecycle;
 import org.elasticsearch.node.settings.NodeSettingsService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -266,6 +265,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
     
     private final TimeValue mappingUpdateTimeout;
     private final IndicesService indicesService;
+    
     private final DiscoveryService discoveryService;
     private final SecondaryIndicesService secondaryIndicesService;
     protected final MappingUpdatedAction mappingUpdatedAction;
@@ -283,11 +283,13 @@ public class InternalCassandraClusterService extends InternalClusterService {
     private final String insertMetadataQuery;
     private final String updateMetaDataQuery;
     
+    private CassandraShardStateObserver shardStateObserver = null;
+    
     @Inject
     public InternalCassandraClusterService(Settings settings, DiscoveryService discoveryService, OperationRouting operationRouting, TransportService transportService, NodeSettingsService nodeSettingsService,
             ThreadPool threadPool, ClusterName clusterName, DiscoveryNodeService discoveryNodeService, Version version, 
-            SecondaryIndicesService secondaryIndicesService, IndicesService indicesService, MappingUpdatedAction mappingUpdatedAction) {
-        super(settings, discoveryService, operationRouting, transportService, nodeSettingsService, threadPool, clusterName, discoveryNodeService, version, secondaryIndicesService, indicesService);
+            SecondaryIndicesService secondaryIndicesService, IndicesService indicesService, IndicesLifecycle indicesLifecycle, MappingUpdatedAction mappingUpdatedAction) {
+        super(settings, discoveryService, operationRouting, transportService, nodeSettingsService, threadPool, clusterName, discoveryNodeService, version, secondaryIndicesService, indicesService, indicesLifecycle);
         this.mappingUpdateTimeout = settings.getAsTime(SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT, TimeValue.timeValueSeconds(30));
         this.mappingUpdatedAction = mappingUpdatedAction;
         this.indicesService = indicesService;
@@ -321,6 +323,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         insertMetadataQuery = String.format("INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version,metadata) VALUES (?,?,?,?) IF NOT EXISTS", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         updateMetaDataQuery = String.format("UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE cluster_name = ? IF version < ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
     }
+    
     
     public boolean isNativeCql3Type(String cqlType) {
         return cqlMapping.keySet().contains(cqlType) && !cqlType.startsWith("geo_");
@@ -452,6 +455,12 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return null;
     }
     
+    // see https://docs.datastax.com/en/cql/3.0/cql/cql_reference/keywords_r.html
+    static Pattern keywordsPattern = Pattern.compile("(ADD|ALLOW|ALTER|AND|ANY|APPLY|ASC|AUTHORIZE|BATCH|BEGIN|BY|COLUMNFAMILY|CREATE|DELETE|DESC|DROP|EACH_QUORUM|FROM|GRANT|IN|INDEX|INET|INSERT|INTO|KEYSPACE|KEYSPACES|LIMIT|LOCAL_ONE|LOCAL_QUORUM|MODIFY|NOT|NORECURSIVE|OF|ON|ONE|ORDER|PASSWORD|PRIMARY|QUORUM|RENAME|REVOKE|SCHEMA|SELECT|SET|TABLE|TO|TOKEN|THREE|TRUNCATE|TWO|UNLOGGED|UPDATE|USE|USING|WHERE|WITH)"); 
+    
+    static boolean isReservedKeyword(String identifier) {
+    	return keywordsPattern.matcher(identifier.toUpperCase()).matches();
+    }
 
     public String buildCql(final String ksName, final String cfName, final String name, final ObjectMapper objectMapper) throws RequestExecutionException {
         if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
@@ -505,6 +514,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 int lastDotIndex = mapper.name().lastIndexOf('.');
                 String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
                 
+                if (isReservedKeyword(shortName))
+                	throw new ConfigurationException(shortName+" is a reserved keyword");
                 create.append('\"').append(shortName).append("\" ");
                 if (mapper instanceof ObjectMapper) {
                     if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(mapper.cqlCollectionTag()).append("<");
@@ -532,9 +543,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 }
             }
             create.append(" )");
-            if (logger.isDebugEnabled()) {
+            if (logger.isDebugEnabled())
                 logger.debug("create UDT:"+ create.toString());
-            }
+            
             QueryProcessor.process(create.toString(), ConsistencyLevel.LOCAL_ONE);
         } else {
             // update existing UDT
@@ -542,7 +553,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 Mapper mapper = it.next();
                 int lastDotIndex = mapper.name().lastIndexOf('.');
                 String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
-                StringBuilder update = new StringBuilder(String.format("ALTER TYPE \"%s\".\"%s\" ADD \"%s\" ", ksName, typeName,shortName));
+                if (isReservedKeyword(shortName))
+                	throw new ConfigurationException(shortName+" is a reserved keyword");
+                
+                StringBuilder update = new StringBuilder(String.format("ALTER TYPE \"%s\".\"%s\" ADD \"%s\" ", ksName, typeName, shortName));
                 if (!udt.left.contains(shortName)) {
                     if (mapper instanceof ObjectMapper) {
                         if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(mapper.cqlCollectionTag()).append("<");
@@ -715,8 +729,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
             if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
                 AbstractReplicationStrategy replicationStrategy = Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy();
                 int rf = replicationStrategy.getReplicationFactor();
-                if (replicationStrategy instanceof IDistributedReplicationStrategy) {
-                    rf = ((IDistributedReplicationStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter());
+                if (replicationStrategy instanceof NetworkTopologyStrategy) {
+                    rf = ((NetworkTopologyStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter());
                 } 
                 indexMetaDataBuilder.numberOfReplicas( Math.max(0, rf - 1) );
             } else {
@@ -753,6 +767,31 @@ public class InternalCassandraClusterService extends InternalClusterService {
         });
     }
 
+    @Override
+    public void updateRoutingTable() {
+    	submitStateUpdateTask("Update all routingTable" , Priority.NORMAL, new ProcessedClusterStateNonMasterUpdateTask() {
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+            	 RoutingTable routingTable = RoutingTable.build(InternalCassandraClusterService.this, currentState);
+                 return ClusterState.builder(currentState).routingTable(routingTable).build();
+            }
+    
+            @Override
+            public boolean doPresistMetaData() {
+                return false;
+            }
+    
+            @Override
+            public void onFailure(String source, Throwable t) {
+                logger.error("unexpected failure during [{}]", t, source);
+            }
+    
+            @Override
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+            	InternalCassandraClusterService.this.discoveryService.publishX1(newState);
+            } 
+        });
+    }
     
     /*
      * (non-Javadoc)
@@ -779,10 +818,15 @@ public class InternalCassandraClusterService extends InternalClusterService {
             int primaryKeyLength = 0;
             int partitionKeyLength = 0;
             for (String column : columns) {
-                if (columnsList.length() > 0) columnsList.append(',');
-                if (column.equals("_token")) {
+            	if (isReservedKeyword(column))
+                	throw new ConfigurationException(column+" is a reserved keyword");
+            	
+                if (column.equals("_token"))
                     continue; // ignore pseudo column known by Elasticsearch
-                }
+                
+                if (columnsList.length() > 0) 
+                	columnsList.append(',');
+                
                 String cqlType = null;
                 boolean isStatic = false;
                 FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
@@ -944,9 +988,14 @@ public class InternalCassandraClusterService extends InternalClusterService {
         if (cfm != null && mapping.sourceAsMap().get("properties") != null) {
             String query=null;
             try {
-                for (String column : ((Map<String,Object>)mapping.sourceAsMap().get("properties")).keySet()) {
+            	Map<String,Object> mappingProperties = (Map<String,Object>)mapping.sourceAsMap().get("properties");
+                for (Map.Entry<String, Object> entry : mappingProperties.entrySet()) {
+                	String column = entry.getKey();
                     if (column.startsWith("_")) {
                         continue; // ignore pseudo column known by Elasticsearch
+                    }
+                    if ("no".equals( ((Map<String,Object>)entry.getValue()).get("index")) ) {
+                    	continue; // ignore field with index:no
                     }
                     ColumnDefinition cdef = (cfm == null) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
                     if ((cdef != null) && !cdef.isIndexed() && !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY )) {
@@ -1284,9 +1333,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
             }
         }
         query.append(" FROM \"").append(ksName).append("\".\"").append(cfName).append("\" WHERE ").append((forStaticDocument) ? metadata.getCqlFragments().ptWhere : metadata.getCqlFragments().pkWhere );
-        if (forStaticDocument) {
+        if (forStaticDocument)
             query.append(" LIMIT 1");
-        }
         return query.toString();
     }
     
@@ -1320,7 +1368,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
         int j=0;
         for(ColumnSpecification colSpec: row.getColumns()) {
             if (values[i] != null) {
-                mapObject.put(colSpec.name.toString(), values[i]);
+                String colName = colSpec.name.toString();
+                mapObject.put(colName, values[i]);
                 j++;
             }
             i++;
@@ -1331,6 +1380,15 @@ public class InternalCassandraClusterService extends InternalClusterService {
     @Override
     public Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row) throws IOException {
         return rowAsArray(index, type, row, true);
+    }
+    
+    private Object value(FieldMapper fieldMapper, Object rowValue, boolean valueForSearch) {
+        if (fieldMapper != null) {
+            final MappedFieldType fieldType = fieldMapper.fieldType();
+            return (valueForSearch) ? fieldType.valueForSearch( rowValue ) : fieldType.value( rowValue );
+        } else {
+            return rowValue;
+        }
     }
     
     // TODO: return raw values if no mapper found.
@@ -1355,7 +1413,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
             
             if (cql3Type instanceof CQL3Type.Native) {
                 final FieldMapper fieldMapper = docFieldMappers.smartNameFieldMapper(columnName);
-                final MappedFieldType fieldType = fieldMapper.fieldType();
                 switch ((CQL3Type.Native) cql3Type) {
                 case ASCII:
                 case TEXT:
@@ -1367,37 +1424,37 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     values[columnIndex] = row.getUUID(columnIndex).toString();
                     break;
                 case TIMESTAMP:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getTimestamp(columnIndex).getTime()) : fieldType.value( row.getTimestamp(columnIndex).getTime());
+                    values[columnIndex] = value(fieldMapper, row.getTimestamp(columnIndex).getTime(), valueForSearch);
                     break;
                 case INT:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getInt(columnIndex)) : fieldType.value( row.getInt(columnIndex));
+                    values[columnIndex] = value(fieldMapper, row.getInt(columnIndex), valueForSearch);
                     break;
                 case SMALLINT:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getShort(columnIndex)) : fieldType.value( row.getShort(columnIndex));
+                    values[columnIndex] = value(fieldMapper, row.getShort(columnIndex), valueForSearch);
                     break;
                 case TINYINT:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getByte(columnIndex)) : fieldType.value( row.getByte(columnIndex));
+                    values[columnIndex] = value(fieldMapper, row.getByte(columnIndex), valueForSearch);
                     break;
                 case BIGINT:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getLong(columnIndex)) : fieldType.value( row.getLong(columnIndex));
+                    values[columnIndex] = value(fieldMapper, row.getLong(columnIndex), valueForSearch);
                     break;
                 case DOUBLE:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getDouble(columnIndex)) : fieldType.value( row.getDouble(columnIndex));
+                    values[columnIndex] = value(fieldMapper, row.getDouble(columnIndex), valueForSearch);
                     break;
                 case FLOAT:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getFloat(columnIndex)) : fieldType.value( row.getFloat(columnIndex));
+                    values[columnIndex] = value(fieldMapper, row.getFloat(columnIndex), valueForSearch);
                     break;
                 case BLOB:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getBytes(columnIndex)) : fieldType.value( row.getBytes(columnIndex));
+                    values[columnIndex] = value(fieldMapper, row.getBytes(columnIndex), valueForSearch);
                     break;
                 case BOOLEAN:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getBoolean(columnIndex)) : fieldType.value( row.getBoolean(columnIndex));
+                    values[columnIndex] = value(fieldMapper, row.getBoolean(columnIndex), valueForSearch);
                     break;
                 case COUNTER:
                     logger.warn("Ignoring unsupported counter {} for column {}", cql3Type, columnName);
                     break;
                 case INET:
-                    values[columnIndex] = (valueForSearch) ? fieldType.valueForSearch( row.getInetAddress(columnIndex).getHostAddress()) : fieldType.value( row.getInetAddress(columnIndex).getHostAddress());
+                    values[columnIndex] = value(fieldMapper, row.getInetAddress(columnIndex).getHostAddress(), valueForSearch);
                     break;
                 default:
                     logger.error("Ignoring unsupported type {} for column {}", cql3Type, columnName);
@@ -1420,7 +1477,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                         final List list2 = row.getList(colSpec.name.toString(), elementType);
                         list = new ArrayList(list2.size());
                         for(Object v : list2) {
-                            list.add((valueForSearch) ? fieldMapper.fieldType().valueForSearch(v) : fieldMapper.fieldType().value(v) );
+                            list.add(value(fieldMapper, v, valueForSearch));
                         }
                     }
                     values[columnIndex] =  (list.size() == 1) ? list.get(0) : list;
@@ -1440,7 +1497,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                         final Set set2 = row.getSet(columnIndex, elementType);
                         set = new HashSet(set2.size());
                         for(Object v : set2) {
-                            set.add( (valueForSearch) ? fieldMapper.fieldType().valueForSearch(v) : fieldMapper.fieldType().value(v) );
+                            set.add( value(fieldMapper, v, valueForSearch) );
                         }
                     }
                     values[columnIndex] =  (set.size() == 1) ? set.iterator().next() : set;
@@ -1464,7 +1521,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                         map = new HashMap<String, Object>(map2.size());
                         for(String key : map2.keySet()) {
                             FieldMapper subMapper = (FieldMapper)objectMapper.getMapper(key);
-                            map.put(key,  (valueForSearch) ? subMapper.fieldType().valueForSearch(map2.get(key)) : subMapper.fieldType().value(map2.get(key)) );
+                            map.put(key,  value(subMapper, map2.get(key), valueForSearch) );
                         }
                     }
                     values[columnIndex] =  map;
@@ -1543,7 +1600,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
         final String keyspaceName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE, request.index());
         final Engine.IndexingOperation operation = indexShard.prepareIndex(sourceToParse, request.version(), request.versionType(), Engine.Operation.Origin.PRIMARY, request.canHaveDuplicates());
         final Mapping update = operation.parsedDoc().dynamicMappingsUpdate();
-        if (update != null) {
+        final boolean dynamicMappingEnable = indexService.indexSettings().getAsBoolean("index.mapper.dynamic", true);
+        if (update != null && dynamicMappingEnable) {
             if (logger.isDebugEnabled()) 
                 logger.debug("Document source={} require a blocking mapping update of [{}]", request.sourceAsMap(), indexService.index().name());
             // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
@@ -1606,35 +1664,43 @@ public class InternalCassandraClusterService extends InternalClusterService {
         for (String field : sourceMap.keySet()) {
             FieldMapper fieldMapper = fieldMappers.getMapper(field);
             Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMappers.get(field);
+            ByteBuffer colName;
             if (mapper == null) {
-                throw new MapperException("Unmapped field ["+field+"]");
+            	if (dynamicMappingEnable)
+            		throw new MapperException("Unmapped field ["+field+"]");
+            	colName = ByteBufferUtil.bytes(field);
+            } else {
+            	colName = mapper.cqlName();	// cached ByteBuffer column name.
             }
-            final ColumnDefinition cd = metadata.getColumnDefinition(mapper.cqlName());
-            final Object fieldValue = sourceMap.get(field);
-            try {
-                if (fieldValue == null) {
-                    if (cd.type.isCollection()) {
-                        switch (((CollectionType<?>)cd.type).kind) {
-                        case LIST :
-                        case SET : 
-                            map.put(field, CollectionSerializer.pack(Collections.emptyList(), 0, Server.VERSION_3)); 
-                            break;
-                        case MAP :
-                            break;
-                        }
-                    } else {
-                        map.put(field, null); 
-                    }
-                    continue;
-                }
-                
-                if (mapper.cqlCollection().equals(CqlCollection.SINGLETON) && (fieldValue instanceof Collection)) {
-                    throw new MapperParsingException("field " + fieldMapper.name() + " should be a single value");
-                }
-                map.put(field, serializeType(request.index(), request.type(), cd.type, field, fieldValue, mapper));
-            } catch (Exception e) {
-                logger.error("[{}].[{}] failed to parse field {}={}", e, request.index(), request.type(), field, fieldValue );
-                throw e;
+            final ColumnDefinition cd = metadata.getColumnDefinition(colName);
+            if (cd != null) {
+            	// we got a CQL column.
+            	final Object fieldValue = sourceMap.get(field);
+	            try {
+	            	if (fieldValue == null) {
+	                    if (cd.type.isCollection()) {
+	                        switch (((CollectionType<?>)cd.type).kind) {
+	                        case LIST :
+	                        case SET : 
+	                            map.put(field, CollectionSerializer.pack(Collections.emptyList(), 0, Server.VERSION_3)); 
+	                            break;
+	                        case MAP :
+	                            break;
+	                        }
+	                    } else {
+	                        map.put(field, null); 
+	                    }
+	                    continue;
+	                }
+	                
+	                if (mapper != null && mapper.cqlCollection().equals(CqlCollection.SINGLETON) && (fieldValue instanceof Collection)) {
+	                    throw new MapperParsingException("field " + fieldMapper.name() + " should be a single value");
+	                }
+	                map.put(field, serializeType(request.index(), request.type(), cd.type, field, fieldValue, mapper));
+	            } catch (Exception e) {
+	                logger.error("[{}].[{}] failed to parse field {}={}", e, request.index(), request.type(), field, fieldValue );
+	                throw e;
+	            }
             }
         }
 
@@ -1881,21 +1947,17 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public boolean isDatacenterGroupMember(InetAddress endpoint) {
         String endpointDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint);
         KSMetaData  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
-        if (elasticAdminMetadata != null && endpointDc != null) {
-            String datacenters = elasticAdminMetadata.strategyOptions.get(DatacenterReplicationStrategy.DATACENTERS);
-            for (String dc : datacenters.split(",")) {
-                if (dc.equals(endpointDc)) {
-                    return true;
-                }
-            }
+        if (elasticAdminMetadata != null && elasticAdminMetadata.strategyOptions.get(endpointDc) != null) {
+        	return true;
         }
         return false;
     }
+    
     @Override
     public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException {
         CFMetaData cfm = getCFMetaData(elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         cfm.comment(metaDataString);
-        MigrationManager.announceColumnFamilyUpdate(cfm, false, false);
+        MigrationManager.announceColumnFamilyUpdate(cfm, false);
     }
 
     /**
@@ -1903,6 +1965,23 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * @throws IOException 
      */
     @Override
+    public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException {
+    	try {
+    		String query = String.format("SELECT comment FROM system.schema_columnfamilies WHERE keyspace_name='%s' AND columnfamily_name='%s'", 
+    			this.elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+    		UntypedResultSet result = QueryProcessor.executeInternal(query);
+    		if (result.isEmpty())
+    			throw new NoPersistedMetaDataException("Failed to read comment from "+elasticAdminKeyspaceName+"+"+ELASTIC_ADMIN_METADATA_TABLE);
+
+    		String metadataString = result.one().getString(0);
+    		logger.debug("Recover metadata from {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metadataString);
+    		return parseMetaDataString( metadataString );
+    	} catch (RequestValidationException | RequestExecutionException e) {
+    		throw new NoPersistedMetaDataException("Failed to read comment from "+elasticAdminKeyspaceName+"+"+ELASTIC_ADMIN_METADATA_TABLE, e);
+    	}
+    }
+    
+    /*
     public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException {
         CFMetaData cfm = getCFMetaData(elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         if (cfm == null)
@@ -1912,7 +1991,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
         logger.debug("Recover metadata from {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metadataString);
         return metadata;
     }
-
+     */
+    
     private MetaData parseMetaDataString(String metadataString) throws NoPersistedMetaDataException {
         if (metadataString != null && metadataString.length() > 0) {
             MetaData metaData;
@@ -1970,16 +2050,16 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * @throws IOException 
      */
     @Override
-    public void createElasticAdminKeyspace() throws IOException  {
+    public void createElasticAdminKeyspace()  {
         KSMetaData  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
         if (elasticAdminMetadata == null) {
             MetaData metadata = state().metaData();
             try {
                 logger.debug("Initializing elatic_admin[_datacenter.group].metadata = ", metadata);
-                QueryProcessor.process(String.format("CREATE KEYSPACE \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s' };", 
+                QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = { 'class' : '%s', '%s' : '1' };", 
                         this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName(), DatabaseDescriptor.getLocalDataCenter()),
                         ConsistencyLevel.LOCAL_ONE);
-                QueryProcessor.process(String.format("CREATE TABLE \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';", 
+                QueryProcessor.process(String.format("CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';", 
                         this.elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, MetaData.Builder.toXContent(metadata)),
                         ConsistencyLevel.LOCAL_ONE);
                 
@@ -1996,7 +2076,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     logger.debug("Succefully initialize metadata metaData={}", metadata);
                     writeMetaDataAsComment(metaDataString);
                 }
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 logger.error("Failed to initialize keyspace {} or table {}",e, elasticAdminMetadata, ELASTIC_ADMIN_METADATA_TABLE);
             }
         }
@@ -2007,31 +2087,24 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * @throws IOException 
      */
     @Override
-    public void updateElasticAdminKeyspace() throws IOException  {
+    public void updateElasticAdminKeyspace()  {
         KSMetaData  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
         if (elasticAdminMetadata != null) {
             if (elasticAdminMetadata.strategyClass != DatacenterReplicationStrategy.class) {
                 throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+DatacenterReplicationStrategy.class.getName()+" replication strategy");
             }
-            String datacentersOption = elasticAdminMetadata.strategyOptions.get(DatacenterReplicationStrategy.DATACENTERS);
-            if (datacentersOption == null) {
-                throw new ConfigurationException("Missing ["+DatacenterReplicationStrategy.DATACENTERS+"] option in "+DatacenterReplicationStrategy.class.getName());
-            }
-            boolean localDcFound = false;
-            for(String datacenter: datacentersOption.split(",")) {
-                if (DatabaseDescriptor.getLocalDataCenter().equals(datacenter)) {
-                    localDcFound = true;
-                    break;
-                }
-            }
-            if (!localDcFound) {
+            String localRfOption = elasticAdminMetadata.strategyOptions.get(DatabaseDescriptor.getLocalDataCenter());
+            if (localRfOption == null || Integer.valueOf(localRfOption) <= 0) {
                 try {
-                    QueryProcessor.process(String.format("ALTER KEYSPACE \"%s\" WITH replication = { 'class' : '%s', 'datacenters' : '%s,%s' };", 
-                            this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName(), datacentersOption, DatabaseDescriptor.getLocalDataCenter()),
-                            ConsistencyLevel.LOCAL_ONE);
+                    String query = String.format("ALTER KEYSPACE \"%s\" WITH replication = { 'class' : '%s' ", this.elasticAdminKeyspaceName, DatacenterReplicationStrategy.class.getName());
+                    for(Map.Entry<String, String> entry : elasticAdminMetadata.strategyOptions.entrySet()) {
+                        query += ",'"+entry.getKey()+"':'"+entry.getValue()+"'";
+                    }
+                    query += ",'"+DatabaseDescriptor.getLocalDataCenter()+"':'1' }";
+                    QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
                     logger.info("Add local datacenter {} in {} for keyspace [{}]", 
                             DatabaseDescriptor.getLocalDataCenter(),DatacenterReplicationStrategy.class.getName(), this.elasticAdminKeyspaceName);
-                } catch (RequestExecutionException e) {
+                } catch (Throwable e) {
                     logger.error("Failed to alter keyspace [{}]",e, this.elasticAdminKeyspaceName);
                     throw e;
                 }
@@ -2106,7 +2179,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
      * @param index
      * @return a set of remote started shards according t the gossip state map.
      */
-    public Set<InetAddress> getStartedShard(String index) {
+    public Set<InetAddress> getRemoteStartedShard(String index) {
         return this.discoveryService.getStartedShard(index);
     }
     
@@ -2126,6 +2199,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
     /**
      * Publish on Gossip.X1 all local shard state.
      */
+    /*
     public void publishAllShardsState() {
         for (IndexRoutingTable indexRoutingTable : state().routingTable()) {
             IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shards().get(0);
@@ -2136,47 +2210,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
             }
         }
     }
-
+*/
+   
     
-    /**
-     * Block until recovery is done and all local shards are STARTED
-     */
-    public void waitShardsStarted() {
-        logger.debug("Waiting until all local primary shards are STARTED");
-        final CountDownLatch latch = new CountDownLatch(1);
-        final ClusterStateObserver observer = new ClusterStateObserver(this, logger);
-        observer.waitForNextChange(new ClusterStateObserver.Listener() {
-            @Override
-            public void onTimeout(TimeValue timeout) {
-            }
-            
-            @Override
-            public void onNewClusterState(ClusterState state) {
-                logger.debug("Ok, all local primary shards are STARTED, state={}", state().prettyPrint());
-                latch.countDown();
-            }
-            
-            @Override
-            public void onClusterServiceClose() {
-                logger.warn("Cluster service closed", state().prettyPrint());
-                latch.countDown();
-            }
-        }, new EventPredicate() {
-            @Override
-            public boolean apply(ClusterChangedEvent changedEvent) {
-                logger.debug("Cluster state change isLocalShardsStarted={}",state().routingTable().isLocalShardsStarted());
-                return (!changedEvent.state().blocks().hasGlobalBlock(GatewayService.STATE_NOT_RECOVERED_BLOCK) && changedEvent.state().routingTable().isLocalShardsStarted());
-            }
-        });
-        try {
-            latch.await();
-        } catch (InterruptedException e) {
-            logger.error("Interrupred before local shards started", e);
-        }
-    }
-
-    
-    public static Object value(FieldMapper mapper, Object value) {
+    private static Object value(FieldMapper mapper, Object value) {
         if (mapper instanceof DateFieldMapper) {
             // workaround because elasticsearch manage Date as Long
             return new Date(((DateFieldMapper) mapper).fieldType().value(value));

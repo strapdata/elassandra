@@ -32,8 +32,6 @@ import org.elasticsearch.cluster.TimeoutClusterStateUpdateTask;
 import org.elasticsearch.cluster.action.index.NodeIndexDeletedAction;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.routing.RoutingTable;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -52,8 +50,6 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
     private final ClusterService clusterService;
 
-    private final AllocationService allocationService;
-
     private final NodeIndexDeletedAction nodeIndexDeletedAction;
 
     private final MetaDataService metaDataService;
@@ -61,13 +57,12 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
     private final SecondaryIndicesService secondaryIndicesService;
 
     @Inject
-    public MetaDataDeleteIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService, AllocationService allocationService,
+    public MetaDataDeleteIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService,
                                       NodeIndexDeletedAction nodeIndexDeletedAction, MetaDataService metaDataService,
                                       SecondaryIndicesService secondaryIndicesService) {
         super(settings);
         this.threadPool = threadPool;
         this.clusterService = clusterService;
-        this.allocationService = allocationService;
         this.nodeIndexDeletedAction = nodeIndexDeletedAction;
         this.metaDataService = metaDataService;
         this.secondaryIndicesService = secondaryIndicesService;
@@ -132,10 +127,17 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 MetaData newMetaData = MetaData.builder(currentState.metaData()).remove(request.index).build();
                 ClusterBlocks newblocks = ClusterBlocks.builder().blocks(currentState.blocks()).removeIndexBlocks(request.index).build();
                 ClusterState newCurrentState = ClusterState.builder(currentState).blocks(newblocks).metaData(newMetaData).build();
-                RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, newCurrentState);
+                
+                RoutingTable routingTable = RoutingTable.build(clusterService, newCurrentState);
 
-                newCurrentState = ClusterState.builder(newCurrentState).incrementVersion().blocks(newblocks).metaData(newMetaData).routingTable(routingTableBuilder).build();
-                if (logger.isTraceEnabled()) logger.trace("newClusterState = {}", newCurrentState);
+                newCurrentState = ClusterState.builder(newCurrentState)
+                			.incrementVersion()
+                			.blocks(newblocks)
+                			.metaData(newMetaData)
+                			.routingTable(routingTable)	// update routing before deleting the index in the CassandraIndicesClusterStateService.
+                			.build();
+                if (logger.isTraceEnabled()) 
+                	logger.trace("newClusterState = {}", newCurrentState);
                 
                 final IndexMetaData indexMetaData = currentState.metaData().index(request.index);
                 MetaDataDeleteIndexService.this.secondaryIndicesService.addDeleteListener(new SecondaryIndicesService.DeleteListener() {

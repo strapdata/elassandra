@@ -36,11 +36,13 @@ import org.elasticsearch.cassandra.gateway.CassandraGatewayModule;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.cassandra.index.BaseElasticSecondaryIndex;
 import org.elasticsearch.cassandra.index.SecondaryIndicesService;
+import org.elasticsearch.cassandra.indices.CassandraIndicesClusterStateService;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.node.NodeClientModule;
 import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.component.Lifecycle;
 import org.elasticsearch.common.component.LifecycleComponent;
@@ -67,7 +69,6 @@ import org.elasticsearch.indices.IndicesModule;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.breaker.CircuitBreakerModule;
 import org.elasticsearch.indices.cache.query.IndicesQueryCache;
-import org.elasticsearch.indices.cluster.IndicesClusterStateService;
 import org.elasticsearch.indices.fielddata.cache.IndicesFieldDataCache;
 import org.elasticsearch.indices.memory.IndexingMemoryController;
 import org.elasticsearch.indices.store.IndicesStore;
@@ -117,7 +118,10 @@ public class Node implements Releasable {
     private final Environment environment;
     private final PluginsService pluginsService;
     private final Client client;
-
+    
+    private ClusterService clusterService = null;
+    private DiscoveryService discoveryService = null;
+    
     /**
      * Constructs a node with the given settings.
      *
@@ -225,6 +229,12 @@ public class Node implements Releasable {
         return client;
     }
 
+    public synchronized ClusterService clusterService() {
+    	if (this.clusterService == null)
+    		this.clusterService = injector.getInstance(ClusterService.class);
+    	return this.clusterService;
+    }
+    
     public Node activate() {
         if (!lifecycle.moveToStarted()) {
             return this;
@@ -236,27 +246,23 @@ public class Node implements Releasable {
         //injector.getInstance(Discovery.class).setAllocationService(injector.getInstance(AllocationService.class));
         injector.getInstance(TransportService.class).start();
 
-        ClusterService clusterService = injector.getInstance(ClusterService.class);
+        ClusterService clusterService = clusterService();
         clusterService.start();
 
         IndicesService indiceService = injector.getInstance(IndicesService.class);
         indiceService.start();
         injector.getInstance(IndexingMemoryController.class).start();
-        injector.getInstance(IndicesClusterStateService.class).start();
+        injector.getInstance(CassandraIndicesClusterStateService.class).start();
         injector.getInstance(SecondaryIndicesService.class).start();
         
-        DiscoveryService discoService = injector.getInstance(DiscoveryService.class).start();
-        discoService.waitForInitialState();
+        discoveryService = injector.getInstance(DiscoveryService.class).start();
+        //discoveryService.waitForInitialState();
 
         // gateway should start after disco, so it can try and recovery from gateway on "start"
         GatewayService gatewayService = injector.getInstance(CassandraGatewayService.class);
         gatewayService.start(); // block until recovery done from cassandra schema.
 
-        // check metadata not empty and block until all primary local shards are STARTED
-        clusterService.waitShardsStarted();
         logger.info("activated ...");
-        
-        
         return this;
     }
     
@@ -276,8 +282,8 @@ public class Node implements Releasable {
         }
 
         //injector.getInstance(IndicesTTLService.class).start();
-        injector.getInstance(SnapshotsService.class).start();
-        injector.getInstance(SnapshotShardsService.class).start();
+        //injector.getInstance(SnapshotsService.class).start();
+        //injector.getInstance(SnapshotShardsService.class).start();
         injector.getInstance(SearchService.class).start();
         injector.getInstance(MonitorService.class).start();
         injector.getInstance(RestController.class).start();
@@ -289,32 +295,23 @@ public class Node implements Releasable {
         injector.getInstance(ResourceWatcherService.class).start();
         injector.getInstance(TribeService.class).start();
 
-        ClusterService clusterService = injector.getInstance(ClusterService.class);
-        
         // initialize custom secondary indices.
         for(BaseElasticSecondaryIndex esi : BaseElasticSecondaryIndex.elasticSecondayIndices.values()) {
             esi.initMapping();
         }
-        
-        // broadcast shards state over gossip
-        clusterService.publishAllShardsState();
-        
-        // update number of shard when all keyspaces are loaded.
-        clusterService.submitNumberOfShardsUpdate();
-        
+
         logger.debug("Elasticsearch started state={}", clusterService.state().toString());
         return this;
     }
     
     public void cassandraStartupComplete() {
-        ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
-        try {
-            ClusterService clusterService = injector.getInstance(ClusterService.class);
-            clusterService.createElasticAdminKeyspace();
-        } catch (Exception e) {
-            logger.error("Unexpected error", e);
-        }
+        clusterService().createElasticAdminKeyspace();
+        
+        // update number of shard when all keyspaces are loade (update task publish X2)
+        clusterService().submitNumberOfShardsUpdate();
+        clusterService().updateRoutingTable();
     }
+    
     
     private Node stop() {
         if (!lifecycle.moveToStopped()) {
@@ -329,10 +326,10 @@ public class Node implements Releasable {
             injector.getInstance(HttpServer.class).stop();
         }
 
-        injector.getInstance(SnapshotsService.class).stop();
-        injector.getInstance(SnapshotShardsService.class).stop();
+        //injector.getInstance(SnapshotsService.class).stop();
+        //injector.getInstance(SnapshotShardsService.class).stop();
         // stop any changes happening as a result of cluster state changes
-        injector.getInstance(IndicesClusterStateService.class).stop();
+        injector.getInstance(CassandraIndicesClusterStateService.class).stop();
         // we close indices first, so operations won't be allowed on it
         injector.getInstance(IndexingMemoryController.class).stop();
         //injector.getInstance(IndicesTTLService.class).stop();
@@ -384,7 +381,7 @@ public class Node implements Releasable {
         stopWatch.stop().start("client");
         Releasables.close(injector.getInstance(Client.class));
         stopWatch.stop().start("indices_cluster");
-        injector.getInstance(IndicesClusterStateService.class).close();
+        injector.getInstance(CassandraIndicesClusterStateService.class).close();
         stopWatch.stop().start("indices");
         injector.getInstance(IndexingMemoryController.class).close();
         injector.getInstance(IndicesTTLService.class).close();

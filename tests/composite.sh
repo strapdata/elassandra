@@ -34,9 +34,9 @@ insert into composite.t3 (a,b,c,d) VALUES ('a','b3',2,3);
 insert into composite.t3 (a,b,c,d) VALUES ('a','b3',3,3);
 EOF
 
-curl -XPUT "http://$NODE:9200/composite/_mapping/t1" -d '{ "t1" : { "columns_regexp" : ".*" }}'
-curl -XPUT "http://$NODE:9200/composite/_mapping/t2" -d '{ "t2" : { "columns_regexp" : ".*" }}'
-curl -XPUT "http://$NODE:9200/composite/_mapping/t3" -d '{ "t3" : { "columns_regexp" : ".*" }}'
+curl -XPUT "http://$NODE:9200/composite/_mapping/t1" -d '{ "t1" : { "discover" : ".*" }}'
+curl -XPUT "http://$NODE:9200/composite/_mapping/t2" -d '{ "t2" : { "discover" : ".*" }}'
+curl -XPUT "http://$NODE:9200/composite/_mapping/t3" -d '{ "t3" : { "discover" : ".*" }}'
 
 curl -XGET "http://$NODE:9200/composite/t1/\[\"a\",\"b1\"\]?pretty=true" 
 curl -XGET "http://$NODE:9200/composite/t2/\[\"a\",\"b2\",2\]?pretty=true"

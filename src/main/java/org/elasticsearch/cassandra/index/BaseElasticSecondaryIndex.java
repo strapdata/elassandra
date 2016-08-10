@@ -33,6 +33,7 @@ public abstract class BaseElasticSecondaryIndex extends PerRowSecondaryIndex imp
 
     public static final Map<String, BaseElasticSecondaryIndex> elasticSecondayIndices = Maps.newConcurrentMap();
     public static final Field DEFAULT_VERSION = new NumericDocValuesField(VersionFieldMapper.NAME, -1L);
+    public static boolean runsElassandra = false;
     
     volatile boolean registred = false;
     volatile String index_name;
@@ -41,7 +42,6 @@ public abstract class BaseElasticSecondaryIndex extends PerRowSecondaryIndex imp
     
     // init write lock
     private ReadWriteLock initLock = new ReentrantReadWriteLock();
-    
     
     @Override
     public ColumnFamilyStore getIndexCfs() {

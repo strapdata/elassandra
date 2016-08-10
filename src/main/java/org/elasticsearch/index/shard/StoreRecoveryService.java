@@ -212,6 +212,8 @@ public class StoreRecoveryService extends AbstractIndexShardComponent implements
                     indexShouldExists = false;
                 }
                 if (si != null) {
+                	version = si.getVersion();
+                	/*
                     if (indexShouldExists) {
                         version = si.getVersion();
                     } else {
@@ -222,6 +224,7 @@ public class StoreRecoveryService extends AbstractIndexShardComponent implements
                         writer.close();
                         recoveryState.getTranslog().totalOperations(0);
                     }
+                    */
                 }
             } catch (Throwable e) {
                 throw new IndexShardRecoveryException(shardId(), "failed to fetch index version after copying it over", e);

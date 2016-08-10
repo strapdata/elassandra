@@ -45,7 +45,6 @@ import org.elasticsearch.cluster.metadata.MetaDataUpdateSettingsService;
 import org.elasticsearch.cluster.node.DiscoveryNodeService;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
 import org.elasticsearch.cluster.routing.allocation.decider.AllocationDecider;
 import org.elasticsearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;
@@ -70,7 +69,6 @@ import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.ExtensionPoint;
 import org.elasticsearch.discovery.DiscoverySettings;
-import org.elasticsearch.gateway.GatewayAllocator;
 import org.elasticsearch.gateway.PrimaryShardAllocator;
 import org.elasticsearch.index.engine.EngineConfig;
 import org.elasticsearch.index.indexing.IndexingSlowLog;
@@ -324,8 +322,8 @@ public class ClusterModule extends AbstractModule {
         indexTemplateFilters.bind(binder());
 
         bind(ClusterInfoService.class).to(clusterInfoServiceImpl).asEagerSingleton();
-        bind(GatewayAllocator.class).asEagerSingleton();
-        bind(AllocationService.class).asEagerSingleton();
+        //bind(GatewayAllocator.class).asEagerSingleton();
+        //bind(AllocationService.class).asEagerSingleton();
         bind(DiscoveryNodeService.class).asEagerSingleton();
         
         bind(ClusterService.class).to(InternalCassandraClusterService.class).asEagerSingleton();

@@ -89,7 +89,7 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
             for (InetAddress node : localUnreachableNodes) {
                 for (Range<Token> orphanRange : StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, node)) {
                     Set<InetAddress> replicaEndPoints = new HashSet<InetAddress>();
-                    for(Range range : allRanges.keySet()) {
+                    for(Range<Token> range : allRanges.keySet()) {
                         if (range.contains(orphanRange)) {
                             replicaEndPoints.addAll( allRanges.get(range) );
                         }
@@ -98,12 +98,14 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
                     if (replicaEndPoints.size() == 0) {
                         consistent = false;
                         orphanRanges.add(orphanRange);
-                        logger.warn("Inconsistent search for keyspace {}, no alive node having range {}", ksName, orphanRange);
+                        if (logger.isDebugEnabled())
+                        	logger.debug("Inconsistent search for keyspace {}, no alive node having range {}", ksName, orphanRange);
                     } else {
                         InetAddress[] replicas = replicaEndPoints.toArray( new InetAddress[replicaEndPoints.size()] );
                         InetAddress liveReplica = replicas[rnd.nextInt(replicas.length)];
                         topo.put(liveReplica, orphanRange);
-                        logger.debug("orphanRanges {} available on = {} ", orphanRanges, liveReplica);
+                        if (logger.isDebugEnabled())
+                        	logger.debug("orphanRanges {} available on = {} ", orphanRanges, liveReplica);
                     }
                 }
             }

@@ -65,6 +65,7 @@ import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.codehaus.jackson.JsonGenerationException;
@@ -92,6 +93,8 @@ import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.analysis.AnalysisService;
 import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.engine.Engine.DeleteByQuery;
+import org.elasticsearch.index.engine.Engine.Operation;
 import org.elasticsearch.index.mapper.ContentPath;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.DocumentMapperParser;
@@ -109,6 +112,7 @@ import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.internal.IdFieldMapper;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
+import org.elasticsearch.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper.Defaults;
@@ -137,7 +141,7 @@ import com.ibm.icu.text.MessageFormat;
 public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     private final static SourceToParse EMPTY_SOURCE_TO_PARSE= SourceToParse.source((XContentParser)null);
 
-    // reusable per thread context pool
+    // reusable per thread context
     private CloseableThreadLocal<Context> perThreadContext = new CloseableThreadLocal<Context>() {
         @Override
         protected Context initialValue() {
@@ -217,23 +221,27 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     
         // recusivelly add fields
         public void addField(Mapper mapper, Object value) throws IOException {
-            if (value == null) return;
+            if (value == null) 
+            	return;
+            
             if (value instanceof Collection) {
                 // flatten list or set of fields
-                for(Object v : (Collection)value) {
+                for(Object v : (Collection)value)
                     addField(mapper, v);
-                }
                 return;
             }
-            if (logger.isTraceEnabled()) {
+            
+            if (logger.isTraceEnabled())
                 logger.trace("doc[{}] class={} name={} value={}", this.documents.indexOf(doc()), mapper.getClass().getSimpleName(), mapper.name(), value);
-            }
+            
             if (mapper instanceof FieldMapper) {
-                ((FieldMapper)mapper).createField(this, value);
+            	FieldMapper fieldMapper = (FieldMapper)mapper;
+            	if (fieldMapper.fieldType().indexOptions() != IndexOptions.NONE)
+            		fieldMapper.createField(this, value);
             } else if (mapper instanceof ObjectMapper) {
                 final ObjectMapper objectMapper = (ObjectMapper)mapper;
                 final ObjectMapper.Nested nested = objectMapper.nested();
-                //see https://www.elastic.co/guide/en/elasticsearch/guide/current/nested-objects.html
+                // see https://www.elastic.co/guide/en/elasticsearch/guide/current/nested-objects.html
                 // code from DocumentParser.parseObject()
                 if (nested.isNested()) {
                     beginNestedDocument(objectMapper.fullPath(),new Uid(baseCfs.metadata.cfName, id));
@@ -242,15 +250,8 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     // pre add the uid field if possible (id was already provided)
                     IndexableField uidField = parentDoc.getField(UidFieldMapper.NAME);
                     if (uidField != null) {
-                        // we don't need to add it as a full uid field in nested docs, since we don't need versioning
-                        // we also rely on this for UidField#loadVersion
-
-                        // this is a deeply nested field
                         nestedDoc.add(new Field(UidFieldMapper.NAME, uidField.stringValue(), UidFieldMapper.Defaults.NESTED_FIELD_TYPE));
                     }
-                    // the type of the nested doc starts with __, so we can identify that its a nested one in filters
-                    // note, we don't prefix it with the type of the doc since it allows us to execute a nested query
-                    // across types (for example, with similar nested objects)
                     nestedDoc.add(new Field(TypeFieldMapper.NAME, objectMapper.nestedTypePathAsString(), TypeFieldMapper.Defaults.FIELD_TYPE));
                 }
 
@@ -596,12 +597,10 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
 
         @Override
         public void ignoredValue(String indexName, String value) {
-            // TODO Auto-generated method stub
         }
 
         @Override
         public String ignoredValue(String indexName) {
-            // TODO Auto-generated method stub
             return null;
         }
     }
@@ -627,27 +626,42 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             public boolean isStaticField(int idx) {
                 return MappingInfo.this.fieldsIsStatic.get(idx);
             }
+            
+            public IndexShard shard() {
+                final IndexShard indexShard = indexService.shard(0);
+                if (indexShard == null) {
+                    logger.warn("No such shard {}.0", name);
+                    return null;
+                }
+                if (indexShard.state() != IndexShardState.STARTED) {
+                    logger.warn("Shard {}.0 not started", name);
+                    return null;
+                }
+                return indexShard;
+            }
         }
 
         class PartitionFunction {
             String name;
             String pattern;
             String[] fields;
-            int[]  fieldsIndex;
-            
-            public PartitionFunction(String[] args) {
+            int[]    fieldsIndex;
+            Set<String> indices;
+                    
+            PartitionFunction(String[] args) {
                 this.name = args[0];
                 this.pattern = args[1];
                 this.fields = new String[args.length-2];
                 this.fieldsIndex = new int[args.length-2];
                 System.arraycopy(args, 2, this.fields, 0, args.length-2);
+                this.indices = new HashSet<String>();
             }
             
-            public String indexName(Object[] values) {
+            String indexName(Object[] values) {
                 Object[] args = new Object[fields.length];
                 int j=0;
                 for(int i : fieldsIndex) {
-                    args[j++] = values[i];
+                    args[j++] = (i < values.length) ? values[i] : null;
                 }
                 return MessageFormat.format(pattern, args);
             }
@@ -679,24 +693,34 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
             
             Map<String, Boolean> fieldsMap = new HashMap<String, Boolean>();
-            Map<String, PartitionFunction> partFuncs = new HashMap<String, PartitionFunction>();
+            Map<String, PartitionFunction> partFuncs = null;
+            
             for(Iterator<IndexMetaData> indexMetaDataIterator = state.metaData().iterator(); indexMetaDataIterator.hasNext(); ) {
                 IndexMetaData indexMetaData = indexMetaDataIterator.next();
                 String index = indexMetaData.getIndex();
                 MappingMetaData mappingMetaData; 
+                
+                if (indexMetaData.getState() != IndexMetaData.State.OPEN)
+                	continue;
+                
                 ClusterBlockException clusterBlockException = state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, index);
                 if (clusterBlockException != null) {
-                    logger.warn("ignore, index=[{}] blocked blocks={}", index, clusterBlockException.blocks());
+                    if (logger.isInfoEnabled())
+                    	logger.info("ignore, index=[{}] blocked blocks={}", index, clusterBlockException.blocks());
                     continue;
                 }
 
                 if ( ExtendedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace()) &&
-                     (mappingMetaData = indexMetaData.mapping(ExtendedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null) {
+                	 (mappingMetaData = indexMetaData.mapping(ExtendedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null) {
                     try {
                         Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
                         if (mappingMap.get("properties") != null) {
                             IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
-                            IndexService indexService = indicesService.indexServiceSafe(index);
+                            IndexService indexService = indicesService.indexService(index);
+                            if (indexService == null) {
+                            	logger.error("indexService not available for [{}], ignoring" , index);
+                            	continue;
+                            }
                             IndexInfo indexInfo = new IndexInfo(index, indexService, mappingMetaData);
                             this.indices.put(index, indexInfo);
                             
@@ -720,10 +744,20 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 }
                             }
                             
-                            String[] partitionFunction = indexMetaData.partitionFunction();
-                            if (partitionFunction != null) {
-                                PartitionFunction func = new PartitionFunction(partitionFunction);
-                                partFuncs.put(func.name, func);
+                            String[] pf = indexMetaData.partitionFunction();
+                            if (pf != null) {
+                                if (partFuncs == null) 
+                                    partFuncs = new HashMap<String, PartitionFunction>();
+                                
+                                PartitionFunction func = partFuncs.get(pf[0]);
+                                if (func == null) {
+                                    func = new PartitionFunction(pf);
+                                    partFuncs.put(func.name, func);
+                                }
+                                if (!func.pattern.equals(pf[1])) {
+                                    logger.error("Partition function [{}] is defined with two different partterns [{}] and [{}]", pf[0], func.pattern, pf[1]);
+                                }
+                                func.indices.add(index);
                             }
                         }
                     } catch (IOException e) {
@@ -778,11 +812,11 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
             }
             
-            if (partFuncs.size() > 0) {
-                for(PartitionFunction shunt : partFuncs.values()) {
+            if (partFuncs != null && partFuncs.size() > 0) {
+                for(PartitionFunction func : partFuncs.values()) {
                     int i = 0;
-                    for(String field : shunt.fields) {
-                        shunt.fieldsIndex[i++] = indexOf(field);
+                    for(String field : func.fields) {
+                        func.fieldsIndex[i++] = indexOf(field);
                     }
                 }
                 this.partitionFunctions = partFuncs;
@@ -795,14 +829,15 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             if (this.partitionFunctions == null)
                 return this.indices.values();
             
-            List<IndexInfo> targetIndices = new ArrayList<IndexInfo>(this.partitionFunctions.size());
+            Set<IndexInfo> targetIndices = new HashSet<IndexInfo>(this.partitionFunctions.size());
             for(PartitionFunction func : this.partitionFunctions.values()) {
                 String indexName = func.indexName(values);
-                if (this.indices.get(indexName) != null) {
-                    targetIndices.add( this.indices.get(indexName) );
+                IndexInfo targetIndexInfo = this.indices.get(indexName);
+                if (targetIndexInfo != null) {
+                    targetIndices.add( targetIndexInfo );
                 } else {
                     if (logger.isWarnEnabled())
-                        logger.warn("No target for index=[{}] partition function name=[{}] pattern=[{}] indices={}", indexName, func.name, func.pattern, this.indices);
+                        logger.warn("No target index=[{}] found for partition function name=[{}] pattern=[{}] indices={}", indexName, func.name, func.pattern, this.indices.keySet());
                 }
             }
             if (logger.isTraceEnabled()) 
@@ -810,9 +845,30 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             return targetIndices;
         }
         
-        public int indexOf(String f) {
+        public Collection<IndexInfo> targetIndicesForDelete(Object[] values) {
+            if (this.partitionFunctions == null)
+                return this.indices.values();
+            
+            Set<IndexInfo> targetIndices = new HashSet<IndexInfo>(this.partitionFunctions.size());
+            for(PartitionFunction func : this.partitionFunctions.values()) {
+                String indexName = func.indexName(values);
+                IndexInfo targetIndexInfo = this.indices.get(indexName);
+                if (targetIndexInfo != null) {
+                    targetIndices.add( targetIndexInfo );
+                } else {
+                    if (logger.isWarnEnabled())
+                        logger.warn("No target index=[{}] found, function name=[{}] pattern=[{}], return all indices={}", indexName, func.name, func.pattern, this.indices);
+                    for(String index : func.indices) {
+                        targetIndices.add( this.indices.get(index) );
+                    }
+                }
+            }
+            return targetIndices;
+        }
+        
+        public int indexOf(String field) {
             for(int i=0; i < this.fields.length; i++) {
-                if (this.fields[i].equals(f)) return i;
+                if (this.fields[i].equals(field)) return i;
             }
             return -1;
         }
@@ -891,22 +947,47 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     }
                 }
             }
-            
-            public void delete() {
-                logger.warn("delete row not implemented");
-            }
 
+            // delete a row when PK has no clustering keys.
+            public void delete() {
+                
+                // copy the indexed columns of partition key in values
+                ArrayList<Object> values = new ArrayList<Object>(baseCfs.metadata.partitionKeyColumns().size());
+                for(int i=0 ; i < baseCfs.metadata.partitionKeyColumns().size(); i++) {
+                    if (indexedPkColumns[i]) {
+                        values.add( pkCols[i] );
+                    }
+                }
+                
+                for (MappingInfo.IndexInfo indexInfo : targetIndicesForDelete(values.toArray())) {
+                    if (logger.isTraceEnabled())
+                        logger.trace("deleting document from index.type={}.{} id={}", indexInfo.name, baseCfs.metadata.cfName, partitionKey);
+                    IndexShard indexShard = indexInfo.indexService.shard(0);
+                    if (indexShard != null) {
+                        Engine.Delete delete = indexShard.prepareDelete(baseCfs.metadata.cfName, partitionKey, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
+                        indexShard.delete(delete);
+                        
+                        if (indexInfo.refresh) {
+                            try {
+                                indexShard.refresh("refresh_flag_index");
+                            } catch (Throwable e) {
+                                logger.error("error", e);
+                            }
+                        }
+                    }
+                }
+            }
             
             class Rowcument {
+                String id = null;
                 final Object[] values = new Object[fields.length];
                 final BitSet fieldsNotNull = new BitSet();
                 final BitSet tombstoneColumns = new BitSet();
-                String id = null;
                 final boolean wideRow;
                 final boolean hasMissingClusteringKeys;
                 boolean hasStaticUpdate = false;
                 int     docTtl = Integer.MAX_VALUE;
-                Uid uid;
+                Uid     uid;
                 
                 // init document with clustering columns stored in cellName, or cell value for non-clustered columns (regular with no clustering key or static columns).
                 public Rowcument(Cell cell) throws IOException {
@@ -1109,7 +1190,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 elementType = ((SetType<?>) colSpec.type).getElementsType();
                                 if (elementType instanceof UserType) {
                                     final Set<ByteBuffer> lbb = row.getSet(idx, BytesType.instance);
-                                    set = new HashSet(lbb.size());
+                                    set = new HashSet<>(lbb.size());
                                     for (ByteBuffer bb : lbb) {
                                         set.add(InternalCassandraClusterService.deserialize(elementType, bb));
                                     }
@@ -1159,7 +1240,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
                 
                 // return true if at least one field in one mapping is updated.
-                public boolean complete() {
+                public void complete() {
                     // add missing or collection columns that should be read before indexing the document.
                     // read missing static columns (with limit 1) or regular columns if  
                     final BitSet mustUpdateFields = (BitSet)fieldsToRead.clone();
@@ -1219,7 +1300,6 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     if (logger.isTraceEnabled()) {
                         logger.trace("{}.{} id={} fields={} values={}", baseCfs.metadata.ksName, baseCfs.metadata.cfName, id, Arrays.toString(values));
                     }
-                    return fieldsNotNull.cardinality() > 0;
                 }
                 
                 public Context buildContext(IndexInfo indexInfo) throws IOException {
@@ -1352,12 +1432,8 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                             if (logger.isTraceEnabled()) {
                                 logger.trace("index={} id={} type={} uid={} routing={} docs={}", context.indexInfo.name, parsedDoc.id(), parsedDoc.type(), parsedDoc.uid(), parsedDoc.routing(), parsedDoc.docs());
                             }
-                            final IndexShard indexShard = context.indexInfo.indexService.shard(0);
-                            if (indexShard == null) {
-                                logger.warn("No such shard {}.0", context.indexInfo.name);
-                            } else if (indexShard.state() != IndexShardState.STARTED) {
-                                logger.warn("Shard {}.0 not started", context.indexInfo.name);
-                            } else {
+                            final IndexShard indexShard = context.indexInfo.shard();
+                            if (indexShard != null) {
                                 final Engine.Index operation = new Engine.Index(context.docMapper.uidMapper().term(uid.stringValue()), 
                                         parsedDoc, 
                                         Versions.MATCH_ANY, 
@@ -1392,20 +1468,28 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 
                 public void delete() {
                     for (MappingInfo.IndexInfo indexInfo : targetIndices(values)) {
-                        logger.debug("deleting document from index.type={}.{} id={}", indexInfo.name, baseCfs.metadata.cfName, id);
-                        IndexShard indexShard = indexInfo.indexService.shardSafe(0);
-                        Engine.Delete delete = indexShard.prepareDelete(baseCfs.metadata.cfName, id, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
-                        indexShard.delete(delete);
+                        final IndexShard indexShard = indexInfo.shard();
+                        if (indexShard != null) {
+                            if (logger.isDebugEnabled())
+                                logger.debug("deleting document from index.type={}.{} id={}", indexInfo.name, baseCfs.metadata.cfName, id);
+                            Engine.Delete delete = indexShard.prepareDelete(baseCfs.metadata.cfName, id, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
+                            indexShard.delete(delete);
+                            
+                            if (indexInfo.refresh) {
+                                try {
+                                    indexShard.refresh("refresh_flag_index");
+                                } catch (Throwable e) {
+                                    logger.error("error", e);
+                                }
+                            }
+                        }
                     }
                 }
                 
                 
                 public void flush() throws JsonGenerationException, JsonMappingException, IOException {
-                    if (complete()) {
-                        index();
-                    } else {
-                        delete();
-                    }
+                    complete();
+                    index();
                 }
             }
 
@@ -1428,14 +1512,17 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
      */
     @Override
     public void index(ByteBuffer rowKey, ColumnFamily cf)  {
+    	if (!runsElassandra) 
+    		return;
+    	
         try {
             if (mappingInfo == null) {
-                if (logger.isInfoEnabled())  
+                if (logger.isWarnEnabled())  
                     logger.warn("No Elasticsearch index ready");
                 return;
             }
             if (mappingInfo.indices.size() == 0) {
-                if (logger.isTraceEnabled())  
+                if (logger.isWarnEnabled())  
                     logger.warn("No Elasticsearch index configured");
                 return;
             }
@@ -1445,7 +1532,6 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             
             mappingInfoLock.readLock().lock();
             try {
-                // block for stack allocation
                 final MappingInfo.RowcumentFactory docFactory = mappingInfo.new RowcumentFactory(rowKey, cf);
                 final Iterator<Cell> cellIterator = cf.iterator();
                 if (cellIterator.hasNext()) {
@@ -1465,64 +1551,35 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
 
     /**
      * cleans up deleted columns from cassandra cleanup compaction
-     *
      * @param key
      */
     @Override
     public void delete(DecoratedKey key, Group opGroup) {
+    	if (!runsElassandra) 
+    		return;
+    	
         if (mappingInfo == null || mappingInfo.indices.size() == 0) {
             // TODO: save the update in a commit log to replay it later....
             logger.warn("Elastic node not ready, cannot delete document");
             return;
         }
-        
+
         Token token = key.getToken();
         Long  token_long = (Long) token.getTokenValue();
-        logger.debug("deleting (not imlemented) document with _token = " + token_long);
         
-        // TODO: DeleteByQuery or Scan+Bulk Delete.
-        /*
-        for (Pair<String, String> target : targets.keySet()) {
-            logger.debug("xdeleting document from index={} type={} id={}", target.left, target.right);
-            // submit a delete request
-            XDeleteRequest request = new XDeleteRequest(target.left, target.right, );
-            ActionListener<XDeleteResponse> listener = new ActionListener<XDeleteResponse>() {
-                @Override
-                public void onResponse(XDeleteResponse response) {
-                    logger.debug("doc deleted id=" + response.getId());
-                }
-
-                @Override
-                public void onFailure(Throwable e) {
-                    logger.error("failed to delete doc id=" + id, e);
-                }
-            };
-            ElassandraDaemon.client().xdelete(request, listener);
-        }
-        */
-    }
-
-    
-    public void initMapping() {
-        mappingInfoLock.writeLock().lock();
-        try {
-            if (ElassandraDaemon.injector() != null) {
-               if (!registred) {
-                   getClusterService().addLast(this);
-                   registred = true;
-               }
-               mappingInfo = new MappingInfo(getClusterService().state());
-               logger.debug("Secondary index=[{}.{}] initialized, metadata.version={} mappingInfo.indices={}", 
-                       this.baseCfs.metadata.ksName, index_name, mappingInfo.metadataVersion,  mappingInfo.indices.keySet());
-            } else {
-                logger.warn("Cannot initialize index=[{}.{}], cluster service not available.", this.baseCfs.metadata.ksName, index_name);
+        // Delete documents where _token = token_long
+        for (MappingInfo.IndexInfo indexInfo : this.mappingInfo.indices.values()) {
+            if (logger.isTraceEnabled())
+                logger.trace("deleting documents where _token={} from index.type={}.{} id={}", token_long, indexInfo.name, baseCfs.metadata.cfName);
+            IndexShard indexShard = indexInfo.indexService.shard(0);
+            if (indexShard != null) {
+            	//Query query = new TermQuery(new Term("_token", Long.toString(token_long) ));
+            	NumericRangeQuery<Long> query =	NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, token_long, token_long, true, true);
+            	DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), this.baseCfs.metadata.cfName);
+            	indexShard.engine().delete(deleteByQuery);
             }
-        } finally {
-            mappingInfoLock.writeLock().unlock();
         }
     }
-    
-    
 
     /**
      * Cassandra index flush => Elasticsearch flush => lucene commit and disk
@@ -1530,6 +1587,9 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
      */
     @Override
     public void forceBlockingFlush() {
+    	if (!runsElassandra) 
+    		return;
+    	
         if (mappingInfo == null || mappingInfo.indices.size() == 0) {
             logger.trace("Elasticsearch not ready, cannot flush Elasticsearch index");
             return;
@@ -1554,7 +1614,23 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     }
 
     
-
+    public void initMapping() {
+        mappingInfoLock.writeLock().lock();
+        try {
+           if (!registred) {
+               getClusterService().addLast(this);
+               registred = true;
+           }
+           mappingInfo = new MappingInfo(getClusterService().state());
+           logger.debug("Secondary index=[{}.{}] initialized, metadata.version={} mappingInfo.indices={}", 
+                   this.baseCfs.metadata.ksName, index_name, mappingInfo.metadataVersion,  mappingInfo.indices.keySet());
+        } catch(ElasticsearchException e) {
+        	 logger.warn("Cannot initialize index=[{}.{}], cluster service not available.", this.baseCfs.metadata.ksName, index_name);
+        } finally {
+            mappingInfoLock.writeLock().unlock();
+        }
+    }
+    
     
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
@@ -1576,7 +1652,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             mappingInfoLock.writeLock().lock();
             try {
                 mappingInfo = new MappingInfo(event.state());
-                logger.debug("index=[{}.{}] metadata.version={} mappingInfo.indices={}",
+                logger.debug("secondary index=[{}.{}] metadata.version={} mappingInfo.indices={}",
                         this.baseCfs.metadata.ksName, this.index_name, event.state().metaData().version(), mappingInfo.indices.keySet() );
             } finally {
                 mappingInfoLock.writeLock().unlock();

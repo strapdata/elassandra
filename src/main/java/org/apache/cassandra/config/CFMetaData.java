@@ -243,8 +243,7 @@ public final class CFMetaData
     public final byte[] ksAndCFBytes;
     public final ColumnFamilyType cfType;             // standard, super
     public volatile CellNameType comparator;          // bytes, long, timeuuid, utf8, etc.
-    
-    
+
     //OPTIONAL
     private volatile String comment = "";
     private volatile double readRepairChance = DEFAULT_READ_REPAIR_CHANCE;
@@ -327,7 +326,6 @@ public final class CFMetaData
         return this.cqlFragments;
     }
 
-    
     /**
      * Create new ColumnFamily metadata with generated random ID.
      * When loading from existing schema, use CFMetaData

@@ -26,9 +26,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
-import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.lucene.util.CollectionUtil;
@@ -44,6 +44,8 @@ import org.elasticsearch.common.collect.ImmutableOpenIntMap;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.index.shard.ShardId;
 
 import com.carrotsearch.hppc.IntSet;
@@ -77,7 +79,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
     //private final ShardShuffler shuffler;
 
     final public static  UnassignedInfo UNASSIGNED_INFO_NODE_LEFT = new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "cassandra node left");
-    final public static  UnassignedInfo UNASSIGNED_INFO_KEYSPACE_UNAVAILABLE = new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "cassandra keyspace unavailable");
+    final public static  UnassignedInfo UNASSIGNED_INFO_UNAVAILABLE = new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "shard or keyspace unavailable");
     final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_CREATED = new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null);
     final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_REOPEN = new UnassignedInfo(UnassignedInfo.Reason.INDEX_REOPENED, null);
     
@@ -414,126 +416,70 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
          * @param clusterService
          * @param targetState
          */
-        public Builder(String index, ClusterService clusterService, ClusterState currentState) {
-            this(index, clusterService, currentState, null);
-        }
-        
-        public Builder(String index, ClusterService clusterService, ClusterState targetState, RoutingNodes newRoutingNodes) {
+        public Builder(String index, ClusterService clusterService, ClusterState targetState) {
             this.index = index;
             IndexMetaData targetIndexMetaData = targetState.metaData().index(index);
-            IndexMetaData currentIndexMetaData = clusterService.state().metaData().index(index);
-            if (targetIndexMetaData.getState() == State.CLOSE) {
-                Loggers.getLogger(getClass()).debug("Ignoring closed index [{}]",index);
-                return;
-            }
+            if (targetIndexMetaData == null || targetIndexMetaData.getState() == State.CLOSE)
+            	return;
+            
             try {
-                String ksName = targetIndexMetaData.keyspace();
-                if (Schema.instance.getKeyspaceInstance(ksName) == null) {
-                    Loggers.getLogger(getClass()).warn("Keyspace [{}] not available for index=[{}] => shard relocating", ksName, this.index);
-                    ShardRouting localPrimaryShardRouting = new ShardRouting(index, 0, clusterService.localNode().id(), true, 
-                            ShardRoutingState.UNAVAILABLE, targetState.version(), UNASSIGNED_INFO_KEYSPACE_UNAVAILABLE, AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
-                    shards.put(0, new IndexShardRoutingTable(new ShardId(index, 0), ImmutableList.of(localPrimaryShardRouting)));
-                    return;
+                Set<InetAddress> startedShard = clusterService.getRemoteStartedShard(index);
+                IndexShard localIndexShard = null;
+                if (clusterService.indexService(index) != null && clusterService.indexService(index).shard(0) != null) {
+                	localIndexShard = clusterService.indexService(index).shard(0);
                 }
-                
-                Set<InetAddress> startedShard = clusterService.getStartedShard(index);
-                ShardRouting localPrimaryShardRouting = null;
-                RoutingNodes routingNodes = (newRoutingNodes != null) ? newRoutingNodes : targetState.getRoutingNodes();
-                for(ShardRouting sr : routingNodes.node(clusterService.localNode().id())) {
-                    if (index.equals(sr.getIndex())) {
-                        localPrimaryShardRouting = sr;
-                        if (sr.started()) {
-                            startedShard.add(clusterService.localNode().getInetAddress());
-                        }
-                        break;
-                    }
+                if (localIndexShard != null && localIndexShard.state() == IndexShardState.STARTED) {
+                	startedShard.add(clusterService.localNode().getInetAddress());
                 }
-                if (localPrimaryShardRouting == null) {
-                    // keyspace may not be created yet for this new shard, so don't try to set tokenRanges.
-                    localPrimaryShardRouting = new ShardRouting(index, 0, clusterService.localNode().id(), true, 
-                            ShardRoutingState.INITIALIZING, targetState.version(), 
-                            (currentIndexMetaData != null && currentIndexMetaData.getState() == State.CLOSE) ? UNASSIGNED_INFO_INDEX_REOPEN : UNASSIGNED_INFO_INDEX_CREATED, 
-                            AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
-                }
-                startedShard.add(clusterService.localNode().getInetAddress());
                 
                 AbstractSearchStrategy.Result topologyResult = clusterService.searchStrategy(targetIndexMetaData, startedShard);
                 Set<InetAddress> unreachableEndpoints = topologyResult.getUnreachableTokenOwners();
-                Collection<Range<Token>> localTokenRanges = topologyResult.getTokenRanges(clusterService.localNode().getInetAddress());
-                localPrimaryShardRouting.tokenRanges(localTokenRanges);
                 
-                int i = 0;
-                List<ShardRouting> shardRoutingList = new ArrayList<ShardRouting>();
-                shardRoutingList.add(localPrimaryShardRouting);
-                if (unreachableEndpoints.size() > 0) {
-                    // add unassigned secondary routingShard (yellow status)
-                    for (InetAddress deadNode : unreachableEndpoints) {
-                        for (List<InetAddress> endPoints : topologyResult.getRangeToAddressMap().values()) {
-                            if (endPoints.contains(deadNode) && endPoints.contains(clusterService.localNode().getInetAddress())) {
-                                ShardRouting fakeShardRouting = new ShardRouting(index, i, targetState.nodes().findByInetAddress(deadNode).id(), false, 
-                                        ShardRoutingState.UNASSIGNED, targetState.version(), UNASSIGNED_INFO_NODE_LEFT, AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
-                                shardRoutingList.add(fakeShardRouting);
-                                break;
-                            }
-                        }
-                    }
-                }
-                shards.put(0, new IndexShardRoutingTable(new ShardId(index, 0), ImmutableList.copyOf(shardRoutingList)));
-                i++; // 0=local shard, i > 0 for remote shards
-
-                // add one primary ShardRouting for remote alive nodes and some unassigned replica shards for DEAD node. 
-                for (DiscoveryNode node : targetState.nodes()) {
-                    if (!clusterService.localNode().id().equals(node.id())) {
-                        Collection<Range<Token>> token_ranges = topologyResult.getTokenRanges(node.getInetAddress());
-                        if (token_ranges != null) {
-                            // node is alive for some token range
-                            ShardRoutingState shardRoutingState = ShardRoutingState.INITIALIZING;
-
-                            // get state from current cluster state
-                            RoutingNode routingNode = routingNodes.node(node.id());
-                            if ((routingNode != null) && (routingNode.size() > 0)) {
-                                shardRoutingState = routingNode.get(0).state();
-                            }
-
-                            // get state from gossip state
-                            shardRoutingState = clusterService.getShardRoutingState(node.getInetAddress(), index, shardRoutingState);
-
-                            ShardRouting shardRouting = new ShardRouting(index, i, node.id(), true, shardRoutingState, // We assume shard is started on alive nodes...
-                                  targetState.version(), (shardRoutingState == ShardRoutingState.STARTED) ? null : UNASSIGNED_INFO_KEYSPACE_UNAVAILABLE, token_ranges);
-                            
-
-                            shardRoutingList = new ArrayList<ShardRouting>();
-                            shardRoutingList.add(shardRouting);
-                            if (unreachableEndpoints.size() > 0) {
-                                // add unassigned secondary routingShard (yellow status)
-                                for (InetAddress deadNode : unreachableEndpoints) {
-                                    for (List<InetAddress> endPoints : topologyResult.getRangeToAddressMap().values()) {
-                                        if (endPoints.contains(deadNode) && endPoints.contains(node.getInetAddress())) {
-                                            ShardRouting fakeShardRouting = new ShardRouting(index, i, targetState.nodes().findByInetAddress(deadNode).id(), false, ShardRoutingState.UNASSIGNED, targetState
-                                                    .version(), UNASSIGNED_INFO_NODE_LEFT, AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
-                                            shardRoutingList.add(fakeShardRouting);
-                                            break;
-                                        }
-                                    }
+                int i = 1; 
+                // build IndexShardRoutingTable with
+                //	-1 primary started shard for available nodes with associated token range
+                //  -N secondary unassigned shard for unavailable nodes with no token range to reflect yellow status.
+                // shardId = 0 if local endpoint
+                for(Map.Entry<InetAddress, Collection<Range<Token>>> entry : topologyResult.getTopology().entrySet()) {
+                	List<ShardRouting> shardRoutingList = new ArrayList<ShardRouting>();
+                	DiscoveryNode node = targetState.nodes().findByInetAddress(entry.getKey());
+                	int shardId = (clusterService.localNode().id().equals(node.id())) ? 0 : i;
+                	
+                	ShardRouting primaryShardRouting = new ShardRouting(index, shardId, node.id(), true, ShardRoutingState.STARTED, targetState.version(), null, entry.getValue());
+                	shardRoutingList.add(primaryShardRouting);
+                	
+                    if (unreachableEndpoints.size() > 0) {
+                        // add unassigned secondary routingShard (yellow status)
+                        for (InetAddress deadNode : unreachableEndpoints) {
+                            for (List<InetAddress> endPoints : topologyResult.getRangeToAddressMap().values()) {
+                                if (endPoints.contains(deadNode) && endPoints.contains(node.getInetAddress())) {
+                                    ShardRouting fakeShardRouting = new ShardRouting(index, shardId, targetState.nodes().findByInetAddress(deadNode).id(), false, 
+                                    		ShardRoutingState.UNASSIGNED, targetState.version(), UNASSIGNED_INFO_NODE_LEFT, AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
+                                    shardRoutingList.add(fakeShardRouting);
+                                    break;
                                 }
                             }
-                            shards.put(i, new IndexShardRoutingTable(new ShardId(index, i), ImmutableList.copyOf(shardRoutingList)));
-                            i++;
                         }
                     }
+                    shards.put(shardId, new IndexShardRoutingTable(new ShardId(index, shardId), ImmutableList.copyOf(shardRoutingList)));
+                    if (shardId != 0)
+                    	i++;
                 }
-
+                
+                // for orphan range, add a IndexShardRoutingTable with a primary unassigned shard with an unreachable node + orphan token ranges
                 if (!topologyResult.isConsistent() && unreachableEndpoints.size() > 0) {
                     // add a unassigned primary IndexShardRoutingTable to reflect missing data (red status).
-                    ShardRouting shardRouting = new ShardRouting(index, i, targetState.nodes().findByInetAddress(unreachableEndpoints.iterator().next()).id(), true, ShardRoutingState.UNASSIGNED, targetState
-                            .version(), UNASSIGNED_INFO_NODE_LEFT, topologyResult.getOrphanTokenRanges());
-                    shards.put(i, new IndexShardRoutingTable(new ShardId(index, i), ImmutableList.of(shardRouting)));
+                    DiscoveryNode discoveryNode = targetState.nodes().findByInetAddress(unreachableEndpoints.iterator().next());
+                    if (discoveryNode != null) {
+                        ShardRouting shardRouting = new ShardRouting(index, i, discoveryNode.id(), true, ShardRoutingState.UNASSIGNED, targetState.version(), 
+                                UNASSIGNED_INFO_NODE_LEFT, topologyResult.getOrphanTokenRanges());
+                        shards.put(i, new IndexShardRoutingTable(new ShardId(index, i), ImmutableList.of(shardRouting)));
+                    }
                 }
-
             } catch (java.lang.AssertionError e) {
                 // thrown by cassandra when the keyspace is not yet create locally. 
                 // We must wait for a gossip schema change to update the routing Table.
-                Loggers.getLogger(getClass()).warn("Keyspace {} not yet available", e, this.index);
+                Loggers.getLogger(getClass()).warn("Keyspace {} not  available", e, this.index);
             }
         }
         

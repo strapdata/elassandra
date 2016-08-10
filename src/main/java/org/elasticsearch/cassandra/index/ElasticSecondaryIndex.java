@@ -88,7 +88,7 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
  * Custom secondary index for CQL3 only, should be created when mapping is applied and local shard started.
  * Index row as document when Elasticsearch clusterState has no write blocks and local shard is started.
  * @author vroyer
- *
+ * @deprecated
  */
 public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     
@@ -247,9 +247,27 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
             }
             
+            // delete a row when PK has no clustering keys.
             public void delete() {
-                logger.warn("delete row not implemented");
+                for (MappingInfo.IndexInfo indexInfo : indices) {
+                    if (logger.isTraceEnabled())
+                        logger.trace("deleting document from index.type={}.{} id={}", indexInfo.name, baseCfs.metadata.cfName, partitionKey);
+                    IndexShard indexShard = indexInfo.indexService.shard(0);
+                    if (indexShard != null) {
+                        Engine.Delete delete = indexShard.prepareDelete(baseCfs.metadata.cfName, partitionKey, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
+                        indexShard.delete(delete);
+                        
+                        if (indexInfo.refresh) {
+                            try {
+                                indexShard.refresh("refresh_flag_index");
+                            } catch (Throwable e) {
+                                logger.error("error", e);
+                            }
+                        }
+                    }
+                }
             }
+            
                 
             class Document {
                 final Map<String, Object> docMap = new HashMap<String, Object>(fieldsMap.size());
@@ -556,7 +574,7 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     }
     
     // updated when create/open/close/remove an ES index.
-    private AtomicReference<MappingInfo> mappingAtomicReference = new AtomicReference();
+    private AtomicReference<MappingInfo> mappingAtomicReference = new AtomicReference<MappingInfo>();
     protected ReadWriteLock mappingInfoLock = new ReentrantReadWriteLock();
     
     public ElasticSecondaryIndex() {
@@ -569,10 +587,13 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
      */
     @Override
     public void index(ByteBuffer rowKey, ColumnFamily cf)  {
+    	if (!runsElassandra) 
+    		return;
+    	
         try {
             MappingInfo mappingInfo = this.mappingAtomicReference.get();
             if (mappingInfo == null || mappingInfo.indices.size() == 0) {
-                logger.trace("No Elasticsearch index ready");
+                logger.warn("No Elasticsearch index ready");
                 return;
             }
 
@@ -597,6 +618,9 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
      */
     @Override
     public void delete(DecoratedKey key, Group opGroup) {
+    	if (!runsElassandra) 
+    		return;
+    	
         MappingInfo mappingInfo = this.mappingAtomicReference.get();
         if (mappingInfo == null || mappingInfo.indices.size() == 0) {
             // TODO: save the update in a commit log to replay it later....
@@ -634,24 +658,26 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
 
     
     public synchronized void initMapping() {
-        if (ElassandraDaemon.injector() != null) {
-            if (!registred) {
+    	try {
+    		if (!registred) {
                 getClusterService().addLast(this);
                 registred = true;
             }
             this.mappingAtomicReference.set(new MappingInfo(getClusterService().state()));
             logger.debug("index=[{}.{}] initialized,  mappingAtomicReference = {}", this.baseCfs.metadata.ksName, index_name, this.mappingAtomicReference.get());
-        } else {
+        } catch(ElasticsearchException e) {
             logger.warn("Cannot initialize index=[{}.{}], cluster service not available.", this.baseCfs.metadata.ksName, index_name);
         }
     }
     
     /**
-     * Cassandra index flush => Elasticsearch flush => lucene commit and disk
-     * sync.
+     * Cassandra index flush => Elasticsearch flush => lucene commit and disk sync.
      */
     @Override
     public void forceBlockingFlush() {
+    	if (!runsElassandra) 
+    		return;
+    	
         MappingInfo mappingInfo = this.mappingAtomicReference.get();
         if (mappingInfo == null || mappingInfo.indices.size() == 0) {
             logger.warn("Elasticsearch not ready, cannot flush Elasticsearch index");

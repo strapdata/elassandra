@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action.bulk;
 
+import java.util.Map;
+
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionRequest;
@@ -35,7 +37,6 @@ import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.routing.ShardIterator;
@@ -61,8 +62,6 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
 
-import java.util.Map;
-
 /**
  * Performs the index operation.
  */
@@ -78,10 +77,10 @@ public class TransportShardBulkAction extends TransportReplicationAction<BulkSha
 
     @Inject
     public TransportShardBulkAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                    IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                    IndicesService indicesService, ThreadPool threadPool,
                                     MappingUpdatedAction mappingUpdatedAction, UpdateHelper updateHelper, ActionFilters actionFilters,
                                     IndexNameExpressionResolver indexNameExpressionResolver) {
-        super(settings, ACTION_NAME, transportService, clusterService, indicesService, threadPool, shardStateAction, mappingUpdatedAction,
+        super(settings, ACTION_NAME, transportService, clusterService, indicesService, threadPool, mappingUpdatedAction,
                 actionFilters, indexNameExpressionResolver,
                 BulkShardRequest.class, BulkShardRequest.class, ThreadPool.Names.BULK);
         this.updateHelper = updateHelper;

@@ -1,5 +1,5 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
+  * Licensed to Elasticsearch under one or more contributor
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under
@@ -154,18 +154,13 @@ public abstract class TransportSearchTypeAction extends TransportAction<SearchRe
                     if (!tokenRangesSpecified) {
                         // add shard tokenRanges to search request.
                         request.tokenRanges(shard.tokenRanges());
-                    } else {
-                        if (TransportSearchTypeAction.this.clusterService.tokenRangesIntersec(shard.tokenRanges(), request.tokenRanges())) {
-                            // skip the shard, token ranges does not intersec.
-                            break;
-                        }
-                    }
+                    } 
                     if (request.routing() != null) {
                         boolean tokenMatch = false;
                         for(String type : request.types()) {
                             try {
                                 Token token = TransportSearchTypeAction.this.clusterService.getToken(shard.index(), type, request.routing());
-                                if (token != null && TransportSearchTypeAction.this.clusterService.tokenRangesContains(shard.tokenRanges(), token)) {
+                                if (token != null && TransportSearchTypeAction.this.clusterService.tokenRangesContains(request.tokenRanges(), token)) {
                                     tokenMatch = true;
                                     break;
                                 }
@@ -182,6 +177,9 @@ public abstract class TransportSearchTypeAction extends TransportAction<SearchRe
                                     request.preference(), shard.shortSummary(), request.tokenRanges(), request.routing());
                         }
                         performFirstPhase(shardIndex, shardIt, shard);
+                    } else {
+                    	// really, no shards active in this group
+                        onFirstPhaseResult(shardIndex, null, null, shardIt, new NoShardAvailableActionException(shardIt.shardId()));
                     }
                 } else {
                     // really, no shards active in this group

@@ -98,7 +98,7 @@ public class CassandraDaemon
         logger = LoggerFactory.getLogger(CassandraDaemon.class);
     }
 
-    private static void maybeInitJmx()
+    private void maybeInitJmx()
     {
         if (System.getProperty("com.sun.management.jmxremote.port") != null)
             return;
@@ -119,7 +119,7 @@ public class CassandraDaemon
         }
         catch (IOException e)
         {
-            logger.error("Error starting local jmx server: ", e);
+            exitOrFail(1, e.getMessage(), e.getCause());
         }
     }
 
@@ -149,6 +149,8 @@ public class CassandraDaemon
      */
     protected void setup()
     {
+        FileUtils.setFSErrorHandler(new DefaultFSErrorHandler());
+
         // Delete any failed snapshot deletions on Windows - see CASSANDRA-9658
         if (FBUtilities.isWindows())
             WindowsFailedSnapshotTracker.deleteOldSnapshots();
@@ -174,6 +176,10 @@ public class CassandraDaemon
         {
             exitOrFail(3, e.getMessage(), e.getCause());
         }
+
+        // We need to persist this as soon as possible after startup checks.
+        // This should be the first write to SystemKeyspace (CASSANDRA-11742)
+        SystemKeyspace.persistLocalMetadata();
 
         maybeInitJmx();
 
@@ -219,6 +225,9 @@ public class CassandraDaemon
         }
         SystemKeyspace.discardCompactionsInProgress();
 
+        // Elassandra hook.
+        systemKeyspaceInitialized();
+        
         // clean up debris in the rest of the keyspaces
         for (String keyspaceName : Schema.instance.getKeyspaces())
         {
@@ -267,9 +276,6 @@ public class CassandraDaemon
             JVMStabilityInspector.inspectThrowable(t);
             logger.warn("Unable to start GCInspector (currently only supported on the Sun JVM)");
         }
-
-        // Elassandra hook.
-        beforeCommitLogRecover();
         
         // replay the log if necessary
         try
@@ -575,10 +581,10 @@ public class CassandraDaemon
     
     /**
      * This is a hook for concrete daemons to initialize themselves suitably.
-     * Subclasses should override this to initialize before cassandra bootstrap
+     * Subclasses should override this to initialize when system keyspace is ready.
      * (called once from CassandraDaemon2.setup()).
      */
-    public void beforeCommitLogRecover() {
+    public void systemKeyspaceInitialized() {
     }
 
     /**
@@ -648,7 +654,6 @@ public class CassandraDaemon
             logger.info("Gossip settled after {} extra polls; proceeding", totalPolls - GOSSIP_SETTLE_POLL_SUCCESSES_REQUIRED);
         else
             logger.info("No gossip backlog; proceeding");
-        
     }
 
     public static void stop(String[] args)

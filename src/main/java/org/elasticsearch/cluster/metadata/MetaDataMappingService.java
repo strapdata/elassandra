@@ -225,7 +225,7 @@ public class MetaDataMappingService extends AbstractComponent {
         if (!dirty) {
             return Tuple.tuple(currentState, allTasks);
         }
-        return Tuple.tuple(ClusterState.builder(currentState).metaData(mdBuilder).build(), allTasks);
+        return Tuple.tuple(ClusterState.builder(currentState).incrementVersion().metaData(mdBuilder).build(), allTasks);
     }
 
     private boolean processIndexMappingTasks(List<MappingTask> tasks, IndexService indexService, IndexMetaData.Builder builder) {

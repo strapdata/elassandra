@@ -15,8 +15,6 @@ import javax.management.StandardMBean;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.KSMetaData;
-import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.marshal.UTF8Type;
@@ -25,9 +23,13 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
 import org.elasticsearch.bootstrap.Bootstrap;
 import org.elasticsearch.bootstrap.JVMCheck;
+import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.discovery.CassandraDiscovery;
+import org.elasticsearch.cassandra.index.BaseElasticSecondaryIndex;
+import org.elasticsearch.cassandra.shard.CassandraShardStateObserver;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.common.cli.Terminal;
 import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Injector;
@@ -38,6 +40,7 @@ import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.logging.logback.LogbackESLoggerFactory;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
+import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.monitor.jvm.JvmInfo;
 import org.elasticsearch.monitor.process.ProcessProbe;
 import org.elasticsearch.node.Node;
@@ -68,8 +71,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     private Node node = null;
     private Settings settings;
     private Environment env;
-    private boolean addShutdownHook;
-
+    
     static {
         try {
             ESLoggerFactory.setDefaultFactory(new LogbackESLoggerFactory());
@@ -83,7 +85,8 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
 
     public void activate(boolean addShutdownHook) {
-        this.addShutdownHook = addShutdownHook;
+        instance.setup(addShutdownHook, settings, env); 
+        
         try {
             MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
             mbs.registerMBean(new StandardMBean(new NativeAccess(), NativeAccessMBean.class), new ObjectName(MBEAN_NAME));
@@ -116,17 +119,22 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
     }
 
-   
- 
     @Override
-    public void beforeCommitLogRecover() {
+    public void systemKeyspaceInitialized() {
         try {
-            KSMetaData ksMetaData = Schema.instance.getKSMetaData(InternalCassandraClusterService.ELASTIC_ADMIN_KEYSPACE);
-            if (ksMetaData != null) {
-                logger.debug("Starting ElasticSearch before recovering commitlogs (elastic_admin keyspace already  exists)");
-                startElasticSearch();
-             }
-        } catch(Exception e) {
+        	if (node != null) {
+	        	MetaData metadata = node.clusterService().readMetaDataAsComment();
+	        	if (metadata != null) {
+	                logger.debug("Starting Elasticsearch shards before open user keyspaces...");
+	                CassandraShardStateObserver observer = new CassandraShardStateObserver(node.injector().getInstance(IndicesLifecycle.class), metadata.concreteAllOpenIndices());
+	                node.activate();
+	                // check metadata not empty and block until all primary local shards are STARTED
+	                observer.waitLocalShardsStarted();
+	            }
+        	}
+        } catch(NoPersistedMetaDataException e) {
+            logger.debug("Start Elasticsearch later, no mapping available");
+        } catch(Throwable e) {
             logger.warn("Unexpected error",e);
         }
         
@@ -134,31 +142,20 @@ public class ElassandraDaemon extends CassandraDaemon {
     
     @Override
     public void beforeBootstrap() {
-        if (instance.node == null) {
-            logger.debug("Starting ElasticSearch before bootstraping");
-            startElasticSearch();
-        } 
+    	node.activate();
     }
     
     @Override
     public void beforeStartupComplete() {
-        if (instance.node == null) {
-            logger.debug("Starting ElasticSearch before startup complete (no boostrap)");
-            startElasticSearch();
-        } 
+    	node.activate();
     }
     
     @Override
     public void afterStartupComplet() {
         logger.debug("Create elastic_admin[_datacenter.group] keyspace if not exits.");
-        instance.node.cassandraStartupComplete();
+        node.cassandraStartupComplete();
     }
-    
-    private void startElasticSearch() {
-        instance.setup(addShutdownHook, settings, env); // Initialize ElasticSearch by reading stored metadata.
-        instance.node.activate(); // block until recovery and all local primary shards are started.
-        logger.debug("ElasticSearch ready to index (but not search), client={}", this.node.client());
-    }
+
 
     
     /**
@@ -297,7 +294,9 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     public static void main(String[] args) {
-        
+    	
+    	BaseElasticSecondaryIndex.runsElassandra = true;
+    	
         boolean foreground = System.getProperty("cassandra-foreground") != null;
         // handle the wrapper system property, if its a service, don't run as a
         // service

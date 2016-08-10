@@ -59,6 +59,7 @@ import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.cassandra.index.SecondaryIndicesService;
+import org.elasticsearch.cassandra.shard.CassandraShardStateService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
@@ -108,6 +109,7 @@ import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.settings.NodeSettingsService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -136,6 +138,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     private final DiscoveryNodeService discoveryNodeService;
     private final SecondaryIndicesService secondaryIndicesService;
     private final IndicesService indicesService;
+    private final IndicesLifecycle indicesLifecycle;
     
     private final Version version;
 
@@ -171,7 +174,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     @Inject
     public InternalClusterService(Settings settings, DiscoveryService discoveryService, OperationRouting operationRouting, TransportService transportService,
                                   NodeSettingsService nodeSettingsService, ThreadPool threadPool, ClusterName clusterName, DiscoveryNodeService discoveryNodeService,
-                                  Version version, SecondaryIndicesService secondaryIndicesService, IndicesService indicesService) {
+                                  Version version, SecondaryIndicesService secondaryIndicesService, IndicesService indicesService, IndicesLifecycle indicesLifecycle) {
         super(settings);
         this.operationRouting = operationRouting;
         this.transportService = transportService;
@@ -181,6 +184,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
         this.discoveryNodeService = discoveryNodeService;
         this.secondaryIndicesService = secondaryIndicesService;
         this.indicesService = indicesService;
+        this.indicesLifecycle = indicesLifecycle;
         this.version = version;
 
         // will be replaced on doStart.
@@ -251,6 +255,9 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
         
         // addPost because 2i shoukd be created/deleted after that cassandra indices have taken the new mapping.
         addLast(this.secondaryIndicesService);
+        
+        // add listener to publish shard state in Application.X1
+        this.indicesLifecycle.addListener(new CassandraShardStateService(this, this.discoveryService));
     }
     
     @Override
@@ -512,7 +519,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
             if (previousClusterState == newClusterState) {
                 if (updateTask instanceof AckedClusterStateUpdateTask) {
                     //no need to wait for ack if nothing changed, the update can be counted as acknowledged
-                    ((AckedClusterStateUpdateTask) updateTask).onAllNodesAcked(null);
+                    ((AckedClusterStateUpdateTask<?>) updateTask).onAllNodesAcked(null);
                 }
                 if (updateTask instanceof ProcessedClusterStateUpdateTask) {
                     ((ProcessedClusterStateUpdateTask) updateTask).clusterStateProcessed(source, previousClusterState, newClusterState);
@@ -564,11 +571,11 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
                     logger.trace("set local clusterState version={} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
                 
                 // publish in gossip state the applied metadata.uuid and version
-                discoveryService.publish(newClusterState);
+                discoveryService.publishX2(newClusterState);
              
                 // wait for acknowledgment
                 if (updateTask instanceof AckedClusterStateUpdateTask) {
-                    final AckedClusterStateUpdateTask ackedUpdateTask = (AckedClusterStateUpdateTask) updateTask;
+                    final AckedClusterStateUpdateTask<?> ackedUpdateTask = (AckedClusterStateUpdateTask<?>) updateTask;
                     if (ackedUpdateTask.mustApplyMetaData() && newClusterState.nodes().size() > 1) {
                         try {
                             if (logger.isInfoEnabled())
@@ -890,10 +897,10 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract Map<String, List<Object>> flattenTree(Set<String> neededFiedls, String path, Object node, Map<String, List<Object>> fields);
 
     @Override
-    public abstract void createElasticAdminKeyspace() throws Exception;
+    public abstract void createElasticAdminKeyspace();
 
     @Override
-    public abstract void updateElasticAdminKeyspace() throws IOException;
+    public abstract void updateElasticAdminKeyspace();
     
     @Override
     public abstract void createIndexKeyspace(String index, int replicationFactor) throws IOException;
@@ -913,6 +920,9 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     
     @Override
     public abstract void submitNumberOfShardsUpdate();
+    
+    @Override
+    public abstract void updateRoutingTable();
     
     @Override
     public abstract void updateTableSchema(String index, String type, Set<String> columns, DocumentMapper docMapper) throws IOException;
@@ -1007,12 +1017,6 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
 
     @Override
     public abstract Map<String, Object> discoverTableMapping(String ksName, String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
-
-    @Override
-    public abstract void waitShardsStarted();
-
-    @Override
-    public abstract void publishAllShardsState();
 
     @Override
     public abstract ShardRoutingState getShardRoutingState(InetAddress address, String index, ShardRoutingState defaultState);

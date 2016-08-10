@@ -103,7 +103,7 @@ public class AllocationService extends AbstractComponent {
                 }
             }
         }
-        return new RoutingAllocation.Result(true, new RoutingTable.Builder(this.clusterService,clusterState, routingNodes).build().validateRaiseException(clusterState.metaData()));
+        return new RoutingAllocation.Result(true, new RoutingTable.Builder(this.clusterService,clusterState).build().validateRaiseException(clusterState.metaData()));
     }
 
     public RoutingAllocation.Result applyFailedShard(ClusterState clusterState, ShardRouting failedShard) {
@@ -116,7 +116,6 @@ public class AllocationService extends AbstractComponent {
      * <p>If the same instance of the routing table is returned, then no change has been made.</p>
      */
     public RoutingAllocation.Result applyFailedShards(ClusterState clusterState, List<FailedRerouteAllocation.FailedShard> failedShards) {
-        RoutingNodes routingNodes = getMutableRoutingNodes(clusterState);
         // shuffle the unassigned nodes, just so we won't have things like poison failed shards
         /*
         routingNodes.unassigned().shuffle();
@@ -132,7 +131,7 @@ public class AllocationService extends AbstractComponent {
         shardsAllocators.applyFailedShards(allocation);
         reroute(allocation);
         */
-        return new RoutingAllocation.Result(true, new RoutingTable.Builder(this.clusterService,clusterState, routingNodes).build().validateRaiseException(clusterState.metaData()));
+        return new RoutingAllocation.Result(true, new RoutingTable.Builder(this.clusterService,clusterState).build().validateRaiseException(clusterState.metaData()));
     }
 
     public RoutingAllocation.Result reroute(ClusterState clusterState, AllocationCommands commands) {
@@ -157,7 +156,7 @@ public class AllocationService extends AbstractComponent {
         // so, there will always be shard "movements", so no need to check on reroute
         reroute(allocation);
         */
-        return new RoutingAllocation.Result(true, new RoutingTable.Builder(this.clusterService,clusterState, null).build().validateRaiseException(clusterState.metaData()));
+        return new RoutingAllocation.Result(true, new RoutingTable.Builder(this.clusterService,clusterState).build().validateRaiseException(clusterState.metaData()));
     }
 
     /**

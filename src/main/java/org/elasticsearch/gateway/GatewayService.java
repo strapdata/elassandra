@@ -101,8 +101,11 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
 
     @Override
     protected void doStart() {
-        clusterService.addLast(this);
+        //clusterService.addLast(this);
+        checkStateMeetsSettingsAndMaybeRecover(clusterService.state());
+        
         // check we didn't miss any cluster state that came in until now / during the addition
+        /*
         clusterService.submitStateUpdateTask("gateway_initial_state_recovery", new ClusterStateUpdateTask() {
 
             @Override
@@ -123,6 +126,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
                 logger.warn("unexpected failure while checking if state can be recovered. another attempt will be made with the next cluster state change", t);
             }
         });
+        */
     }
 
     @Override
