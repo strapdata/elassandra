@@ -1,5 +1,5 @@
 # Installation
-  
+
 ## Building from source
 
 * Elassandra uses [Maven](http://maven.apache.org) for its build system. Simply run the `mvn clean package -Dmaven.test.skip=true  -Dcassandra.home=<path/to/cassandra>` command in the cloned directory. The distribution will be created under *target/releases*.
@@ -11,5 +11,17 @@
 * For linux, install jemalloc (yum install jemalloc).
 * Download Elassandra tarball from [elassandra repository](https://github.com/vroyer/elassandra/releases) and extract files in your installation directory.
 * Install the cassandra driver `pip install cassandra-driver` and the cqlsh utility `python pylib/setup.py install`.
-* Configure your cassandra cluster (cluster name, snitch, ip address, seed...), see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html). Default Elasticsearch configuration is located in `conf/elasticsearch.yml`, but you should NOT use it, everything is inherited from the cassandra.yml (cluster name, listen address, paths, etc...). 
+* Configure your cassandra cluster (cluster name, snitch, ip address, seed...), see [cassandra configuration](http://docs.datastax.com/en/cassandra/2.0/cassandra/initialize/initializeMultipleDS.html). Default Elasticsearch configuration is located in `conf/elasticsearch.yml`, but you should NOT use it, everything is inherited from the cassandra.yml (cluster name, listen address, paths, etc...).
 * Configure cassandra and elasticsearch logging in conf/logback.xml, see [logback framework](http://logback.qos.ch/).
+
+## Install for RPM based systems (RHEL, CentOS, Fedora...)
+
+See [Install Elassandra with RPM](install_rpm.html)
+
+## Install for DEB based systems (Debian, Ubuntu...)
+
+See [Install Elassandra with DEB](install_deb.html)
+
+## Run Elassandra within a docker container
+
+See [Elassandra Docker image](docker.html)
