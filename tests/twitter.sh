@@ -24,6 +24,7 @@ curl -XPUT "http://$NODE:9200/twitter/tweet/4" -d '{
     "message" : "look at Elassandra !!",
     "size": 100
 }'
+
 curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=user:vince"
 
 echo "echo \"select * from twitter.tweet;\" | cqlsh $NODE" 
