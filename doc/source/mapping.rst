@@ -153,11 +153,11 @@ Once your **twitter2** index is ready, set an alias **twitter** for **twitter2**
 Partitioned Index
 -----------------
 
-`Elasticsearch TTL <https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-ttl-field.html>`_. support is deprecated since Elasticsearch 2.0 and the 
+`Elasticsearch TTL <https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-ttl-field.html>`_ support is deprecated since Elasticsearch 2.0 and the 
 Elasticsearch TTLService is disabled in elassandra. Rather than periodically looking for expired documents, Elassandra supports partitioned index allowing to manage per time-frame indices. 
 Thus, old data can be removed by simply deleting old indices.
 
-An index partition function act as a selector when many indices are associated to a cassandra table. A partition function is defined by 3 or more fields separated by a space charater :
+An index partition function act as a selector when many indices are associated to a cassandra table. A partition function is defined by 3 or more fields separated by a space character :
 
 * Function name.
 * Index name pattern.
@@ -435,7 +435,12 @@ Search for employee documents having a parent document where *country* match UK.
 Indexing cassandra static columns
 ---------------------------------
 
-In a table that use clustering columns, a [static columns](http://docs.datastax.com/en/cql/3.1/cql/cql_reference/refStaticCol.html) is shared by all the rows with the same partition key. A slight modification of cassandra code provides support of secondary index on static columns, allowing to search on static columns values (CQL search on static columns remains unsupported). Each time a static columns is modified, a document containing the partition key and only static columns is indexed in Elasticserach. Static columns are not indexed with every [wide rows](http://www.planetcassandra.org/blog/wide-rows-in-cassandra-cql/) because any update on a static column would require reindexation of all wide rows. However, you can request for fields backed by a static columns on any get/search request.
+In a table that use clustering columns, a `static columns <http://docs.datastax.com/en/cql/3.1/cql/cql_reference/refStaticCol.html>`_ is shared by all the rows with the same partition key. 
+A slight modification of cassandra code provides support of secondary index on static columns, allowing to search on static columns values (CQL search on static columns remains unsupported). 
+
+Each time a static columns is modified, a document containing the partition key and only static columns is indexed in Elasticserach. 
+Static columns are not indexed with every `wide rows <http://www.planetcassandra.org/blog/wide-rows-in-cassandra-cql/>`_ because any update on a static column would require reindexation of all wide rows. 
+However, you can request for fields backed by a static columns on any get/search request.
 
 The following example demonstrates how to use static columns to store meta information of timeseries.
 
@@ -533,11 +538,11 @@ Search for rows where meta.region=west, returns only the partition key and stati
          }
        } ]
 
-Using elassandra as a JSON-REST Gateway
----------------------------------------
+Elassandra as a JSON-REST Gateway
+---------------------------------
 
 When dynamic mapping is disabled and a mapping type has no indexed field, elassandra nodes can act as a JSON-REST gateway for cassandra to get, set or delete a cassandra row without any indexing overhead.
-In this case, the mapping may be use to cast types or format date fields, as show below.
+In this case, the mapping may be use to cast types or format date fields, as shown below.
 
 .. code::
 
