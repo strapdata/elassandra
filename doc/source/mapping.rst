@@ -110,7 +110,7 @@ Meta-Fields
 * ``_token`` is a meta-field introduced by Elassandra, valued with **token(<partition_key>)**.
 
 Mapping change with zero downtime
-_________________________________
+---------------------------------
 
 You can map several Elasticsearch indices with different mapping to the same cassandra keyspace. 
 By default, an index is mapped to a keyspace with the same name, but you can specify a target ``keyspace`` in your index settings. 

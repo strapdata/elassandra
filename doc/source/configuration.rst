@@ -20,10 +20,13 @@ Elasticsearch paths are set according to the following environement variables an
 * ``path.conf`` : **CASSANDRA_CONF** environement variable, path.conf or path.home.
 * ``path.data`` : **cassandra_storagedir**/data/elasticsearch.data, path.data system property or path.home/data/elasticsearch.data
 
-Elasticsearch configuration
----------------------------
 
-Elasticsearch configuration rely on cassandra configuration file 'conf/cassandra.yaml' for the following parameters. Node role (master, primary, data) is automatically set by elassandra.
+.. _elassandra_configuration:
+
+Configuration
+-------------
+
+Elasticsearch configuration rely on cassandra configuration file 'conf/cassandra.yaml' for the following parameters. 
 
 .. cssclass:: table-bordered
 
@@ -40,6 +43,8 @@ Elasticsearch configuration rely on cassandra configuration file 'conf/cassandra
 |                   |                          |                                                                     |
 |                   | ``http.host``            |                                                                     |
 +-------------------+--------------------------+---------------------------------------------------------------------+
+
+Node role (master, primary, data) is automatically set by elassandra, standard configuration should only set **cluster_name**, **rpc_address** and **rpc_interface** in the ``conf/cassandra.yaml``.
 
 Logging configuration
 ---------------------
