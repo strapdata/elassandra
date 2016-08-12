@@ -4,7 +4,7 @@
   * Fix a bug when using cassandra index (issue #41)
   * Implement the delete document in elaticsearch indices (issue #36), and nodetool cleanup effectively remove documents.
   * [breaking change] Change the DatacenterReplicationStrategy options to be compatible with the standard apache cassandra 2.2.7.
-  * Write documentation about backup and restore.
+  * Add documentation about backup and restore.
   
 2.1.1-15 - 2016-07-10
   * Add a per-index logging level.
