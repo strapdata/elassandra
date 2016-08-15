@@ -25,6 +25,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.ParseFieldMatcher;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.index.analysis.AnalysisService;
@@ -235,6 +236,16 @@ public abstract class FilteredSearchContext extends SearchContext {
     @Override
     public SearchContext fetchSourceContext(FetchSourceContext fetchSourceContext) {
         return in.fetchSourceContext(fetchSourceContext);
+    }
+    
+    @Override
+    public ClusterState getClusterState() {
+    	return in.getClusterState();
+    }
+    
+    @Override
+	public void setClusterState(ClusterState clusterState) {
+    	in.setClusterState(clusterState);
     }
 
     @Override

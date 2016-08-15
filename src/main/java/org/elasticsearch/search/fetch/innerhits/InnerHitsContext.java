@@ -83,7 +83,8 @@ public final class InnerHitsContext {
         protected final ParsedQuery query;
         private final InnerHitsContext childInnerHits;
         private Map<String,String> cqlQueryCache = new HashMap<String,String>();
-
+        private boolean includeNode;
+        
         protected BaseInnerHits(SearchContext context, ParsedQuery query, Map<String, BaseInnerHits> childInnerHits) {
             super(context);
             this.query = query;
@@ -119,6 +120,16 @@ public final class InnerHitsContext {
         @Override
         public void putFetchQuery(String type, String query) {
             cqlQueryCache.put(type, query);
+        }
+        
+        @Override
+        public boolean includeNode() {
+        	return includeNode;
+        }
+        
+        @Override
+        public void    includeNode(boolean includeNode) {
+        	this.includeNode = includeNode;
         }
     }
 

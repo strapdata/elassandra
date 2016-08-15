@@ -37,6 +37,7 @@ import org.apache.lucene.util.Counter;
 import org.elasticsearch.action.percolate.PercolateShardRequest;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.HasContext;
 import org.elasticsearch.common.HasContextAndHeaders;
 import org.elasticsearch.common.HasHeaders;
@@ -110,6 +111,7 @@ public class PercolateContext extends SearchContext {
     private String[] types;
     
     private Map<String,String> cqlQueryCache = new HashMap<String,String>();
+    private boolean includeNode;
     
     private Engine.Searcher docSearcher;
     private Engine.Searcher engineSearcher;
@@ -127,9 +129,12 @@ public class PercolateContext extends SearchContext {
     private final Map<String, FetchSubPhaseContext> subPhaseContexts = new HashMap<>();
     private final Map<Class<?>, Collector> queryCollectors = new HashMap<>();
 
+    private ClusterState clusterState;
+    
     public PercolateContext(PercolateShardRequest request, SearchShardTarget searchShardTarget, IndexShard indexShard,
                             IndexService indexService, PageCacheRecycler pageCacheRecycler,
-                            BigArrays bigArrays, ScriptService scriptService, Query aliasFilter, ParseFieldMatcher parseFieldMatcher) {
+                            BigArrays bigArrays, ScriptService scriptService, Query aliasFilter, ParseFieldMatcher parseFieldMatcher,
+                            ClusterState clusterState) {
         super(parseFieldMatcher, request);
         this.indexShard = indexShard;
         this.indexService = indexService;
@@ -146,6 +151,7 @@ public class PercolateContext extends SearchContext {
         this.numberOfShards = request.getNumberOfShards();
         this.aliasFilter = aliasFilter;
         this.startTime = request.getStartTime();
+        this.clusterState = clusterState;
     }
 
     public IndexSearcher docSearcher() {
@@ -767,5 +773,26 @@ public class PercolateContext extends SearchContext {
     @Override
     public void putFetchQuery(String type, String query) {
         cqlQueryCache.put(type, query);
+    }
+    
+    @Override
+    public boolean includeNode() {
+    	return includeNode;
+    }
+    
+    @Override
+    public void    includeNode(boolean includeNode) {
+    	this.includeNode = includeNode;
+    }
+    
+    
+    @Override
+    public ClusterState getClusterState() {
+    	return this.clusterState;
+    }
+    
+    @Override
+	public void setClusterState(ClusterState clusterState) {
+    	this.clusterState = clusterState;
     }
 }

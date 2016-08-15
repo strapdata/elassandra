@@ -49,6 +49,7 @@ import org.elasticsearch.index.mapper.internal.AllFieldMapper;
 import org.elasticsearch.index.mapper.internal.FieldNamesFieldMapper;
 import org.elasticsearch.index.mapper.internal.IdFieldMapper;
 import org.elasticsearch.index.mapper.internal.IndexFieldMapper;
+import org.elasticsearch.index.mapper.internal.NodeFieldMapper;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
 import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
@@ -247,8 +248,12 @@ public class IndicesModule extends AbstractModule {
         registerMetadataMapper(TimestampFieldMapper.NAME, new TimestampFieldMapper.TypeParser());
         registerMetadataMapper(TTLFieldMapper.NAME, new TTLFieldMapper.TypeParser());
         registerMetadataMapper(VersionFieldMapper.NAME, new VersionFieldMapper.TypeParser());
-        registerMetadataMapper(TokenFieldMapper.NAME, new TokenFieldMapper.TypeParser());
         registerMetadataMapper(ParentFieldMapper.NAME, new ParentFieldMapper.TypeParser());
+        
+        // elassandra metadata fields mapper.
+        registerMetadataMapper(TokenFieldMapper.NAME, new TokenFieldMapper.TypeParser());
+        registerMetadataMapper(NodeFieldMapper.NAME, new NodeFieldMapper.TypeParser());
+        
         // _field_names is not registered here, see #getMapperRegistry: we need to register it
         // last so that it can see all other mappers, including those coming from plugins
     }

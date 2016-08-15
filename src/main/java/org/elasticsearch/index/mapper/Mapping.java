@@ -40,7 +40,7 @@ import java.util.Map;
  */
 public final class Mapping implements ToXContent {
 
-    public static final List<String> LEGACY_INCLUDE_IN_OBJECT = Arrays.asList("_all", "_id", "_parent", "_routing", "_timestamp", "_ttl", "_token");
+    public static final List<String> LEGACY_INCLUDE_IN_OBJECT = Arrays.asList("_all", "_id", "_parent", "_routing", "_timestamp", "_ttl", "_token","_node");
 
     /**
      * Transformations to be applied to the source before indexing and/or after loading.

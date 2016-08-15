@@ -51,12 +51,14 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
+import org.apache.lucene.search.NumericRangeQuery;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.node.ArrayNode;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
+import org.elasticsearch.cassandra.index.ExtendedElasticSecondaryIndex.MappingInfo;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
@@ -71,6 +73,8 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.engine.Engine.DeleteByQuery;
+import org.elasticsearch.index.engine.Engine.Operation;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
@@ -78,6 +82,7 @@ import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
+import org.elasticsearch.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.indices.IndicesService;
@@ -627,31 +632,21 @@ public class ElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             logger.warn("Elastic node not ready, cannot delete document");
             return;
         }
-        
+
         Token token = key.getToken();
         Long  token_long = (Long) token.getTokenValue();
-        logger.debug("deleting (not imlemented) document with _token = " + token_long);
         
-        // TODO: DeleteByQuery or Scan+Bulk Delete.
-        /*
-        for (Pair<String, String> target : targets.keySet()) {
-            logger.debug("xdeleting document from index={} type={} id={}", target.left, target.right);
-            // submit a delete request
-            XDeleteRequest request = new XDeleteRequest(target.left, target.right, );
-            ActionListener<XDeleteResponse> listener = new ActionListener<XDeleteResponse>() {
-                @Override
-                public void onResponse(XDeleteResponse response) {
-                    logger.debug("doc deleted id=" + response.getId());
-                }
-
-                @Override
-                public void onFailure(Throwable e) {
-                    logger.error("failed to delete doc id=" + id, e);
-                }
-            };
-            ElassandraDaemon.client().xdelete(request, listener);
+        // Delete documents where _token = token_long
+        for (MappingInfo.IndexInfo indexInfo : mappingInfo.indices) {
+            if (logger.isTraceEnabled())
+                logger.trace("deleting documents where _token={} from index.type={}.{} id={}", token_long, indexInfo.name, baseCfs.metadata.cfName);
+            IndexShard indexShard = indexInfo.indexService.shard(0);
+            if (indexShard != null) {
+            	NumericRangeQuery<Long> query =	NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, token_long, token_long, true, true);
+            	DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), this.baseCfs.metadata.cfName);
+            	indexShard.engine().delete(deleteByQuery);
+            }
         }
-        */
     }
 
 

@@ -59,6 +59,7 @@ import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.apache.lucene.document.BinaryDocValuesField;
@@ -609,6 +610,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         class IndexInfo  {
             final String name;
             final boolean refresh;
+            final boolean includeNodeId;
             final IndexService indexService;
             Map<String,Object> mapping;
             
@@ -617,6 +619,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 this.indexService = indexService;
                 this.mapping = mappingMetaData.sourceAsMap();
                 this.refresh = false;
+                this.includeNodeId = indexService.indexSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE, false);
             }
 
             public int indexOf(String f) {
@@ -1314,7 +1317,11 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     context.docMapper.idFieldMapper().createField(context, id);
                     context.docMapper.uidMapper().createField(context, uid);
                     context.docMapper.typeMapper().createField(context, baseCfs.metadata.cfName);
+                    
                     context.docMapper.tokenFieldMapper().createField(context, token);
+                    if (indexInfo.includeNodeId)
+                    	context.docMapper.nodeFieldMapper().createField(context, StorageService.instance.getLocalHostId());
+                    
                     context.docMapper.routingFieldMapper().createField(context, partitionKey);
                     context.version(DEFAULT_VERSION);
                     context.doc().add(DEFAULT_VERSION);
@@ -1573,7 +1580,6 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 logger.trace("deleting documents where _token={} from index.type={}.{} id={}", token_long, indexInfo.name, baseCfs.metadata.cfName);
             IndexShard indexShard = indexInfo.indexService.shard(0);
             if (indexShard != null) {
-            	//Query query = new TermQuery(new Term("_token", Long.toString(token_long) ));
             	NumericRangeQuery<Long> query =	NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, token_long, token_long, true, true);
             	DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), this.baseCfs.metadata.cfName);
             	indexShard.engine().delete(deleteByQuery);

@@ -257,10 +257,15 @@ public class IpFieldMapper extends NumberFieldMapper {
 
     @Override
     protected void innerCreateField(ParseContext context, Object object) throws IOException {
-        if (!(object instanceof InetAddress)) {
-            Loggers.getLogger(BaseElasticSecondaryIndex.class).error("Unexpected type for field name={}",this.name());
-        }
-        InetAddress addr = (InetAddress)object;
+    	InetAddress addr = null;
+    	
+    	if (object instanceof String) {
+    		//TODO: find why we got String object here ?
+    		addr = com.google.common.net.InetAddresses.forString((String)object);
+    	} else {
+    		addr =  (InetAddress) object;
+    	}
+        
         if (addr == null) {
             String ipAsString = fieldType().nullValueAsString();
             if (ipAsString == null) {
