@@ -51,6 +51,7 @@ import org.elasticsearch.index.mapper.MetadataFieldMapper.TypeParser;
 import org.elasticsearch.index.mapper.internal.AllFieldMapper;
 import org.elasticsearch.index.mapper.internal.IdFieldMapper;
 import org.elasticsearch.index.mapper.internal.IndexFieldMapper;
+import org.elasticsearch.index.mapper.internal.NodeFieldMapper;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
 import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
@@ -267,6 +268,10 @@ public class DocumentMapper implements ToXContent {
 
     public TokenFieldMapper tokenFieldMapper() {
         return metadataMapper(TokenFieldMapper.class);
+    }
+    
+    public NodeFieldMapper nodeFieldMapper() {
+        return metadataMapper(NodeFieldMapper.class);
     }
     
     public ParentFieldMapper parentFieldMapper() {

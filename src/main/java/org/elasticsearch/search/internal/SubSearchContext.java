@@ -71,6 +71,7 @@ public class SubSearchContext extends FilteredSearchContext {
     private InnerHitsContext innerHitsContext;
 
     private Map<String,String> cqlQueryCache = new HashMap<String,String>();
+    private boolean includeNode;
     
     public SubSearchContext(SearchContext context) {
         super(context);
@@ -348,5 +349,15 @@ public class SubSearchContext extends FilteredSearchContext {
     @Override
     public void putFetchQuery(String type, String query) {
         cqlQueryCache.put(type, query);
+    }
+    
+    @Override
+    public boolean includeNode() {
+    	return includeNode;
+    }
+    
+    @Override
+    public void    includeNode(boolean includeNode) {
+    	this.includeNode = includeNode;
     }
 }

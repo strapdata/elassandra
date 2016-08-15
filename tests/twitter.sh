@@ -1,4 +1,4 @@
-curl -XPUT "http://$NODE:9200/twitter/"
+curl -XPUT "http://$NODE:9200/twitter/" -d '{ "settings" : { "index.include_node":true }}'
 
 curl -XPUT "http://$NODE:9200/twitter/tweet/1?consistency=one" -d '{
     "user" : "vince",

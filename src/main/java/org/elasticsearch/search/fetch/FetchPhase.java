@@ -33,6 +33,7 @@ import java.util.Set;
 
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.service.StorageService;
 import org.apache.log4j.Logger;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.ReaderUtil;
@@ -43,6 +44,7 @@ import org.apache.lucene.util.BitSet;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterService.DocPrimaryKey;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
@@ -59,6 +61,7 @@ import org.elasticsearch.index.fieldvisitor.FieldsVisitor;
 import org.elasticsearch.index.fieldvisitor.JustUidFieldsVisitor;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MappedFieldType;
+import org.elasticsearch.index.mapper.internal.NodeFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.search.SearchHit;
@@ -425,18 +428,25 @@ public class FetchPhase implements SearchPhase {
                 if (cqlQuery == null) {
                     Set<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
                     if (requiredColumns.size() > 0) {
+                    	IndexMetaData indexMetaData = clusterService.state().metaData().index(searchContext.request().index());
                         cqlQuery = clusterService.buildFetchQuery(
-                                clusterService.state().metaData().index(searchContext.request().index()).keyspace(),
-                                searchContext.request().index(), fieldVisitor.uid().type(),
+                        		indexMetaData.keyspace(), searchContext.request().index(), fieldVisitor.uid().type(),
                                 requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument);
                         searchContext.putFetchQuery(typeKey, cqlQuery);
+                        
+                        if (requiredColumns.contains(NodeFieldMapper.NAME))
+                        	searchContext.includeNode(indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE, false));
                     }
+                    
                 }
                 
                 if (cqlQuery != null) {
                     UntypedResultSet result = QueryProcessor.executeInternal(cqlQuery,docPk.values);
                     if (!result.isEmpty()) {
                         Map<String, Object> mapObject = clusterService.rowAsMap(searchContext.request().index(), fieldVisitor.uid().type(), result.one());
+                        if (searchContext.includeNode()) {
+                        	mapObject.put(NodeFieldMapper.NAME, StorageService.instance.getLocalHostId());
+                        }
                         if (fieldVisitor.requestedFields() == null || fieldVisitor.requestedFields().size() > 0) {
                             Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
                             clusterService.flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);

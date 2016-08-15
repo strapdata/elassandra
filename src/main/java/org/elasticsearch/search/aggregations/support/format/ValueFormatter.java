@@ -39,7 +39,8 @@ import java.util.Locale;
  */
 public interface ValueFormatter extends Streamable {
 
-    public final static ValueFormatter RAW = new Raw();
+	public final static ValueFormatter RAW = new Raw();
+	public final static ValueFormatter LONG = new ValueFormatter.Number.Pattern("\\-?[0-9]+");
     public final static ValueFormatter IPv4 = new IPv4Formatter();
     public final static ValueFormatter GEOHASH = new GeoHash();
     public final static ValueFormatter BOOLEAN = new BooleanFormatter();

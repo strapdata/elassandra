@@ -123,8 +123,6 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.cluster.node.DiscoveryNodeService;
-import org.elasticsearch.cluster.routing.IndexRoutingTable;
-import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
@@ -173,6 +171,8 @@ import org.elasticsearch.index.mapper.core.StringFieldMapper;
 import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper.Names;
+import org.elasticsearch.index.mapper.geo.GeoShapeFieldMapper;
+import org.elasticsearch.index.mapper.internal.NodeFieldMapper;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
 import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
 import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
@@ -184,7 +184,6 @@ import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.IndicesService;
-import org.elasticsearch.indices.InternalIndicesLifecycle;
 import org.elasticsearch.node.settings.NodeSettingsService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -593,12 +592,24 @@ public class InternalCassandraClusterService extends InternalClusterService {
     }
 
     private static String GEO_POINT_TYPE = "geo_point";
+    private static String GEO_SHAPE_TYPE = "geo_shape";
+    private static String ATTACHEMENT_TYPE = "attachement";
     
     private void buildGeoPointType(String ksName) throws RequestExecutionException {
         String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( %s double, %s double)", ksName, GEO_POINT_TYPE,Names.LAT,Names.LON);
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
     }
 
+    private void buildGeoShapeType(String ksName) throws RequestExecutionException {
+        String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" (geojson text)", ksName, GEO_SHAPE_TYPE);
+        QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+    }
+    
+    private void buildAttachementType(String ksName) throws RequestExecutionException {
+        String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" (context text, content_type text, content_length bigint, date timestamp, title text, author text, keywords text, language text)", ksName, ATTACHEMENT_TYPE);
+        QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+    }
+    
     private void buildGeoShapeType(String ksName, String typeName) {
         // TODO: Implements geo_shape.
     }
@@ -821,7 +832,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
             	if (isReservedKeyword(column))
                 	throw new ConfigurationException(column+" is a reserved keyword");
             	
-                if (column.equals("_token"))
+                if (column.equals(TokenFieldMapper.NAME))
                     continue; // ignore pseudo column known by Elasticsearch
                 
                 if (columnsList.length() > 0) 
@@ -831,6 +842,24 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 boolean isStatic = false;
                 FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
                 if (fieldMapper != null) {
+                    if (fieldMapper instanceof GeoPointFieldMapper) {
+                        cqlType = GEO_POINT_TYPE;
+                        buildGeoPointType(ksName);
+                    } else if (fieldMapper instanceof GeoShapeFieldMapper) {
+                        cqlType = GEO_SHAPE_TYPE;
+                        buildGeoShapeType(ksName);
+                    } else if (fieldMapper.getClass().getName().equals("org.elasticsearch.mapper.attachments.AttachmentMapper")) {
+                    	// attachement is a plugin, so class may not found.
+                        cqlType = GEO_SHAPE_TYPE;
+                        buildGeoShapeType(ksName);
+                    } else {
+                        cqlType = mapperToCql.get(fieldMapper.getClass());
+                        if (cqlType == null) {
+                        	logger.warn("Ignoring field [{}] type [{}]", column, fieldMapper.name());
+                        	continue;
+                        }
+                    }
+                    
                     columnsMap.put(column, fieldMapper.cqlPartialUpdate());
                     if (fieldMapper.cqlPrimaryKeyOrder() >= 0) {
                         if (fieldMapper.cqlPrimaryKeyOrder() < primaryKeyList.length && primaryKeyList[fieldMapper.cqlPrimaryKeyOrder()] == null) {
@@ -843,12 +872,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                             throw new Exception("Wrong primary key order for column "+column);
                         }
                     }
-                    if (fieldMapper instanceof GeoPointFieldMapper) {
-                        cqlType = GEO_POINT_TYPE;
-                        buildGeoPointType(ksName);
-                    } else {
-                        cqlType = mapperToCql.get(fieldMapper.getClass());
-                    }
+                    
                     
                     if (!isNativeCql3Type(cqlType)) {
                         cqlType = "frozen<" + cqlType + ">";
@@ -860,7 +884,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 } else {
                     ObjectMapper objectMapper = docMapper.objectMappers().get(column);
                     if (objectMapper == null) {
-                       logger.warn("Cannot infer CQL type mapping for field [{}]", column);
+                       logger.warn("Cannot infer CQL type from object mapping for field [{}]", column);
                        continue;
                     }
                     columnsMap.put(column,  objectMapper.cqlPartialUpdate());
@@ -1328,6 +1352,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     query.append(query.length() > 7 ? ',':' ').append("\"_parent\"");
                 }
                 break;
+            case NodeFieldMapper.NAME:
+            	// nothing to add.
+            	break;
             default:  
                 query.append(query.length() > 7 ? ',':' ').append("\"").append(c).append("\"");
             }
@@ -1732,7 +1759,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
         final ByteBuffer[] values = new ByteBuffer[map.size()];
         int i=0;
         for (Entry<String,ByteBuffer> entry : map.entrySet()) {
-            if (entry.getKey().equals("_token")) continue;
+            if (entry.getKey().equals(TokenFieldMapper.NAME)) 
+            	continue;
+            
             if (columnNames.length() > 0) {
                 columnNames.append(',');
                 questionsMarks.append(',');

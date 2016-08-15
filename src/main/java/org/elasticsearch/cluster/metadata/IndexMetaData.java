@@ -185,6 +185,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public static final String SETTING_SECONDARY_INDEX_CLASS = "index.secondary_index_class"; 
     public static final String SETTING_SEARCH_STRATEGY_CLASS = "index.search_strategy_class"; 
     public static final String SETTING_PARTITION_FUNCTION = "index.partition_function"; 
+    public static final String SETTING_INCLUDE_NODE = "index.include_node"; 
     
 
     // hard-coded hash function as of 2.0

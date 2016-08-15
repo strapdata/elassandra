@@ -28,6 +28,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.DelegatingHasContextAndHeaders;
 import org.elasticsearch.common.HasContextAndHeaders;
 import org.elasticsearch.common.Nullable;
@@ -314,6 +315,11 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
     public abstract String getCqlFetchQuery(String type);
     public abstract void   putFetchQuery(String type, String query);
 
+    public abstract boolean includeNode();
+    public abstract void    includeNode(boolean includeNode);
+
+    public abstract ClusterState getClusterState();
+	public abstract void setClusterState(ClusterState clusterState);
     
     /**
      * Schedule the release of a resource. The time when {@link Releasable#close()} will be called on this object
