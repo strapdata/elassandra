@@ -45,7 +45,7 @@ import org.elasticsearch.index.mapper.ParseContext;
 public class NodeFieldMapper extends MetadataFieldMapper {
 
     public static final String NAME = "_node";
-    public static final String CONTENT_TYPE = "_node";
+    public static final String CONTENT_TYPE = "string";
 
     public static class Defaults {
         public static final String NAME = NodeFieldMapper.NAME;
