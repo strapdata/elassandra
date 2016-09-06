@@ -38,6 +38,7 @@ public class ValueFormatterStreams {
             case ValueFormatter.Number.Pattern.ID: formatter = new ValueFormatter.Number.Pattern(); break;
             case ValueFormatter.GeoHash.ID: formatter = ValueFormatter.GEOHASH; break;
             case ValueFormatter.BooleanFormatter.ID: formatter = ValueFormatter.BOOLEAN; break;
+            case ValueFormatter.TokenFormatter.ID: formatter = ValueFormatter.TOKEN; break;
             default: throw new IllegalArgumentException("Unknown value formatter with id [" + id + "]");
         }
         formatter.readFrom(in);

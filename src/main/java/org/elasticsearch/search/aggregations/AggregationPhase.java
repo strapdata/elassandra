@@ -18,10 +18,16 @@
  */
 package org.elasticsearch.search.aggregations;
 
-import com.google.common.collect.ImmutableMap;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.TopDocs;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.search.SearchParseElement;
@@ -33,10 +39,7 @@ import org.elasticsearch.search.aggregations.support.AggregationContext;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.query.QueryPhaseExecutionException;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import com.google.common.collect.ImmutableMap;
 
 /**
  *
@@ -47,10 +50,13 @@ public class AggregationPhase implements SearchPhase {
 
     private final AggregationBinaryParseElement binaryParseElement;
 
+    private final ClusterService clusterService;
+    
     @Inject
-    public AggregationPhase(AggregationParseElement parseElement, AggregationBinaryParseElement binaryParseElement) {
+    public AggregationPhase(AggregationParseElement parseElement, AggregationBinaryParseElement binaryParseElement, ClusterService clusterService) {
         this.parseElement = parseElement;
         this.binaryParseElement = binaryParseElement;
+        this.clusterService = clusterService;
     }
 
     @Override
