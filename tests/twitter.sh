@@ -37,7 +37,7 @@ curl -XGET "http://$NODE:9200/twitter/_search?pretty=true&q=user:vince"
 
 
 curl -XPUT "http://$NODE:9200/twitter3/" -d '{
-    "settings": { "keyspace":"twitter" },
+    "settings": { "keyspace":"twitter4" },
     "mappings": { "tweet": { "discover":".*"} }
 }'
 
