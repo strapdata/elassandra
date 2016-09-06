@@ -57,6 +57,14 @@ function open() {
    curl -XPOST "http://$NODE:9200/$1/_open"
 }
 
+function forcemerge() {
+   curl -XPOST "http://$NODE:9200/$1/_forcemerge"
+}
+
+function clearcache() {
+   curl -XPOST "http://$NODE:9200/$1/_cache/clear"
+}
+
 # Cassandra aliases
 alias cstart='$CASSANDRA_HOME/bin/cassandra'
 alias cdebug='$CASSANDRA_HOME/bin/cassandra -d'
@@ -87,6 +95,9 @@ alias settings='curl -XGET http://$NODE:9200/_cluster/settings?pretty=true'
 
 alias open='open'
 alias close='close'
+alias forcemerge='forcemerge'
+alias clearcache='clearcache'
+
 alias get='get'
 alias put='put'
 alias post='post'
