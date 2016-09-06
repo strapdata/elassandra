@@ -18,9 +18,11 @@
  */
 package org.elasticsearch.search.internal;
 
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.MultimapBuilder;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Query;
@@ -28,6 +30,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.DelegatingHasContextAndHeaders;
 import org.elasticsearch.common.HasContextAndHeaders;
@@ -48,6 +51,7 @@ import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.similarity.SimilarityService;
 import org.elasticsearch.script.ScriptService;
+import org.elasticsearch.search.SearchProcessor;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.aggregations.SearchContextAggregations;
 import org.elasticsearch.search.dfs.DfsSearchResult;
@@ -64,17 +68,15 @@ import org.elasticsearch.search.rescore.RescoreSearchContext;
 import org.elasticsearch.search.scan.ScanContext;
 import org.elasticsearch.search.suggest.SuggestionSearchContext;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.MultimapBuilder;
 
 public abstract class SearchContext extends DelegatingHasContextAndHeaders implements Releasable {
 
     private static ThreadLocal<SearchContext> current = new ThreadLocal<>();
     public final static int DEFAULT_TERMINATE_AFTER = 0;
-
+    
     public static void setCurrent(SearchContext value) {
         current.set(value);
         QueryParseContext.setTypes(value.types());
@@ -93,7 +95,8 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     protected final ParseFieldMatcher parseFieldMatcher;
-
+    protected SearchProcessor processor = null;
+    
     protected SearchContext(ParseFieldMatcher parseFieldMatcher, HasContextAndHeaders contextHeaders) {
         super(contextHeaders);
         this.parseFieldMatcher = parseFieldMatcher;
@@ -122,6 +125,14 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
      * Should be called before executing the main query and after all other parameters have been set.
      */
     public abstract void preProcess();
+    
+    public void processors(SearchProcessor processors) {
+    	this.processor = processors;
+    }
+    
+    public SearchProcessor processor() {
+    	return processor;
+    }
 
     public abstract Query searchFilter(String[] types);
 
@@ -211,6 +222,8 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
     public abstract MapperService mapperService();
 
     public abstract AnalysisService analysisService();
+
+    public abstract ClusterService clusterService();
 
     public abstract IndexQueryParserService queryParserService();
 
@@ -319,8 +332,7 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
     public abstract void    includeNode(boolean includeNode);
 
     public abstract ClusterState getClusterState();
-	public abstract void setClusterState(ClusterState clusterState);
-    
+	
     /**
      * Schedule the release of a resource. The time when {@link Releasable#close()} will be called on this object
      * is function of the provided {@link Lifetime}.

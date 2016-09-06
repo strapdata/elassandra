@@ -28,7 +28,9 @@ import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
 import org.elasticsearch.action.search.SearchType;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.index.query.ParsedQuery;
+import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.search.aggregations.SearchContextAggregations;
 import org.elasticsearch.search.fetch.FetchSearchResult;
 import org.elasticsearch.search.fetch.innerhits.InnerHitsContext;
@@ -360,4 +362,10 @@ public class SubSearchContext extends FilteredSearchContext {
     public void    includeNode(boolean includeNode) {
     	this.includeNode = includeNode;
     }
+
+	@Override
+	public ClusterService clusterService() {
+		// TODO Auto-generated method stub
+		return null;
+	}
 }

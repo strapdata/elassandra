@@ -125,7 +125,7 @@ public class TransportExplainAction extends TransportSingleShardAction<ExplainRe
                 null, result.searcher(), indexService, indexShard,
                 scriptService, pageCacheRecycler,
                 bigArrays, threadPool.estimatedTimeInMillisCounter(), parseFieldMatcher,
-                SearchService.NO_TIMEOUT, clusterService.state()
+                SearchService.NO_TIMEOUT
         );
         SearchContext.setCurrent(context);
 

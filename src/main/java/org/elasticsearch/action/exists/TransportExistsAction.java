@@ -155,7 +155,7 @@ public class TransportExistsAction extends TransportBroadcastAction<ExistsReques
                 new ShardSearchLocalRequest(request.types(), request.nowInMillis(), request.filteringAliases()),
                 shardTarget, indexShard.acquireSearcher("exists"), indexService, indexShard,
                 scriptService, pageCacheRecycler, bigArrays, threadPool.estimatedTimeInMillisCounter(), parseFieldMatcher,
-                SearchService.NO_TIMEOUT, clusterService.state()
+                SearchService.NO_TIMEOUT
         );
         SearchContext.setCurrent(context);
 

@@ -39,11 +39,11 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.ParseFieldMatcher;
 import org.elasticsearch.common.lease.Releasables;
-import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.common.lucene.search.function.BoostScoreFunction;
 import org.elasticsearch.common.lucene.search.function.FunctionScoreQuery;
@@ -63,6 +63,7 @@ import org.elasticsearch.index.query.ParsedQuery;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.similarity.SimilarityService;
 import org.elasticsearch.script.ScriptService;
+import org.elasticsearch.search.SearchProcessor;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.aggregations.SearchContextAggregations;
 import org.elasticsearch.search.dfs.DfsSearchResult;
@@ -151,8 +152,9 @@ public class DefaultSearchContext extends SearchContext {
     private volatile long lastAccessTime = -1;
     private InnerHitsContext innerHitsContext;
 
-    private ClusterState clusterState;
-
+    private final ClusterState clusterState;
+    private SearchProcessor searchProcessor;
+    
 	private Map<String,String> cqlQueryCache = new HashMap<String,String>();
     private boolean includeNode;
     
@@ -163,8 +165,8 @@ public class DefaultSearchContext extends SearchContext {
                                 Engine.Searcher engineSearcher, IndexService indexService, IndexShard indexShard,
                                 ScriptService scriptService, PageCacheRecycler pageCacheRecycler,
                                 BigArrays bigArrays, Counter timeEstimateCounter, ParseFieldMatcher parseFieldMatcher,
-                                TimeValue timeout, @Nullable ClusterState clusterState
-    ) {
+                                TimeValue timeout)
+    {
         super(parseFieldMatcher, request);
         this.id = id;
         this.request = request;
@@ -183,16 +185,13 @@ public class DefaultSearchContext extends SearchContext {
         this.searcher = new ContextIndexSearcher(this, engineSearcher);
         this.timeEstimateCounter = timeEstimateCounter;
         this.timeoutInMillis = timeout.millis();
-        this.clusterState = clusterState;
+        this.clusterState = indexService.clusterService().state();
     }
 
     public ClusterState getClusterState() {
 		return clusterState;
 	}
 
-	public void setClusterState(ClusterState clusterState) {
-		this.clusterState = clusterState;
-	}
 	
     @Override
     public void doClose() {
@@ -232,27 +231,16 @@ public class DefaultSearchContext extends SearchContext {
         if (queryBoost() != 1.0f) {
             parsedQuery(new ParsedQuery(new FunctionScoreQuery(query(), new BoostScoreFunction(queryBoost)), parsedQuery()));
         }
-        
+    
+        if (this.indexService.searchProcessorFactory() != null) {
+        	this.searchProcessor = this.indexService.searchProcessorFactory().create();
+        	this.searchProcessor.preProcess(this);
+        }
+
         Query tokenRangeQuery = null;
-        if (this.request.tokenRanges() != null) {
-            Loggers.getLogger(DefaultSearchContext.class).debug("search within tokenRanges = {}",this.request.tokenRanges());
-            switch(this.request.tokenRanges().size()){
-                case 0: break;
-                case 1: 
-                    Range<Token> unique_range = this.request.tokenRanges().iterator().next();
-                    NumericRangeQuery<Long> nrq2 = NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, 16, (Long) unique_range.left.getTokenValue(), (Long) unique_range.right.getTokenValue(), false, true);
-                    tokenRangeQuery = nrq2;
-                    break;
-                default:
-                    BooleanQuery.Builder bq2 = new BooleanQuery.Builder();
-                    for (Range<Token> range : this.request.tokenRanges()) {
-                        // TODO: check the best precisionStep (6 by default), see https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html
-                        NumericRangeQuery<Long> nrq = NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, 16, (Long) range.left.getTokenValue(), (Long) range.right.getTokenValue(), false, true);
-                        bq2.add(nrq, Occur.SHOULD);
-                    }
-                    tokenRangeQuery = bq2.build();
-                    break;
-            }
+        if ( (this.request.tokenRanges() != null) && 
+        	 (this.aggregations == null ||  this.aggregations.factories() == null || !this.aggregations.factories().hasTokenRangeAggregation()) ) {
+        	tokenRangeQuery = Queries.newTokenRangeQuery(request.tokenRanges());
         }
         
         Query searchFilter = searchFilter(types());
@@ -815,4 +803,9 @@ public class DefaultSearchContext extends SearchContext {
     public Map<Class<?>, Collector> queryCollectors() {
         return queryCollectors;
     }
+
+	@Override
+	public ClusterService clusterService() {
+		return this.indexService.clusterService();
+	}
 }
