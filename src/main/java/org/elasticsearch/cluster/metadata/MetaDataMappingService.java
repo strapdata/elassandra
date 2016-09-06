@@ -266,6 +266,7 @@ public class MetaDataMappingService extends AbstractComponent {
                 UpdateTask updateTask = (UpdateTask) task;
                 try {
                     String type = updateTask.type;
+                    String cfName = ClusterService.Utils.typeToCfName(type);
                     CompressedXContent mappingSource = updateTask.mappingSource;
 
                     MappingMetaData mappingMetaData = builder.mapping(type);
@@ -295,8 +296,8 @@ public class MetaDataMappingService extends AbstractComponent {
                     
                     if (!mappingMetaData2.type().equals(MapperService.DEFAULT_MAPPING)) {
                         Set<String> columns = ((Map<String, Object>) mappingMetaData2.sourceAsMap().get("properties")).keySet();
-                        logger.debug("Updating CQL3 schema {}.{} columns={}", index, type, columns);
-                        clusterService.updateTableSchema(index, type, columns, updatedMapper);
+                        logger.debug("Updating CQL3 schema {}.{} columns={}", index, cfName, columns);
+                        clusterService.updateTableSchema(index, cfName, columns, updatedMapper);
                     }
                     dirty = true;
                 } catch (Throwable t) {

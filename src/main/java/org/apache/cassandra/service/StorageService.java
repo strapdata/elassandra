@@ -738,7 +738,6 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 Gossiper.instance.addLocalApplicationStates(states);
             }
             logger.info("Not joining ring as requested. Use JMX (StorageService->joinRing()) to initiate ring joining");
-            this.daemon.afterStartupComplet();
         }
     }
 
@@ -977,7 +976,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             
             // start elasticsearch and block until all local shards are started
             // (#table with custom ElasticSecondaryIndex).
-            this.daemon.beforeStartupComplete();
+            this.daemon.tokensReady();
         }
 
         // if we don't have system_traces keyspace at this point, then create it manually

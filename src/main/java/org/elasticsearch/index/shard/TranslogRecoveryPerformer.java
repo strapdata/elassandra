@@ -11,6 +11,7 @@ import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.index.aliases.IndexAliasesService;
 import org.elasticsearch.index.cache.IndexCache;
 import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.mapper.DocumentMapperForType;
 import org.elasticsearch.index.mapper.MapperException;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
@@ -50,6 +51,10 @@ public class TranslogRecoveryPerformer {
     }
     
     protected void operationProcessed() {
+    }
+    
+    protected DocumentMapperForType docMapper(String type) {
+    	return null;
     }
     
     public static class BatchOperationException extends ElasticsearchException {

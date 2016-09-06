@@ -32,8 +32,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ConsistencyLevel;
@@ -63,17 +61,17 @@ import org.apache.cassandra.serializers.TimestampSerializer;
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.UTF8Serializer;
 import org.apache.cassandra.serializers.UUIDSerializer;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.util.BytesRef;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.node.ArrayNode;
-import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.OperationRouting;
@@ -103,7 +101,9 @@ import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper.Names;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
+import org.elasticsearch.index.percolator.PercolatorQueriesRegistry;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.percolator.PercolatorService;
 
 /**
  * The cluster service allowing to both register for cluster state events ({@link ClusterStateListener})
@@ -306,6 +306,10 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
             return jsonMapper.writeValueAsString(an);
         }
         
+        public static String stringify(Object object) throws JsonGenerationException, JsonMappingException, IOException {
+        	return jsonMapper.writeValueAsString(object);
+        }
+        
         public static String stringify(AbstractType<?> type, ByteBuffer buf) {
             return stringify(type, type.compose(buf));
         }
@@ -429,6 +433,21 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
             return mapper.cqlStaticColumn() || mapper.cqlPartitionKey();
         }
    
+        public  static final String PERCOLATOR_TABLE = "_percolator";
+        
+        public static String typeToCfName(String type) {
+        	return type.replaceAll("\\.", "_").replaceAll("\\-", "_");
+        }
+        
+        public static String cfNameToType(String cfName) {
+        	switch(cfName) {
+        	case PERCOLATOR_TABLE:
+        		return PercolatorService.TYPE_NAME;
+        	default:
+        		return cfName;
+        	}
+        }
+        
     }
     
     public AbstractSearchStrategy.Result searchStrategy(IndexMetaData indexMetaData, Collection<InetAddress> startedShards);
@@ -436,8 +455,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Object node, Map<String, GetField> flatFields);
     public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> fields);
 
-    public void createElasticAdminKeyspace();
-    public void updateElasticAdminKeyspace();
+    public void createOrUpdateElasticAdminKeyspace();
     
     public void createIndexKeyspace(String index, int replicationFactor) throws IOException;
     
@@ -478,6 +496,8 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public Engine.GetResult fetchSourceInternal(String ksName, String index, String type, String id) throws IOException;
     
+    public Map<BytesRef, Query> loadQueries(final IndexService indexService,  PercolatorQueriesRegistry percolator);
+    
     public Map<String, Object> rowAsMap(final String index, final String type, UntypedResultSet.Row row) throws IOException;
     public int rowAsMap(final String index, final String type, UntypedResultSet.Row row, Map<String, Object> map) throws IOException;
     public Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row) throws IOException;
@@ -504,9 +524,6 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public MetaData checkForNewMetaData(Long version) throws NoPersistedMetaDataException;
     public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
             RequestValidationException;
-    
-    public Map<String, Object> discoverTableMapping(final String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
-    public Map<String, Object> discoverTableMapping(final String ksName, final String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
     
     /**
      * Get indices shard state from gossip endpoints state map.

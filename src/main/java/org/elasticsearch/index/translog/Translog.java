@@ -63,7 +63,11 @@ public class Translog implements Closeable, TwoPhaseCommit {
     
     public static final String TRANSLOG_GENERATION_KEY = "translog_generation";
     public static final String TRANSLOG_UUID_KEY = "translog_uuid";
-    
+    public static final String TRANSLOG_FILE_PREFIX = "translog-";
+    public static final String TRANSLOG_FILE_SUFFIX = ".tlog";
+    public static final String CHECKPOINT_SUFFIX = ".ckp";
+    public static final String CHECKPOINT_FILE_NAME = "translog" + CHECKPOINT_SUFFIX;
+
     private TranslogWriter current;
     
     public Translog(TranslogConfig config) {
@@ -932,6 +936,10 @@ public class Translog implements Closeable, TwoPhaseCommit {
 
     @Override
     public void commit() throws IOException {
+    }
+
+    public boolean syncNeeded() {
+        return true;
     }
 
     @Override

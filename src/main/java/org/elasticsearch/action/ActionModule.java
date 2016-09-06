@@ -44,16 +44,6 @@ import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsActi
 import org.elasticsearch.action.admin.cluster.settings.TransportClusterUpdateSettingsAction;
 import org.elasticsearch.action.admin.cluster.shards.ClusterSearchShardsAction;
 import org.elasticsearch.action.admin.cluster.shards.TransportClusterSearchShardsAction;
-import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.create.TransportCreateSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.delete.DeleteSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.delete.TransportDeleteSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.get.GetSnapshotsAction;
-import org.elasticsearch.action.admin.cluster.snapshots.get.TransportGetSnapshotsAction;
-import org.elasticsearch.action.admin.cluster.snapshots.restore.RestoreSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.restore.TransportRestoreSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.status.SnapshotsStatusAction;
-import org.elasticsearch.action.admin.cluster.snapshots.status.TransportSnapshotsStatusAction;
 import org.elasticsearch.action.admin.cluster.state.ClusterStateAction;
 import org.elasticsearch.action.admin.cluster.state.TransportClusterStateAction;
 import org.elasticsearch.action.admin.cluster.stats.ClusterStatsAction;
@@ -132,7 +122,7 @@ import org.elasticsearch.action.admin.indices.warmer.get.TransportGetWarmersActi
 import org.elasticsearch.action.admin.indices.warmer.put.PutWarmerAction;
 import org.elasticsearch.action.admin.indices.warmer.put.TransportPutWarmerAction;
 import org.elasticsearch.action.bulk.BulkAction;
-import org.elasticsearch.action.bulk.TransportBulkAction;
+import org.elasticsearch.action.bulk.TransportXBulkAction;
 import org.elasticsearch.action.bulk.TransportXShardBulkAction;
 import org.elasticsearch.action.delete.DeleteAction;
 import org.elasticsearch.action.delete.TransportXDeleteAction;
@@ -268,11 +258,11 @@ public class ActionModule extends AbstractModule {
         registerAction(GetRepositoriesAction.INSTANCE, TransportGetRepositoriesAction.class);
         registerAction(DeleteRepositoryAction.INSTANCE, TransportDeleteRepositoryAction.class);
         registerAction(VerifyRepositoryAction.INSTANCE, TransportVerifyRepositoryAction.class);
-        registerAction(GetSnapshotsAction.INSTANCE, TransportGetSnapshotsAction.class);
-        registerAction(DeleteSnapshotAction.INSTANCE, TransportDeleteSnapshotAction.class);
-        registerAction(CreateSnapshotAction.INSTANCE, TransportCreateSnapshotAction.class);
-        registerAction(RestoreSnapshotAction.INSTANCE, TransportRestoreSnapshotAction.class);
-        registerAction(SnapshotsStatusAction.INSTANCE, TransportSnapshotsStatusAction.class);
+        //registerAction(GetSnapshotsAction.INSTANCE, TransportGetSnapshotsAction.class);
+        //registerAction(DeleteSnapshotAction.INSTANCE, TransportDeleteSnapshotAction.class);
+        //registerAction(CreateSnapshotAction.INSTANCE, TransportCreateSnapshotAction.class);
+        //registerAction(RestoreSnapshotAction.INSTANCE, TransportRestoreSnapshotAction.class);
+        //registerAction(SnapshotsStatusAction.INSTANCE, TransportSnapshotsStatusAction.class);
 
         registerAction(IndicesStatsAction.INSTANCE, TransportIndicesStatsAction.class);
         registerAction(IndicesSegmentsAction.INSTANCE, TransportIndicesSegmentsAction.class);
@@ -320,7 +310,7 @@ public class ActionModule extends AbstractModule {
         registerAction(UpdateAction.INSTANCE, TransportXUpdateAction.class);
         registerAction(MultiGetAction.INSTANCE, TransportMultiGetAction.class,
                 TransportShardMultiGetAction.class);
-        registerAction(BulkAction.INSTANCE, TransportBulkAction.class,
+        registerAction(BulkAction.INSTANCE, TransportXBulkAction.class,
                 TransportXShardBulkAction.class);
         registerAction(SearchAction.INSTANCE, TransportSearchAction.class,
                 TransportSearchDfsQueryThenFetchAction.class,

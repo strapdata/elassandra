@@ -49,6 +49,8 @@ import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.util.BytesRef;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
@@ -109,6 +111,7 @@ import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.percolator.PercolatorQueriesRegistry;
 import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.settings.NodeSettingsService;
@@ -246,12 +249,6 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
         DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder().put(localNode).localNodeId(localNode.id());
         this.clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).blocks(initialBlocks).build();
         this.transportService.setLocalNode(localNode);
-        
-        try {
-            updateElasticAdminKeyspace();
-        } catch (Exception e) {
-            logger.error("Failed to update elastic_admin keyspace", e);
-        }
         
         // addPost because 2i shoukd be created/deleted after that cassandra indices have taken the new mapping.
         addLast(this.secondaryIndicesService);
@@ -897,10 +894,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract Map<String, List<Object>> flattenTree(Set<String> neededFiedls, String path, Object node, Map<String, List<Object>> fields);
 
     @Override
-    public abstract void createElasticAdminKeyspace();
-
-    @Override
-    public abstract void updateElasticAdminKeyspace();
+    public abstract void createOrUpdateElasticAdminKeyspace();
     
     @Override
     public abstract void createIndexKeyspace(String index, int replicationFactor) throws IOException;
@@ -985,6 +979,9 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract void deleteRow(String index, String type, String id, ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException;
 
     @Override
+    public abstract Map<BytesRef, Query> loadQueries(final IndexService indexService,  PercolatorQueriesRegistry percolator);
+    
+    @Override
     public abstract void insertDocument(IndicesService indicesService, IndexRequest request, ClusterState clusterState, String timestampString) throws Exception;
 
     @Override
@@ -1011,12 +1008,6 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     @Override
     public abstract void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
             RequestValidationException;
-
-    @Override
-    public abstract Map<String, Object> discoverTableMapping(String ksName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
-
-    @Override
-    public abstract Map<String, Object> discoverTableMapping(String ksName, String cfName, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException;
 
     @Override
     public abstract ShardRoutingState getShardRoutingState(InetAddress address, String index, ShardRoutingState defaultState);

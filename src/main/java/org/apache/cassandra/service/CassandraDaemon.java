@@ -594,20 +594,12 @@ public class CassandraDaemon
      */
     public void beforeBootstrap() {
     }
-
-    /**
-     * This is a hook for concrete daemons to initialize themselves suitably.
-     * Subclasses should override this to initialize before cassandra bootstrap
-     * (called once from ServiceStorage.joinTokenRing() when elastic_admin keyspace does not exist and not boostraping).
-     */
-    public void beforeStartupComplete() {
-    }
     
     /**
      * This is a hook for concrete daemons to initialize themselves suitably.
      * Subclasses should override this to initialize after cassandra start
      */
-    public void afterStartupComplet() {
+    public void tokensReady() {
     }
     
     private void waitForGossipToSettle()

@@ -384,7 +384,13 @@ public abstract class FieldMapper extends Mapper {
      */
     protected abstract void parseCreateField(ParseContext context, List<Field> fields) throws IOException;
 
-    public abstract void createField(ParseContext context, Object value) throws IOException;
+    /**
+     * Add lucene field to context according to the provided value
+     * @param context
+     * @param value
+     */
+    public void createField(ParseContext context, Object value) throws IOException {
+    }
     
     
     /**

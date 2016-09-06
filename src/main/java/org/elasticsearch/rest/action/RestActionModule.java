@@ -159,11 +159,11 @@ public class RestActionModule extends AbstractModule {
         bind(RestGetRepositoriesAction.class).asEagerSingleton();
         bind(RestDeleteRepositoryAction.class).asEagerSingleton();
         bind(RestVerifyRepositoryAction.class).asEagerSingleton();
-        bind(RestGetSnapshotsAction.class).asEagerSingleton();
-        bind(RestCreateSnapshotAction.class).asEagerSingleton();
-        bind(RestRestoreSnapshotAction.class).asEagerSingleton();
-        bind(RestDeleteSnapshotAction.class).asEagerSingleton();
-        bind(RestSnapshotsStatusAction.class).asEagerSingleton();
+        //bind(RestGetSnapshotsAction.class).asEagerSingleton();
+        //bind(RestCreateSnapshotAction.class).asEagerSingleton();
+        //bind(RestRestoreSnapshotAction.class).asEagerSingleton();
+        //bind(RestDeleteSnapshotAction.class).asEagerSingleton();
+        //bind(RestSnapshotsStatusAction.class).asEagerSingleton();
 
         bind(RestIndicesExistsAction.class).asEagerSingleton();
         bind(RestTypesExistsAction.class).asEagerSingleton();
@@ -266,7 +266,7 @@ public class RestActionModule extends AbstractModule {
         catActionMultibinder.addBinding().to(RestFielddataAction.class).asEagerSingleton();
         catActionMultibinder.addBinding().to(RestNodeAttrsAction.class).asEagerSingleton();
         catActionMultibinder.addBinding().to(RestRepositoriesAction.class).asEagerSingleton();
-        catActionMultibinder.addBinding().to(RestSnapshotAction.class).asEagerSingleton();
+        //catActionMultibinder.addBinding().to(RestSnapshotAction.class).asEagerSingleton();
         // no abstract cat action
         bind(RestCatAction.class).asEagerSingleton();
     }

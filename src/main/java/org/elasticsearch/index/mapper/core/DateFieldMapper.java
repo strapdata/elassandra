@@ -200,7 +200,7 @@ public class DateFieldMapper extends NumberFieldMapper {
 
     public static class DateFieldType extends NumberFieldType {
 
-        final class LateParsingQuery extends Query {
+        public final class LateParsingQuery extends Query {
 
             final Object lowerTerm;
             final Object upperTerm;

@@ -330,7 +330,7 @@ public class MetaDataIndexUpgradeService extends AbstractComponent {
             // We cannot instantiate real analysis server at this point because the node might not have
             // been started yet. However, we don't really need real analyzers at this stage - so we can fake it
             try (AnalysisService analysisService = new FakeAnalysisService(index, settings)) {
-                try (MapperService mapperService = new MapperService(index, settings, analysisService, similarityLookupService, scriptService, mapperRegistry, clusterService)) {
+                try (MapperService mapperService = new MapperService(index, settings, analysisService, similarityLookupService, scriptService, mapperRegistry)) {
                     for (ObjectCursor<MappingMetaData> cursor : indexMetaData.getMappings().values()) {
                         MappingMetaData mappingMetaData = cursor.value;
                         mapperService.merge(mappingMetaData.type(), mappingMetaData.source(), false, false);

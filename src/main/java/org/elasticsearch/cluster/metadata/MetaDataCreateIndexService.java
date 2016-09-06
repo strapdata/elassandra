@@ -38,14 +38,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.config.Schema;
 import org.apache.lucene.util.CollectionUtil;
 import org.elasticsearch.ElasticsearchException;
-import org.elasticsearch.ElasticsearchTimeoutException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRunnable;
@@ -56,13 +54,14 @@ import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlock;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData.Custom;
+import org.elasticsearch.cluster.metadata.IndexMetaData.State;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
+import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
@@ -75,7 +74,6 @@ import org.elasticsearch.common.io.PathUtils;
 import org.elasticsearch.common.io.Streams;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -98,6 +96,7 @@ import org.joda.time.DateTimeZone;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import com.google.common.base.Charsets;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 
 /**
@@ -477,7 +476,8 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                                             indicesService.indexService(indexMetaData.getIndex()).mapperService().documentMapper(mappingMd.type()));
                                 }
                             }
-                           
+                        } else {
+                        	throw new ClusterBlockException(ImmutableSet.of(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK));
                         }
                         
                     } catch (Exception e) {
@@ -509,14 +509,14 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     ClusterState updatedState = ClusterState.builder(currentState).incrementVersion().blocks(blocks).metaData(newMetaData).build();
 
                     /*
-                    // update routing table after the index is created by the CassandraIndicesClusterStateService
+                     *  Update routing table before the shard is really opened by the CassandraIndicesClusterStateService, to be able to route write requests. 
+                     *  If the index is the first one created for the underlying keyspace, we won't loose any document because cassandra launch an index rebuild on first create index statement.
+                     *  Otherwise, we could "loose" document written until the local shard is actually started.
+                     */
                     if (request.state() == State.OPEN) {
                         RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, updatedState).addAsNew(updatedState.metaData().index(request.index()));
                         updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder).build();
                     }
-                    */
-                    
-                    
                     
                     return updatedState;
                 } finally {

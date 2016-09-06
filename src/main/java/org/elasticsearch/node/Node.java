@@ -34,7 +34,6 @@ import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.cassandra.discovery.CassandraDiscoveryModule;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayModule;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
-import org.elasticsearch.cassandra.index.BaseElasticSecondaryIndex;
 import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cassandra.indices.CassandraIndicesClusterStateService;
 import org.elasticsearch.client.Client;
@@ -42,7 +41,6 @@ import org.elasticsearch.client.node.NodeClientModule;
 import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.component.Lifecycle;
 import org.elasticsearch.common.component.LifecycleComponent;
@@ -61,7 +59,6 @@ import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.EnvironmentModule;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.env.NodeEnvironmentModule;
-import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.http.HttpServer;
 import org.elasticsearch.http.HttpServerModule;
 import org.elasticsearch.index.search.shape.ShapeModule;
@@ -120,7 +117,7 @@ public class Node implements Releasable {
     private final Client client;
     
     private ClusterService clusterService = null;
-    private DiscoveryService discoveryService = null;
+    private CassandraGatewayService gatewayService = null;
     
     /**
      * Constructs a node with the given settings.
@@ -235,6 +232,12 @@ public class Node implements Releasable {
     	return this.clusterService;
     }
     
+    public synchronized CassandraGatewayService gatewayService() {
+    	if (this.gatewayService == null)
+    		this.gatewayService = injector.getInstance(CassandraGatewayService.class);
+    	return this.gatewayService;
+    }
+    
     public Node activate() {
         if (!lifecycle.moveToStarted()) {
             return this;
@@ -255,17 +258,22 @@ public class Node implements Releasable {
         injector.getInstance(CassandraIndicesClusterStateService.class).start();
         injector.getInstance(SecondaryIndicesService.class).start();
         
-        discoveryService = injector.getInstance(DiscoveryService.class).start();
-        //discoveryService.waitForInitialState();
+        injector.getInstance(DiscoveryService.class).start();
 
         // gateway should start after disco, so it can try and recovery from gateway on "start"
-        GatewayService gatewayService = injector.getInstance(CassandraGatewayService.class);
-        gatewayService.start(); // block until recovery done from cassandra schema.
+        gatewayService().start(); // block until recovery done from cassandra schema.
 
         logger.info("activated ...");
         return this;
     }
     
+    public void postInitialization() {
+    	// create elastic_admin if not exists after joining the ring and before allowing metadata update.
+        clusterService().createOrUpdateElasticAdminKeyspace();
+        
+        // Cassandra started => release metadata update blocks.
+        gatewayService().enableMetaDataPersictency();
+    }
     
     /**
      * finish ElasticSearch start when we have joined the ring.
@@ -273,9 +281,6 @@ public class Node implements Releasable {
     public Node start() {
         ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
         logger.info("starting ...");
-
-        // Cassandra started => release metadata update blocks.
-        injector.getInstance(CassandraGatewayService.class).enableMetaDataPersictency();
 
         for (Class<? extends LifecycleComponent> plugin : pluginsService.nodeServices()) {
             injector.getInstance(plugin).start();
@@ -295,11 +300,7 @@ public class Node implements Releasable {
         injector.getInstance(ResourceWatcherService.class).start();
         injector.getInstance(TribeService.class).start();
 
-        // initialize custom secondary indices.
-        for(BaseElasticSecondaryIndex esi : BaseElasticSecondaryIndex.elasticSecondayIndices.values()) {
-            esi.initMapping();
-        }
-
+        
         logger.debug("Elasticsearch started state={}", clusterService.state().toString());
         return this;
     }

@@ -429,23 +429,25 @@ public class FetchPhase implements SearchPhase {
                     Set<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
                     if (requiredColumns.size() > 0) {
                     	IndexMetaData indexMetaData = clusterService.state().metaData().index(searchContext.request().index());
-                        cqlQuery = clusterService.buildFetchQuery(
-                        		indexMetaData.keyspace(), searchContext.request().index(), fieldVisitor.uid().type(),
-                                requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument);
-                        searchContext.putFetchQuery(typeKey, cqlQuery);
-                        
-                        if (requiredColumns.contains(NodeFieldMapper.NAME))
+                    	if (requiredColumns.contains(NodeFieldMapper.NAME)) {
                         	searchContext.includeNode(indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE, false));
+                        	requiredColumns.remove(NodeFieldMapper.NAME);
+                        }
+                    	if (requiredColumns.size() > 0) {
+	                    	cqlQuery = clusterService.buildFetchQuery(
+	                        		indexMetaData.keyspace(), searchContext.request().index(), fieldVisitor.uid().type(),
+	                                requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument);
+	                        searchContext.putFetchQuery(typeKey, cqlQuery);
+                    	}
                     }
-                    
                 }
                 
                 if (cqlQuery != null) {
-                    UntypedResultSet result = QueryProcessor.executeInternal(cqlQuery,docPk.values);
+                    UntypedResultSet result = QueryProcessor.executeInternal(cqlQuery, docPk.values);
                     if (!result.isEmpty()) {
                         Map<String, Object> mapObject = clusterService.rowAsMap(searchContext.request().index(), fieldVisitor.uid().type(), result.one());
                         if (searchContext.includeNode()) {
-                        	mapObject.put(NodeFieldMapper.NAME, StorageService.instance.getLocalHostId());
+                        	mapObject.put(NodeFieldMapper.NAME, clusterService.state().nodes().localNodeId());
                         }
                         if (fieldVisitor.requestedFields() == null || fieldVisitor.requestedFields().size() > 0) {
                             Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
@@ -460,6 +462,13 @@ public class FetchPhase implements SearchPhase {
                             builder.humanReadable(true);
                             fieldVisitor.source(builder.bytes().toBytes());
                         }
+                    }
+                } else {
+                	// when only requesting for field _node
+                	if (searchContext.includeNode()) {
+                		List<Object> values = new ArrayList<Object>(1);
+                		values.add(clusterService.state().nodes().localNodeId());
+                		fieldVisitor.setValues(NodeFieldMapper.NAME, values);
                     }
                 }
             } catch (Exception e) {

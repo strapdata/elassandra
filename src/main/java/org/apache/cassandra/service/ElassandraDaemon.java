@@ -26,6 +26,7 @@ import org.elasticsearch.bootstrap.JVMCheck;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.discovery.CassandraDiscovery;
+import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.cassandra.index.BaseElasticSecondaryIndex;
 import org.elasticsearch.cassandra.shard.CassandraShardStateObserver;
 import org.elasticsearch.client.Client;
@@ -71,6 +72,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     private Node node = null;
     private Settings settings;
     private Environment env;
+    private boolean boostraped = false;
     
     static {
         try {
@@ -112,6 +114,22 @@ public class ElassandraDaemon extends CassandraDaemon {
     
         super.setup(); // start bootstrap CassandraDaemon and call beforeRecover()+beforeBootstrap() to activate ElasticSearch
         super.start(); // complete cassandra start
+        
+        instance.node.clusterService().submitNumberOfShardsUpdate();
+        instance.node.clusterService().updateRoutingTable();
+        
+        logger.debug("Schedule elastic_admin post initialization in 5s");
+        new java.util.Timer().schedule( 
+                new java.util.TimerTask() {
+                    @Override
+                    public void run() {
+                    	logger.debug("Executing elastic_admin post initialization");
+                    	node.postInitialization();
+                    }
+                }, 
+                5000 
+        );
+
         if (instance.node != null) {
             instance.node.start(); // start ElasticSerach public services to complete
         } else {
@@ -142,11 +160,12 @@ public class ElassandraDaemon extends CassandraDaemon {
     
     @Override
     public void beforeBootstrap() {
+    	boostraped = true;
     	node.activate();
     }
     
     @Override
-    public void beforeStartupComplete() {
+    public void tokensReady() {
     	node.activate();
     }
 

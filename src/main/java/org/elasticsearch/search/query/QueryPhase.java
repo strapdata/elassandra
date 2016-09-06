@@ -19,12 +19,33 @@
 
 package org.elasticsearch.search.query;
 
-import com.google.common.collect.ImmutableMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Callable;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queries.MinDocQuery;
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.Collector;
+import org.apache.lucene.search.ConstantScoreQuery;
+import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.search.MultiCollector;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.TimeLimitingCollector;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopDocsCollector;
+import org.apache.lucene.search.TopFieldCollector;
+import org.apache.lucene.search.TopScoreDocCollector;
+import org.apache.lucene.search.TotalHitCountCollector;
+import org.apache.lucene.search.Weight;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.Lucene;
@@ -43,10 +64,7 @@ import org.elasticsearch.search.sort.SortParseElement;
 import org.elasticsearch.search.sort.TrackScoresParseElement;
 import org.elasticsearch.search.suggest.SuggestPhase;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Callable;
+import com.google.common.collect.ImmutableMap;
 
 /**
  *
@@ -101,7 +119,7 @@ public class QueryPhase implements SearchPhase {
         // Pre-process aggregations as late as possible. In the case of a DFS_Q_T_F
         // request, preProcess is called on the DFS phase phase, this is why we pre-process them
         // here to make sure it happens during the QUERY phase
-        aggregationPhase.preProcess(searchContext);
+    	aggregationPhase.preProcess(searchContext);
 
         boolean rescore = execute(searchContext, searchContext.searcher());
 
@@ -110,6 +128,10 @@ public class QueryPhase implements SearchPhase {
         }
         suggestPhase.execute(searchContext);
         aggregationPhase.execute(searchContext);
+        
+        if (searchContext.processor() != null) {
+        	searchContext.processor().postProcess(searchContext);
+        }
     }
 
     private static boolean returnsDocsInOrder(Query query, Sort sort) {

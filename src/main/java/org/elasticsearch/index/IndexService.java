@@ -19,18 +19,34 @@
 
 package org.elasticsearch.index;
 
-import com.google.common.base.Function;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterators;
+import static com.google.common.collect.Maps.newHashMap;
+import static org.elasticsearch.common.collect.MapBuilder.newMapBuilder;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.inject.*;
+import org.elasticsearch.common.inject.ConfigurationException;
+import org.elasticsearch.common.inject.CreationException;
+import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.inject.Injector;
+import org.elasticsearch.common.inject.Injectors;
+import org.elasticsearch.common.inject.Module;
+import org.elasticsearch.common.inject.ModulesBuilder;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.env.ShardLock;
@@ -46,7 +62,12 @@ import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.settings.IndexSettingsService;
-import org.elasticsearch.index.shard.*;
+import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.IndexShardModule;
+import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.index.shard.ShardNotFoundException;
+import org.elasticsearch.index.shard.ShardPath;
+import org.elasticsearch.index.shard.StoreRecoveryService;
 import org.elasticsearch.index.similarity.SimilarityService;
 import org.elasticsearch.index.store.IndexStore;
 import org.elasticsearch.index.store.Store;
@@ -57,19 +78,11 @@ import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.InternalIndicesLifecycle;
 import org.elasticsearch.indices.cache.query.IndicesQueryCache;
 import org.elasticsearch.plugins.PluginsService;
+import org.elasticsearch.search.SearchProcessorFactory;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static com.google.common.collect.Maps.newHashMap;
-import static org.elasticsearch.common.collect.MapBuilder.newMapBuilder;
+import com.google.common.base.Function;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterators;
 
 /**
  *
@@ -86,6 +99,9 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
 
     private final MapperService mapperService;
 
+    private final ClusterService clusterService;
+
+    
     private final IndexQueryParserService queryParserService;
 
     private final SimilarityService similarityService;
@@ -105,6 +121,9 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
 
     private volatile ImmutableMap<Integer, IndexShardInjectorPair> shards = ImmutableMap.of();
 
+    private SearchProcessorFactory searchProcessorFactory;
+    
+    
     private static class IndexShardInjectorPair {
         private final IndexShard indexShard;
         private final Injector injector;
@@ -145,7 +164,15 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
         this.settingsService = settingsService;
         this.bitsetFilterCache = bitSetFilterCache;
 
+        this.clusterService = injector.getInstance(ClusterService.class);
         this.pluginsService = injector.getInstance(PluginsService.class);
+        try {
+        	this.searchProcessorFactory = injector.getInstance(SearchProcessorFactory.class);
+        	logger.debug("SearchProcessorFactory={}", searchProcessorFactory.getClass().getName());
+        } catch(ConfigurationException e) {
+        	logger.debug("No SearchProcessorFactory " );
+        }
+
         this.indicesServices = indicesServices;
         this.indicesLifecycle = (InternalIndicesLifecycle) injector.getInstance(IndicesLifecycle.class);
 
@@ -163,6 +190,10 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
         return this.indicesLifecycle;
     }
 
+    public SearchProcessorFactory searchProcessorFactory() {
+    	return this.searchProcessorFactory;
+    }
+    
     @Override
     public Iterator<IndexShard> iterator() {
         return Iterators.transform(shards.values().iterator(), new Function<IndexShardInjectorPair, IndexShard>() {
@@ -230,6 +261,10 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
         return this.analysisService;
     }
 
+    public ClusterService clusterService() {
+        return this.clusterService;
+    }
+    
     public MapperService mapperService() {
         return mapperService;
     }

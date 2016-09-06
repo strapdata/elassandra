@@ -64,14 +64,18 @@ public class CassandraShardStateObserver extends IndicesLifecycle.Listener {
      * Block until all local shards are started.
      */
     public void waitLocalShardsStarted() {
-    	try {
-            if (latch.await(600, TimeUnit.SECONDS))
-            	logger.debug("All local shards started.");
-            else 
-            	logger.error("Some local shards did not start {}", localShardsToStart);
-        } catch (InterruptedException e) {
-            logger.error("Interrupred before all local shards started", e);
-        }
+    	if (localShardsToStart.size() > 0) {
+	    	try {
+	            if (latch.await(600, TimeUnit.SECONDS))
+	            	logger.debug("All local shards started.");
+	            else 
+	            	logger.error("Some local shards did not start {}", localShardsToStart);
+	        } catch (InterruptedException e) {
+	            logger.error("Interrupred before all local shards started", e);
+	        }
+    	} else {
+    		logger.debug("No shard to start");
+    	}
     	indicesLifecycle.removeListener(this);
     }
     

@@ -64,6 +64,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.NumericRangeQuery;
@@ -82,6 +83,7 @@ import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.lucene.all.AllEntries;
@@ -113,6 +115,7 @@ import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.internal.IdFieldMapper;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
+import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
 import org.elasticsearch.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
@@ -122,6 +125,7 @@ import org.elasticsearch.index.mapper.object.RootObjectMapper;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.percolator.PercolatorService;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.google.common.base.Predicate;
@@ -194,21 +198,22 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         
         private boolean hasStaticField = false;
         private boolean finalized = false;
+        private BytesReference source;
         
         public Context() {
         }
         
         public Context(MappingInfo.IndexInfo ii, Uid uid) {
             this.indexInfo = ii;
-            this.docMapper = ii.indexService.mapperService().documentMapper(baseCfs.metadata.cfName);
-            this.document = (baseCfs.metadata.hasStaticColumns()) ? new StaticDocument("",null, uid) : new Document();
+            this.docMapper = ii.indexService.mapperService().documentMapper(uid.type());
+            this.document = (baseCfs.metadata.hasStaticColumns() || ii.forceStatic()) ? new StaticDocument("",null, uid) : new Document();
             this.documents.add(this.document);
         }
         
         public void reset(MappingInfo.IndexInfo ii, Uid uid) {
             this.indexInfo = ii;
-            this.docMapper = ii.indexService.mapperService().documentMapper(baseCfs.metadata.cfName);
-            this.document = (baseCfs.metadata.hasStaticColumns()) ? new StaticDocument("",null, uid) : new Document();
+            this.docMapper = ii.indexService.mapperService().documentMapper(uid.type());
+            this.document = (baseCfs.metadata.hasStaticColumns() || ii.forceStatic()) ? new StaticDocument("",null, uid) : new Document();
             this.documents.clear();
             this.documents.add(this.document);
             this.id = null;
@@ -245,7 +250,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 // see https://www.elastic.co/guide/en/elasticsearch/guide/current/nested-objects.html
                 // code from DocumentParser.parseObject()
                 if (nested.isNested()) {
-                    beginNestedDocument(objectMapper.fullPath(),new Uid(baseCfs.metadata.cfName, id));
+                    beginNestedDocument(objectMapper.fullPath(),new Uid(docMapper.type(), id));
                     final ParseContext.Document nestedDoc = doc();
                     final ParseContext.Document parentDoc = nestedDoc.getParent();
                     // pre add the uid field if possible (id was already provided)
@@ -258,62 +263,76 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
 
                 ContentPath.Type origPathType = path().pathType();
                 path().pathType(objectMapper.pathType());
-
-                for(Entry<String,Object> entry : ((Map<String,Object>)value).entrySet()) {
-                    Mapper subMapper = objectMapper.getMapper(entry.getKey());
-                    if (subMapper != null) {
-                        addField(subMapper, entry.getValue());
-                    } else {
-                        // dynamic field in top level map => update mapping and add the field.
-                        ColumnDefinition cd = baseCfs.metadata.getColumnDefinition(mapper.cqlName());
-                        if (cd != null && cd.type.isCollection() && cd.type instanceof MapType) {
-                            logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
-                            CollectionType ctype = (CollectionType) cd.type;
-                            if (ctype.kind == CollectionType.Kind.MAP && ((MapType)ctype).getKeysType().asCQL3Type().toString().equals("text")) {
-                                try {
-                                    final String valueType = InternalCassandraClusterService.cqlMapping.get(((MapType)ctype).getValuesType().asCQL3Type().toString());
-                                    // build a mapping update
-                                    Map<String,Object> objectMapping = (Map<String,Object>) ((Map<String,Object>)indexInfo.mapping.get("properties")).get(mapper.name());
-                                    XContentBuilder builder = XContentFactory.jsonBuilder()
-                                            .startObject()
-                                            .startObject(baseCfs.metadata.cfName)
-                                            .startObject("properties")
-                                            .startObject(mapper.name());
-                                    boolean hasProperties = false;
-                                    for(String key : objectMapping.keySet()) {
-                                        if (key.equals("properties")) {
-                                            Map<String,Object> props = (Map<String,Object>)objectMapping.get(key);
-                                            builder.startObject("properties");
-                                            for(String key2 : props.keySet()) {
-                                                builder.field(key2, props.get(key2));
-                                            }
-                                            builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type",valueType); }});
-                                            builder.endObject();
-                                            hasProperties = true;
-                                        } else {
-                                            builder.field(key, objectMapping.get(key));
-                                        }
-                                    }
-                                    if (!hasProperties) {
-                                        builder.startObject("properties");
-                                        builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type",valueType); }});
-                                        builder.endObject();
-                                    }
-                                    builder.endObject().endObject().endObject().endObject();
-                                    String mappingUpdate = builder.string();
-                                    logger.info("updating mapping={}",mappingUpdate);
-                                    
-                                    getClusterService().blockingMappingUpdate(indexInfo.indexService, baseCfs.metadata.cfName, new CompressedXContent(mappingUpdate) );
-                                    subMapper = objectMapper.getMapper(entry.getKey());
-                                    addField(subMapper, entry.getValue());
-                                } catch (Exception e) {
-                                    logger.error("error while updating mapping",e);
-                                }
-                            }
-                        } else {
-                            logger.error("Unexpected subfield={} for field={} column type={}",entry.getKey(), mapper.name(), cd.type.asCQL3Type().toString());
-                        }
-                    }
+   
+                if (value instanceof Map<?,?>) {   
+	                for(Entry<String,Object> entry : ((Map<String,Object>)value).entrySet()) {
+	                    Mapper subMapper = objectMapper.getMapper(entry.getKey());
+	                    if (subMapper != null) {
+	                        addField(subMapper, entry.getValue());
+	                    } else {
+	                        // dynamic field in top level map => update mapping and add the field.
+	                        ColumnDefinition cd = baseCfs.metadata.getColumnDefinition(mapper.cqlName());
+	                        if (cd != null && cd.type.isCollection() && cd.type instanceof MapType) {
+	                            logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
+	                            CollectionType ctype = (CollectionType) cd.type;
+	                            if (ctype.kind == CollectionType.Kind.MAP && ((MapType)ctype).getKeysType().asCQL3Type().toString().equals("text")) {
+	                                try {
+	                                    final String valueType = InternalCassandraClusterService.cqlMapping.get(((MapType)ctype).getValuesType().asCQL3Type().toString());
+	                                    // build a mapping update
+	                                    Map<String,Object> objectMapping = (Map<String,Object>) ((Map<String,Object>)indexInfo.mapping.get("properties")).get(mapper.name());
+	                                    XContentBuilder builder = XContentFactory.jsonBuilder()
+	                                            .startObject()
+	                                            .startObject(docMapper.type())
+	                                            .startObject("properties")
+	                                            .startObject(mapper.name());
+	                                    boolean hasProperties = false;
+	                                    for(String key : objectMapping.keySet()) {
+	                                        if (key.equals("properties")) {
+	                                            Map<String,Object> props = (Map<String,Object>)objectMapping.get(key);
+	                                            builder.startObject("properties");
+	                                            for(String key2 : props.keySet()) {
+	                                                builder.field(key2, props.get(key2));
+	                                            }
+	                                            builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type",valueType); }});
+	                                            builder.endObject();
+	                                            hasProperties = true;
+	                                        } else {
+	                                            builder.field(key, objectMapping.get(key));
+	                                        }
+	                                    }
+	                                    if (!hasProperties) {
+	                                        builder.startObject("properties");
+	                                        builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type",valueType); }});
+	                                        builder.endObject();
+	                                    }
+	                                    builder.endObject().endObject().endObject().endObject();
+	                                    String mappingUpdate = builder.string();
+	                                    logger.info("updating mapping={}",mappingUpdate);
+	                                    
+	                                    getClusterService().blockingMappingUpdate(indexInfo.indexService, docMapper.type(), new CompressedXContent(mappingUpdate) );
+	                                    subMapper = objectMapper.getMapper(entry.getKey());
+	                                    addField(subMapper, entry.getValue());
+	                                } catch (Exception e) {
+	                                    logger.error("error while updating mapping",e);
+	                                }
+	                            }
+	                        } else {
+	                            logger.error("Unexpected subfield={} for field={} column type={}",entry.getKey(), mapper.name(), cd.type.asCQL3Type().toString());
+	                        }
+	                    }
+	                }
+                } else {
+                	if (docMapper.type().equals(PercolatorService.TYPE_NAME)) {
+                		// store percolator query as source.
+                		String sourceQuery = "{ \"query\":"+value+"}";
+                		if (logger.isDebugEnabled()) 
+                			logger.debug("Store percolate query={}", sourceQuery);
+                		
+                		BytesReference source = new BytesArray(sourceQuery);
+                		source( source );
+                		Field sourceQueryField = new StoredField(SourceFieldMapper.NAME, source.array(), source.arrayOffset(), source.length());
+                		doc().add(sourceQueryField);
+                	}
                 }
                 
                 // restore the enable path flag
@@ -427,11 +446,12 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
     
         @Override
         public BytesReference source() {
-            return null;
+            return this.source;
         }
     
         @Override
         public void source(BytesReference source) {
+        	this.source = source;
         }
     
         @Override
@@ -627,7 +647,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
             
             public boolean isStaticField(int idx) {
-                return MappingInfo.this.fieldsIsStatic.get(idx);
+            	return (fieldsIsStatic == null) ? false : fieldsIsStatic.get(idx);
             }
             
             public IndexShard shard() {
@@ -641,6 +661,10 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     return null;
                 }
                 return indexShard;
+            }
+            
+            public boolean forceStatic() {
+            	return MappingInfo.this.forceStatic;
             }
         }
 
@@ -682,9 +706,14 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         final BitSet fieldsIsStatic;
         final boolean[] indexedPkColumns;
         final long metadataVersion;
+        final String nodeId;
+        final String typeName = ClusterService.Utils.cfNameToType(ExtendedElasticSecondaryIndex.this.baseCfs.metadata.cfName);
+        boolean forceStatic = false;
         
         MappingInfo(final ClusterState state) {
             this.metadataVersion = state.metaData().version();
+            this.nodeId = state.nodes().localNodeId();
+            
             if (state.blocks().hasGlobalBlock(ClusterBlockLevel.WRITE)) {
                 logger.debug("global write blocked");
                 this.fields = null;
@@ -714,9 +743,17 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
 
                 if ( ExtendedElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace()) &&
-                	 (mappingMetaData = indexMetaData.mapping(ExtendedElasticSecondaryIndex.this.baseCfs.metadata.cfName)) != null) {
+                	 (mappingMetaData = indexMetaData.mapping(typeName)) != null) {
                     try {
                         Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
+                        if (mappingMap.get("_meta") != null) {
+                        	Map<String,Object> meta = (Map<String,Object>)mappingMap.get("_meta");
+                        	if (meta.get("noindex") != null) {
+                        		logger.debug("_meta force_static for {}" , index);
+                        		forceStatic = true;
+                        	}
+                        		
+                        }
                         if (mappingMap.get("properties") != null) {
                             IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
                             IndexService indexService = indicesService.indexService(index);
@@ -807,7 +844,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             }
             
             this.fieldsToRead = new BitSet(fields.length);
-            this.fieldsIsStatic = (baseCfs.metadata.hasStaticColumns()) ? new BitSet() : null;
+            this.fieldsIsStatic = (baseCfs.metadata.hasStaticColumns() || forceStatic) ? new BitSet() : null;
             for(int i=0; i < fields.length; i++) {
                 this.fieldsToRead.set(i, fieldsMap.get(fields[i]));
                 if (baseCfs.metadata.hasStaticColumns()) {
@@ -964,10 +1001,10 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 
                 for (MappingInfo.IndexInfo indexInfo : targetIndicesForDelete(values.toArray())) {
                     if (logger.isTraceEnabled())
-                        logger.trace("deleting document from index.type={}.{} id={}", indexInfo.name, baseCfs.metadata.cfName, partitionKey);
+                        logger.trace("deleting document from index.type={}.{} id={}", indexInfo.name, typeName, partitionKey);
                     IndexShard indexShard = indexInfo.indexService.shard(0);
                     if (indexShard != null) {
-                        Engine.Delete delete = indexShard.prepareDelete(baseCfs.metadata.cfName, partitionKey, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
+                        Engine.Delete delete = indexShard.prepareDelete(typeName, partitionKey, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
                         indexShard.delete(delete);
                         
                         if (indexInfo.refresh) {
@@ -990,7 +1027,6 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 final boolean hasMissingClusteringKeys;
                 boolean hasStaticUpdate = false;
                 int     docTtl = Integer.MAX_VALUE;
-                Uid     uid;
                 
                 // init document with clustering columns stored in cellName, or cell value for non-clustered columns (regular with no clustering key or static columns).
                 public Rowcument(Cell cell) throws IOException {
@@ -1026,7 +1062,6 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         id = partitionKey;
                         readCellValue(cell);
                     }
-                    uid = new Uid(baseCfs.metadata.cfName, id);
                     hasMissingClusteringKeys = baseCfs.metadata.clusteringColumns().size() > 0 && !wideRow;
                 }
                
@@ -1301,12 +1336,14 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     }
                     
                     if (logger.isTraceEnabled()) {
-                        logger.trace("{}.{} id={} fields={} values={}", baseCfs.metadata.ksName, baseCfs.metadata.cfName, id, Arrays.toString(values));
+                        logger.trace("{}.{} id={} fields={} values={}", baseCfs.metadata.ksName, typeName, id, Arrays.toString(values));
                     }
                 }
                 
-                public Context buildContext(IndexInfo indexInfo) throws IOException {
+                public Context buildContext(IndexInfo indexInfo, boolean staticColumnsOnly) throws IOException {
                     Context context = ExtendedElasticSecondaryIndex.this.perThreadContext.get();
+                    Uid uid = new Uid(typeName,  (staticColumnsOnly) ? partitionKey : id);
+                    
                     context.reset(indexInfo, uid);
                     
                     // preCreate for all metadata fields.
@@ -1314,13 +1351,13 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         metadataMapper.preCreate(context);
                     }
                     
-                    context.docMapper.idFieldMapper().createField(context, id);
+                    context.docMapper.idFieldMapper().createField(context, uid.id());
                     context.docMapper.uidMapper().createField(context, uid);
-                    context.docMapper.typeMapper().createField(context, baseCfs.metadata.cfName);
+                    context.docMapper.typeMapper().createField(context, typeName);
                     
                     context.docMapper.tokenFieldMapper().createField(context, token);
                     if (indexInfo.includeNodeId)
-                    	context.docMapper.nodeFieldMapper().createField(context, StorageService.instance.getLocalHostId());
+                    	context.docMapper.nodeFieldMapper().createField(context, MappingInfo.this.nodeId);
                     
                     context.docMapper.routingFieldMapper().createField(context, partitionKey);
                     context.version(DEFAULT_VERSION);
@@ -1335,8 +1372,10 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 if (mapper != null) {
                                     if (fieldsIsStatic != null && fieldsIsStatic.get(i)) {
                                         context.setStaticField(true);
+                                        context.addField(mapper, values[i]);
+                                    } else if (!staticColumnsOnly || mapper.cqlPartitionKey()) {
+                                    	context.addField(mapper, values[i]);
                                     }
-                                    context.addField(mapper, values[i]);
                                 }
                             } catch (IOException e) {
                                 logger.error("error", e);
@@ -1390,6 +1429,11 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
                 
                 public void index() {
+                	if (forceStatic) {
+                		// force index static document, ignore regular rows.
+                        index(true);
+                        return;
+                	}
                     if (!this.hasMissingClusteringKeys) {
                         // index regular row
                         index(false);
@@ -1406,13 +1450,13 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     
                     for(IndexInfo ii : MappingInfo.this.targetIndices(values)) {
                         try {
-                            Context context = buildContext(ii);
-                            if (staticDocumentOnly && !context.hasStaticField()) 
+                            Context context = buildContext(ii, staticDocumentOnly);
+                            if (staticDocumentOnly &&  !(forceStatic || context.hasStaticField())) 
                                 continue;
                             
                             Field uid = context.uid();
                             if (staticDocumentOnly) {
-                                uid = new Field(UidFieldMapper.NAME, Uid.createUid(baseCfs.metadata.cfName, partitionKey), Defaults.FIELD_TYPE);
+                                uid = new Field(UidFieldMapper.NAME, Uid.createUid(typeName, partitionKey), Defaults.FIELD_TYPE);
                                 for(Document doc : context.docs()) {
                                     if (doc instanceof Context.StaticDocument) {
                                         ((Context.StaticDocument)doc).applyFilter(staticDocumentOnly);
@@ -1431,7 +1475,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                     ttl,
                                     token.longValue(), 
                                     context.docs(), 
-                                    (BytesReference)null, // source 
+                                    context.source(), // source 
                                     (Mapping)null); // mappingUpdate
                             
                             parsedDoc.parent(context.parent());
@@ -1463,8 +1507,8 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                                 if (logger.isDebugEnabled()) {
                                     logger.debug("document CF={}.{} index={} type={} id={} version={} created={} ttl={} refresh={} ", 
                                         baseCfs.metadata.ksName, baseCfs.metadata.cfName,
-                                        context.indexInfo.name, baseCfs.metadata.cfName,
-                                        id, version, created, ttl, context.indexInfo.refresh);
+                                        context.indexInfo.name, typeName,
+                                        parsedDoc.id(), version, created, ttl, context.indexInfo.refresh);
                                 }
                              }
                         } catch (IOException e) {
@@ -1478,8 +1522,8 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         final IndexShard indexShard = indexInfo.shard();
                         if (indexShard != null) {
                             if (logger.isDebugEnabled())
-                                logger.debug("deleting document from index.type={}.{} id={}", indexInfo.name, baseCfs.metadata.cfName, id);
-                            Engine.Delete delete = indexShard.prepareDelete(baseCfs.metadata.cfName, id, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
+                                logger.debug("deleting document from index.type={}.{} id={}", indexInfo.name, typeName, id);
+                            Engine.Delete delete = indexShard.prepareDelete(typeName, id, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
                             indexShard.delete(delete);
                             
                             if (indexInfo.refresh) {
@@ -1573,15 +1617,16 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
 
         Token token = key.getToken();
         Long  token_long = (Long) token.getTokenValue();
+        String typeName = ClusterService.Utils.cfNameToType(ExtendedElasticSecondaryIndex.this.baseCfs.metadata.cfName);
         
         // Delete documents where _token = token_long
         for (MappingInfo.IndexInfo indexInfo : this.mappingInfo.indices.values()) {
             if (logger.isTraceEnabled())
-                logger.trace("deleting documents where _token={} from index.type={}.{} id={}", token_long, indexInfo.name, baseCfs.metadata.cfName);
+                logger.trace("deleting documents where _token={} from index.type={}.{} id={}", token_long, indexInfo.name, typeName);
             IndexShard indexShard = indexInfo.indexService.shard(0);
             if (indexShard != null) {
             	NumericRangeQuery<Long> query =	NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, token_long, token_long, true, true);
-            	DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), this.baseCfs.metadata.cfName);
+            	DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
             	indexShard.engine().delete(deleteByQuery);
             }
         }

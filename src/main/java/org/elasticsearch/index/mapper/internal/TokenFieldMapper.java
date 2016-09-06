@@ -50,7 +50,7 @@ import org.elasticsearch.index.mapper.internal.TTLFieldMapper.Defaults;
 public class TokenFieldMapper extends MetadataFieldMapper {
 
     public static final String NAME = "_token";
-    public static final String CONTENT_TYPE = "_token";
+    public static final String CONTENT_TYPE = "long";
 
     public static class Defaults extends LongFieldMapper.Defaults{
         public static final String NAME = TokenFieldMapper.NAME;
@@ -114,11 +114,6 @@ public class TokenFieldMapper extends MetadataFieldMapper {
         @Override
         public TokenFieldType clone() {
             return new TokenFieldType(this);
-        }
-
-        @Override
-        public String typeName() {
-            return CONTENT_TYPE;
         }
 
     }

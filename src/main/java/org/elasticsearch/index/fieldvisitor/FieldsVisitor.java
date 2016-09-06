@@ -103,19 +103,11 @@ public class FieldsVisitor extends StoredFieldVisitor {
         Set<String> requiredColumns =  new HashSet<String>();
         
         if (requestedFields() != null) {
-            for(String field : requestedFields()) {
+        	for(String field : requestedFields()) {
                 int i = field.indexOf('.');
                 String columnName = (i > 0) ? field.substring(0, i) : field;
-                if (isStaticDocument) {
-                    for(ColumnDefinition cd : metadata.staticColumns()) {
-                        if (cd.name.toString().equals(columnName)) {
-                            requiredColumns.add(columnName);
-                            break;
-                        }
-                    }
-                } else {
-                    requiredColumns.add(columnName);
-                }
+                // TODO: eliminate non-existant columns or (non-static or non-partition-key) for static docs.
+                requiredColumns.add(columnName);
             }
         }
         if (loadSource()) {

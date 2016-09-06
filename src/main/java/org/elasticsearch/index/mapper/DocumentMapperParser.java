@@ -29,8 +29,6 @@ import java.util.Map;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.elasticsearch.Version;
-import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
-import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.ParseFieldMatcher;
@@ -61,7 +59,6 @@ public class DocumentMapperParser {
     private static final ESLogger logger = Loggers.getLogger(DocumentMapperParser.class);
     private final SimilarityLookupService similarityLookupService;
     private final ScriptService scriptService;
-    private final ClusterService clusterService;
 
     private final RootObjectMapper.TypeParser rootObjectTypeParser = new RootObjectMapper.TypeParser();
 
@@ -73,12 +70,11 @@ public class DocumentMapperParser {
 
     public DocumentMapperParser(Settings indexSettings, MapperService mapperService, AnalysisService analysisService,
                                 SimilarityLookupService similarityLookupService, ScriptService scriptService,
-                                MapperRegistry mapperRegistry, ClusterService clusterService) {
+                                MapperRegistry mapperRegistry) {
         this.indexSettings = indexSettings;
         this.parseFieldMatcher = new ParseFieldMatcher(this.indexSettings);
         this.scriptService = scriptService;
         this.mapperService = mapperService;
-        this.clusterService = clusterService;
         this.analysisService = analysisService;
         this.similarityLookupService = similarityLookupService;
         this.typeParsers = mapperRegistry.getMapperParsers();
@@ -167,7 +163,7 @@ public class DocumentMapperParser {
                     throw new MapperParsingException("Transform must be an object or an array but was:  " + fieldNode);
                 }
                 iterator.remove();
-            } else if (InternalCassandraClusterService.DISCOVER.equals(fieldName)) {
+            } else if (MapperService.DISCOVER.equals(fieldName)) {
                 iterator.remove();
             } else {
                 MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
@@ -247,7 +243,7 @@ public class DocumentMapperParser {
         }
         
         try {
-            this.clusterService.discoverTableMapping(this.indexSettings.get(IndexMetaData.SETTING_KEYSPACE, this.mapperService.index().getName()), root);
+            this.mapperService.discoverTableMapping(this.indexSettings.get(IndexMetaData.SETTING_KEYSPACE, this.mapperService.index().getName()), root);
         } catch (SyntaxException | ConfigurationException | IOException e) {
             logger.error("Failed to expand mapping", e);
         }
