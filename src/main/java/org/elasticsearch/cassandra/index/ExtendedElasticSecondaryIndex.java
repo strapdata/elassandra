@@ -748,8 +748,8 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
                         if (mappingMap.get("_meta") != null) {
                         	Map<String,Object> meta = (Map<String,Object>)mappingMap.get("_meta");
-                        	if (meta.get("noindex") != null) {
-                        		logger.debug("_meta force_static for {}" , index);
+                        	if (meta.get("_static") != null) {
+                        		logger.debug("_meta _static for {}" , index);
                         		forceStatic = true;
                         	}
                         		

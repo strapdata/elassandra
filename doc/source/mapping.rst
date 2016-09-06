@@ -608,8 +608,8 @@ As the result, you can index, get or delete a cassandra row, including any colum
      }
    }
 
-Check Cassandra consistency with etlasticsearch
------------------------------------------------
+Check Cassandra consistency with elasticsearch
+----------------------------------------------
 
 When the ``index.include_node = true``  (default is false), the ``_node`` metafield containing the host id is included in every indexed document. 
 This allow to to distinguish multiple copies of a document when the datacenter replication factor is greater than one. Then a token range agregation allow to count the number of documents for each token range and for each cassandra node. 
