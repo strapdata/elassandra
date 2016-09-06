@@ -165,7 +165,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         }
     }
 
-    private boolean setResponseFailureIfIndexMatches(AtomicArray<BulkItemResponse> responses, int idx, ActionRequest request, String index, Throwable e) {
+    protected boolean setResponseFailureIfIndexMatches(AtomicArray<BulkItemResponse> responses, int idx, ActionRequest request, String index, Throwable e) {
         if (request instanceof IndexRequest) {
             IndexRequest indexRequest = (IndexRequest) request;
             if (index.equals(indexRequest.index())) {
@@ -201,12 +201,12 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         executeBulk(bulkRequest, startTime, listener, new AtomicArray<BulkItemResponse>(bulkRequest.requests.size()));
     }
 
-    private final long buildTookInMillis(long startTime) {
+    protected final long buildTookInMillis(long startTime) {
         // protect ourselves against time going backwards
         return Math.max(1, System.currentTimeMillis() - startTime);
     }
 
-    private void executeBulk(final BulkRequest bulkRequest, final long startTime, final ActionListener<BulkResponse> listener, final AtomicArray<BulkItemResponse> responses ) {
+    protected void executeBulk(final BulkRequest bulkRequest, final long startTime, final ActionListener<BulkResponse> listener, final AtomicArray<BulkItemResponse> responses ) {
         final ClusterState clusterState = clusterService.state();
         // TODO use timeout to wait here if its blocked...
         clusterState.blocks().globalBlockedRaiseException(ClusterBlockLevel.WRITE);
@@ -361,7 +361,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         }
     }
 
-    private boolean addFailureIfIndexIsUnavailable(DocumentRequest request, BulkRequest bulkRequest, AtomicArray<BulkItemResponse> responses, int idx,
+    protected boolean addFailureIfIndexIsUnavailable(DocumentRequest request, BulkRequest bulkRequest, AtomicArray<BulkItemResponse> responses, int idx,
                                               final ConcreteIndices concreteIndices,
                                               final MetaData metaData) {
         String concreteIndex = concreteIndices.getConcreteIndex(request.index());
@@ -402,7 +402,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
     }
 
 
-    private static class ConcreteIndices  {
+    protected static class ConcreteIndices  {
         private final ClusterState state;
         private final IndexNameExpressionResolver indexNameExpressionResolver;
         private final Map<String, String> indices = new HashMap<>();
