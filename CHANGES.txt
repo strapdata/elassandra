@@ -1,3 +1,12 @@
+2.1.1-17 - 2016-09-04
+  * Temporary revert CASSANDRA-11427 because of CASSANDRA-12351 (CASSANDRA-12143).
+  * [breaking change] Replace DatacenterReplicationStrategy by NetworkReplicationStrategy to avoid boostraping issues (Replace all DatacenterReplicationStrategy by 
+    NetworkReplicationStrategy before upgrading). 
+  * Add support for completion type.
+  * Add support for percolator.
+  * Add support for Spark/Hadoop with the elasticsearch-hadoop spark connector.
+  * Add a new metafield _node when indexing document and a token_range aggregation allowing to check cassandra consistency of an index.
+  
 2.1.1-16 - 2016-08-12
   * Upgrade to cassandra 2.2.7
   * Provide a JSON-REST access to cassandra rows (get/index/delete without indexing in elasticsearch).

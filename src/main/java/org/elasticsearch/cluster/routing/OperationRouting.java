@@ -151,9 +151,11 @@ public class OperationRouting extends AbstractComponent {
                         break;
                     }
                 }
+                /* Always found as shard 0 on elassandra.
                 if (!found) {
                     return null;
                 }
+                */
                 // no more preference
                 if (index == -1 || index == preference.length() - 1) {
                     String[] awarenessAttributes = awarenessAllocationDecider.awarenessAttributes();
