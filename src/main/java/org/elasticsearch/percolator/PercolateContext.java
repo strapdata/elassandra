@@ -37,6 +37,7 @@ import org.apache.lucene.util.Counter;
 import org.elasticsearch.action.percolate.PercolateShardRequest;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.HasContext;
 import org.elasticsearch.common.HasContextAndHeaders;
@@ -59,6 +60,7 @@ import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.query.ParsedQuery;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.similarity.SimilarityService;
+import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.SearchHitField;
 import org.elasticsearch.search.SearchShardTarget;
@@ -790,9 +792,9 @@ public class PercolateContext extends SearchContext {
     public ClusterState getClusterState() {
     	return this.clusterState;
     }
-    
-    @Override
-	public void setClusterState(ClusterState clusterState) {
-    	this.clusterState = clusterState;
-    }
+
+	@Override
+	public ClusterService clusterService() {
+		return this.indexService.clusterService();
+	}
 }

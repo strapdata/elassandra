@@ -20,6 +20,8 @@ package org.elasticsearch.percolator;
 
 import com.carrotsearch.hppc.IntObjectHashMap;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.ReaderUtil;
 import org.apache.lucene.index.memory.ExtendedMemoryIndex;
@@ -28,9 +30,11 @@ import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.elasticsearch.ElasticsearchParseException;
@@ -48,6 +52,7 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.common.settings.Settings;
@@ -72,6 +77,7 @@ import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.index.percolator.stats.ShardPercolateService;
 import org.elasticsearch.index.query.ParsedQuery;
@@ -92,8 +98,10 @@ import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
 import org.elasticsearch.search.aggregations.pipeline.SiblingPipelineAggregator;
 import org.elasticsearch.search.highlight.HighlightField;
 import org.elasticsearch.search.highlight.HighlightPhase;
+import org.elasticsearch.search.internal.DefaultSearchContext;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.sort.SortParseElement;
+import org.apache.lucene.search.QueryWrapperFilter;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -500,7 +508,7 @@ public class PercolatorService extends AbstractComponent {
             Engine.Searcher percolatorSearcher = context.indexShard().acquireSearcher("percolate");
             try {
                 Count countCollector = count(logger, context, isNested);
-                queryBasedPercolating(percolatorSearcher, context, countCollector);
+                queryBasedPercolating(percolatorSearcher, context, countCollector, request);
                 count = countCollector.counter();
             } catch (Throwable e) {
                 logger.warn("failed to execute", e);
@@ -557,6 +565,7 @@ public class PercolatorService extends AbstractComponent {
             List<Map<String, HighlightField>> hls = new ArrayList<>();
             Lucene.EarlyTerminatingCollector collector = Lucene.createExistsCollector();
 
+            Query tokenRangeQuery = Queries.newTokenRangeQuery(request.tokenRanges());
             for (Map.Entry<BytesRef, Query> entry : context.percolateQueries().entrySet()) {
                 if (context.highlight() != null) {
                     context.parsedQuery(new ParsedQuery(entry.getValue()));
@@ -564,9 +573,14 @@ public class PercolatorService extends AbstractComponent {
                 }
                 try {
                     if (isNested) {
-                        Lucene.exists(context.docSearcher(), entry.getValue(), Queries.newNonNestedFilter(), collector);
+                    	BooleanQuery bq = new BooleanQuery.Builder()
+                                .add(Queries.newNestedFilter(), Occur.MUST_NOT)
+                                .add(tokenRangeQuery, Occur.FILTER)
+                                .build();
+                        //Lucene.exists(context.docSearcher(), entry.getValue(), Queries.newNonNestedFilter(), collector);
+                        Lucene.exists(context.docSearcher(), entry.getValue(), new QueryWrapperFilter(bq), collector);
                     } else {
-                        Lucene.exists(context.docSearcher(), entry.getValue(), collector);
+                        Lucene.exists(context.docSearcher(), entry.getValue(), new QueryWrapperFilter(tokenRangeQuery), collector);
                     }
                 } catch (Throwable e) {
                     logger.debug("[" + entry.getKey() + "] failed to execute query", e);
@@ -607,7 +621,7 @@ public class PercolatorService extends AbstractComponent {
             Engine.Searcher percolatorSearcher = context.indexShard().acquireSearcher("percolate");
             try {
                 Match match = match(logger, context, highlightPhase, isNested);
-                queryBasedPercolating(percolatorSearcher, context, match);
+                queryBasedPercolating(percolatorSearcher, context, match, request);
                 List<BytesRef> matches = match.matches();
                 List<Map<String, HighlightField>> hls = match.hls();
                 long count = match.counter();
@@ -640,7 +654,7 @@ public class PercolatorService extends AbstractComponent {
             Engine.Searcher percolatorSearcher = context.indexShard().acquireSearcher("percolate");
             try {
                 MatchAndScore matchAndScore = matchAndScore(logger, context, highlightPhase, isNested);
-                queryBasedPercolating(percolatorSearcher, context, matchAndScore);
+                queryBasedPercolating(percolatorSearcher, context, matchAndScore, request);
                 List<BytesRef> matches = matchAndScore.matches();
                 List<Map<String, HighlightField>> hls = matchAndScore.hls();
                 float[] scores = matchAndScore.scores().toArray();
@@ -753,7 +767,7 @@ public class PercolatorService extends AbstractComponent {
             Engine.Searcher percolatorSearcher = context.indexShard().acquireSearcher("percolate");
             try {
                 MatchAndSort matchAndSort = QueryCollector.matchAndSort(logger, context, isNested);
-                queryBasedPercolating(percolatorSearcher, context, matchAndSort);
+                queryBasedPercolating(percolatorSearcher, context, matchAndSort, request);
                 TopDocs topDocs = matchAndSort.topDocs();
                 long count = topDocs.totalHits;
                 List<BytesRef> matches = new ArrayList<>(topDocs.scoreDocs.length);
@@ -800,17 +814,31 @@ public class PercolatorService extends AbstractComponent {
 
     };
 
-    private void queryBasedPercolating(Engine.Searcher percolatorSearcher, PercolateContext context, QueryCollector percolateCollector) throws IOException {
+    private void queryBasedPercolating(Engine.Searcher percolatorSearcher, PercolateContext context, QueryCollector percolateCollector, PercolateShardRequest request) throws IOException {
         Query percolatorTypeFilter = context.indexService().mapperService().documentMapper(TYPE_NAME).typeFilter();
 
+        if (logger.isDebugEnabled())
+        	logger.debug("precolate within tokenRanges = {}", request.tokenRanges());
+        
+        Query tokenRangeQuery = Queries.newTokenRangeQuery(request.tokenRanges());
+        
         final Query filter;
         if (context.aliasFilter() != null) {
             BooleanQuery.Builder booleanFilter = new BooleanQuery.Builder();
             booleanFilter.add(context.aliasFilter(), BooleanClause.Occur.MUST);
             booleanFilter.add(percolatorTypeFilter, BooleanClause.Occur.MUST);
+            if (tokenRangeQuery != null)
+            	booleanFilter.add(tokenRangeQuery, Occur.FILTER);
             filter = booleanFilter.build();
         } else {
-            filter = percolatorTypeFilter;
+            if (tokenRangeQuery != null) {
+            	BooleanQuery.Builder booleanFilter = new BooleanQuery.Builder();
+            	booleanFilter.add(percolatorTypeFilter, BooleanClause.Occur.MUST);
+            	booleanFilter.add(tokenRangeQuery, Occur.FILTER);
+            	filter = booleanFilter.build();
+            } else {
+            	filter = percolatorTypeFilter;
+            }
         }
 
         Query query = Queries.filtered(context.percolateQuery(), filter);

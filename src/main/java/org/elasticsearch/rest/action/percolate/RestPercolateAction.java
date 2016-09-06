@@ -63,6 +63,7 @@ public class RestPercolateAction extends BaseRestHandler {
         percolateRequest.documentType(restRequest.param("type"));
         percolateRequest.routing(restRequest.param("routing"));
         percolateRequest.preference(restRequest.param("preference"));
+        percolateRequest.tokenRanges(restRequest.paramsAsTokenRanges("token_ranges"));
         percolateRequest.source(RestActions.getRestContent(restRequest));
 
         percolateRequest.indicesOptions(IndicesOptions.fromRequest(restRequest, percolateRequest.indicesOptions()));
@@ -87,6 +88,7 @@ public class RestPercolateAction extends BaseRestHandler {
         percolateRequest.getRequest(getRequest);
         percolateRequest.routing(restRequest.param("percolate_routing"));
         percolateRequest.preference(restRequest.param("percolate_preference"));
+        percolateRequest.tokenRanges(restRequest.paramsAsTokenRanges("token_ranges"));
         percolateRequest.source(RestActions.getRestContent(restRequest));
 
         percolateRequest.indicesOptions(IndicesOptions.fromRequest(restRequest, percolateRequest.indicesOptions()));
