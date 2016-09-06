@@ -149,15 +149,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     public void beforeStartupComplete() {
     	node.activate();
     }
-    
-    @Override
-    public void afterStartupComplet() {
-        logger.debug("Create elastic_admin[_datacenter.group] keyspace if not exits.");
-        node.cassandraStartupComplete();
-    }
 
-
-    
     /**
      * hook for JSVC
      */

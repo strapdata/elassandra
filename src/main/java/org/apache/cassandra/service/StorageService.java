@@ -738,9 +738,8 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 Gossiper.instance.addLocalApplicationStates(states);
             }
             logger.info("Not joining ring as requested. Use JMX (StorageService->joinRing()) to initiate ring joining");
+            this.daemon.afterStartupComplet();
         }
-        
-        this.daemon.afterStartupComplet();
     }
 
     /**

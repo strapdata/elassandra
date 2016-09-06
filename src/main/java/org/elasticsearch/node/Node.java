@@ -304,14 +304,6 @@ public class Node implements Releasable {
         return this;
     }
     
-    public void cassandraStartupComplete() {
-        clusterService().createElasticAdminKeyspace();
-        
-        // update number of shard when all keyspaces are loade (update task publish X2)
-        clusterService().submitNumberOfShardsUpdate();
-        clusterService().updateRoutingTable();
-    }
-    
     
     private Node stop() {
         if (!lifecycle.moveToStopped()) {

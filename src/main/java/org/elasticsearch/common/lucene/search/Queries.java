@@ -19,21 +19,58 @@
 
 package org.elasticsearch.common.lucene.search;
 
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.*;
-import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.util.BytesRef;
-import org.elasticsearch.common.Nullable;
-import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
-
+import java.util.Collection;
 import java.util.List;
 import java.util.regex.Pattern;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanClause.Occur;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
+import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.search.NumericRangeQuery;
+import org.apache.lucene.search.PrefixQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.QueryWrapperFilter;
+import org.apache.lucene.util.BytesRef;
+import org.elasticsearch.common.Nullable;
+import org.elasticsearch.index.mapper.internal.TokenFieldMapper;
+import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
 
 /**
  *
  */
 public class Queries {
 
+	public static Query newTokenRangeQuery(Collection<Range<Token>> tokenRanges) {
+		Query tokenRangeQuery = null;
+        if (tokenRanges != null) {
+            switch(tokenRanges.size()) {
+                case 0:
+                	break;
+                case 1: 
+                    Range<Token> unique_range = tokenRanges.iterator().next();
+                    NumericRangeQuery<Long> nrq2 = NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, 16, (Long) unique_range.left.getTokenValue(), (Long) unique_range.right.getTokenValue(), false, true);
+                    tokenRangeQuery = nrq2;
+                    break;
+                default:
+                    BooleanQuery.Builder bq2 = new BooleanQuery.Builder();
+                    for (Range<Token> range : tokenRanges) {
+                        // TODO: check the best precisionStep (6 by default), see https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html
+                        NumericRangeQuery<Long> nrq = NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, 16, (Long) range.left.getTokenValue(), (Long) range.right.getTokenValue(), false, true);
+                        bq2.add(nrq, Occur.SHOULD);
+                    }
+                    tokenRangeQuery = bq2.build();
+                    break;
+            }
+        }
+        return tokenRangeQuery;
+	}
+	
     public static Query newMatchAllQuery() {
         return new MatchAllDocsQuery();
     }
