@@ -63,6 +63,8 @@
                 <include>jsr223/*/**</include>
                 <include>licenses/*</include>
                 <include>sigar-bin/*</include>
+                <include>cassandra-driver-core-2.2.0-rc2-SNAPSHOT-20150617-shaded.jar</include>
+                <include>cassandra-driver-internal-only-3.0.0-6af642d.zip</include>
             </includes>
         </fileSet>
         

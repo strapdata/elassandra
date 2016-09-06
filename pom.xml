@@ -500,6 +500,7 @@
 
 
         <!-- for cassandra UDF -->
+        <!--
         <dependency>
             <groupId>com.datastax.cassandra</groupId>
             <artifactId>cassandra-driver-core</artifactId>
@@ -515,7 +516,8 @@
                 </exclusion>
             </exclusions>
         </dependency>
-
+		-->
+	
     </dependencies>
 
     <build>
