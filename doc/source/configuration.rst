@@ -67,10 +67,13 @@ By default, all elassandra datacenters share the same Elasticsearch cluster name
 If you want to manage distinct Elasticsearch clusters inside a cassandra cluster (when indexing differents tables in different datacenter), you can set a ``datacenter.group`` in **conf/elasticsearch.yml** and thus, all elassandra datacenters sharing the same datacenter group name will share the same mapping. 
 Those elasticsearch cluster will be named <cluster_name>@<datacenter.group> and mapping will be stored in a dedicated keyspace.table ``elastic_admin_<datacenter.group>.metadata``.
 
-All ``elastic_admin[_<datacenter.group>]`` keyspace are configured with **DatacenterReplicationStrategy** where all nodes of each configured datacenters are replica. Adding a node automatically increase the Replication Factor in its datacenter.
-When a mapping change occurs, Elassandra update Elasticsearch metadata in  `elastic_admin[_<datacenter.group>].metadata` within a `lightweight transaction <https://docs.datastax.com/en/cassandra/2.1/cassandra/dml/dml_ltwt_transaction_c.html>`_ to avoid conflit with concurrent updates.
-Obviously, this require QUORUM available nodes, that is more than half the nodes of one or more datacenters regarding your ``datacenter.group`` configuration.
+All ``elastic_admin[_<datacenter.group>]`` keyspace are configured with **NetworkReplicationStrategy** (see `data replication <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html>`_). 
+where the replication factor is automatically set to the number of nodes in the datacenter. This ensure maximum availibility for the elaticsearch metadata. When removing a node from an elassandra datacenter, descrease the ``elastic_admin[_<datacenter.group>]`` replication factor to the number of nodes.
+
+When a mapping change occurs, Elassandra updates Elasticsearch metadata in `elastic_admin[_<datacenter.group>].metadata` within a `lightweight transaction <https://docs.datastax.com/en/cassandra/2.1/cassandra/dml/dml_ltwt_transaction_c.html>`_ to avoid conflit with concurrent updates.
+This transaction requires QUORUM available nodes, that is more than half the nodes of one or more datacenters regarding your ``datacenter.group`` configuration.
 It also involve cross-datacenter network latency for each mapping update.
+
 
 .. TIP::
    Cassandra cross-datacenter writes are not sent directly to each replica; instead, they are sent to a single replica with a parameter telling that replica to forward to the other replicas in that datacenter; those replicas will respond diectly to the original coordinator. This reduces network trafic between datacenters when having many replica.

@@ -91,7 +91,15 @@ Run this as root :
       Java(TM) SE Runtime Environment (build 1.8.0_91-b14)
       Java HotSpot(TM) 64-Bit Server VM (build 25.91-b14, mixed mode)
 
-8. Install Elassandra
+8. Install JNA for Debian and Ubuntu
+
+   .. code:: bash
+   
+      sudo apt-get install libjna-java
+      ln -s /usr/share/java/jna.jar install_location/lib
+     
+
+9. Install Elassandra
 
 
    .. code:: bash
@@ -102,7 +110,7 @@ Run this as root :
       See configuration_ chapter to configure elassandra before starting.
     
 
-9. Start/Stop/Status Elassandra
+10. Start/Stop/Status Elassandra
 
    .. note:: You need to be root, or use sudo to run the following commands. These commands work for systemd enabled systems (RHEL and CentOS > 7).
    
@@ -113,8 +121,7 @@ Run this as root :
       systemctl status elassandra  
 
 
-9. Enable elassandra at boot time
-
+   To enable elassandra at boot time
 
    .. code:: bash
    

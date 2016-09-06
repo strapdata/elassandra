@@ -285,13 +285,115 @@ has no effect on elassandra, because write operations are converted to CQL queri
 
       curl -XPOST 'localhost:9200/my_index/_refresh'
       
-A flush basically write a lucene index on disk. Because document _source is stored in cassandra table in elassandra, it make sense to execute 
+A flush basically write a lucene index on disk. Because document **_source** is stored in cassandra table in elassandra, it make sense to execute 
 a ``nodetool flush <keyspace> <table>`` to flush both cassandra memtables to SSTables and lucene files for all associated elasticsearch indices. 
 Moreover, remember that a ``nodetool snapshot``  also involve a flush before creating the snapshot.
 
 .. code::
 
       curl -XPOST 'localhost:9200/my_index/_flush'
+
+Percolator
+__________
+
+Elassandra supports distributed percolator by storing percolation queries in a dedicated cassandra table ``_percolator``.
+As for documents, token ranges filtering applies to avoid dupliquate query matching.
+
+.. code::
+
+   curl -XPUT "localhost:9200/my_index" -d '{
+     "mappings": {
+       "my_type": {
+         "properties": {
+           "message": { "type": "string" },
+           "created_at" : { "type": "date" }
+         }
+       }
+     }
+   }'
+   
+   curl -XPUT "localhost:9200/my_index/.percolator/1" -d '{
+       "query" : {
+           "match" : {
+               "message" : "bonsai tree"
+           }
+       }
+   }'
+   
+   curl -XPUT "localhost:9200/my_index/.percolator/2" -d '{
+       "query" : {
+           "match" : {
+               "message" : "bonsai tree"
+           }
+       },
+       "priority" : "high"
+   }'
+   
+   curl -XPUT "localhost:9200/my_index/.percolator/3" -d '{
+           "query" : {
+                   "range" : {
+                           "created_at" : {
+                                   "gte" : "2010-01-01T00:00:00",
+                                   "lte" : "2011-01-01T00:00:00"
+                           }
+                   }
+           },
+           "type" : "tweet",
+           "priority" : "high"
+   }'
+
+Then search for matching queries.
+
+.. code::
+
+   curl -XGET 'localhost:9200/my_index/my_type/_percolate?pretty=true' -d '{
+       "doc" : {
+           "message" : "A new bonsai tree in the office"
+       }
+   }'
+   {
+     "took" : 4,
+     "_shards" : {
+       "total" : 2,
+       "successful" : 2,
+       "failed" : 0
+     },
+     "total" : 2,
+     "matches" : [ {
+       "_index" : "my_index",
+       "_id" : "2"
+     }, {
+       "_index" : "my_index",
+       "_id" : "1"
+     } ]
+   }
+
+
+.. code::
+
+   curl -XGET 'localhost:9200/my_index/my_type/_percolate?pretty=true' -d '{
+       "doc" : {
+           "message" : "A new bonsai tree in the office"
+       },
+       "filter" : {
+           "term" : {
+               "priority" : "high"
+           }
+       }
+   }'
+   {
+     "took" : 4,
+     "_shards" : {
+       "total" : 2,
+       "successful" : 2,
+       "failed" : 0
+     },
+     "total" : 1,
+     "matches" : [ {
+       "_index" : "my_index",
+       "_id" : "2"
+     } ]
+   }
 
 
 Backup and restore
@@ -319,7 +421,8 @@ To perform a hot restore of cassandra keyspace and its elasticsearch indices :
 2. Trunacte all cassandra tables of the keyspace (because of delete operation later than the snapshot)
 3. Restore the cassandra table with your snapshot on each node
 4. Restore elasticsearch snapshot on each nodes (if ES index is open during nodetool refresh, this cause elasticsearch index rebuild by the compaction manager, usually 2 threads).
-5. Open all indices associated to the keyspace
+5. Load restored SSTables with a ``nodetool refresh``
+6. Open all indices associated to the keyspace
 
 Point in time recovery
 ----------------------

@@ -108,6 +108,7 @@ Meta-Fields
 * ``_ttl``  and ``_timestamp`` are mapped to the cassandra `TTL <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ttl_t.html>`_ and `WRITIME <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_writetime.html>`_. The returned ``_ttl``  and ``_timestamp`` for a document will be the one of a regular cassandra columns if there is one in the underlying table. Moreover, when indexing a document throught the Elasticearch API, all cassandra cells carry the same WRITETIME and TTL, but this could be different when upserting some cells using CQL.
 * ``_parent`` is string representation of the parent document primary key. If the parent document primary key is composite, this is string representation of columns defined by ``cql_parent_pk`` in the mapping. See `Parent-Child Relationship`_.
 * ``_token`` is a meta-field introduced by Elassandra, valued with **token(<partition_key>)**.
+* ``_node`` is a meta-field introduced by Elassandra, valued with host id, allowing to check cassandra consistency.
 
 Mapping change with zero downtime
 ---------------------------------
@@ -606,3 +607,105 @@ As the result, you can index, get or delete a cassandra row, including any colum
        "failed" : 0
      }
    }
+
+Check Cassandra consistency with etlasticsearch
+-----------------------------------------------
+
+When the ``index.include_node = true``  (default is false), the ``_node`` metafield containing the host id is included in every indexed document. 
+This allow to to distinguish multiple copies of a document when the datacenter replication factor is greater than one. Then a token range agregation allow to count the number of documents for each token range and for each cassandra node. 
+This alow to check your datacenter consistency. 
+
+
+In the following exemple, we have 1000 accounts documents in a keysace with RF=2 in a two nodes datacenter, and each token ranges have the same number of document for the two nodes.
+
+.. code::
+
+   curl -XGET "http://$NODE:9200/accounts/_search?pretty=true&size=0" -d'{
+           "aggs" : {
+               "tokens" : {
+                   "token_range" : { 
+                      "field" : "_token" 
+                    },
+                   "aggs": { 
+                      "nodes" : { 
+                         "terms" : { "field" : "_node" } 
+                      } 
+                   }
+               }
+           }
+       }'
+   {
+     "took" : 23,
+     "timed_out" : false,
+     "_shards" : {
+       "total" : 2,
+       "successful" : 2,
+       "failed" : 0
+     },
+     "hits" : {
+       "total" : 2000,
+       "max_score" : 0.0,
+       "hits" : [ ]
+     },
+     "aggregations" : {
+       "tokens" : {
+         "buckets" : [ {
+           "key" : "(-9223372036854775807,-4215073831085397715]",
+           "from" : -9223372036854775807,
+           "from_as_string" : "-9223372036854775807",
+           "to" : -4215073831085397715,
+           "to_as_string" : "-4215073831085397715",
+           "doc_count" : 562,
+           "nodes" : {
+             "doc_count_error_upper_bound" : 0,
+             "sum_other_doc_count" : 0,
+             "buckets" : [ {
+               "key" : "528b78d3-fae9-49ae-969a-96668566f1c3",
+               "doc_count" : 281
+             }, {
+               "key" : "7f0b782e-5b75-409b-85e9-f5f96a75a7dc",
+               "doc_count" : 281
+             } ]
+           }
+         }, {
+           "key" : "(-4215073831085397714,7919694572960951318]",
+           "from" : -4215073831085397714,
+           "from_as_string" : "-4215073831085397714",
+           "to" : 7919694572960951318,
+           "to_as_string" : "7919694572960951318",
+           "doc_count" : 1268,
+           "nodes" : {
+             "doc_count_error_upper_bound" : 0,
+             "sum_other_doc_count" : 0,
+             "buckets" : [ {
+               "key" : "528b78d3-fae9-49ae-969a-96668566f1c3",
+               "doc_count" : 634
+             }, {
+               "key" : "7f0b782e-5b75-409b-85e9-f5f96a75a7dc",
+               "doc_count" : 634
+             } ]
+           }
+         }, {
+           "key" : "(7919694572960951319,9223372036854775807]",
+           "from" : 7919694572960951319,
+           "from_as_string" : "7919694572960951319",
+           "to" : 9223372036854775807,
+           "to_as_string" : "9223372036854775807",
+           "doc_count" : 170,
+           "nodes" : {
+             "doc_count_error_upper_bound" : 0,
+             "sum_other_doc_count" : 0,
+             "buckets" : [ {
+               "key" : "528b78d3-fae9-49ae-969a-96668566f1c3",
+               "doc_count" : 85
+             }, {
+               "key" : "7f0b782e-5b75-409b-85e9-f5f96a75a7dc",
+               "doc_count" : 85
+             } ]
+           }
+         } ]
+       }
+     }
+   }
+   
+

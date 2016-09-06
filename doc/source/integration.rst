@@ -4,11 +4,8 @@ Integration
 Integration with an existing cassandra cluster
 ----------------------------------------------
 
-Elassandra include a modified version of cassandra 2.2, so **all nodes of a cluster should run elassandra binaries** [1] However, you can start a node with or without the elasticsearch support. 
+Elassandra include a modified version of cassandra 2.2, so **all nodes of a cluster should run elassandra binaries**. However, you can start a node with or without the elasticsearch support. 
 Obviously, all nodes of a datacenter should run cassandra only or cassandra with elasticsearch.
-
-[1] This is mainly because the ``DatacenterReplicationStrategy`` class (a replication strategy replicating to all nodes of a datacenter, whatever the number of nodes) and 
-a dummy version of the custom index classes should be deployed on all nodes to be instancied when loading the CQL schema.
 
 Rolling upgrade to elassandra
 .............................
@@ -137,4 +134,17 @@ The `Elasticsearch JDBC driver <https://github.com/Anchormen/sql4es>`_. can be u
    rs.close();
    con.close();
 
- 
+Running Spark with Elassandra
+-----------------------------
+
+A modified version of the `elasticsearch-hadoop <https://github.com/elastic/elasticsearch-hadoop>`_ connector is available for elassandra at `https://github.com/vroyer/elasticsearch-hadoop`_. 
+This connector works with spark as describe in the elasticsearch documentation available at `https://www.elastic.co/guide/en/elasticsearch/hadoop/current/index.html`.
+
+For example, in order to submit a spark job in client mode.
+
+.. code:: java
+
+   bin/spark-submit --driver-class-path <yourpath>/elasticsearch-spark_2.10-2.2.0.jar  --master spark://<sparkmaster>:7077 --deploy-mode client <application.jar> 
+
+
+

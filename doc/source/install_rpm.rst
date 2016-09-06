@@ -80,7 +80,14 @@
       f1d18d84-5724b296 gpg(Elassandra <build@elassandra.org>)
       34ec9cba-54e38751 gpg(Fedora (23) <fedora-23-primary@fedoraproject.org>)
 
-7. Install Elassandra
+7. Install JNA for Redhat and CentOS
+
+   .. code:: bash
+   
+      sudo yum install jna
+
+      
+8. Install Elassandra
 
    .. code:: bash
    
@@ -90,7 +97,7 @@
 See Configuration chapter to configure elassandra before starting.
 
 
-8. Start, Stop, and check Status of Elassandra (for systemd enabled systems, RHEL and CentOS > 7)
+9. Start, Stop, and check Status of Elassandra (for systemd enabled systems, RHEL and CentOS > 7)
 
    .. code:: bash
    
