@@ -2378,9 +2378,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
             
             if (GEO_POINT_TYPE.equals(ByteBufferUtil.string(udt.name))) {
                 if (components[0] != null) 
-                    mapValue.put(GeoPointFieldMapper.Names.LON, deserialize(udt.type(0), components[0], null));
+                    mapValue.put(GeoPointFieldMapper.Names.LAT, deserialize(udt.type(0), components[0], null));
                 if (components[1] != null) 
-                    mapValue.put(GeoPointFieldMapper.Names.LAT, deserialize(udt.type(1), components[1], null));
+                    mapValue.put(GeoPointFieldMapper.Names.LON, deserialize(udt.type(1), components[1], null));
             } else {
                 for (int i = 0; i < components.length; i++) {
                     String fieldName = UTF8Type.instance.compose(udt.fieldName(i));
