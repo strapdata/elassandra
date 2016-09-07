@@ -113,6 +113,15 @@ Because cassandra keyspace, type and table can only contain alphanumeric and und
    s/twitter:image/twitterImage/g
    s/twitter:site/twitterSite/g
 
+.. note:: Since july 2016, the default map provider for kibana 4.3 is not more available, so you can set the following alternate map provider in your map options :
+   
+   * WMS URL: http://ows-tile.terrestris.de/osm-basemap/service?
+   * WMS Layers: OSM-WMS
+   * WMS Version: 1.1.1
+   * WMS format: image/jpeg
+
+
+
 JDBC Driver sql4es + Elassandra
 -------------------------------
 
