@@ -57,7 +57,7 @@ Durability
 ----------
 
 All writes to a cassandra node are recorded both in a memory table and in a commit log. When a memtable flush occurs, it flushes the elasticsearch secondary index on disk. 
-When restarting after a failure, cassandra replays commitlogs and re-index elasticsearch document that were no flushed by elasticsearch. 
+When restarting after a failure, cassandra replays commitlogs and re-indexes elasticsearch documents that were no flushed by elasticsearch. 
 This the reason why `elasticsearch translog <https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-translog.html#index-modules-translog>`_ is disabled in elassandra.   
 
 Shards and Replica
