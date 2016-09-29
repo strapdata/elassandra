@@ -54,6 +54,12 @@ For Elasticsearch users, elassandra provides useful features :
 * Hadoop Hive, Pig and Spark support with pushdown predicate.
 * Cassandra supports partial update and [distributed counters](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_counter_t.html).
 
+# Support
+
+ * Support available via [elassandra google groups](https://groups.google.com/forum/#!forum/elassandra).
+ * Post feature requests and bugs on https://github.com/vroyer/elassandra/issues
+ * Follow us and get community support on twitter @elassandraio
+ 
 # Known bugs and restrictions
     
 * Cassandra 
