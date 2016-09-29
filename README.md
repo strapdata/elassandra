@@ -58,7 +58,7 @@ For Elasticsearch users, elassandra provides useful features :
 
  * Support available via [elassandra google groups](https://groups.google.com/forum/#!forum/elassandra).
  * Post feature requests and bugs on https://github.com/vroyer/elassandra/issues
- * Follow us and get community support on twitter @elassandraio
+ * Follow us and get community support on twitter [@elassandraio](https://twitter.com/elassandraio)
  
 # Known bugs and restrictions
     
