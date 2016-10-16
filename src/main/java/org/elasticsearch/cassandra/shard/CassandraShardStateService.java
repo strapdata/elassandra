@@ -45,6 +45,15 @@ public class CassandraShardStateService extends IndicesLifecycle.Listener {
 		this.discoveryService = discoveryService;
 	}
     
+	public void beforeIndexShardCreated(ShardId shardId, Settings indexSettings) {
+		try {
+			discoveryService.putShardRoutingState(shardId.getIndex(), ShardRoutingState.INITIALIZING);
+			updateRoutingTable("shard ["+shardId.getIndex()+"][0] started", shardId.getIndex());
+		} catch (IOException e) {
+			logger.error("Unexpected error", e);
+		}
+    }
+	
     /**
      * Called after the index shard has been started.
      */

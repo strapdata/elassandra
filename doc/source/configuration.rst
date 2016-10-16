@@ -30,21 +30,17 @@ Elasticsearch configuration rely on cassandra configuration file 'conf/cassandra
 
 .. cssclass:: table-bordered
 
-+-------------------+--------------------------+---------------------------------------------------------------------+
-| Cassandra         | Elasticsearch            | Description                                                         |
-+===================+==========================+=====================================================================+
-| ``cluster.name``  | ``cluster_name``         | Elasticsearch cluster name is mapped to the cassandra cluster name. |
-+-------------------+--------------------------+---------------------------------------------------------------------+
-| ``rpc_address``   | ``network.host``         | Elasticsearch listen on the cassandra rpc addresses                 |
-|                   |                          |                                                                     |
-| ``rpc_interface`` | ``http.bind_host``       |                                                                     |
-|                   |                          |                                                                     |
-|                   | ``http.netty.bind_host`` |                                                                     |
-|                   |                          |                                                                     |
-|                   | ``http.host``            |                                                                     |
-+-------------------+--------------------------+---------------------------------------------------------------------+
++------------------+--------------------+---------------------------------------------------------------------+
+| Cassandra        | Elasticsearch      | Description                                                         |
++==================+====================+=====================================================================+
+| ``cluster.name`` | ``cluster_name``   | Elasticsearch cluster name is mapped to the cassandra cluster name. |
++------------------+--------------------+---------------------------------------------------------------------+
+| ``rpc_address``  | ``network.host``   | Elasticsearch network and transport bind and publish addresses      |
+|                  | ``transport.host`` | are set to the cassandra rpc address.                               |
++------------------+--------------------+---------------------------------------------------------------------+
 
-Node role (master, primary, data) is automatically set by elassandra, standard configuration should only set **cluster_name**, **rpc_address** and **rpc_interface** in the ``conf/cassandra.yaml``.
+Node role (master, primary, data) is automatically set by elassandra, standard configuration should only set **cluster_name**, **rpc_address** in the ``conf/cassandra.yaml``.
+
 
 Logging configuration
 ---------------------

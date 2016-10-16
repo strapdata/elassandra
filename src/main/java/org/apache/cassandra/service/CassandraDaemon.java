@@ -257,6 +257,8 @@ public class CassandraDaemon
         }
 
 
+       
+        
         try
         {
             loadRowAndKeyCacheAsync().get();
@@ -335,6 +337,8 @@ public class CassandraDaemon
         if (!FBUtilities.getBroadcastAddress().equals(InetAddress.getLoopbackAddress()))
             waitForGossipToSettle();
 
+        userKeyspaceInitialized();
+        
         // schedule periodic background compaction task submission. this is simply a backstop against compactions stalling
         // due to scheduling errors or race conditions
         ScheduledExecutors.optionalTasks.scheduleWithFixedDelay(ColumnFamilyStore.getBackgroundCompactionTaskSubmitter(), 5, 1, TimeUnit.MINUTES);
@@ -458,8 +462,12 @@ public class CassandraDaemon
         // On linux, this doesn't entirely shut down Cassandra, just the RPC server.
         // jsvc takes care of taking the rest down
         logger.info("Cassandra shutting down...");
-        thriftServer.stop();
-        nativeServer.stop();
+        
+        if (thriftServer != null) 
+        	thriftServer.stop();
+        
+        if (nativeServer != null)
+        	nativeServer.stop();
 
         // On windows, we need to stop the entire system as prunsrv doesn't have the jsvc hooks
         // We rely on the shutdown hook to drain the node
@@ -585,6 +593,9 @@ public class CassandraDaemon
      * (called once from CassandraDaemon2.setup()).
      */
     public void systemKeyspaceInitialized() {
+    }
+    
+    public void userKeyspaceInitialized() {
     }
 
     /**

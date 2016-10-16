@@ -386,25 +386,28 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
     // build routing table for all indices.
     public static RoutingTable build(ClusterService clusterService, ClusterState clusterState) {
     	ImmutableMap.Builder<String, IndexRoutingTable> indicesRoutingMap = new ImmutableMap.Builder<>();
-        for(ObjectObjectCursor<String, IndexMetaData> entry : clusterState.metaData().getIndices()) {
-        	IndexRoutingTable.Builder indexRoutingTableBuilder = new IndexRoutingTable.Builder(entry.key, clusterService, clusterState);
-        	 indicesRoutingMap.put(indexRoutingTableBuilder.index, indexRoutingTableBuilder.build());
-        }
+    	if (clusterService.isUserKeyspaceInitialized()) {
+	        for(ObjectObjectCursor<String, IndexMetaData> entry : clusterState.metaData().getIndices()) {
+	        	IndexRoutingTable.Builder indexRoutingTableBuilder = new IndexRoutingTable.Builder(entry.key, clusterService, clusterState);
+	        	 indicesRoutingMap.put(indexRoutingTableBuilder.index, indexRoutingTableBuilder.build());
+	        }
+    	}
         return new RoutingTable(clusterState.routingTable().version(), indicesRoutingMap.build());
     }
     
     // update routing table for one index.
     public static RoutingTable build(ClusterService clusterService, ClusterState clusterState, String index) {
     	ImmutableMap.Builder<String, IndexRoutingTable> indicesRoutingMap = new ImmutableMap.Builder<>();
-        for(Map.Entry<String, IndexRoutingTable> entry : clusterState.routingTable().indicesRouting().entrySet()) {
-        	if (!entry.getKey().equals(index))
-        		indicesRoutingMap.put(entry.getKey(), entry.getValue());
-        }
-        
-        // may update the routing table for the specified index
-        if (clusterState.metaData().index(index) != null)
-        	indicesRoutingMap.put(index, new IndexRoutingTable.Builder(index, clusterService, clusterState).build());
-        
+    	if (clusterService.isUserKeyspaceInitialized()) {
+	        for(Map.Entry<String, IndexRoutingTable> entry : clusterState.routingTable().indicesRouting().entrySet()) {
+	        	if (!entry.getKey().equals(index))
+	        		indicesRoutingMap.put(entry.getKey(), entry.getValue());
+	        }
+	        
+	        // may update the routing table for the specified index
+	        if (clusterState.metaData().index(index) != null)
+	        	indicesRoutingMap.put(index, new IndexRoutingTable.Builder(index, clusterService, clusterState).build());
+    	}
         return new RoutingTable(clusterState.routingTable().version(), indicesRoutingMap.build());
     }
     
@@ -517,7 +520,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
             return this;
         }
         public Builder addAsNew(IndexMetaData indexMetaData) {
-            if (indexMetaData.getState() == IndexMetaData.State.OPEN) {
+            if (indexMetaData.getState() == IndexMetaData.State.OPEN && indicesRouting.get(indexMetaData.getIndex()) != null) {
                 indicesRouting.get(indexMetaData.getIndex())
                     .initializeAsNew(indexMetaData);
             }
@@ -525,7 +528,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
         }
 
         public Builder addAsRecovery(IndexMetaData indexMetaData) {
-            if (indexMetaData.getState() == IndexMetaData.State.OPEN) {
+            if (indexMetaData.getState() == IndexMetaData.State.OPEN  && indicesRouting.get(indexMetaData.getIndex()) != null) {
                 indicesRouting.get(indexMetaData.getIndex())
                         .initializeAsRecovery(indexMetaData);
             }

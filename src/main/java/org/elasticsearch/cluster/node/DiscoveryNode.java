@@ -19,13 +19,21 @@
 
 package org.elasticsearch.cluster.node;
 
-import com.google.common.collect.ImmutableMap;
+import static org.elasticsearch.common.transport.TransportAddressSerializers.addressToStream;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.io.stream.*;
-import org.elasticsearch.common.network.NetworkUtils;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
@@ -33,13 +41,7 @@ import org.elasticsearch.common.transport.TransportAddressSerializers;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.common.transport.TransportAddressSerializers.addressToStream;
+import com.google.common.collect.ImmutableMap;
 
 /**
  * A discovery node represents a node that is part of the cluster.
@@ -98,6 +100,7 @@ public class DiscoveryNode implements Streamable, ToXContent {
 
     private String nodeName = "";
     private String nodeId;
+    private transient UUID nodeUuid;
     private String hostName;
     private String hostAddress;
     private TransportAddress address;
@@ -171,6 +174,7 @@ public class DiscoveryNode implements Streamable, ToXContent {
         }
         this.attributes = builder.build();
         this.nodeId = nodeId.intern();
+        this.nodeUuid = UUID.fromString(nodeId);
         this.hostName = hostName.intern();
         this.hostAddress = hostAddress.intern();
         this.address = address;
@@ -272,6 +276,10 @@ public class DiscoveryNode implements Streamable, ToXContent {
         return id();
     }
 
+    public UUID uuid() {
+    	return this.nodeUuid;
+    }
+    
     /**
      * The name of the node.
      */

@@ -26,11 +26,15 @@ import org.elasticsearch.bootstrap.JVMCheck;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.cassandra.discovery.CassandraDiscovery;
-import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.cassandra.index.BaseElasticSecondaryIndex;
 import org.elasticsearch.cassandra.shard.CassandraShardStateObserver;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.cli.Terminal;
 import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Injector;
@@ -86,6 +90,10 @@ public class ElassandraDaemon extends CassandraDaemon {
         super();
     }
 
+    public Node node() {
+    	return node;
+    }
+    
     public void activate(boolean addShutdownHook) {
         instance.setup(addShutdownHook, settings, env); 
         
@@ -159,6 +167,30 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     @Override
+    public void userKeyspaceInitialized() {
+    	ClusterService clusterService = node.clusterService();
+    	clusterService.userKeyspaceInitialized();
+    	clusterService.submitStateUpdateTask("User keyspaces initialized",Priority.NORMAL, new ClusterStateUpdateTask() {
+
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+                ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
+                ClusterState newClusterState = clusterService.updateNumberOfShards( newStateBuilder.build() );
+                RoutingTable newRoutingTable = RoutingTable.build(clusterService, newClusterState);
+                return ClusterState.builder(newClusterState).incrementVersion().routingTable(newRoutingTable).build();
+            }
+
+
+            @Override
+            public void onFailure(String source, Throwable t) {
+                logger.error("unexpected failure during [{}]", t, source);
+            }
+
+        });
+    }
+    
+    
+    @Override
     public void beforeBootstrap() {
     	boostraped = true;
     	node.activate();
@@ -181,7 +213,8 @@ public class ElassandraDaemon extends CassandraDaemon {
      */
     public void stop() {
         super.stop();
-        node.close();
+        if (node != null) 
+        	node.close();
     }
 
     /**
@@ -203,13 +236,17 @@ public class ElassandraDaemon extends CassandraDaemon {
      */
     public void destroy() {
         super.destroy();
-        node.close();
-        keepAliveLatch.countDown();
+        if (node != null)
+        	node.close();
+        if (keepAliveLatch != null)
+        	keepAliveLatch.countDown();
     }
 
-    private void setup(boolean addShutdownHook, Settings settings, Environment environment) {
-        
-        org.elasticsearch.bootstrap.Bootstrap.initializeNatives(environment.tmpFile(),
+    public void setup(boolean addShutdownHook, Settings settings, Environment environment) {
+    	this.settings = settings;
+    	this.env = environment;
+        org.elasticsearch.bootstrap.Bootstrap.initializeNatives(
+        				  environment.tmpFile(),
                           settings.getAsBoolean("bootstrap.mlockall", false),
                           settings.getAsBoolean("bootstrap.seccomp", true),
                           settings.getAsBoolean("bootstrap.ctrlhandler", true));
@@ -257,10 +294,13 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
         nodeBuilder.clusterName(clusterName).data(true).settings()
                 .put("name", CassandraDiscovery.buildNodeName(DatabaseDescriptor.getRpcAddress()))
-                .put("network.host", DatabaseDescriptor.getRpcAddress().getHostAddress())
-                .put("http.netty.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
-                .put("http.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
-                .put("http.host", DatabaseDescriptor.getRpcAddress().getHostAddress())
+                .put("network.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
+                .put("network.publish_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
+                .put("transport.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
+                .put("transport.publish_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
+                //.put("http.netty.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
+                //.put("http.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
+                //.put("http.host", DatabaseDescriptor.getRpcAddress().getHostAddress())
                 ;
 
         this.node = nodeBuilder.build();
@@ -306,6 +346,19 @@ public class ElassandraDaemon extends CassandraDaemon {
     
     public static void main(String[] args) {
     	
+    	try
+        {
+            DatabaseDescriptor.forceStaticInitialization();
+        }
+        catch (ExceptionInInitializerError e)
+        {
+        	System.out.println("Exception (" + e.getClass().getName() + ") encountered during startup: " + e.getMessage());
+        	String errorMessage = buildErrorMessage("Initialization", e);
+            System.err.println(errorMessage);
+            System.err.flush();
+            System.exit(3);
+        }
+    	
     	BaseElasticSecondaryIndex.runsElassandra = true;
     	
         boolean foreground = System.getProperty("cassandra-foreground") != null;
@@ -346,7 +399,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         String stage = "Initialization";
 
         try {
-            if (foreground) {
+            if (!foreground) {
                 Loggers.disableConsoleLogging();
                 System.out.close();
             }

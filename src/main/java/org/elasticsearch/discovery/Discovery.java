@@ -21,7 +21,9 @@ package org.elasticsearch.discovery;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
@@ -82,24 +84,7 @@ public interface Discovery extends LifecycleComponent<Discovery> {
     
     public DiscoveryNodes nodes();
     
-    /**
-     * Get indices shard state from gossip endpoints state map.
-     * @param address
-     * @param index
-     * @return
-     * @throws JsonParseException
-     * @throws JsonMappingException
-     * @throws IOException
-     */
-    ShardRoutingState getShardRoutingState(final InetAddress address, final String index, ShardRoutingState defaultState);
-    
-    
-    /**
-     * Return a set of remote started shards according t the gossip state map.
-     * @param index
-     * @return a set of remote started shards according t the gossip state map.
-     */
-    Set<InetAddress> getStartedShard(String index);
+    public Map<UUID, ShardRoutingState> getShardRoutingStates(String index);
     
     /**
      * Set index shard state in the gossip endpoint map (must be synchronized).

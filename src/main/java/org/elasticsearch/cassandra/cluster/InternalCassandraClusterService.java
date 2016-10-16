@@ -55,6 +55,7 @@ import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.composites.CBuilder;
 import org.apache.cassandra.db.composites.CType;
 import org.apache.cassandra.db.composites.Composite;
@@ -79,7 +80,6 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.exceptions.UnavailableException;
-import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.serializers.CollectionSerializer;
@@ -125,8 +125,11 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.cluster.node.DiscoveryNodeService;
+import org.elasticsearch.cluster.routing.GroupShardsIterator;
+import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.InternalClusterService;
 import org.elasticsearch.common.Priority;
@@ -134,7 +137,9 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.inject.internal.Nullable;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -186,6 +191,7 @@ import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.percolator.PercolatorQueriesRegistry;
 import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.IndicesService;
@@ -202,7 +208,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 
 
@@ -270,6 +275,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     };
     
+    private volatile boolean  userKeyspaceInitialized = false;
+    
     private final TimeValue mappingUpdateTimeout;
     private final IndicesService indicesService;
     
@@ -279,8 +286,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
     
     protected Class defaultSecondaryIndexClass = ExtendedElasticSecondaryIndex.class;
     protected Class defaultSearchStrategyClass = PrimaryFirstSearchStrategy.class;
-    protected Map<String, AbstractSearchStrategy> registry = new ConcurrentHashMap<String, AbstractSearchStrategy>();
-    
+    protected Map<String, AbstractSearchStrategy> strategies = new ConcurrentHashMap<String, AbstractSearchStrategy>();
+    protected Map<String, AbstractSearchStrategy.Router> routers = new ConcurrentHashMap<String, AbstractSearchStrategy.Router>();
+     
     private ConsistencyLevel metadataWriteCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.write.cl","QUORUM"));
     private ConsistencyLevel metadataReadCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.read.cl","QUORUM"));
     private ConsistencyLevel metadataSerialCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.serial.cl","SERIAL"));
@@ -313,7 +321,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         if (settings.get(SETTING_CLUSTER_DEFAULT_SEARCH_STRATEGY_CLASS) != null) {
             try {
                 this.defaultSearchStrategyClass = Class.forName(settings.get(SETTING_CLUSTER_DEFAULT_SEARCH_STRATEGY_CLASS));
-                registry.put(defaultSearchStrategyClass.getClass().getName(), (AbstractSearchStrategy) defaultSearchStrategyClass.newInstance());
+                strategies.put(defaultSearchStrategyClass.getClass().getName(), (AbstractSearchStrategy) defaultSearchStrategyClass.newInstance());
             } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
                 logger.error("Cannot load " + SETTING_CLUSTER_DEFAULT_SEARCH_STRATEGY_CLASS, e);
             }
@@ -336,24 +344,104 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return cqlMapping.keySet().contains(cqlType) && !cqlType.startsWith("geo_");
     }
     
-    public AbstractSearchStrategy.Result searchStrategy(IndexMetaData indexMetaData, Collection<InetAddress> startedShards) {
-        String searchStrategyClassName = defaultSearchStrategyClass.getName();
+   
+    
+    @Override
+    public void userKeyspaceInitialized() {
+    	this.userKeyspaceInitialized = true;
+    }
+    
+    @Override
+    public boolean isUserKeyspaceInitialized() {
+    	return this.userKeyspaceInitialized;
+    }
+    
+    public AbstractSearchStrategy searchStrategy(IndexMetaData indexMetaData) {
+    	String searchStrategyClassName = defaultSearchStrategyClass.getName();
         if (indexMetaData.searchStrategyClass() != null) {
             searchStrategyClassName = indexMetaData.searchStrategyClass();
         }
-        AbstractSearchStrategy searchStrategy = registry.get(searchStrategyClassName);
+        return searchStrategy(searchStrategyClassName);
+    }
+    
+    private AbstractSearchStrategy searchStrategy(String searchStrategyClassName) {
+    	AbstractSearchStrategy searchStrategy = strategies.get(searchStrategyClassName);
         if (searchStrategy == null) {
             try {
                 searchStrategy = (AbstractSearchStrategy) Class.forName(searchStrategyClassName).newInstance();
-                registry.putIfAbsent(searchStrategyClassName, searchStrategy);
+                strategies.putIfAbsent(searchStrategyClassName, searchStrategy);
             } catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
                 logger.error("Failed to instanciate search strategy "+searchStrategyClassName, e);
-                searchStrategy = registry.get(defaultSearchStrategyClass.getClass().getName());
+                searchStrategy = strategies.get(defaultSearchStrategyClass.getClass().getName());
             }
         }
-        return searchStrategy.topology(indexMetaData.keyspace(), startedShards);
+        return searchStrategy;
     }
      
+    public PrimaryFirstSearchStrategy.PrimaryFirstRouter updateRouter(IndexMetaData indexMetaData, ClusterState state) {
+    	// update and returns a PrimaryFirstRouter for the build table.
+    	AbstractSearchStrategy searchStrategy = searchStrategy(PrimaryFirstSearchStrategy.class.getName());
+    	PrimaryFirstSearchStrategy.PrimaryFirstRouter router = (PrimaryFirstSearchStrategy.PrimaryFirstRouter) searchStrategy.newRouter(indexMetaData.getIndex(), indexMetaData.keyspace(), getShardRoutingStates(indexMetaData.getIndex()), state);
+        
+    	// update the router cache with the effective router
+    	if (!PrimaryFirstSearchStrategy.class.getName().equals(indexMetaData.searchStrategyClass())) {
+    		AbstractSearchStrategy searchStrategy2 = searchStrategy(indexMetaData);
+    		AbstractSearchStrategy.Router router2 = searchStrategy2.newRouter(indexMetaData.getIndex(), indexMetaData.keyspace(), getShardRoutingStates(indexMetaData.getIndex()), state);
+    		this.routers.put(indexMetaData.getIndex(), router2);
+    	} else {
+    		this.routers.put(indexMetaData.getIndex(), router);
+    	}
+        
+    	return router;
+    }
+    
+    public AbstractSearchStrategy.Router getRouter(IndexMetaData indexMetaData, ClusterState state) {
+    	AbstractSearchStrategy.Router router = this.routers.get(indexMetaData.getIndex());
+    	return router;
+    }
+    
+    /*
+    public GroupShardsIterator searchShards(TransportAddress sourceIp, String queryHash, String key, ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference) {
+        final Set<IndexShardRoutingTable> shards = operationRouting().computeTargetedShards(clusterState, concreteIndices, routing);
+        final Set<ShardIterator> set = new HashSet<>(shards.size());
+        for (IndexShardRoutingTable shard : shards) {
+            ShardIterator iterator = preferenceActiveShardIterator(shard, clusterState.nodes().localNodeId(), clusterState.nodes(), preference);
+            // Modified here to check that iterator.size() > 0
+            if ((iterator != null) && (iterator.size() > 0)) {
+                set.add(iterator);
+            }
+        }
+        return new GroupShardsIterator(new ArrayList<>(set));
+    }
+    private static final Map<String, Set<String>> EMPTY_ROUTING = Collections.emptyMap();
+    
+    private Set<IndexShardRoutingTable> computeTargetedShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing) {
+        routing = routing == null ? EMPTY_ROUTING : routing; // just use an empty map
+        final Set<IndexShardRoutingTable> set = new HashSet<>();
+        // we use set here and not list since we might get duplicates
+        for (String index : concreteIndices) {
+            final IndexRoutingTable indexRouting = indexRoutingTable(clusterState, index);
+            final Set<String> effectiveRouting = routing.get(index);
+            if (effectiveRouting != null) {
+                for (String r : effectiveRouting) {
+                    int shardId = 0;
+                    IndexShardRoutingTable indexShard = indexRouting.shard(shardId);
+                    if (indexShard == null) {
+                        throw new ShardNotFoundException(new ShardId(index, shardId));
+                    }
+                    // we might get duplicates, but that's ok, they will override one another
+                    set.add(indexShard);
+                }
+            } else {
+                for (IndexShardRoutingTable indexShard : indexRouting) {
+                    set.add(indexShard);
+                }
+            }
+        }
+        return set;
+    }
+    */
+    
     /**
      * Binds values with query and executes with consistency level.
      * 
@@ -408,9 +496,17 @@ public class InternalCassandraClusterService extends InternalClusterService {
      *      int)
      **/
     @Override
-    public void createIndexKeyspace(final String index, final int replicationFactor) throws IOException {
-        try {
-            QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = {'class':'NetworkTopologyStrategy', '%s':'%d' };", index,
+    public void createIndexKeyspace(final String ksname, final int replicationFactor) throws IOException {
+    	try {
+    		Keyspace ks = Keyspace.open(ksname);
+    		if (ks != null && !(ks.getReplicationStrategy() instanceof NetworkTopologyStrategy)) {
+        		throw new IOException("Cannot create index, underlying keyspace requires the NetworkTopologyStrategy.");
+        	}
+    	} catch(AssertionError e) {
+    	}
+
+    	try {
+            QueryProcessor.process(String.format("CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = {'class':'NetworkTopologyStrategy', '%s':'%d' };", ksname,
                     DatabaseDescriptor.getLocalDataCenter(), replicationFactor), ConsistencyLevel.LOCAL_ONE);
         } catch (Throwable e) {
             throw new IOException(e.getMessage(), e);
@@ -601,7 +697,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
     }
 
     private static final String GEO_POINT_TYPE = "geo_point";
-    private static final String GEO_SHAPE_TYPE = "geo_shape";
     private static final String ATTACHEMENT_TYPE = "attachement";
     private static final String COMPLETION_TYPE = "completion";
     
@@ -610,11 +705,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
     }
 
-    private void buildGeoShapeType(String ksName) throws RequestExecutionException {
-        String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" (geojson text)", ksName, GEO_SHAPE_TYPE);
-        QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
-    }
-    
     private void buildAttachementType(String ksName) throws RequestExecutionException {
         String query = String.format("CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" (context text, content_type text, content_length bigint, date timestamp, title text, author text, keywords text, language text)", ksName, ATTACHEMENT_TYPE);
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
@@ -747,8 +837,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
                         cqlType = GEO_POINT_TYPE;
                         buildGeoPointType(ksName);
                     } else if (fieldMapper instanceof GeoShapeFieldMapper) {
-                        cqlType = GEO_SHAPE_TYPE;
-                        buildGeoShapeType(ksName);
+                        cqlType = "text";
+                        //buildGeoShapeType(ksName);
                     } else if (fieldMapper instanceof CompletionFieldMapper) {
                     	cqlType = COMPLETION_TYPE;
                     	buildCompletionType(ksName);
@@ -1653,7 +1743,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
             if (cd != null) {
             	// we got a CQL column.
             	Object fieldValue = sourceMap.get(field);
-	            try {
+            	try {
 	            	if (fieldValue == null) {
 	                    if (cd.type.isCollection()) {
 	                        switch (((CollectionType<?>)cd.type).kind) {
@@ -1675,26 +1765,28 @@ public class InternalCassandraClusterService extends InternalClusterService {
 	                }
 	                
 	                // hack to store percolate query as a string while mapper is an object mapper.
-	                if (cd.type.isCollection()) {
-                        switch (((CollectionType<?>)cd.type).kind) {
-                        case LIST :
-                        	if ( ((ListType)cd.type).getElementsType().asCQL3Type().equals(CQL3Type.Native.TEXT) && !(fieldValue instanceof String)) {
-    	                		// opaque list of objects serialized to JSON text 
-    		                	fieldValue = Collections.singletonList( ClusterService.Utils.stringify(fieldValue) );
-    	                	}
-                        	break;
-                        case SET :
-                        	if ( ((SetType)cd.type).getElementsType().asCQL3Type().equals(CQL3Type.Native.TEXT) &&  !(fieldValue instanceof String)) {
-    	                		// opaque set of objects serialized to JSON text 
-    		                	fieldValue = Collections.singleton( ClusterService.Utils.stringify(fieldValue) );
-    	                	}
-                        	break;
-                        }
-	                } else {
-	                	if (cd.type.asCQL3Type().equals(CQL3Type.Native.TEXT) && !(fieldValue instanceof String)) {
-	                		// opaque singleton object serialized to JSON text 
-		                	fieldValue = ClusterService.Utils.stringify(fieldValue);
-	                	}
+	                if (metadata.cfName.equals("_percolator") && field.equals("query")) {
+		                if (cd.type.isCollection()) {
+	                        switch (((CollectionType<?>)cd.type).kind) {
+	                        case LIST :
+	                        	if ( ((ListType)cd.type).getElementsType().asCQL3Type().equals(CQL3Type.Native.TEXT) && !(fieldValue instanceof String)) {
+	    	                		// opaque list of objects serialized to JSON text 
+	    		                	fieldValue = Collections.singletonList( ClusterService.Utils.stringify(fieldValue) );
+	    	                	}
+	                        	break;
+	                        case SET :
+	                        	if ( ((SetType)cd.type).getElementsType().asCQL3Type().equals(CQL3Type.Native.TEXT) &&  !(fieldValue instanceof String)) {
+	    	                		// opaque set of objects serialized to JSON text 
+	    		                	fieldValue = Collections.singleton( ClusterService.Utils.stringify(fieldValue) );
+	    	                	}
+	                        	break;
+	                        }
+		                } else {
+		                	if (cd.type.asCQL3Type().equals(CQL3Type.Native.TEXT) && !(fieldValue instanceof String)) {
+		                		// opaque singleton object serialized to JSON text 
+			                	fieldValue = ClusterService.Utils.stringify(fieldValue);
+		                	}
+		                }
 	                }
 	                
 	                
@@ -2196,28 +2288,22 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     }
 
-    
+	
     
     /**
-     * Get indices shard state from gossip endpoints state map.
-     * @param address
+     * Return a set of started shards according t the gossip state map and the local shard state.
      * @param index
-     * @return
-     * @throws JsonParseException
-     * @throws JsonMappingException
-     * @throws IOException
+     * @return a set of started shards.
      */
-    public ShardRoutingState getShardRoutingState(final InetAddress address, final String index, ShardRoutingState defaultState) {
-        return this.discoveryService.getShardRoutingState(address, index, defaultState);
-    }
-
-    /**
-     * Return a set of remote started shards according t the gossip state map.
-     * @param index
-     * @return a set of remote started shards according t the gossip state map.
-     */
-    public Set<InetAddress> getRemoteStartedShard(String index) {
-        return this.discoveryService.getStartedShard(index);
+    public Map<UUID, ShardRoutingState> getShardRoutingStates(String index) {
+    	Map<UUID, ShardRoutingState> shards = this.discoveryService.getShardRoutingStates(index);
+    	try {
+			IndexShard localIndexShard = indicesService.indexServiceSafe(index).shard(0);
+			if (localIndexShard != null)
+				shards.put(this.localNode().uuid(), localIndexShard.shardRouting().state());
+		} catch (IndexNotFoundException e) {
+		}
+        return shards;
     }
     
     
@@ -2258,6 +2344,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
             // workaround because elasticsearch manage InetAddress as Long
             Long ip = (Long) ((IpFieldMapper) mapper).fieldType().value(value);
             return  com.google.common.net.InetAddresses.forString(IpFieldMapper.longToIp(ip));
+        } else if (mapper instanceof GeoShapeFieldMapper) {
+        	return value.toString();
         } else {
             Object v = mapper.fieldType().value(value);
             if (v instanceof Uid) {

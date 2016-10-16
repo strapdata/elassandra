@@ -21,15 +21,14 @@ package org.elasticsearch.discovery;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.UUID;
 
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
-import org.elasticsearch.ElasticsearchTimeoutException;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlock;
@@ -49,31 +48,8 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
     public static final String SETTING_INITIAL_STATE_TIMEOUT = "discovery.initial_state_timeout";
     public static final String SETTING_DISCOVERY_SEED = "discovery.id.seed";
 
-
-    /*
-    private static class InitialStateListener implements InitialStateDiscoveryListener {
-
-        private final CountDownLatch latch = new CountDownLatch(1);
-        private volatile boolean initialStateReceived;
-
-        @Override
-        public void initialStateProcessed() {
-            initialStateReceived = true;
-            latch.countDown();
-        }
-
-        public boolean waitForInitialState(TimeValue timeValue) throws InterruptedException {
-            if (timeValue.millis() > 0) {
-                latch.await(timeValue.millis(), TimeUnit.MILLISECONDS);
-            }
-            return initialStateReceived;
-        }
-    }
-	*/
-    
     private final TimeValue initialStateTimeout;
     private final Discovery discovery;
-    //private InitialStateListener initialStateListener;
     private final DiscoverySettings discoverySettings;
 
     @Inject
@@ -95,27 +71,9 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
         discovery.start();
         logger.info(discovery.nodeDescription());
     }
-
-    /*
-    public void waitForInitialState() {
-        try {
-            if (!initialStateListener.waitForInitialState(initialStateTimeout)) {
-                logger.warn("waited for {} and no initial state was set by the discovery", initialStateTimeout);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new ElasticsearchTimeoutException("Interrupted while waiting for initial discovery state");
-        }
-    }
-	*/
     
     @Override
     protected void doStop() {
-    	/*
-        if (initialStateListener != null) {
-            discovery.removeListener(initialStateListener);
-        }
-        */
         discovery.stop();
     }
 
@@ -155,21 +113,6 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
     
     
     /**
-     * Get indices shard state from gossip endpoints state map.
-     * @param address
-     * @param index
-     * @return
-     * @throws JsonParseException
-     * @throws JsonMappingException
-     * @throws IOException
-     * 
-     */
-    public ShardRoutingState getShardRoutingState(final InetAddress address, final String index, final ShardRoutingState defaultState) {
-        return this.discovery.getShardRoutingState(address, index, defaultState);
-    }
-
-    
-    /**
      * Set index shard state in the gossip endpoint map (must be synchronized).
      * @param index
      * @param shardRoutingState
@@ -181,15 +124,10 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
         this.discovery.putShardRoutingState(index, shardRoutingState);
     }
 
-    /**
-     * Return a set of remote started shards according t the gossip state map.
-     * @param index
-     * @return a set of remote started shards according t the gossip state map.
-     */
-    public Set<InetAddress> getStartedShard(String index) {
-        return this.discovery.getStartedShard(index);
-    }
     
+    public Map<UUID, ShardRoutingState> getShardRoutingStates(String index) {
+    	 return this.discovery.getShardRoutingStates(index);
+    }
     
     public void removeIndexShardState(final String index) throws JsonGenerationException, JsonMappingException, IOException {
         this.discovery.putShardRoutingState(index, null);

@@ -16,6 +16,7 @@
 package org.elasticsearch.cassandra.index;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -93,6 +94,11 @@ public abstract class BaseElasticSecondaryIndex extends PerRowSecondaryIndex imp
         initMapping();
     }
 
+    @Override
+    public String getNameForSystemKeyspace(ByteBuffer columnName)
+    {
+        return index_name;
+    }
     
     public abstract void initMapping();
 

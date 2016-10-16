@@ -104,7 +104,7 @@ Meta-Fields
 * ``_id`` is a string representation of the primary key of the underlying cassandra table. Single field primary key is converted to a string, compound primary key is converted to a JSON array.
 * ``_type`` is the underlying cassandra table name.
 * ``_source`` is build from the cassandra row, for all columns having a mapped type in elasticsearch.
-* ``_routing`` is valued with a string representation of the partition key of the underlying cassandra table. Single partition key is converted to a string, compound partition key is converted to a JSON array. Specifying ``_routing`` on get, index or delete operations is useless, since the partition key is included from the ``_id``. On search operations, ``_routing`` reduce a search to a cassandra node hosting the searched document.
+* ``_routing`` is valued with a string representation of the partition key of the underlying cassandra table. Single partition key is converted to a string, compound partition key is converted to a JSON array. Specifying ``_routing`` on get, index or delete operations is useless, since the partition key is included in ``_id``. On search operations, Elassandra compute the cassandra token associated to ``_routing`` for the search type, and reduce the search only to a cassandra node hosting this token. (WARNING: Without any search types, Elassandra cannot compute the cassandra token and returns an error **all shards failed**). 
 * ``_ttl``  and ``_timestamp`` are mapped to the cassandra `TTL <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ttl_t.html>`_ and `WRITIME <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_writetime.html>`_. The returned ``_ttl``  and ``_timestamp`` for a document will be the one of a regular cassandra columns if there is one in the underlying table. Moreover, when indexing a document throught the Elasticearch API, all cassandra cells carry the same WRITETIME and TTL, but this could be different when upserting some cells using CQL.
 * ``_parent`` is string representation of the parent document primary key. If the parent document primary key is composite, this is string representation of columns defined by ``cql_parent_pk`` in the mapping. See `Parent-Child Relationship`_.
 * ``_token`` is a meta-field introduced by Elassandra, valued with **token(<partition_key>)**.
@@ -142,8 +142,9 @@ You can set a specific mapping for **twitter2** and re-index existing data on ea
 
 .. code::
 
-   nodetool rebuild_index twitter tweet elastic_tweet
+   nodetool rebuild_index twitter [--threads <N>] tweet elastic_tweet
 
+By default, **rebuild_index** use only one thread, but Elassandra supports multi-threaded index rebuild with the new parameter **--threads**.  
 Once your **twitter2** index is ready, set an alias **twitter** for **twitter2** to switch from the old mapping to the new one, and delete the old **twitter** index.
 
 .. code::
@@ -157,6 +158,8 @@ Partitioned Index
 `Elasticsearch TTL <https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-ttl-field.html>`_ support is deprecated since Elasticsearch 2.0 and the 
 Elasticsearch TTLService is disabled in elassandra. Rather than periodically looking for expired documents, Elassandra supports partitioned index allowing to manage per time-frame indices. 
 Thus, old data can be removed by simply deleting old indices.
+
+Partitionned index also allows to index more than 2^31 documents on a node (2^31 is the lucene max documents per index).
 
 An index partition function act as a selector when many indices are associated to a cassandra table. A partition function is defined by 3 or more fields separated by a space character :
 

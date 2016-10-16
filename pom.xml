@@ -6,7 +6,7 @@
     
     <groupId>org.elassandra</groupId>
     <artifactId>elassandra</artifactId>
-    <version>2.1.1-17</version>
+    <version>2.1.1-18</version>
     <name>Elassandra</name>
     <description>Elassandra - Elasticsearch for Cassandra</description>
 
@@ -67,7 +67,7 @@
         <tests.topn>5</tests.topn>
         <execution.hint.file>.local-${elasticsearch.version}-execution-hints.log</execution.hint.file>
         <execution.hint.integ.file>.local-${elasticsearch.version}-integ-execution-hints.log</execution.hint.integ.file>
-        <tests.assertion.disabled>false</tests.assertion.disabled>
+        <tests.assertion.disabled>true</tests.assertion.disabled>
         <tests.verbose>false</tests.verbose>
         <tests.seed></tests.seed>
         <tests.bwc></tests.bwc>
@@ -737,10 +737,13 @@
                                         <exclude>org/apache/cassandra/cql3/selection/Selectable*.class</exclude>
                                         <exclude>org/apache/cassandra/config/CFMetaData*.class</exclude>
                                         <exclude>org/apache/cassandra/service/CassandraDaemon*.class</exclude>
-                                        <exclude>org/apache/cassandra/service/StorageService$*.class</exclude>
-                                        <exclude>org/apache/cassandra/service/StorageService.class</exclude>
+                                        <exclude>org/apache/cassandra/service/StorageService*.class</exclude>
                                         <exclude>org/apache/cassandra/utils/CLibrary*.class</exclude>
                                         <exclude>org/apache/cassandra/db/index/SecondaryIndexManager*.class</exclude>
+                                        <exclude>org/apache/cassandra/db/index/SecondaryIndexBuilder.class</exclude>
+                                        
+                                        <exclude>org/apache/cassandra/tools/NodeProbe*.class</exclude>
+                                        <exclude>org/apache/cassandra/tools/nodetool/RebuildIndex.class</exclude>
                                         
                                         <!-- temporary Revert CASSANDRA-11427 because of CASSANDRA-12351 (CASSANDRA-12143).  -->
                                         <exclude>org/apache/cassandra/db/ColumnFamilyStore$*.class</exclude>
@@ -804,18 +807,53 @@
                 </configuration>
             </plugin>
             
-            <!--  
+             
             <plugin>
 	        	<groupId>org.apache.maven.plugins</groupId>
 	        	<artifactId>maven-surefire-plugin</artifactId>
+	        	
 	        	<configuration>
+	        		<argLine>-Djava.library.path=${basedir}/lib/sigar-bin -Dcassandra.config=file://${basedir}/src/test/resources/conf/cassandra.yaml -Dcassandra.config.dir=${basedir}/src/test/resources/conf -Dcassandra-rackdc.properties=file://${basedir}/src/test/resources/conf/cassandra-rackdc.properties -Dcassandra.config.loader=org.elasticsearch.cassandra.config.YamlTestConfigurationLoader -Dcassandra.storagedir=${basedir}/target/tests/</argLine>
+	        		<includes>
+                    	<include>**/*Tests.java</include>
+               		 </includes>
+	        		
+	        		<!--
+	        		<debugForkedProcess>true</debugForkedProcess>
+	        		
+	        		<systemProperties>
+            			<property>
+              				<name>cassandra-rackdc.properties</name>
+              				<value>file://${basedir}/src/test/resources/conf/cassandra-rackdc.properties</value>
+            			</property>
+            			<property>
+              				<name>cassandra.storagedir</name>
+              				<value>${basedir}/tests</value>
+            			</property>
+            		</systemProperties>
+	        		
+	        		<useSystemClassLoader>true</useSystemClassLoader>
 	         	 	<classpathDependencyExcludes>
 	           	 		<classpathDependencyExclude>org.apache.cassandra:cassandra-all</classpathDependencyExclude>
 	          		</classpathDependencyExcludes>
+	          		-->
 	       		 </configuration>
 	      	</plugin>
-	      	-->
-        </plugins>
+	      
+	        <plugin>
+  				<groupId>org.apache.maven.plugins</groupId>
+  				<artifactId>maven-surefire-report-plugin</artifactId>
+  				<version>2.6</version>
+  				<executions>
+    				<execution>
+      				<phase>test</phase>
+      				<goals>
+        				<goal>report-only</goal>
+      				</goals>
+    				</execution>
+  				</executions>
+  			</plugin>
+        	</plugins>
       </pluginManagement>
     </build>
     <profiles>

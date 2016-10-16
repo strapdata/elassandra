@@ -1,3 +1,12 @@
+2.1.1-18 - 2016-10-16
+  * Add support for multi-threaded nodetool rebuild_index to improve re-indexing performances.
+  * Add a new random search strategy to distribute search request to a minimum of nodes.
+  * Add support for multi-fields and geo_shape.
+  * Fix issue #50 Elastic Index ignores documents created using Cassandra UPDATE
+  * Fix issue when using distinct RPC and INTERNAL ip addresses for Cassandra.
+  * Don't close stdout when running in foreground.
+  * Creates Elasticsearch indices only for keyspaces using the NetworkReplicationStrategy.
+
 2.1.1-17.1 - 2016-09-04
   * Temporary revert CASSANDRA-11427 because of CASSANDRA-12351 (CASSANDRA-12143).
   * [breaking change] Replace DatacenterReplicationStrategy by NetworkReplicationStrategy to avoid boostraping issues (Replace all DatacenterReplicationStrategy by 

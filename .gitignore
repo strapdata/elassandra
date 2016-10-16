@@ -1,7 +1,10 @@
+dependency-reduced-pom.xml
 /tests
 /private
-/lib
 /target
-/build/
-/src/test/
+/build
+/src/test
+/src2
+/www
+/blog
 .*

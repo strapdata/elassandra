@@ -17,103 +17,82 @@ package org.elasticsearch.cassandra.cluster.routing;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
-import java.util.Set;
+import java.util.UUID;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.dht.Murmur3Partitioner.LongToken;
+import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.utils.FBUtilities;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
+import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.transport.TransportAddress;
 
-import com.google.common.base.Predicate;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Collections2;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
 
 /**
- * Use all local ranges and pickup a random endpoint for remote ranges (may be
- * unbalanced).
+ * return primary ranges of all nodes (and some replica for unreachable nodes).
  * 
  * @author vroyer
  *
  */
 public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
-    private static final Logger logger = LoggerFactory.getLogger(AbstractSearchStrategy.class);
 
-    @Override
-    public AbstractSearchStrategy.Result topology(String ksName, Collection<InetAddress> startedShards) {
-
-        Predicate<InetAddress> isLocalDC = new Predicate<InetAddress>() {
-            String localDC = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());
-           
-            public boolean apply(InetAddress address) {
-                String remoteDC = DatabaseDescriptor.getEndpointSnitch().getDatacenter(address);
-                return remoteDC.equals(localDC);
-            }
-        };
-        
-        Set<InetAddress> localLiveNodes = Sets.newHashSet(Collections2.filter(Gossiper.instance.getLiveTokenOwners(), isLocalDC));
-        Set<InetAddress> localUnreachableNodes = Sets.newHashSet(Collections2.filter(Gossiper.instance.getUnreachableTokenOwners(), isLocalDC));
-        Map<Range<Token>, List<InetAddress>> allRanges = StorageService.instance.getRangeToAddressMapInLocalDC(ksName);
-
-        Multimap<InetAddress, Range<Token>> topo = ArrayListMultimap.create();
-        Set<Range<Token>> orphanRanges = new HashSet<Range<Token>>();
-        boolean consistent = true;
-
-        // get live primary token ranges
-        for (InetAddress node : localLiveNodes) {
-            if (startedShards.contains(node)) {
-                topo.putAll(node, StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, node));
-            } else {
-                localUnreachableNodes.add(node);
-            }
-        }
-        if (logger.isDebugEnabled()) {
-            logger.debug("keyspace={} live nodes={}, primary ranges map = {}",ksName, localLiveNodes, topo);
-        }
-
-        // pickup random live replica for primary range owned by unreachable or not started nodes.
-        if (localUnreachableNodes.size() > 0) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("unreachableNodes = {} ", localUnreachableNodes);
-            }
-            Random rnd = new Random();
-            for (InetAddress node : localUnreachableNodes) {
-                for (Range<Token> orphanRange : StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, node)) {
-                    Set<InetAddress> replicaEndPoints = new HashSet<InetAddress>();
-                    for(Range<Token> range : allRanges.keySet()) {
-                        if (range.contains(orphanRange)) {
-                            replicaEndPoints.addAll( allRanges.get(range) );
-                        }
-                    }
-                    replicaEndPoints.removeAll(localUnreachableNodes);
-                    if (replicaEndPoints.size() == 0) {
-                        consistent = false;
-                        orphanRanges.add(orphanRange);
-                        if (logger.isDebugEnabled())
-                        	logger.debug("Inconsistent search for keyspace {}, no alive node having range {}", ksName, orphanRange);
-                    } else {
-                        InetAddress[] replicas = replicaEndPoints.toArray( new InetAddress[replicaEndPoints.size()] );
-                        InetAddress liveReplica = replicas[rnd.nextInt(replicas.length)];
-                        topo.put(liveReplica, orphanRange);
-                        if (logger.isDebugEnabled())
-                        	logger.debug("orphanRanges {} available on = {} ", orphanRanges, liveReplica);
-                    }
-                }
-            }
-        }
-
-        if (logger.isDebugEnabled()) {
-            logger.debug("topology for keyspace {} = {}, consistent={} unreachableNodes={} orphanRanges={}", ksName, topo.asMap(), consistent, localUnreachableNodes, orphanRanges);
-        }
-        return new AbstractSearchStrategy.Result(topo.asMap(), orphanRanges, localUnreachableNodes, allRanges);
+    public Router newRouter(final String index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
+    	return new PrimaryFirstRouter(index, ksName, shardStates, clusterState);
     }
+    
+    public class PrimaryFirstRouter extends Router {
+    	
+    	public PrimaryFirstRouter(final String index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
+    		super(index, ksName, shardStates, clusterState);
+    		
+    		Map<UUID, InetAddress> hostIdToEndpoints = StorageService.instance.getUuidToEndpoint();
+    		
+    		for(ObjectCursor<DiscoveryNode> entry : clusterState.nodes().getDataNodes().values()) {
+    			DiscoveryNode node = entry.value;
+    			InetAddress endpoint  = hostIdToEndpoints.get(node.uuid());
+    			assert endpoint != null;
+    			Collection<Range<Token>> primaryRanges = StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, endpoint);
+    			Range<Token> wrappedRange = null;		
+    			for(Range<Token> range : primaryRanges) {
+	    			if (range.isWrapAround()) {
+	    				wrappedRange = range;
+	    				break;
+	    			}
+    			}
+    			if (wrappedRange != null) {
+    				primaryRanges.remove(wrappedRange);
+                	primaryRanges.add( new Range<Token>(new LongToken((Long) wrappedRange.left.getTokenValue()), new LongToken(Long.MAX_VALUE)) );
+                	primaryRanges.add( new Range<Token>(new LongToken(Long.MIN_VALUE), new LongToken((Long) wrappedRange.right.getTokenValue())));
+                }
+    			if (ShardRoutingState.STARTED.equals(shardStates.get(node.uuid()))) {
+    				// unset all primary range bit on replica nodes.
+    				for(Range<Token> range : primaryRanges) {
+    					int idx = this.tokens.indexOf(range);
+    					for(InetAddress replica : this.rangeToEndpointsMap.get(range)) {
+    						UUID uuid = StorageService.instance.getHostId(replica);
+    						assert uuid != null;
+    						if (!node.uuid().equals(uuid)) {
+    							DiscoveryNode n = clusterState.nodes().get( uuid.toString() );
+    							if (this.greenShards.get(n) != null)
+    								this.greenShards.get(n).set(idx, false);
+    						}
+    					}
+    				}
+    			} 
+    		}
+    	}
+
+    }
+
+    
 }

@@ -455,6 +455,10 @@ public class IndexShard extends AbstractIndexShardComponent {
         }
     }
     
+    public ShardRouting shardRouting() {
+    	return this.shardRouting;
+    }
+    
     public void shardRouting(ShardRouting shardRouting) {
     	this.shardRouting = shardRouting;
     }

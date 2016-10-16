@@ -735,6 +735,9 @@ public final class ShardRouting implements Streamable, ToXContent {
         if (expectedShardSize != UNAVAILABLE_EXPECTED_SHARD_SIZE) {
             sb.append(", expected_shard_size[").append(expectedShardSize).append("]");
         }
+        if (tokenRanges != null && tokenRanges.size() > 0) {
+            sb.append(", token_ranges=").append(tokenRanges).append("]");
+        }
         return sb.toString();
     }
 
@@ -748,8 +751,8 @@ public final class ShardRouting implements Streamable, ToXContent {
                 .field("shard", shardId().id())
                 .field("index", shardId().index().name())
                 .field("version", version);
-        if (tokenRanges() != null) {
-            builder.field("token_ranges", tokenRanges());
+        if (tokenRanges != null) {
+            builder.field("token_ranges", tokenRanges);
         }
         if (expectedShardSize != UNAVAILABLE_EXPECTED_SHARD_SIZE){
             builder.field("expected_shard_size_in_bytes", expectedShardSize);

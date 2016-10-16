@@ -130,7 +130,7 @@ public abstract class TransportSearchTypeAction extends TransportAction<SearchRe
 
             Map<String, Set<String>> routingMap = indexNameExpressionResolver.resolveSearchRouting(clusterState, request.routing(), request.indices());
 
-            shardsIts = clusterService.operationRouting().searchShards(clusterState, concreteIndices, routingMap, request.preference());
+            shardsIts = clusterService.operationRouting().searchShards(clusterState, concreteIndices, routingMap, request.preference(), request.remoteAddress());
             expectedSuccessfulOps = shardsIts.size();
             // we need to add 1 for non active partition, since we count it in the total!
             expectedTotalOps = shardsIts.totalSizeWith1ForEmpty();

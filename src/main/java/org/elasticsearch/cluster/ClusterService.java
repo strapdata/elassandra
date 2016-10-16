@@ -70,6 +70,7 @@ import org.codehaus.jackson.node.ArrayNode;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
+import org.elasticsearch.cassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
@@ -450,7 +451,13 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
         
     }
     
-    public AbstractSearchStrategy.Result searchStrategy(IndexMetaData indexMetaData, Collection<InetAddress> startedShards);
+    
+    public void      userKeyspaceInitialized();
+    public boolean isUserKeyspaceInitialized();
+    
+    public AbstractSearchStrategy searchStrategy(IndexMetaData indexMetaData);
+    public AbstractSearchStrategy.Router getRouter(IndexMetaData indexMetaData, ClusterState state);
+    public PrimaryFirstSearchStrategy.PrimaryFirstRouter updateRouter(IndexMetaData indexMetaData, ClusterState state);
     
     public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Object node, Map<String, GetField> flatFields);
     public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> fields);
@@ -534,7 +541,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
      * @throws JsonMappingException
      * @throws IOException
      */
-    public ShardRoutingState getShardRoutingState(final InetAddress address, final String index, ShardRoutingState defaultState);
+    public Map<UUID, ShardRoutingState> getShardRoutingStates(String index);
     
     
     /**
@@ -547,12 +554,6 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
      */
     public void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
     
-    /**
-     * Return a set of remote started shards according t the gossip state map.
-     * @param index
-     * @return a set of remote started shards according t the gossip state map.
-     */
-    public Set<InetAddress> getRemoteStartedShard(String index);
 
     boolean isDatacenterGroupMember(InetAddress endpoint);
 }

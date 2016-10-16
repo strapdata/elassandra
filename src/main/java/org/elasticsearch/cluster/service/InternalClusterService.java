@@ -22,7 +22,6 @@ package org.elasticsearch.cluster.service;
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -42,13 +41,13 @@ import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
-import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.codehaus.jackson.JsonGenerationException;
@@ -59,6 +58,7 @@ import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cassandra.ConcurrentMetaDataUpdateException;
 import org.elasticsearch.cassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cassandra.cluster.routing.AbstractSearchStrategy;
+import org.elasticsearch.cassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.cassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.cassandra.index.SecondaryIndicesService;
 import org.elasticsearch.cassandra.shard.CassandraShardStateService;
@@ -243,7 +243,7 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
         
         Map<String, String> nodeAttributes = discoveryNodeService.buildAttributes();
         // note, we rely on the fact that its a new id each time we start, see FD and "kill -9" handling
-        final String nodeId = DiscoveryService.generateNodeId(settings);
+        final String nodeId = SystemKeyspace.getLocalHostId().toString();
         final TransportAddress publishAddress = transportService.boundAddress().publishAddress();
         DiscoveryNode localNode = new DiscoveryNode(settings.get("name"), nodeId, publishAddress, nodeAttributes, version);
         DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder().put(localNode).localNodeId(localNode.id());
@@ -883,9 +883,22 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
             InternalClusterService.this.slowTaskLoggingThreshold = slowTaskLoggingThreshold;
         }
     }
+    
+    @Override
+    public abstract void userKeyspaceInitialized();
+    
+    @Override
+    public abstract boolean isUserKeyspaceInitialized();
+    
+    @Override
+    public abstract AbstractSearchStrategy searchStrategy(IndexMetaData indexMetaData);
 
     @Override
-    public abstract AbstractSearchStrategy.Result searchStrategy(IndexMetaData indexMetaData, Collection<InetAddress> startedShards);
+    public abstract PrimaryFirstSearchStrategy.PrimaryFirstRouter updateRouter(IndexMetaData indexMetaData, ClusterState state);
+    
+    @Override
+    public abstract AbstractSearchStrategy.Router getRouter(IndexMetaData indexMetaData, ClusterState state);
+    
     
     @Override
     public abstract Map<String, GetField> flattenGetField(String[] fieldFilter, String path, Object node, Map<String, GetField> flatFields);
@@ -1009,12 +1022,11 @@ public abstract class InternalClusterService extends AbstractLifecycleComponent<
     public abstract void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source) throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
             RequestValidationException;
 
-    @Override
-    public abstract ShardRoutingState getShardRoutingState(InetAddress address, String index, ShardRoutingState defaultState);
+    //@Override
+    //public abstract ShardRoutingState getShardRoutingState(InetAddress address, String index, ShardRoutingState defaultState);
 
     @Override
     public abstract void putShardRoutingState(String index, ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
-
     
     @Override
     public abstract boolean isStaticDocument(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;

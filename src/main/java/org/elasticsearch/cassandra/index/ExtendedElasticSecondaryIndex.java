@@ -59,7 +59,6 @@ import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ElassandraDaemon;
-import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.apache.lucene.document.BinaryDocValuesField;
@@ -67,7 +66,12 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanClause.Occur;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.NumericRangeQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.codehaus.jackson.JsonGenerationException;
@@ -86,12 +90,14 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
+import org.elasticsearch.common.geo.builders.ShapeBuilder;
 import org.elasticsearch.common.lucene.all.AllEntries;
 import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.analysis.AnalysisService;
@@ -113,6 +119,7 @@ import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.core.TypeParsers;
+import org.elasticsearch.index.mapper.geo.GeoShapeFieldMapper;
 import org.elasticsearch.index.mapper.internal.IdFieldMapper;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
@@ -199,6 +206,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         private boolean hasStaticField = false;
         private boolean finalized = false;
         private BytesReference source;
+        private Object externalValue = null;
         
         public Context() {
         }
@@ -223,6 +231,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             this.dynamicMappingsUpdate = null;
             this.parent = null;
             this.version = BaseElasticSecondaryIndex.DEFAULT_VERSION;
+            this.externalValue = null;
         }
     
         // recusivelly add fields
@@ -240,7 +249,18 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             if (logger.isTraceEnabled())
                 logger.trace("doc[{}] class={} name={} value={}", this.documents.indexOf(doc()), mapper.getClass().getSimpleName(), mapper.name(), value);
             
-            if (mapper instanceof FieldMapper) {
+            if (mapper instanceof GeoShapeFieldMapper) {
+            	GeoShapeFieldMapper geoShapeMapper = (GeoShapeFieldMapper) mapper;
+            	XContentType xContentType = XContentType.JSON;
+            	XContentParser parser = xContentType.xContent().createParser((String)value);
+            	parser.nextToken();
+            	ShapeBuilder shapeBuilder = ShapeBuilder.parse(parser, geoShapeMapper);
+            	externalValue = shapeBuilder.build();
+            	path().add(mapper.name());
+            	geoShapeMapper.parse(this);
+            	path().remove();
+            	externalValue = null;
+        	} else if (mapper instanceof FieldMapper) {
             	FieldMapper fieldMapper = (FieldMapper)mapper;
             	if (fieldMapper.fieldType().indexOptions() != IndexOptions.NONE)
             		fieldMapper.createField(this, value);
@@ -324,7 +344,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 } else {
                 	if (docMapper.type().equals(PercolatorService.TYPE_NAME)) {
                 		// store percolator query as source.
-                		String sourceQuery = "{ \"query\":"+value+"}";
+                		String sourceQuery = "{\"query\":"+value+"}";
                 		if (logger.isDebugEnabled()) 
                 			logger.debug("Store percolate query={}", sourceQuery);
                 		
@@ -375,6 +395,16 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
         
         public void endNestedDocument() {
             this.document = doc().getParent();
+        }
+        
+        public boolean externalValueSet() {
+            return (externalValue != null);
+        }
+
+        public Object externalValue() {
+        	if (externalValue == null)
+        		throw new IllegalStateException("External value is not set");
+        	return externalValue;
         }
         
         public void finalize() {
@@ -653,11 +683,11 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             public IndexShard shard() {
                 final IndexShard indexShard = indexService.shard(0);
                 if (indexShard == null) {
-                    logger.warn("No such shard {}.0", name);
+                    logger.debug("No such shard {}.0", name);
                     return null;
                 }
                 if (indexShard.state() != IndexShardState.STARTED) {
-                    logger.warn("Shard {}.0 not started", name);
+                    logger.debug("Shard {}.0 not started", name);
                     return null;
                 }
                 return indexShard;
@@ -876,8 +906,8 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 if (targetIndexInfo != null) {
                     targetIndices.add( targetIndexInfo );
                 } else {
-                    if (logger.isWarnEnabled())
-                        logger.warn("No target index=[{}] found for partition function name=[{}] pattern=[{}] indices={}", indexName, func.name, func.pattern, this.indices.keySet());
+                    if (logger.isDebugEnabled())
+                        logger.debug("No target index=[{}] found for partition function name=[{}] pattern=[{}] indices={}", indexName, func.name, func.pattern, this.indices.keySet());
                 }
             }
             if (logger.isTraceEnabled()) 
@@ -957,7 +987,7 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     Cell cell = cellIterator.next();
                     CellName cellName = cell.name();
                     assert cellName instanceof CompoundSparseCellName;
-                    if (baseCfs.metadata.getColumnDefinition(cellName) == null && cellName.clusteringSize() > 0)  {
+                    if (baseCfs.metadata.clusteringColumns().size() > 0 && cellName.clusteringSize() > 0)  {
                         doc.flush();
                         doc = new Rowcument(cell);
                     } else {
@@ -992,21 +1022,34 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
             public void delete() {
                 
                 // copy the indexed columns of partition key in values
-                ArrayList<Object> values = new ArrayList<Object>(baseCfs.metadata.partitionKeyColumns().size());
-                for(int i=0 ; i < baseCfs.metadata.partitionKeyColumns().size(); i++) {
-                    if (indexedPkColumns[i]) {
+            	ArrayList<Object> values = new ArrayList<Object>(baseCfs.metadata.partitionKeyColumns().size());
+            	for(int i=0 ; i < baseCfs.metadata.partitionKeyColumns().size(); i++) {
+                    if (indexedPkColumns[i])
                         values.add( pkCols[i] );
-                    }
                 }
                 
                 for (MappingInfo.IndexInfo indexInfo : targetIndicesForDelete(values.toArray())) {
                     if (logger.isTraceEnabled())
-                        logger.trace("deleting document from index.type={}.{} id={}", indexInfo.name, typeName, partitionKey);
+                        logger.trace("deleting by query document from index.type={}.{} where partition_key={}", indexInfo.name, typeName, partitionKey);
                     IndexShard indexShard = indexInfo.indexService.shard(0);
                     if (indexShard != null) {
-                        Engine.Delete delete = indexShard.prepareDelete(typeName, partitionKey, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
-                        indexShard.delete(delete);
-                        
+                    	
+                    	BooleanQuery.Builder builder = new BooleanQuery.Builder();
+                    	DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(typeName);
+                    	for(int i=0 ; i < baseCfs.metadata.partitionKeyColumns().size(); i++) {
+                    		if (indexedPkColumns[i]) {
+                    			FieldMapper mapper = docMapper.mappers().smartNameFieldMapper(fields[i]);
+                    			if (mapper != null) {
+                    				Term t = new Term(fields[i], mapper.fieldType().indexedValueForSearch(values.get(i)));
+                    				builder.add(new TermQuery(t), Occur.FILTER);
+                    			} 
+                    		}
+                    	}
+                    	
+                    	Query query = builder.build();
+                    	DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+                    	indexShard.engine().delete(deleteByQuery);
+                    	
                         if (indexInfo.refresh) {
                             try {
                                 indexShard.refresh("refresh_flag_index");
@@ -1041,8 +1084,9 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                         }
                     }
                     // copy the indexed columns of clustering key in values
-                    if (cellName.clusteringSize() > 0 && baseCfs.metadata.getColumnDefinition(cell.name()) == null)  {
-                        // add clustering keys to docMap and _id
+                    //if (cellName.clusteringSize() > 0 && (baseCfs.metadata.getColumnDefinition(cell.name()) == null))  {
+                    if (cellName.clusteringSize() > 0 && (baseCfs.metadata.clusteringColumns().size() > 0))  {
+                            // add clustering keys to docMap and _id
                         ArrayNode an2 = ClusterService.Utils.jsonMapper.createArrayNode();
                         an2.addAll(an);
                         wideRow = true;

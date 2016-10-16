@@ -1,9 +1,9 @@
-curl -XPUT "http://$NODE:9200/twitter/" -d '{ "settings" : { "index.include_node":true }}'
+curl -XPUT "http://$NODE:9200/twitter/" -d '{ "settings" : { "index.include_node":true, "index.search_strategy_class":"org.elasticsearch.cassandra.cluster.routing.RandomSearchStrategy" }}'
 
 curl -XPUT "http://$NODE:9200/twitter/tweet/1?consistency=one" -d '{
     "user" : "vince",
     "post_date" : "2009-11-15T14:12:12",
-    "message" : "look at Elassandra !!",
+    "message" : ["look at Elassandra !!","twice"],
     "size": 50
 }'
 curl -XPUT "http://$NODE:9200/twitter/tweet/2?consistency=one" -d '{

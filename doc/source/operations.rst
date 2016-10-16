@@ -217,8 +217,36 @@ We can also do range search (the 'postDate' was automatically identified as date
    }'
 
 
-There are many more options to perform search, after all, it's a search product no? All the familiar Lucene queries are available through the JSON query language, or through the query parser.
+There are many more options to perform search, after all, it's a search product no ? All the familiar Lucene queries are available through the JSON query language, or through the query parser.
 
+Optimized search routing
+------------------------
+
+Elassandra supports various search strategies to distrbute a search request over the Elasticsearch cluster. A search strategy is configured at index-level with the ``index.search_strategy_class`` parameter.
+
++------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| Strategy                                                                                 | Description                                                                                                                        |
++==========================================================================================+====================================================================================================================================+
+| ``org.elasticsearch.cassandra.cluster.routing.PrimaryFirstSearchStrategy`` (**Default**) | Search on all alive nodes in the datacenter. All alive nodes responds for their primary token ranges, and for replica token ranges |
+|                                                                                          | when there is some unavailable nodes. This strategy is always used to build the routing table in the cluster state.                |
++------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| ``org.elasticsearch.cassandra.cluster.routing.RandomSearchStrategy``                     | For each query, randomly distribute a search request to a minimum of nodes to reduce the network traffic.                          |
+|                                                                                          | For exemple, if your underlying keyspace replication factor is N, a search only invloves 1/N of the nodes.                         |
++------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+
+You can create an index with the ``RandomSearchStrategy`` as shown below.
+
+.. code::
+
+   curl -XPUT "http://localhost:9200/twitter/" -d '{ 
+      "settings" : { 
+         "index.search_strategy_class":"org.elasticsearch.cassandra.cluster.routing.RandomSearchStrategy" 
+      }
+   }'
+
+.. TIP::
+   When changing a keyspace replication factor, you can force an elasticsearch routing table update by closing and re-opening all associated elasticsearch indices.
+   To troubleshoot search request routing, set the logging level to **DEBUG** for **class org.elasticsearch.cassandra.cluster.routing** in the **conf/logback.xml** file.  
 
 Create, delete and rebuild index
 ________________________________
@@ -251,17 +279,30 @@ To re-index your existing data, for exemple after a mapping change to index a ne
 
 .. code::
 
-   nodetool rebuild_index <keyspace> <table> elastic_<table>
+   nodetool rebuild_index [--threads <N>] <keyspace> <table> elastic_<table>
 
 .. TIP::
-   Re-index extisting data rely on the cassandra compaction manager. You can trigger a `cassandra compaction <http://docs.datastax.com/en/cassandra/2.0/cassandra/operations/ops_configure_compaction_t.html>`_ when :
+   By default, rebuild index runs on a single thread. In order to improve re-indexing performance, Elassandra comes with a multi-threaded rebuild_index implementation. The **--threads** parameter allows to specify the number of threads dedicated to re-index a cassandra table.
+   Number of indexing threads should be tuned carefully to avoid CPU exhaustion. Moreover, indexing throughput is limited by locking at the lucene level, but this limit can be exceeded by using a partitioned index invloving many independant shards. 
    
-   * Creating the first Elasticsearch index on a cassandra table with existing data, 
-   * Running a `nodetool rebuild_index <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRebuildIndex.html>`_  command,
-   * Running a `nodetool repair <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRepair.html>`_ on a keyspace having indexed tables (a repair actually creates new SSTables triggering index build).
-   
-   If the compaction manager is busy, secondary index rebuild is added as a pending task and executed later on. You can check current running compactions with a **nodetool compactionstats** and check pending compaction tasks with a **nodetool tpstats**. 
+Re-index extisting data rely on the cassandra compaction manager. You can trigger a `cassandra compaction <http://docs.datastax.com/en/cassandra/2.0/cassandra/operations/ops_configure_compaction_t.html>`_ when :
 
+* Creating the first Elasticsearch index on a cassandra table with existing data, 
+* Running a `nodetool rebuild_index <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRebuildIndex.html>`_  command,
+* Running a `nodetool repair <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRepair.html>`_ on a keyspace having indexed tables (a repair actually creates new SSTables triggering index build).
+
+If the compaction manager is busy, secondary index rebuild is added as a pending task and executed later on. You can check current running compactions with a **nodetool compactionstats** and check pending compaction tasks with a **nodetool tpstats**.
+
+.. code::
+   nodetool -h 52.43.156.196 compactionstats
+   pending tasks: 1
+                                     id         compaction type   keyspace      table   completed       total    unit   progress
+   052c70f0-8690-11e6-aa56-674c194215f6   Secondary index build     lastfm   playlist    66347424   330228366   bytes     20,09%
+   Active compaction remaining time :   0h00m00s
+
+To stop a compaction task (including a rebuild index task), you can either use a **nodetool stop** or use the JMX management operation  **stopCompactionById**.
+   
+   
 
 Open, close, index
 __________________
@@ -279,15 +320,15 @@ Flush, refresh index
 ____________________
 
 A refresh makes all index updates performed since the last refresh available for search. By default, refresh is scheduled every second. By design, setting refresh=true on a index operation
-has no effect on elassandra, because write operations are converted to CQL queries and documents are indexed later by a custom secondary index. So, the per-index refresh interval should be set carfully according to your needs.
+has no effect with Elassandra, because write operations are converted to CQL queries and documents are indexed later by a custom secondary index. So, the per-index refresh interval should be set carfully according to your needs.
 
 .. code::
 
       curl -XPOST 'localhost:9200/my_index/_refresh'
       
 A flush basically write a lucene index on disk. Because document **_source** is stored in cassandra table in elassandra, it make sense to execute 
-a ``nodetool flush <keyspace> <table>`` to flush both cassandra memtables to SSTables and lucene files for all associated elasticsearch indices. 
-Moreover, remember that a ``nodetool snapshot``  also involve a flush before creating the snapshot.
+a ``nodetool flush <keyspace> <table>`` to flush both cassandra Memtables to SSTables and lucene files for all associated elasticsearch indices. 
+Moreover, remember that a ``nodetool snapshot``  also involve a flush before creating a snapshot.
 
 .. code::
 
