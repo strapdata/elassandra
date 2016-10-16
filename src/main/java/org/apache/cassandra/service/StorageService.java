@@ -1598,6 +1598,12 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     {
         return getTokenMetadata().getHostId(FBUtilities.getBroadcastAddress()).toString();
     }
+    
+    public UUID getHostId(InetAddress endpoint)
+    {
+        return getTokenMetadata().getHostId(endpoint);
+    }
+    
 
     public Map<String, String> getHostIdMap()
     {
@@ -1617,6 +1623,14 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         Map<String, String> mapOut = new HashMap<>();
         for (Map.Entry<InetAddress, UUID> entry : getTokenMetadata().getEndpointToHostIdMapForReading().entrySet())
             mapOut.put(entry.getValue().toString(), entry.getKey().getHostAddress());
+        return mapOut;
+    }
+    
+    public Map<UUID, InetAddress> getUuidToEndpoint()
+    {
+        Map<UUID, InetAddress> mapOut = new HashMap<>();
+        for (Map.Entry<InetAddress, UUID> entry : getTokenMetadata().getEndpointToHostIdMapForReading().entrySet())
+            mapOut.put(entry.getValue(), entry.getKey());
         return mapOut;
     }
 
@@ -4385,7 +4399,12 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
     public void rebuildSecondaryIndex(String ksName, String cfName, String... idxNames)
     {
-        ColumnFamilyStore.rebuildSecondaryIndex(ksName, cfName, idxNames);
+        rebuildSecondaryIndex(1, ksName, cfName, idxNames);
+    }
+    
+    public void rebuildSecondaryIndex(int indexThreads, String ksName, String cfName, String... idxNames)
+    {
+        ColumnFamilyStore.rebuildSecondaryIndex(indexThreads, ksName, cfName, idxNames);
     }
 
     public void resetLocalSchema() throws IOException
