@@ -159,6 +159,11 @@ public class SecondaryIndexManager
      */
     public void maybeBuildSecondaryIndexes(Collection<SSTableReader> sstables, Set<String> idxNames)
     {
+    	maybeBuildSecondaryIndexes(1, sstables, idxNames);
+    }
+    
+    public void maybeBuildSecondaryIndexes(int indexThreads, Collection<SSTableReader> sstables, Set<String> idxNames)
+    {
         idxNames = filterByColumn(idxNames);
         if (idxNames.isEmpty())
             return;
@@ -166,7 +171,7 @@ public class SecondaryIndexManager
         logger.info(String.format("Submitting index build of %s for data in %s",
                                   idxNames, StringUtils.join(sstables, ", ")));
 
-        SecondaryIndexBuilder builder = new SecondaryIndexBuilder(baseCfs, idxNames, new ReducingKeyIterator(sstables));
+        SecondaryIndexBuilder builder = new SecondaryIndexBuilder(indexThreads, baseCfs, idxNames, new ReducingKeyIterator(sstables));
         Future<?> future = CompactionManager.instance.submitIndexBuild(builder);
         FBUtilities.waitOnFuture(future);
 

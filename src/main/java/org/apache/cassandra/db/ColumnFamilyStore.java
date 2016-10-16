@@ -818,10 +818,10 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public void rebuildSecondaryIndex(String idxName)
     {
-        rebuildSecondaryIndex(keyspace.getName(), metadata.cfName, idxName);
+        rebuildSecondaryIndex(1, keyspace.getName(), metadata.cfName, idxName);
     }
 
-    public static void rebuildSecondaryIndex(String ksName, String cfName, String... idxNames)
+    public static void rebuildSecondaryIndex(int indexThreads, String ksName, String cfName, String... idxNames)
     {
         ColumnFamilyStore cfs = Keyspace.open(ksName).getColumnFamilyStore(cfName);
 
@@ -833,7 +833,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         {
             cfs.indexManager.setIndexRemoved(indexes);
             logger.info(String.format("User Requested secondary index re-build for %s/%s indexes", ksName, cfName));
-            cfs.indexManager.maybeBuildSecondaryIndexes(sstables, indexes);
+            cfs.indexManager.maybeBuildSecondaryIndexes(indexThreads, sstables, indexes);
             cfs.indexManager.setIndexBuilt(indexes);
         }
     }
