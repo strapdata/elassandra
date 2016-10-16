@@ -323,6 +323,7 @@ public class StringFieldMapper extends FieldMapper implements AllFieldMapper.Inc
         if (!hasField) {
             context.ignoredValue(fieldType().names().indexName(), valueAndBoost.value());
         }
+        super.createField(context, object);
     }
     
     protected void parseCreateField(ParseContext context, List<Field> fields, ValueAndBoost valueAndBoost) throws IOException {

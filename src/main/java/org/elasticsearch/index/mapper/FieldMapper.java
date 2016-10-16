@@ -390,6 +390,7 @@ public abstract class FieldMapper extends Mapper {
      * @param value
      */
     public void createField(ParseContext context, Object value) throws IOException {
+    	multiFields.create(this, context, value);
     }
     
     
@@ -696,6 +697,25 @@ public abstract class FieldMapper extends Mapper {
             context.path().add(mainField.simpleName());
             for (ObjectCursor<FieldMapper> cursor : mappers.values()) {
                 cursor.value.parse(context);
+            }
+            context.path().remove();
+            context.path().pathType(origPathType);
+        }
+        
+        public void create(FieldMapper mainField, ParseContext context, Object val) throws IOException {
+            // TODO: multi fields are really just copy fields, we just need to expose "sub fields" or something that can be part of the mappings
+            if (mappers.isEmpty()) {
+                return;
+            }
+
+            context = context.createMultiFieldContext();
+
+            ContentPath.Type origPathType = context.path().pathType();
+            context.path().pathType(pathType);
+
+            context.path().add(mainField.simpleName());
+            for (ObjectCursor<FieldMapper> cursor : mappers.values()) {
+                cursor.value.createField(context, val);
             }
             context.path().remove();
             context.path().pathType(origPathType);

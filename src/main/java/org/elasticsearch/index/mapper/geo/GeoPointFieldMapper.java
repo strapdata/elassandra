@@ -673,7 +673,8 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
             addGeohashField(context, geohash);
         }
         
-        multiFields.parse(this, context);
+        super.createField(context,value);
+        //multiFields.parse(this, context);
     }
 
     @Override

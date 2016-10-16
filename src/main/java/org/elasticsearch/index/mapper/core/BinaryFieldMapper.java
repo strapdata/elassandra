@@ -217,6 +217,7 @@ public class BinaryFieldMapper extends FieldMapper {
                 field.add(value);
             }
         }
+        super.createField(context,value);
     }
     
     @Override

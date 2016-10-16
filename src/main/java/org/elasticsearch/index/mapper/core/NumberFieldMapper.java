@@ -229,6 +229,7 @@ public abstract class NumberFieldMapper extends FieldMapper implements AllFieldM
         RuntimeException e = null;
         try {
             innerCreateField(context, value);
+            super.createField(context,value);
         } catch (IllegalArgumentException e1) {
             e = e1;
         } catch (MapperParsingException e2) {

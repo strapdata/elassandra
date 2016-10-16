@@ -218,6 +218,7 @@ public class BooleanFieldMapper extends FieldMapper {
         if (fieldType().hasDocValues()) {
             context.doc().add(new SortedNumericDocValuesField(fieldType().names().indexName(), value ? 1 : 0));
         }
+        super.createField(context,value);
     }
     
     @Override

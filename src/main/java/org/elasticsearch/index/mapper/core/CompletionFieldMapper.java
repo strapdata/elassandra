@@ -593,7 +593,7 @@ public class CompletionFieldMapper extends FieldMapper {
                 context.doc().add(getCompletionField(ctx, input, suggestPayload));
             }
         }
-        
+        super.createField(context,value);
     }
     
     @Override
