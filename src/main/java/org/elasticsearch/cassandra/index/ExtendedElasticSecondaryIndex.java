@@ -1029,26 +1029,36 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
                 
                 for (MappingInfo.IndexInfo indexInfo : targetIndicesForDelete(values.toArray())) {
-                    if (logger.isTraceEnabled())
-                        logger.trace("deleting by query document from index.type={}.{} where partition_key={}", indexInfo.name, typeName, partitionKey);
                     IndexShard indexShard = indexInfo.indexService.shard(0);
                     if (indexShard != null) {
-                    	
-                    	BooleanQuery.Builder builder = new BooleanQuery.Builder();
-                    	DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(typeName);
-                    	for(int i=0 ; i < baseCfs.metadata.partitionKeyColumns().size(); i++) {
-                    		if (indexedPkColumns[i]) {
-                    			FieldMapper mapper = docMapper.mappers().smartNameFieldMapper(fields[i]);
-                    			if (mapper != null) {
-                    				Term t = new Term(fields[i], mapper.fieldType().indexedValueForSearch(values.get(i)));
-                    				builder.add(new TermQuery(t), Occur.FILTER);
-                    			} 
-                    		}
+                    	if (baseCfs.metadata.clusteringColumns().size() > 0) {
+                    		// delete by query a wide row
+	                    	BooleanQuery.Builder builder = new BooleanQuery.Builder();
+	                    	DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(typeName);
+	                    	for(int i=0 ; i < baseCfs.metadata.partitionKeyColumns().size(); i++) {
+	                    		if (indexedPkColumns[i]) {
+	                    			FieldMapper mapper = docMapper.mappers().smartNameFieldMapper(fields[i]);
+	                    			if (mapper != null) {
+	                    				Term t = new Term(fields[i], mapper.fieldType().indexedValueForSearch(values.get(i)));
+	                    				builder.add(new TermQuery(t), Occur.FILTER);
+	                    			} 
+	                    		}
+	                    	}
+	                    	Query query = builder.build();
+	                    	
+	                    	if (logger.isTraceEnabled())
+                                logger.trace("deleting by query={} document from index.type={}.{} where partition_key={}", query.toString(), indexInfo.name, typeName, partitionKey);
+                            
+	                    	DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+	                    	indexShard.engine().delete(deleteByQuery);
+                    	} else {
+                    		// delete by id 
+                    		if (logger.isTraceEnabled())
+                                logger.trace("deleting by id document from index.type={}.{} where partition_key={}", indexInfo.name, typeName, partitionKey);
+                            
+                    		Engine.Delete delete = indexShard.prepareDelete(typeName, partitionKey, Versions.MATCH_ANY, VersionType.INTERNAL, Engine.Operation.Origin.PRIMARY);
+                            indexShard.delete(delete);
                     	}
-                    	
-                    	Query query = builder.build();
-                    	DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
-                    	indexShard.engine().delete(deleteByQuery);
                     	
                         if (indexInfo.refresh) {
                             try {
