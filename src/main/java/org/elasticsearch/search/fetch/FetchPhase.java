@@ -449,10 +449,10 @@ public class FetchPhase implements SearchPhase {
                         if (searchContext.includeNode()) {
                         	mapObject.put(NodeFieldMapper.NAME, clusterService.state().nodes().localNodeId());
                         }
-                        if (fieldVisitor.requestedFields() == null || fieldVisitor.requestedFields().size() > 0) {
+                        if (fieldVisitor.requestedFields() != null && fieldVisitor.requestedFields().size() > 0) {
                             Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
                             clusterService.flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);
-                            for (String field : flatMap.keySet()) {
+                            for (String field :  fieldVisitor.requestedFields()) {
                                 fieldVisitor.setValues(field, flatMap.get(field));
                             }
                         }
