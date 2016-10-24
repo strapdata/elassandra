@@ -1798,14 +1798,14 @@ public class InternalCassandraClusterService extends InternalClusterService {
             }
         }
         
-        // set empty top-level fields to null to overwrite existing doc.
+        // set empty existing top-level fields to null to overwrite existing doc.
         for(FieldMapper m : fieldMappers) {
         	String fullname = m.name();
-        	if (!fullname.startsWith("_") && fullname.indexOf('.') == -1 && map.get(fullname) == null) 
+        	if (map.get(fullname) == null && !fullname.startsWith("_") && fullname.indexOf('.') == -1 && metadata.getColumnDefinition(m.cqlName()) != null) 
         		map.put(fullname, null);
         }
         for(String m : objectMappers.keySet()) {
-        	if (map.get(m) == null && m.indexOf('.') == -1)
+        	if (map.get(m) == null && m.indexOf('.') == -1 && metadata.getColumnDefinition(objectMappers.get(m).cqlName()) != null)
         		map.put(m, null);
         }
         
