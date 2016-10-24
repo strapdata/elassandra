@@ -22,8 +22,6 @@ package org.elasticsearch.index.mapper;
 import java.nio.ByteBuffer;
 import java.util.Map;
 
-import net.jpountz.util.ByteBufferUtils;
-
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Nullable;
