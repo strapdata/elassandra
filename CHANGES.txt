@@ -1,8 +1,8 @@
-2.1.1-18 - 2016-10-16
+2.1.1-18 - 2016-10-24
   * Add support for multi-threaded nodetool rebuild_index to improve re-indexing performances.
   * Add a new random search strategy to distribute search request to a minimum of nodes.
   * Add support for multi-fields and geo_shape.
-  * Add support for ES index update when deleting by partition key (deleting with a range of clustering keys not yet implemented).
+  * Add support for ES index update when deleting by partition key (but deleting with a range of clustering keys not yet implemented).
   * Fix issue #50 Elastic Index ignores documents created using Cassandra UPDATE
   * Fix issue when using distinct RPC and INTERNAL ip addresses for Cassandra.
   * Don't close stdout when running in foreground.
