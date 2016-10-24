@@ -16,7 +16,7 @@ alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 New project documentation available at [doc.elassandra.io](http://doc.elassandra.io).
 
-* **2016-10-24 Release 2.1.1-18 Add multi-threaded index rebuild and optimized search routing (see RandomSearchStrategy) **
+* **2016-10-24 Release 2.1.1-18 Add multi-threaded index rebuild and optimized search routing (see RandomSearchStrategy)**
 * **2016-09-05 Release 2.1.1-17 Add spark support with a modified version of [elasticsearch-hadoop-2.2](https://github.com/vroyer/elasticsearch-hadoop)**
 * **2016-08-12 Release 2.1.1-16 Upgrade to cassandra 2.2.7**
 * **2016-07-10 Release 2.1.1-15 Bug fix**
