@@ -66,5 +66,6 @@ curl "$NODE:9200/composite/t3/_mget?pretty=true" -d '{
     ]
 }'
 
-
-curl -XDELETE "http://$NODE:9200/composite"
+cqlsh <<EOF
+DELETE FROM composite.t1 WHERE a='a';
+EOF
