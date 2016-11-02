@@ -28,41 +28,36 @@ import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class ToJsonArrayFct extends NativeScalarFunction
+public class ToStringFct extends NativeScalarFunction
 {
-    public static final FunctionName NAME = FunctionName.nativeFunction("tojsonarray");
+    public static final FunctionName NAME = FunctionName.nativeFunction("tostring");
 
-    private static final Map<List<AbstractType<?>>, ToJsonArrayFct> instances = new ConcurrentHashMap<>();
+    private static final Map<AbstractType<?>, ToStringFct> instances = new ConcurrentHashMap<>();
 
-    public static ToJsonArrayFct getInstance(List<AbstractType<?>> argTypes) throws InvalidRequestException
+    public static ToStringFct getInstance(List<AbstractType<?>> argTypes) throws InvalidRequestException
     {
-        ToJsonArrayFct func = instances.get(argTypes);
+        assert argTypes.size() == 1 : "Expected 1 argument for toString(), but got " + argTypes.size();
+        AbstractType<?> argType = argTypes.get(0);
+        ToStringFct func = instances.get(argType);
         if (func == null)
         {
-            func = new ToJsonArrayFct(argTypes);
-            instances.put(argTypes, func);
+            func = new ToStringFct(argType);
+            instances.put(argType, func);
         }
         return func;
     }
 
-    private ToJsonArrayFct(List<AbstractType<?>> argTypes)
+    private ToStringFct(AbstractType<?> argType)
     {
-        super("tojsonarray", UTF8Type.instance, argTypes.toArray(new AbstractType<?>[argTypes.size()]));
+        super("tostring", UTF8Type.instance, argType);
     }
 
     public ByteBuffer execute(int protocolVersion, List<ByteBuffer> parameters) throws InvalidRequestException
     {
-        assert parameters.size() >= 1 : "Expected at least 1 argument for toJsonArray(), but got " + parameters.size();
-        StringBuilder sb = new StringBuilder();
-        sb.append('[');
-        int i=0;
-        for(ByteBuffer bb : parameters) {
-            if (sb.length() > 1) 
-                sb.append(',');
-            sb.append(argTypes.get(i).toJSONString(bb, protocolVersion));
-            i++;
-        }
-        sb.append(']');
-        return ByteBufferUtil.bytes(sb.toString());
+        ByteBuffer bb = parameters.get(0);
+        if (bb == null)
+            return ByteBufferUtil.bytes("null");
+        
+        return ByteBufferUtil.bytes(argTypes.get(0).getSerializer().deserialize(bb).toString());
     }
 }
