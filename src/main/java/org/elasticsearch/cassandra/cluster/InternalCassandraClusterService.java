@@ -1958,19 +1958,21 @@ public class InternalCassandraClusterService extends InternalClusterService {
         String ksName = indexService.settingsService().getSettings().get(IndexMetaData.SETTING_KEYSPACE,index);
         CFMetaData metadata = getCFMetaData(ksName, cfName);
         List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
+        int ptLen = partitionColumns.size();
+        
         if (routing.startsWith("[") && routing.endsWith("]")) {
             // _routing is JSON array of values.
             Object[] elements = ClusterService.Utils.jsonMapper.readValue(routing, Object[].class);
             Object[] values = new Object[elements.length];
             String[] names = new String[elements.length];
-            int i=0;
-            for(ColumnDefinition cd : partitionColumns) {
-                if (i > elements.length) 
-                    throw new JsonMappingException("_routing "+routing+" does not match the partition key size="+partitionColumns.size());
+            if (elements.length != ptLen) 
+                throw new JsonMappingException("_routing="+routing+" does not match the partition key size="+ptLen);
+            
+            for(int i=0; i < elements.length; i++) {
+                ColumnDefinition cd = partitionColumns.get(i);
                 AbstractType<?> type = cd.type;
                 names[i] = cd.name.toString();
                 values[i] = type.compose( type.fromString(elements[i].toString()) );
-                i++;
             }
             return new DocPrimaryKey(names, values) ;
         } else {
