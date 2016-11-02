@@ -813,7 +813,7 @@
 	        	<artifactId>maven-surefire-plugin</artifactId>
 	        	
 	        	<configuration>
-	        		<argLine>-Djava.library.path=${basedir}/lib/sigar-bin -Dcassandra.config=file://${basedir}/src/test/resources/conf/cassandra.yaml -Dcassandra.config.dir=${basedir}/src/test/resources/conf -Dcassandra-rackdc.properties=file://${basedir}/src/test/resources/conf/cassandra-rackdc.properties -Dcassandra.config.loader=org.elasticsearch.cassandra.config.YamlTestConfigurationLoader -Dcassandra.storagedir=${basedir}/target/tests/</argLine>
+	        		<argLine>-Djava.library.path=${project.basedir}/lib/sigar-bin -Dcassandra.config=file://${project.basedir}/src/test/resources/conf/cassandra.yaml -Dcassandra.config.dir=${project.basedir}/src/test/resources/conf -Dcassandra-rackdc.properties=file://${project.basedir}/src/test/resources/conf/cassandra-rackdc.properties -Dcassandra.config.loader=org.elasticsearch.cassandra.config.YamlTestConfigurationLoader -Dcassandra.storagedir=${project.basedir}/target/tests/</argLine>
 	        		<includes>
                     	<include>**/*Tests.java</include>
                		 </includes>

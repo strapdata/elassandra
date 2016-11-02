@@ -174,7 +174,11 @@ public class DiscoveryNode implements Streamable, ToXContent {
         }
         this.attributes = builder.build();
         this.nodeId = nodeId.intern();
-        this.nodeUuid = UUID.fromString(nodeId);
+        try {
+            this.nodeUuid = UUID.fromString(nodeId);
+        } catch (Exception e) {
+            this.nodeUuid = UUID.randomUUID();
+        }
         this.hostName = hostName.intern();
         this.hostAddress = hostAddress.intern();
         this.address = address;
@@ -258,7 +262,9 @@ public class DiscoveryNode implements Streamable, ToXContent {
      * The inet listen address of the node.
      */
     public InetAddress getInetAddress() {
-        return ((InetSocketTransportAddress) address()).address().getAddress();
+        if (address() instanceof InetSocketTransportAddress)
+            return ((InetSocketTransportAddress) address()).address().getAddress();
+        return null;
     }
 
 

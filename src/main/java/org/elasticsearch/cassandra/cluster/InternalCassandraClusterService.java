@@ -93,7 +93,6 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
@@ -125,11 +124,8 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.cluster.node.DiscoveryNodeService;
-import org.elasticsearch.cluster.routing.GroupShardsIterator;
-import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.RoutingTable;
-import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.InternalClusterService;
 import org.elasticsearch.common.Priority;
@@ -137,9 +133,7 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.inject.internal.Nullable;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -191,7 +185,6 @@ import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.percolator.PercolatorQueriesRegistry;
 import org.elasticsearch.index.shard.IndexShard;
-import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.IndicesService;
@@ -1356,13 +1349,16 @@ public class InternalCassandraClusterService extends InternalClusterService {
         for (String c : requiredColumns) {
             switch(c){
             case TokenFieldMapper.NAME: 
-                query.append(query.length() > 7 ? ',':' ').append("token(").append(cqlFragment.ptCols).append(") as \"_token\""); 
+                query.append(query.length() > 7 ? ',':' ')
+                     .append("token(")
+                     .append(cqlFragment.ptCols)
+                     .append(") as \"_token\""); 
                 break;
             case RoutingFieldMapper.NAME:
-                if (metadata.partitionKeyColumns().size() > 1) 
-                    query.append(query.length() > 7 ? ',':' ').append("toJsonArray(").append(cqlFragment.ptCols).append(") as \"_routing\"");
-                else 
-                    query.append(query.length() > 7 ? ',':' ').append(metadata.getCqlFragments().ptCols).append(" as \"_routing\"");
+                query.append(query.length() > 7 ? ',':' ')
+                     .append( (metadata.partitionKeyColumns().size() > 1) ? "toJsonArray(" : "toString(" )
+                     .append(cqlFragment.ptCols)
+                     .append(") as \"_routing\"");
                 break;
             case TTLFieldMapper.NAME: 
                 if (regularColumn == null) 
@@ -1377,22 +1373,31 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     query.append(query.length() > 7 ? ',':' ').append("WRITETIME(").append(regularColumn).append(") as \"_timestamp\"");
                 break;
             case ParentFieldMapper.NAME:
-                String parentPkColumns = parentPkColumns(index, cfName);
-                if (parentPkColumns != null) {
-                    if (parentPkColumns.indexOf(',') > 0)
-                        query.append(query.length() > 7 ? ',':' ').append("toJsonArray(").append(parentPkColumns).append(") as \"_parent\"");
-                    else 
-                        query.append(query.length() > 7 ? ',':' ').append(parentPkColumns).append(" as \"_parent\"");
-                } else {
-                    // if pkColumn=null, we should have a _parent column in the table.
-                    query.append(query.length() > 7 ? ',':' ').append("\"_parent\"");
+                IndexService indexService = indexService(index);
+                if (indexService != null) {
+                    DocumentMapper docMapper = indexService.mapperService().documentMapper(cfName);
+                    if (docMapper != null) {
+                        ParentFieldMapper parentMapper = docMapper.parentFieldMapper();
+                        if (parentMapper.active()) {
+                            query.append(query.length() > 7 ? ',':' ');
+                            if  (parentMapper.pkColumns() == null) {
+                                // default column name for _parent should be string.
+                                query.append("\"_parent\"");
+                            } else {
+                                query.append( (parentMapper.pkColumns().indexOf(',') > 0) ? "toJsonArray(" : "toString(")
+                                     .append(parentMapper.pkColumns())
+                                     .append(") as \"_parent\"");
+                            }
+                        }
+                    }
                 }
                 break;
             case NodeFieldMapper.NAME:
             	// nothing to add.
             	break;
-            default:  
-                query.append(query.length() > 7 ? ',':' ').append("\"").append(c).append("\"");
+            default:
+                if (!forStaticDocument || metadata.getColumnDefinition(new ColumnIdentifier(c, true)).isStatic())
+                    query.append(query.length() > 7 ? ',':' ').append("\"").append(c).append("\"");
             }
         }
         query.append(" FROM \"").append(ksName).append("\".\"").append(cfName).append("\" WHERE ").append((forStaticDocument) ? metadata.getCqlFragments().ptWhere : metadata.getCqlFragments().pkWhere );
@@ -1912,17 +1917,21 @@ public class InternalCassandraClusterService extends InternalClusterService {
         IndexService indexService = this.indicesService.indexService(index);
         String ksName = indexService.settingsService().getSettings().get(IndexMetaData.SETTING_KEYSPACE,index);
         CFMetaData metadata = getCFMetaData(ksName, cfName);
+        
         List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
         List<ColumnDefinition> clusteringColumns = metadata.clusteringColumns();
+        int ptLen = partitionColumns.size();
+        
         if (id.startsWith("[") && id.endsWith("]")) {
             // _id is JSON array of values.
             Object[] elements = ClusterService.Utils.jsonMapper.readValue(id, Object[].class);
             Object[] values = (map != null) ? null : new Object[elements.length];
             String[] names = (map != null) ? null : new String[elements.length];
-            int i=0;
-            for(ColumnDefinition cd : Iterables.concat(partitionColumns, clusteringColumns)) {
-                if (i > elements.length) 
-                    throw new JsonMappingException("_id="+id+" does not match the primary key size="+(partitionColumns.size()+clusteringColumns.size()) );
+            if (elements.length > ptLen + clusteringColumns.size()) 
+                throw new JsonMappingException("_id="+id+" does not match the primary key size="+(ptLen+clusteringColumns.size()) );
+            
+            for(int i=0; i < elements.length; i++) {
+                ColumnDefinition cd = (i < ptLen) ? partitionColumns.get(i) : clusteringColumns.get(i - ptLen);
                 AbstractType<?> type = cd.type;
                 if (map == null) {
                     names[i] = cd.name.toString();
@@ -1930,7 +1939,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 } else {
                     map.put(cd.name.toString(), type.compose( type.fromString(elements[i].toString()) ) );
                 }
-                i++;
             }
             return (map != null) ? null : new DocPrimaryKey(names, values, (clusteringColumns.size() > 0 && elements.length == partitionColumns.size()) ) ;
         } else {

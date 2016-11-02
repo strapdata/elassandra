@@ -1,3 +1,7 @@
+2.1.1-18.1 - 2016-11-02
+  * Fix #59 delete-by-query plugin does not work 
+  * Fix #57 Static members cause java.lang.ArrayIndexOutOfBoundsException
+
 2.1.1-18 - 2016-10-24
   * Add support for multi-threaded nodetool rebuild_index to improve re-indexing performances.
   * Add a new random search strategy to distribute search request to a minimum of nodes.

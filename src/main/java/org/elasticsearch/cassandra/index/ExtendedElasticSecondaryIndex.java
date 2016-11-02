@@ -1071,13 +1071,17 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                 }
             }
             
+            /**
+             * 
+             * @author vroyer
+             *
+             */
             class Rowcument {
                 String id = null;
                 final Object[] values = new Object[fields.length];
                 final BitSet fieldsNotNull = new BitSet();
                 final BitSet tombstoneColumns = new BitSet();
-                final boolean wideRow;
-                final boolean hasMissingClusteringKeys;
+                boolean hasMissingClusteringKeys = false;
                 boolean hasStaticUpdate = false;
                 int     docTtl = Integer.MAX_VALUE;
                 
@@ -1096,27 +1100,33 @@ public class ExtendedElasticSecondaryIndex extends BaseElasticSecondaryIndex {
                     // copy the indexed columns of clustering key in values
                     //if (cellName.clusteringSize() > 0 && (baseCfs.metadata.getColumnDefinition(cell.name()) == null))  {
                     if (cellName.clusteringSize() > 0 && (baseCfs.metadata.clusteringColumns().size() > 0))  {
-                            // add clustering keys to docMap and _id
+                        // add clustering keys to docMap and _id
                         ArrayNode an2 = ClusterService.Utils.jsonMapper.createArrayNode();
                         an2.addAll(an);
-                        wideRow = true;
-                        int i=0;
-                        for(ColumnDefinition ccd : baseCfs.metadata.clusteringColumns()) {
-                            Object value = InternalCassandraClusterService.deserialize(ccd.type, cellName.get(i));
-                            pkCols[baseCfs.metadata.partitionKeyColumns().size()+i] = value;
-                            if (indexedPkColumns[baseCfs.metadata.partitionKeyColumns().size()+i]) {
-                                values[x++] = value;
+                        if (cellName.isStatic()) {
+                            // static row update
+                            hasStaticUpdate = true;
+                            hasMissingClusteringKeys = true;
+                            readCellValue(cell);
+                        } else {
+                            // wide row update
+                            int i=0;
+                            for(ColumnDefinition ccd : baseCfs.metadata.clusteringColumns()) {
+                                Object value = InternalCassandraClusterService.deserialize(ccd.type, cellName.get(i));
+                                pkCols[baseCfs.metadata.partitionKeyColumns().size()+i] = value;
+                                if (indexedPkColumns[baseCfs.metadata.partitionKeyColumns().size()+i]) {
+                                    values[x++] = value;
+                                }
+                                ClusterService.Utils.addToJsonArray(ccd.type, value, an2);
+                                i++;
                             }
-                            ClusterService.Utils.addToJsonArray(ccd.type, value, an2);
-                            i++;
                         }
                         id = ClusterService.Utils.writeValueAsString(an2);
                     } else {
-                        wideRow = false;
+                        // partiton row update
                         id = partitionKey;
                         readCellValue(cell);
                     }
-                    hasMissingClusteringKeys = baseCfs.metadata.clusteringColumns().size() > 0 && !wideRow;
                 }
                
                 public void readCellValue(Cell cell) throws IOException {

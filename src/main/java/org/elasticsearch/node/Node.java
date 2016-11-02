@@ -377,7 +377,7 @@ public class Node implements Releasable {
         injector.getInstance(CassandraIndicesClusterStateService.class).close();
         stopWatch.stop().start("indices");
         injector.getInstance(IndexingMemoryController.class).close();
-        injector.getInstance(IndicesTTLService.class).close();
+        //injector.getInstance(IndicesTTLService.class).close();
         injector.getInstance(IndicesService.class).close();
         // close filter/fielddata caches after indices
         injector.getInstance(IndicesQueryCache.class).close();

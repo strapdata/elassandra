@@ -23,7 +23,6 @@ import static org.elasticsearch.common.xcontent.XContentFactory.contentBuilder;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -33,7 +32,6 @@ import java.util.Set;
 
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
-import org.apache.cassandra.service.StorageService;
 import org.apache.log4j.Logger;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.ReaderUtil;
@@ -61,6 +59,7 @@ import org.elasticsearch.index.fieldvisitor.FieldsVisitor;
 import org.elasticsearch.index.fieldvisitor.JustUidFieldsVisitor;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MappedFieldType;
+import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.internal.NodeFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
@@ -423,7 +422,10 @@ public class FetchPhase implements SearchPhase {
         if (!(fieldVisitor instanceof JustUidFieldsVisitor) ) {
             try {
                 DocPrimaryKey docPk = clusterService.parseElasticId(searchContext.request().index(), fieldVisitor.uid().type(), fieldVisitor.uid().id());
-                String typeKey = (docPk.isStaticDocument) ? fieldVisitor.uid().type()+"_static" : fieldVisitor.uid().type();
+                String typeKey = fieldVisitor.uid().type();
+                if (docPk.isStaticDocument) 
+                    typeKey += "_static";
+                
                 String cqlQuery = searchContext.getCqlFetchQuery( typeKey );
                 if (cqlQuery == null) {
                     Set<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
@@ -434,7 +436,7 @@ public class FetchPhase implements SearchPhase {
                         	requiredColumns.remove(NodeFieldMapper.NAME);
                         }
                     	if (requiredColumns.size() > 0) {
-	                    	cqlQuery = clusterService.buildFetchQuery(
+                    	    cqlQuery = clusterService.buildFetchQuery(
 	                        		indexMetaData.keyspace(), searchContext.request().index(), fieldVisitor.uid().type(),
 	                                requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument);
 	                        searchContext.putFetchQuery(typeKey, cqlQuery);
@@ -453,7 +455,8 @@ public class FetchPhase implements SearchPhase {
                             Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
                             clusterService.flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);
                             for (String field :  fieldVisitor.requestedFields()) {
-                                fieldVisitor.setValues(field, flatMap.get(field));
+                                if (flatMap.get(field) != null) 
+                                    fieldVisitor.setValues(field, flatMap.get(field));
                             }
                         }
                         if (fieldVisitor.loadSource()) {
