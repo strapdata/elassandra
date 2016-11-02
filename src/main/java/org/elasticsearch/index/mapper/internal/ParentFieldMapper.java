@@ -307,6 +307,9 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         return parentType;
     }
 
+    /**
+     * @return a comma separated list of pk columns names.
+     */
     public String pkColumns() {
         return parentPkColumns;
     }
