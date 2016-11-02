@@ -1,4 +1,4 @@
-curl -XPUT "http://$NODE:9200/twitter/" -d '{ "settings" : { "index.include_node":true, "index.search_strategy_class":"org.elasticsearch.cassandra.cluster.routing.RandomSearchStrategy" }}'
+curl -XPUT "http://$NODE:9200/twitter/" -d '{ "settings" : { "index.include_node":true, "index.search_strategy_class":"org.strapdata.elassandra.cluster.routing.RandomSearchStrategy" }}'
 
 curl -XPUT "http://$NODE:9200/twitter/tweet/1?consistency=one" -d '{
     "user" : "vince",

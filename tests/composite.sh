@@ -69,3 +69,10 @@ curl "$NODE:9200/composite/t3/_mget?pretty=true" -d '{
 cqlsh <<EOF
 DELETE FROM composite.t1 WHERE a='a';
 EOF
+
+curl "$NODE:9200/composite/t1/_mget?pretty=true" -d '{
+    "docs" : [
+        { "_id" : "[\"a\",\"b1\"]" },
+        { "_id" : "[\"b\",\"b1\"]" }
+    ]
+}'
