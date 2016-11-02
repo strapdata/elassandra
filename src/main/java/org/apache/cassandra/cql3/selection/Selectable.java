@@ -149,6 +149,8 @@ public abstract class Selectable
                 fun = ToJsonFct.getInstance(factories.getReturnTypes());
             else if (functionName.equalsNativeFunction(ToJsonArrayFct.NAME))
                 fun = ToJsonArrayFct.getInstance(factories.getReturnTypes());
+            else if (functionName.equalsNativeFunction(ToStringFct.NAME))
+                fun = ToStringFct.getInstance(factories.getReturnTypes());
             else
                 fun = Functions.get(cfm.ksName, functionName, factories.newInstances(), cfm.ksName, cfm.cfName, null);
 
