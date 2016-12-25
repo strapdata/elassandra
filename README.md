@@ -12,7 +12,7 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
-* **2016-12-23 Release 2.4.2-1 Upgrade to Elasticsearch 2.4.2 + pass 3000 unit tests from Elasticsearch**
+* **2016-12-25 Release 2.4.2-2 Upgrade to Elasticsearch 2.4.2 + pass 3000 unit tests from Elasticsearch**
 * **2016-10-24 Release 2.1.1-18 Add multi-threaded index rebuild and optimized search routing (see RandomSearchStrategy)**
 * **2016-09-05 Release 2.1.1-17 Add spark support with a modified version of [elasticsearch-hadoop-2.2](https://github.com/vroyer/elasticsearch-hadoop)**
 * **2016-08-12 Release 2.1.1-16 Upgrade to cassandra 2.2.7**
