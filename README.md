@@ -86,3 +86,8 @@ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 License for the specific language governing permissions and limitations under
 the License.
 ```
+
+## Acknowledgments
+
+Elasticsearch and Kibana are trademarks of Elasticsearch BV, registered in the U.S. and in other
+countries.
