@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.strapdata.javassist-maven</groupId>
+        <artifactId>javassist-maven-plugin-parent</artifactId>
+        <version>2.3</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <groupId>com.strapdata</groupId>
+    <artifactId>javassist-maven-plugin-core</artifactId>
+    <packaging>jar</packaging>
+    <name>Maven Javassist Plugin Core</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.javassist</groupId>
+            <artifactId>javassist</artifactId>
+        </dependency>
+    </dependencies>
+    
+</project>

@@ -1,0 +1,61 @@
+[[cluster-update-settings]]
+== Cluster Update Settings
+
+Allows to update cluster wide specific settings. Settings updated can
+either be persistent (applied cross restarts) or transient (will not
+survive a full cluster restart). Here is an example:
+
+[source,js]
+--------------------------------------------------
+curl -XPUT localhost:9200/_cluster/settings -d '{
+    "persistent" : {
+        "discovery.zen.minimum_master_nodes" : 2
+    }
+}'
+--------------------------------------------------
+
+Or:
+
+[source,js]
+--------------------------------------------------
+curl -XPUT localhost:9200/_cluster/settings -d '{
+    "transient" : {
+        "discovery.zen.minimum_master_nodes" : 2
+    }
+}'
+--------------------------------------------------
+
+The cluster responds with the settings updated. So the response for the
+last example will be:
+
+[source,js]
+--------------------------------------------------
+{
+    "persistent" : {},
+    "transient" : {
+        "discovery.zen.minimum_master_nodes" : "2"
+    }
+}'
+--------------------------------------------------
+
+Cluster wide settings can be returned using:
+
+[source,js]
+--------------------------------------------------
+curl -XGET localhost:9200/_cluster/settings
+--------------------------------------------------
+
+[float]
+=== Precedence of settings
+
+Transient cluster settings take precedence over persistent cluster settings,
+which take precedence over settings configured in the `elasticsearch.yml`
+config file.
+
+For this reason it is preferrable to  use the `elasticsearch.yml` file only
+for local configurations, and set all cluster-wider settings with the
+`settings` API.
+
+A list of dynamically updatable settings can be found in the
+<<modules,Modules>> documentation.
+

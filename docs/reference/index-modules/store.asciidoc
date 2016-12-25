@@ -1,0 +1,72 @@
+[[index-modules-store]]
+== Store
+
+The store module allows you to control how index data is stored and accessed on disk.
+
+[float]
+[[file-system]]
+=== File system storage types
+
+There are different file system implementations or _storage types_. The best
+one for the operating environment will be automatically chosen: `mmapfs` on
+Windows 64bit, `simplefs` on Windows 32bit, and `default` (hybrid `niofs` and
+`mmapfs`) for the rest.
+
+This can be overridden for all indices by adding this to the
+`config/elasticsearch.yml` file:
+
+[source,yaml]
+---------------------------------
+index.store.type: niofs
+---------------------------------
+
+It is a _static_ setting that can be set on a per-index basis at index
+creation time:
+
+[source,js]
+---------------------------------
+PUT /my_index
+{
+  "settings": {
+    "index.store.type": "niofs"
+  }
+}
+---------------------------------
+
+experimental[This is an expert-only setting and may be removed in the future]
+
+The following sections lists all the different storage types supported.
+
+[[simplefs]]`simplefs`::
+
+The Simple FS type is a straightforward implementation of file system
+storage (maps to Lucene `SimpleFsDirectory`) using a random access file.
+This implementation has poor concurrent performance (multiple threads
+will bottleneck). It is usually better to use the `niofs` when you need
+index persistence.
+
+[[niofs]]`niofs`::
+
+The NIO FS type stores the shard index on the file system (maps to
+Lucene `NIOFSDirectory`) using NIO. It allows multiple threads to read
+from the same file concurrently. It is not recommended on Windows
+because of a bug in the SUN Java implementation.
+
+[[mmapfs]]`mmapfs`::
+
+The MMap FS type stores the shard index on the file system (maps to
+Lucene `MMapDirectory`) by mapping a file into memory (mmap). Memory
+mapping uses up a portion of the virtual memory address space in your
+process equal to the size of the file being mapped. Before using this
+class, be sure you have allowed plenty of
+<<vm-max-map-count,virtual address space>>.
+
+[[default_fs]]`default_fs`::
+
+The `default` type is a hybrid of NIO FS and MMapFS, which chooses the best
+file system for each type of file. Currently only the Lucene term dictionary
+and doc values files are memory mapped to reduce the impact on the operating
+system. All other files are opened using Lucene `NIOFSDirectory`. Address
+space settings (<<vm-max-map-count>>) might also apply if your term
+dictionaries are large.
+

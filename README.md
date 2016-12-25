@@ -2,20 +2,17 @@
 
 Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run on top of [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
-![Elassandra architecture](/images/elassandra1.jpg)
+![Elassandra architecture](/docs/elassandra/source/images/elassandra1.jpg)
 
 Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes. A demo video is available on youtube.
-
-<a href="http://www.youtube.com/watch?feature=player_embedded&v=SHncUmuvH58
-" target="_blank"><img src="http://img.youtube.com/vi/SHncUmuvH58/0.jpg" 
-alt="Elassandra demo" width="240" height="180" border="10" /></a>
 
 ## News
 
 [![Build Status](https://travis-ci.org/strapdata/elassandra.svg?branch=master)](https://travis-ci.org/strapdata/elassandra)
 
-New project documentation available at [doc.elassandra.io](http://doc.elassandra.io).
+Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
+* **2016-12-23 Release 2.4.2-1 Upgrade to Elasticsearch 2.4.2 + pass 3000 unit tests from Elasticsearch**
 * **2016-10-24 Release 2.1.1-18 Add multi-threaded index rebuild and optimized search routing (see RandomSearchStrategy)**
 * **2016-09-05 Release 2.1.1-17 Add spark support with a modified version of [elasticsearch-hadoop-2.2](https://github.com/vroyer/elasticsearch-hadoop)**
 * **2016-08-12 Release 2.1.1-16 Upgrade to cassandra 2.2.7**
@@ -31,10 +28,6 @@ New project documentation available at [doc.elassandra.io](http://doc.elassandra
 * **2015-11-15 Release 0.4 New elassandra tarball ready-to-run.**
 
 ## Benefits of Elassandra
-
-Show short intro: <a href="http://www.youtube.com/watch?feature=player_embedded&v=2H6RIBjSwcM
-" target="_blank"><img src="http://img.youtube.com/vi/2H6RIBjSwcM/0.jpg" 
-alt="Elassandra short intro" width="240" height="180" border="10" /></a>
 
 For cassandra users, elassandra provides elasticsearch features :
 * Cassandra update are automatically indexed in Elasticsearch.
@@ -55,33 +48,31 @@ For Elasticsearch users, elassandra provides useful features :
 * Hadoop Hive, Pig and Spark support with pushdown predicate.
 * Cassandra supports partial update and [distributed counters](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_counter_t.html).
 
+# Quick start
+
+* Ensure your JAVA_HOME points to your JDK 8 installation.
+* Extract the distribution tarball in your install directory.
+* Define the CASSANDRA_HOME environment variable: **export CASSANDRA_HOME=&lt;elassandra_install_dir&gt;**
+* Load useful aliases : **source $CASSANDRA_HOME/bin/aliases.sh**
+* Start a node: **$CASSANDRA_HOME/bin/cassandra -e** (or **elstart** alias)
+* Check the Cassandra status: **$CASSANDRA_HOME/bin/nodetool status**
+* Check the Elasticsearch cluster state: **curl -XGET localhost:9200/_cluster/state** (or **state** alias)
+
 # Support
 
  * Support available via [elassandra google groups](https://groups.google.com/forum/#!forum/elassandra).
  * Post feature requests and bugs on https://github.com/vroyer/elassandra/issues
  
-# Known bugs and restrictions
-    
-* Cassandra 
- * Thrift is not supported, only CQL3.
- * CQL3 truncate has not effect on elasticsearch indices.
-
-* Elasticsearch 
- * tribe, percolate, snapshots and recovery service not tested.
- * Geoshape type not supported.
- * Any Elasticsearch metadata update require the LOCAL_QUORUM (more than half the number of nodes in the elassandra datacenter)
- * Document version is alaways 1 for all documents (because cassandra index rebuild would increment version many times, document version become meaningless). 
- 
 # Contribute
 
-Contributors are welcome to test and enhance Elassandra to make it production ready.
+Contributors are welcome to test and enhance Elassandra.
 
 # License
 
 ```
 This software is licensed under the Apache License, version 2 ("ALv2"), quoted below.
 
-Copyright 2015, Vincent Royer (vroyer@vroyer.org).
+Copyright 2015-2016, Vincent Royer (vroyer@vroyer.org).
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not
 use this file except in compliance with the License. You may obtain a copy of

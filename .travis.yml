@@ -9,9 +9,10 @@ cache:
     - $HOME/.m2
 
 notifications:
-  email: false
+  email: true
 
 before_install:
   - ulimit -u 65535
+  - mvn -f javassist-maven/pom.xml install
 
-script: mvn compile
+install: mvn -DskipTests  package

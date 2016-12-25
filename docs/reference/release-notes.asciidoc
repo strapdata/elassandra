@@ -1,0 +1,49 @@
+[[es-release-notes]]
+= Release Notes
+
+[partintro]
+--
+This section summarizes the changes in each release.
+
+* <<release-notes-2.4.1>>
+* <<release-notes-2.4.0>>
+* <<release-notes-2.3.5>>
+* <<release-notes-2.3.4>>
+* <<release-notes-2.3.3>>
+* <<release-notes-2.3.2>>
+* <<release-notes-2.3.1>>
+* <<release-notes-2.3.0>>
+* <<release-notes-2.2.2>>
+* <<release-notes-2.2.1>>
+* <<release-notes-2.2.0>>
+* <<release-notes-2.1.2>>
+* <<release-notes-2.1.1>>
+* <<release-notes-2.1.0>>
+* <<release-notes-2.0.2>>
+* <<release-notes-2.0.1>>
+* <<release-notes-2.0.0>>
+* <<release-notes-2.0.0-rc1>>
+* <<release-notes-2.0.0-beta2>>
+* <<release-notes-2.0.0-beta1>>
+
+--
+include::release-notes/2.4.1.asciidoc[]
+include::release-notes/2.4.0.asciidoc[]
+include::release-notes/2.3.5.asciidoc[]
+include::release-notes/2.3.4.asciidoc[]
+include::release-notes/2.3.3.asciidoc[]
+include::release-notes/2.3.2.asciidoc[]
+include::release-notes/2.3.1.asciidoc[]
+include::release-notes/2.3.0.asciidoc[]
+include::release-notes/2.2.2.asciidoc[]
+include::release-notes/2.2.1.asciidoc[]
+include::release-notes/2.2.0.asciidoc[]
+include::release-notes/2.1.2.asciidoc[]
+include::release-notes/2.1.1.asciidoc[]
+include::release-notes/2.1.0.asciidoc[]
+include::release-notes/2.0.2.asciidoc[]
+include::release-notes/2.0.1.asciidoc[]
+include::release-notes/2.0.0.asciidoc[]
+include::release-notes/2.0.0-rc1.asciidoc[]
+include::release-notes/2.0.0-beta2.asciidoc[]
+include::release-notes/2.0.0-beta1.asciidoc[]

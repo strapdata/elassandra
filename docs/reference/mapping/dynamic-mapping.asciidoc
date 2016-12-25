@@ -1,0 +1,67 @@
+[[dynamic-mapping]]
+== Dynamic Mapping
+
+One of the most important features of Elasticsearch is that it tries to get
+out of your way and let you start exploring your data as quickly as possible.
+To index a document, you don't have to first create an index, define a mapping
+type, and define your fields -- you can just index a document and the index,
+type, and fields will spring to life automatically:
+
+[source,js]
+--------------------------------------------------
+PUT data/counters/1 <1>
+{ "count": 5 }
+--------------------------------------------------
+// AUTOSENSE
+<1> Creates the `data` index, the `counters` mapping type, and a field
+    called `count` with datatype `long`.
+
+The automatic detection and addition of new types and fields is called
+_dynamic mapping_. The dynamic mapping rules can be customised to suit your
+purposes with:
+
+<<default-mapping,`_default_` mapping>>::
+
+    Configure the base mapping to be used for new mapping types.
+
+<<dynamic-field-mapping,Dynamic field mappings>>::
+
+    The rules governing dynamic field detection.
+
+<<dynamic-templates,Dynamic templates>>::
+
+    Custom rules to configure the mapping for dynamically added fields.
+
+TIP: <<indices-templates,Index templates>> allow you to configure the default
+mappings, settings, aliases, and warmers for new indices, whether created
+automatically or explicitly.
+
+
+[float]
+=== Disabling automatic type creation
+
+Automatic type creation can be disabled by setting the `index.mapper.dynamic`
+setting to `false`, either by setting the default value in the
+`config/elasticsearch.yml` file, or per-index as an index setting:
+
+[source,js]
+--------------------------------------------------
+PUT /_settings <1>
+{
+  "index.mapper.dynamic":false
+}
+--------------------------------------------------
+// AUTOSENSE
+<1> Disable automatic type creation for all indices.
+
+Regardless of the value of this setting, types can still be added explicitly
+when <<indices-create-index,creating an index>> or with the
+<<indices-put-mapping,PUT mapping>> API.
+
+
+include::dynamic/default-mapping.asciidoc[]
+
+include::dynamic/field-mapping.asciidoc[]
+
+include::dynamic/templates.asciidoc[]
+

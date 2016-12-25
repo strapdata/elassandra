@@ -1,0 +1,42 @@
+[[analysis-mapping-charfilter]]
+=== Mapping Char Filter
+
+A char filter of type `mapping` replacing characters of an analyzed text
+with given mapping.
+
+[horizontal]
+`mappings`::
+
+    A list of mappings to use.
+
+`mappings_path`::
+
+    A path, relative to the `config` directory, to a mappings file
+    configuration.
+
+Here is a sample configuration:
+
+[source,js]
+--------------------------------------------------
+{
+    "index" : {
+        "analysis" : {
+            "char_filter" : {
+                "my_mapping" : {
+                    "type" : "mapping",
+                    "mappings" : [
+                      "ph => f",
+                      "qu => k"
+                    ]
+                }
+            },
+            "analyzer" : {
+                "custom_with_char_filter" : {
+                    "tokenizer" : "standard",
+                    "char_filter" : ["my_mapping"]
+                }
+            }
+        }
+    }
+}
+--------------------------------------------------

@@ -1,0 +1,124 @@
+[[cluster-nodes-info]]
+== Nodes Info
+
+The cluster nodes info API allows to retrieve one or more (or all) of
+the cluster nodes information.
+
+[source,js]
+--------------------------------------------------
+curl -XGET 'http://localhost:9200/_nodes'
+curl -XGET 'http://localhost:9200/_nodes/nodeId1,nodeId2'
+--------------------------------------------------
+
+The first command retrieves information of all the nodes in the cluster.
+The second command selectively retrieves nodes information of only
+`nodeId1` and `nodeId2`. All the nodes selective options are explained
+<<cluster-nodes,here>>.
+
+By default, it just returns all attributes and core settings for a node.
+It also allows to get only information on `settings`, `os`, `process`, `jvm`,
+`thread_pool`, `transport`, `http` and `plugins`:
+
+[source,js]
+--------------------------------------------------
+curl -XGET 'http://localhost:9200/_nodes/process'
+curl -XGET 'http://localhost:9200/_nodes/_all/process'
+curl -XGET 'http://localhost:9200/_nodes/nodeId1,nodeId2/jvm,process'
+# same as above
+curl -XGET 'http://localhost:9200/_nodes/nodeId1,nodeId2/info/jvm,process'
+
+curl -XGET 'http://localhost:9200/_nodes/nodeId1,nodeId2/_all
+--------------------------------------------------
+
+The `_all` flag can be set to return all the information - or you can simply omit it.
+
+[float]
+[[os-info]]
+==== Operating System information
+
+The `os` flag can be set to retrieve information that concern
+the operating system:
+
+`os.refresh_interval_in_millis`::
+	Refresh interval for the OS statistics
+
+`os.name`::
+	Name of the operating system (ex: Linux, Windows, Mac OS X)
+
+`os.arch`::
+	Name of the JVM architecture (ex: amd64, x86)
+
+`os.version`::
+	Version of the operating system
+
+`os.available_processors`::
+	Number of processors available to the Java virtual machine
+
+`os.allocated_processors`::
+    The number of processors actually used to calculate thread pool size. This number can be set
+    with the `processors` setting of a node and defaults to the number of processors reported by the OS.
+    In both cases this number will never be larger than 32.
+
+[float]
+[[process-info]]
+==== Process information
+
+The `process` flag can be set to retrieve information that concern
+the current running process:
+
+`process.refresh_interval_in_millis`::
+	Refresh interval for the process statistics
+
+`process.id`::
+	Process identifier (PID)
+
+`process.mlockall`::
+	Indicates if the process address space has been successfully locked in memory
+
+[float]
+[[plugins-info]]
+==== Plugins information
+
+`plugins` - if set, the result will contain details about the loaded
+plugins per node:
+
+* `name`: plugin name
+* `description`: plugin description if any
+* `site`: `true` if the plugin is a site plugin
+* `jvm`: `true` if the plugin is a plugin running in the JVM
+* `url`: URL if the plugin is a site plugin
+
+The result will look similar to:
+
+[source,js]
+--------------------------------------------------
+{
+  "cluster_name" : "test-cluster-MacBook-Air-de-David.local",
+  "nodes" : {
+    "hJLXmY_NTrCytiIMbX4_1g" : {
+      "name" : "node4",
+      "transport_address" : "inet[/172.18.58.139:9303]",
+      "hostname" : "MacBook-Air-de-David.local",
+      "version" : "0.90.0.Beta2-SNAPSHOT",
+      "http_address" : "inet[/172.18.58.139:9203]",
+      "plugins" : [ {
+        "name" : "test-plugin",
+        "description" : "test-plugin description",
+        "site" : true,
+        "jvm" : false
+      }, {
+        "name" : "test-no-version-plugin",
+        "description" : "test-no-version-plugin description",
+        "site" : true,
+        "jvm" : false
+      }, {
+        "name" : "dummy",
+        "description" : "No description found for dummy.",
+        "url" : "/_plugin/dummy/",
+        "site" : false,
+        "jvm" : true
+      } ]
+    }
+  }
+}
+--------------------------------------------------

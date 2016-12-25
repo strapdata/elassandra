@@ -1,0 +1,12 @@
+inline org.apache.cassandra.db.AbstractNativeCell::compareTo (Lorg.apache.cassandra.db.composites.Composite;)I
+inline org.apache.cassandra.db.composites.AbstractSimpleCellNameType::compareUnsigned (Lorg.apache.cassandra.db.composites.Composite;Lorg.apache.cassandra.db.composites.Composite;)I
+inline org.apache.cassandra.io.util.Memory::checkBounds (JJ)V
+inline org.apache.cassandra.io.util.SafeMemory::checkBounds (JJ)V
+inline org.apache.cassandra.utils.AsymmetricOrdering::selectBoundary (Lorg.apache.cassandra.utils.AsymmetricOrdering.Op;II)I
+inline org.apache.cassandra.utils.AsymmetricOrdering::strictnessOfLessThan (Lorg.apache.cassandra.utils.AsymmetricOrdering.Op;)I
+inline org.apache.cassandra.utils.ByteBufferUtil::compare (Ljava.nio.ByteBuffer;[B)I
+inline org.apache.cassandra.utils.ByteBufferUtil::compare ([BLjava.nio.ByteBuffer;)I
+inline org.apache.cassandra.utils.ByteBufferUtil::compareUnsigned (Ljava.nio.ByteBuffer;Ljava.nio.ByteBuffer;)I
+inline org.apache.cassandra.utils.FastByteOperations$UnsafeOperations::compareTo (Ljava.lang.Object;JILjava.lang.Object;JI)I
+inline org.apache.cassandra.utils.FastByteOperations$UnsafeOperations::compareTo (Ljava.lang.Object;JILjava.nio.ByteBuffer;)I
+inline org.apache.cassandra.utils.FastByteOperations$UnsafeOperations::compareTo (Ljava.nio.ByteBuffer;Ljava.nio.ByteBuffer;)I

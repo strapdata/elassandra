@@ -1,0 +1,122 @@
+[[docs-multi-termvectors]]
+== Multi termvectors API
+
+Multi termvectors API allows to get multiple termvectors at once. The
+documents from which to retrieve the term vectors are specified by an index,
+type and id. But the documents could also be artificially provided
+The response includes a `docs`
+array with all the fetched termvectors, each element having the structure
+provided by the <<docs-termvectors,termvectors>>
+API. Here is an example:
+
+[source,js]
+--------------------------------------------------
+curl 'localhost:9200/_mtermvectors' -d '{
+   "docs": [
+      {
+         "_index": "testidx",
+         "_type": "test",
+         "_id": "2",
+         "term_statistics": true
+      },
+      {
+         "_index": "testidx",
+         "_type": "test",
+         "_id": "1",
+         "fields": [
+            "text"
+         ]
+      }
+   ]
+}'
+--------------------------------------------------
+
+See the <<docs-termvectors,termvectors>> API for a description of possible parameters.
+
+The `_mtermvectors` endpoint can also be used against an index (in which case it
+is not required in the body):
+
+[source,js]
+--------------------------------------------------
+curl 'localhost:9200/testidx/_mtermvectors' -d '{
+   "docs": [
+      {
+         "_type": "test",
+         "_id": "2",
+         "fields": [
+            "text"
+         ],
+         "term_statistics": true
+      },
+      {
+         "_type": "test",
+         "_id": "1"
+      }
+   ]
+}'
+--------------------------------------------------
+
+And type:
+
+[source,js]
+--------------------------------------------------
+curl 'localhost:9200/testidx/test/_mtermvectors' -d '{
+   "docs": [
+      {
+         "_id": "2",
+         "fields": [
+            "text"
+         ],
+         "term_statistics": true
+      },
+      {
+         "_id": "1"
+      }
+   ]
+}'
+--------------------------------------------------
+
+If all requested documents are on same index and have same type and also the parameters are the same, the request can be simplified:
+
+[source,js]
+--------------------------------------------------
+curl 'localhost:9200/testidx/test/_mtermvectors' -d '{
+    "ids" : ["1", "2"],
+    "parameters": {
+    	"fields": [
+         	"text"
+      	],
+      	"term_statistics": true,
+      	…
+    }
+}'
+--------------------------------------------------
+
+Additionally, just like for the <<docs-termvectors,termvectors>>
+API, term vectors could be generated for user provided documents. The syntax
+is similar to the <<search-percolate,percolator>> API. The mapping used is
+determined by `_index` and `_type`.
+
+[source,js]
+--------------------------------------------------
+curl 'localhost:9200/_mtermvectors' -d '{
+   "docs": [
+      {
+         "_index": "testidx",
+         "_type": "test",
+         "doc" : {
+            "fullname" : "John Doe",
+            "text" : "twitter test test test"
+         }
+      },
+      {
+         "_index": "testidx",
+         "_type": "test",
+         "doc" : {
+           "fullname" : "Jane Doe",
+           "text" : "Another twitter test ..."
+         }
+      }
+   ]
+}'
+--------------------------------------------------

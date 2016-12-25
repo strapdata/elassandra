@@ -1,0 +1,100 @@
+[[indices-update-settings]]
+== Update Indices Settings
+
+Change specific index level settings in real time.
+
+The REST endpoint is `/_settings` (to update all indices) or
+`{index}/_settings` to update one (or more) indices settings. The body
+of the request includes the updated settings, for example:
+
+[source,js]
+--------------------------------------------------
+{
+    "index" : {
+        "number_of_replicas" : 4
+    }
+}
+--------------------------------------------------
+
+The above will change the number of replicas to 4 from the current
+number of replicas. Here is a curl example:
+
+[source,js]
+--------------------------------------------------
+curl -XPUT 'localhost:9200/my_index/_settings' -d '
+{
+    "index" : {
+        "number_of_replicas" : 4
+    }
+}'
+--------------------------------------------------
+
+The list of per-index settings which can be updated dynamically on live
+indices can be found in <<index-modules>>.
+
+[float]
+[[bulk]]
+=== Bulk Indexing Usage
+
+For example, the update settings API can be used to dynamically change
+the index from being more performant for bulk indexing, and then move it
+to more real time indexing state. Before the bulk indexing is started,
+use:
+
+[source,js]
+--------------------------------------------------
+curl -XPUT localhost:9200/test/_settings -d '{
+    "index" : {
+        "refresh_interval" : "-1"
+    } }'
+--------------------------------------------------
+
+(Another optimization option is to start the index without any replicas,
+and only later adding them, but that really depends on the use case).
+
+Then, once bulk indexing is done, the settings can be updated (back to
+the defaults for example):
+
+[source,js]
+--------------------------------------------------
+curl -XPUT localhost:9200/test/_settings -d '{
+    "index" : {
+        "refresh_interval" : "1s"
+    } }'
+--------------------------------------------------
+
+And, a force merge should be called:
+
+[source,js]
+--------------------------------------------------
+curl -XPOST 'http://localhost:9200/test/_forcemerge?max_num_segments=5'
+--------------------------------------------------
+
+[float]
+[[update-settings-analysis]]
+=== Updating Index Analysis
+
+It is also possible to define new <<analysis,analyzers>> for the index.
+But it is required to <<indices-open-close,close>> the index
+first and <<indices-open-close,open>> it after the changes are made.
+
+For example if `content` analyzer hasn't been defined on `myindex` yet
+you can use the following commands to add it:
+
+[source,js]
+--------------------------------------------------
+curl -XPOST 'localhost:9200/myindex/_close'
+
+curl -XPUT 'localhost:9200/myindex/_settings' -d '{
+  "analysis" : {
+    "analyzer":{
+      "content":{
+        "type":"custom",
+        "tokenizer":"whitespace"
+      }
+    }
+  }
+}'
+
+curl -XPOST 'localhost:9200/myindex/_open'
+--------------------------------------------------

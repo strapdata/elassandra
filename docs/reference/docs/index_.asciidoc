@@ -1,0 +1,398 @@
+[[docs-index_]]
+== Index API
+
+The index API adds or updates a typed JSON document in a specific index,
+making it searchable. The following example inserts the JSON document
+into the "twitter" index, under a type called "tweet" with an id of 1:
+
+[source,js]
+--------------------------------------------------
+$ curl -XPUT 'http://localhost:9200/twitter/tweet/1' -d '{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}'
+--------------------------------------------------
+
+The result of the above index operation is:
+
+[source,js]
+--------------------------------------------------
+{
+    "_shards" : {
+        "total" : 10,
+        "failed" : 0,
+        "successful" : 10
+    },
+    "_index" : "twitter",
+    "_type" : "tweet",
+    "_id" : "1",
+    "_version" : 1,
+    "created" : true
+}
+--------------------------------------------------
+
+The `_shards` header provides information about the replication process of the index operation.
+
+* `total` - Indicates to how many shard copies (primary and replica shards) the index operation should be executed on.
+* `successful`- Indicates the number of shard copies the index operation succeeded on.
+* `failures` - An array that contains replication related errors in the case an index operation failed on a replica shard.
+
+The index operation is successful in the case `successful` is at least 1.
+
+NOTE:   Replica shards may not all be started when an indexing operation successfully returns (by default, a  quorum is
+        required). In that case, `total` will be equal to the total shards based on the index replica settings and
+        `successful` will be equal to the number of shards started (primary plus replicas). As there were no failures,
+        the `failed` will be 0.
+
+[float]
+[[index-creation]]
+=== Automatic Index Creation
+
+The index operation automatically creates an index if it has not been
+created before (check out the
+<<indices-create-index,create index API>> for manually
+creating an index), and also automatically creates a
+dynamic type mapping for the specific type if one has not yet been
+created (check out the <<indices-put-mapping,put mapping>>
+API for manually creating a type mapping).
+
+The mapping itself is very flexible and is schema-free. New fields and
+objects will automatically be added to the mapping definition of the
+type specified. Check out the <<mapping,mapping>>
+section for more information on mapping definitions.
+
+Automatic index creation can be disabled by setting
+`action.auto_create_index` to `false` in the config file of all nodes.
+Automatic mapping creation can be disabled by setting
+`index.mapper.dynamic` to `false` in the config files of all nodes (or
+on the specific index settings).
+
+Automatic index creation can include a pattern based white/black list,
+for example, set `action.auto_create_index` to `+aaa*,-bbb*,+ccc*,-*` (+
+meaning allowed, and - meaning disallowed).
+
+[float]
+[[index-versioning]]
+=== Versioning
+
+Each indexed document is given a version number. The associated
+`version` number is returned as part of the response to the index API
+request. The index API optionally allows for
+http://en.wikipedia.org/wiki/Optimistic_concurrency_control[optimistic
+concurrency control] when the `version` parameter is specified. This
+will control the version of the document the operation is intended to be
+executed against. A good example of a use case for versioning is
+performing a transactional read-then-update. Specifying a `version` from
+the document initially read ensures no changes have happened in the
+meantime (when reading in order to update, it is recommended to set
+`preference` to `_primary`). For example:
+
+[source,js]
+--------------------------------------------------
+curl -XPUT 'localhost:9200/twitter/tweet/1?version=2' -d '{
+    "message" : "elasticsearch now has versioning support, double cool!"
+}'
+--------------------------------------------------
+
+*NOTE:* versioning is completely real time, and is not affected by the
+near real time aspects of search operations. If no version is provided,
+then the operation is executed without any version checks.
+
+By default, internal versioning is used that starts at 1 and increments
+with each update, deletes included. Optionally, the version number can be
+supplemented with an external value (for example, if maintained in a
+database). To enable this functionality, `version_type` should be set to
+`external`. The value provided must be a numeric, long value greater or equal to 0,
+and less than around 9.2e+18. When using the external version type, instead
+of checking for a matching version number, the system checks to see if
+the version number passed to the index request is greater than the
+version of the currently stored document. If true, the document will be
+indexed and the new version number used. If the value provided is less
+than or equal to the stored document's version number, a version
+conflict will occur and the index operation will fail.
+
+A nice side effect is that there is no need to maintain strict ordering
+of async indexing operations executed as a result of changes to a source
+database, as long as version numbers from the source database are used.
+Even the simple case of updating the elasticsearch index using data from
+a database is simplified if external versioning is used, as only the
+latest version will be used if the index operations are out of order for
+whatever reason.
+
+[float]
+==== Version types
+
+Next to the `internal` & `external` version types explained above, Elasticsearch
+also supports other types for specific use cases. Here is an overview of
+the different version types and their semantics.
+
+`internal`:: only index the document if the given version is identical to the version
+of the stored document.
+
+`external` or `external_gt`:: only index the document if the given version is strictly higher
+than the version of the stored document *or* if there is no existing document. The given
+version will be used as the new version and will be stored with the new document. The supplied
+version must be a non-negative long number.
+
+`external_gte`:: only index the document if the given version is *equal* or higher
+than the version of the stored document. If there is no existing document
+the operation will succeed as well. The given version will be used as the new version
+and will be stored with the new document. The supplied version must be a non-negative long number.
+
+*NOTE*: The `external_gte` version type is meant for special use cases and
+should be used with care. If used incorrectly, it can result in loss of data.
+There is another option, `force`, which is deprecated because it can cause
+primary and replica shards to diverge.
+
+[float]
+[[operation-type]]
+=== Operation Type
+
+The index operation also accepts an `op_type` that can be used to force
+a `create` operation, allowing for "put-if-absent" behavior. When
+`create` is used, the index operation will fail if a document by that id
+already exists in the index.
+
+Here is an example of using the `op_type` parameter:
+
+[source,js]
+--------------------------------------------------
+$ curl -XPUT 'http://localhost:9200/twitter/tweet/1?op_type=create' -d '{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}'
+--------------------------------------------------
+
+Another option to specify `create` is to use the following uri:
+
+[source,js]
+--------------------------------------------------
+$ curl -XPUT 'http://localhost:9200/twitter/tweet/1/_create' -d '{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}'
+--------------------------------------------------
+
+[float]
+=== Automatic ID Generation
+
+The index operation can be executed without specifying the id. In such a
+case, an id will be generated automatically. In addition, the `op_type`
+will automatically be set to `create`. Here is an example (note the
+*POST* used instead of *PUT*):
+
+[source,js]
+--------------------------------------------------
+$ curl -XPOST 'http://localhost:9200/twitter/tweet/' -d '{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}'
+--------------------------------------------------
+
+The result of the above index operation is:
+
+[source,js]
+--------------------------------------------------
+{
+    "_index" : "twitter",
+    "_type" : "tweet",
+    "_id" : "6a8ca01c-7896-48e9-81cc-9f70661fcb32",
+    "_version" : 1,
+    "created" : true
+}
+--------------------------------------------------
+
+[float]
+[[index-routing]]
+=== Routing
+
+By default, shard placement — or `routing` — is controlled by using a
+hash of the document's id value. For more explicit control, the value
+fed into the hash function used by the router can be directly specified
+on a per-operation basis using the `routing` parameter. For example:
+
+[source,js]
+--------------------------------------------------
+$ curl -XPOST 'http://localhost:9200/twitter/tweet?routing=kimchy' -d '{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}'
+--------------------------------------------------
+
+In the example above, the "tweet" document is routed to a shard based on
+the `routing` parameter provided: "kimchy".
+
+When setting up explicit mapping, the `_routing` field can be optionally
+used to direct the index operation to extract the routing value from the
+document itself. This does come at the (very minimal) cost of an
+additional document parsing pass. If the `_routing` mapping is defined
+and set to be `required`, the index operation will fail if no routing
+value is provided or extracted.
+
+[float]
+[[parent-children]]
+=== Parents & Children
+
+A child document can be indexed by specifying its parent when indexing.
+For example:
+
+[source,js]
+--------------------------------------------------
+$ curl -XPUT localhost:9200/blogs/blog_tag/1122?parent=1111 -d '{
+    "tag" : "something"
+}'
+--------------------------------------------------
+
+When indexing a child document, the routing value is automatically set
+to be the same as its parent, unless the routing value is explicitly
+specified using the `routing` parameter.
+
+[float]
+[[index-timestamp]]
+=== Timestamp
+
+deprecated[2.0.0-beta2,The `_timestamp` field is deprecated.  Instead, use a normal <<date,`date`>> field and set its value explicitly]
+
+A document can be indexed with a `timestamp` associated with it. The
+`timestamp` value of a document can be set using the `timestamp`
+parameter. For example:
+
+[source,js]
+--------------------------------------------------
+$ curl -XPUT localhost:9200/twitter/tweet/1?timestamp=2009-11-15T14%3A12%3A12 -d '{
+    "user" : "kimchy",
+    "message" : "trying out Elasticsearch"
+}'
+--------------------------------------------------
+
+If the `timestamp` value is not provided externally or in the `_source`,
+the `timestamp` will be automatically set to the date the document was
+processed by the indexing chain. More information can be found on the
+<<mapping-timestamp-field,_timestamp mapping
+page>>.
+
+[float]
+[[index-ttl]]
+=== TTL
+
+deprecated[2.0.0-beta2,The current `_ttl` implementation is deprecated and will be replaced with a different implementation in a future version]
+
+
+A document can be indexed with a `ttl` (time to live) associated with
+it. Expired documents will be expunged automatically. The expiration
+date that will be set for a document with a provided `ttl` is relative
+to the `timestamp` of the document, meaning it can be based on the time
+of indexing or on any time provided. The provided `ttl` must be strictly
+positive and can be a number (in milliseconds) or any valid time value
+as shown in the following examples:
+
+[source,js]
+--------------------------------------------------
+curl -XPUT 'http://localhost:9200/twitter/tweet/1?ttl=86400000' -d '{
+    "user": "kimchy",
+    "message": "Trying out elasticsearch, so far so good?"
+}'
+--------------------------------------------------
+
+[source,js]
+--------------------------------------------------
+curl -XPUT 'http://localhost:9200/twitter/tweet/1?ttl=1d' -d '{
+    "user": "kimchy",
+    "message": "Trying out elasticsearch, so far so good?"
+}'
+--------------------------------------------------
+
+[source,js]
+--------------------------------------------------
+curl -XPUT 'http://localhost:9200/twitter/tweet/1' -d '{
+    "_ttl": "1d",
+    "user": "kimchy",
+    "message": "Trying out elasticsearch, so far so good?"
+}'
+--------------------------------------------------
+
+More information can be found on the
+<<mapping-ttl-field,_ttl mapping page>>.
+
+[float]
+[[index-distributed]]
+=== Distributed
+
+The index operation is directed to the primary shard based on its route
+(see the Routing section above) and performed on the actual node
+containing this shard. After the primary shard completes the operation,
+if needed, the update is distributed to applicable replicas.
+
+[float]
+[[index-consistency]]
+=== Write Consistency
+
+To prevent writes from taking place on the "wrong" side of a network
+partition, by default, index operations only succeed if a quorum
+(>replicas/2+1) of active shards are available. This default can be
+overridden on a node-by-node basis using the `action.write_consistency`
+setting. To alter this behavior per-operation, the `consistency` request
+parameter can be used.
+
+Valid write consistency values are `one`, `quorum`, and `all`.
+
+Note, for the case where the number of replicas is 1 (total of 2 copies
+of the data), then the default behavior is to succeed if 1 copy (the primary)
+can perform the write.
+
+The index operation only returns after all *active* shards within the
+replication group have indexed the document (sync replication).
+
+[float]
+[[index-refresh]]
+=== Refresh
+
+To refresh the shard (not the whole index) immediately after the operation
+occurs, so that the document appears in search results immediately, the
+`refresh` parameter can be set to `true`. Setting this option to `true` should
+*ONLY* be done after careful thought and verification that it does not lead to
+poor performance, both from an indexing and a search standpoint. Note, getting
+a document using the get API is completely realtime and doesn't require a
+refresh.
+
+[float]
+[[index-noop]]
+=== Noop Updates
+
+When updating a document using the index api a new version of the document is
+always created even if the document hasn't changed. If this isn't acceptable
+use the `_update` api with `detect_noop` set to true. This option isn't
+available on the index api because the index api doesn't fetch the old source
+and isn't able to compare it against the new source.
+
+There isn't a hard and fast rule about when noop updates aren't acceptable.
+It's a combination of lots of factors like how frequently your data source
+sends updates that are actually noops and how many queries per second
+elasticsearch runs on the shard with receiving the updates.
+
+[float]
+[[timeout]]
+=== Timeout
+
+The primary shard assigned to perform the index operation might not be
+available when the index operation is executed. Some reasons for this
+might be that the primary shard is currently recovering from a gateway
+or undergoing relocation. By default, the index operation will wait on
+the primary shard to become available for up to 1 minute before failing
+and responding with an error. The `timeout` parameter can be used to
+explicitly specify how long it waits. Here is an example of setting it
+to 5 minutes:
+
+[source,js]
+--------------------------------------------------
+$ curl -XPUT 'http://localhost:9200/twitter/tweet/1?timeout=5m' -d '{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}'
+--------------------------------------------------

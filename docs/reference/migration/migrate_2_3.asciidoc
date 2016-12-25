@@ -1,0 +1,52 @@
+[[breaking-changes-2.3]]
+== Breaking changes in 2.3
+
+This section discusses the changes that you need to be aware of when migrating
+your application to Elasticsearch 2.3.
+
+[[breaking_23_rest]]
+[float]
+=== REST API
+
+[float]
+==== CORS support broken in 2.3.0 and 2.3.1
+
+A change to the CORS implementation means that CORS support for pre-flight
+`OPTIONS` requests is broken in 2.3.0 and 2.3.1.  This is fixed in 2.3.2.
+
+[[breaking_23_index_apis]]
+[float]
+=== Mappings
+
+[float]
+==== Limit to the number of `nested` fields
+
+Indexing a document with 100 nested fields actually indexes 101 documents as each nested
+document is indexed as a separate document. To safeguard against ill-defined mappings
+the number of nested fields that can be defined per index has been limited to 50.
+This default limit can be changed with the index setting `index.mapping.nested_fields.limit`.
+Note that the limit is only checked when new indices are created or mappings are updated. It
+will thus only affect existing pre-2.3 indices if their mapping is changed.
+
+[[breaking_23_scripting]]
+[float]
+=== Scripting
+
+[float]
+==== Groovy dependencies
+
+In previous versions of Elasticsearch, the Groovy scripting capabilities
+depended on the `org.codehaus.groovy:groovy-all` artifact.  In addition
+to pulling in the Groovy language, this pulls in a very large set of
+functionality, none of which is needed for scripting within
+Elasticsearch. Aside from the inherent difficulties in managing such a
+large set of dependencies, this also increases the surface area for
+security issues. This dependency has been reduced to the core Groovy
+language `org.codehaus.groovy:groovy` artifact.
+
+[float]
+=== Analyze API changes
+
+The deprecated `filters`/`token_filters`/`char_filters` parameter has been
+renamed `filter`/`token_filter`/`char_filter`.
+And `filters`/`token_filters`/`char_filters` has been removed in 5.0.0

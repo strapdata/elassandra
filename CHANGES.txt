@@ -1,3 +1,17 @@
+2.4.2-2 - 2016-12-25
+  * Fix useless compactions when creating an index.
+  * Support for ES Object fields w/ enabled settings 
+  * UDT by name support #64
+  
+2.4.2-1 - 2016-12-23
+  * Based on Elasticsearch 2.4.2 + Cassandra 2.2.7
+  * Add support for Elasticsearch unit tests (2790 unit tests OK).
+  * Manage indexes and documents types containing dash or dot caracters (works with Kibana without any modification).
+  * New index settings *drop_on_delete_index* to delete Cassandra keyspace/table when deleting an Elasticsearch index.
+  * New index settings *synchrnous_refresh* to refresh Elasticsearch index on each document update.
+  * Improve search performance by removing some lock contention.
+  * [WARNING]: RPM & Debian packages not ready to use (please install tarballs).
+
 2.1.1-18.1 - 2016-11-02
   * Fix #59 delete-by-query plugin does not work 
   * Fix #57 Static members cause java.lang.ArrayIndexOutOfBoundsException

@@ -1,0 +1,176 @@
+[[indices-templates]]
+== Index Templates
+
+Index templates allow you to define templates that will automatically be
+applied when new indices are created. The templates include both settings and
+mappings, and a simple pattern template that controls whether the template
+should be applied to the new index.
+
+NOTE: Templates are only applied at index creation time.  Changing a template
+will have no impact on existing indices.
+
+For example:
+
+[source,js]
+--------------------------------------------------
+PUT /_template/template_1
+{
+  "template": "te*",
+  "settings": {
+    "number_of_shards": 1
+  },
+  "mappings": {
+    "type1": {
+      "_source": {
+        "enabled": false
+      },
+      "properties": {
+        "host_name": {
+          "type": "string",
+          "index": "not_analyzed"
+        },
+        "created_at": {
+          "type": "date",
+          "format": "EEE MMM dd HH:mm:ss Z YYYY"
+        }
+      }
+    }
+  }
+}
+--------------------------------------------------
+// AUTOSENSE
+
+Defines a template named template_1, with a template pattern of `te*`.
+The settings and mappings will be applied to any index name that matches
+the `te*` template.
+
+It is also possible to include aliases in an index template as follows:
+
+[source,js]
+--------------------------------------------------
+curl -XPUT localhost:9200/_template/template_1 -d '
+{
+    "template" : "te*",
+    "settings" : {
+        "number_of_shards" : 1
+    },
+    "aliases" : {
+        "alias1" : {},
+        "alias2" : {
+            "filter" : {
+                "term" : {"user" : "kimchy" }
+            },
+            "routing" : "kimchy"
+        },
+        "{index}-alias" : {} <1>
+    }
+}
+'
+--------------------------------------------------
+
+<1> the `{index}` placeholder within the alias name will be replaced with the
+actual index name that the template gets applied to during index creation.
+
+[float]
+[[delete]]
+=== Deleting a Template
+
+Index templates are identified by a name (in the above case
+`template_1`) and can be deleted as well:
+
+[source,js]
+--------------------------------------------------
+curl -XDELETE localhost:9200/_template/template_1
+--------------------------------------------------
+
+[float]
+[[getting]]
+=== Getting templates
+
+Index templates are identified by a name (in the above case
+`template_1`) and can be retrieved using the following:
+
+[source,js]
+--------------------------------------------------
+curl -XGET localhost:9200/_template/template_1
+--------------------------------------------------
+
+You can also match several templates by using wildcards like:
+
+[source,js]
+--------------------------------------------------
+curl -XGET localhost:9200/_template/temp*
+curl -XGET localhost:9200/_template/template_1,template_2
+--------------------------------------------------
+
+To get list of all index templates you can run:
+
+[source,js]
+--------------------------------------------------
+curl -XGET localhost:9200/_template/
+--------------------------------------------------
+
+
+[float]
+[[indices-templates-exists]]
+=== Templates exists
+
+Used to check if the template exists or not. For example:
+
+[source,js]
+-----------------------------------------------
+curl -XHEAD -i localhost:9200/_template/template_1
+-----------------------------------------------
+
+The HTTP status code indicates if the template with the given name
+exists or not. A status code `200` means it exists, a `404` it does not.
+
+
+[float]
+[[multiple-templates]]
+=== Multiple Template Matching
+
+Multiple index templates can potentially match an index, in this case,
+both the settings and mappings are merged into the final configuration
+of the index. The order of the merging can be controlled using the
+`order` parameter, with lower order being applied first, and higher
+orders overriding them. For example:
+
+[source,js]
+--------------------------------------------------
+curl -XPUT localhost:9200/_template/template_1 -d '
+{
+    "template" : "*",
+    "order" : 0,
+    "settings" : {
+        "number_of_shards" : 1
+    },
+    "mappings" : {
+        "type1" : {
+            "_source" : { "enabled" : false }
+        }
+    }
+}
+'
+
+curl -XPUT localhost:9200/_template/template_2 -d '
+{
+    "template" : "te*",
+    "order" : 1,
+    "settings" : {
+        "number_of_shards" : 1
+    },
+    "mappings" : {
+        "type1" : {
+            "_source" : { "enabled" : true }
+        }
+    }
+}
+'
+--------------------------------------------------
+
+The above will disable storing the `_source` on all `type1` types, but
+for indices of that start with `te*`, source will still be enabled.
+Note, for mappings, the merging is "deep", meaning that specific
+object/property based mappings can easily be added/overridden on higher
+order templates, with lower order templates providing the basis.

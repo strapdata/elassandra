@@ -1,0 +1,55 @@
+[[setup-upgrade]]
+== Upgrading
+
+[IMPORTANT]
+===========================================
+Before upgrading Elasticsearch:
+
+* Consult the <<breaking-changes,breaking changes>> docs.
+* Test upgrades in a dev environment before upgrading your production cluster.
+* Always back up your data before upgrading. You cannot roll back to an earlier
+  version unless you have a <<backup,backup>> of your data.
+===========================================
+
+Elasticsearch can usually be upgraded using a rolling upgrade process,
+resulting in no interruption of service.  This section details how to perform
+both rolling upgrades and upgrades with full cluster restarts.
+
+To determine whether a rolling upgrade is supported for your release, please
+consult this table:
+
+[cols="1<m,1<m,3",options="header",]
+|=======================================================================
+|Upgrade From   |Upgrade To     |Supported Upgrade Type
+|0.90.x         |2.x            |<<restart-upgrade,Full cluster restart>>
+|1.x            |2.x            |<<restart-upgrade,Full cluster restart>>
+|2.x            |2.y            |<<rolling-upgrades,Rolling upgrade>> (where `y > x `)
+|=======================================================================
+
+===========================================
+Upgrading Elasticsearch with Plugins
+
+Take plugins into consideration as well when upgrading. Plugins must be upgraded alongside Elasticsearch.
+
+Check with your plugin's provider to ensure that the plugin is compatible with
+your targeted version of Elasticsearch. If doing a rolling upgrade, it may be
+worth checking as well that the plugin works across a mixed-version cluster.
+Most plugins will have to be upgraded alongside Elasticsearch, although some
+plugins accessed primarily through the browser (`_site` plugins) may continue to
+work given that API changes are compatible.
+
+The process for both <<rolling-upgrades,Rolling upgrade>> and
+<<restart-upgrade,Full cluster restart>> is generally as follows, per node.
+
+* Shut down Elasticsearch
+* Upgrade Elasticsearch
+* Upgrade Plugins
+* Start up Elasticsearch
+
+===========================================
+
+include::backup.asciidoc[]
+
+include::rolling_upgrade.asciidoc[]
+
+include::cluster_restart.asciidoc[]
