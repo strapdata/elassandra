@@ -1,10 +1,41 @@
+# intellij files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# eclipse files
+.project
+.classpath
+eclipse-build
+.settings
+
+# netbeans files
+nb-configuration.xml
+nbactions.xml
+
+# gradle stuff
+.gradle/
+build/
+generated-resources/
+
+# maven stuff (to be removed when trunk becomes 4.x)
+*-execution-hints.log
+target/
 dependency-reduced-pom.xml
-/tests
-/private
-/target
-/build
-/src/test
-/src2
-/www
-/blog
-.*
+
+# testing stuff
+**/.local*
+.vagrant/
+
+# osx stuff
+.DS_Store
+
+# needed in case docs build is run...maybe we can configure doc build to generate files under build?
+html_docs
+
+# random old stuff that we should look at the necessity of...
+/tmp/
+backwards/
+
+private/
