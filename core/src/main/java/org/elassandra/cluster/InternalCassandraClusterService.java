@@ -794,7 +794,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 if (isReservedKeyword(shortName))
                 {
                     logger.warn("Allowing Reserved Keyword in ES: {}", shortName);
-                    continue; // Ignore
                 }
                 create.append('\"').append(shortName).append("\" ");
                 if (mapper instanceof ObjectMapper) {
@@ -842,7 +841,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 if (isReservedKeyword(shortName))
                 {
                     logger.warn("Allowing Reserved Keyword in ES: {}", shortName);
-                    continue; // Ignore
                 }
                 
                 StringBuilder update = new StringBuilder(String.format((Locale)null, "ALTER TYPE \"%s\".\"%s\" ADD \"%s\" ", ksName, typeName, shortName));
@@ -1009,7 +1007,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 if (isReservedKeyword(column))
                 {
                     logger.warn("Allowing Reserved Keyword in ES: {}", column);
-                    continue; // Ignore
                 }
                 
                 if (column.equals(TokenFieldMapper.NAME))
