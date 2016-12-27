@@ -792,7 +792,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
                 
                 if (isReservedKeyword(shortName))
-                    throw new ConfigurationException(shortName+" is a reserved keyword");
+                {
+                    logger.warn("Allowing Reserved Keyword in ES: {}", shortName);
+                }
                 create.append('\"').append(shortName).append("\" ");
                 if (mapper instanceof ObjectMapper) {
                     if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(mapper.cqlCollectionTag()).append("<");
@@ -837,7 +839,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 int lastDotIndex = mapper.name().lastIndexOf('.');
                 String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
                 if (isReservedKeyword(shortName))
-                    throw new ConfigurationException(shortName+" is a reserved keyword");
+                {
+                    logger.warn("Allowing Reserved Keyword in ES: {}", shortName);
+                }
                 
                 StringBuilder update = new StringBuilder(String.format((Locale)null, "ALTER TYPE \"%s\".\"%s\" ADD \"%s\" ", ksName, typeName, shortName));
                 if (!udt.left.contains(shortName)) {
@@ -1001,7 +1005,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
             int partitionKeyLength = 0;
             for (String column : columns) {
                 if (isReservedKeyword(column))
-                    throw new ConfigurationException(column+" is a CQL reserved keyword");
+                {
+                    logger.warn("Allowing Reserved Keyword in ES: {}", column);
+                }
                 
                 if (column.equals(TokenFieldMapper.NAME))
                     continue; // ignore pseudo column known by Elasticsearch
