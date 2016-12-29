@@ -7,17 +7,17 @@ Most of these tests work with Elassandra to ensure compatibility between Elastic
 Testing environnement
 ---------------------
 
-By default, JUnit creates one instance of each test class and executes each @Test method in parallel in many threads. Because Cassandra use many static variables, 
+By default, JUnit creates one instance of each test class and executes each *@Test* method in parallel in many threads. Because Cassandra use many static variables, 
 concurrent testing is not possible, so each test is executed sequentially (using a semaphore to serialize tests) on a single node Elassandra cluster listening on localhost. 
-Default configuration is located in **core/src/test/resources/conf**, data and logs are generated in **core/target/tests/**.
+Default configuration is located in **src/test/resources/conf**, data and logs are generated in **target/tests/**.
 
 Between each test, all indices (and underlying keyspaces and tables) are removed to have idempotent testings and avoid conflicts on index names. 
 Global cluster settings ``cluster.default_synchronous_refresh``  and ``cluster.default_drop_on_delete_index`` are set to *true*.
 
 Finally, the testing framework randomizes the locale settings representing a specific geographical, political, or cultural region, but Apache Cassandra does not 
-support such setting because string manipulation are implemented with the default locale settings. 
+support such setting because string manipulation are implemented with the default locale settings (see CASSANDRA-12334). 
 For exemple, *String.format("SELECT %s FROM ...",...)* is computed as *String.format(Local.getDefault(),"SELECT %s FROM ...",...)*, involving errors for some Locale setting.
-As a workaround, a javassit byte-code manipulation adds a *Locale.ROOT* argument to weak method calls in all Cassandra classes.
+As a workaround, a javassit byte-code manipulation in the maven build step adds a *Locale.ROOT* argument to weak method calls in all Cassandra classes.
 
 Elassandra unit test
 --------------------
@@ -63,7 +63,7 @@ To run this specific test :
 
 .. code::
 
-   $mvn test -Pdev -pl org.elasticsearch:elasticsearch -Dtests.seed=56E318ABFCECC61 -Dtests.class=org.elassandra.ParentChildTests 
+   $mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=56E318ABFCECC61 -Dtests.class=org.elassandra.ParentChildTests 
       -Des.logger.level=DEEBUG -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=de-GR -Dtests.timezone=Etc/UTC
 
 To run all unit tests :
