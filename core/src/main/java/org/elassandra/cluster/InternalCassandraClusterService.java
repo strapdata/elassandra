@@ -113,6 +113,7 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
@@ -1688,7 +1689,15 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 case ASCII:
                 case TEXT:
                 case VARCHAR:
-                    values[columnIndex] = row.getString(columnIndex);
+                    if (fieldMapper == null) {
+                        ObjectMapper objectMapper = documentMapper.objectMappers().get(columnName);
+                        if (objectMapper != null && !objectMapper.isEnabled()) {
+                            // parse text as JSON Map (not enabled object)
+                            values[columnIndex] = FBUtilities.fromJsonMap(row.getString(columnName));
+                        }
+                    } else {
+                        values[columnIndex] = row.getString(columnName);
+                    }
                     break;
                 case TIMEUUID:
                 case UUID:
