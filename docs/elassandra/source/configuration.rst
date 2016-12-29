@@ -114,7 +114,7 @@ Index settings
 Sizing and tunning
 ------------------
 
-Elassandra write throughput should be half the cassandra write throughput if you index all columns. If you only index a subset of columns, performance would be better. 
+Basically, Elassandra requires much CPU than standelone Cassandra or Elasticsearch and Elassandra write throughput should be half the cassandra write throughput if you index all columns. If you only index a subset of columns, performance would be better. 
 
 Recommended production setting for Apache cassandra and Elasticsearch can be applied to Elassandra :
 
