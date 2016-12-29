@@ -39,6 +39,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.FutureUtils;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
@@ -99,8 +100,9 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                     
                     final IndexMetaData indexMetaData = currentState.metaData().index(index);
                     // record keyspace.table having useless 2i 
-                    for(ObjectCursor<MappingMetaData> type:indexMetaData.getMappings().values()) 
-                        unindexedTables.put(indexMetaData, InternalCassandraClusterService.typeToCfName(type.value.type()));
+                    for(ObjectCursor<MappingMetaData> type:indexMetaData.getMappings().values())
+                        if (!MapperService.DEFAULT_MAPPING.equals(type.value.type()))
+                            unindexedTables.put(indexMetaData, InternalCassandraClusterService.typeToCfName(type.value.type()));
                 }
                
                 MetaData newMetaData = metaDataBuilder.build();
