@@ -49,4 +49,23 @@ public class NamedUdtTests extends ESSingleNodeTestCase {
         assertThat(results.size(),equalTo(1));
     }
 
+    @Test
+    public void testIndexNameTranslation() throws Exception {
+        assertThat(client().admin().indices().preparePutTemplate("test_template")
+                .addMapping("_default_", "{ \"_default_\": { \"properties\": { \"attachment\": { \"type\": \"binary\" }}}}")
+                .setTemplate("test_index-*")
+                .get().isAcknowledged(), equalTo(true));
+        
+        assertThat(client().prepareIndex("test_index-2016.12.29", "tweet-info", "1")
+                .setSource("{ \"user\": { \"user_id\": \"500\", \"user_email\":\"user@test.com\" }, \"message\": \"hello\" }")
+                .get().isCreated(), equalTo(true));
+        ensureGreen("test_index-2016.12.29");
+
+        assertThat(client().prepareGet().setIndex("test_index-2016.12.29").setType("tweet-info").setId("1").get().isExists(), equalTo(true));
+        assertThat(client().prepareMultiGet().add("test_index-2016.12.29","tweet-info","1").get().getResponses().length, equalTo(1));
+        assertThat(client().prepareSearch("test_index-2016.12.29").setTypes("tweet-info").setQuery(QueryBuilders.queryStringQuery("message:hello")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareDelete().setIndex("test_index-2016.12.29").setType("tweet-info").setId("1").get().getId(), equalTo("1"));
+        assertThat(client().admin().indices().prepareDelete("test_index-2016.12.29").get().isAcknowledged(), equalTo(true));
+        assertThat(client().admin().indices().prepareDeleteTemplate("test_template").get().isAcknowledged(), equalTo(true));
+    }
 }
