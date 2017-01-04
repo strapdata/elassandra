@@ -23,6 +23,9 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.Semaphore;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -50,22 +53,19 @@ import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.BigArrays;
-import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
+import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Rule;
-
-import com.carrotsearch.randomizedtesting.rules.StaticFieldsInvariantRule;
 
 /**
  * A test that keep a singleton node started for all tests that can be used to get
@@ -80,15 +80,16 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     private static Node NODE;
     private static final Semaphore available = new Semaphore(1);
         
-    static void initNode()  {
+    static void initNode(Settings testSettings, Collection<Class<? extends Plugin>> classpathPlugins)  {
         System.out.println("cassandra.home="+System.getProperty("cassandra.home"));
         System.out.println("cassandra.config.loader="+System.getProperty("cassandra.config.loader"));
         System.out.println("cassandra.config="+System.getProperty("cassandra.config"));
         System.out.println("cassandra.config.dir="+System.getProperty("cassandra.config.dir"));
         System.out.println("cassandra-rackdc.properties="+System.getProperty("cassandra-rackdc.properties"));
         System.out.println("cassandra.storagedir="+System.getProperty("cassandra.storagedir"));
+        System.out.println("settings="+testSettings);
+        System.out.println("plugins="+classpathPlugins);
         DatabaseDescriptor.createAllDirectories();
-        
         
         Settings settings = Settings.builder()
                 .put(ClusterName.SETTING, InternalTestCluster.clusterName("single-node-cluster",1))
@@ -107,10 +108,13 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
                 .put("script.indexed", "on")
                 //.put(EsExecutors.PROCESSORS, 1) // limit the number of threads created
                 .put("http.enabled", true)
-                .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true).build();
+                .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
+                .put(testSettings)
+                .build();
         System.out.println("settings="+settings.getAsMap());
+        System.out.println("plugins="+classpathPlugins);
         
-        ElassandraDaemon.instance.activate(false,  settings, new Environment(settings));
+        ElassandraDaemon.instance.activate(false,  settings, new Environment(settings), classpathPlugins);
         try {
             Thread.sleep(1000*15);
         } catch (InterruptedException e) {
@@ -132,6 +136,11 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     
     public ESSingleNodeTestCase() {
         super();
+    }
+    
+    // override this to initialize the single node cluster.
+    public Settings settings() {
+        return Settings.EMPTY;
     }
     
     static void reset() {
@@ -158,7 +167,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         try {
             available.acquire();
             if (NODE == null) {
-                initNode();
+                initNode(settings(), nodePlugins());
                 // register NodeEnvironment to remove node.lock
                 closeAfterTest(NODE.nodeEnvironment());
             }
@@ -196,7 +205,25 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         return true;
     }
 
+    /**
+     * Returns a collection of plugins that should be loaded on each node.
+     */
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        return Collections.emptyList();
+    }
 
+    /**
+     * Returns a collection of plugins that should be loaded when creating a transport client.
+     */
+    protected Collection<Class<? extends Plugin>> transportClientPlugins() {
+        return Collections.emptyList();
+    }
+
+    /** Helper method to create list of plugins without specifying generic types. */
+    protected static Collection<Class<? extends Plugin>> pluginList(Class<? extends Plugin>... plugins) {
+        return Arrays.asList(plugins);
+    }
+    
     
     /**
      * Returns a client to the single-node cluster.

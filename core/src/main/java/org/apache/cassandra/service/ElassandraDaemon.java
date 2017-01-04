@@ -4,6 +4,8 @@ import static com.google.common.collect.Sets.newHashSet;
 
 import java.lang.management.ManagementFactory;
 import java.nio.file.Paths;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -50,6 +52,7 @@ import org.elasticsearch.monitor.process.ProcessProbe;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeBuilder;
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
+import org.elasticsearch.plugins.Plugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -94,8 +97,8 @@ public class ElassandraDaemon extends CassandraDaemon {
         return node;
     }
     
-    public void activate(boolean addShutdownHook, Settings settings, Environment env) {
-        instance.setup(addShutdownHook, settings, env); 
+    public void activate(boolean addShutdownHook, Settings settings, Environment env, Collection<Class<? extends Plugin>> pluginList) {
+        instance.setup(addShutdownHook, settings, env, pluginList); 
         
         //enable indexing in cassandra.
         BaseElasticSecondaryIndex.runsElassandra = true;
@@ -229,7 +232,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             keepAliveLatch.countDown();
     }
 
-    public void setup(boolean addShutdownHook, Settings settings, Environment environment) {
+    public void setup(boolean addShutdownHook, Settings settings, Environment environment, Collection<Class<? extends Plugin>> pluginList) {
         this.settings = settings;
         this.env = environment;
         org.elasticsearch.bootstrap.Bootstrap.initializeNatives(
@@ -290,7 +293,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                 //.put("http.host", DatabaseDescriptor.getRpcAddress().getHostAddress())
                 ;
 
-        this.node = nodeBuilder.build();
+        this.node = nodeBuilder.build(pluginList);
     }
   
     public static Client client() {
@@ -387,7 +390,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                         .build(), 
                     foreground ? Terminal.DEFAULT : null);
             
-            instance.activate(true, env.settings(), env);
+            instance.activate(true, env.settings(), env, Collections.<Class<? extends Plugin>>emptyList());
 
             if (!foreground) {
                 System.err.close();
