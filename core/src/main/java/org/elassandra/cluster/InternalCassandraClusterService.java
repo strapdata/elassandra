@@ -1621,10 +1621,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
     }
 
     @Override
-    public void deleteRow(final String ksName, final String type, final String id, final ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
+    public void deleteRow(final String index, final String type, final String id, final ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
             IOException {
+        IndexService indexService = this.indexServiceSafe(index);
         String cfName = typeToCfName(type);
-        process(cl, buildDeleteQuery(ksName, cfName, id), parseElasticId(ksName, cfName, id).values);
+        process(cl, buildDeleteQuery(indexService.keyspace(), cfName, id), parseElasticId(index, type, id).values);
     }
     
     @Override
@@ -2033,16 +2034,16 @@ public class InternalCassandraClusterService extends InternalClusterService {
             if (!applied) 
                 throw new DocumentAlreadyExistsException(indexShard.shardId(), cfName, request.id());
         } else {
-            values = new ByteBuffer[metadata.partitionKeyColumns().size() + metadata.clusteringColumns().size()];
-            int i = 0;
-            for(ColumnDefinition cd : metadata.partitionKeyColumns())
-                values[i++] = map.get(cd.name.toString());
-            for(ColumnDefinition cd : metadata.clusteringColumns())
-                values[i++] = map.get(cd.name.toString());
-            
-            query = String.format((Locale)null, "DELETE FROM \"%s\".\"%s\" WHERE %s %s", keyspaceName, cfName, metadata.getCqlFragments().pkWhere,
-                    (timestamp != null) ? "USING TIMESTAMP "+Long.toString(timestamp*1000-1) : "");
-            process(request.consistencyLevel().toCassandraConsistencyLevel(), query, values);
+            // set empty top-level fields to null to overwrite existing columns.
+            for(FieldMapper m : fieldMappers) {
+                String fullname = m.name();
+                if (map.get(fullname) == null && !fullname.startsWith("_") && fullname.indexOf('.') == -1 && metadata.getColumnDefinition(m.cqlName()) != null) 
+                    map.put(fullname, null);
+            }
+            for(String m : objectMappers.keySet()) {
+                if (map.get(m) == null && m.indexOf('.') == -1 && metadata.getColumnDefinition(objectMappers.get(m).cqlName()) != null)
+                    map.put(m, null);
+            }
 
             values = new ByteBuffer[map.size()];
             query = buildInsertQuery(keyspaceName, cfName, map, id, 
@@ -2134,7 +2135,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
      */
     public DocPrimaryKey parseElasticId(final String index, final String type, final String id, Map<String, Object> map) throws JsonParseException, JsonMappingException, IOException {
         IndexService indexService = indexServiceSafe(index);
-        String ksName = indexService.settingsService().getSettings().get(IndexMetaData.SETTING_KEYSPACE,index);
+        String ksName = indexService.keyspace();
         String cfName = typeToCfName(type);
         CFMetaData metadata = getCFMetaData(ksName, cfName);
         
