@@ -69,13 +69,12 @@ public abstract class AbstractSearchStrategy {
         final long version;
         final DiscoveryNode localNode;
         final Map<UUID, ShardRoutingState> shardStates;
-        Map<Range<Token>, List<InetAddress>> rangeToEndpointsMap; // range to endpoints map
-        Map<DiscoveryNode, BitSet> greenShards;            // available   node to bitset of ranges => started primary.
-        Map<DiscoveryNode, BitSet> redShards;            // unavailable node to bitset of orphan ranges => unassigned primary
-        List<DiscoveryNode> yellowShards;                 // unassigned replica
-        List<Range<Token>> tokens;
-        boolean isConsistent = true;
-        final Route route;
+        protected Map<Range<Token>, List<InetAddress>> rangeToEndpointsMap; // range to endpoints map
+        protected Map<DiscoveryNode, BitSet> greenShards;            // available   node to bitset of ranges => started primary.
+        protected Map<DiscoveryNode, BitSet> redShards;            // unavailable node to bitset of orphan ranges => unassigned primary
+        protected List<DiscoveryNode> yellowShards;                 // unassigned replica
+        protected List<Range<Token>> tokens;
+        protected boolean isConsistent = true;
         
         public Router(final String index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) 
         {
@@ -112,7 +111,10 @@ public abstract class AbstractSearchStrategy {
             
             int i=0;
             this.greenShards = new HashMap<DiscoveryNode, BitSet>();
+            
+            
             for(Range<Token> rt: tokens) {
+                // greenshard = available node -> token range bitset, 
                 boolean orphanRange = true;
                 for(InetAddress endpoint : rangeToEndpointsMap.get(rt)) {
                     UUID uuid = StorageService.instance.getHostId(endpoint);
@@ -128,6 +130,7 @@ public abstract class AbstractSearchStrategy {
                         bs.set(i);
                     }
                 }
+                // redshards = unavailable node->token range bitset, 
                 if (orphanRange) {
                     isConsistent = false;
                     if (redShards == null) 
@@ -147,6 +150,8 @@ public abstract class AbstractSearchStrategy {
                 }
                 i++;
             }
+            
+            // yellow shards = unavailable nodes hosting token range available somewhere else in greenShards.
             for(DiscoveryNode node : clusterState.nodes()) {
                 if (this.greenShards.get(node) == null && (this.redShards == null || this.redShards.get(node)==null)) {
                     if (this.yellowShards == null) {
@@ -155,17 +160,12 @@ public abstract class AbstractSearchStrategy {
                     this.yellowShards.add(node);
                 }
             }
-            if (!this.isConsistent)
-                logger.debug("Unavailable index={} keyspace={} ranges={}", index, ksName, redShards);
-            this.route = new Route();
         }
         
-        public Route newRoute(@Nullable String preference, TransportAddress src) {
-            return this.route;
-        }
+        public abstract Route newRoute(@Nullable String preference, TransportAddress src);
 
         public boolean isConsistent() {
-            return isConsistent;
+            return this.isConsistent;
         }
         
         public ShardRoutingState getShardRoutingState(DiscoveryNode node) {
@@ -198,15 +198,24 @@ public abstract class AbstractSearchStrategy {
             return l;
         }
         
-        public class Route {
+        public abstract class Route {
+            List<IndexShardRoutingTable> shardRouting = null;
+            
             public Route() {
+                shardRouting = buildShardRouting();
             }
         
-            public Map<DiscoveryNode, BitSet> selectedShards() {
-                return Router.this.greenShards;
-            }
+            /**
+             * Should returns selected shards token range bitset covering 100% of the cassandra ring.
+             * @return
+             */
+            public abstract Map<DiscoveryNode, BitSet> selectedShards();
             
             public List<IndexShardRoutingTable> getShardRouting() {
+                return this.shardRouting;
+            }
+            
+            List<IndexShardRoutingTable> buildShardRouting() {
                 List<IndexShardRoutingTable> isrt = new ArrayList<IndexShardRoutingTable>(selectedShards().size() + ((Router.this.redShards!=null) ? Router.this.redShards.size() : 0) );
                 int i = 1;
                 boolean todo = true;
@@ -263,10 +272,6 @@ public abstract class AbstractSearchStrategy {
                             i++;
                     }
                 }
-                
-                if (logger.isDebugEnabled()) {
-                    logger.debug("route = {}", isrt);
-                }
                 return isrt;
             }
              
@@ -283,36 +288,5 @@ public abstract class AbstractSearchStrategy {
         }
         return searchClass;
     }
-    
-    // utility
-    /*
-    public static Collection<Range<Token>> sortAndMergeRange(Collection<Range<Token>> ranges) {
-        ArrayList<Range<Token>> optimizedRange = new ArrayList<Range<Token>>();
-        for (Range<Token> range : ranges) {
-            if (range.isWrapAround()) {
-                optimizedRange.add(new Range<Token>(new LongToken((Long) range.left.getTokenValue()), new LongToken(Long.MAX_VALUE)));
-                optimizedRange.add(new Range<Token>(new LongToken(Long.MIN_VALUE), new LongToken((Long) range.right.getTokenValue())));
-            } else {
-                optimizedRange.add(range);
-            }
-        }
-        CollectionUtil.introSort(optimizedRange);
-        if (logger.isTraceEnabled())
-            logger.trace("sort in={} out={}", ranges, optimizedRange);
-        int i = 0;
-        while (i < optimizedRange.size() - 1) {
-            Range<Token> range1 = optimizedRange.get(i);
-            Range<Token> range2 = optimizedRange.get(i + 1);
-            if (range1.right.equals(range2.left)) {
-                optimizedRange.set(i + 1, new Range<Token>(range1.left, range2.right));
-                optimizedRange.remove(i);
-            } else {
-                i++;
-            }
-        }
-        if (logger.isTraceEnabled())
-            logger.trace("merge out={}", optimizedRange);
-        return optimizedRange;
-    }
-    */
+
 }
