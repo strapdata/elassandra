@@ -1,3 +1,6 @@
+2.4.2-3 - 2017-01-04
+  * Fix search and indexing issue when cassandra replcation factor > 1 
+
 2.4.2-2 - 2016-12-25
   * Fix useless compactions when creating an index.
   * Support for ES Object fields w/ enabled settings 
