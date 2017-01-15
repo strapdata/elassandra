@@ -17,6 +17,10 @@
  */
 package org.apache.cassandra.cache;
 
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -24,13 +28,8 @@ import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.config.KSMetaData;
-import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.RowIndexEntry;
-import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
@@ -44,9 +43,11 @@ public class AutoSavingCacheTest
     {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
-                                    SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1));
+                                    KeyspaceParams.simple(1),
+                                    CFMetaData.Builder.create(KEYSPACE1, CF_STANDARD1)
+                                                      .addPartitionKey("pKey", AsciiType.instance)
+                                                      .addRegularColumn("col1", AsciiType.instance)
+                                                      .build());
     }
 
     @Test
@@ -55,16 +56,17 @@ public class AutoSavingCacheTest
         ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(CF_STANDARD1);
         for (int i = 0; i < 2; i++)
         {
-            Mutation rm = new Mutation(KEYSPACE1, ByteBufferUtil.bytes("key1"));
-            rm.add(CF_STANDARD1, Util.cellname("c1"), ByteBufferUtil.bytes(i), 0);
-            rm.applyUnsafe();
+            ColumnDefinition colDef = ColumnDefinition.regularDef(cfs.metadata, ByteBufferUtil.bytes("col1"), AsciiType.instance);
+            RowUpdateBuilder rowBuilder = new RowUpdateBuilder(cfs.metadata, System.currentTimeMillis(), "key1");
+            rowBuilder.add(colDef, "val1");
+            rowBuilder.build().apply();
             cfs.forceBlockingFlush();
         }
 
-        Assert.assertEquals(2, cfs.getSSTables().size());
+        Assert.assertEquals(2, cfs.getLiveSSTables().size());
 
         // preheat key cache
-        for (SSTableReader sstable : cfs.getSSTables())
+        for (SSTableReader sstable : cfs.getLiveSSTables())
             sstable.getPosition(Util.dk("key1"), SSTableReader.Operator.EQ);
 
         AutoSavingCache<KeyCacheKey, RowIndexEntry> keyCache = CacheService.instance.keyCache;
@@ -77,7 +79,7 @@ public class AutoSavingCacheTest
 
         // then load saved
         keyCache.loadSavedAsync().get();
-        for (SSTableReader sstable : cfs.getSSTables())
+        for (SSTableReader sstable : cfs.getLiveSSTables())
             Assert.assertNotNull(keyCache.get(new KeyCacheKey(cfs.metadata.ksAndCFName, sstable.descriptor, ByteBufferUtil.bytes("key1"))));
     }
 }

@@ -33,6 +33,7 @@ public class TimeUUIDType extends AbstractType<UUID>
 
     TimeUUIDType()
     {
+        super(ComparisonType.CUSTOM);
     } // singleton
 
     public boolean isEmptyValueMeaningless()
@@ -40,7 +41,7 @@ public class TimeUUIDType extends AbstractType<UUID>
         return true;
     }
 
-    public int compare(ByteBuffer b1, ByteBuffer b2)
+    public int compareCustom(ByteBuffer b1, ByteBuffer b2)
     {
         // Compare for length
         int s1 = b1.position(), s2 = b2.position();
@@ -126,5 +127,11 @@ public class TimeUUIDType extends AbstractType<UUID>
     public TypeSerializer<UUID> getSerializer()
     {
         return TimeUUIDSerializer.instance;
+    }
+
+    @Override
+    protected int valueLengthIfFixed()
+    {
+        return 16;
     }
 }

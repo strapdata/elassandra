@@ -137,6 +137,10 @@ public class Node implements Releasable {
     public Node(Settings preparedSettings) {
         this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), Version.CURRENT, Collections.<Class<? extends Plugin>>emptyList());
     }
+    
+    public Node(Settings preparedSettings, Collection<Class<? extends Plugin>> classpathPlugins) {
+        this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), Version.CURRENT, classpathPlugins);
+    }
 
     protected Node(Environment tmpEnv, Version version, Collection<Class<? extends Plugin>> classpathPlugins) {
         Settings tmpSettings = settingsBuilder().put(tmpEnv.settings())
@@ -316,8 +320,7 @@ public class Node implements Releasable {
 
 
         transportService.acceptIncomingRequests();
-        //discoService.joinClusterAndWaitForInitialState();
-
+        
         if (settings.getAsBoolean("http.enabled", true)) {
             injector.getInstance(HttpServer.class).start();
         }

@@ -39,11 +39,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.cassandra.concurrent.ExecutorLocal;
 import org.apache.cassandra.concurrent.ExecutorLocals;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.concurrent.Stage;
@@ -52,6 +49,7 @@ import org.apache.cassandra.concurrent.LocalAwareExecutorService;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.batchlog.Batch;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.BootStrapper;
 import org.apache.cassandra.dht.IPartitioner;
@@ -60,7 +58,10 @@ import org.apache.cassandra.gms.EchoMessage;
 import org.apache.cassandra.gms.GossipDigestAck;
 import org.apache.cassandra.gms.GossipDigestAck2;
 import org.apache.cassandra.gms.GossipDigestSyn;
+import org.apache.cassandra.hints.HintMessage;
+import org.apache.cassandra.hints.HintResponse;
 import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.locator.ILatencySubscriber;
@@ -85,7 +86,8 @@ public final class MessagingService implements MessagingServiceMBean
     public static final int VERSION_20 = 7;
     public static final int VERSION_21 = 8;
     public static final int VERSION_22 = 9;
-    public static final int current_version = VERSION_22;
+    public static final int VERSION_30 = 10;
+    public static final int current_version = VERSION_30;
 
     public static final String FAILURE_CALLBACK_PARAM = "CAL_BAC";
     public static final byte[] ONE_BYTE = new byte[1];
@@ -97,17 +99,18 @@ public final class MessagingService implements MessagingServiceMBean
     public static final int PROTOCOL_MAGIC = 0xCA552DFA;
 
     private boolean allNodesAtLeast22 = true;
+    private boolean allNodesAtLeast30 = true;
 
     /* All verb handler identifiers */
     public enum Verb
     {
         MUTATION,
-        @Deprecated BINARY,
+        HINT,
         READ_REPAIR,
         READ,
         REQUEST_RESPONSE, // client-initiated reads and writes
-        @Deprecated STREAM_INITIATE,
-        @Deprecated STREAM_INITIATE_DONE,
+        BATCH_STORE,  // was @Deprecated STREAM_INITIATE,
+        BATCH_REMOVE, // was @Deprecated STREAM_INITIATE_DONE,
         @Deprecated STREAM_REPLY,
         @Deprecated STREAM_REQUEST,
         RANGE_SLICE,
@@ -134,16 +137,27 @@ public final class MessagingService implements MessagingServiceMBean
         _TRACE, // dummy verb so we can use MS.droppedMessagesMap
         ECHO,
         REPAIR_MESSAGE,
-        // use as padding for backwards compatability where a previous version needs to validate a verb from the future.
         PAXOS_PREPARE,
         PAXOS_PROPOSE,
         PAXOS_COMMIT,
-        PAGED_RANGE,
+        @Deprecated PAGED_RANGE,
         // remember to add new verbs at the end, since we serialize by ordinal
         UNUSED_1,
         UNUSED_2,
         UNUSED_3,
+        UNUSED_4,
+        UNUSED_5,
         ;
+
+        // This is to support a "late" choice of the verb based on the messaging service version.
+        // See CASSANDRA-12249 for more details.
+        public static Verb convertForMessagingServiceVersion(Verb verb, int version)
+        {
+            if (verb == PAGED_RANGE && version >= VERSION_30)
+                return RANGE_SLICE;
+
+            return verb;
+        }
     }
 
     public static final EnumMap<MessagingService.Verb, Stage> verbStages = new EnumMap<MessagingService.Verb, Stage>(MessagingService.Verb.class)
@@ -151,10 +165,13 @@ public final class MessagingService implements MessagingServiceMBean
         put(Verb.MUTATION, Stage.MUTATION);
         put(Verb.COUNTER_MUTATION, Stage.COUNTER_MUTATION);
         put(Verb.READ_REPAIR, Stage.MUTATION);
+        put(Verb.HINT, Stage.MUTATION);
         put(Verb.TRUNCATE, Stage.MUTATION);
         put(Verb.PAXOS_PREPARE, Stage.MUTATION);
         put(Verb.PAXOS_PROPOSE, Stage.MUTATION);
         put(Verb.PAXOS_COMMIT, Stage.MUTATION);
+        put(Verb.BATCH_STORE, Stage.MUTATION);
+        put(Verb.BATCH_REMOVE, Stage.MUTATION);
 
         put(Verb.READ, Stage.READ);
         put(Verb.RANGE_SLICE, Stage.READ);
@@ -208,9 +225,9 @@ public final class MessagingService implements MessagingServiceMBean
 
         put(Verb.MUTATION, Mutation.serializer);
         put(Verb.READ_REPAIR, Mutation.serializer);
-        put(Verb.READ, ReadCommand.serializer);
-        put(Verb.RANGE_SLICE, RangeSliceCommand.serializer);
-        put(Verb.PAGED_RANGE, PagedRangeCommand.serializer);
+        put(Verb.READ, ReadCommand.readSerializer);
+        put(Verb.RANGE_SLICE, ReadCommand.rangeSliceSerializer);
+        put(Verb.PAGED_RANGE, ReadCommand.pagedRangeSerializer);
         put(Verb.BOOTSTRAP_TOKEN, BootStrapper.StringSerializer.instance);
         put(Verb.REPAIR_MESSAGE, RepairMessage.serializer);
         put(Verb.GOSSIP_DIGEST_ACK, GossipDigestAck.serializer);
@@ -225,6 +242,9 @@ public final class MessagingService implements MessagingServiceMBean
         put(Verb.PAXOS_PREPARE, Commit.serializer);
         put(Verb.PAXOS_PROPOSE, Commit.serializer);
         put(Verb.PAXOS_COMMIT, Commit.serializer);
+        put(Verb.HINT, HintMessage.serializer);
+        put(Verb.BATCH_STORE, Batch.serializer);
+        put(Verb.BATCH_REMOVE, UUIDSerializer.serializer);
     }};
 
     /**
@@ -233,10 +253,11 @@ public final class MessagingService implements MessagingServiceMBean
     public static final EnumMap<Verb, IVersionedSerializer<?>> callbackDeserializers = new EnumMap<Verb, IVersionedSerializer<?>>(Verb.class)
     {{
         put(Verb.MUTATION, WriteResponse.serializer);
+        put(Verb.HINT, HintResponse.serializer);
         put(Verb.READ_REPAIR, WriteResponse.serializer);
         put(Verb.COUNTER_MUTATION, WriteResponse.serializer);
-        put(Verb.RANGE_SLICE, RangeSliceReply.serializer);
-        put(Verb.PAGED_RANGE, RangeSliceReply.serializer);
+        put(Verb.RANGE_SLICE, ReadResponse.rangeSliceSerializer);
+        put(Verb.PAGED_RANGE, ReadResponse.rangeSliceSerializer);
         put(Verb.READ, ReadResponse.serializer);
         put(Verb.TRUNCATE, TruncateResponse.serializer);
         put(Verb.SNAPSHOT, null);
@@ -248,6 +269,9 @@ public final class MessagingService implements MessagingServiceMBean
 
         put(Verb.PAXOS_PREPARE, PrepareResponse.serializer);
         put(Verb.PAXOS_PROPOSE, BooleanSerializer.serializer);
+
+        put(Verb.BATCH_STORE, WriteResponse.serializer);
+        put(Verb.BATCH_REMOVE, WriteResponse.serializer);
     }};
 
     /* This records all the results mapped by message Id */
@@ -261,7 +285,7 @@ public final class MessagingService implements MessagingServiceMBean
     {
         public static final CallbackDeterminedSerializer instance = new CallbackDeterminedSerializer();
 
-        public Object deserialize(DataInput in, int version) throws IOException
+        public Object deserialize(DataInputPlus in, int version) throws IOException
         {
             throw new UnsupportedOperationException();
         }
@@ -280,7 +304,7 @@ public final class MessagingService implements MessagingServiceMBean
     /* Lookup table for registering message handlers based on the verb. */
     private final Map<Verb, IVerbHandler> verbHandlers;
 
-    private final ConcurrentMap<InetAddress, OutboundTcpConnectionPool> connectionManagers = new NonBlockingHashMap<InetAddress, OutboundTcpConnectionPool>();
+    private final ConcurrentMap<InetAddress, OutboundTcpConnectionPool> connectionManagers = new NonBlockingHashMap<>();
 
     private static final Logger logger = LoggerFactory.getLogger(MessagingService.class);
     private static final int LOG_DROPPED_INTERVAL_IN_MS = 5000;
@@ -296,11 +320,14 @@ public final class MessagingService implements MessagingServiceMBean
     public static final EnumSet<Verb> DROPPABLE_VERBS = EnumSet.of(Verb._TRACE,
                                                                    Verb.MUTATION,
                                                                    Verb.COUNTER_MUTATION,
+                                                                   Verb.HINT,
                                                                    Verb.READ_REPAIR,
                                                                    Verb.READ,
                                                                    Verb.RANGE_SLICE,
                                                                    Verb.PAGED_RANGE,
-                                                                   Verb.REQUEST_RESPONSE);
+                                                                   Verb.REQUEST_RESPONSE,
+                                                                   Verb.BATCH_STORE,
+                                                                   Verb.BATCH_REMOVE);
 
 
     private static final class DroppedMessages
@@ -364,7 +391,7 @@ public final class MessagingService implements MessagingServiceMBean
             droppedMessagesMap.put(verb, new DroppedMessages(verb));
 
         listenGate = new SimpleCondition();
-        verbHandlers = new EnumMap<Verb, IVerbHandler>(Verb.class);
+        verbHandlers = new EnumMap<>(Verb.class);
         if (!testOnly)
         {
             Runnable logDropped = new Runnable()
@@ -633,7 +660,9 @@ public final class MessagingService implements MessagingServiceMBean
                            ConsistencyLevel consistencyLevel,
                            boolean allowHints)
     {
-        assert message.verb == Verb.MUTATION || message.verb == Verb.COUNTER_MUTATION || message.verb == Verb.PAXOS_COMMIT;
+        assert message.verb == Verb.MUTATION
+            || message.verb == Verb.COUNTER_MUTATION
+            || message.verb == Verb.PAXOS_COMMIT;
         int messageId = nextId();
 
         CallbackInfo previous = callbacks.put(messageId,
@@ -769,7 +798,8 @@ public final class MessagingService implements MessagingServiceMBean
         assert !StageManager.getStage(Stage.MUTATION).isShutdown();
 
         // the important part
-        callbacks.shutdownBlocking();
+        if (!callbacks.shutdownBlocking())
+            logger.warn("Failed to wait for messaging service callbacks shutdown");
 
         // attempt to humor tests that try to stop and restart MS
         try
@@ -848,21 +878,31 @@ public final class MessagingService implements MessagingServiceMBean
         return allNodesAtLeast22;
     }
 
+    public boolean areAllNodesAtLeast30()
+    {
+        return allNodesAtLeast30;
+    }
+
     /**
      * @return the last version associated with address, or @param version if this is the first such version
      */
     public int setVersion(InetAddress endpoint, int version)
     {
+        // We can't talk to someone from the future
+        version = Math.min(version, current_version);
+
         logger.trace("Setting version {} for {}", version, endpoint);
 
         if (version < VERSION_22)
             allNodesAtLeast22 = false;
+        if (version < VERSION_30)
+            allNodesAtLeast30 = false;
 
         Integer v = versions.put(endpoint, version);
 
-        // if the version was increased to 2.2 or later, see if all nodes are >= 2.2 now
-        if (v != null && v < VERSION_22 && version >= VERSION_22)
-            refreshAllNodesAtLeast22();
+        // if the version was increased to 2.2 or later see if the min version across the cluster has changed
+        if (v != null && (v < VERSION_30 && version >= VERSION_22))
+            refreshAllNodeMinVersions();
 
         return v == null ? version : v;
     }
@@ -871,21 +911,29 @@ public final class MessagingService implements MessagingServiceMBean
     {
         logger.trace("Resetting version for {}", endpoint);
         Integer removed = versions.remove(endpoint);
-        if (removed != null && removed <= VERSION_22)
-            refreshAllNodesAtLeast22();
+        if (removed != null && removed <= VERSION_30)
+            refreshAllNodeMinVersions();
     }
 
-    private void refreshAllNodesAtLeast22()
+    private void refreshAllNodeMinVersions()
     {
-        for (Integer version: versions.values())
+        boolean anyNodeLowerThan30 = false;
+        for (Integer version : versions.values())
         {
-            if (version < VERSION_22)
+            if (version < MessagingService.VERSION_30)
+            {
+                anyNodeLowerThan30 = true;
+                allNodesAtLeast30 = false;
+            }
+
+            if (version < MessagingService.VERSION_22)
             {
                 allNodesAtLeast22 = false;
                 return;
             }
         }
         allNodesAtLeast22 = true;
+        allNodesAtLeast30 = !anyNodeLowerThan30;
     }
 
     public int getVersion(InetAddress endpoint)
@@ -1034,9 +1082,9 @@ public final class MessagingService implements MessagingServiceMBean
                     logger.error("SSL handshake error for inbound connection from " + socket, e);
                     FileUtils.closeQuietly(socket);
                 }
-                catch (IOException e)
+                catch (Throwable t)
                 {
-                    logger.trace("Error reading the socket " + socket, e);
+                    logger.trace("Error reading the socket {}", socket, t);
                     FileUtils.closeQuietly(socket);
                 }
             }
@@ -1182,13 +1230,21 @@ public final class MessagingService implements MessagingServiceMBean
 
     public static IPartitioner globalPartitioner()
     {
-        return DatabaseDescriptor.getPartitioner();
+        return StorageService.instance.getTokenMetadata().partitioner;
+    }
+
+    public static void validatePartitioner(Collection<? extends AbstractBounds<?>> allBounds)
+    {
+        for (AbstractBounds<?> bounds : allBounds)
+            validatePartitioner(bounds);
     }
 
     public static void validatePartitioner(AbstractBounds<?> bounds)
     {
         if (globalPartitioner() != bounds.left.getPartitioner())
-            throw new AssertionError();
+            throw new AssertionError(String.format("Partitioner in bounds serialization. Expected %s, was %s.",
+                                                   globalPartitioner().getClass().getName(),
+                                                   bounds.left.getPartitioner().getClass().getName()));
     }
 
     @VisibleForTesting

@@ -1,6 +1,4 @@
-package org.apache.cassandra.db;
 /*
- * 
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,26 +15,62 @@ package org.apache.cassandra.db;
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- * 
  */
-
+package org.apache.cassandra.db;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 
-import org.junit.Test;
+import com.google.common.collect.Lists;
 
 import junit.framework.Assert;
-import org.apache.cassandra.Util;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.db.marshal.*;
+import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.concurrent.OpOrder;
-import org.apache.cassandra.utils.memory.NativeAllocator;
-import org.apache.cassandra.utils.memory.NativePool;
+import org.apache.cassandra.utils.FBUtilities;
 
 public class CellTest
 {
+    private static final String KEYSPACE1 = "CellTest";
+    private static final String CF_STANDARD1 = "Standard1";
+    private static final String CF_COLLECTION = "Collection1";
 
-    private static final OpOrder order = new OpOrder();
-    private static NativeAllocator allocator = new NativePool(Integer.MAX_VALUE, Integer.MAX_VALUE, 1f, null).newAllocator();
+    private static final CFMetaData cfm = SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1);
+    private static final CFMetaData cfm2 = CFMetaData.Builder.create(KEYSPACE1, CF_COLLECTION)
+                                                             .addPartitionKey("k", IntegerType.instance)
+                                                             .addClusteringColumn("c", IntegerType.instance)
+                                                             .addRegularColumn("v", IntegerType.instance)
+                                                             .addRegularColumn("m", MapType.getInstance(IntegerType.instance, IntegerType.instance, true))
+                                                             .build();
+
+    private static final CFMetaData fakeMetadata = CFMetaData.createFake("fakeKS", "fakeTable");
+
+    @BeforeClass
+    public static void defineSchema() throws ConfigurationException
+    {
+        SchemaLoader.prepareServer();
+        SchemaLoader.createKeyspace(KEYSPACE1, KeyspaceParams.simple(1), cfm, cfm2);
+    }
+
+    private static ColumnDefinition fakeColumn(String name, AbstractType<?> type)
+    {
+        return new ColumnDefinition(fakeMetadata.ksName,
+                                    fakeMetadata.cfName,
+                                    ColumnIdentifier.getInterned(name, false),
+                                    type,
+                                    ColumnDefinition.NO_POSITION,
+                                    ColumnDefinition.Kind.REGULAR);
+    }
 
     @Test
     public void testConflictingTypeEquality()
@@ -49,35 +83,124 @@ public class CellTest
                 // don't test equality for both sides native, as this is based on CellName resolution
                 if (lhs && rhs)
                     continue;
-                Cell a = expiring("a", "a", 1, 1, lhs);
-                Cell b = regular("a", "a", 1, rhs);
+                Cell a = expiring(cfm, "val", "a", 1, 1);
+                Cell b = regular(cfm, "val", "a", 1);
                 Assert.assertNotSame(a, b);
                 Assert.assertNotSame(b, a);
-                a = deleted("a", 1, 1, lhs);
-                b = regular("a", ByteBufferUtil.bytes(1), 1, rhs);
+
+                a = deleted(cfm, "val", 1, 1);
                 Assert.assertNotSame(a, b);
                 Assert.assertNotSame(b, a);
             }
         }
     }
 
+    private void assertValid(Cell cell)
+    {
+        try
+        {
+            cell.validate();
+        }
+        catch (Exception e)
+        {
+            Assert.fail("Cell should be valid but got error: " + e);
+        }
+    }
+
+    private void assertInvalid(Cell cell)
+    {
+        try
+        {
+            cell.validate();
+            Assert.fail("Cell " + cell + " should be invalid");
+        }
+        catch (MarshalException e)
+        {
+            // Note that we shouldn't get anything else than a MarshalException so let other escape and fail the test
+        }
+    }
+
+    @Test
+    public void testValidate()
+    {
+        ColumnDefinition c;
+
+        // Valid cells
+        c = fakeColumn("c", Int32Type.instance);
+        assertValid(BufferCell.live(fakeMetadata, c, 0, ByteBufferUtil.EMPTY_BYTE_BUFFER));
+        assertValid(BufferCell.live(fakeMetadata, c, 0, ByteBufferUtil.bytes(4)));
+
+        assertValid(BufferCell.expiring(c, 0, 4, 4, ByteBufferUtil.EMPTY_BYTE_BUFFER));
+        assertValid(BufferCell.expiring(c, 0, 4, 4, ByteBufferUtil.bytes(4)));
+
+        assertValid(BufferCell.tombstone(c, 0, 4));
+
+        // Invalid value (we don't all empty values for smallint)
+        c = fakeColumn("c", ShortType.instance);
+        assertInvalid(BufferCell.live(fakeMetadata, c, 0, ByteBufferUtil.EMPTY_BYTE_BUFFER));
+        // But this should be valid even though the underlying value is an empty BB (catches bug #11618)
+        assertValid(BufferCell.tombstone(c, 0, 4));
+        // And of course, this should be valid with a proper value
+        assertValid(BufferCell.live(fakeMetadata, c, 0, ByteBufferUtil.bytes((short)4)));
+
+        // Invalid ttl
+        assertInvalid(BufferCell.expiring(c, 0, -4, 4, ByteBufferUtil.bytes(4)));
+        // Invalid local deletion times
+        assertInvalid(BufferCell.expiring(c, 0, 4, -4, ByteBufferUtil.bytes(4)));
+        assertInvalid(BufferCell.expiring(c, 0, 4, Cell.NO_DELETION_TIME, ByteBufferUtil.bytes(4)));
+
+        c = fakeColumn("c", MapType.getInstance(Int32Type.instance, Int32Type.instance, true));
+        // Valid cell path
+        assertValid(BufferCell.live(fakeMetadata, c, 0, ByteBufferUtil.bytes(4), CellPath.create(ByteBufferUtil.bytes(4))));
+        // Invalid cell path (int values should be 0 or 4 bytes)
+        assertInvalid(BufferCell.live(fakeMetadata, c, 0, ByteBufferUtil.bytes(4), CellPath.create(ByteBufferUtil.bytes((long)4))));
+    }
+
     @Test
     public void testExpiringCellReconile()
     {
         // equal
-        Assert.assertEquals(0, testExpiring("a", "a", 1, 1, null, null, null, null));
+        Assert.assertEquals(0, testExpiring("val", "a", 1, 1, null, null, null, null));
 
         // newer timestamp
-        Assert.assertEquals(-1, testExpiring("a", "a", 2, 1, null, null, 1L, null));
-        Assert.assertEquals(-1, testExpiring("a", "a", 2, 1, null, "b", 1L, 2));
+        Assert.assertEquals(-1, testExpiring("val", "a", 2, 1, null, null, 1L, null));
+        Assert.assertEquals(-1, testExpiring("val", "a", 2, 1, null, "val", 1L, 2));
 
-        // newer TTL
-        Assert.assertEquals(-1, testExpiring("a", "a", 1, 2, null, null, null, 1));
-        Assert.assertEquals(1, testExpiring("a", "a", 1, 2, null, "b", null, 1));
+        Assert.assertEquals(-1, testExpiring("val", "a", 1, 2, null, null, null, 1));
+        Assert.assertEquals(1, testExpiring("val", "a", 1, 2, null, "val", null, 1));
 
         // newer value
-        Assert.assertEquals(-1, testExpiring("a", "b", 2, 1, null, "a", null, null));
-        Assert.assertEquals(-1, testExpiring("a", "b", 2, 1, null, "a", null, 2));
+        Assert.assertEquals(-1, testExpiring("val", "b", 2, 1, null, "a", null, null));
+        Assert.assertEquals(-1, testExpiring("val", "b", 2, 1, null, "a", null, 2));
+    }
+
+    private static ByteBuffer bb(int i)
+    {
+        return ByteBufferUtil.bytes(i);
+    }
+
+    @Test
+    public void testComplexCellReconcile()
+    {
+        ColumnDefinition m = cfm2.getColumnDefinition(new ColumnIdentifier("m", false));
+        int now1 = FBUtilities.nowInSeconds();
+        long ts1 = now1*1000000;
+
+
+        Cell r1m1 = BufferCell.live(cfm2, m, ts1, bb(1), CellPath.create(bb(1)));
+        Cell r1m2 = BufferCell.live(cfm2, m, ts1, bb(2), CellPath.create(bb(2)));
+        List<Cell> cells1 = Lists.newArrayList(r1m1, r1m2);
+
+        int now2 = now1 + 1;
+        long ts2 = now2*1000000;
+        Cell r2m2 = BufferCell.live(cfm2, m, ts2, bb(1), CellPath.create(bb(2)));
+        Cell r2m3 = BufferCell.live(cfm2, m, ts2, bb(2), CellPath.create(bb(3)));
+        Cell r2m4 = BufferCell.live(cfm2, m, ts2, bb(3), CellPath.create(bb(4)));
+        List<Cell> cells2 = Lists.newArrayList(r2m2, r2m3, r2m4);
+
+        RowBuilder builder = new RowBuilder();
+        Cells.reconcileComplex(m, cells1.iterator(), cells2.iterator(), DeletionTime.LIVE, builder, now2 + 1);
+        Assert.assertEquals(Lists.newArrayList(r1m1, r2m2, r2m3, r2m4), builder.cells);
     }
 
     private int testExpiring(String n1, String v1, long t1, int et1, String n2, String v2, Long t2, Integer et2)
@@ -90,52 +213,30 @@ public class CellTest
             t2 = t1;
         if (et2 == null)
             et2 = et1;
-        int result = testExpiring(n1, v1, t1, et1, false, n2, v2, t2, et2, false);
-        Assert.assertEquals(result, testExpiring(n1, v1, t1, et1, false, n2, v2, t2, et2, true));
-        Assert.assertEquals(result, testExpiring(n1, v1, t1, et1, true, n2, v2, t2, et2, false));
-        Assert.assertEquals(result, testExpiring(n1, v1, t1, et1, true, n2, v2, t2, et2, true));
-        return result;
+        Cell c1 = expiring(cfm, n1, v1, t1, et1);
+        Cell c2 = expiring(cfm, n2, v2, t2, et2);
+
+        int now = FBUtilities.nowInSeconds();
+        if (Cells.reconcile(c1, c2, now) == c1)
+            return Cells.reconcile(c2, c1, now) == c1 ? -1 : 0;
+        return Cells.reconcile(c2, c1, now) == c2 ? 1 : 0;
     }
 
-    private int testExpiring(String n1, String v1, long t1, int et1, boolean native1, String n2, String v2, long t2, int et2, boolean native2)
+    private Cell regular(CFMetaData cfm, String columnName, String value, long timestamp)
     {
-        Cell c1 = expiring(n1, v1, t1, et1, native1);
-        Cell c2 = expiring(n2, v2, t2, et2, native2);
-        return reconcile(c1, c2);
+        ColumnDefinition cdef = cfm.getColumnDefinition(ByteBufferUtil.bytes(columnName));
+        return BufferCell.live(cfm, cdef, timestamp, ByteBufferUtil.bytes(value));
     }
 
-    int reconcile(Cell c1, Cell c2)
+    private Cell expiring(CFMetaData cfm, String columnName, String value, long timestamp, int localExpirationTime)
     {
-        if (c1.reconcile(c2) == c1)
-            return c2.reconcile(c1) == c1 ? -1 : 0;
-        return c2.reconcile(c1) == c2 ? 1 : 0;
+        ColumnDefinition cdef = cfm.getColumnDefinition(ByteBufferUtil.bytes(columnName));
+        return new BufferCell(cdef, timestamp, 1, localExpirationTime, ByteBufferUtil.bytes(value), null);
     }
 
-    private Cell expiring(String name, String value, long timestamp, int expirationTime, boolean nativeCell)
+    private Cell deleted(CFMetaData cfm, String columnName, int localDeletionTime, long timestamp)
     {
-        ExpiringCell cell = new BufferExpiringCell(Util.cellname(name), ByteBufferUtil.bytes(value), timestamp, 1, expirationTime);
-        if (nativeCell)
-            cell = new NativeExpiringCell(allocator, order.getCurrent(), cell);
-        return cell;
-    }
-
-    private Cell regular(String name, ByteBuffer value, long timestamp, boolean nativeCell)
-    {
-        Cell cell = new BufferCell(Util.cellname(name), value, timestamp);
-        if (nativeCell)
-            cell = new NativeCell(allocator, order.getCurrent(), cell);
-        return cell;
-    }
-    private Cell regular(String name, String value, long timestamp, boolean nativeCell)
-    {
-        return regular(name, ByteBufferUtil.bytes(value), timestamp, nativeCell);
-    }
-
-    private Cell deleted(String name, int localDeletionTime, long timestamp, boolean nativeCell)
-    {
-        DeletedCell cell = new BufferDeletedCell(Util.cellname(name), localDeletionTime, timestamp);
-        if (nativeCell)
-            cell = new NativeDeletedCell(allocator, order.getCurrent(), cell);
-        return cell;
+        ColumnDefinition cdef = cfm.getColumnDefinition(ByteBufferUtil.bytes(columnName));
+        return BufferCell.tombstone(cdef, timestamp, localDeletionTime);
     }
 }

@@ -26,12 +26,15 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.*;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.FailureDetector;
@@ -79,6 +82,9 @@ public class TokenMetadata
     // means we can detect and reject the addition of multiple nodes at the same token
     // before one becomes part of the ring.
     private final BiMultiValMap<Token, InetAddress> bootstrapTokens = new BiMultiValMap<>();
+
+    private final BiMap<InetAddress, InetAddress> replacementToOriginal = HashBiMap.create();
+
     // (don't need to record Token here since it's still part of tokenToEndpointMap until it's done leaving)
     private final Set<InetAddress> leavingEndpoints = new HashSet<>();
     // this is a cache of the calculation from {tokenToEndpointMap, bootstrapTokens, leavingEndpoints}
@@ -92,6 +98,7 @@ public class TokenMetadata
     private volatile ArrayList<Token> sortedTokens;
 
     private final Topology topology;
+    public final IPartitioner partitioner;
 
     private static final Comparator<InetAddress> inetaddressCmp = new Comparator<InetAddress>()
     {
@@ -108,15 +115,26 @@ public class TokenMetadata
     {
         this(SortedBiMultiValMap.<Token, InetAddress>create(null, inetaddressCmp),
              HashBiMap.<InetAddress, UUID>create(),
-             new Topology());
+             new Topology(),
+             DatabaseDescriptor.getPartitioner());
     }
 
-    private TokenMetadata(BiMultiValMap<Token, InetAddress> tokenToEndpointMap, BiMap<InetAddress, UUID> endpointsMap, Topology topology)
+    private TokenMetadata(BiMultiValMap<Token, InetAddress> tokenToEndpointMap, BiMap<InetAddress, UUID> endpointsMap, Topology topology, IPartitioner partitioner)
     {
         this.tokenToEndpointMap = tokenToEndpointMap;
         this.topology = topology;
+        this.partitioner = partitioner;
         endpointToHostIdMap = endpointsMap;
         sortedTokens = sortTokens();
+    }
+
+    /**
+     * To be used by tests only (via {@link StorageService.setPartitionerUnsafe}).
+     */
+    @VisibleForTesting
+    public TokenMetadata cloneWithNewPartitioner(IPartitioner newPartitioner)
+    {
+        return new TokenMetadata(tokenToEndpointMap, endpointToHostIdMap, topology, newPartitioner);
     }
 
     private ArrayList<Token> sortTokens()
@@ -185,6 +203,7 @@ public class TokenMetadata
                 tokenToEndpointMap.removeValue(endpoint);
                 topology.addEndpoint(endpoint);
                 leavingEndpoints.remove(endpoint);
+                replacementToOriginal.remove(endpoint);
                 removeFromMoving(endpoint); // also removing this endpoint from moving
 
                 for (Token token : tokens)
@@ -297,6 +316,11 @@ public class TokenMetadata
 
     public void addBootstrapTokens(Collection<Token> tokens, InetAddress endpoint)
     {
+        addBootstrapTokens(tokens, endpoint, null);
+    }
+
+    private void addBootstrapTokens(Collection<Token> tokens, InetAddress endpoint, InetAddress original)
+    {
         assert tokens != null && !tokens.isEmpty();
         assert endpoint != null;
 
@@ -313,7 +337,7 @@ public class TokenMetadata
                     throw new RuntimeException("Bootstrap Token collision between " + oldEndpoint + " and " + endpoint + " (token " + token);
 
                 oldEndpoint = tokenToEndpointMap.get(token);
-                if (oldEndpoint != null && !oldEndpoint.equals(endpoint))
+                if (oldEndpoint != null && !oldEndpoint.equals(endpoint) && !oldEndpoint.equals(original))
                     throw new RuntimeException("Bootstrap Token collision between " + oldEndpoint + " and " + endpoint + " (token " + token);
             }
 
@@ -326,6 +350,43 @@ public class TokenMetadata
         {
             lock.writeLock().unlock();
         }
+    }
+
+    public void addReplaceTokens(Collection<Token> replacingTokens, InetAddress newNode, InetAddress oldNode)
+    {
+        assert replacingTokens != null && !replacingTokens.isEmpty();
+        assert newNode != null && oldNode != null;
+
+        lock.writeLock().lock();
+        try
+        {
+            Collection<Token> oldNodeTokens = tokenToEndpointMap.inverse().get(oldNode);
+            if (!replacingTokens.containsAll(oldNodeTokens) || !oldNodeTokens.containsAll(replacingTokens))
+            {
+                throw new RuntimeException(String.format("Node %s is trying to replace node %s with tokens %s with a " +
+                                                         "different set of tokens %s.", newNode, oldNode, oldNodeTokens,
+                                                         replacingTokens));
+            }
+
+            logger.debug("Replacing {} with {}", newNode, oldNode);
+            replacementToOriginal.put(newNode, oldNode);
+
+            addBootstrapTokens(replacingTokens, newNode, oldNode);
+        }
+        finally
+        {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public Optional<InetAddress> getReplacementNode(InetAddress endpoint)
+    {
+        return Optional.ofNullable(replacementToOriginal.inverse().get(endpoint));
+    }
+
+    public Optional<InetAddress> getReplacingNode(InetAddress endpoint)
+    {
+        return Optional.ofNullable((replacementToOriginal.get(endpoint)));
     }
 
     public void removeBootstrapTokens(Collection<Token> tokens)
@@ -391,6 +452,10 @@ public class TokenMetadata
             tokenToEndpointMap.removeValue(endpoint);
             topology.removeEndpoint(endpoint);
             leavingEndpoints.remove(endpoint);
+            if (replacementToOriginal.remove(endpoint) != null)
+            {
+                logger.debug("Node {} failed during replace.", endpoint);
+            }
             endpointToHostIdMap.remove(endpoint);
             sortedTokens = sortTokens();
             invalidateCachedRings();
@@ -555,7 +620,8 @@ public class TokenMetadata
         {
             return new TokenMetadata(SortedBiMultiValMap.create(tokenToEndpointMap, null, inetaddressCmp),
                                      HashBiMap.create(endpointToHostIdMap),
-                                     new Topology(topology));
+                                     new Topology(topology),
+                                     partitioner);
         }
         finally
         {
@@ -952,7 +1018,7 @@ public class TokenMetadata
     public static Iterator<Token> ringIterator(final ArrayList<Token> ring, Token start, boolean includeMin)
     {
         if (ring.isEmpty())
-            return includeMin ? Iterators.singletonIterator(StorageService.getPartitioner().getMinimumToken())
+            return includeMin ? Iterators.singletonIterator(start.getPartitioner().getMinimumToken())
                               : Iterators.<Token>emptyIterator();
 
         final boolean insertMin = includeMin && !ring.get(0).isMinimum();
@@ -968,7 +1034,7 @@ public class TokenMetadata
                 {
                     // return minimum for index == -1
                     if (j == -1)
-                        return StorageService.getPartitioner().getMinimumToken();
+                        return start.getPartitioner().getMinimumToken();
                     // return ring token for other indexes
                     return ring.get(j);
                 }
@@ -1152,6 +1218,11 @@ public class TokenMetadata
     {
         ringVersion++;
         cachedTokenMap.set(null);
+    }
+
+    public DecoratedKey decorateKey(ByteBuffer key)
+    {
+        return partitioner.decorateKey(key);
     }
 
     /**

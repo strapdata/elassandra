@@ -1,6 +1,4 @@
-package org.apache.cassandra.db;
 /*
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,30 +15,27 @@ package org.apache.cassandra.db;
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- *
  */
+package org.apache.cassandra.db;
 
 import com.google.common.base.Charsets;
+
 import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.KSMetaData;
-import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
+import org.apache.cassandra.UpdateBuilder;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.Verifier;
-import org.apache.cassandra.db.marshal.BytesType;
-import org.apache.cassandra.db.marshal.CounterColumnType;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.io.FSWriteError;
-import org.apache.cassandra.io.compress.*;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.schema.CompressionParams;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.BeforeClass;
@@ -49,13 +44,9 @@ import org.junit.runner.RunWith;
 
 import java.io.*;
 import java.nio.file.Files;
-import java.util.HashMap;
-import java.util.List;
-import java.util.zip.Adler32;
+import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
 
-import static org.apache.cassandra.Util.cellname;
-import static org.apache.cassandra.Util.column;
 import static org.junit.Assert.fail;
 
 @RunWith(OrderedJUnit4ClassRunner.class)
@@ -80,25 +71,24 @@ public class VerifyTest
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
-        CompressionParameters compressionParameters = new CompressionParameters(SnappyCompressor.instance, 32768, new HashMap<String, String>());
+        CompressionParams compressionParameters = CompressionParams.snappy(32768);
 
         SchemaLoader.loadSchema();
         SchemaLoader.createKeyspace(KEYSPACE,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
-                                    SchemaLoader.standardCFMD(KEYSPACE, CF).compressionParameters(compressionParameters),
-                                    SchemaLoader.standardCFMD(KEYSPACE, CF2).compressionParameters(compressionParameters),
+                                    KeyspaceParams.simple(1),
+                                    SchemaLoader.standardCFMD(KEYSPACE, CF).compression(compressionParameters),
+                                    SchemaLoader.standardCFMD(KEYSPACE, CF2).compression(compressionParameters),
                                     SchemaLoader.standardCFMD(KEYSPACE, CF3),
                                     SchemaLoader.standardCFMD(KEYSPACE, CF4),
                                     SchemaLoader.standardCFMD(KEYSPACE, CORRUPT_CF),
                                     SchemaLoader.standardCFMD(KEYSPACE, CORRUPT_CF2),
-                                    SchemaLoader.standardCFMD(KEYSPACE, COUNTER_CF, BytesType.instance).defaultValidator(CounterColumnType.instance).compressionParameters(compressionParameters),
-                                    SchemaLoader.standardCFMD(KEYSPACE, COUNTER_CF2, BytesType.instance).defaultValidator(CounterColumnType.instance).compressionParameters(compressionParameters),
-                                    SchemaLoader.standardCFMD(KEYSPACE, COUNTER_CF3, BytesType.instance).defaultValidator(CounterColumnType.instance),
-                                    SchemaLoader.standardCFMD(KEYSPACE, COUNTER_CF4, BytesType.instance).defaultValidator(CounterColumnType.instance),
-                                    SchemaLoader.standardCFMD(KEYSPACE, CORRUPTCOUNTER_CF, BytesType.instance).defaultValidator(CounterColumnType.instance),
-                                    SchemaLoader.standardCFMD(KEYSPACE, CORRUPTCOUNTER_CF2, BytesType.instance).defaultValidator(CounterColumnType.instance),
-                                    SchemaLoader.standardCFMD(KEYSPACE, CF_UUID).keyValidator(UUIDType.instance));
+                                    SchemaLoader.counterCFMD(KEYSPACE, COUNTER_CF).compression(compressionParameters),
+                                    SchemaLoader.counterCFMD(KEYSPACE, COUNTER_CF2).compression(compressionParameters),
+                                    SchemaLoader.counterCFMD(KEYSPACE, COUNTER_CF3),
+                                    SchemaLoader.counterCFMD(KEYSPACE, COUNTER_CF4),
+                                    SchemaLoader.counterCFMD(KEYSPACE, CORRUPTCOUNTER_CF),
+                                    SchemaLoader.counterCFMD(KEYSPACE, CORRUPTCOUNTER_CF2),
+                                    SchemaLoader.standardCFMD(KEYSPACE, CF_UUID, 0, UUIDType.instance));
     }
 
 
@@ -109,11 +99,11 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF);
 
-        fillCF(cfs, KEYSPACE, CF, 2);
+        fillCF(cfs, 2);
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        try(Verifier verifier = new Verifier(cfs, sstable, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
         {
             verifier.verify(false);
         }
@@ -130,12 +120,11 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(COUNTER_CF);
 
-        fillCounterCF(cfs, KEYSPACE, COUNTER_CF, 2);
+        fillCounterCF(cfs, 2);
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        Verifier verifier = new Verifier(cfs, sstable, false);
-        try
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
         {
             verifier.verify(false);
         }
@@ -152,12 +141,11 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF2);
 
-        fillCF(cfs, KEYSPACE, CF2, 2);
+        fillCF(cfs, 2);
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        Verifier verifier = new Verifier(cfs, sstable, false);
-        try
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
         {
             verifier.verify(true);
         }
@@ -174,12 +162,11 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(COUNTER_CF2);
 
-        fillCounterCF(cfs, KEYSPACE, COUNTER_CF2, 2);
+        fillCounterCF(cfs, 2);
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        Verifier verifier = new Verifier(cfs, sstable, false);
-        try
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
         {
             verifier.verify(true);
         }
@@ -196,12 +183,11 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF3);
 
-        fillCF(cfs, KEYSPACE, CF3, 2);
+        fillCF(cfs, 2);
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        Verifier verifier = new Verifier(cfs, sstable, false);
-        try
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
         {
             verifier.verify(false);
         }
@@ -218,12 +204,11 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(COUNTER_CF3);
 
-        fillCounterCF(cfs, KEYSPACE, COUNTER_CF3, 2);
+        fillCounterCF(cfs, 2);
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        Verifier verifier = new Verifier(cfs, sstable, false);
-        try
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
         {
             verifier.verify(false);
         }
@@ -240,12 +225,11 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF4);
 
-        fillCF(cfs, KEYSPACE, CF4, 2);
+        fillCF(cfs, 2);
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        Verifier verifier = new Verifier(cfs, sstable, false);
-        try
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
         {
             verifier.verify(true);
         }
@@ -262,12 +246,11 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(COUNTER_CF4);
 
-        fillCounterCF(cfs, KEYSPACE, COUNTER_CF4, 2);
+        fillCounterCF(cfs, 2);
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        Verifier verifier = new Verifier(cfs, sstable, false);
-        try
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
         {
             verifier.verify(true);
         }
@@ -285,21 +268,20 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CORRUPT_CF);
 
-        fillCF(cfs, KEYSPACE, CORRUPT_CF, 2);
+        fillCF(cfs, 2);
 
-        List<Row> rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
+        Util.getAll(Util.cmd(cfs).build());
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
 
-        RandomAccessFile file = new RandomAccessFile(sstable.descriptor.filenameFor(Component.DIGEST), "rw");
+        RandomAccessFile file = new RandomAccessFile(sstable.descriptor.filenameFor(sstable.descriptor.digestComponent), "rw");
         Long correctChecksum = Long.parseLong(file.readLine());
         file.close();
 
-        writeChecksum(++correctChecksum, sstable.descriptor.filenameFor(Component.DIGEST));
+        writeChecksum(++correctChecksum, sstable.descriptor.filenameFor(sstable.descriptor.digestComponent));
 
-        Verifier verifier = new Verifier(cfs, sstable, false);
-        try
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
         {
             verifier.verify(false);
             fail("Expected a CorruptSSTableException to be thrown");
@@ -315,15 +297,15 @@ public class VerifyTest
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CORRUPT_CF2);
 
-        fillCF(cfs, KEYSPACE, CORRUPT_CF2, 2);
+        fillCF(cfs, 2);
 
-        List<Row> rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
+        Util.getAll(Util.cmd(cfs).build());
 
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
         // overwrite one row with garbage
-        long row0Start = sstable.getPosition(RowPosition.ForKey.get(ByteBufferUtil.bytes("0"), sstable.partitioner), SSTableReader.Operator.EQ).position;
-        long row1Start = sstable.getPosition(RowPosition.ForKey.get(ByteBufferUtil.bytes("1"), sstable.partitioner), SSTableReader.Operator.EQ).position;
+        long row0Start = sstable.getPosition(PartitionPosition.ForKey.get(ByteBufferUtil.bytes("0"), cfs.getPartitioner()), SSTableReader.Operator.EQ).position;
+        long row1Start = sstable.getPosition(PartitionPosition.ForKey.get(ByteBufferUtil.bytes("1"), cfs.getPartitioner()), SSTableReader.Operator.EQ).position;
         long startPosition = row0Start < row1Start ? row0Start : row1Start;
         long endPosition = row0Start < row1Start ? row1Start : row0Start;
 
@@ -333,59 +315,55 @@ public class VerifyTest
         file.close();
 
         // Update the Digest to have the right Checksum
-        writeChecksum(simpleFullChecksum(sstable.getFilename()), sstable.descriptor.filenameFor(Component.DIGEST));
+        writeChecksum(simpleFullChecksum(sstable.getFilename()), sstable.descriptor.filenameFor(sstable.descriptor.digestComponent));
 
-        Verifier verifier = new Verifier(cfs, sstable, false);
+        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        {
+            // First a simple verify checking digest, which should succeed
+            try
+            {
+                verifier.verify(false);
+            }
+            catch (CorruptSSTableException err)
+            {
+                fail("Simple verify should have succeeded as digest matched");
+            }
 
-        // First a simple verify checking digest, which should succeed
-        try
-        {
-            verifier.verify(false);
-        }
-        catch (CorruptSSTableException err)
-        {
-            fail("Simple verify should have succeeded as digest matched");
-        }
+            // Now try extended verify
+            try
+            {
+                verifier.verify(true);
 
-        // Now try extended verify
-        try
-        {
-            verifier.verify(true);
-
+            }
+            catch (CorruptSSTableException err)
+            {
+                return;
+            }
+            fail("Expected a CorruptSSTableException to be thrown");
         }
-        catch (CorruptSSTableException err)
-        {
-            return;
-        }
-        fail("Expected a CorruptSSTableException to be thrown");
 
     }
 
-    protected void fillCF(ColumnFamilyStore cfs, String keyspace, String columnFamily, int rowsPerSSTable)
+    protected void fillCF(ColumnFamilyStore cfs, int partitionsPerSSTable)
     {
-        for (int i = 0; i < rowsPerSSTable; i++)
+        for (int i = 0; i < partitionsPerSSTable; i++)
         {
-            String key = String.valueOf(i);
-            ColumnFamily cf = ArrayBackedSortedColumns.factory.create(keyspace, columnFamily);
-            cf.addColumn(column("c1", "1", 1L));
-            cf.addColumn(column("c2", "2", 1L));
-            Mutation rm = new Mutation(keyspace, ByteBufferUtil.bytes(key), cf);
-            rm.apply();
+            UpdateBuilder.create(cfs.metadata, String.valueOf(i))
+                         .newRow("c1").add("val", "1")
+                         .newRow("c2").add("val", "2")
+                         .apply();
         }
 
         cfs.forceBlockingFlush();
     }
 
-    protected void fillCounterCF(ColumnFamilyStore cfs, String keyspace, String columnFamily, int rowsPerSSTable) throws WriteTimeoutException
+    protected void fillCounterCF(ColumnFamilyStore cfs, int partitionsPerSSTable) throws WriteTimeoutException
     {
-        for (int i = 0; i < rowsPerSSTable; i++)
+        for (int i = 0; i < partitionsPerSSTable; i++)
         {
-            String key = String.valueOf(i);
-            ColumnFamily cf = ArrayBackedSortedColumns.factory.create(keyspace, columnFamily);
-            Mutation rm = new Mutation(keyspace, ByteBufferUtil.bytes(key), cf);
-            rm.addCounter(columnFamily, cellname("Column1"), 100);
-            CounterMutation cm = new CounterMutation(rm, ConsistencyLevel.ONE);
-            cm.apply();
+            UpdateBuilder.create(cfs.metadata, String.valueOf(i))
+                         .newRow("c1").add("val", 100L)
+                         .apply();
         }
 
         cfs.forceBlockingFlush();
@@ -394,8 +372,8 @@ public class VerifyTest
     protected long simpleFullChecksum(String filename) throws IOException
     {
         FileInputStream inputStream = new FileInputStream(filename);
-        Adler32 adlerChecksum = new Adler32();
-        CheckedInputStream cinStream = new CheckedInputStream(inputStream, adlerChecksum);
+        CRC32 checksum = new CRC32();
+        CheckedInputStream cinStream = new CheckedInputStream(inputStream, checksum);
         byte[] b = new byte[128];
         while (cinStream.read(b) >= 0) {
         }

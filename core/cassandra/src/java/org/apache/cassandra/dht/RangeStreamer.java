@@ -322,8 +322,8 @@ public class RangeStreamer
                 if (strat != null && strat.getReplicationFactor() == 1)
                 {
                     if (useStrictConsistency)
-                        throw new IllegalStateException("Unable to find sufficient sources for streaming range " + range + " in keyspace " + keyspace + " with RF=1." +
-                                                        "If you want to ignore this, consider using system property -Dcassandra.consistent.rangemovement=false.");
+                        throw new IllegalStateException("Unable to find sufficient sources for streaming range " + range + " in keyspace " + keyspace + " with RF=1. " +
+                                                        "Ensure this keyspace contains replicas in the source datacenter.");
                     else
                         logger.warn("Unable to find sufficient sources for streaming range " + range + " in keyspace " + keyspace + " with RF=1. " +
                                     "Keyspace might be missing data.");
@@ -359,7 +359,7 @@ public class RangeStreamer
             Collection<Range<Token>> ranges = entry.getValue().getValue();
 
             // filter out already streamed ranges
-            Set<Range<Token>> availableRanges = stateStore.getAvailableRanges(keyspace, StorageService.getPartitioner());
+            Set<Range<Token>> availableRanges = stateStore.getAvailableRanges(keyspace, StorageService.instance.getTokenMetadata().partitioner);
             if (ranges.removeAll(availableRanges))
             {
                 logger.info("Some ranges of {} are already available. Skipping streaming those ranges.", availableRanges);

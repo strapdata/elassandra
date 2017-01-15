@@ -23,31 +23,36 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.*;
 
-import org.junit.Test;
-
-import static org.junit.Assert.*;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.Util.PartitionerSwitcher;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.SystemKeyspace;
-import org.apache.cassandra.dht.*;
+import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner.BigIntegerToken;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.ApplicationState;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.gms.VersionedValue;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.SimpleSnitch;
 import org.apache.cassandra.locator.TokenMetadata;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+
+import static org.junit.Assert.*;
 
 public class LeaveAndBootstrapTest
 {
     private static final IPartitioner partitioner = RandomPartitioner.instance;
-    private static IPartitioner oldPartitioner;
+    private static PartitionerSwitcher partitionerSwitcher;
     private static final String KEYSPACE1 = "LeaveAndBootstrapTestKeyspace1";
     private static final String KEYSPACE2 = "LeaveAndBootstrapTestKeyspace2";
     private static final String KEYSPACE3 = "LeaveAndBootstrapTestKeyspace3";
@@ -56,7 +61,7 @@ public class LeaveAndBootstrapTest
     @BeforeClass
     public static void defineSchema() throws Exception
     {
-        oldPartitioner = StorageService.instance.setPartitionerUnsafe(partitioner);
+        partitionerSwitcher = Util.switchPartitioner(partitioner);
         SchemaLoader.loadSchema();
         SchemaLoader.schemaDefinition("LeaveAndBootstrapTest");
     }
@@ -64,7 +69,7 @@ public class LeaveAndBootstrapTest
     @AfterClass
     public static void tearDown()
     {
-        StorageService.instance.setPartitionerUnsafe(oldPartitioner);
+        partitionerSwitcher.close();
     }
 
     /**
@@ -91,7 +96,7 @@ public class LeaveAndBootstrapTest
         Util.createInitialRing(ss, partitioner, endpointTokens, keyTokens, hosts, hostIds, RING_SIZE);
 
         Map<Token, List<InetAddress>> expectedEndpoints = new HashMap<Token, List<InetAddress>>();
-        for (String keyspaceName : Schema.instance.getNonSystemKeyspaces())
+        for (String keyspaceName : Schema.instance.getNonLocalStrategyKeyspaces())
         {
             for (Token token : keyTokens)
             {
@@ -115,7 +120,7 @@ public class LeaveAndBootstrapTest
         PendingRangeCalculatorService.instance.blockUntilFinished();
 
         AbstractReplicationStrategy strategy;
-        for (String keyspaceName : Schema.instance.getNonSystemKeyspaces())
+        for (String keyspaceName : Schema.instance.getNonLocalStrategyKeyspaces())
         {
             strategy = getStrategy(keyspaceName, tmd);
             for (Token token : keyTokens)
@@ -691,7 +696,7 @@ public class LeaveAndBootstrapTest
         // create a ring of 1 node
         StorageService ss = StorageService.instance;
         VersionedValue.VersionedValueFactory valueFactory = new VersionedValue.VersionedValueFactory(partitioner);
-        Util.createInitialRing(ss, partitioner, new ArrayList<Token>(), new ArrayList<Token>(),  new ArrayList<InetAddress>(), new ArrayList<UUID>(), 1);
+        Util.createInitialRing(ss, partitioner, new ArrayList<Token>(), new ArrayList<Token>(), new ArrayList<InetAddress>(), new ArrayList<UUID>(), 1);
 
         // make a REMOVING state change on a non-member endpoint; without the CASSANDRA-6564 fix, this
         // would result in an ArrayIndexOutOfBoundsException
@@ -708,13 +713,13 @@ public class LeaveAndBootstrapTest
 
     private AbstractReplicationStrategy getStrategy(String keyspaceName, TokenMetadata tmd)
     {
-        KSMetaData ksmd = Schema.instance.getKSMetaData(keyspaceName);
+        KeyspaceMetadata ksmd = Schema.instance.getKSMetaData(keyspaceName);
         return AbstractReplicationStrategy.createReplicationStrategy(
                 keyspaceName,
-                ksmd.strategyClass,
+                ksmd.params.replication.klass,
                 tmd,
                 new SimpleSnitch(),
-                ksmd.strategyOptions);
+                ksmd.params.replication.options);
     }
 
 }

@@ -21,9 +21,11 @@ import javassist.CtClass;
 import javassist.CtMethod;
 import javassist.expr.ExprEditor;
 import javassist.expr.MethodCall;
+import javassist.expr.NewExpr;
 import nl.topicus.plugins.maven.javassist.ClassTransformer;
 import nl.topicus.plugins.maven.javassist.ILogger;
 import nl.topicus.plugins.maven.javassist.TransformationException;
+
 
 /**
  * See https://issues.apache.org/jira/browse/CASSANDRA-9626.
@@ -38,6 +40,7 @@ public class StringLocaleTransformer extends ClassTransformer {
             final CtMethod[] targetMethods = classToTransform.getDeclaredMethods();
             for (int i = 0; i < targetMethods.length; i++) {
                 targetMethods[i].instrument(new ExprEditor() {
+                    
                     public void edit(final MethodCall m) throws CannotCompileException {
                         ILogger logger = getLogger();
                         if ("java.lang.String".equals(m.getClassName())) {
@@ -51,6 +54,17 @@ public class StringLocaleTransformer extends ClassTransformer {
                                logger.info("Modifing toLowerCase() @ "+m.getFileName()+":"+m.getLineNumber());
                                m.replace("{$_ = $proceed(java.util.Locale.ROOT);}");
                            }
+                        }
+                    }
+                    
+                    // see http://tutorials.jenkov.com/java-internationalization/decimalformat.html#decimalformatsymbols
+                    public void edit(NewExpr e) throws CannotCompileException {
+                        ILogger logger = getLogger();
+                        if ("java.text.DecimalFormat".equals(e.getClassName())) {
+                            if (e.getSignature().startsWith("(Ljava/lang/String;)")) {
+                                logger.info("Modifing DecimalFormat(String) @ "+e.getFileName()+":"+e.getLineNumber());
+                                e.replace("{$_ = $proceed($1, java.text.DecimalFormatSymbols.getInstance(java.util.Locale.ROOT) );}");
+                            }
                         }
                     }
                 });

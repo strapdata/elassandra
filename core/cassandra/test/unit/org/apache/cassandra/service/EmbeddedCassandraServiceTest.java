@@ -26,9 +26,10 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.KSMetaData;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.db.marshal.AsciiType;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.thrift.*;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.thrift.TException;
@@ -61,9 +62,12 @@ public class EmbeddedCassandraServiceTest
         SchemaLoader.prepareServer();
         setup();
         SchemaLoader.createKeyspace(KEYSPACE1,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
-                                    SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD));
+                                    KeyspaceParams.simple(1),
+                                    CFMetaData.Builder.create(KEYSPACE1, CF_STANDARD, true, false, false)
+                                                      .addPartitionKey("pk", AsciiType.instance)
+                                                      .addClusteringColumn("ck", AsciiType.instance)
+                                                      .addRegularColumn("val", AsciiType.instance)
+                                                      .build());
     }
 
     /**

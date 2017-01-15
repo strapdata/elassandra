@@ -18,9 +18,18 @@
  */
 package org.elasticsearch.test.cluster;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
-import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -37,11 +46,19 @@ import org.elassandra.NoPersistedMetaDataException;
 import org.elassandra.cluster.routing.AbstractSearchStrategy;
 import org.elassandra.cluster.routing.AbstractSearchStrategy.Router;
 import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy.PrimaryFirstRouter;
-import org.elassandra.shard.CassandraShardStartedBarrier;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionWriteResponse.ShardInfo;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.cluster.*;
+import org.elasticsearch.cluster.ClusterName;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.ClusterStateTaskConfig;
+import org.elasticsearch.cluster.ClusterStateTaskExecutor;
+import org.elasticsearch.cluster.ClusterStateTaskListener;
+import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.LocalNodeMasterListener;
+import org.elasticsearch.cluster.TimeoutClusterStateListener;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
@@ -67,15 +84,6 @@ import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.percolator.PercolatorQueriesRegistry;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.tasks.TaskManager;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.nio.ByteBuffer;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 
 public class NoopClusterService implements ClusterService {
 
@@ -306,94 +314,13 @@ public class NoopClusterService implements ClusterService {
     }
 
     @Override
-    public String[] mappedColumns(String index, String type, boolean forStaticDocument, boolean includeMeta) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public String[] mappedColumns(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public String[] mappedColumns(String index, String type, boolean forStaticDocument) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public String[] mappedColumns(MapperService mapperService, String type, boolean forStaticDocument) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
     public boolean isStaticDocument(String index, Uid uid)
             throws JsonParseException, JsonMappingException, IOException {
         // TODO Auto-generated method stub
         return false;
     }
 
-    @Override
-    public boolean rowExists(String ksName, String table, String id)
-            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        // TODO Auto-generated method stub
-        return false;
-    }
-
-    @Override
-    public UntypedResultSet fetchRow(String ksName, String index, String type, String id, String[] columns)
-            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public UntypedResultSet fetchRow(String ksName, String index, String cfName, String id, String[] columns,
-            ConsistencyLevel cl)
-            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public UntypedResultSet fetchRow(String ksName, String index, String cfName, DocPrimaryKey docPk, String[] columns,
-            ConsistencyLevel cl)
-            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public String buildFetchQuery(String ksName, String index, String cfName, String[] requiredColumns,
-            boolean forStaticDocument) throws ConfigurationException, IndexNotFoundException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String id, String[] columns)
-            throws ConfigurationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, DocPrimaryKey docPk,
-            String[] columns) throws ConfigurationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String[] columns,
-            Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
+    
     @Override
     public GetResult fetchSourceInternal(String ksName, String index, String type, String id) throws IOException {
         // TODO Auto-generated method stub
@@ -447,19 +374,6 @@ public class NoopClusterService implements ClusterService {
     public void blockingMappingUpdate(IndexService indexService, String type, String source) throws Exception {
         // TODO Auto-generated method stub
         
-    }
-
-    @Override
-    public Token getToken(ByteBuffer rowKey, ColumnFamily cf) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public Token getToken(String index, String type, String routing)
-            throws JsonParseException, JsonMappingException, IOException {
-        // TODO Auto-generated method stub
-        return null;
     }
 
     @Override
@@ -644,5 +558,72 @@ public class NoopClusterService implements ClusterService {
     public void blockUntilShardsStarted() {
         // TODO Auto-generated method stub
         
+    }
+
+    @Override
+    public void dropSecondaryIndex(CFMetaData cfMetaData) throws RequestExecutionException {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public boolean rowExists(MapperService mapperService, String type, String id)
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public UntypedResultSet fetchRow(String ksName, String index, String type, String id, String[] columns,
+            Map<String, ColumnDefinition> columnDefs)
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRow(String ksName, String index, String cfName, String id, String[] columns,
+            ConsistencyLevel cl, Map<String, ColumnDefinition> columnDefs)
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRow(String ksName, String index, String cfName, DocPrimaryKey docPk, String[] columns,
+            ConsistencyLevel cl, Map<String, ColumnDefinition> columnDefs)
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public String buildFetchQuery(String ksName, String index, String cfName, String[] requiredColumns,
+            boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs)
+            throws ConfigurationException, IndexNotFoundException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String id, String[] columns,
+            Map<String, ColumnDefinition> columnDefs) throws ConfigurationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, DocPrimaryKey docPk,
+            String[] columns, Map<String, ColumnDefinition> columnDefs) throws ConfigurationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String[] columns,
+            Object[] pkColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs)
+            throws ConfigurationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
     }
 }

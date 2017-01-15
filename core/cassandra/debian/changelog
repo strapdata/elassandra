@@ -1,56 +1,92 @@
-cassandra (2.2.7) unstable; urgency=medium
-
-  * New release 
-
- -- Jake Luciani <jake@apache.org>  Tue, 28 Jun 2016 20:08:44 -0400
-
-cassandra (2.2.6) unstable; urgency=medium
+cassandra (3.0.10) unstable; urgency=medium
 
   * New release
 
- -- Jake Luciani <jake@apache.org>  Fri, 15 Apr 2016 09:47:38 -0400
+ -- Michael Shuler <michael@pbandjelly.org>  Mon, 31 Oct 2016 10:33:44 -0500
 
-cassandra (2.2.5) unstable; urgency=medium
-
-  * New release 
-
- -- Jake Luciani <jake@apache.org>  Tue, 26 Jan 2016 09:15:04 -0500
-
-cassandra (2.2.4) unstable; urgency=medium
+cassandra (3.0.9) unstable; urgency=medium
 
   * New release
 
- -- Jake Luciani <jake@apache.org>  Wed, 02 Dec 2015 10:52:18 -0500
+ -- Michael Shuler <mshuler@apache.org>  Tue, 16 Aug 2016 18:02:20 -0500
 
-cassandra (2.2.3) unstable; urgency=medium
-
-  * New release 
-
- -- Jake Luciani <jake@apache.org>  Mon, 12 Oct 2015 09:49:15 -0400
-
-cassandra (2.2.2) unstable; urgency=medium
+cassandra (3.0.8) unstable; urgency=medium
 
   * New release 
 
- -- Jake Luciani <jake@apache.org>  Thu, 01 Oct 2015 09:37:57 -0400
+ -- Jake Luciani <jake@apache.org>  Tue, 28 Jun 2016 20:12:22 -0400
 
-cassandra (2.2.1) unstable; urgency=medium
-
-  * New release
-
- -- Jake Luciani <jake@apache.org>  Tue, 25 Aug 2015 13:22:45 -0400
-
-cassandra (2.2.0) unstable; urgency=medium
+cassandra (3.0.7) unstable; urgency=medium
 
   * New release
 
- -- Jake Luciani <jake@apache.org>  Fri, 17 Jul 2015 13:06:22 -0400
+ -- Jake Luciani <jake@apache.org>  Mon, 06 Jun 2016 14:27:28 -0400
 
-cassandra (2.2.0~rc2) unstable; urgency=medium
+cassandra (3.0.6) unstable; urgency=medium
 
-  * New RC release
+  * New release
 
- -- Jake Luciani <jake@apache.org>  Tue, 30 Jun 2015 09:43:38 -0400
+ -- Jake Luciani <jake@apache.org>  Tue, 03 May 2016 09:29:31 -0400
+
+cassandra (3.0.5) unstable; urgency=medium
+
+  * New release
+
+ -- Jake Luciani <jake@apache.org>  Sat, 02 Apr 2016 07:57:16 -0400
+
+cassandra (3.0.4) unstable; urgency=medium
+
+  * New release
+
+ -- Jake Luciani <jake@apache.org>  Mon, 29 Feb 2016 10:36:33 -0500
+
+cassandra (3.0.3) unstable; urgency=medium
+
+  * New release 
+
+ -- Jake Luciani <jake@apache.org>  Wed, 03 Feb 2016 08:54:57 -0500
+
+cassandra (3.0.1) unstable; urgency=medium
+
+  * New release
+
+ -- Jake Luciani <jake@apache.org>  Fri, 04 Dec 2015 15:56:02 -0500
+
+cassandra (3.0.0) unstable; urgency=medium
+
+  * New release 
+
+ -- Jake Luciani <jake@apache.org>  Fri, 06 Nov 2015 14:37:07 -0500
+
+cassandra (3.0.0~rc2) unstable; urgency=medium
+
+  * New release candidate 
+
+ -- Jake Luciani <jake@apache.org>  Fri, 16 Oct 2015 16:02:24 -0400
+
+cassandra (3.0.0~rc1) unstable; urgency=medium
+
+  * New release candidate
+
+ -- Jake Luciani <jake@apache.org>  Sat, 19 Sep 2015 16:01:59 -0400
+
+cassandra (3.0.0~beta2) unstable; urgency=medium
+
+  * New beta release
+
+ -- Jake Luciani <jake@apache.org>  Fri, 04 Sep 2015 19:06:25 -0400
+
+cassandra (3.0.0~beta1) unstable; urgency=medium
+
+  * New beta release
+
+ -- Jake Luciani <jake@apache.org>  Fri, 21 Aug 2015 22:33:04 -0400
+
+cassandra (3.0.0~alpha1) unstable; urgency=medium
+
+  * New alpha release
+
+ -- Jake Luciani <jake@apache.org>  Thu, 30 Jul 2015 09:21:15 -0400
 
 cassandra (2.2.0~rc1) unstable; urgency=medium
 

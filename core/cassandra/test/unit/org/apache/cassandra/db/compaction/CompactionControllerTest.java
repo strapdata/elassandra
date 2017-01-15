@@ -26,20 +26,21 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
-import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.Util;
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.Mutation;
-import org.apache.cassandra.db.composites.CellName;
+import org.apache.cassandra.db.RowUpdateBuilder;
+import org.apache.cassandra.db.marshal.AsciiType;
+import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
-import static org.apache.cassandra.Util.cellname;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
@@ -54,10 +55,17 @@ public class CompactionControllerTest extends SchemaLoader
     {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
-                                    SchemaLoader.standardCFMD(KEYSPACE, CF1),
-                                    SchemaLoader.standardCFMD(KEYSPACE, CF2));
+                                    KeyspaceParams.simple(1),
+                                    CFMetaData.Builder.create(KEYSPACE, CF1, true, false, false)
+                                                      .addPartitionKey("pk", AsciiType.instance)
+                                                      .addClusteringColumn("ck", AsciiType.instance)
+                                                      .addRegularColumn("val", AsciiType.instance)
+                                                      .build(),
+                                    CFMetaData.Builder.create(KEYSPACE, CF2, true, false, false)
+                                                      .addPartitionKey("pk", AsciiType.instance)
+                                                      .addClusteringColumn("ck", AsciiType.instance)
+                                                      .addRegularColumn("val", AsciiType.instance)
+                                                      .build());
     }
 
     @Test
@@ -67,15 +75,14 @@ public class CompactionControllerTest extends SchemaLoader
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF1);
         cfs.truncateBlocking();
 
-        ByteBuffer rowKey = ByteBufferUtil.bytes("k1");
-        DecoratedKey key = DatabaseDescriptor.getPartitioner().decorateKey(rowKey);
+        DecoratedKey key = Util.dk("k1");
 
         long timestamp1 = FBUtilities.timestampMicros(); // latest timestamp
         long timestamp2 = timestamp1 - 5;
         long timestamp3 = timestamp2 - 5; // oldest timestamp
 
         // add to first memtable
-        applyMutation(CF1, rowKey, timestamp1);
+        applyMutation(cfs.metadata, key, timestamp1);
 
         // check max purgeable timestamp without any sstables
         try(CompactionController controller = new CompactionController(cfs, null, 0))
@@ -86,10 +93,10 @@ public class CompactionControllerTest extends SchemaLoader
             assertEquals(Long.MAX_VALUE, controller.maxPurgeableTimestamp(key)); //no memtables and no sstables
         }
 
-        Set<SSTableReader> compacting = Sets.newHashSet(cfs.getSSTables()); // first sstable is compacting
+        Set<SSTableReader> compacting = Sets.newHashSet(cfs.getLiveSSTables()); // first sstable is compacting
 
         // create another sstable
-        applyMutation(CF1, rowKey, timestamp2);
+        applyMutation(cfs.metadata, key, timestamp2);
         cfs.forceBlockingFlush();
 
         // check max purgeable timestamp when compacting the first sstable with and without a memtable
@@ -97,7 +104,7 @@ public class CompactionControllerTest extends SchemaLoader
         {
             assertEquals(timestamp2, controller.maxPurgeableTimestamp(key)); //second sstable only
 
-            applyMutation(CF1, rowKey, timestamp3);
+            applyMutation(cfs.metadata, key, timestamp3);
 
             assertEquals(timestamp3, controller.maxPurgeableTimestamp(key)); //second sstable and second memtable
         }
@@ -108,9 +115,9 @@ public class CompactionControllerTest extends SchemaLoader
         //newest to oldest
         try (CompactionController controller = new CompactionController(cfs, null, 0))
         {
-            applyMutation(CF1, rowKey, timestamp1);
-            applyMutation(CF1, rowKey, timestamp2);
-            applyMutation(CF1, rowKey, timestamp3);
+            applyMutation(cfs.metadata, key, timestamp1);
+            applyMutation(cfs.metadata, key, timestamp2);
+            applyMutation(cfs.metadata, key, timestamp3);
 
             assertEquals(timestamp3, controller.maxPurgeableTimestamp(key)); //memtable only
         }
@@ -120,9 +127,9 @@ public class CompactionControllerTest extends SchemaLoader
         //oldest to newest
         try (CompactionController controller = new CompactionController(cfs, null, 0))
         {
-            applyMutation(CF1, rowKey, timestamp3);
-            applyMutation(CF1, rowKey, timestamp2);
-            applyMutation(CF1, rowKey, timestamp1);
+            applyMutation(cfs.metadata, key, timestamp3);
+            applyMutation(cfs.metadata, key, timestamp2);
+            applyMutation(cfs.metadata, key, timestamp1);
 
             assertEquals(timestamp3, controller.maxPurgeableTimestamp(key)); //memtable only
         }
@@ -135,25 +142,25 @@ public class CompactionControllerTest extends SchemaLoader
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF2);
         cfs.truncateBlocking();
 
-        ByteBuffer rowKey = ByteBufferUtil.bytes("k1");
+        DecoratedKey key = Util.dk("k1");
 
         long timestamp1 = FBUtilities.timestampMicros(); // latest timestamp
         long timestamp2 = timestamp1 - 5;
         long timestamp3 = timestamp2 - 5; // oldest timestamp
 
         // create sstable with tombstone that should be expired in no older timestamps
-        applyDeleteMutation(CF2, rowKey, timestamp2);
+        applyDeleteMutation(cfs.metadata, key, timestamp2);
         cfs.forceBlockingFlush();
 
         // first sstable with tombstone is compacting
-        Set<SSTableReader> compacting = Sets.newHashSet(cfs.getSSTables());
+        Set<SSTableReader> compacting = Sets.newHashSet(cfs.getLiveSSTables());
 
         // create another sstable with more recent timestamp
-        applyMutation(CF2, rowKey, timestamp1);
+        applyMutation(cfs.metadata, key, timestamp1);
         cfs.forceBlockingFlush();
 
         // second sstable is overlapping
-        Set<SSTableReader> overlapping = Sets.difference(Sets.newHashSet(cfs.getSSTables()), compacting);
+        Set<SSTableReader> overlapping = Sets.difference(Sets.newHashSet(cfs.getLiveSSTables()), compacting);
 
         // the first sstable should be expired because the overlapping sstable is newer and the gc period is later
         int gcBefore = (int) (System.currentTimeMillis() / 1000) + 5;
@@ -163,29 +170,26 @@ public class CompactionControllerTest extends SchemaLoader
         assertEquals(compacting.iterator().next(), expired.iterator().next());
 
         // however if we add an older mutation to the memtable then the sstable should not be expired
-        applyMutation(CF2, rowKey, timestamp3);
+        applyMutation(cfs.metadata, key, timestamp3);
         expired = CompactionController.getFullyExpiredSSTables(cfs, compacting, overlapping, gcBefore);
         assertNotNull(expired);
         assertEquals(0, expired.size());
     }
 
-    private void applyMutation(String cf, ByteBuffer rowKey, long timestamp)
+    private void applyMutation(CFMetaData cfm, DecoratedKey key, long timestamp)
     {
-        CellName colName = cellname("birthdate");
         ByteBuffer val = ByteBufferUtil.bytes(1L);
 
-        Mutation rm = new Mutation(KEYSPACE, rowKey);
-        rm.add(cf, colName, val, timestamp);
-        rm.applyUnsafe();
+        new RowUpdateBuilder(cfm, timestamp, key)
+        .clustering("ck")
+        .add("val", val)
+        .build()
+        .applyUnsafe();
     }
 
-    private void applyDeleteMutation(String cf, ByteBuffer rowKey, long timestamp)
+    private void applyDeleteMutation(CFMetaData cfm, DecoratedKey key, long timestamp)
     {
-        Mutation rm = new Mutation(KEYSPACE, rowKey);
-        rm.delete(cf, timestamp);
-        rm.applyUnsafe();
+        new Mutation(PartitionUpdate.fullPartitionDelete(cfm, key, timestamp, FBUtilities.nowInSeconds()))
+        .applyUnsafe();
     }
-
-
-
 }

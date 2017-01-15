@@ -84,7 +84,15 @@ public class ListSerializer<T> extends CollectionSerializer<List<T>>
         {
             ByteBuffer input = bytes.duplicate();
             int n = readCollectionSize(input, version);
-            List<T> l = new ArrayList<T>(n);
+
+            if (n < 0)
+                throw new MarshalException("The data cannot be deserialized as a list");
+
+            // If the received bytes are not corresponding to a list, n might be a huge number.
+            // In such a case we do not want to initialize the list with that size as it can result
+            // in an OOM (see CASSANDRA-12618). On the other hand we do not want to have to resize the list
+            // if we can avoid it, so we put a reasonable limit on the initialCapacity.
+            List<T> l = new ArrayList<T>(Math.min(n, 256));
             for (int i = 0; i < n; i++)
             {
                 // We can have nulls in lists that are used for IN values
@@ -143,14 +151,16 @@ public class ListSerializer<T> extends CollectionSerializer<List<T>>
     {
         StringBuilder sb = new StringBuilder();
         boolean isFirst = true;
+        sb.append('[');
         for (T element : value)
         {
             if (isFirst)
                 isFirst = false;
             else
-                sb.append("; ");
+                sb.append(", ");
             sb.append(elements.toString(element));
         }
+        sb.append(']');
         return sb.toString();
     }
 

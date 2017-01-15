@@ -120,17 +120,6 @@ public class CompositeType extends AbstractCompositeType
         this.types = ImmutableList.copyOf(types);
     }
 
-    @Override
-    public boolean references(AbstractType<?> check)
-    {
-        if (super.references(check))
-            return true;
-        for (AbstractType<?> type : types)
-            if (type.references(check))
-                return true;
-        return false;
-    }
-
     protected AbstractType<?> getComparator(int i, ByteBuffer bb)
     {
         try
@@ -192,6 +181,7 @@ public class CompositeType extends AbstractCompositeType
         // most names will be complete.
         ByteBuffer[] l = new ByteBuffer[types.size()];
         ByteBuffer bb = name.duplicate();
+        readStatic(bb);
         int i = 0;
         while (bb.remaining() > 0)
         {
@@ -199,6 +189,24 @@ public class CompositeType extends AbstractCompositeType
             bb.get(); // skip end-of-component
         }
         return i == l.length ? l : Arrays.copyOfRange(l, 0, i);
+    }
+
+    public static List<ByteBuffer> splitName(ByteBuffer name)
+    {
+        List<ByteBuffer> l = new ArrayList<>();
+        ByteBuffer bb = name.duplicate();
+        readStatic(bb);
+        while (bb.remaining() > 0)
+        {
+            l.add(ByteBufferUtil.readBytesWithShortLength(bb));
+            bb.get(); // skip end-of-component
+        }
+        return l;
+    }
+
+    public static byte lastEOC(ByteBuffer name)
+    {
+        return name.get(name.limit() - 1);
     }
 
     // Extract component idx from bb. Return null if there is not enough component.
@@ -333,11 +341,20 @@ public class CompositeType extends AbstractCompositeType
 
     public static ByteBuffer build(ByteBuffer... buffers)
     {
-        int totalLength = 0;
+        return build(false, buffers);
+    }
+
+    public static ByteBuffer build(boolean isStatic, ByteBuffer... buffers)
+    {
+        int totalLength = isStatic ? 2 : 0;
         for (ByteBuffer bb : buffers)
             totalLength += 2 + bb.remaining() + 1;
 
         ByteBuffer out = ByteBuffer.allocate(totalLength);
+
+        if (isStatic)
+            out.putShort((short)STATIC_MARKER);
+
         for (ByteBuffer bb : buffers)
         {
             ByteBufferUtil.writeShortLength(out, bb.remaining());

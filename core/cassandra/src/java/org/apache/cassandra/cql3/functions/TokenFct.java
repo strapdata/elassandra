@@ -22,22 +22,17 @@ import java.util.List;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
-import org.apache.cassandra.db.composites.CBuilder;
+import org.apache.cassandra.db.CBuilder;
 import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.exceptions.InvalidRequestException;
-import org.apache.cassandra.service.StorageService;
 
 public class TokenFct extends NativeScalarFunction
 {
-    // The actual token function depends on the partitioner used
-    private static final IPartitioner partitioner = StorageService.getPartitioner();
-
     private final CFMetaData cfm;
 
     public TokenFct(CFMetaData cfm)
     {
-        super("token", partitioner.getTokenValidator(), getKeyTypes(cfm));
+        super("token", cfm.partitioner.getTokenValidator(), getKeyTypes(cfm));
         this.cfm = cfm;
     }
 
@@ -52,7 +47,7 @@ public class TokenFct extends NativeScalarFunction
 
     public ByteBuffer execute(int protocolVersion, List<ByteBuffer> parameters) throws InvalidRequestException
     {
-        CBuilder builder = cfm.getKeyValidatorAsCType().builder();
+        CBuilder builder = CBuilder.create(cfm.getKeyValidatorAsClusteringComparator());
         for (int i = 0; i < parameters.size(); i++)
         {
             ByteBuffer bb = parameters.get(i);
@@ -60,6 +55,6 @@ public class TokenFct extends NativeScalarFunction
                 return null;
             builder.add(bb);
         }
-        return partitioner.getTokenFactory().toByteArray(partitioner.getToken(builder.build().toByteBuffer()));
+        return cfm.partitioner.getTokenFactory().toByteArray(cfm.partitioner.getToken(CFMetaData.serializePartitionKey(builder.build())));
     }
 }

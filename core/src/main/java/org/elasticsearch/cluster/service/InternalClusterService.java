@@ -23,7 +23,6 @@ import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadF
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -41,9 +40,10 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
-import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -87,6 +87,7 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNodeService;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.OperationRouting;
@@ -635,7 +636,19 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                     return;
                 }
             }
-            
+        } catch (org.apache.cassandra.exceptions.UnavailableException e) {
+            // Cassandra issue => ack with failure.
+            for (UpdateTask<T> task : proccessedListeners) {
+                if (task.listener instanceof AckedClusterStateTaskListener) {
+                    //no need to wait for ack if nothing changed, the update can be counted as acknowledged
+                    try {
+                        ((AckedClusterStateTaskListener) task.listener).onFailure(source, e);
+                    } catch (Throwable t) {
+                        logger.debug("error while processing ack for master node [{}]", t, newClusterState.nodes().localNode());
+                    }
+                }
+            }
+            return;
         } catch (Throwable e) {
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
             if (logger.isTraceEnabled()) {
@@ -678,7 +691,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
             // TODO, do this in parallel (and wait)
             for (DiscoveryNode node : nodesDelta.addedNodes()) {
-                if (!nodeRequiresConnection(node)) {
+                if (!nodeRequiresConnection(node) || !DiscoveryNodeStatus.ALIVE.equals(node.status())) {
                     continue;
                 }
                 try {
@@ -1245,10 +1258,15 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
     
     @Override
-    public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException {
+    public void dropSecondaryIndex(CFMetaData cfMetaData) throws RequestExecutionException {
         
     }
 
+    @Override
+    public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException {
+        
+    }
+    
     @Override
     public void dropTable(String ksName, String cfName) throws RequestExecutionException {
         
@@ -1287,30 +1305,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
-    public String[] mappedColumns(String index, String type, boolean forStaticDocument, boolean includeMeta) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public String[] mappedColumns(String index, Uid uid) throws JsonParseException, JsonMappingException, IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public String[] mappedColumns(String index, String type, boolean forStaticDocument) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public String[] mappedColumns(MapperService mapperService, String type, boolean forStaticDocument) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
     public boolean isStaticDocument(String index, Uid uid)
             throws JsonParseException, JsonMappingException, IOException {
         // TODO Auto-generated method stub
@@ -1318,14 +1312,14 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
-    public boolean rowExists(String ksName, String table, String id)
+    public boolean rowExists(final MapperService mapperService, final String type, String id)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
         // TODO Auto-generated method stub
         return false;
     }
 
     @Override
-    public UntypedResultSet fetchRow(String ksName, String index, String type, String id, String[] columns)
+    public UntypedResultSet fetchRow(String ksName, String index, String type, String id, String[] columns, Map<String,ColumnDefinition> columnDefs)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
         // TODO Auto-generated method stub
         return null;
@@ -1333,7 +1327,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     @Override
     public UntypedResultSet fetchRow(String ksName, String index, String cfName, String id, String[] columns,
-            ConsistencyLevel cl)
+            ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
         // TODO Auto-generated method stub
         return null;
@@ -1341,7 +1335,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     @Override
     public UntypedResultSet fetchRow(String ksName, String index, String cfName, DocPrimaryKey docPk, String[] columns,
-            ConsistencyLevel cl)
+            ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
         // TODO Auto-generated method stub
         return null;
@@ -1349,28 +1343,26 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     @Override
     public String buildFetchQuery(String ksName, String index, String cfName, String[] requiredColumns,
-            boolean forStaticDocument) throws ConfigurationException, IndexNotFoundException, IOException {
+            boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws IndexNotFoundException, IOException {
         // TODO Auto-generated method stub
         return null;
     }
 
     @Override
-    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String id, String[] columns)
-            throws ConfigurationException, IOException {
+    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String id, String[] columns,  Map<String,ColumnDefinition> columnDefs) throws IOException {
         // TODO Auto-generated method stub
         return null;
     }
 
     @Override
-    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, DocPrimaryKey docPk,
-            String[] columns) throws ConfigurationException, IOException {
+    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, DocPrimaryKey docPk, String[] columns,  Map<String,ColumnDefinition> columnDefs) throws IOException {
         // TODO Auto-generated method stub
         return null;
     }
 
     @Override
     public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String[] columns,
-            Object[] pkColumns, boolean forStaticDocument) throws ConfigurationException, IOException {
+            Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException {
         // TODO Auto-generated method stub
         return null;
     }
@@ -1440,12 +1432,13 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         // TODO Auto-generated method stub
         
     }
-
+/*
     @Override
     public Token getToken(ByteBuffer rowKey, ColumnFamily cf) {
         // TODO Auto-generated method stub
         return null;
     }
+
 
     @Override
     public Token getToken(String index, String type, String routing)
@@ -1453,7 +1446,8 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         // TODO Auto-generated method stub
         return null;
     }
-
+*/
+    
     @Override
     public boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges,
             Collection<Range<Token>> requestTokenRange) {

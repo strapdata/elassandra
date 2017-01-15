@@ -204,6 +204,19 @@
         </dependency>
        
         <!-- for Apache Cassandra -->
+        <dependency>
+            <groupId>com.datastax.cassandra</groupId>
+            <artifactId>cassandra-driver-core</artifactId>
+            <version>3.0.1-shaded</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/cassandra/lib/cassandra-driver-core-3.0.1-shaded.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+            <version>5.0.4</version>
+        </dependency>
+        
          <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-core</artifactId>
@@ -261,6 +274,11 @@
             <version>3.1.0</version>
         </dependency>
         <dependency>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-jvm</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+        <dependency>
             <groupId>net.sf.supercsv</groupId>
             <artifactId>super-csv</artifactId>
             <version>2.1.0</version>
@@ -281,10 +299,11 @@
             <version>0.9.2</version>
             <optional>true</optional>
         </dependency>
+
         <dependency>
             <groupId>org.apache.cassandra</groupId>
             <artifactId>cassandra-thrift</artifactId>
-            <version>2.2.7</version>
+            <version>3.0.10</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -292,10 +311,16 @@
                 </exclusion>
             </exclusions>
         </dependency>
+
         <dependency>
             <groupId>org.caffinitas.ohc</groupId>
             <artifactId>ohc-core</artifactId>
-            <version>0.3.4</version>
+            <version>0.4.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.caffinitas.ohc</groupId>
+            <artifactId>ohc-core-j8</artifactId>
+            <version>0.4.3</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
@@ -397,6 +422,12 @@
         <groupId>com.thinkaurelius.thrift</groupId>
         <artifactId>thrift-server</artifactId>
         <version>0.3.7</version>
+        <exclusions>
+            <exclusion>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-log4j12</artifactId>
+            </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.pig</groupId>
@@ -414,26 +445,13 @@
         <artifactId>ecj</artifactId>
         <version>4.5.1</version>
       </dependency>
-      <!-- 
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>log4j-over-slf4j</artifactId>
-        <version>1.7.7</version>
-      </dependency>
-       -->
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>jcl-over-slf4j</artifactId>
         <version>1.7.7</version>
       </dependency>           
                     
-        <dependency>
-            <groupId>com.datastax.cassandra</groupId>
-            <artifactId>cassandra-driver-core</artifactId>
-            <version>2.2.0-rc2-SNAPSHOT-20150617-shaded</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/cassandra/lib/cassandra-driver-core-2.2.0-rc2-SNAPSHOT-20150617-shaded.jar</systemPath>
-        </dependency>
+        
         
         <dependency>
             <groupId>org.codehaus.mojo</groupId>
@@ -612,6 +630,7 @@
                 <transformerClass>org.elassandra.transformer.StringLocaleTransformer</transformerClass>
                 <processInclusions>
                     <inclusion>org.apache.cassandra.auth</inclusion>
+                    <inclusion>org.apache.cassandra.batchlog</inclusion>
                     <inclusion>org.apache.cassandra.cache</inclusion>
                     <inclusion>org.apache.cassandra.client</inclusion>
                     <inclusion>org.apache.cassandra.concurrent</inclusion>
@@ -621,10 +640,12 @@
                     <inclusion>org.apache.cassandra.dht</inclusion>
                     <inclusion>org.apache.cassandra.exceptions</inclusion>
                     <inclusion>org.apache.cassandra.gms</inclusion>
+                    <inclusion>org.apache.cassandra.thrift</inclusion>
                     <!-- 
                     <inclusion>org.apache.cassandra.hadoop</inclusion>
-                    <inclusion>org.apache.cassandra.thrift</inclusion>
                     -->
+                    <inclusion>org.apache.cassandra.hints</inclusion>
+                    <inclusion>org.apache.cassandra.index</inclusion>
                     <inclusion>org.apache.cassandra.io</inclusion>
                     <inclusion>org.apache.cassandra.locator</inclusion>
                     <inclusion>org.apache.cassandra.metrics</inclusion>

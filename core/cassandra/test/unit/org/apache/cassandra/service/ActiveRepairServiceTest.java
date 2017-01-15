@@ -22,29 +22,26 @@ import java.net.InetAddress;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 
-import com.google.common.base.Predicate;
 import com.google.common.collect.Sets;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
-import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.db.compaction.OperationType;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
+import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
-import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.locator.TokenMetadata;
-import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.Refs;
 
@@ -69,8 +66,7 @@ public class ActiveRepairServiceTest
     {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE5,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(2),
+                                    KeyspaceParams.simple(2),
                                     SchemaLoader.standardCFMD(KEYSPACE5, CF_COUNTER),
                                     SchemaLoader.standardCFMD(KEYSPACE5, CF_STANDARD1));
     }
@@ -90,8 +86,8 @@ public class ActiveRepairServiceTest
 
         TokenMetadata tmd = StorageService.instance.getTokenMetadata();
         tmd.clearUnsafe();
-        StorageService.instance.setTokens(Collections.singleton(StorageService.getPartitioner().getRandomToken()));
-        tmd.updateNormalToken(StorageService.getPartitioner().getMinimumToken(), REMOTE);
+        StorageService.instance.setTokens(Collections.singleton(tmd.partitioner.getRandomToken()));
+        tmd.updateNormalToken(tmd.partitioner.getMinimumToken(), REMOTE);
         assert tmd.isMember(REMOTE);
     }
 
@@ -223,7 +219,7 @@ public class ActiveRepairServiceTest
         for (int i = 1; i <= max; i++)
         {
             InetAddress endpoint = InetAddress.getByName("127.0.0." + i);
-            tmd.updateNormalToken(StorageService.getPartitioner().getRandomToken(), endpoint);
+            tmd.updateNormalToken(tmd.partitioner.getRandomToken(), endpoint);
             endpoints.add(endpoint);
         }
         return endpoints;
@@ -233,10 +229,10 @@ public class ActiveRepairServiceTest
     public void testGetActiveRepairedSSTableRefs()
     {
         ColumnFamilyStore store = prepareColumnFamilyStore();
-        Set<SSTableReader> original = store.getUnrepairedSSTables();
+        Set<SSTableReader> original = store.getLiveSSTables();
 
         UUID prsId = UUID.randomUUID();
-        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), null, true, false);
+        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), null, true, 0, false);
         ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(prsId);
         prs.markSSTablesRepairing(store.metadata.cfId, prsId);
 
@@ -251,7 +247,7 @@ public class ActiveRepairServiceTest
         Iterator<SSTableReader> it = newLiveSet.iterator();
         final SSTableReader removed = it.next();
         it.remove();
-        store.getTracker().dropSSTables(new Predicate<SSTableReader>()
+        store.getTracker().dropSSTables(new com.google.common.base.Predicate<SSTableReader>()
         {
             public boolean apply(SSTableReader reader)
             {
@@ -271,9 +267,9 @@ public class ActiveRepairServiceTest
     public void testAddingMoreSSTables()
     {
         ColumnFamilyStore store = prepareColumnFamilyStore();
-        Set<SSTableReader> original = store.getUnrepairedSSTables();
+        Set<SSTableReader> original = Sets.newHashSet(store.select(View.select(SSTableSet.CANONICAL, (s) -> !s.isRepaired())).sstables);
         UUID prsId = UUID.randomUUID();
-        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), null, true, true);
+        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), null, true, System.currentTimeMillis(), true);
         ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(prsId);
         prs.markSSTablesRepairing(store.metadata.cfId, prsId);
         try (Refs<SSTableReader> refs = prs.getActiveRepairedSSTableRefsForAntiCompaction(store.metadata.cfId, prsId))
@@ -286,7 +282,7 @@ public class ActiveRepairServiceTest
         try
         {
             UUID newPrsId = UUID.randomUUID();
-            ActiveRepairService.instance.registerParentRepairSession(newPrsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), null, true, true);
+            ActiveRepairService.instance.registerParentRepairSession(newPrsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), null, true, System.currentTimeMillis(), true);
             ActiveRepairService.instance.getParentRepairSession(newPrsId).markSSTablesRepairing(store.metadata.cfId, newPrsId);
         }
         catch (Throwable t)
@@ -307,12 +303,12 @@ public class ActiveRepairServiceTest
     {
         ColumnFamilyStore store = prepareColumnFamilyStore();
         UUID prsId = UUID.randomUUID();
-        Set<SSTableReader> original = store.getUnrepairedSSTables();
-        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.partitioner.getMinimumToken(), store.partitioner.getMinimumToken())), true, true);
+        Set<SSTableReader> original = Sets.newHashSet(store.select(View.select(SSTableSet.CANONICAL, (s) -> !s.isRepaired())).sstables);
+        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken())), true, System.currentTimeMillis(), true);
         ActiveRepairService.instance.getParentRepairSession(prsId).maybeSnapshot(store.metadata.cfId, prsId);
 
         UUID prsId2 = UUID.randomUUID();
-        ActiveRepairService.instance.registerParentRepairSession(prsId2, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.partitioner.getMinimumToken(), store.partitioner.getMinimumToken())), true, true);
+        ActiveRepairService.instance.registerParentRepairSession(prsId2, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken())), true, System.currentTimeMillis(), true);
         createSSTables(store, 2);
         ActiveRepairService.instance.getParentRepairSession(prsId).maybeSnapshot(store.metadata.cfId, prsId);
         try (Refs<SSTableReader> refs = ActiveRepairService.instance.getParentRepairSession(prsId).getActiveRepairedSSTableRefsForAntiCompaction(store.metadata.cfId, prsId))
@@ -331,13 +327,13 @@ public class ActiveRepairServiceTest
     public void testSnapshotMultipleRepairs()
     {
         ColumnFamilyStore store = prepareColumnFamilyStore();
-        Set<SSTableReader> original = store.getUnrepairedSSTables();
+        Set<SSTableReader> original = Sets.newHashSet(store.select(View.select(SSTableSet.CANONICAL, (s) -> !s.isRepaired())).sstables);
         UUID prsId = UUID.randomUUID();
-        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.partitioner.getMinimumToken(), store.partitioner.getMinimumToken())), true, true);
+        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken())), true, System.currentTimeMillis(), true);
         ActiveRepairService.instance.getParentRepairSession(prsId).maybeSnapshot(store.metadata.cfId, prsId);
 
         UUID prsId2 = UUID.randomUUID();
-        ActiveRepairService.instance.registerParentRepairSession(prsId2, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.partitioner.getMinimumToken(), store.partitioner.getMinimumToken())), true, true);
+        ActiveRepairService.instance.registerParentRepairSession(prsId2, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken())), true, System.currentTimeMillis(), true);
         boolean exception = false;
         try
         {
@@ -369,14 +365,14 @@ public class ActiveRepairServiceTest
         long timestamp = System.currentTimeMillis();
         for (int i = 0; i < count; i++)
         {
-            DecoratedKey key = Util.dk(Integer.toString(i));
-            Mutation rm = new Mutation(KEYSPACE5, key.getKey());
             for (int j = 0; j < 10; j++)
-                rm.add("Standard1", Util.cellname(Integer.toString(j)),
-                       ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                       timestamp,
-                       0);
-            rm.apply();
+            {
+                new RowUpdateBuilder(cfs.metadata, timestamp, Integer.toString(j))
+                .clustering("c")
+                .add("val", "val")
+                .build()
+                .applyUnsafe();
+            }
             cfs.forceBlockingFlush();
         }
     }

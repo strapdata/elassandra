@@ -50,7 +50,7 @@ public class MetadataSerializer implements IMetadataSerializer
 {
     private static final Logger logger = LoggerFactory.getLogger(MetadataSerializer.class);
 
-    public void serialize(Map<MetadataType, MetadataComponent> components, Version version, DataOutputPlus out) throws IOException
+    public void serialize(Map<MetadataType, MetadataComponent> components, DataOutputPlus out, Version version) throws IOException
     {
         // sort components by type
         List<MetadataComponent> sortedComponents = Lists.newArrayList(components.values());
@@ -67,16 +67,16 @@ public class MetadataSerializer implements IMetadataSerializer
             out.writeInt(type.ordinal());
             // serialize position
             out.writeInt(lastPosition);
-            lastPosition += type.serializer.serializedSize(component, version);
+            lastPosition += type.serializer.serializedSize(version, component);
         }
         // serialize components
         for (MetadataComponent component : sortedComponents)
         {
-            component.getType().serializer.serialize(component, version, out);
+            component.getType().serializer.serialize(version, component, out);
         }
     }
 
-    public Map<MetadataType, MetadataComponent> deserialize(Descriptor descriptor, EnumSet<MetadataType> types) throws IOException
+    public Map<MetadataType, MetadataComponent> deserialize( Descriptor descriptor, EnumSet<MetadataType> types) throws IOException
     {
         Map<MetadataType, MetadataComponent> components;
         logger.trace("Load metadata for {}", descriptor);
@@ -116,14 +116,13 @@ public class MetadataSerializer implements IMetadataSerializer
         }
         for (MetadataType type : types)
         {
-            MetadataComponent component = null;
             Integer offset = toc.get(type);
             if (offset != null)
             {
                 in.seek(offset);
-                component = type.serializer.deserialize(descriptor.version, in);
+                MetadataComponent component = type.serializer.deserialize(descriptor.version, in);
+                components.put(type, component);
             }
-            components.put(type, component);
         }
         return components;
     }
@@ -150,17 +149,16 @@ public class MetadataSerializer implements IMetadataSerializer
 
     private void rewriteSSTableMetadata(Descriptor descriptor, Map<MetadataType, MetadataComponent> currentComponents) throws IOException
     {
-        Descriptor tmpDescriptor = descriptor.asType(Descriptor.Type.TEMP);
-
-        try (DataOutputStreamPlus out = new BufferedDataOutputStreamPlus(new FileOutputStream(tmpDescriptor.filenameFor(Component.STATS))))
+        String filePath = descriptor.tmpFilenameFor(Component.STATS);
+        try (DataOutputStreamPlus out = new BufferedDataOutputStreamPlus(new FileOutputStream(filePath)))
         {
-            serialize(currentComponents, descriptor.version, out);
+            serialize(currentComponents, out, descriptor.version);
             out.flush();
         }
         // we cant move a file on top of another file in windows:
         if (FBUtilities.isWindows())
             FileUtils.delete(descriptor.filenameFor(Component.STATS));
-        FileUtils.renameWithConfirm(tmpDescriptor.filenameFor(Component.STATS), descriptor.filenameFor(Component.STATS));
+        FileUtils.renameWithConfirm(filePath, descriptor.filenameFor(Component.STATS));
 
     }
 }

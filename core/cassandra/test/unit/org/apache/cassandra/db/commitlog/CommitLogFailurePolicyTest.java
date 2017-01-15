@@ -39,6 +39,7 @@ public class CommitLogFailurePolicyTest
     public static void defineSchema() throws ConfigurationException
     {
         SchemaLoader.prepareServer();
+        System.setProperty("cassandra.commitlog.stop_on_errors", "true");
     }
 
     @Test

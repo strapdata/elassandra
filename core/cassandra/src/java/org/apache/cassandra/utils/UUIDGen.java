@@ -25,9 +25,11 @@ import java.security.SecureRandom;
 import java.util.Collection;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
+import com.google.common.primitives.Ints;
 
 
 /**
@@ -203,6 +205,15 @@ public class UUIDGen
 
     /**
      * @param uuid
+     * @return seconds since Unix epoch
+     */
+    public static int unixTimestampInSec(UUID uuid)
+    {
+        return Ints.checkedCast(TimeUnit.MILLISECONDS.toSeconds(unixTimestamp(uuid)));
+    }
+
+    /**
+     * @param uuid
      * @return microseconds since Unix epoch
      */
     public static long microsTimestamp(UUID uuid)
@@ -272,7 +283,7 @@ public class UUIDGen
 
     private static long makeClockSeqAndNode()
     {
-        long clock = new Random(System.currentTimeMillis()).nextLong();
+        long clock = new SecureRandom().nextLong();
 
         long lsb = 0;
         lsb |= 0x8000000000000000L;                 // variant (2 bits)

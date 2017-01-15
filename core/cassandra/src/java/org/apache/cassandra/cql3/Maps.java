@@ -21,21 +21,18 @@ import static org.apache.cassandra.cql3.Constants.UNSET_VALUE;
 
 import java.nio.ByteBuffer;
 import java.util.*;
-
-import com.google.common.collect.Iterables;
+import java.util.stream.Collectors;
 
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.functions.Function;
-import org.apache.cassandra.db.ColumnFamily;
-import org.apache.cassandra.db.composites.CellName;
-import org.apache.cassandra.db.composites.Composite;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 
 /**
@@ -55,7 +52,7 @@ public abstract class Maps
         return new ColumnSpecification(column.ksName, column.cfName, new ColumnIdentifier("value(" + column.name + ")", true), ((MapType)column.type).getValuesType());
     }
 
-    public static class Literal implements Term.Raw
+    public static class Literal extends Term.Raw
     {
         public final List<Pair<Term.Raw, Term.Raw>> entries;
 
@@ -130,18 +127,11 @@ public abstract class Maps
             return res;
         }
 
-        @Override
-        public String toString()
+        public String getText()
         {
-            StringBuilder sb = new StringBuilder();
-            sb.append("{");
-            for (int i = 0; i < entries.size(); i++)
-            {
-                if (i > 0) sb.append(", ");
-                sb.append(entries.get(i).left).append(":").append(entries.get(i).right);
-            }
-            sb.append("}");
-            return sb.toString();
+            return entries.stream()
+                    .map(entry -> String.format("%s: %s", entry.left.getText(), entry.right.getText()))
+                    .collect(Collectors.joining(", ", "{", "}"));
         }
     }
 
@@ -232,14 +222,11 @@ public abstract class Maps
             {
                 // We don't support values > 64K because the serialization format encode the length as an unsigned short.
                 ByteBuffer keyBytes = entry.getKey().bindAndGet(options);
+
                 if (keyBytes == null)
                     throw new InvalidRequestException("null is not supported inside collections");
                 if (keyBytes == ByteBufferUtil.UNSET_BYTE_BUFFER)
                     throw new InvalidRequestException("unset value is not supported for map keys");
-                if (keyBytes.remaining() > FBUtilities.MAX_UNSIGNED_SHORT)
-                    throw new InvalidRequestException(String.format("Map key is too long. Map keys are limited to %d bytes but %d bytes keys provided",
-                                                                    FBUtilities.MAX_UNSIGNED_SHORT,
-                                                                    keyBytes.remaining()));
 
                 ByteBuffer valueBytes = entry.getValue().bindAndGet(options);
                 if (valueBytes == null)
@@ -247,20 +234,15 @@ public abstract class Maps
                 if (valueBytes == ByteBufferUtil.UNSET_BYTE_BUFFER)
                     return UNSET_VALUE;
 
-                if (valueBytes.remaining() > FBUtilities.MAX_UNSIGNED_SHORT)
-                    throw new InvalidRequestException(String.format("Map value is too long. Map values are limited to %d bytes but %d bytes value provided",
-                                                                    FBUtilities.MAX_UNSIGNED_SHORT,
-                                                                    valueBytes.remaining()));
-
                 buffers.put(keyBytes, valueBytes);
             }
             return new Value(buffers);
         }
 
-        public Iterable<Function> getFunctions()
+        public void addFunctionsTo(List<Function> functions)
         {
-            return Iterables.concat(Terms.getFunctions(elements.keySet()),
-                                    Terms.getFunctions(elements.values()));
+            Terms.addFunctions(elements.keySet(), functions);
+            Terms.addFunctions(elements.values(), functions);
         }
     }
 
@@ -290,17 +272,16 @@ public abstract class Maps
             super(column, t);
         }
 
-        public void execute(ByteBuffer rowKey, ColumnFamily cf, Composite prefix, UpdateParameters params) throws InvalidRequestException
+        public void execute(DecoratedKey partitionKey, UpdateParameters params) throws InvalidRequestException
         {
             Term.Terminal value = t.bind(params.options);
-            if (column.type.isMultiCell() && value != UNSET_VALUE)
-            {
-                // delete + put
-                CellName name = cf.getComparator().create(prefix, column);
-                cf.addAtom(params.makeTombstoneForOverwrite(name.slice()));
-            }
-            if (value != UNSET_VALUE)
-                Putter.doPut(cf, prefix, column, params, value);
+            if (value == UNSET_VALUE)
+                return;
+
+            // delete + put
+            if (column.type.isMultiCell())
+                params.setComplexDeletionTimeForOverwrite(column);
+            Putter.doPut(value, column, params);
         }
     }
 
@@ -321,7 +302,7 @@ public abstract class Maps
             k.collectMarkerSpecification(boundNames);
         }
 
-        public void execute(ByteBuffer rowKey, ColumnFamily cf, Composite prefix, UpdateParameters params) throws InvalidRequestException
+        public void execute(DecoratedKey partitionKey, UpdateParameters params) throws InvalidRequestException
         {
             assert column.type.isMultiCell() : "Attempted to set a value for a single key on a frozen map";
             ByteBuffer key = k.bindAndGet(params.options);
@@ -331,21 +312,15 @@ public abstract class Maps
             if (key == ByteBufferUtil.UNSET_BYTE_BUFFER)
                 throw new InvalidRequestException("Invalid unset map key");
 
-            CellName cellName = cf.getComparator().create(prefix, column, key);
+            CellPath path = CellPath.create(key);
 
             if (value == null)
             {
-                cf.addColumn(params.makeTombstone(cellName));
+                params.addTombstone(column, path);
             }
             else if (value != ByteBufferUtil.UNSET_BYTE_BUFFER)
             {
-                // We don't support value > 64K because the serialization format encode the length as an unsigned short.
-                if (value.remaining() > FBUtilities.MAX_UNSIGNED_SHORT)
-                    throw new InvalidRequestException(String.format("Map value is too long. Map values are limited to %d bytes but %d bytes value provided",
-                                                                    FBUtilities.MAX_UNSIGNED_SHORT,
-                                                                    value.remaining()));
-
-                cf.addColumn(params.makeColumn(cellName, value));
+                params.addCell(column, path, value);
             }
         }
     }
@@ -357,15 +332,15 @@ public abstract class Maps
             super(column, t);
         }
 
-        public void execute(ByteBuffer rowKey, ColumnFamily cf, Composite prefix, UpdateParameters params) throws InvalidRequestException
+        public void execute(DecoratedKey partitionKey, UpdateParameters params) throws InvalidRequestException
         {
             assert column.type.isMultiCell() : "Attempted to add items to a frozen map";
             Term.Terminal value = t.bind(params.options);
             if (value != UNSET_VALUE)
-                doPut(cf, prefix, column, params, value);
+                doPut(value, column, params);
         }
 
-        static void doPut(ColumnFamily cf, Composite prefix, ColumnDefinition column, UpdateParameters params, Term.Terminal value) throws InvalidRequestException
+        static void doPut(Term.Terminal value, ColumnDefinition column, UpdateParameters params) throws InvalidRequestException
         {
             if (column.type.isMultiCell())
             {
@@ -374,19 +349,15 @@ public abstract class Maps
 
                 Map<ByteBuffer, ByteBuffer> elements = ((Value) value).map;
                 for (Map.Entry<ByteBuffer, ByteBuffer> entry : elements.entrySet())
-                {
-                    CellName cellName = cf.getComparator().create(prefix, column, entry.getKey());
-                    cf.addColumn(params.makeColumn(cellName, entry.getValue()));
-                }
+                    params.addCell(column, CellPath.create(entry.getKey()), entry.getValue());
             }
             else
             {
                 // for frozen maps, we're overwriting the whole cell
-                CellName cellName = cf.getComparator().create(prefix, column);
                 if (value == null)
-                    cf.addAtom(params.makeTombstone(cellName));
+                    params.addTombstone(column);
                 else
-                    cf.addColumn(params.makeColumn(cellName, value.get(Server.CURRENT_VERSION)));
+                    params.addCell(column, value.get(Server.CURRENT_VERSION));
             }
         }
     }
@@ -398,7 +369,7 @@ public abstract class Maps
             super(column, k);
         }
 
-        public void execute(ByteBuffer rowKey, ColumnFamily cf, Composite prefix, UpdateParameters params) throws InvalidRequestException
+        public void execute(DecoratedKey partitionKey, UpdateParameters params) throws InvalidRequestException
         {
             assert column.type.isMultiCell() : "Attempted to delete a single key in a frozen map";
             Term.Terminal key = t.bind(params.options);
@@ -407,8 +378,7 @@ public abstract class Maps
             if (key == Constants.UNSET_VALUE)
                 throw new InvalidRequestException("Invalid unset map key");
 
-            CellName cellName = cf.getComparator().create(prefix, column, key.get(params.options.getProtocolVersion()));
-            cf.addColumn(params.makeTombstone(cellName));
+            params.addTombstone(column, CellPath.create(key.get(params.options.getProtocolVersion())));
         }
     }
 }

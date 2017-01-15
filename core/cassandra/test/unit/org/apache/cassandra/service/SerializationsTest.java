@@ -18,18 +18,24 @@
  */
 package org.apache.cassandra.service;
 
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.UUID;
 
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
 import org.apache.cassandra.AbstractSerializationsTester;
+import org.apache.cassandra.Util;
+import org.apache.cassandra.Util.PartitionerSwitcher;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.util.DataInputPlus.DataInputStreamPlus;
 import org.apache.cassandra.io.util.DataOutputStreamPlus;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
@@ -38,19 +44,30 @@ import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.repair.Validator;
 import org.apache.cassandra.repair.messages.*;
 import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.MerkleTree;
+import org.apache.cassandra.utils.MerkleTrees;
 
 public class SerializationsTest extends AbstractSerializationsTester
 {
-    static
+    private static PartitionerSwitcher partitionerSwitcher;
+    private static UUID RANDOM_UUID;
+    private static Range<Token> FULL_RANGE;
+    private static RepairJobDesc DESC;
+
+    @BeforeClass
+    public static void defineSchema() throws Exception
     {
-        System.setProperty("cassandra.partitioner", "RandomPartitioner");
+        partitionerSwitcher = Util.switchPartitioner(RandomPartitioner.instance);
+        RANDOM_UUID = UUID.fromString("b5c3d033-75aa-4c2f-a819-947aac7a0c54");
+        FULL_RANGE = new Range<>(Util.testPartitioner().getMinimumToken(), Util.testPartitioner().getMinimumToken());
+        DESC = new RepairJobDesc(getVersion() < MessagingService.VERSION_21 ? null : RANDOM_UUID, RANDOM_UUID, "Keyspace1", "Standard1", Arrays.asList(FULL_RANGE));
     }
 
-    private static final UUID RANDOM_UUID = UUID.fromString("b5c3d033-75aa-4c2f-a819-947aac7a0c54");
-    private static final Range<Token> FULL_RANGE = new Range<>(StorageService.getPartitioner().getMinimumToken(), StorageService.getPartitioner().getMinimumToken());
-    private static final RepairJobDesc DESC = new RepairJobDesc(getVersion() < MessagingService.VERSION_21 ? null : RANDOM_UUID, RANDOM_UUID, "Keyspace1", "Standard1", FULL_RANGE);
-
+    @AfterClass
+    public static void tearDown()
+    {
+        partitionerSwitcher.close();
+    }
+    
     private void testRepairMessageWrite(String fileName, RepairMessage... messages) throws IOException
     {
         try (DataOutputStreamPlus out = getOutput(fileName))
@@ -78,7 +95,7 @@ public class SerializationsTest extends AbstractSerializationsTester
         if (EXECUTE_WRITES)
             testValidationRequestWrite();
 
-        try (DataInputStream in = getInput("service.ValidationRequest.bin"))
+        try (DataInputStreamPlus in = getInput("service.ValidationRequest.bin"))
         {
             RepairMessage message = RepairMessage.serializer.deserialize(in, getVersion());
             assert message.messageType == RepairMessage.Type.VALIDATION_REQUEST;
@@ -92,13 +109,17 @@ public class SerializationsTest extends AbstractSerializationsTester
     private void testValidationCompleteWrite() throws IOException
     {
         IPartitioner p = RandomPartitioner.instance;
+
+        MerkleTrees mt = new MerkleTrees(p);
+
         // empty validation
-        MerkleTree mt = new MerkleTree(p, FULL_RANGE, MerkleTree.RECOMMENDED_DEPTH, (int) Math.pow(2, 15));
+        mt.addMerkleTree((int) Math.pow(2, 15), FULL_RANGE);
         Validator v0 = new Validator(DESC, FBUtilities.getBroadcastAddress(),  -1);
         ValidationComplete c0 = new ValidationComplete(DESC, mt);
 
         // validation with a tree
-        mt = new MerkleTree(p, FULL_RANGE, MerkleTree.RECOMMENDED_DEPTH, Integer.MAX_VALUE);
+        mt = new MerkleTrees(p);
+        mt.addMerkleTree(Integer.MAX_VALUE, FULL_RANGE);
         for (int i = 0; i < 10; i++)
             mt.split(p.getRandomToken());
         Validator v1 = new Validator(DESC, FBUtilities.getBroadcastAddress(), -1);
@@ -116,31 +137,31 @@ public class SerializationsTest extends AbstractSerializationsTester
         if (EXECUTE_WRITES)
             testValidationCompleteWrite();
 
-        try (DataInputStream in = getInput("service.ValidationComplete.bin"))
+        try (DataInputStreamPlus in = getInput("service.ValidationComplete.bin"))
         {
             // empty validation
             RepairMessage message = RepairMessage.serializer.deserialize(in, getVersion());
             assert message.messageType == RepairMessage.Type.VALIDATION_COMPLETE;
             assert DESC.equals(message.desc);
 
-            assert ((ValidationComplete) message).success;
-            assert ((ValidationComplete) message).tree != null;
+            assert ((ValidationComplete) message).success();
+            assert ((ValidationComplete) message).trees != null;
 
             // validation with a tree
             message = RepairMessage.serializer.deserialize(in, getVersion());
             assert message.messageType == RepairMessage.Type.VALIDATION_COMPLETE;
             assert DESC.equals(message.desc);
 
-            assert ((ValidationComplete) message).success;
-            assert ((ValidationComplete) message).tree != null;
+            assert ((ValidationComplete) message).success();
+            assert ((ValidationComplete) message).trees != null;
 
             // failed validation
             message = RepairMessage.serializer.deserialize(in, getVersion());
             assert message.messageType == RepairMessage.Type.VALIDATION_COMPLETE;
             assert DESC.equals(message.desc);
 
-            assert !((ValidationComplete) message).success;
-            assert ((ValidationComplete) message).tree == null;
+            assert !((ValidationComplete) message).success();
+            assert ((ValidationComplete) message).trees == null;
 
             // MessageOuts
             for (int i = 0; i < 3; i++)
@@ -168,7 +189,7 @@ public class SerializationsTest extends AbstractSerializationsTester
         InetAddress src = InetAddress.getByAddress(new byte[]{127, 0, 0, 2});
         InetAddress dest = InetAddress.getByAddress(new byte[]{127, 0, 0, 3});
 
-        try (DataInputStream in = getInput("service.SyncRequest.bin"))
+        try (DataInputStreamPlus in = getInput("service.SyncRequest.bin"))
         {
             RepairMessage message = RepairMessage.serializer.deserialize(in, getVersion());
             assert message.messageType == RepairMessage.Type.SYNC_REQUEST;
@@ -204,7 +225,7 @@ public class SerializationsTest extends AbstractSerializationsTester
         InetAddress dest = InetAddress.getByAddress(new byte[]{127, 0, 0, 3});
         NodePair nodes = new NodePair(src, dest);
 
-        try (DataInputStream in = getInput("service.SyncComplete.bin"))
+        try (DataInputStreamPlus in = getInput("service.SyncComplete.bin"))
         {
             // success
             RepairMessage message = RepairMessage.serializer.deserialize(in, getVersion());

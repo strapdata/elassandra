@@ -36,9 +36,10 @@ public interface IMetadataSerializer
      *
      * @param components Metadata components to serialize
      * @param out
+     * @param version
      * @throws IOException
      */
-    void serialize(Map<MetadataType, MetadataComponent> components, Version version, DataOutputPlus out) throws IOException;
+    void serialize(Map<MetadataType, MetadataComponent> components, DataOutputPlus out, Version version) throws IOException;
 
     /**
      * Deserialize specified metadata components from given descriptor.

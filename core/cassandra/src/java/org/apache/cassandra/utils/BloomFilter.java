@@ -19,9 +19,9 @@ package org.apache.cassandra.utils;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.concurrent.WrappedSharedCloseable;
 import org.apache.cassandra.utils.obs.IBitSet;
-import org.apache.cassandra.db.TypeSizes;
 
 public class BloomFilter extends WrappedSharedCloseable implements IFilter
 {
@@ -35,26 +35,31 @@ public class BloomFilter extends WrappedSharedCloseable implements IFilter
 
     public final IBitSet bitset;
     public final int hashCount;
+    /**
+     * CASSANDRA-8413: 3.0 (inverted) bloom filters have no 'static' bits caused by using the same upper bits
+     * for both bloom filter and token distribution.
+     */
+    public final boolean oldBfHashOrder;
 
-    BloomFilter(int hashCount, IBitSet bitset)
+    BloomFilter(int hashCount, IBitSet bitset, boolean oldBfHashOrder)
     {
         super(bitset);
         this.hashCount = hashCount;
         this.bitset = bitset;
+        this.oldBfHashOrder = oldBfHashOrder;
     }
 
-    BloomFilter(BloomFilter copy)
+    private BloomFilter(BloomFilter copy)
     {
         super(copy);
         this.hashCount = copy.hashCount;
         this.bitset = copy.bitset;
+        this.oldBfHashOrder = copy.oldBfHashOrder;
     }
-
-    public static final BloomFilterSerializer serializer = new BloomFilterSerializer();
 
     public long serializedSize()
     {
-        return serializer.serializedSize(this, TypeSizes.NATIVE);
+        return BloomFilterSerializer.serializedSize(this);
     }
 
     // Murmur is faster than an SHA-based approach and provides as-good collision
@@ -71,7 +76,7 @@ public class BloomFilter extends WrappedSharedCloseable implements IFilter
         long[] hash = new long[2];
         key.filterHash(hash);
         long[] indexes = new long[hashCount];
-        setIndexes(hash[0], hash[1], hashCount, max, indexes);
+        setIndexes(hash[1], hash[0], hashCount, max, indexes);
         return indexes;
     }
 
@@ -85,12 +90,19 @@ public class BloomFilter extends WrappedSharedCloseable implements IFilter
         // so that we do not need to allocate two arrays.
         long[] indexes = reusableIndexes.get();
         key.filterHash(indexes);
-        setIndexes(indexes[0], indexes[1], hashCount, bitset.capacity(), indexes);
+        setIndexes(indexes[1], indexes[0], hashCount, bitset.capacity(), indexes);
         return indexes;
     }
 
     private void setIndexes(long base, long inc, int count, long max, long[] results)
     {
+        if (oldBfHashOrder)
+        {
+            long x = inc;
+            inc = base;
+            base = x;
+        }
+
         for (int i = 0; i < count; i++)
         {
             results[i] = FBUtilities.abs(base % max);
@@ -134,5 +146,16 @@ public class BloomFilter extends WrappedSharedCloseable implements IFilter
     public long offHeapSize()
     {
         return bitset.offHeapSize();
+    }
+
+    public String toString()
+    {
+        return "BloomFilter[hashCount=" + hashCount + ";oldBfHashOrder=" + oldBfHashOrder + ";capacity=" + bitset.capacity() + ']';
+    }
+
+    public void addTo(Ref.IdentityCollection identities)
+    {
+        super.addTo(identities);
+        bitset.addTo(identities);
     }
 }

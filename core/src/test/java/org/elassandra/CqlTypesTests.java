@@ -49,10 +49,13 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .setSource("{ \"natives\" : { \"discover\" : \".*\", \"properties\": { \"c2\":{ \"type\":\"string\", \"index\":\"not_analyzed\" }}}}")
                 .get());
         
+        // {"c2": "toto", "c3" : "2016-10-10", "c4": 1, "c5":44, "c6":1.0, "c7":2.22, "c8": true, "c9":"U29tZSBiaW5hcnkgYmxvYg==" }
         assertThat(client().prepareIndex("ks1", "natives", "1")
                 .setSource("{\"c2\": \"toto\", \"c3\" : \"2016-10-10\", \"c4\": 1, \"c5\":44, \"c6\":1.0, \"c7\":2.22, \"c8\": true, \"c9\":\"U29tZSBiaW5hcnkgYmxvYg==\" }")
                 .get().isCreated(), equalTo(true));
-        Map<String,Object> fields = client().prepareSearch("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("c2:toto")).get().getHits().getHits()[0].getSource();
+        Map<String,Object> fields = client().prepareSearch("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("c2:toto"))
+                .get().getHits().getHits()[0]
+                .getSource();
         assertThat(fields.get("c2"),equalTo("toto"));
         assertThat(fields.get("c3").toString(),equalTo("2016-10-10T00:00:00.000Z"));
         assertThat(fields.get("c4"),equalTo(1));

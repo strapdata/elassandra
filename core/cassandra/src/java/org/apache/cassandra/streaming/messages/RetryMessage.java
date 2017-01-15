@@ -22,18 +22,25 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.UUID;
 
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataInputPlus.DataInputStreamPlus;
 import org.apache.cassandra.io.util.DataOutputStreamPlus;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.streaming.StreamSession;
 import org.apache.cassandra.utils.UUIDSerializer;
 
+/**
+ * @deprecated retry support removed on CASSANDRA-10992
+ */
+@Deprecated
 public class RetryMessage extends StreamMessage
 {
     public static Serializer<RetryMessage> serializer = new Serializer<RetryMessage>()
     {
+        @SuppressWarnings("resource") // Not closing constructed DataInputPlus's as the channel needs to remain open.
         public RetryMessage deserialize(ReadableByteChannel in, int version, StreamSession session) throws IOException
         {
-            DataInput input = new DataInputStream(Channels.newInputStream(in));
+            DataInputPlus input = new DataInputStreamPlus(Channels.newInputStream(in));
             return new RetryMessage(UUIDSerializer.serializer.deserialize(input, MessagingService.current_version), input.readInt());
         }
 

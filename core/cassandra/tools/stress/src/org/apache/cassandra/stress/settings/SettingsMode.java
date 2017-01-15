@@ -1,6 +1,6 @@
 package org.apache.cassandra.stress.settings;
 /*
- * 
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -8,16 +8,16 @@ package org.apache.cassandra.stress.settings;
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- * 
+ *
  */
 
 
@@ -29,6 +29,7 @@ import java.util.Map;
 import com.datastax.driver.core.AuthProvider;
 import com.datastax.driver.core.PlainTextAuthProvider;
 import com.datastax.driver.core.ProtocolOptions;
+import com.datastax.driver.core.ProtocolVersion;
 
 public class SettingsMode implements Serializable
 {
@@ -36,11 +37,15 @@ public class SettingsMode implements Serializable
     public final ConnectionAPI api;
     public final ConnectionStyle style;
     public final CqlVersion cqlVersion;
+    public final ProtocolVersion protocolVersion;
 
     public final String username;
     public final String password;
     public final String authProviderClassname;
     public final AuthProvider authProvider;
+
+    public final Integer maxPendingPerConnection;
+    public final Integer connectionsPerHost;
 
     private final String compression;
 
@@ -50,11 +55,16 @@ public class SettingsMode implements Serializable
         {
             cqlVersion = CqlVersion.CQL3;
             Cql3Options opts = (Cql3Options) options;
+            protocolVersion = "NEWEST_SUPPORTED".equals(opts.protocolVersion.value())
+                    ? ProtocolVersion.NEWEST_SUPPORTED
+                    : ProtocolVersion.fromInt(Integer.parseInt(opts.protocolVersion.value()));
             api = opts.mode().displayPrefix.equals("native") ? ConnectionAPI.JAVA_DRIVER_NATIVE : ConnectionAPI.THRIFT;
             style = opts.useUnPrepared.setByUser() ? ConnectionStyle.CQL :  ConnectionStyle.CQL_PREPARED;
             compression = ProtocolOptions.Compression.valueOf(opts.useCompression.value().toUpperCase()).name();
             username = opts.user.value();
             password = opts.password.value();
+            maxPendingPerConnection = opts.maxPendingPerConnection.value().isEmpty() ? null : Integer.valueOf(opts.maxPendingPerConnection.value());
+            connectionsPerHost = opts.connectionsPerHost.value().isEmpty() ? null : Integer.valueOf(opts.connectionsPerHost.value());
             authProviderClassname = opts.authProvider.value();
             if (authProviderClassname != null)
             {
@@ -87,6 +97,7 @@ public class SettingsMode implements Serializable
         {
             cqlVersion = CqlVersion.CQL3;
             Cql3SimpleNativeOptions opts = (Cql3SimpleNativeOptions) options;
+            protocolVersion = ProtocolVersion.NEWEST_SUPPORTED;
             api = ConnectionAPI.SIMPLE_NATIVE;
             style = opts.usePrepared.setByUser() ? ConnectionStyle.CQL_PREPARED : ConnectionStyle.CQL;
             compression = ProtocolOptions.Compression.NONE.name();
@@ -94,10 +105,13 @@ public class SettingsMode implements Serializable
             password = null;
             authProvider = null;
             authProviderClassname = null;
+            maxPendingPerConnection = null;
+            connectionsPerHost = null;
         }
         else if (options instanceof ThriftOptions)
         {
             ThriftOptions opts = (ThriftOptions) options;
+            protocolVersion = ProtocolVersion.NEWEST_SUPPORTED;
             cqlVersion = CqlVersion.NOCQL;
             api = opts.smart.setByUser() ? ConnectionAPI.THRIFT_SMART : ConnectionAPI.THRIFT;
             style = ConnectionStyle.THRIFT;
@@ -106,6 +120,8 @@ public class SettingsMode implements Serializable
             password = opts.password.value();
             authProviderClassname = null;
             authProvider = null;
+            maxPendingPerConnection = null;
+            connectionsPerHost = null;
         }
         else
             throw new IllegalStateException();
@@ -139,18 +155,22 @@ public class SettingsMode implements Serializable
     private static abstract class Cql3Options extends GroupedOptions
     {
         final OptionSimple api = new OptionSimple("cql3", "", null, "", true);
+        final OptionSimple protocolVersion = new OptionSimple("protocolVersion=", "[2-4]+", "NEWEST_SUPPORTED", "CQL Protocol Version", false);
         final OptionSimple useUnPrepared = new OptionSimple("unprepared", "", null, "force use of unprepared statements", false);
         final OptionSimple useCompression = new OptionSimple("compression=", "none|lz4|snappy", "none", "", false);
         final OptionSimple port = new OptionSimple("port=", "[0-9]+", "9046", "", false);
         final OptionSimple user = new OptionSimple("user=", ".+", null, "username", false);
         final OptionSimple password = new OptionSimple("password=", ".+", null, "password", false);
         final OptionSimple authProvider = new OptionSimple("auth-provider=", ".*", null, "Fully qualified implementation of com.datastax.driver.core.AuthProvider", false);
+        final OptionSimple maxPendingPerConnection = new OptionSimple("maxPending=", "[0-9]+", "", "Maximum pending requests per connection", false);
+        final OptionSimple connectionsPerHost = new OptionSimple("connectionsPerHost=", "[0-9]+", "", "Number of connections per host", false);
 
         abstract OptionSimple mode();
         @Override
         public List<? extends Option> options()
         {
-            return Arrays.asList(mode(), useUnPrepared, api, useCompression, port, user, password, authProvider);
+            return Arrays.asList(mode(), useUnPrepared, api, useCompression, port, user, password, authProvider,
+                                 maxPendingPerConnection, connectionsPerHost, protocolVersion);
         }
     }
 

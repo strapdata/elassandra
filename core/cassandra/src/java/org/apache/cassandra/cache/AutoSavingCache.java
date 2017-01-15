@@ -42,10 +42,10 @@ import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.compaction.CompactionInfo;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.OperationType;
-import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.io.util.ChecksummedRandomAccessReader.CorruptFileException;
+import org.apache.cassandra.io.util.DataInputPlus.DataInputStreamPlus;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Pair;
@@ -75,14 +75,16 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
      *
      * Since cache versions match exactly and there is no partial fallback just add
      * a minor version letter.
+     *
+     * Sticking with "d" is fine for 3.0 since it has never been released or used by another version
      */
-    private static final String CURRENT_VERSION = "ca";
+    private static final String CURRENT_VERSION = "d";
 
     private static volatile IStreamFactory streamFactory = new IStreamFactory()
     {
         public InputStream getInputStream(File dataPath, File crcPath) throws IOException
         {
-            return ChecksummedRandomAccessReader.open(dataPath, crcPath);
+            return new ChecksummedRandomAccessReader.Builder(dataPath, crcPath).build();
         }
 
         public OutputStream getOutputStream(File dataPath, File crcPath)
@@ -166,7 +168,7 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
                             cacheType);
                 es.shutdown();
             }
-        }, MoreExecutors.sameThreadExecutor());
+        }, MoreExecutors.directExecutor());
 
         return cacheLoad;
     }
@@ -181,11 +183,11 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
         File crcPath = getCacheCrcPath(CURRENT_VERSION);
         if (dataPath.exists() && crcPath.exists())
         {
-            DataInputStream in = null;
+            DataInputStreamPlus in = null;
             try
             {
                 logger.info(String.format("reading saved cache %s", dataPath));
-                in = new DataInputStream(new LengthAvailableInputStream(new BufferedInputStream(streamFactory.getInputStream(dataPath, crcPath)), dataPath.length()));
+                in = new DataInputStreamPlus(new LengthAvailableInputStream(new BufferedInputStream(streamFactory.getInputStream(dataPath, crcPath)), dataPath.length()));
 
                 //Check the schema has not changed since CFs are looked up by name which is ambiguous
                 UUID schemaVersion = new UUID(in.readLong(), in.readLong());
@@ -298,7 +300,7 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
             else
                 type = OperationType.UNKNOWN;
 
-            info = new CompactionInfo(CFMetaData.denseCFMetaData(SystemKeyspace.NAME, cacheType.toString(), BytesType.instance),
+            info = new CompactionInfo(CFMetaData.createFake(SystemKeyspace.NAME, cacheType.toString()),
                                       type,
                                       0,
                                       keysEstimate,
@@ -318,7 +320,6 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
             return info.forProgress(keysWritten, Math.max(keysWritten, keysEstimate));
         }
 
-        @SuppressWarnings("resource")
         public void saveCache()
         {
             logger.trace("Deleting old {} files.", cacheType);
@@ -332,56 +333,42 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
 
             long start = System.nanoTime();
 
-            WrappedDataOutputStreamPlus writer = null;
             Pair<File, File> cacheFilePaths = tempCacheFiles();
-            try
+            try (WrappedDataOutputStreamPlus writer = new WrappedDataOutputStreamPlus(streamFactory.getOutputStream(cacheFilePaths.left, cacheFilePaths.right)))
             {
-                try
+
+                //Need to be able to check schema version because CF names are ambiguous
+                UUID schemaVersion = Schema.instance.getVersion();
+                if (schemaVersion == null)
                 {
-                    writer = new WrappedDataOutputStreamPlus(streamFactory.getOutputStream(cacheFilePaths.left, cacheFilePaths.right));
+                    Schema.instance.updateVersion();
+                    schemaVersion = Schema.instance.getVersion();
                 }
-                catch (FileNotFoundException e)
+                writer.writeLong(schemaVersion.getMostSignificantBits());
+                writer.writeLong(schemaVersion.getLeastSignificantBits());
+
+                while (keyIterator.hasNext())
                 {
-                    throw new RuntimeException(e);
+                    K key = keyIterator.next();
+
+                    ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreIncludingIndexes(key.ksAndCFName);
+                    if (cfs == null)
+                        continue; // the table or 2i has been dropped.
+
+                    cacheLoader.serialize(key, writer, cfs);
+
+                    keysWritten++;
+                    if (keysWritten >= keysEstimate)
+                        break;
                 }
-
-                try
-                {
-                    //Need to be able to check schema version because CF names are ambiguous
-                    UUID schemaVersion = Schema.instance.getVersion();
-                    if (schemaVersion == null)
-                    {
-                        Schema.instance.updateVersion();
-                        schemaVersion = Schema.instance.getVersion();
-                    }
-                    writer.writeLong(schemaVersion.getMostSignificantBits());
-                    writer.writeLong(schemaVersion.getLeastSignificantBits());
-
-                    while (keyIterator.hasNext())
-                    {
-                        K key = keyIterator.next();
-
-                        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreIncludingIndexes(key.ksAndCFName);
-                        if (cfs == null)
-                            continue; // the table or 2i has been dropped.
-
-                        cacheLoader.serialize(key, writer, cfs);
-
-                        keysWritten++;
-                        if (keysWritten >= keysEstimate)
-                            break;
-                    }
-                }
-                catch (IOException e)
-                {
-                    throw new FSWriteError(e, cacheFilePaths.left);
-                }
-
             }
-            finally
+            catch (FileNotFoundException e)
             {
-                if (writer != null)
-                    FileUtils.closeQuietly(writer);
+                throw new RuntimeException(e);
+            }
+            catch (IOException e)
+            {
+                throw new FSWriteError(e, cacheFilePaths.left);
             }
 
             File cacheFile = getCacheDataPath(CURRENT_VERSION);
@@ -439,6 +426,6 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
     {
         void serialize(K key, DataOutputPlus out, ColumnFamilyStore cfs) throws IOException;
 
-        Future<Pair<K, V>> deserialize(DataInputStream in, ColumnFamilyStore cfs) throws IOException;
+        Future<Pair<K, V>> deserialize(DataInputPlus in, ColumnFamilyStore cfs) throws IOException;
     }
 }

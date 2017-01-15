@@ -21,12 +21,14 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.apache.cassandra.dht.Murmur3Partitioner.LongToken;
+import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.service.StorageService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
+import org.elasticsearch.common.transport.TransportAddress;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 
@@ -43,59 +45,73 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
     }
     
     public class PrimaryFirstRouter extends Router {
+        Route route;
         
         public PrimaryFirstRouter(final String index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
             super(index, ksName, shardStates, clusterState);
             
-            if (!StorageService.instance.isJoined()) {
+            if (!StorageService.instance.isJoined() || !Keyspace.isInitialized()) {
                 // temporary fake routing table in order to start local shards before cassandra services.
-                Range<Token> ring = new Range<Token>(new LongToken(Long.MIN_VALUE), new LongToken(Long.MAX_VALUE));
-                this.tokens.add(ring);
                 BitSet singletonBitSet = new BitSet(1);
                 singletonBitSet.set(0, true);
                 this.greenShards.put(localNode, singletonBitSet);
+                this.route = new Router.Route() {
+                    @Override
+                    public Map<DiscoveryNode, BitSet> selectedShards() {
+                        return greenShards;
+                    }
+                };
                 return;
             }
             
-            Map<UUID, InetAddress> hostIdToEndpoints = StorageService.instance.getUuidToEndpoint();
-            for(ObjectCursor<DiscoveryNode> entry : clusterState.nodes().getDataNodes().values()) {
-                DiscoveryNode node = entry.value;
-                InetAddress endpoint  = hostIdToEndpoints.get(node.uuid());
-                assert endpoint != null;
-                Collection<Range<Token>> primaryRanges = StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, endpoint);
-                Range<Token> wrappedRange = null;        
-                for(Range<Token> range : primaryRanges) {
-                    if (range.isWrapAround()) {
-                        wrappedRange = range;
-                        break;
+            // clear replica ranges from bitset of greenShards.
+            for(DiscoveryNode node : greenShards.keySet()) {
+                for(Range<Token> primaryRange : StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, node.getInetAddress())) {
+                    int rightTokenIndex = this.tokens.indexOf(primaryRange.right);
+                    if (logger.isTraceEnabled())
+                        logger.trace("primaryRange={} idx={} wrapped={}", primaryRange, rightTokenIndex, primaryRange.isWrapAround());
+                    
+                    if (primaryRange.isWrapAround()) 
+                        // remove the higher token even if the current token belongs to another DC
+                        clearReplicaRange(node.getInetAddress(), this.tokens.size() - 1, TOKEN_MAX, clusterState);
+                    
+                    if (rightTokenIndex >= 0)
+                        clearReplicaRange(node.getInetAddress(), rightTokenIndex, primaryRange.right, clusterState);
+                }
+            }
+            
+            if (logger.isTraceEnabled())
+                logger.trace("index={} keyspace={} greenShards={} yellowShards={} redShards={}", index, ksName, greenShards, yellowShards, redShards);
+            
+            this.route = new Router.Route() {
+                @Override
+                public Map<DiscoveryNode, BitSet> selectedShards() {
+                    return greenShards;
+                }
+            };
+        }
+        
+        private void clearReplicaRange(InetAddress endpoint, int tokenIndex, Token token, ClusterState clusterState) {
+            for(InetAddress replica : tokenToEndpointsMap.get(token)) {
+                if (!endpoint.equals(replica)) {
+                    UUID uuid = StorageService.instance.getHostId(replica);
+                    DiscoveryNode n = clusterState.nodes().get( uuid.toString() );
+                    if (this.greenShards.get(n) != null) {
+                        if (logger.isTraceEnabled())
+                            logger.trace("clear bit={} for token={} node={}", tokenIndex, token, n);
+                        this.greenShards.get(n).set(tokenIndex, false);
+                    } else {
+                        if (logger.isTraceEnabled())
+                            logger.trace("uuid={} for replica={} node found", uuid, replica);
                     }
                 }
-                if (wrappedRange != null) {
-                    primaryRanges.remove(wrappedRange);
-                    primaryRanges.add( new Range<Token>(new LongToken((Long) wrappedRange.left.getTokenValue()), new LongToken(Long.MAX_VALUE)) );
-                    primaryRanges.add( new Range<Token>(new LongToken(Long.MIN_VALUE), new LongToken((Long) wrappedRange.right.getTokenValue())));
-                }
-                if (ShardRoutingState.STARTED.equals(shardStates.get(node.uuid()))) {
-                    // unset all primary range bits on replica nodes.
-                    for(Range<Token> range : primaryRanges) {
-                        int idx = this.tokens.indexOf(range);
-                        if (this.rangeToEndpointsMap.get(range) != null) {
-                            for(InetAddress replica : this.rangeToEndpointsMap.get(range)) {
-                                UUID uuid = StorageService.instance.getHostId(replica);
-                                assert uuid != null;
-                                if (!node.uuid().equals(uuid)) {
-                                    DiscoveryNode n = clusterState.nodes().get( uuid.toString() );
-                                    if (this.greenShards.get(n) != null)
-                                        this.greenShards.get(n).set(idx, false);
-                                }
-                            }
-                        }
-                    }
-                } 
             }
         }
 
-    }
+        @Override
+        public Route newRoute(String preference, TransportAddress src) {
+            return this.route;
+        }
 
-    
+    }
 }

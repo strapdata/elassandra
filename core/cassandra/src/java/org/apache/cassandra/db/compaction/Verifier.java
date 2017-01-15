@@ -18,8 +18,9 @@
 package org.apache.cassandra.db.compaction;
 
 import com.google.common.base.Throwables;
-import com.google.common.collect.Sets;
+
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
@@ -31,7 +32,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.JVMStabilityInspector;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.OutputHandler;
 import org.apache.cassandra.utils.UUIDGen;
 
@@ -71,7 +72,7 @@ public class Verifier implements Closeable
         this.cfs = cfs;
         this.sstable = sstable;
         this.outputHandler = outputHandler;
-        this.rowIndexEntrySerializer = sstable.descriptor.version.getSSTableFormat().getIndexSerializer(sstable.metadata);
+        this.rowIndexEntrySerializer = sstable.descriptor.version.getSSTableFormat().getIndexSerializer(sstable.metadata, sstable.descriptor.version, sstable.header);
 
         this.controller = new VerifyController(cfs);
 
@@ -90,19 +91,20 @@ public class Verifier implements Closeable
         outputHandler.output(String.format("Checking computed hash of %s ", sstable));
 
 
-        // Verify will use the adler32 Digest files, which works for both compressed and uncompressed sstables
+        // Verify will use the Digest files, which works for both compressed and uncompressed sstables
         try
         {
             validator = null;
 
-            if (new File(sstable.descriptor.filenameFor(Component.DIGEST)).exists())
+            if (sstable.descriptor.digestComponent != null &&
+                new File(sstable.descriptor.filenameFor(sstable.descriptor.digestComponent)).exists())
             {
                 validator = DataIntegrityMetadata.fileDigestValidator(sstable.descriptor);
                 validator.validate();
             }
             else
             {
-                outputHandler.output("Data digest missing, assuming extended verification of disk atoms");
+                outputHandler.output("Data digest missing, assuming extended verification of disk values");
                 extended = true;
             }
         }
@@ -119,14 +121,14 @@ public class Verifier implements Closeable
         if ( !extended )
             return;
 
-        outputHandler.output("Extended Verify requested, proceeding to inspect atoms");
+        outputHandler.output("Extended Verify requested, proceeding to inspect values");
 
 
         try
         {
             ByteBuffer nextIndexKey = ByteBufferUtil.readWithShortLength(indexFile);
             {
-                long firstRowPositionFromIndex = rowIndexEntrySerializer.deserialize(indexFile, sstable.descriptor.version).position;
+                long firstRowPositionFromIndex = rowIndexEntrySerializer.deserialize(indexFile).position;
                 if (firstRowPositionFromIndex != 0)
                     markAndThrow();
             }
@@ -145,7 +147,7 @@ public class Verifier implements Closeable
                 DecoratedKey key = null;
                 try
                 {
-                    key = sstable.partitioner.decorateKey(ByteBufferUtil.readWithShortLength(dataFile));
+                    key = sstable.decorateKey(ByteBufferUtil.readWithShortLength(dataFile));
                 }
                 catch (Throwable th)
                 {
@@ -160,7 +162,7 @@ public class Verifier implements Closeable
                     nextIndexKey = indexFile.isEOF() ? null : ByteBufferUtil.readWithShortLength(indexFile);
                     nextRowPositionFromIndex = indexFile.isEOF()
                                              ? dataFile.length()
-                                             : rowIndexEntrySerializer.deserialize(indexFile, sstable.descriptor.version).position;
+                                             : rowIndexEntrySerializer.deserialize(indexFile).position;
                 }
                 catch (Throwable th)
                 {
@@ -185,7 +187,10 @@ public class Verifier implements Closeable
                         markAndThrow();
 
                     //mimic the scrub read path
-                    new SSTableIdentityIterator(sstable, dataFile, key, true);
+                    try (UnfilteredRowIterator iterator = new SSTableIdentityIterator(sstable, dataFile, key))
+                    {
+                    }
+
                     if ( (prevKey != null && prevKey.compareTo(key) > 0) || !key.getKey().equals(currentIndexKey) || dataStart != dataStartFromIndex )
                         markAndThrow();
                     

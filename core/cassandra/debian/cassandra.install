@@ -5,13 +5,14 @@ conf/commitlog_archiving.properties etc/cassandra
 conf/cassandra-topology.properties etc/cassandra
 conf/logback.xml etc/cassandra
 conf/logback-tools.xml etc/cassandra
+conf/jvm.options etc/cassandra
 conf/triggers/* etc/cassandra/triggers
 debian/cassandra.in.sh usr/share/cassandra
 debian/cassandra.conf etc/security/limits.d
 debian/cassandra-sysctl.conf etc/sysctl.d
 bin/cassandra usr/sbin
 bin/nodetool usr/bin
-bin/sstablekeys usr/bin
+bin/sstableutil usr/bin
 bin/sstableloader usr/bin
 bin/cqlsh usr/bin
 bin/cqlsh.py usr/bin

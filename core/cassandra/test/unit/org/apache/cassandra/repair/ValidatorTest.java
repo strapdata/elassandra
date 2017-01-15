@@ -17,56 +17,70 @@
  */
 package org.apache.cassandra.repair;
 
-import java.io.IOException;
 import java.net.InetAddress;
-import java.security.MessageDigest;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
-import org.apache.cassandra.io.util.SequentialWriter;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
+
+import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.compaction.CompactionsTest;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
-import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.BufferDecoratedKey;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.EmptyIterators;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.RowIndexEntry;
-import org.apache.cassandra.db.compaction.AbstractCompactedRow;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.io.sstable.ColumnStats;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.net.IMessageSink;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.net.IMessageSink;
 import org.apache.cassandra.repair.messages.RepairMessage;
 import org.apache.cassandra.repair.messages.ValidationComplete;
-import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.MerkleTree;
-import org.apache.cassandra.utils.concurrent.SimpleCondition;
+import org.apache.cassandra.utils.MerkleTrees;
+import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.UUIDGen;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class ValidatorTest
 {
+    private static final long TEST_TIMEOUT = 60; //seconds
+
     private static final String keyspace = "ValidatorTest";
     private static final String columnFamily = "Standard1";
-    private final IPartitioner partitioner = StorageService.getPartitioner();
+    private static IPartitioner partitioner;
 
     @BeforeClass
     public static void defineSchema() throws Exception
     {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(keyspace,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
+                                    KeyspaceParams.simple(1),
                                     SchemaLoader.standardCFMD(keyspace, columnFamily));
+        partitioner = Schema.instance.getCFMetaData(keyspace, columnFamily).partitioner;
     }
 
     @After
@@ -79,44 +93,17 @@ public class ValidatorTest
     public void testValidatorComplete() throws Throwable
     {
         Range<Token> range = new Range<>(partitioner.getMinimumToken(), partitioner.getRandomToken());
-        final RepairJobDesc desc = new RepairJobDesc(UUID.randomUUID(), UUID.randomUUID(), keyspace, columnFamily, range);
+        final RepairJobDesc desc = new RepairJobDesc(UUID.randomUUID(), UUID.randomUUID(), keyspace, columnFamily, Arrays.asList(range));
 
-        final SimpleCondition lock = new SimpleCondition();
-        MessagingService.instance().addMessageSink(new IMessageSink()
-        {
-            @SuppressWarnings("unchecked")
-            public boolean allowOutgoingMessage(MessageOut message, int id, InetAddress to)
-            {
-                try
-                {
-                    if (message.verb == MessagingService.Verb.REPAIR_MESSAGE)
-                    {
-                        RepairMessage m = (RepairMessage) message.payload;
-                        assertEquals(RepairMessage.Type.VALIDATION_COMPLETE, m.messageType);
-                        assertEquals(desc, m.desc);
-                        assertTrue(((ValidationComplete) m).success);
-                        assertNotNull(((ValidationComplete) m).tree);
-                    }
-                }
-                finally
-                {
-                    lock.signalAll();
-                }
-                return false;
-            }
-
-            public boolean allowIncomingMessage(MessageIn message, int id)
-            {
-                return false;
-            }
-        });
+        final CompletableFuture<MessageOut> outgoingMessageSink = registerOutgoingMessageSink();
 
         InetAddress remote = InetAddress.getByName("127.0.0.2");
 
         ColumnFamilyStore cfs = Keyspace.open(keyspace).getColumnFamilyStore(columnFamily);
 
         Validator validator = new Validator(desc, remote, 0);
-        MerkleTree tree = new MerkleTree(cfs.partitioner, validator.desc.range, MerkleTree.RECOMMENDED_DEPTH, (int) Math.pow(2, 15));
+        MerkleTrees tree = new MerkleTrees(partitioner);
+        tree.addMerkleTrees((int) Math.pow(2, 15), validator.desc.ranges);
         validator.prepare(cfs, tree);
 
         // and confirm that the tree was split
@@ -124,66 +111,118 @@ public class ValidatorTest
 
         // add a row
         Token mid = partitioner.midpoint(range.left, range.right);
-        validator.add(new CompactedRowStub(new BufferDecoratedKey(mid, ByteBufferUtil.bytes("inconceivable!"))));
+        validator.add(EmptyIterators.unfilteredRow(cfs.metadata, new BufferDecoratedKey(mid, ByteBufferUtil.bytes("inconceivable!")), false));
         validator.complete();
 
         // confirm that the tree was validated
         Token min = tree.partitioner().getMinimumToken();
         assertNotNull(tree.hash(new Range<>(min, min)));
 
-        if (!lock.isSignaled())
-            lock.await();
+        MessageOut message = outgoingMessageSink.get(TEST_TIMEOUT, TimeUnit.SECONDS);
+        assertEquals(MessagingService.Verb.REPAIR_MESSAGE, message.verb);
+        RepairMessage m = (RepairMessage) message.payload;
+        assertEquals(RepairMessage.Type.VALIDATION_COMPLETE, m.messageType);
+        assertEquals(desc, m.desc);
+        assertTrue(((ValidationComplete) m).success());
+        assertNotNull(((ValidationComplete) m).trees);
     }
 
-    private static class CompactedRowStub extends AbstractCompactedRow
-    {
-        private CompactedRowStub(DecoratedKey key)
-        {
-            super(key);
-        }
-
-        public RowIndexEntry write(long currentPosition, SequentialWriter out) throws IOException
-        {
-            throw new UnsupportedOperationException();
-        }
-
-        public void update(MessageDigest digest) { }
-
-        public ColumnStats columnStats()
-        {
-            throw new UnsupportedOperationException();
-        }
-
-        public void close() throws IOException { }
-    }
 
     @Test
     public void testValidatorFailed() throws Throwable
     {
         Range<Token> range = new Range<>(partitioner.getMinimumToken(), partitioner.getRandomToken());
-        final RepairJobDesc desc = new RepairJobDesc(UUID.randomUUID(), UUID.randomUUID(), keyspace, columnFamily, range);
+        final RepairJobDesc desc = new RepairJobDesc(UUID.randomUUID(), UUID.randomUUID(), keyspace, columnFamily, Arrays.asList(range));
 
-        final SimpleCondition lock = new SimpleCondition();
+        final CompletableFuture<MessageOut> outgoingMessageSink = registerOutgoingMessageSink();
+
+        InetAddress remote = InetAddress.getByName("127.0.0.2");
+
+        Validator validator = new Validator(desc, remote, 0);
+        validator.fail();
+
+        MessageOut message = outgoingMessageSink.get(TEST_TIMEOUT, TimeUnit.SECONDS);
+        assertEquals(MessagingService.Verb.REPAIR_MESSAGE, message.verb);
+        RepairMessage m = (RepairMessage) message.payload;
+        assertEquals(RepairMessage.Type.VALIDATION_COMPLETE, m.messageType);
+        assertEquals(desc, m.desc);
+        assertFalse(((ValidationComplete) m).success());
+        assertNull(((ValidationComplete) m).trees);
+    }
+
+    @Test
+    public void simpleValidationTest128() throws Exception
+    {
+        simpleValidationTest(128);
+    }
+
+    @Test
+    public void simpleValidationTest1500() throws Exception
+    {
+        simpleValidationTest(1500);
+    }
+
+    /**
+     * Test for CASSANDRA-5263
+     * 1. Create N rows
+     * 2. Run validation compaction
+     * 3. Expect merkle tree with size 2^(log2(n))
+     */
+    public void simpleValidationTest(int n) throws Exception
+    {
+        Keyspace ks = Keyspace.open(keyspace);
+        ColumnFamilyStore cfs = ks.getColumnFamilyStore(columnFamily);
+        cfs.clearUnsafe();
+
+        // disable compaction while flushing
+        cfs.disableAutoCompaction();
+
+        CompactionsTest.populate(keyspace, columnFamily, 0, n, 0); //ttl=3s
+
+        cfs.forceBlockingFlush();
+        assertEquals(1, cfs.getLiveSSTables().size());
+
+        // wait enough to force single compaction
+        TimeUnit.SECONDS.sleep(5);
+
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
+        UUID repairSessionId = UUIDGen.getTimeUUID();
+        final RepairJobDesc desc = new RepairJobDesc(repairSessionId, UUIDGen.getTimeUUID(), cfs.keyspace.getName(),
+                                               cfs.getColumnFamilyName(), Collections.singletonList(new Range<>(sstable.first.getToken(),
+                                                                                                                sstable.last.getToken())));
+
+        ActiveRepairService.instance.registerParentRepairSession(repairSessionId, FBUtilities.getBroadcastAddress(),
+                                                                 Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
+                                                                 false);
+
+        final CompletableFuture<MessageOut> outgoingMessageSink = registerOutgoingMessageSink();
+        Validator validator = new Validator(desc, FBUtilities.getBroadcastAddress(), 0, true);
+        CompactionManager.instance.submitValidation(cfs, validator);
+
+        MessageOut message = outgoingMessageSink.get(TEST_TIMEOUT, TimeUnit.SECONDS);
+        assertEquals(MessagingService.Verb.REPAIR_MESSAGE, message.verb);
+        RepairMessage m = (RepairMessage) message.payload;
+        assertEquals(RepairMessage.Type.VALIDATION_COMPLETE, m.messageType);
+        assertEquals(desc, m.desc);
+        assertTrue(((ValidationComplete) m).success());
+        MerkleTrees trees = ((ValidationComplete) m).trees;
+
+        Iterator<Map.Entry<Range<Token>, MerkleTree>> iterator = trees.iterator();
+        while (iterator.hasNext())
+        {
+            assertEquals(Math.pow(2, Math.ceil(Math.log(n) / Math.log(2))), iterator.next().getValue().size(), 0.0);
+        }
+        assertEquals(trees.rowCount(), n);
+    }
+
+    private CompletableFuture<MessageOut> registerOutgoingMessageSink()
+    {
+        final CompletableFuture<MessageOut> future = new CompletableFuture<>();
         MessagingService.instance().addMessageSink(new IMessageSink()
         {
-            @SuppressWarnings("unchecked")
             public boolean allowOutgoingMessage(MessageOut message, int id, InetAddress to)
             {
-                try
-                {
-                    if (message.verb == MessagingService.Verb.REPAIR_MESSAGE)
-                    {
-                        RepairMessage m = (RepairMessage) message.payload;
-                        assertEquals(RepairMessage.Type.VALIDATION_COMPLETE, m.messageType);
-                        assertEquals(desc, m.desc);
-                        assertFalse(((ValidationComplete) m).success);
-                        assertNull(((ValidationComplete) m).tree);
-                    }
-                }
-                finally
-                {
-                    lock.signalAll();
-                }
+                future.complete(message);
                 return false;
             }
 
@@ -192,13 +231,6 @@ public class ValidatorTest
                 return false;
             }
         });
-
-        InetAddress remote = InetAddress.getByName("127.0.0.2");
-
-        Validator validator = new Validator(desc, remote, 0);
-        validator.fail();
-
-        if (!lock.isSignaled())
-            lock.await();
+        return future;
     }
 }

@@ -17,18 +17,11 @@
  */
 package org.apache.cassandra.cql3.restrictions;
 
-import java.nio.ByteBuffer;
-
-import org.apache.cassandra.config.ColumnDefinition;
-
-import org.apache.cassandra.cql3.ColumnSpecification;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.statements.Bound;
-import org.apache.cassandra.db.composites.CompositesBuilder;
-import org.apache.cassandra.exceptions.InvalidRequestException;
-import static org.apache.cassandra.cql3.statements.RequestValidations.checkBindValueSet;
-import static org.apache.cassandra.cql3.statements.RequestValidations.checkFalse;
-import static org.apache.cassandra.cql3.statements.RequestValidations.checkNotNull;
+import org.apache.cassandra.db.MultiCBuilder;
+
+import org.apache.cassandra.config.ColumnDefinition;
 
 /**
  * Base class for <code>Restriction</code>s
@@ -72,13 +65,19 @@ abstract class AbstractRestriction  implements Restriction
     }
 
     @Override
+    public boolean isNotNull()
+    {
+        return false;
+    }
+
+    @Override
     public boolean hasBound(Bound b)
     {
         return true;
     }
 
     @Override
-    public CompositesBuilder appendBoundTo(CompositesBuilder builder, Bound bound, QueryOptions options)
+    public MultiCBuilder appendBoundTo(MultiCBuilder builder, Bound bound, QueryOptions options)
     {
         return appendTo(builder, options);
     }
@@ -87,16 +86,6 @@ abstract class AbstractRestriction  implements Restriction
     public boolean isInclusive(Bound b)
     {
         return true;
-    }
-
-    protected static ByteBuffer validateIndexedValue(ColumnSpecification columnSpec,
-                                                     ByteBuffer value)
-                                                     throws InvalidRequestException
-    {
-        checkNotNull(value, "Unsupported null value for column %s", columnSpec.name);
-        checkBindValueSet(value, "Unsupported unset value for column %s", columnSpec.name);
-        checkFalse(value.remaining() > 0xFFFF, "Index expression values may not be larger than 64K");
-        return value;
     }
 
     /**

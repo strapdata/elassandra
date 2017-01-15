@@ -33,9 +33,10 @@ public class ByteType extends AbstractType<Byte>
 
     ByteType()
     {
+        super(ComparisonType.CUSTOM);
     } // singleton
 
-    public int compare(ByteBuffer o1, ByteBuffer o2)
+    public int compareCustom(ByteBuffer o1, ByteBuffer o2)
     {
         return o1.get(o1.position()) - o2.get(o2.position());
     }
@@ -62,22 +63,11 @@ public class ByteType extends AbstractType<Byte>
 
     public Term fromJSONObject(Object parsed) throws MarshalException
     {
-        try
-        {
-            if (parsed instanceof String)
-                return new Constants.Value(fromString((String) parsed));
+        if (parsed instanceof String || parsed instanceof Number)
+            return new Constants.Value(fromString(String.valueOf(parsed)));
 
-            Number parsedNumber = (Number) parsed;
-            if (!(parsedNumber instanceof Byte))
-                throw new MarshalException(String.format("Expected a byte value, but got a %s: %s", parsed.getClass().getSimpleName(), parsed));
-
-            return new Constants.Value(getSerializer().serialize(parsedNumber.byteValue()));
-        }
-        catch (ClassCastException exc)
-        {
-            throw new MarshalException(String.format(
-                    "Expected a byte value, but got a %s: %s", parsed.getClass().getSimpleName(), parsed));
-        }
+        throw new MarshalException(String.format(
+                "Expected a byte value, but got a %s: %s", parsed.getClass().getSimpleName(), parsed));
     }
 
     @Override

@@ -147,6 +147,8 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
 
     public abstract Query searchFilter(String[] types);
 
+    public abstract SearchProcessor searchProcessor();
+
     public abstract long id();
 
     public abstract String source();

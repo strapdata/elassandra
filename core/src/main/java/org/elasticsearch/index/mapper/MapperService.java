@@ -39,7 +39,9 @@ import java.util.regex.Pattern;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.CQLFragmentParser;
 import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.cql3.CqlParser;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
@@ -66,6 +68,7 @@ import org.apache.lucene.util.BytesRef;
 import org.elassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.ElasticsearchGenerationException;
 import org.elasticsearch.Version;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.inject.Inject;
@@ -224,10 +227,15 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
         }
     }
 
+    
     public MapperService(Index index, Settings indexSettings, AnalysisService analysisService,
                          SimilarityLookupService similarityLookupService,
                          ScriptService scriptService, MapperRegistry mapperRegistry) {
         this(index, new IndexSettingsService(index, indexSettings), analysisService, similarityLookupService, scriptService, mapperRegistry);
+    }
+    
+    public String keyspace() {
+        return indexSettings().get(IndexMetaData.SETTING_KEYSPACE, index().name());
     }
     
     private void buildNativeOrUdtMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
@@ -285,7 +293,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
      */
     public static String DISCOVER = "discover";
     
-    public Map<String, Object> discoverTableMapping(final String ksName, final String type, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException {
+    public Map<String, Object> discoverTableMapping(final String type, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException {
         final String columnRegexp = (String)mapping.get(DISCOVER);
         final String cfName = InternalCassandraClusterService.typeToCfName(type);
         if (columnRegexp != null) {
@@ -296,6 +304,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                 properties = Maps.newHashMap();
                 mapping.put("properties", properties);
             }
+            String ksName = keyspace();
             try {
                 CFMetaData metadata = InternalCassandraClusterService.getCFMetaData(ksName, cfName);
                 List<String> pkColNames = new ArrayList<String>(metadata.partitionKeyColumns().size() + metadata.clusteringColumns().size());
@@ -303,10 +312,10 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                     pkColNames.add(cd.name.toString());
                 }
                 
-                UntypedResultSet result = QueryProcessor.executeInternal("SELECT column_name, validator FROM system.schema_columns WHERE keyspace_name=? and columnfamily_name=?", 
-                        new Object[] { ksName, cfName });
+                UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT column_name, type FROM system_schema.columns WHERE keyspace_name=? and table_name=?", 
+                        new Object[] { keyspace(), cfName });
                 for (Row row : result) {
-                    if (row.has("validator") && pattern.matcher(row.getString("column_name")).matches() && !row.getString("column_name").startsWith("_")) {
+                    if (row.has("type") && pattern.matcher(row.getString("column_name")).matches() && !row.getString("column_name").startsWith("_")) {
                         String columnName = row.getString("column_name");
                         Map<String,Object> props = (Map<String, Object>) properties.get(columnName);
                         if (props == null) {
@@ -323,7 +332,9 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                         if (metadata.getColumnDefinition(new ColumnIdentifier(columnName, true)).isStatic()) {
                             props.put(TypeParsers.CQL_STATIC_COLUMN, true);
                         }
-                        AbstractType<?> atype =  TypeParser.parse(row.getString("validator"));
+                        
+                        CQL3Type.Raw rawType = CQLFragmentParser.parseAny(CqlParser::comparatorType, row.getString("type"), "CQL type");
+                        AbstractType<?> atype =  rawType.prepare(ksName).getType();
                         buildCollectionMapping(props, atype);
                     }
                 }

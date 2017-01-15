@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,37 +19,29 @@ package org.apache.cassandra;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.*;
 
 import org.junit.After;
 import org.junit.BeforeClass;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.cache.CachingOptions;
 import org.apache.cassandra.config.*;
+import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.ColumnIdentifier;
-import org.apache.cassandra.db.*;
+import org.apache.cassandra.cql3.statements.IndexTarget;
+import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.db.compaction.LeveledCompactionStrategy;
-import org.apache.cassandra.db.index.PerRowSecondaryIndexTest;
-import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.gms.Gossiper;
-import org.apache.cassandra.io.compress.CompressionParameters;
-import org.apache.cassandra.io.compress.SnappyCompressor;
+import org.apache.cassandra.index.StubIndex;
 import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.locator.AbstractReplicationStrategy;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.schema.*;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.FBUtilities;
 
 public class SchemaLoader
 {
-    private static Logger logger = LoggerFactory.getLogger(SchemaLoader.class);
-
     @BeforeClass
     public static void loadSchema() throws ConfigurationException
     {
@@ -71,26 +63,7 @@ public class SchemaLoader
 
     public static void prepareServer()
     {
-        // Cleanup first
-        try
-        {
-            cleanupAndLeaveDirs();
-        }
-        catch (IOException e)
-        {
-            logger.error("Failed to cleanup and recreate directories and files.");
-            throw new RuntimeException(e);
-        }
-
-        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler()
-        {
-            public void uncaughtException(Thread t, Throwable e)
-            {
-                logger.error("Fatal exception in thread " + t, e);
-            }
-        });
-
-        Keyspace.setInitialized();
+       CQLTester.prepareServer();
     }
 
     public static void startGossiper()
@@ -101,7 +74,7 @@ public class SchemaLoader
 
     public static void schemaDefinition(String testName) throws ConfigurationException
     {
-        List<KSMetaData> schema = new ArrayList<KSMetaData>();
+        List<KeyspaceMetadata> schema = new ArrayList<KeyspaceMetadata>();
 
         // A whole bucket of shorthand
         String ks1 = testName + "Keyspace1";
@@ -116,13 +89,6 @@ public class SchemaLoader
         String ks_nocommit = testName + "NoCommitlogSpace";
         String ks_prsi = testName + "PerRowSecondaryIndex";
         String ks_cql = testName + "cql_keyspace";
-
-        Class<? extends AbstractReplicationStrategy> simple = SimpleStrategy.class;
-
-        Map<String, String> opts_rf1 = KSMetaData.optsWithRF(1);
-        Map<String, String> opts_rf2 = KSMetaData.optsWithRF(2);
-        Map<String, String> opts_rf3 = KSMetaData.optsWithRF(3);
-        Map<String, String> opts_rf5 = KSMetaData.optsWithRF(5);
 
         AbstractType bytes = BytesType.instance;
 
@@ -142,173 +108,147 @@ public class SchemaLoader
         leveledOptions.put("sstable_size_in_mb", "1");
 
         // Keyspace 1
-        schema.add(KSMetaData.testMetadata(ks1,
-                                           simple,
-                                           opts_rf1,
-
-                                           // Column Families
-                                           standardCFMD(ks1, "Standard1").compactionStrategyOptions(compactionOptions),
-                                           standardCFMD(ks1, "Standard2"),
-                                           standardCFMD(ks1, "Standard3"),
-                                           standardCFMD(ks1, "Standard4"),
-                                           standardCFMD(ks1, "StandardGCGS0").gcGraceSeconds(0),
-                                           standardCFMD(ks1, "StandardLong1"),
-                                           standardCFMD(ks1, "StandardLong2"),
-                                           CFMetaData.denseCFMetaData(ks1, "ValuesWithQuotes", BytesType.instance).defaultValidator(UTF8Type.instance),
-                                           superCFMD(ks1, "Super1", LongType.instance),
-                                           superCFMD(ks1, "Super2", LongType.instance),
-                                           superCFMD(ks1, "Super3", LongType.instance),
-                                           superCFMD(ks1, "Super4", UTF8Type.instance),
-                                           superCFMD(ks1, "Super5", bytes),
-                                           superCFMD(ks1, "Super6", LexicalUUIDType.instance, UTF8Type.instance),
-                                           indexCFMD(ks1, "Indexed1", true),
-                                           indexCFMD(ks1, "Indexed2", false),
-                                           CFMetaData.denseCFMetaData(ks1, "StandardInteger1", IntegerType.instance),
-                                           CFMetaData.denseCFMetaData(ks1, "StandardLong3", IntegerType.instance),
-                                           CFMetaData.denseCFMetaData(ks1, "Counter1", bytes).defaultValidator(CounterColumnType.instance),
-                                           CFMetaData.denseCFMetaData(ks1, "SuperCounter1", bytes, bytes).defaultValidator(CounterColumnType.instance),
-                                           superCFMD(ks1, "SuperDirectGC", BytesType.instance).gcGraceSeconds(0),
-                                           jdbcSparseCFMD(ks1, "JdbcInteger", IntegerType.instance).addColumnDefinition(integerColumn(ks1, "JdbcInteger")),
-                                           jdbcSparseCFMD(ks1, "JdbcUtf8", UTF8Type.instance).addColumnDefinition(utf8Column(ks1, "JdbcUtf8")),
-                                           jdbcCFMD(ks1, "JdbcLong", LongType.instance),
-                                           jdbcCFMD(ks1, "JdbcBytes", bytes),
-                                           jdbcCFMD(ks1, "JdbcAscii", AsciiType.instance),
-                                           CFMetaData.denseCFMetaData(ks1, "StandardComposite", composite),
-                                           CFMetaData.denseCFMetaData(ks1, "StandardComposite2", compositeMaxMin),
-                                           CFMetaData.denseCFMetaData(ks1, "StandardDynamicComposite", dynamicComposite),
-                                           standardCFMD(ks1, "StandardLeveled")
-                                                                               .compactionStrategyClass(LeveledCompactionStrategy.class)
-                                                                               .compactionStrategyOptions(leveledOptions),
-                                           standardCFMD(ks1, "legacyleveled")
-                                                                               .compactionStrategyClass(LeveledCompactionStrategy.class)
-                                                                               .compactionStrategyOptions(leveledOptions),
-                                           standardCFMD(ks1, "StandardLowIndexInterval").minIndexInterval(8)
-                                                                                        .maxIndexInterval(256)
-                                                                                        .caching(CachingOptions.NONE),
-                                           standardCFMD(ks1, "UUIDKeys").keyValidator(UUIDType.instance),
-                                           CFMetaData.denseCFMetaData(ks1, "MixedTypes", LongType.instance).keyValidator(UUIDType.instance).defaultValidator(BooleanType.instance),
-                                           CFMetaData.denseCFMetaData(ks1, "MixedTypesComposite", composite).keyValidator(composite).defaultValidator(BooleanType.instance),
-                                           standardCFMD(ks1, "AsciiKeys").keyValidator(AsciiType.instance)
-        ));
+        schema.add(KeyspaceMetadata.create(ks1,
+                KeyspaceParams.simple(1),
+                Tables.of(
+                // Column Families
+                standardCFMD(ks1, "Standard1").compaction(CompactionParams.scts(compactionOptions)),
+                standardCFMD(ks1, "Standard2"),
+                standardCFMD(ks1, "Standard3"),
+                standardCFMD(ks1, "Standard4"),
+                standardCFMD(ks1, "StandardGCGS0").gcGraceSeconds(0),
+                standardCFMD(ks1, "StandardLong1"),
+                standardCFMD(ks1, "StandardLong2"),
+                //CFMetaData.Builder.create(ks1, "ValuesWithQuotes").build(),
+                superCFMD(ks1, "Super1", LongType.instance),
+                superCFMD(ks1, "Super2", LongType.instance),
+                superCFMD(ks1, "Super3", LongType.instance),
+                superCFMD(ks1, "Super4", UTF8Type.instance),
+                superCFMD(ks1, "Super5", bytes),
+                superCFMD(ks1, "Super6", LexicalUUIDType.instance, UTF8Type.instance),
+                keysIndexCFMD(ks1, "Indexed1", true),
+                keysIndexCFMD(ks1, "Indexed2", false),
+                //CFMetaData.Builder.create(ks1, "StandardInteger1").withColumnNameComparator(IntegerType.instance).build(),
+                //CFMetaData.Builder.create(ks1, "StandardLong3").withColumnNameComparator(IntegerType.instance).build(),
+                //CFMetaData.Builder.create(ks1, "Counter1", false, false, true).build(),
+                //CFMetaData.Builder.create(ks1, "SuperCounter1", false, false, true, true).build(),
+                superCFMD(ks1, "SuperDirectGC", BytesType.instance).gcGraceSeconds(0),
+//                jdbcCFMD(ks1, "JdbcInteger", IntegerType.instance).addColumnDefinition(integerColumn(ks1, "JdbcInteger")),
+                jdbcCFMD(ks1, "JdbcUtf8", UTF8Type.instance).addColumnDefinition(utf8Column(ks1, "JdbcUtf8")),
+                jdbcCFMD(ks1, "JdbcLong", LongType.instance),
+                jdbcCFMD(ks1, "JdbcBytes", bytes),
+                jdbcCFMD(ks1, "JdbcAscii", AsciiType.instance),
+                //CFMetaData.Builder.create(ks1, "StandardComposite", false, true, false).withColumnNameComparator(composite).build(),
+                //CFMetaData.Builder.create(ks1, "StandardComposite2", false, true, false).withColumnNameComparator(compositeMaxMin).build(),
+                //CFMetaData.Builder.create(ks1, "StandardDynamicComposite", false, true, false).withColumnNameComparator(dynamicComposite).build(),
+                standardCFMD(ks1, "StandardLeveled").compaction(CompactionParams.lcs(leveledOptions)),
+                standardCFMD(ks1, "legacyleveled").compaction(CompactionParams.lcs(leveledOptions)),
+                standardCFMD(ks1, "StandardLowIndexInterval").minIndexInterval(8)
+                                                             .maxIndexInterval(256)
+                                                             .caching(CachingParams.CACHE_NOTHING)
+                //CFMetaData.Builder.create(ks1, "UUIDKeys").addPartitionKey("key",UUIDType.instance).build(),
+                //CFMetaData.Builder.create(ks1, "MixedTypes").withColumnNameComparator(LongType.instance).addPartitionKey("key", UUIDType.instance).build(),
+                //CFMetaData.Builder.create(ks1, "MixedTypesComposite", false, true, false).withColumnNameComparator(composite).addPartitionKey("key", composite).build(),
+                //CFMetaData.Builder.create(ks1, "AsciiKeys").addPartitionKey("key", AsciiType.instance).build()
+        )));
 
         // Keyspace 2
-        schema.add(KSMetaData.testMetadata(ks2,
-                                           simple,
-                                           opts_rf1,
-
-                                           // Column Families
-                                           standardCFMD(ks2, "Standard1"),
-                                           standardCFMD(ks2, "Standard3"),
-                                           superCFMD(ks2, "Super3", bytes),
-                                           superCFMD(ks2, "Super4", TimeUUIDType.instance),
-                                           indexCFMD(ks2, "Indexed1", true),
-                                           compositeIndexCFMD(ks2, "Indexed2", true),
-                                           compositeIndexCFMD(ks2, "Indexed3", true).gcGraceSeconds(0)));
+        schema.add(KeyspaceMetadata.create(ks2,
+                KeyspaceParams.simple(1),
+                Tables.of(
+                // Column Families
+                standardCFMD(ks2, "Standard1"),
+                standardCFMD(ks2, "Standard3"),
+                superCFMD(ks2, "Super3", bytes),
+                superCFMD(ks2, "Super4", TimeUUIDType.instance),
+                keysIndexCFMD(ks2, "Indexed1", true),
+                compositeIndexCFMD(ks2, "Indexed2", true),
+                compositeIndexCFMD(ks2, "Indexed3", true).gcGraceSeconds(0))));
 
         // Keyspace 3
-        schema.add(KSMetaData.testMetadata(ks3,
-                                           simple,
-                                           opts_rf5,
-
-                                           // Column Families
-                                           standardCFMD(ks3, "Standard1"),
-                                           indexCFMD(ks3, "Indexed1", true)));
+        schema.add(KeyspaceMetadata.create(ks3,
+                KeyspaceParams.simple(5),
+                Tables.of(
+                standardCFMD(ks3, "Standard1"),
+                keysIndexCFMD(ks3, "Indexed1", true))));
 
         // Keyspace 4
-        schema.add(KSMetaData.testMetadata(ks4,
-                                           simple,
-                                           opts_rf3,
-
-                                           // Column Families
-                                           standardCFMD(ks4, "Standard1"),
-                                           standardCFMD(ks4, "Standard3"),
-                                           superCFMD(ks4, "Super3", bytes),
-                                           superCFMD(ks4, "Super4", TimeUUIDType.instance),
-                                           CFMetaData.denseCFMetaData(ks4, "Super5", TimeUUIDType.instance, bytes)));
+        schema.add(KeyspaceMetadata.create(ks4,
+                KeyspaceParams.simple(3),
+                Tables.of(
+                standardCFMD(ks4, "Standard1"),
+                standardCFMD(ks4, "Standard3"),
+                superCFMD(ks4, "Super3", bytes),
+                superCFMD(ks4, "Super4", TimeUUIDType.instance),
+                superCFMD(ks4, "Super5", TimeUUIDType.instance, BytesType.instance))));
 
         // Keyspace 5
-        schema.add(KSMetaData.testMetadata(ks5,
-                                           simple,
-                                           opts_rf2,
-                                           standardCFMD(ks5, "Standard1"),
-                                           standardCFMD(ks5, "Counter1")
-                                                   .defaultValidator(CounterColumnType.instance)));
-
+        schema.add(KeyspaceMetadata.create(ks5,
+                KeyspaceParams.simple(2),
+                Tables.of(standardCFMD(ks5, "Standard1"))));
         // Keyspace 6
-        schema.add(KSMetaData.testMetadata(ks6,
-                                           simple,
-                                           opts_rf1,
-                                           indexCFMD(ks6, "Indexed1", true)));
+        schema.add(KeyspaceMetadata.create(ks6,
+                KeyspaceParams.simple(1),
+                Tables.of(keysIndexCFMD(ks6, "Indexed1", true))));
 
         // KeyCacheSpace
-        schema.add(KSMetaData.testMetadata(ks_kcs,
-                                           simple,
-                                           opts_rf1,
-                                           standardCFMD(ks_kcs, "Standard1"),
-                                           standardCFMD(ks_kcs, "Standard2"),
-                                           standardCFMD(ks_kcs, "Standard3")));
+        schema.add(KeyspaceMetadata.create(ks_kcs,
+                KeyspaceParams.simple(1),
+                Tables.of(
+                standardCFMD(ks_kcs, "Standard1"),
+                standardCFMD(ks_kcs, "Standard2"),
+                standardCFMD(ks_kcs, "Standard3"))));
 
         // RowCacheSpace
-        schema.add(KSMetaData.testMetadata(ks_rcs,
-                                           simple,
-                                           opts_rf1,
-                                           standardCFMD(ks_rcs, "CFWithoutCache").caching(CachingOptions.NONE),
-                                           standardCFMD(ks_rcs, "CachedCF").caching(CachingOptions.ALL),
-                                           standardCFMD(ks_rcs, "CachedIntCF").
-                                                   defaultValidator(IntegerType.instance).
-                                                   caching(new CachingOptions(new CachingOptions.KeyCache(CachingOptions.KeyCache.Type.ALL),
-                                                                                  new CachingOptions.RowCache(CachingOptions.RowCache.Type.HEAD, 100)))));
+        schema.add(KeyspaceMetadata.create(ks_rcs,
+                KeyspaceParams.simple(1),
+                Tables.of(
+                standardCFMD(ks_rcs, "CFWithoutCache").caching(CachingParams.CACHE_NOTHING),
+                standardCFMD(ks_rcs, "CachedCF").caching(CachingParams.CACHE_EVERYTHING),
+                standardCFMD(ks_rcs, "CachedNoClustering", 1, IntegerType.instance, IntegerType.instance, null).caching(CachingParams.CACHE_EVERYTHING),
+                standardCFMD(ks_rcs, "CachedIntCF").
+                        caching(new CachingParams(true, 100)))));
 
         // CounterCacheSpace
-        schema.add(KSMetaData.testMetadata(ks_ccs,
-                                           simple,
-                                           opts_rf1,
-                                           standardCFMD(ks_ccs, "Counter1").defaultValidator(CounterColumnType.instance),
-                                           standardCFMD(ks_ccs, "Counter2").defaultValidator(CounterColumnType.instance)));
+        /*schema.add(KeyspaceMetadata.testMetadata(ks_ccs,
+                simple,
+                opts_rf1,
+                CFMetaData.Builder.create(ks_ccs, "Counter1", false, false, true).build(),
+                CFMetaData.Builder.create(ks_ccs, "Counter1", false, false, true).build()));*/
 
-        schema.add(KSMetaData.testMetadataNotDurable(ks_nocommit,
-                                                     simple,
-                                                     opts_rf1,
-                                                     standardCFMD(ks_nocommit, "Standard1")));
-
-        // PerRowSecondaryIndexTest
-        schema.add(KSMetaData.testMetadata(ks_prsi,
-                                           simple,
-                                           opts_rf1,
-                                           perRowIndexedCFMD(ks_prsi, "Indexed1")));
+        schema.add(KeyspaceMetadata.create(ks_nocommit, KeyspaceParams.simpleTransient(1), Tables.of(
+                standardCFMD(ks_nocommit, "Standard1"))));
 
         // CQLKeyspace
-        schema.add(KSMetaData.testMetadata(ks_cql,
-                                           simple,
-                                           opts_rf1,
+        schema.add(KeyspaceMetadata.create(ks_cql, KeyspaceParams.simple(1), Tables.of(
 
-                                           // Column Families
-                                           CFMetaData.compile("CREATE TABLE table1 ("
-                                                              + "k int PRIMARY KEY,"
-                                                              + "v1 text,"
-                                                              + "v2 int"
-                                                              + ")", ks_cql),
+                // Column Families
+                CFMetaData.compile("CREATE TABLE table1 ("
+                        + "k int PRIMARY KEY,"
+                        + "v1 text,"
+                        + "v2 int"
+                        + ")", ks_cql),
 
-                                           CFMetaData.compile("CREATE TABLE table2 ("
-                                                              + "k text,"
-                                                              + "c text,"
-                                                              + "v text,"
-                                                              + "PRIMARY KEY (k, c))", ks_cql),
-                                           CFMetaData.compile("CREATE TABLE foo ("
-                                                   + "bar text, "
-                                                   + "baz text, "
-                                                   + "qux text, "
-                                                   + "PRIMARY KEY(bar, baz) ) "
-                                                   + "WITH COMPACT STORAGE", ks_cql),
-                                           CFMetaData.compile("CREATE TABLE foofoo ("
-                                                   + "bar text, "
-                                                   + "baz text, "
-                                                   + "qux text, "
-                                                   + "quz text, "
-                                                   + "foo text, "
-                                                   + "PRIMARY KEY((bar, baz), qux, quz) ) "
-                                                   + "WITH COMPACT STORAGE", ks_cql)
-                                           ));
+                CFMetaData.compile("CREATE TABLE table2 ("
+                        + "k text,"
+                        + "c text,"
+                        + "v text,"
+                        + "PRIMARY KEY (k, c))", ks_cql),
+                CFMetaData.compile("CREATE TABLE foo ("
+                        + "bar text, "
+                        + "baz text, "
+                        + "qux text, "
+                        + "PRIMARY KEY(bar, baz) ) "
+                        + "WITH COMPACT STORAGE", ks_cql),
+                CFMetaData.compile("CREATE TABLE foofoo ("
+                        + "bar text, "
+                        + "baz text, "
+                        + "qux text, "
+                        + "quz text, "
+                        + "foo text, "
+                        + "PRIMARY KEY((bar, baz), qux, quz) ) "
+                        + "WITH COMPACT STORAGE", ks_cql)
+        )));
 
 
         if (Boolean.parseBoolean(System.getProperty("cassandra.test.compression", "false")))
@@ -316,144 +256,225 @@ public class SchemaLoader
 
         // if you're messing with low-level sstable stuff, it can be useful to inject the schema directly
         // Schema.instance.load(schemaDefinition());
-        for (KSMetaData ksm : schema)
+        for (KeyspaceMetadata ksm : schema)
             MigrationManager.announceNewKeyspace(ksm, false);
     }
 
-    public static void createKeyspace(String keyspaceName,
-                                      Class<? extends AbstractReplicationStrategy> strategy,
-                                      Map<String, String> options,
-                                      CFMetaData... cfmetas) throws ConfigurationException
+    public static void createKeyspace(String name, KeyspaceParams params, CFMetaData... tables)
     {
-        createKeyspace(keyspaceName, true, true, strategy, options, cfmetas);
+        MigrationManager.announceNewKeyspace(KeyspaceMetadata.create(name, params, Tables.of(tables)), true);
     }
 
-    public static void createKeyspace(String keyspaceName,
-                                      boolean durable,
-                                      boolean announceLocally,
-                                      Class<? extends AbstractReplicationStrategy> strategy,
-                                      Map<String, String> options,
-                                      CFMetaData... cfmetas) throws ConfigurationException
+    public static void createKeyspace(String name, KeyspaceParams params, Tables tables, Types types)
     {
-        KSMetaData ksm = durable ? KSMetaData.testMetadata(keyspaceName, strategy, options, cfmetas)
-                                 : KSMetaData.testMetadataNotDurable(keyspaceName, strategy, options, cfmetas);
-        MigrationManager.announceNewKeyspace(ksm, announceLocally);
+        MigrationManager.announceNewKeyspace(KeyspaceMetadata.create(name, params, tables, Views.none(), types, Functions.none()), true);
     }
 
     public static ColumnDefinition integerColumn(String ksName, String cfName)
     {
         return new ColumnDefinition(ksName,
                                     cfName,
-                                    new ColumnIdentifier(IntegerType.instance.fromString("42"), IntegerType.instance),
+                                    ColumnIdentifier.getInterned(IntegerType.instance.fromString("42"), IntegerType.instance),
                                     UTF8Type.instance,
-                                    null,
-                                    null,
-                                    null,
-                                    null,
+                                    ColumnDefinition.NO_POSITION,
                                     ColumnDefinition.Kind.REGULAR);
     }
 
-    private static ColumnDefinition utf8Column(String ksName, String cfName)
+    public static ColumnDefinition utf8Column(String ksName, String cfName)
     {
         return new ColumnDefinition(ksName,
                                     cfName,
-                                    new ColumnIdentifier("fortytwo", true),
+                                    ColumnIdentifier.getInterned("fortytwo", true),
                                     UTF8Type.instance,
-                                    null,
-                                    null,
-                                    null,
-                                    null,
+                                    ColumnDefinition.NO_POSITION,
                                     ColumnDefinition.Kind.REGULAR);
     }
 
     public static CFMetaData perRowIndexedCFMD(String ksName, String cfName)
     {
         final Map<String, String> indexOptions = Collections.singletonMap(
-                                                      SecondaryIndex.CUSTOM_INDEX_OPTION_NAME,
-                                                      PerRowSecondaryIndexTest.TestIndex.class.getName());
+                                                      IndexTarget.CUSTOM_INDEX_OPTION_NAME,
+                                                      StubIndex.class.getName());
 
-        CFMetaData cfm =  CFMetaData.sparseCFMetaData(ksName, cfName, AsciiType.instance).keyValidator(AsciiType.instance);
+        CFMetaData cfm =  CFMetaData.Builder.create(ksName, cfName)
+                .addPartitionKey("key", AsciiType.instance)
+                .build();
 
-        ByteBuffer cName = ByteBufferUtil.bytes("indexed");
-        return cfm.addOrReplaceColumnDefinition(ColumnDefinition.regularDef(cfm, cName, AsciiType.instance, null)
-                                                                .setIndex("indexe1", IndexType.CUSTOM, indexOptions));
+        ColumnDefinition indexedColumn = ColumnDefinition.regularDef(ksName, cfName, "indexed", AsciiType.instance);
+        cfm.addOrReplaceColumnDefinition(indexedColumn);
+
+        cfm.indexes(
+            cfm.getIndexes()
+               .with(IndexMetadata.fromIndexTargets(cfm,
+                                                    Collections.singletonList(new IndexTarget(indexedColumn.name,
+                                                                                              IndexTarget.Type.VALUES)),
+                                                    "indexe1",
+                                                    IndexMetadata.Kind.CUSTOM,
+                                                    indexOptions)));
+        return cfm;
     }
 
-    private static void useCompression(List<KSMetaData> schema)
+    private static void useCompression(List<KeyspaceMetadata> schema)
     {
-        for (KSMetaData ksm : schema)
-        {
-            for (CFMetaData cfm : ksm.cfMetaData().values())
-            {
-                cfm.compressionParameters(new CompressionParameters(SnappyCompressor.instance));
-            }
-        }
+        for (KeyspaceMetadata ksm : schema)
+            for (CFMetaData cfm : ksm.tablesAndViews())
+                cfm.compression(CompressionParams.snappy());
+    }
+
+    public static CFMetaData counterCFMD(String ksName, String cfName)
+    {
+        return CFMetaData.Builder.create(ksName, cfName, false, true, true)
+                .addPartitionKey("key", AsciiType.instance)
+                .addClusteringColumn("name", AsciiType.instance)
+                .addRegularColumn("val", CounterColumnType.instance)
+                .addRegularColumn("val2", CounterColumnType.instance)
+                .build()
+                .compression(getCompressionParameters());
     }
 
     public static CFMetaData standardCFMD(String ksName, String cfName)
     {
-        return CFMetaData.denseCFMetaData(ksName, cfName, BytesType.instance).compressionParameters(getCompressionParameters());
+        return standardCFMD(ksName, cfName, 1, AsciiType.instance);
     }
 
-    public static CFMetaData standardCFMD(String ksName, String cfName, AbstractType<?> comparator)
+    public static CFMetaData standardCFMD(String ksName, String cfName, int columnCount, AbstractType<?> keyType)
     {
-        return CFMetaData.denseCFMetaData(ksName, cfName, comparator).compressionParameters(getCompressionParameters());
+        return standardCFMD(ksName, cfName, columnCount, keyType, AsciiType.instance);
     }
 
+    public static CFMetaData standardCFMD(String ksName, String cfName, int columnCount, AbstractType<?> keyType, AbstractType<?> valType)
+    {
+        return standardCFMD(ksName, cfName, columnCount, keyType, valType, AsciiType.instance);
+    }
+
+    public static CFMetaData standardCFMD(String ksName, String cfName, int columnCount, AbstractType<?> keyType, AbstractType<?> valType, AbstractType<?> clusteringType)
+    {
+        CFMetaData.Builder builder;
+        builder = CFMetaData.Builder.create(ksName, cfName)
+                                    .addPartitionKey("key", keyType)
+                                    .addRegularColumn("val", valType);
+
+        if(clusteringType != null)
+            builder = builder.addClusteringColumn("name", clusteringType);
+
+        for (int i = 0; i < columnCount; i++)
+            builder.addRegularColumn("val" + i, AsciiType.instance);
+
+        return builder.build()
+                      .compression(getCompressionParameters());
+    }
+
+
+    public static CFMetaData denseCFMD(String ksName, String cfName)
+    {
+        return denseCFMD(ksName, cfName, AsciiType.instance);
+    }
+    public static CFMetaData denseCFMD(String ksName, String cfName, AbstractType cc)
+    {
+        return denseCFMD(ksName, cfName, cc, null);
+    }
+    public static CFMetaData denseCFMD(String ksName, String cfName, AbstractType cc, AbstractType subcc)
+    {
+        AbstractType comp = cc;
+        if (subcc != null)
+            comp = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{cc, subcc}));
+
+        return CFMetaData.Builder.createDense(ksName, cfName, subcc != null, false)
+            .addPartitionKey("key", AsciiType.instance)
+            .addClusteringColumn("cols", comp)
+            .addRegularColumn("val", AsciiType.instance)
+            .build()
+            .compression(getCompressionParameters());
+    }
+
+    // TODO: Fix superCFMD failing on legacy table creation. Seems to be applying composite comparator to partition key
     public static CFMetaData superCFMD(String ksName, String cfName, AbstractType subcc)
     {
-        return superCFMD(ksName, cfName, BytesType.instance, subcc).compressionParameters(getCompressionParameters());
+        return superCFMD(ksName, cfName, BytesType.instance, subcc);
     }
-
     public static CFMetaData superCFMD(String ksName, String cfName, AbstractType cc, AbstractType subcc)
     {
-        return CFMetaData.denseCFMetaData(ksName, cfName, cc, subcc).compressionParameters(getCompressionParameters());
+        return superCFMD(ksName, cfName, "cols", cc, subcc);
     }
-
-    public static CFMetaData indexCFMD(String ksName, String cfName, final Boolean withIdxType) throws ConfigurationException
+    public static CFMetaData superCFMD(String ksName, String cfName, String ccName, AbstractType cc, AbstractType subcc)
     {
-        CFMetaData cfm = CFMetaData.sparseCFMetaData(ksName, cfName, BytesType.instance).keyValidator(AsciiType.instance);
+        //This is busted
+//        return CFMetaData.Builder.createSuper(ksName, cfName, false)
+//            .addPartitionKey("0", BytesType.instance)
+//            .addClusteringColumn("1", cc)
+//            .addClusteringColumn("2", subcc)
+//            .addRegularColumn("3", AsciiType.instance)
+//            .build();
+        return standardCFMD(ksName, cfName);
 
-        ByteBuffer cName = ByteBufferUtil.bytes("birthdate");
-        IndexType keys = withIdxType ? IndexType.KEYS : null;
-        return cfm.addColumnDefinition(ColumnDefinition.regularDef(cfm, cName, LongType.instance, null)
-                                                       .setIndex(withIdxType ? ByteBufferUtil.bytesToHex(cName) : null, keys, null))
-                                      .compressionParameters(getCompressionParameters());
     }
-
-    public static CFMetaData compositeIndexCFMD(String ksName, String cfName, final Boolean withIdxType) throws ConfigurationException
+    public static CFMetaData compositeIndexCFMD(String ksName, String cfName, boolean withIndex) throws ConfigurationException
     {
-        final CompositeType composite = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{UTF8Type.instance, UTF8Type.instance})); 
-        CFMetaData cfm = CFMetaData.sparseCFMetaData(ksName, cfName, composite);
+        // the withIndex flag exists to allow tests index creation
+        // on existing columns
+        CFMetaData cfm = CFMetaData.Builder.create(ksName, cfName)
+                .addPartitionKey("key", AsciiType.instance)
+                .addClusteringColumn("c1", AsciiType.instance)
+                .addRegularColumn("birthdate", LongType.instance)
+                .addRegularColumn("notbirthdate", LongType.instance)
+                .build();
 
-        ByteBuffer cName = ByteBufferUtil.bytes("col1");
-        IndexType idxType = withIdxType ? IndexType.COMPOSITES : null;
-        return cfm.addColumnDefinition(ColumnDefinition.regularDef(cfm, cName, UTF8Type.instance, 1)
-                                                       .setIndex(withIdxType ? "col1_idx" : null, idxType, Collections.<String, String>emptyMap()))
-                                       .compressionParameters(getCompressionParameters());
+        if (withIndex)
+            cfm.indexes(
+                cfm.getIndexes()
+                   .with(IndexMetadata.fromIndexTargets(cfm,
+                                                        Collections.singletonList(
+                                                            new IndexTarget(new ColumnIdentifier("birthdate", true),
+                                                                            IndexTarget.Type.VALUES)),
+                                                        "birthdate_key_index",
+                                                        IndexMetadata.Kind.COMPOSITES,
+                                                        Collections.EMPTY_MAP)));
+
+        return cfm.compression(getCompressionParameters());
+    }
+    public static CFMetaData keysIndexCFMD(String ksName, String cfName, boolean withIndex) throws ConfigurationException
+    {
+        CFMetaData cfm = CFMetaData.Builder.createDense(ksName, cfName, false, false)
+                                           .addPartitionKey("key", AsciiType.instance)
+                                           .addClusteringColumn("c1", AsciiType.instance)
+                                           .addStaticColumn("birthdate", LongType.instance)
+                                           .addStaticColumn("notbirthdate", LongType.instance)
+                                           .addRegularColumn("value", LongType.instance)
+                                           .build();
+
+        if (withIndex)
+            cfm.indexes(
+                cfm.getIndexes()
+                   .with(IndexMetadata.fromIndexTargets(cfm,
+                                                        Collections.singletonList(
+                                                            new IndexTarget(new ColumnIdentifier("birthdate", true),
+                                                                            IndexTarget.Type.VALUES)),
+                                                         "birthdate_composite_index",
+                                                         IndexMetadata.Kind.KEYS,
+                                                         Collections.EMPTY_MAP)));
+
+
+        return cfm.compression(getCompressionParameters());
     }
     
-    private static CFMetaData jdbcCFMD(String ksName, String cfName, AbstractType comp)
+    public static CFMetaData jdbcCFMD(String ksName, String cfName, AbstractType comp)
     {
-        return CFMetaData.denseCFMetaData(ksName, cfName, comp).defaultValidator(comp).compressionParameters(getCompressionParameters());
+        return CFMetaData.Builder.create(ksName, cfName).addPartitionKey("key", BytesType.instance)
+                                                        .build()
+                                                        .compression(getCompressionParameters());
     }
 
-    public static CFMetaData jdbcSparseCFMD(String ksName, String cfName, AbstractType comp)
-    {
-        return CFMetaData.sparseCFMetaData(ksName, cfName, comp).defaultValidator(comp).compressionParameters(getCompressionParameters());
-    }
-
-    public static CompressionParameters getCompressionParameters()
+    public static CompressionParams getCompressionParameters()
     {
         return getCompressionParameters(null);
     }
 
-    public static CompressionParameters getCompressionParameters(Integer chunkSize)
+    public static CompressionParams getCompressionParameters(Integer chunkSize)
     {
         if (Boolean.parseBoolean(System.getProperty("cassandra.test.compression", "false")))
-            return new CompressionParameters(SnappyCompressor.instance, chunkSize, Collections.<String, String>emptyMap());
-        else
-            return new CompressionParameters(null);
+            return CompressionParams.snappy(chunkSize);
+
+        return CompressionParams.noCompression();
     }
 
     public static void cleanupAndLeaveDirs() throws IOException
@@ -503,25 +524,19 @@ public class SchemaLoader
 
     public static void insertData(String keyspace, String columnFamily, int offset, int numberOfRows)
     {
+        CFMetaData cfm = Schema.instance.getCFMetaData(keyspace, columnFamily);
+
         for (int i = offset; i < offset + numberOfRows; i++)
         {
-            ByteBuffer key = ByteBufferUtil.bytes("key" + i);
-            Mutation mutation = new Mutation(keyspace, key);
-            mutation.add(columnFamily, Util.cellname("col" + i), ByteBufferUtil.bytes("val" + i), System.currentTimeMillis());
-            mutation.applyUnsafe();
+            RowUpdateBuilder builder = new RowUpdateBuilder(cfm, FBUtilities.timestampMicros(), ByteBufferUtil.bytes("key"+i));
+            if (cfm.clusteringColumns() != null && !cfm.clusteringColumns().isEmpty())
+                builder.clustering(ByteBufferUtil.bytes("col"+ i)).add("val", ByteBufferUtil.bytes("val" + i));
+            else
+                builder.add("val", ByteBufferUtil.bytes("val"+i));
+            builder.build().apply();
         }
     }
 
-    /* usually used to populate the cache */
-    public static void readData(String keyspace, String columnFamily, int offset, int numberOfRows)
-    {
-        ColumnFamilyStore store = Keyspace.open(keyspace).getColumnFamilyStore(columnFamily);
-        for (int i = offset; i < offset + numberOfRows; i++)
-        {
-            DecoratedKey key = Util.dk("key" + i);
-            store.getColumnFamily(Util.namesQueryFilter(store, key, "col" + i));
-        }
-    }
 
     public static void cleanupSavedCaches()
     {

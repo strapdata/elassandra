@@ -76,6 +76,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
     static {
         SILENT_SHUTDOWN_STATES.addAll(DEAD_STATES);
         SILENT_SHUTDOWN_STATES.add(VersionedValue.STATUS_BOOTSTRAPPING);
+        SILENT_SHUTDOWN_STATES.add(VersionedValue.STATUS_BOOTSTRAPPING_REPLACE);
     }
 
     private volatile ScheduledFuture<?> scheduledGossipTask;
@@ -333,9 +334,11 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
         if (epState == null)
             return;
 
-        logger.debug("Convicting {} with status {} - alive {}", endpoint, getGossipStatus(epState), epState.isAlive());
         if (!epState.isAlive())
             return;
+
+        logger.debug("Convicting {} with status {} - alive {}", endpoint, getGossipStatus(epState), epState.isAlive());
+
 
         if (isShutdown(endpoint))
         {
@@ -579,17 +582,6 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
         }
         else
         {
-            try
-            {
-                tokens = StorageService.instance.getTokenMetadata().getTokens(endpoint);
-            }
-            catch (Throwable th)
-            {
-                JVMStabilityInspector.inspectThrowable(th);
-                // TODO this is broken
-                logger.warn("Unable to calculate tokens for {}.  Will use a random one", address);
-                tokens = Collections.singletonList(StorageService.getPartitioner().getRandomToken());
-            }
             int generation = epState.getHeartBeatState().getGeneration();
             int heartbeat = epState.getHeartBeatState().getHeartBeatVersion();
             logger.info("Sleeping for {}ms to ensure {} does not change", StorageService.RING_DELAY, endpoint);
@@ -604,6 +596,18 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
                 throw new RuntimeException("Endpoint still alive: " + endpoint + " heartbeat changed while trying to assassinate it");
             epState.updateTimestamp(); // make sure we don't evict it too soon
             epState.getHeartBeatState().forceNewerGenerationUnsafe();
+        }
+
+        try
+        {
+            tokens = StorageService.instance.getTokenMetadata().getTokens(endpoint);
+        }
+        catch (Throwable th)
+        {
+            JVMStabilityInspector.inspectThrowable(th);
+            // TODO this is broken
+            logger.warn("Unable to calculate tokens for {}.  Will use a random one", address);
+            tokens = Collections.singletonList(StorageService.instance.getTokenMetadata().partitioner.getRandomToken());
         }
 
         // do not pass go, do not collect 200 dollars, just gtfo
@@ -811,6 +815,20 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
     public EndpointState getEndpointStateForEndpoint(InetAddress ep)
     {
         return endpointStateMap.get(ep);
+    }
+
+    public boolean valuesEqual(InetAddress ep1, InetAddress ep2, ApplicationState as)
+    {
+        EndpointState state1 = getEndpointStateForEndpoint(ep1);
+        EndpointState state2 = getEndpointStateForEndpoint(ep2);
+
+        if (state1 == null || state2 == null)
+            return false;
+
+        VersionedValue value1 = state1.getApplicationState(as);
+        VersionedValue value2 = state2.getApplicationState(as);
+
+        return !(value1 == null || value2 == null) && value1.value.equals(value2.value);
     }
 
     // removes ALL endpoint states; should only be called after shadow gossip
@@ -1443,7 +1461,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
     public void stop()
     {
         EndpointState mystate = endpointStateMap.get(FBUtilities.getBroadcastAddress());
-        if (mystate != null && !isSilentShutdownState(mystate))
+        if (mystate != null && !isSilentShutdownState(mystate) && StorageService.instance.isJoined())
         {
             logger.info("Announcing shutdown");
             addLocalApplicationState(ApplicationState.STATUS, StorageService.instance.valueFactory.shutdown(true));
@@ -1453,7 +1471,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
             Uninterruptibles.sleepUninterruptibly(Integer.getInteger("cassandra.shutdown_announce_in_ms", 2000), TimeUnit.MILLISECONDS);
         }
         else
-            logger.warn("No local state or state is in silent shutdown, not announcing shutdown");
+            logger.warn("No local state, state is in silent shutdown, or node hasn't joined, not announcing shutdown");
         if (scheduledGossipTask != null)
             scheduledGossipTask.cancel(false);
     }

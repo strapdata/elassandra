@@ -80,13 +80,20 @@ public class YamlTestConfigurationLoader extends YamlConfigurationLoader
             constructor.setPropertyUtils(propertiesChecker);
             Yaml yaml = new Yaml(constructor);
             Config result = yaml.loadAs(new ByteArrayInputStream(configBytes), Config.class);
-            result.configHintedHandoff();
+            //result.configHintedHandoff();
             
             SimpleDateFormat sdf =  new SimpleDateFormat("yyyyMMdd-hhmmss", Locale.ROOT);
-            String datadir = System.getProperty("cassandra.storagedir", ".") + File.separator + sdf.format(new Date()) + "_" + new Random().nextInt();
+            String datadir = System.getProperty("cassandra.storagedir", ".") + File.separator + sdf.format(new Date()) + "_" + Integer.getInteger("cassandra.node_ordinal",0);
             result.commitlog_directory = datadir + File.separator + "commitlog";
             result.saved_caches_directory = datadir + File.separator + "saved_caches";
             result.data_file_directories = new String[] { datadir + File.separator + "data" };
+            
+            // replace the last number of listen+rpc addresses by the value of cassandra.node_ordinal.
+            int ordinal = Integer.getInteger("cassandra.node_ordinal", 0); // env var
+            result.listen_address = result.listen_address.substring(0, result.listen_address.lastIndexOf('.')) + (ordinal+1);
+            if (result.rpc_address != null)
+                result.rpc_address = result.rpc_address.substring(0, result.rpc_address.lastIndexOf('.')) + (ordinal+1);
+
                       
             propertiesChecker.check();
             return result;

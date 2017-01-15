@@ -18,8 +18,6 @@
 package org.apache.cassandra.net;
 
 import java.io.Closeable;
-import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.Set;
@@ -27,6 +25,8 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataInputPlus.DataInputStreamPlus;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.streaming.StreamResultFuture;
 import org.apache.cassandra.streaming.messages.StreamInitMessage;
@@ -52,6 +52,7 @@ public class IncomingStreamingConnection extends Thread implements Closeable
     }
 
     @Override
+    @SuppressWarnings("resource") // Not closing constructed DataInputPlus's as the stream needs to remain open.
     public void run()
     {
         try
@@ -61,7 +62,7 @@ public class IncomingStreamingConnection extends Thread implements Closeable
             if (version != StreamMessage.CURRENT_VERSION)
                 throw new IOException(String.format("Received stream using protocol version %d (my version %d). Terminating connection", version, StreamMessage.CURRENT_VERSION));
 
-            DataInput input = new DataInputStream(socket.getInputStream());
+            DataInputPlus input = new DataInputStreamPlus(socket.getInputStream());
             StreamInitMessage init = StreamInitMessage.serializer.deserialize(input, version);
 
             //Set SO_TIMEOUT on follower side
@@ -74,10 +75,9 @@ public class IncomingStreamingConnection extends Thread implements Closeable
             // parallelize said streams and the socket is blocking, so we might deadlock.
             StreamResultFuture.initReceivingSide(init.sessionIndex, init.planId, init.description, init.from, this, init.isForOutgoing, version, init.keepSSTableLevel, init.isIncremental);
         }
-        catch (IOException e)
+        catch (Throwable t)
         {
-            logger.error(String.format("IOException while reading from socket from %s, closing: %s",
-                                       socket.getRemoteSocketAddress(), e));
+            logger.error("Error while reading from socket from {}.", socket.getRemoteSocketAddress(), t);
             close();
         }
     }

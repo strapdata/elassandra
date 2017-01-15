@@ -406,7 +406,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                      'utf8_with_special_chars',
                                      'system_traces.', 'songs',
                                      'system_auth.', 'system_distributed.',
-                                     'system_traces.',
+                                     'system_schema.', 'system_traces.',
                                      '"' + self.cqlsh.keyspace + '".'],
                             other_choices_ok=True)
         self.trycompletions('DELETE FROM twenty_rows_composite_table ',
@@ -523,7 +523,7 @@ class TestCqlshCompletion(CqlshCompletionCase):
         self.trycompletions('DROP ',
                             choices=['AGGREGATE', 'COLUMNFAMILY', 'FUNCTION',
                                      'INDEX', 'KEYSPACE', 'ROLE', 'TABLE',
-                                     'TRIGGER', 'TYPE', 'USER'])
+                                     'TRIGGER', 'TYPE', 'USER', 'MATERIALIZED'])
 
     def test_complete_in_drop_keyspace(self):
         self.trycompletions('DROP K', immediate='EYSPACE ')
@@ -617,7 +617,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
                             + "{'class': '",
                             choices=['SizeTieredCompactionStrategy',
                                      'LeveledCompactionStrategy',
-                                     'DateTieredCompactionStrategy'])
+                                     'DateTieredCompactionStrategy',
+                                     'TimeWindowCompactionStrategy'])
         self.trycompletions(prefix + " new_table (col_a int PRIMARY KEY) WITH compaction = "
                             + "{'class': 'S",
                             immediate="izeTieredCompactionStrategy'")
@@ -637,7 +638,8 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                      'min_sstable_size', 'min_threshold',
                                      'tombstone_compaction_interval',
                                      'tombstone_threshold',
-                                     'unchecked_tombstone_compaction'])
+                                     'unchecked_tombstone_compaction',
+                                     'only_purge_repaired_tombstones'])
         self.trycompletions(prefix + " new_table (col_a int PRIMARY KEY) WITH compaction = "
                             + "{'class': 'SizeTieredCompactionStrategy'}",
                             choices=[';', 'AND'])
@@ -658,7 +660,15 @@ class TestCqlshCompletion(CqlshCompletionCase):
                                      'timestamp_resolution', 'min_threshold', 'class', 'max_threshold',
                                      'tombstone_compaction_interval', 'tombstone_threshold',
                                      'enabled', 'unchecked_tombstone_compaction',
-                                     'max_window_size_seconds'])
+                                     'max_window_size_seconds', 'only_purge_repaired_tombstones'])
+        self.trycompletions(prefix + " new_table (col_a int PRIMARY KEY) WITH compaction = "
+                            + "{'class': 'TimeWindowCompactionStrategy', '",
+                            choices=['compaction_window_unit', 'compaction_window_size',
+                                     'timestamp_resolution', 'min_threshold', 'class', 'max_threshold',
+                                     'tombstone_compaction_interval', 'tombstone_threshold',
+                                     'enabled', 'unchecked_tombstone_compaction',
+                                     'only_purge_repaired_tombstones'])
+
 
     def test_complete_in_create_columnfamily(self):
         self.trycompletions('CREATE C', choices=['COLUMNFAMILY', 'CUSTOM'])

@@ -24,5 +24,6 @@ public enum WriteType
     UNLOGGED_BATCH,
     COUNTER,
     BATCH_LOG,
-    CAS;
+    CAS,
+    VIEW;
 }

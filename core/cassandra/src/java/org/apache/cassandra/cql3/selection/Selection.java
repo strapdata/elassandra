@@ -29,9 +29,7 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.*;
 import org.apache.cassandra.cql3.functions.Function;
-import org.apache.cassandra.db.Cell;
-import org.apache.cassandra.db.CounterCell;
-import org.apache.cassandra.db.ExpiringCell;
+import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.context.CounterContext;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.exceptions.InvalidRequestException;
@@ -120,9 +118,6 @@ public abstract class Selection
      */
     public boolean containsACollection()
     {
-        if (!cfm.comparator.hasCollections())
-            return false;
-
         for (ColumnDefinition def : getColumns())
             if (def.type.isCollection() && def.type.isMultiCell())
                 return true;
@@ -159,9 +154,8 @@ public abstract class Selection
         return columns.size() - 1;
     }
 
-    public Iterable<Function> getFunctions()
+    public void addFunctionsTo(List<Function> functions)
     {
-        return Collections.emptySet();
     }
 
     private static boolean processesSelection(List<RawSelector> rawSelectors)
@@ -244,9 +238,9 @@ public abstract class Selection
         return columnMapping;
     }
 
-    public ResultSetBuilder resultSetBuilder(long now, boolean isJson) throws InvalidRequestException
+    public ResultSetBuilder resultSetBuilder(boolean isJons) throws InvalidRequestException
     {
-        return new ResultSetBuilder(now, isJson);
+        return new ResultSetBuilder(isJons);
     }
 
     public abstract boolean isAggregate();
@@ -284,18 +278,22 @@ public abstract class Selection
         List<ByteBuffer> current;
         final long[] timestamps;
         final int[] ttls;
-        final long now;
 
         private final boolean isJson;
 
-        private ResultSetBuilder(long now, boolean isJson) throws InvalidRequestException
+        private ResultSetBuilder(boolean isJson) throws InvalidRequestException
         {
             this.resultSet = new ResultSet(getResultMetadata(isJson).copy(), new ArrayList<List<ByteBuffer>>());
             this.selectors = newSelectors();
             this.timestamps = collectTimestamps ? new long[columns.size()] : null;
             this.ttls = collectTTLs ? new int[columns.size()] : null;
-            this.now = now;
             this.isJson = isJson;
+
+            // We use MIN_VALUE to indicate no timestamp and -1 for no ttl
+            if (timestamps != null)
+                Arrays.fill(timestamps, Long.MIN_VALUE);
+            if (ttls != null)
+                Arrays.fill(ttls, -1);
         }
 
         public void add(ByteBuffer v)
@@ -303,25 +301,37 @@ public abstract class Selection
             current.add(v);
         }
 
-        public void add(Cell c)
+        public void add(Cell c, int nowInSec)
         {
-            current.add(isDead(c) ? null : value(c));
+            if (c == null)
+            {
+                current.add(null);
+                return;
+            }
+
+            current.add(value(c));
+
             if (timestamps != null)
-            {
-                timestamps[current.size() - 1] = isDead(c) ? Long.MIN_VALUE : c.timestamp();
-            }
+                timestamps[current.size() - 1] = c.timestamp();
+
             if (ttls != null)
-            {
-                int ttl = -1;
-                if (!isDead(c) && c instanceof ExpiringCell)
-                    ttl = c.getLocalDeletionTime() - (int) (now / 1000);
-                ttls[current.size() - 1] = ttl;
-            }
+                ttls[current.size() - 1] = remainingTTL(c, nowInSec);
         }
 
-        private boolean isDead(Cell c)
+        private int remainingTTL(Cell c, int nowInSec)
         {
-            return c == null || !c.isLive(now);
+            if (!c.isExpiring())
+                return -1;
+
+            int remaining = c.localDeletionTime() - nowInSec;
+            return remaining >= 0 ? remaining : -1;
+        }
+
+        private ByteBuffer value(Cell c)
+        {
+            return c.isCounterCell()
+                 ? ByteBufferUtil.bytes(CounterContext.instance().total(c.value()))
+                 : c.value();
         }
 
         public void newRow(int protocolVersion) throws InvalidRequestException
@@ -384,13 +394,6 @@ public abstract class Selection
             }
             sb.append("}");
             return Collections.singletonList(UTF8Type.instance.getSerializer().serialize(sb.toString()));
-        }
-
-        private ByteBuffer value(Cell c)
-        {
-            return (c instanceof CounterCell)
-                ? ByteBufferUtil.bytes(CounterContext.instance().total(c.value()))
-                : c.value();
         }
     }
 
@@ -494,9 +497,9 @@ public abstract class Selection
         }
 
         @Override
-        public Iterable<Function> getFunctions()
+        public void addFunctionsTo(List<Function> functions)
         {
-            return factories.getFunctions();
+            factories.addFunctionsTo(functions);
         }
 
         @Override

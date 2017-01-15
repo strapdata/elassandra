@@ -110,8 +110,7 @@ public class FieldsVisitor extends StoredFieldVisitor {
             }
         }
         if (loadSource()) {
-            for(String s : clusterService.mappedColumns(searchContext.request().index(), uid.type(), isStaticDocument))
-                requiredColumns.add(s); 
+            requiredColumns.addAll( searchContext.mapperService().documentMapper(uid.type()).getColumnDefinitions().keySet() );
         }
         return requiredColumns;
     }

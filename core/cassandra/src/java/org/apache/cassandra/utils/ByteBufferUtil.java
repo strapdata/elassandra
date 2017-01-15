@@ -33,6 +33,8 @@ import java.util.Arrays;
 import java.util.UUID;
 
 import net.nicoulaj.compilecommand.annotations.Inline;
+import org.apache.cassandra.db.TypeSizes;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileUtils;
@@ -289,6 +291,12 @@ public class ByteBufferUtil
         out.write(bytes);
     }
 
+    public static void writeWithVIntLength(ByteBuffer bytes, DataOutputPlus out) throws IOException
+    {
+        out.writeUnsignedVInt(bytes.remaining());
+        out.write(bytes);
+    }
+
     public static void writeWithLength(byte[] bytes, DataOutput out) throws IOException
     {
         out.writeInt(bytes.length);
@@ -298,8 +306,8 @@ public class ByteBufferUtil
     public static void writeWithShortLength(ByteBuffer buffer, DataOutputPlus out) throws IOException
     {
         int length = buffer.remaining();
-        assert 0 <= length && length <= FBUtilities.MAX_UNSIGNED_SHORT :
-        String.format("Attempted serializing to buffer exceeded maximum of %s bytes: %s", FBUtilities.MAX_UNSIGNED_SHORT, length);
+        assert 0 <= length && length <= FBUtilities.MAX_UNSIGNED_SHORT
+            : String.format("Attempted serializing to buffer exceeded maximum of %s bytes: %s", FBUtilities.MAX_UNSIGNED_SHORT, length);
         out.writeShort(length);
         out.write(buffer);
     }
@@ -307,8 +315,8 @@ public class ByteBufferUtil
     public static void writeWithShortLength(byte[] buffer, DataOutput out) throws IOException
     {
         int length = buffer.length;
-        assert 0 <= length && length <= FBUtilities.MAX_UNSIGNED_SHORT :
-        String.format("Attempted serializing to buffer exceeded maximum of %s bytes: %s", FBUtilities.MAX_UNSIGNED_SHORT, length);
+        assert 0 <= length && length <= FBUtilities.MAX_UNSIGNED_SHORT
+            : String.format("Attempted serializing to buffer exceeded maximum of %s bytes: %s", FBUtilities.MAX_UNSIGNED_SHORT, length);
         out.writeShort(length);
         out.write(buffer);
     }
@@ -322,6 +330,36 @@ public class ByteBufferUtil
         }
 
         return ByteBufferUtil.read(in, length);
+    }
+
+    public static ByteBuffer readWithVIntLength(DataInputPlus in) throws IOException
+    {
+        int length = (int)in.readUnsignedVInt();
+        if (length < 0)
+            throw new IOException("Corrupt (negative) value length encountered");
+
+        return ByteBufferUtil.read(in, length);
+    }
+
+    public static int serializedSizeWithLength(ByteBuffer buffer)
+    {
+        int size = buffer.remaining();
+        return TypeSizes.sizeof(size) + size;
+    }
+
+    public static int serializedSizeWithVIntLength(ByteBuffer buffer)
+    {
+        int size = buffer.remaining();
+        return TypeSizes.sizeofUnsignedVInt(size) + size;
+    }
+
+    public static void skipWithVIntLength(DataInputPlus in) throws IOException
+    {
+        int length = (int)in.readUnsignedVInt();
+        if (length < 0)
+            throw new IOException("Corrupt (negative) value length encountered");
+
+        in.skipBytesFully(length);
     }
 
     /* @return An unsigned short in an integer. */
@@ -340,25 +378,27 @@ public class ByteBufferUtil
         return ByteBufferUtil.read(in, readShortLength(in));
     }
 
+    public static int serializedSizeWithShortLength(ByteBuffer buffer)
+    {
+        int size = buffer.remaining();
+        return TypeSizes.sizeof((short)size) + size;
+    }
+
     /**
      * @param in data input
      * @return null
      * @throws IOException if an I/O error occurs.
      */
-    public static ByteBuffer skipShortLength(DataInput in) throws IOException
+    public static void skipShortLength(DataInputPlus in) throws IOException
     {
         int skip = readShortLength(in);
-        FileUtils.skipBytesFully(in, skip);
-        return null;
+        in.skipBytesFully(skip);
     }
 
     public static ByteBuffer read(DataInput in, int length) throws IOException
     {
         if (length == 0)
             return EMPTY_BYTE_BUFFER;
-
-        if (in instanceof FileDataInput)
-            return ((FileDataInput) in).readBytes(length);
 
         byte[] buff = new byte[length];
         in.readFully(buff);

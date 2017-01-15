@@ -27,6 +27,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.UnauthorizedException;
+import org.apache.cassandra.schema.Triggers;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.thrift.ThriftValidation;
@@ -57,22 +58,22 @@ public class DropTriggerStatement extends SchemaAlteringStatement
         ThriftValidation.validateColumnFamily(keyspace(), columnFamily());
     }
 
-    public boolean announceMigration(boolean isLocalOnly) throws ConfigurationException, InvalidRequestException
+    public Event.SchemaChange announceMigration(boolean isLocalOnly) throws ConfigurationException, InvalidRequestException
     {
         CFMetaData cfm = Schema.instance.getCFMetaData(keyspace(), columnFamily()).copy();
-        if (cfm.removeTrigger(triggerName))
-        {
-            logger.info("Dropping trigger with name {}", triggerName);
-            MigrationManager.announceColumnFamilyUpdate(cfm, isLocalOnly);
-            return true;
-        }
-        if (!ifExists)
-            throw new InvalidRequestException(String.format("Trigger %s was not found", triggerName));
-        return false;
-    }
+        Triggers triggers = cfm.getTriggers();
 
-    public Event.SchemaChange changeEvent()
-    {
+        if (!triggers.get(triggerName).isPresent())
+        {
+            if (ifExists)
+                return null;
+            else
+                throw new InvalidRequestException(String.format("Trigger %s was not found", triggerName));
+        }
+
+        logger.info("Dropping trigger with name {}", triggerName);
+        cfm.triggers(triggers.without(triggerName));
+        MigrationManager.announceColumnFamilyUpdate(cfm, isLocalOnly);
         return new Event.SchemaChange(Event.SchemaChange.Change.UPDATED, Event.SchemaChange.Target.TABLE, keyspace(), columnFamily());
     }
 }

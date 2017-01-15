@@ -68,7 +68,10 @@ public abstract class AckedClusterStateUpdateTask<Response> extends ClusterState
      * @param t optional error that might have been thrown
      */
     public void onAllNodesAcked(@Nullable Throwable t) {
-        listener.onResponse(newResponse(true));
+        if (t == null)
+            listener.onResponse(newResponse(true));
+        else
+            listener.onFailure(t);
     }
 
     protected abstract Response newResponse(boolean acknowledged);

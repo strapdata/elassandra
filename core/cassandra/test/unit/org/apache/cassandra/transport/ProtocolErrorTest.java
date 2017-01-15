@@ -20,6 +20,7 @@ package org.apache.cassandra.transport;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.cassandra.transport.messages.ErrorMessage;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -33,14 +34,22 @@ public class ProtocolErrorTest {
     @Test
     public void testInvalidProtocolVersion() throws Exception
     {
+        // test using a protocol version higher than the current version
+        testInvalidProtocolVersion(Server.CURRENT_VERSION + 1);
+     // test using a protocol version lower than the lowest version
+        testInvalidProtocolVersion(Server.MIN_SUPPORTED_VERSION - 1);
+
+    }
+
+    public void testInvalidProtocolVersion(int version) throws Exception
+    {
         Frame.Decoder dec = new Frame.Decoder(null);
 
         List<Object> results = new ArrayList<>();
-        // should generate a protocol exception for using a protocol version higher than the current version
         byte[] frame = new byte[] {
-                (byte) ((Server.CURRENT_VERSION + 1) & Frame.PROTOCOL_VERSION_MASK),  // direction & version
+                (byte) REQUEST.addToVersion(version),  // direction & version
                 0x00,  // flags
-                0x01,  // stream ID
+                0x00, 0x01,  // stream ID
                 0x09,  // opcode
                 0x00, 0x00, 0x00, 0x21,  // body length
                 0x00, 0x00, 0x00, 0x1b, 0x00, 0x1b, 0x53, 0x45,
@@ -48,6 +57,29 @@ public class ProtocolErrorTest {
                 0x52, 0x4f, 0x4d, 0x20, 0x73, 0x79, 0x73, 0x74,
                 0x65, 0x6d, 0x2e, 0x6c, 0x6f, 0x63, 0x61, 0x6c,
                 0x3b
+        };
+        ByteBuf buf = Unpooled.wrappedBuffer(frame);
+        try {
+            dec.decode(null, buf, results);
+            Assert.fail("Expected protocol error");
+        } catch (ProtocolException e) {
+            Assert.assertTrue(e.getMessage().contains("Invalid or unsupported protocol version"));
+        }
+    }
+
+    @Test
+    public void testInvalidProtocolVersionShortFrame() throws Exception
+    {
+        // test for CASSANDRA-11464
+        Frame.Decoder dec = new Frame.Decoder(null);
+
+        List<Object> results = new ArrayList<>();
+        byte[] frame = new byte[] {
+                (byte) REQUEST.addToVersion(1),  // direction & version
+                0x00,  // flags
+                0x01,  // stream ID
+                0x09,  // opcode
+                0x00, 0x00, 0x00, 0x21,  // body length
         };
         ByteBuf buf = Unpooled.wrappedBuffer(frame);
         try {
@@ -67,9 +99,9 @@ public class ProtocolErrorTest {
         // should generate a protocol exception for using a response frame with
         // a prepare op, ensure that it comes back with stream ID 1
         byte[] frame = new byte[] {
-                (byte) RESPONSE.addToVersion(Server.VERSION_2),  // direction & version
+                (byte) RESPONSE.addToVersion(Server.CURRENT_VERSION),  // direction & version
                 0x00,  // flags
-                0x01,  // stream ID
+                0x00, 0x01,  // stream ID
                 0x09,  // opcode
                 0x00, 0x00, 0x00, 0x21,  // body length
                 0x00, 0x00, 0x00, 0x1b, 0x00, 0x1b, 0x53, 0x45,
@@ -96,9 +128,9 @@ public class ProtocolErrorTest {
 
         List<Object> results = new ArrayList<>();
         byte[] frame = new byte[] {
-                (byte) REQUEST.addToVersion(Server.VERSION_2),  // direction & version
+                (byte) REQUEST.addToVersion(Server.CURRENT_VERSION),  // direction & version
                 0x00,  // flags
-                0x01,  // stream ID
+                0x00, 0x01,  // stream ID
                 0x09,  // opcode
                 0x10, (byte) 0x00, (byte) 0x00, (byte) 0x00,  // body length
         };

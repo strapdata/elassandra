@@ -23,7 +23,6 @@ import java.io.Serializable;
 import java.util.*;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.AbstractIterator;
 import com.google.common.collect.PeekingIterator;
 
 import org.apache.cassandra.db.TypeSizes;
@@ -33,7 +32,9 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.net.MessagingService;
 
 /**
  * A MerkleTree implemented as a binary tree.
@@ -91,7 +92,7 @@ public class MerkleTree implements Serializable
             Hashable.serializer.serialize(mt.root, out, version);
         }
 
-        public MerkleTree deserialize(DataInput in, int version) throws IOException
+        public MerkleTree deserialize(DataInputPlus in, int version) throws IOException
         {
             byte hashdepth = in.readByte();
             long maxsize = in.readLong();
@@ -120,9 +121,9 @@ public class MerkleTree implements Serializable
         public long serializedSize(MerkleTree mt, int version)
         {
             long size = 1 // mt.hashdepth
-                 + TypeSizes.NATIVE.sizeof(mt.maxsize)
-                 + TypeSizes.NATIVE.sizeof(mt.size)
-                 + TypeSizes.NATIVE.sizeof(mt.partitioner.getClass().getCanonicalName());
+                 + TypeSizes.sizeof(mt.maxsize)
+                 + TypeSizes.sizeof(mt.size)
+                 + TypeSizes.sizeof(mt.partitioner.getClass().getCanonicalName());
 
             // full range
             size += Token.serializer.serializedSize(mt.fullRange.left, version);
@@ -516,6 +517,16 @@ public class MerkleTree implements Serializable
         return histbuild.buildWithStdevRangesAroundMean();
     }
 
+    public long rowCount()
+    {
+        long count = 0;
+        for (TreeRange range : new TreeRangeIterator(this))
+        {
+            count += range.hashable.rowsInRange;
+        }
+        return count;
+    }
+
     @Override
     public String toString()
     {
@@ -816,12 +827,15 @@ public class MerkleTree implements Serializable
         {
             public void serialize(Inner inner, DataOutputPlus out, int version) throws IOException
             {
-                if (inner.hash == null)
-                    out.writeInt(-1);
-                else
+                if (version < MessagingService.VERSION_30)
                 {
-                    out.writeInt(inner.hash.length);
-                    out.write(inner.hash);
+                    if (inner.hash == null)
+                        out.writeInt(-1);
+                    else
+                    {
+                        out.writeInt(inner.hash.length);
+                        out.write(inner.hash);
+                    }
                 }
                 Token.serializer.serialize(inner.token, out, version);
                 Hashable.serializer.serialize(inner.lchild, out, version);
@@ -830,10 +844,13 @@ public class MerkleTree implements Serializable
 
             public Inner deserialize(DataInput in, IPartitioner p, int version) throws IOException
             {
-                int hashLen = in.readInt();
-                byte[] hash = hashLen >= 0 ? new byte[hashLen] : null;
-                if (hash != null)
-                    in.readFully(hash);
+                if (version < MessagingService.VERSION_30)
+                {
+                    int hashLen = in.readInt();
+                    byte[] hash = hashLen >= 0 ? new byte[hashLen] : null;
+                    if (hash != null)
+                        in.readFully(hash);
+                }
                 Token token = Token.serializer.deserialize(in, p, version);
                 Hashable lchild = Hashable.serializer.deserialize(in, p, version);
                 Hashable rchild = Hashable.serializer.deserialize(in, p, version);
@@ -842,9 +859,13 @@ public class MerkleTree implements Serializable
 
             public long serializedSize(Inner inner, int version)
             {
-                int size = inner.hash == null
-                ? TypeSizes.NATIVE.sizeof(-1)
-                        : TypeSizes.NATIVE.sizeof(inner.hash().length) + inner.hash().length;
+                long size = 0;
+                if (version < MessagingService.VERSION_30)
+                {
+                    size += inner.hash == null
+                                       ? TypeSizes.sizeof(-1)
+                                       : TypeSizes.sizeof(inner.hash().length) + inner.hash().length;
+                }
 
                 size += Token.serializer.serializedSize(inner.token, version)
                 + Hashable.serializer.serializedSize(inner.lchild, version)
@@ -899,18 +920,24 @@ public class MerkleTree implements Serializable
             {
                 if (leaf.hash == null)
                 {
-                    out.writeInt(-1);
+                    if (version < MessagingService.VERSION_30)
+                        out.writeInt(-1);
+                    else
+                        out.writeByte(-1);
                 }
                 else
                 {
-                    out.writeInt(leaf.hash.length);
+                    if (version < MessagingService.VERSION_30)
+                        out.writeInt(leaf.hash.length);
+                    else
+                        out.writeByte(leaf.hash.length);
                     out.write(leaf.hash);
                 }
             }
 
             public Leaf deserialize(DataInput in, IPartitioner p, int version) throws IOException
             {
-                int hashLen = in.readInt();
+                int hashLen = version < MessagingService.VERSION_30 ? in.readInt() : in.readByte();
                 byte[] hash = hashLen < 0 ? null : new byte[hashLen];
                 if (hash != null)
                     in.readFully(hash);
@@ -919,9 +946,12 @@ public class MerkleTree implements Serializable
 
             public long serializedSize(Leaf leaf, int version)
             {
-                return leaf.hash == null
-                     ? TypeSizes.NATIVE.sizeof(-1)
-                     : TypeSizes.NATIVE.sizeof(leaf.hash().length) + leaf.hash().length;
+                long size = version < MessagingService.VERSION_30 ? TypeSizes.sizeof(1) : 1;
+                if (leaf.hash != null)
+                {
+                    size += leaf.hash().length;
+                }
+                return size;
             }
         }
     }

@@ -57,6 +57,7 @@ public class ReversedType<T> extends AbstractType<T>
 
     private ReversedType(AbstractType<T> baseType)
     {
+        super(ComparisonType.CUSTOM);
         this.baseType = baseType;
     }
 
@@ -65,19 +66,15 @@ public class ReversedType<T> extends AbstractType<T>
         return baseType.isEmptyValueMeaningless();
     }
 
-    public int compare(ByteBuffer o1, ByteBuffer o2)
+    public int compareCustom(ByteBuffer o1, ByteBuffer o2)
     {
-        // An empty byte buffer is always smaller
-        if (o1.remaining() == 0)
-        {
-            return o2.remaining() == 0 ? 0 : -1;
-        }
-        if (o2.remaining() == 0)
-        {
-            return 1;
-        }
-
         return baseType.compare(o2, o1);
+    }
+
+    @Override
+    public int compareForCQL(ByteBuffer v1, ByteBuffer v2)
+    {
+        return baseType.compare(v1, v2);
     }
 
     public String getString(ByteBuffer bytes)
@@ -128,9 +125,15 @@ public class ReversedType<T> extends AbstractType<T>
         return baseType.getSerializer();
     }
 
-    public boolean references(AbstractType<?> check)
+    public boolean referencesUserType(String userTypeName)
     {
-        return super.references(check) || baseType.references(check);
+        return baseType.referencesUserType(userTypeName);
+    }
+
+    @Override
+    protected int valueLengthIfFixed()
+    {
+        return baseType.valueLengthIfFixed();
     }
 
     @Override

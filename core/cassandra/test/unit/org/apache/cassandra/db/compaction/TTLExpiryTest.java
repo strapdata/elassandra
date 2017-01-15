@@ -1,6 +1,4 @@
-package org.apache.cassandra.db.compaction;
 /*
- * 
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,31 +15,35 @@ package org.apache.cassandra.db.compaction;
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- * 
  */
+package org.apache.cassandra.db.compaction;
 
-import org.junit.BeforeClass;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.Set;
+
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
-import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.db.rows.BTreeRow;
+import org.apache.cassandra.db.filter.ColumnFilter;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
+import org.apache.cassandra.db.rows.UnfilteredRowIterator;
+import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.tools.SSTableExpiredBlockers;
 import org.apache.cassandra.utils.ByteBufferUtil;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -57,9 +59,18 @@ public class TTLExpiryTest
     {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
-                                    SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1));
+                                    KeyspaceParams.simple(1),
+                                    CFMetaData.Builder.create(KEYSPACE1, CF_STANDARD1)
+                                                      .addPartitionKey("pKey", AsciiType.instance)
+                                                      .addRegularColumn("col1", AsciiType.instance)
+                                                      .addRegularColumn("col", AsciiType.instance)
+                                                      .addRegularColumn("col311", AsciiType.instance)
+                                                      .addRegularColumn("col2", AsciiType.instance)
+                                                      .addRegularColumn("col3", AsciiType.instance)
+                                                      .addRegularColumn("col7", AsciiType.instance)
+                                                      .addRegularColumn("col8", MapType.getInstance(AsciiType.instance, AsciiType.instance, true))
+                                                      .addRegularColumn("shadow", AsciiType.instance)
+                                                      .build().gcGraceSeconds(0));
     }
 
     @Test
@@ -68,33 +79,55 @@ public class TTLExpiryTest
         ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore("Standard1");
         cfs.disableAutoCompaction();
         cfs.metadata.gcGraceSeconds(0);
+        String key = "ttl";
+        new RowUpdateBuilder(cfs.metadata, 1L, 1, key)
+                    .add("col1", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
 
-        DecoratedKey ttlKey = Util.dk("ttl");
-        Mutation rm = new Mutation(KEYSPACE1, ttlKey.getKey());
-        rm.add("Standard1", Util.cellname("col1"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 1, 1);
-        rm.add("Standard1", Util.cellname("col2"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 3, 1);
-        rm.applyUnsafe();
+        new RowUpdateBuilder(cfs.metadata, 3L, 1, key)
+                    .add("col2", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
+        cfs.forceBlockingFlush();
+        new RowUpdateBuilder(cfs.metadata, 2L, 1, key)
+                    .add("col1", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
+
+        new RowUpdateBuilder(cfs.metadata, 5L, 1, key)
+                    .add("col2", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
+
         cfs.forceBlockingFlush();
 
-        rm = new Mutation(KEYSPACE1, ttlKey.getKey());
-        rm.add("Standard1", Util.cellname("col1"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 2, 1);
-        rm.add("Standard1", Util.cellname("col2"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 5, 1);
-        rm.applyUnsafe();
+        new RowUpdateBuilder(cfs.metadata, 4L, 1, key)
+                    .add("col1", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
+
+        new RowUpdateBuilder(cfs.metadata, 7L, 1, key)
+                    .add("shadow", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
+
         cfs.forceBlockingFlush();
 
-        rm = new Mutation(KEYSPACE1, ttlKey.getKey());
-        rm.add("Standard1", Util.cellname("col1"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 4, 1);
-        rm.add("Standard1", Util.cellname("shadow"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 7, 1);
-        rm.applyUnsafe();
+
+        new RowUpdateBuilder(cfs.metadata, 6L, 3, key)
+                    .add("shadow", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
+
+        new RowUpdateBuilder(cfs.metadata, 8L, 1, key)
+                    .add("col2", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
+
         cfs.forceBlockingFlush();
 
-        rm = new Mutation(KEYSPACE1, ttlKey.getKey());
-        rm.add("Standard1", Util.cellname("shadow"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 6, 3);
-        rm.add("Standard1", Util.cellname("col2"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 8, 1);
-        rm.applyUnsafe();
-        cfs.forceBlockingFlush();
-
-        Set<SSTableReader> sstables = Sets.newHashSet(cfs.getSSTables());
+        Set<SSTableReader> sstables = Sets.newHashSet(cfs.getLiveSSTables());
         int now = (int)(System.currentTimeMillis() / 1000);
         int gcBefore = now + 2;
         Set<SSTableReader> expired = CompactionController.getFullyExpiredSSTables(
@@ -110,105 +143,109 @@ public class TTLExpiryTest
     @Test
     public void testSimpleExpire() throws InterruptedException
     {
+        testSimpleExpire(false);
+    }
+
+    @Test
+    public void testBug10944() throws InterruptedException
+    {
+        // Reproduction for CASSANDRA-10944 (at the time of the bug)
+        testSimpleExpire(true);
+    }
+
+    public void testSimpleExpire(boolean force10944Bug) throws InterruptedException
+    {
         ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore("Standard1");
+        cfs.truncateBlocking();
         cfs.disableAutoCompaction();
-        cfs.metadata.gcGraceSeconds(0);
+        // To reproduce #10944, we need our gcBefore to be equal to the locaDeletionTime. A gcGrace of 1 will (almost always) give us that.
+        cfs.metadata.gcGraceSeconds(force10944Bug ? 1 : 0);
         long timestamp = System.currentTimeMillis();
-        Mutation rm = new Mutation(KEYSPACE1, Util.dk("ttl").getKey());
-        rm.add("Standard1", Util.cellname("col"),
-               ByteBufferUtil.EMPTY_BYTE_BUFFER,
-               timestamp,
-               1);
-        rm.add("Standard1", Util.cellname("col7"),
-               ByteBufferUtil.EMPTY_BYTE_BUFFER,
-               timestamp,
-               1);
+        String key = "ttl";
+        new RowUpdateBuilder(cfs.metadata, timestamp, 1, key)
+                        .add("col", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                        .add("col7", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                        .build()
+                        .applyUnsafe();
 
-        rm.applyUnsafe();
         cfs.forceBlockingFlush();
 
-        rm = new Mutation(KEYSPACE1, Util.dk("ttl").getKey());
-                rm.add("Standard1", Util.cellname("col2"),
-                       ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                       timestamp,
-                       1);
-                rm.applyUnsafe();
+        new RowUpdateBuilder(cfs.metadata, timestamp, 1, key)
+            .add("col2", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+            .addMapEntry("col8", "bar", "foo")
+            .delete("col1")
+            .build()
+            .applyUnsafe();
+
+
         cfs.forceBlockingFlush();
-        rm = new Mutation(KEYSPACE1, Util.dk("ttl").getKey());
-        rm.add("Standard1", Util.cellname("col3"),
-                   ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                   timestamp,
-                   1);
-        rm.applyUnsafe();
+        // To reproduce #10944, we need to avoid the optimization that get rid of full sstable because everything
+        // is known to be gcAble, so keep some data non-expiring in that case.
+        new RowUpdateBuilder(cfs.metadata, timestamp, force10944Bug ? 0 : 1, key)
+                    .add("col3", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
+
+
         cfs.forceBlockingFlush();
-        rm = new Mutation(KEYSPACE1, Util.dk("ttl").getKey());
-        rm.add("Standard1", Util.cellname("col311"),
-                   ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                   timestamp,
-                   1);
-        rm.applyUnsafe();
+        new RowUpdateBuilder(cfs.metadata, timestamp, 1, key)
+                            .add("col311", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                            .build()
+                            .applyUnsafe();
+
 
         cfs.forceBlockingFlush();
         Thread.sleep(2000); // wait for ttl to expire
-        assertEquals(4, cfs.getSSTables().size());
+        assertEquals(4, cfs.getLiveSSTables().size());
         cfs.enableAutoCompaction(true);
-        assertEquals(0, cfs.getSSTables().size());
+        assertEquals(force10944Bug ? 1 : 0, cfs.getLiveSSTables().size());
     }
 
     @Test
     public void testNoExpire() throws InterruptedException, IOException
     {
         ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore("Standard1");
+        cfs.truncateBlocking();
         cfs.disableAutoCompaction();
         cfs.metadata.gcGraceSeconds(0);
         long timestamp = System.currentTimeMillis();
-        Mutation rm = new Mutation(KEYSPACE1, Util.dk("ttl").getKey());
-        rm.add("Standard1", Util.cellname("col"),
-               ByteBufferUtil.EMPTY_BYTE_BUFFER,
-               timestamp,
-               1);
-        rm.add("Standard1", Util.cellname("col7"),
-               ByteBufferUtil.EMPTY_BYTE_BUFFER,
-               timestamp,
-               1);
+        String key = "ttl";
+        new RowUpdateBuilder(cfs.metadata, timestamp, 1, key)
+            .add("col", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+            .add("col7", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+            .build()
+            .applyUnsafe();
 
-        rm.applyUnsafe();
         cfs.forceBlockingFlush();
+        new RowUpdateBuilder(cfs.metadata, timestamp, 1, key)
+            .add("col2", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+            .build()
+            .applyUnsafe();
+        cfs.forceBlockingFlush();
+        new RowUpdateBuilder(cfs.metadata, timestamp, 1, key)
+            .add("col3", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+            .build()
+            .applyUnsafe();
+        cfs.forceBlockingFlush();
+        String noTTLKey = "nottl";
+        new RowUpdateBuilder(cfs.metadata, timestamp, noTTLKey)
+            .add("col311", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+            .build()
+            .applyUnsafe();
 
-        rm = new Mutation(KEYSPACE1, Util.dk("ttl").getKey());
-                rm.add("Standard1", Util.cellname("col2"),
-                       ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                       timestamp,
-                       1);
-                rm.applyUnsafe();
-        cfs.forceBlockingFlush();
-        rm = new Mutation(KEYSPACE1, Util.dk("ttl").getKey());
-        rm.add("Standard1", Util.cellname("col3"),
-                   ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                   timestamp,
-                   1);
-        rm.applyUnsafe();
-        cfs.forceBlockingFlush();
-        DecoratedKey noTTLKey = Util.dk("nottl");
-        rm = new Mutation(KEYSPACE1, noTTLKey.getKey());
-        rm.add("Standard1", Util.cellname("col311"),
-                   ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                   timestamp);
-        rm.applyUnsafe();
         cfs.forceBlockingFlush();
         Thread.sleep(2000); // wait for ttl to expire
-        assertEquals(4, cfs.getSSTables().size());
+        assertEquals(4, cfs.getLiveSSTables().size());
         cfs.enableAutoCompaction(true);
-        assertEquals(1, cfs.getSSTables().size());
-        SSTableReader sstable = cfs.getSSTables().iterator().next();
-        ISSTableScanner scanner = sstable.getScanner(DataRange.allData(sstable.partitioner));
+        assertEquals(1, cfs.getLiveSSTables().size());
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
+        ISSTableScanner scanner = sstable.getScanner(ColumnFilter.all(sstable.metadata), DataRange.allData(cfs.getPartitioner()), false);
         assertTrue(scanner.hasNext());
         while(scanner.hasNext())
         {
-            OnDiskAtomIterator iter = scanner.next();
-            assertEquals(noTTLKey, iter.getKey());
+            UnfilteredRowIterator iter = scanner.next();
+            assertEquals(Util.dk(noTTLKey), iter.partitionKey());
         }
-
         scanner.close();
     }
 
@@ -220,19 +257,24 @@ public class TTLExpiryTest
         cfs.disableAutoCompaction();
         cfs.metadata.gcGraceSeconds(0);
 
-        Mutation rm = new Mutation(KEYSPACE1, Util.dk("test").getKey());
-        rm.add("Standard1", Util.cellname("col1"), ByteBufferUtil.EMPTY_BYTE_BUFFER, System.currentTimeMillis());
-        rm.applyUnsafe();
+        new RowUpdateBuilder(cfs.metadata, System.currentTimeMillis(), "test")
+                .noRowMarker()
+                .add("col1", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                .build()
+                .applyUnsafe();
+
         cfs.forceBlockingFlush();
-        SSTableReader blockingSSTable = cfs.getSSTables().iterator().next();
+        SSTableReader blockingSSTable = cfs.getSSTables(SSTableSet.LIVE).iterator().next();
         for (int i = 0; i < 10; i++)
         {
-            rm = new Mutation(KEYSPACE1, Util.dk("test").getKey());
-            rm.delete("Standard1", System.currentTimeMillis());
-            rm.applyUnsafe();
+            new RowUpdateBuilder(cfs.metadata, System.currentTimeMillis(), "test")
+                            .noRowMarker()
+                            .delete("col1")
+                            .build()
+                            .applyUnsafe();
             cfs.forceBlockingFlush();
         }
-        Multimap<SSTableReader, SSTableReader> blockers = SSTableExpiredBlockers.checkForExpiredSSTableBlockers(cfs.getSSTables(), (int) (System.currentTimeMillis() / 1000) + 100);
+        Multimap<SSTableReader, SSTableReader> blockers = SSTableExpiredBlockers.checkForExpiredSSTableBlockers(cfs.getSSTables(SSTableSet.LIVE), (int) (System.currentTimeMillis() / 1000) + 100);
         assertEquals(1, blockers.keySet().size());
         assertTrue(blockers.keySet().contains(blockingSSTable));
         assertEquals(10, blockers.get(blockingSSTable).size());

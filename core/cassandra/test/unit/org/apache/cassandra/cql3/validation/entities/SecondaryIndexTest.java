@@ -17,35 +17,49 @@
  */
 package org.apache.cassandra.cql3.validation.entities;
 
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 
-import org.apache.cassandra.cql3.CQLTester;
-import org.apache.cassandra.db.ColumnFamily;
-import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.IndexExpression;
-import org.apache.cassandra.db.composites.CellName;
-import org.apache.cassandra.db.index.IndexNotAvailableException;
-import org.apache.cassandra.db.index.PerRowSecondaryIndex;
-import org.apache.cassandra.db.index.SecondaryIndexSearcher;
-import org.apache.cassandra.db.index.composites.CompositesSearcher;
-import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.exceptions.InvalidRequestException;
-import org.apache.cassandra.exceptions.SyntaxException;
-import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
+
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.cql3.CQLTester;
+import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.restrictions.StatementRestrictions;
+import org.apache.cassandra.cql3.statements.IndexTarget;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DeletionTime;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.rows.Cell;
+import org.apache.cassandra.db.rows.Row;
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.cassandra.index.IndexNotAvailableException;
+import org.apache.cassandra.index.SecondaryIndexManager;
+import org.apache.cassandra.index.StubIndex;
+import org.apache.cassandra.index.internal.CustomCassandraIndex;
+import org.apache.cassandra.schema.IndexMetadata;
+import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.transport.messages.ResultMessage;
+import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.MD5Digest;
+import org.apache.cassandra.utils.Pair;
+
+import static org.apache.cassandra.Util.throwAssert;
+import static org.apache.cassandra.utils.ByteBufferUtil.EMPTY_BYTE_BUFFER;
+import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class SecondaryIndexTest extends CQLTester
 {
@@ -82,13 +96,27 @@ public class SecondaryIndexTest extends CQLTester
     private void testCreateAndDropIndex(String indexName, boolean addKeyspaceOnDrop) throws Throwable
     {
         execute("USE system");
-        assertInvalidMessage("Index '" + removeQuotes(indexName.toLowerCase(Locale.US)) + "' could not be found", "DROP INDEX " + indexName + ";");
+        assertInvalidMessage(String.format("Index '%s' could not be found",
+                                           removeQuotes(indexName.toLowerCase(Locale.US))),
+                             "DROP INDEX " + indexName + ";");
 
         createTable("CREATE TABLE %s (a int primary key, b int);");
         createIndex("CREATE INDEX " + indexName + " ON %s(b);");
         createIndex("CREATE INDEX IF NOT EXISTS " + indexName + " ON %s(b);");
 
-        assertInvalidMessage("Index already exists", "CREATE INDEX " + indexName + " ON %s(b)");
+        assertInvalidMessage(String.format("Index %s already exists",
+                                           removeQuotes(indexName.toLowerCase(Locale.US))),
+                             "CREATE INDEX " + indexName + " ON %s(b)");
+
+        // IF NOT EXISTS should apply in cases where the new index differs from an existing one in name only
+        String otherIndexName = "index_" + System.nanoTime();
+        assertEquals(1, getCurrentColumnFamilyStore().metadata.getIndexes().size());
+        createIndex("CREATE INDEX IF NOT EXISTS " + otherIndexName + " ON %s(b)");
+        assertEquals(1, getCurrentColumnFamilyStore().metadata.getIndexes().size());
+        assertInvalidMessage(String.format("Index %s is a duplicate of existing index %s",
+                                           removeQuotes(otherIndexName.toLowerCase(Locale.US)),
+                                           removeQuotes(indexName.toLowerCase(Locale.US))),
+                             "CREATE INDEX " + otherIndexName + " ON %s(b)");
 
         execute("INSERT INTO %s (a, b) values (?, ?);", 0, 0);
         execute("INSERT INTO %s (a, b) values (?, ?);", 1, 1);
@@ -96,7 +124,8 @@ public class SecondaryIndexTest extends CQLTester
         execute("INSERT INTO %s (a, b) values (?, ?);", 3, 1);
 
         assertRows(execute("SELECT * FROM %s where b = ?", 1), row(1, 1), row(3, 1));
-        assertInvalidMessage("Index '" + removeQuotes(indexName.toLowerCase(Locale.US)) + "' could not be found in any of the tables of keyspace 'system'",
+        assertInvalidMessage(String.format("Index '%s' could not be found in any of the tables of keyspace 'system'",
+                                           removeQuotes(indexName.toLowerCase(Locale.US))),
                              "DROP INDEX " + indexName);
 
         if (addKeyspaceOnDrop)
@@ -109,10 +138,12 @@ public class SecondaryIndexTest extends CQLTester
             execute("DROP INDEX " + indexName);
         }
 
-        assertInvalidMessage("Predicates on non-primary-key columns (b) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s where b = ?", 1);
         dropIndex("DROP INDEX IF EXISTS " + indexName);
-        assertInvalidMessage("Index '" + removeQuotes(indexName.toLowerCase(Locale.US)) + "' could not be found", "DROP INDEX " + indexName);
+        assertInvalidMessage(String.format("Index '%s' could not be found",
+                                           removeQuotes(indexName.toLowerCase(Locale.US))),
+                             "DROP INDEX " + indexName);
     }
 
     /**
@@ -201,12 +232,10 @@ public class SecondaryIndexTest extends CQLTester
     public void testUnknownCompressionOptions() throws Throwable
     {
         String tableName = createTableName();
-        assertInvalidThrow(SyntaxException.class, String.format(
-                                                               "CREATE TABLE %s (key varchar PRIMARY KEY, password varchar, gender varchar) WITH compression_parameters:sstable_compressor = 'DeflateCompressor'", tableName));
+        assertInvalidThrow(SyntaxException.class, String.format("CREATE TABLE %s (key varchar PRIMARY KEY, password varchar, gender varchar) WITH compression_parameters:sstable_compressor = 'DeflateCompressor'", tableName));
 
-
-        assertInvalidThrow(ConfigurationException.class, String.format(
-                                                                      "CREATE TABLE %s (key varchar PRIMARY KEY, password varchar, gender varchar) WITH compression = { 'sstable_compressor': 'DeflateCompressor' }", tableName));
+        assertInvalidThrow(ConfigurationException.class, String.format("CREATE TABLE %s (key varchar PRIMARY KEY, password varchar, gender varchar) WITH compression = { 'sstable_compressor': 'DeflateCompressor' }",
+                                                                       tableName));
     }
 
     /**
@@ -412,9 +441,6 @@ public class SecondaryIndexTest extends CQLTester
         assertRows(execute("SELECT k, v FROM %s WHERE k = 0 AND m CONTAINS KEY 'a'"), row(0, 0), row(0, 1));
         assertRows(execute("SELECT k, v FROM %s WHERE m CONTAINS KEY 'c'"), row(0, 2));
         assertEmpty(execute("SELECT k, v FROM %s  WHERE m CONTAINS KEY 'd'"));
-
-        // we're not allowed to create a value index if we already have a key one
-        assertInvalid("CREATE INDEX ON %s(m)");
     }
 
     /**
@@ -424,7 +450,7 @@ public class SecondaryIndexTest extends CQLTester
     @Test
     public void testIndexOnKeyWithReverseClustering() throws Throwable
     {
-        createTable(" CREATE TABLE %s (k1 int, k2 int, v int, PRIMARY KEY ((k1, k2), v) ) WITH CLUSTERING ORDER BY (v DESC)");
+        createTable("CREATE TABLE %s (k1 int, k2 int, v int, PRIMARY KEY ((k1, k2), v) ) WITH CLUSTERING ORDER BY (v DESC)");
 
         createIndex("CREATE INDEX ON %s (k2)");
 
@@ -462,6 +488,67 @@ public class SecondaryIndexTest extends CQLTester
         assertRows(execute("select count(*) from %s where app_name='foo' and account='bar' and last_access > 4 allow filtering"), row(1L));
     }
 
+    @Test
+    public void testSyntaxVariationsForIndexOnCollectionsValue() throws Throwable
+    {
+        createTable("CREATE TABLE %s (k int, m map<int, int>, l list<int>, s set<int>, PRIMARY KEY (k))");
+        createAndDropCollectionValuesIndex("m");
+        createAndDropCollectionValuesIndex("l");
+        createAndDropCollectionValuesIndex("s");
+    }
+
+    private void createAndDropCollectionValuesIndex(String columnName) throws Throwable
+    {
+        String indexName = columnName + "_idx";
+        SecondaryIndexManager indexManager = getCurrentColumnFamilyStore().indexManager;
+        createIndex(String.format("CREATE INDEX %s on %%s(%s)", indexName, columnName));
+        IndexMetadata indexDef = indexManager.getIndexByName(indexName).getIndexMetadata();
+        assertEquals(String.format("values(%s)", columnName), indexDef.options.get(IndexTarget.TARGET_OPTION_NAME));
+        dropIndex(String.format("DROP INDEX %s.%s", KEYSPACE, indexName));
+        assertFalse(indexManager.hasIndexes());
+        createIndex(String.format("CREATE INDEX %s on %%s(values(%s))", indexName, columnName));
+        assertEquals(indexDef, indexManager.getIndexByName(indexName).getIndexMetadata());
+        dropIndex(String.format("DROP INDEX %s.%s", KEYSPACE, indexName));
+    }
+
+    @Test
+    public void testCreateIndexWithQuotedColumnNames() throws Throwable
+    {
+        createTable("CREATE TABLE %s (" +
+                    " k int," +
+                    " v int, " +
+                    " lower_case_map map<int, int>," +
+                    " \"MixedCaseMap\" map<int, int>," +
+                    " lower_case_frozen_list frozen<list<int>>," +
+                    " \"UPPER_CASE_FROZEN_LIST\" frozen<list<int>>," +
+                    " \"set name with spaces\" set<int>," +
+                    " \"column_name_with\"\"escaped quote\" int," +
+                    " PRIMARY KEY (k))");
+
+        createAndDropIndexWithQuotedColumnIdentifier("\"v\"");
+        createAndDropIndexWithQuotedColumnIdentifier("keys(\"lower_case_map\")");
+        createAndDropIndexWithQuotedColumnIdentifier("keys(\"MixedCaseMap\")");
+        createAndDropIndexWithQuotedColumnIdentifier("full(\"lower_case_frozen_list\")");
+        createAndDropIndexWithQuotedColumnIdentifier("full(\"UPPER_CASE_FROZEN_LIST\")");
+        createAndDropIndexWithQuotedColumnIdentifier("values(\"set name with spaces\")");
+        createAndDropIndexWithQuotedColumnIdentifier("\"column_name_with\"\"escaped quote\"");
+    }
+
+    private void createAndDropIndexWithQuotedColumnIdentifier(String target) throws Throwable
+    {
+        String indexName = "test_mixed_case_idx";
+        createIndex(String.format("CREATE INDEX %s ON %%s(%s)", indexName, target));
+        SecondaryIndexManager indexManager = getCurrentColumnFamilyStore().indexManager;
+        IndexMetadata indexDef = indexManager.getIndexByName(indexName).getIndexMetadata();
+        dropIndex(String.format("DROP INDEX %s.%s", KEYSPACE, indexName));
+        // verify we can re-create the index using the target string
+        createIndex(String.format("CREATE INDEX %s ON %%s(%s)",
+                                  indexName, indexDef.options.get(IndexTarget.TARGET_OPTION_NAME)));
+        assertEquals(indexDef, indexManager.getIndexByName(indexName).getIndexMetadata());
+        dropIndex(String.format("DROP INDEX %s.%s", KEYSPACE, indexName));
+    }
+
+
     /**
      * Test for CASSANDRA-5732, Can not query secondary index
      * migrated from cql_tests.py:TestCQL.bug_5732_test(),
@@ -473,7 +560,7 @@ public class SecondaryIndexTest extends CQLTester
     {
         String tableName = createTable("CREATE TABLE %s (k int PRIMARY KEY, v int,)");
 
-        execute("ALTER TABLE %s WITH CACHING='ALL'");
+        execute("ALTER TABLE %s WITH CACHING = { 'keys': 'ALL', 'rows_per_partition': 'ALL' }");
         execute("INSERT INTO %s (k,v) VALUES (0,0)");
         execute("INSERT INTO %s (k,v) VALUES (1,1)");
 
@@ -487,29 +574,23 @@ public class SecondaryIndexTest extends CQLTester
 
     // CASSANDRA-8280/8081
     // reject updates with indexed values where value > 64k
+    // make sure we check conditional and unconditional statements,
+    // both singly and in batches (CASSANDRA-10536)
     @Test
     public void testIndexOnCompositeValueOver64k() throws Throwable
     {
         createTable("CREATE TABLE %s(a int, b int, c blob, PRIMARY KEY (a))");
         createIndex("CREATE INDEX ON %s(c)");
         failInsert("INSERT INTO %s (a, b, c) VALUES (0, 0, ?)", ByteBuffer.allocate(TOO_BIG));
-    }
-
-    @Test
-    public void testIndexOnClusteringColumnInsertPartitionKeyAndClusteringsOver64k() throws Throwable
-    {
-        createTable("CREATE TABLE %s(a blob, b blob, c blob, d int, PRIMARY KEY (a, b, c))");
-        createIndex("CREATE INDEX ON %s(b)");
-
-        // CompositeIndexOnClusteringKey creates index entries composed of the
-        // PK plus all of the non-indexed clustering columns from the primary row
-        // so we should reject where len(a) + len(c) > 65560 as this will form the
-        // total clustering in the index table
-        ByteBuffer a = ByteBuffer.allocate(100);
-        ByteBuffer b = ByteBuffer.allocate(10);
-        ByteBuffer c = ByteBuffer.allocate(FBUtilities.MAX_UNSIGNED_SHORT - 99);
-
-        failInsert("INSERT INTO %s (a, b, c, d) VALUES (?, ?, ?, 0)", a, b, c);
+        failInsert("INSERT INTO %s (a, b, c) VALUES (0, 0, ?) IF NOT EXISTS", ByteBuffer.allocate(TOO_BIG));
+        failInsert("BEGIN BATCH\n" +
+                   "INSERT INTO %s (a, b, c) VALUES (0, 0, ?);\n" +
+                   "APPLY BATCH",
+                   ByteBuffer.allocate(TOO_BIG));
+        failInsert("BEGIN BATCH\n" +
+                   "INSERT INTO %s (a, b, c) VALUES (0, 0, ?) IF NOT EXISTS;\n" +
+                   "APPLY BATCH",
+                   ByteBuffer.allocate(TOO_BIG));
     }
 
     @Test
@@ -518,40 +599,15 @@ public class SecondaryIndexTest extends CQLTester
         createTable("CREATE TABLE %s(a int, b blob, PRIMARY KEY (a)) WITH COMPACT STORAGE");
         createIndex("CREATE INDEX ON %s(b)");
         failInsert("INSERT INTO %s (a, b) VALUES (0, ?)", ByteBuffer.allocate(TOO_BIG));
-    }
-
-    @Test
-    public void testIndexOnCollectionValueInsertPartitionKeyAndCollectionKeyOver64k() throws Throwable
-    {
-        createTable("CREATE TABLE %s(a blob , b map<blob, int>, PRIMARY KEY (a))");
-        createIndex("CREATE INDEX ON %s(b)");
-
-        // A collection key > 64k by itself will be rejected from
-        // the primary table.
-        // To test index validation we need to ensure that
-        // len(b) < 64k, but len(a) + len(b) > 64k as that will
-        // form the clustering in the index table
-        ByteBuffer a = ByteBuffer.allocate(100);
-        ByteBuffer b = ByteBuffer.allocate(FBUtilities.MAX_UNSIGNED_SHORT - 100);
-
-        failInsert("UPDATE %s SET b[?] = 0 WHERE a = ?", b, a);
-    }
-
-    @Test
-    public void testIndexOnCollectionKeyInsertPartitionKeyAndClusteringOver64k() throws Throwable
-    {
-        createTable("CREATE TABLE %s(a blob, b blob, c map<blob, int>, PRIMARY KEY (a, b))");
-        createIndex("CREATE INDEX ON %s(KEYS(c))");
-
-        // Basically the same as the case with non-collection clustering
-        // CompositeIndexOnCollectionKeyy creates index entries composed of the
-        // PK plus all of the clustering columns from the primary row, except the
-        // collection element - which becomes the partition key in the index table
-        ByteBuffer a = ByteBuffer.allocate(100);
-        ByteBuffer b = ByteBuffer.allocate(FBUtilities.MAX_UNSIGNED_SHORT - 100);
-        ByteBuffer c = ByteBuffer.allocate(10);
-
-        failInsert("UPDATE %s SET c[?] = 0 WHERE a = ? and b = ?", c, a, b);
+        failInsert("INSERT INTO %s (a, b) VALUES (0, ?) IF NOT EXISTS", ByteBuffer.allocate(TOO_BIG));
+        failInsert("BEGIN BATCH\n" +
+                   "INSERT INTO %s (a, b) VALUES (0, ?);\n" +
+                   "APPLY BATCH",
+                   ByteBuffer.allocate(TOO_BIG));
+        failInsert("BEGIN BATCH\n" +
+                   "INSERT INTO %s (a, b) VALUES (0, ?) IF NOT EXISTS;\n" +
+                   "APPLY BATCH",
+                   ByteBuffer.allocate(TOO_BIG));
     }
 
     @Test
@@ -559,7 +615,29 @@ public class SecondaryIndexTest extends CQLTester
     {
         createTable("CREATE TABLE %s(a int, b int, c blob, PRIMARY KEY ((a, b)))");
         createIndex("CREATE INDEX ON %s(a)");
+        succeedInsert("INSERT INTO %s (a, b, c) VALUES (0, 0, ?) IF NOT EXISTS", ByteBuffer.allocate(TOO_BIG));
         succeedInsert("INSERT INTO %s (a, b, c) VALUES (0, 0, ?)", ByteBuffer.allocate(TOO_BIG));
+        succeedInsert("BEGIN BATCH\n" +
+                      "INSERT INTO %s (a, b, c) VALUES (0, 0, ?);\n" +
+                      "APPLY BATCH", ByteBuffer.allocate(TOO_BIG));
+
+        // the indexed value passes validation, but the batch size will
+        // exceed the default failure threshold, so temporarily raise it
+        // (the non-conditional batch doesn't hit this because
+        // BatchStatement::executeInternal skips the size check but CAS
+        // path does not)
+        long batchSizeThreshold = DatabaseDescriptor.getBatchSizeFailThreshold();
+        try
+        {
+            DatabaseDescriptor.setBatchSizeFailThresholdInKB( (TOO_BIG / 1024) * 2);
+            succeedInsert("BEGIN BATCH\n" +
+                          "INSERT INTO %s (a, b, c) VALUES (1, 1, ?) IF NOT EXISTS;\n" +
+                          "APPLY BATCH", ByteBuffer.allocate(TOO_BIG));
+        }
+        finally
+        {
+            DatabaseDescriptor.setBatchSizeFailThresholdInKB((int) (batchSizeThreshold / 1024));
+        }
     }
 
     @Test
@@ -567,7 +645,29 @@ public class SecondaryIndexTest extends CQLTester
     {
         createTable("CREATE TABLE %s(a int, b int, c blob, PRIMARY KEY (a, b))");
         createIndex("CREATE INDEX ON %s(b)");
+        succeedInsert("INSERT INTO %s (a, b, c) VALUES (0, 0, ?) IF NOT EXISTS", ByteBuffer.allocate(TOO_BIG));
         succeedInsert("INSERT INTO %s (a, b, c) VALUES (0, 0, ?)", ByteBuffer.allocate(TOO_BIG));
+        succeedInsert("BEGIN BATCH\n" +
+                      "INSERT INTO %s (a, b, c) VALUES (0, 0, ?);\n" +
+                      "APPLY BATCH", ByteBuffer.allocate(TOO_BIG));
+
+        // the indexed value passes validation, but the batch size will
+        // exceed the default failure threshold, so temporarily raise it
+        // (the non-conditional batch doesn't hit this because
+        // BatchStatement::executeInternal skips the size check but CAS
+        // path does not)
+        long batchSizeThreshold = DatabaseDescriptor.getBatchSizeFailThreshold();
+        try
+        {
+            DatabaseDescriptor.setBatchSizeFailThresholdInKB( (TOO_BIG / 1024) * 2);
+            succeedInsert("BEGIN BATCH\n" +
+                          "INSERT INTO %s (a, b, c) VALUES (1, 1, ?) IF NOT EXISTS;\n" +
+                          "APPLY BATCH", ByteBuffer.allocate(TOO_BIG));
+        }
+        finally
+        {
+            DatabaseDescriptor.setBatchSizeFailThresholdInKB((int)(batchSizeThreshold / 1024));
+        }
     }
 
     @Test
@@ -578,6 +678,13 @@ public class SecondaryIndexTest extends CQLTester
         Map<Integer, ByteBuffer> map = new HashMap<>();
         map.put(0, ByteBuffer.allocate(1024 * 65));
         failInsert("INSERT INTO %s (a, b) VALUES (0, ?)", map);
+        failInsert("INSERT INTO %s (a, b) VALUES (0, ?) IF NOT EXISTS", map);
+        failInsert("BEGIN BATCH\n" +
+                   "INSERT INTO %s (a, b) VALUES (0, ?);\n" +
+                   "APPLY BATCH", map);
+        failInsert("BEGIN BATCH\n" +
+                   "INSERT INTO %s (a, b) VALUES (0, ?) IF NOT EXISTS;\n" +
+                   "APPLY BATCH", map);
     }
 
     public void failInsert(String insertCQL, Object...args) throws Throwable
@@ -655,6 +762,170 @@ public class SecondaryIndexTest extends CQLTester
     }
 
     @Test
+    public void testMultipleIndexesOnOneColumn() throws Throwable
+    {
+        String indexClassName = StubIndex.class.getName();
+        createTable("CREATE TABLE %s (a int, b int, c int, PRIMARY KEY ((a), b))");
+        // uses different options otherwise the two indexes are considered duplicates
+        createIndex(String.format("CREATE CUSTOM INDEX c_idx_1 ON %%s(c) USING '%s' WITH OPTIONS = {'foo':'a'}", indexClassName));
+        createIndex(String.format("CREATE CUSTOM INDEX c_idx_2 ON %%s(c) USING '%s' WITH OPTIONS = {'foo':'b'}", indexClassName));
+
+        ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
+        CFMetaData cfm = cfs.metadata;
+        StubIndex index1 = (StubIndex)cfs.indexManager.getIndex(cfm.getIndexes()
+                                                                   .get("c_idx_1")
+                                                                   .orElseThrow(throwAssert("index not found")));
+        StubIndex index2 = (StubIndex)cfs.indexManager.getIndex(cfm.getIndexes()
+                                                                   .get("c_idx_2")
+                                                                   .orElseThrow(throwAssert("index not found")));
+        Object[] row1a = row(0, 0, 0);
+        Object[] row1b = row(0, 0, 1);
+        Object[] row2 = row(2, 2, 2);
+        execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?)", row1a);
+        execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?)", row1b);
+        execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?)", row2);
+
+        assertEquals(2, index1.rowsInserted.size());
+        assertColumnValue(0, "c", index1.rowsInserted.get(0), cfm);
+        assertColumnValue(2, "c", index1.rowsInserted.get(1), cfm);
+
+        assertEquals(2, index2.rowsInserted.size());
+        assertColumnValue(0, "c", index2.rowsInserted.get(0), cfm);
+        assertColumnValue(2, "c", index2.rowsInserted.get(1), cfm);
+
+        assertEquals(1, index1.rowsUpdated.size());
+        assertColumnValue(0, "c", index1.rowsUpdated.get(0).left, cfm);
+        assertColumnValue(1, "c", index1.rowsUpdated.get(0).right, cfm);
+
+        assertEquals(1, index2.rowsUpdated.size());
+        assertColumnValue(0, "c", index2.rowsUpdated.get(0).left, cfm);
+        assertColumnValue(1, "c", index2.rowsUpdated.get(0).right, cfm);
+    }
+
+    @Test
+    public void testDeletions() throws Throwable
+    {
+        // Test for bugs like CASSANDRA-10694.  These may not be readily visible with the built-in secondary index
+        // implementation because of the stale entry handling.
+
+        String indexClassName = StubIndex.class.getName();
+        createTable("CREATE TABLE %s (a int, b int, c int, PRIMARY KEY ((a), b))");
+        createIndex(String.format("CREATE CUSTOM INDEX c_idx ON %%s(c) USING '%s'", indexClassName));
+
+        ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
+        CFMetaData cfm = cfs.metadata;
+        StubIndex index1 = (StubIndex) cfs.indexManager.getIndex(cfm.getIndexes()
+                .get("c_idx")
+                .orElseThrow(throwAssert("index not found")));
+
+        execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?) USING TIMESTAMP 1", 0, 0, 0);
+        assertEquals(1, index1.rowsInserted.size());
+
+        execute("DELETE FROM %s USING TIMESTAMP 2 WHERE a = ? AND b = ?", 0, 0);
+        assertEquals(1, index1.rowsUpdated.size());
+        Pair<Row, Row> update = index1.rowsUpdated.get(0);
+        Row existingRow = update.left;
+        Row newRow = update.right;
+
+        // check the existing row from the update call
+        assertTrue(existingRow.deletion().isLive());
+        assertEquals(DeletionTime.LIVE, existingRow.deletion().time());
+        assertEquals(1L, existingRow.primaryKeyLivenessInfo().timestamp());
+
+        // check the new row from the update call
+        assertFalse(newRow.deletion().isLive());
+        assertEquals(2L, newRow.deletion().time().markedForDeleteAt());
+        assertFalse(newRow.cells().iterator().hasNext());
+
+        // delete the same row again
+        execute("DELETE FROM %s USING TIMESTAMP 3 WHERE a = ? AND b = ?", 0, 0);
+        assertEquals(2, index1.rowsUpdated.size());
+        update = index1.rowsUpdated.get(1);
+        existingRow = update.left;
+        newRow = update.right;
+
+        // check the new row from the update call
+        assertFalse(existingRow.deletion().isLive());
+        assertEquals(2L, existingRow.deletion().time().markedForDeleteAt());
+        assertFalse(existingRow.cells().iterator().hasNext());
+
+        // check the new row from the update call
+        assertFalse(newRow.deletion().isLive());
+        assertEquals(3L, newRow.deletion().time().markedForDeleteAt());
+        assertFalse(newRow.cells().iterator().hasNext());
+    }
+
+    @Test
+    public void testUpdatesToMemtableData() throws Throwable
+    {
+        // verify the contract specified by Index.Indexer::updateRow(oldRowData, newRowData),
+        // when a row in the memtable is updated, the indexer should be informed of:
+        // * new columns
+        // * removed columns
+        // * columns whose value, timestamp or ttl have been modified.
+        // Any columns which are unchanged by the update are not passed to the Indexer
+        // Note that for simplicity this test resets the index between each scenario
+        createTable("CREATE TABLE %s (k int, c int, v1 int, v2 int, PRIMARY KEY (k,c))");
+        createIndex(String.format("CREATE CUSTOM INDEX test_index ON %%s() USING '%s'", StubIndex.class.getName()));
+        execute("INSERT INTO %s (k, c, v1, v2) VALUES (0, 0, 0, 0) USING TIMESTAMP 0");
+
+        ColumnDefinition v1 = getCurrentColumnFamilyStore().metadata.getColumnDefinition(new ColumnIdentifier("v1", true));
+        ColumnDefinition v2 = getCurrentColumnFamilyStore().metadata.getColumnDefinition(new ColumnIdentifier("v2", true));
+
+        StubIndex index = (StubIndex)getCurrentColumnFamilyStore().indexManager.getIndexByName("test_index");
+        assertEquals(1, index.rowsInserted.size());
+
+        // Overwrite a single value, leaving the other untouched
+        execute("UPDATE %s USING TIMESTAMP 1 SET v1=1 WHERE k=0 AND c=0");
+        assertEquals(1, index.rowsUpdated.size());
+        Row oldRow = index.rowsUpdated.get(0).left;
+        assertEquals(1, oldRow.size());
+        validateCell(oldRow.getCell(v1), v1, ByteBufferUtil.bytes(0), 0);
+        Row newRow = index.rowsUpdated.get(0).right;
+        assertEquals(1, newRow.size());
+        validateCell(newRow.getCell(v1), v1, ByteBufferUtil.bytes(1), 1);
+        index.reset();
+
+        // Overwrite both values
+        execute("UPDATE %s USING TIMESTAMP 2 SET v1=2, v2=2 WHERE k=0 AND c=0");
+        assertEquals(1, index.rowsUpdated.size());
+        oldRow = index.rowsUpdated.get(0).left;
+        assertEquals(2, oldRow.size());
+        validateCell(oldRow.getCell(v1), v1, ByteBufferUtil.bytes(1), 1);
+        validateCell(oldRow.getCell(v2), v2, ByteBufferUtil.bytes(0), 0);
+        newRow = index.rowsUpdated.get(0).right;
+        assertEquals(2, newRow.size());
+        validateCell(newRow.getCell(v1), v1, ByteBufferUtil.bytes(2), 2);
+        validateCell(newRow.getCell(v2), v2, ByteBufferUtil.bytes(2), 2);
+        index.reset();
+
+        // Delete one value
+        execute("DELETE v1 FROM %s USING TIMESTAMP 3 WHERE k=0 AND c=0");
+        assertEquals(1, index.rowsUpdated.size());
+        oldRow = index.rowsUpdated.get(0).left;
+        assertEquals(1, oldRow.size());
+        validateCell(oldRow.getCell(v1), v1, ByteBufferUtil.bytes(2), 2);
+        newRow = index.rowsUpdated.get(0).right;
+        assertEquals(1, newRow.size());
+        Cell newCell = newRow.getCell(v1);
+        assertTrue(newCell.isTombstone());
+        assertEquals(3, newCell.timestamp());
+        index.reset();
+
+        // Modify the liveness of the primary key, the delta rows should contain
+        // no cell data as only the pk was altered, but it should illustrate the
+        // change to the liveness info
+        execute("INSERT INTO %s(k, c) VALUES (0, 0) USING TIMESTAMP 4");
+        assertEquals(1, index.rowsUpdated.size());
+        oldRow = index.rowsUpdated.get(0).left;
+        assertEquals(0, oldRow.size());
+        assertEquals(0, oldRow.primaryKeyLivenessInfo().timestamp());
+        newRow = index.rowsUpdated.get(0).right;
+        assertEquals(0, newRow.size());
+        assertEquals(4, newRow.primaryKeyLivenessInfo().timestamp());
+    }
+
+    @Test
     public void testIndexQueriesWithIndexNotReady() throws Throwable
     {
         createTable("CREATE TABLE %s (pk int, ck int, value int, PRIMARY KEY (pk, ck))");
@@ -663,8 +934,7 @@ public class SecondaryIndexTest extends CQLTester
             for (int j = 0; j < 10; j++)
                 execute("INSERT INTO %s (pk, ck, value) VALUES (?, ?, ?)", i, j, i + j);
 
-        createIndex("CREATE CUSTOM INDEX testIndex ON %s (value) USING '" + IndexBlockingOnInitialization.class.getName()
-                + "'");
+        createIndex("CREATE CUSTOM INDEX testIndex ON %s (value) USING '" + IndexBlockingOnInitialization.class.getName() + "'");
         try
         {
             execute("SELECT value FROM %s WHERE value = 2");
@@ -680,109 +950,223 @@ public class SecondaryIndexTest extends CQLTester
         }
     }
 
-    /**
-     * Custom index used to test the behavior of the system when the index is not ready.
-     * As Custom indices cannot by <code>PerColumnSecondaryIndex</code> we use a <code>PerRowSecondaryIndex</code>
-     * to avoid the check but return a <code>CompositesSearcher</code>.
-     */
-    public static class IndexBlockingOnInitialization extends PerRowSecondaryIndex
+    @Test
+    public void droppingIndexInvalidatesPreparedStatements() throws Throwable
     {
-        private volatile CountDownLatch latch = new CountDownLatch(1);
+        createTable("CREATE TABLE %s (a int, b int, c int, PRIMARY KEY ((a), b))");
+        createIndex("CREATE INDEX c_idx ON %s(c)");
+        MD5Digest cqlId = prepareStatement("SELECT * FROM %s.%s WHERE c=?", false).statementId;
+        Integer thriftId = prepareStatement("SELECT * FROM %s.%s WHERE c=?", true).toThriftPreparedResult().getItemId();
+
+        assertNotNull(QueryProcessor.instance.getPrepared(cqlId));
+        assertNotNull(QueryProcessor.instance.getPreparedForThrift(thriftId));
+
+        dropIndex("DROP INDEX %s.c_idx");
+
+        assertNull(QueryProcessor.instance.getPrepared(cqlId));
+        assertNull(QueryProcessor.instance.getPreparedForThrift(thriftId));
+    }
+
+    // See CASSANDRA-11021
+    @Test
+    public void testIndexesOnNonStaticColumnsWhereSchemaIncludesStaticColumns() throws Throwable
+    {
+        createTable("CREATE TABLE %s (a int, b int, c int static, d int, PRIMARY KEY (a, b))");
+        createIndex("CREATE INDEX b_idx on %s(b)");
+        createIndex("CREATE INDEX d_idx on %s(d)");
+
+        execute("INSERT INTO %s (a, b, c ,d) VALUES (0, 0, 0, 0)");
+        execute("INSERT INTO %s (a, b, c, d) VALUES (1, 1, 1, 1)");
+        assertRows(execute("SELECT * FROM %s WHERE b = 0"), row(0, 0, 0, 0));
+        assertRows(execute("SELECT * FROM %s WHERE d = 1"), row(1, 1, 1, 1));
+
+        execute("UPDATE %s SET c = 2 WHERE a = 0");
+        execute("UPDATE %s SET c = 3, d = 4 WHERE a = 1 AND b = 1");
+        assertRows(execute("SELECT * FROM %s WHERE b = 0"), row(0, 0, 2, 0));
+        assertRows(execute("SELECT * FROM %s WHERE d = 4"), row(1, 1, 3, 4));
+
+        execute("DELETE FROM %s WHERE a = 0");
+        execute("DELETE FROM %s WHERE a = 1 AND b = 1");
+        assertEmpty(execute("SELECT * FROM %s WHERE b = 0"));
+        assertEmpty(execute("SELECT * FROM %s WHERE d = 3"));
+    }
+
+    @Test
+    public void testWithEmptyRestrictionValueAndSecondaryIndex() throws Throwable
+    {
+        createTable("CREATE TABLE %s (pk blob, c blob, v blob, PRIMARY KEY ((pk), c))");
+        createIndex("CREATE INDEX on %s(c)");
+        createIndex("CREATE INDEX on %s(v)");
+
+        execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)", bytes("foo123"), bytes("1"), bytes("1"));
+        execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)", bytes("foo123"), bytes("2"), bytes("1"));
+
+        beforeAndAfterFlush(() -> {
+            // Test clustering columns restrictions
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c = textAsBlob('');"));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) = (textAsBlob(''));"));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c IN (textAsBlob(''), textAsBlob('1'));"),
+                       row(bytes("foo123"), bytes("1"), bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) IN ((textAsBlob('')), (textAsBlob('1')));"),
+                       row(bytes("foo123"), bytes("1"), bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c > textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"),
+                       row(bytes("foo123"), bytes("1"), bytes("1")),
+                       row(bytes("foo123"), bytes("2"), bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c >= textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"),
+                       row(bytes("foo123"), bytes("1"), bytes("1")),
+                       row(bytes("foo123"), bytes("2"), bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) >= (textAsBlob('')) AND v = textAsBlob('1') ALLOW FILTERING;"),
+                       row(bytes("foo123"), bytes("1"), bytes("1")),
+                       row(bytes("foo123"), bytes("2"), bytes("1")));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c <= textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) <= (textAsBlob('')) AND v = textAsBlob('1') ALLOW FILTERING;"));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) < (textAsBlob('')) AND v = textAsBlob('1') ALLOW FILTERING;"));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c < textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c > textAsBlob('') AND c < textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) > (textAsBlob('')) AND (c) < (textAsBlob('')) AND v = textAsBlob('1') ALLOW FILTERING;"));
+        });
+
+        execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"));
+
+        beforeAndAfterFlush(() -> {
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c = textAsBlob('');"),
+                       row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) = (textAsBlob(''));"),
+                       row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c IN (textAsBlob(''), textAsBlob('1'));"),
+                       row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1")),
+                       row(bytes("foo123"), bytes("1"), bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) IN ((textAsBlob('')), (textAsBlob('1')));"),
+                       row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1")),
+                       row(bytes("foo123"), bytes("1"), bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c > textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"),
+                       row(bytes("foo123"), bytes("1"), bytes("1")),
+                       row(bytes("foo123"), bytes("2"), bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c >= textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"),
+                       row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1")),
+                       row(bytes("foo123"), bytes("1"), bytes("1")),
+                       row(bytes("foo123"), bytes("2"), bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) >= (textAsBlob('')) AND v = textAsBlob('1') ALLOW FILTERING;"),
+                       row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1")),
+                       row(bytes("foo123"), bytes("1"), bytes("1")),
+                       row(bytes("foo123"), bytes("2"), bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c <= textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"),
+                       row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1")));
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) <= (textAsBlob('')) AND v = textAsBlob('1') ALLOW FILTERING;"),
+                       row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1")));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c < textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) < (textAsBlob('')) AND v = textAsBlob('1') ALLOW FILTERING;"));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c >= textAsBlob('') AND c < textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"));
+
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) >= (textAsBlob('')) AND c < textAsBlob('') AND v = textAsBlob('1') ALLOW FILTERING;"));
+
+            // Test restrictions on non-primary key value
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND v = textAsBlob('');"));
+        });
+
+        execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                bytes("foo123"), bytes("3"), EMPTY_BYTE_BUFFER);
+
+        beforeAndAfterFlush(() -> {
+
+            assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND v = textAsBlob('');"),
+                       row(bytes("foo123"), bytes("3"), EMPTY_BYTE_BUFFER));
+        });
+    }
+
+    @Test
+    public void testEmptyRestrictionValueWithSecondaryIndexAndCompactTables() throws Throwable
+    {
+        createTable("CREATE TABLE %s (pk blob, c blob, v blob, PRIMARY KEY ((pk), c)) WITH COMPACT STORAGE");
+        assertInvalidMessage("Secondary indexes are not supported on COMPACT STORAGE tables that have clustering columns",
+                            "CREATE INDEX on %s(c)");
+
+        createTable("CREATE TABLE %s (pk blob PRIMARY KEY, v blob) WITH COMPACT STORAGE");
+        createIndex("CREATE INDEX on %s(v)");
+
+        execute("INSERT INTO %s (pk, v) VALUES (?, ?)", bytes("foo123"), bytes("1"));
+
+        // Test restrictions on non-primary key value
+        assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND v = textAsBlob('');"));
+
+        execute("INSERT INTO %s (pk, v) VALUES (?, ?)", bytes("foo124"), EMPTY_BYTE_BUFFER);
+
+        assertRows(execute("SELECT * FROM %s WHERE v = textAsBlob('');"),
+                   row(bytes("foo124"), EMPTY_BYTE_BUFFER));
+    }
+
+    private ResultMessage.Prepared prepareStatement(String cql, boolean forThrift)
+    {
+        return QueryProcessor.prepare(String.format(cql, KEYSPACE, currentTable()),
+                                      ClientState.forInternalCalls(),
+                                      forThrift);
+    }
+
+    private void validateCell(Cell cell, ColumnDefinition def, ByteBuffer val, long timestamp)
+    {
+        assertNotNull(cell);
+        assertEquals(0, def.type.compare(cell.value(), val));
+        assertEquals(timestamp, cell.timestamp());
+    }
+
+    private static void assertColumnValue(int expected, String name, Row row, CFMetaData cfm)
+    {
+        ColumnDefinition col = cfm.getColumnDefinition(new ColumnIdentifier(name, true));
+        AbstractType<?> type = col.type;
+        assertEquals(expected, type.compose(row.getCell(col).value()));
+    }
+
+    /**
+     * <code>CassandraIndex</code> that blocks during the initialization.
+     */
+    public static class IndexBlockingOnInitialization extends CustomCassandraIndex
+    {
+        private final CountDownLatch latch = new CountDownLatch(1);
+
+        public IndexBlockingOnInitialization(ColumnFamilyStore baseCfs, IndexMetadata indexDef)
+        {
+            super(baseCfs, indexDef);
+        }
 
         @Override
-        public void index(ByteBuffer rowKey, ColumnFamily cf)
+        public Callable<?> getInitializationTask()
         {
-            try
-            {
+            return () -> {
                 latch.await();
-            }
-            catch (InterruptedException e)
-            {
-                Thread.interrupted();
-            }
-        }
-
-        @Override
-        public void delete(DecoratedKey key, Group opGroup)
-        {
-        }
-
-        @Override
-        public void init()
-        {
-        }
-
-        @Override
-        public void reload()
-        {
-        }
-
-        @Override
-        public void validateOptions() throws ConfigurationException
-        {
-        }
-
-        @Override
-        public String getIndexName()
-        {
-            return "testIndex";
-        }
-
-        @Override
-        protected SecondaryIndexSearcher createSecondaryIndexSearcher(Set<ByteBuffer> columns)
-        {
-            return new CompositesSearcher(baseCfs.indexManager, columns)
-            {
-                @Override
-                public boolean canHandleIndexClause(List<IndexExpression> clause)
-                {
-                    return true;
-                }
-
-                @Override
-                public void validate(IndexExpression indexExpression) throws InvalidRequestException
-                {
-                }
+                return null;
             };
         }
 
         @Override
-        public void forceBlockingFlush()
-        {
-        }
-
-        @Override
-        public ColumnFamilyStore getIndexCfs()
-        {
-            return baseCfs;
-        }
-
-        @Override
-        public void removeIndex(ByteBuffer columnName)
+        public Callable<?> getInvalidateTask()
         {
             latch.countDown();
-        }
-
-        @Override
-        public void invalidate()
-        {
-        }
-
-        @Override
-        public void truncateBlocking(long truncatedAt)
-        {
-        }
-
-        @Override
-        public boolean indexes(CellName name)
-        {
-            return false;
-        }
-
-        @Override
-        public long estimateResultRows()
-        {
-            return 0;
+            return super.getInvalidateTask();
         }
     }
 }

@@ -31,6 +31,11 @@ public abstract class MigrationListener
     {
     }
 
+    public void onCreateView(String ksName, String viewName)
+    {
+        onCreateColumnFamily(ksName, viewName);
+    }
+
     public void onCreateUserType(String ksName, String typeName)
     {
     }
@@ -47,8 +52,15 @@ public abstract class MigrationListener
     {
     }
 
-    public void onUpdateColumnFamily(String ksName, String cfName, boolean columnsDidChange)
+    // the boolean flag indicates whether the change that triggered this event may have a substantive
+    // impact on statements using the column family.
+    public void onUpdateColumnFamily(String ksName, String cfName, boolean affectsStatements)
     {
+    }
+
+    public void onUpdateView(String ksName, String viewName, boolean columnsDidChange)
+    {
+        onUpdateColumnFamily(ksName, viewName, columnsDidChange);
     }
 
     public void onUpdateUserType(String ksName, String typeName)
@@ -69,6 +81,11 @@ public abstract class MigrationListener
 
     public void onDropColumnFamily(String ksName, String cfName)
     {
+    }
+
+    public void onDropView(String ksName, String viewName)
+    {
+        onDropColumnFamily(ksName, viewName);
     }
 
     public void onDropUserType(String ksName, String typeName)

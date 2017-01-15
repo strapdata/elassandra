@@ -29,9 +29,8 @@ import org.apache.cassandra.utils.FBUtilities;
 
 public class WriteCallbackInfo extends CallbackInfo
 {
-    private final MessageOut sentMessage;
-    private final ConsistencyLevel consistencyLevel;
-    private final boolean allowHints;
+    // either a Mutation, or a Paxos Commit (MessageOut)
+    private final Object mutation;
 
     public WriteCallbackInfo(InetAddress target,
                              IAsyncCallback callback,
@@ -42,25 +41,34 @@ public class WriteCallbackInfo extends CallbackInfo
     {
         super(target, callback, serializer, true);
         assert message != null;
-        this.sentMessage = message;
-        this.consistencyLevel = consistencyLevel;
-        this.allowHints = allowHints;
+        this.mutation = shouldHint(allowHints, message, consistencyLevel);
         //Local writes shouldn't go through messaging service (https://issues.apache.org/jira/browse/CASSANDRA-10477)
         assert (!target.equals(FBUtilities.getBroadcastAddress()));
     }
 
-    Mutation mutation()
-    {
-        return sentMessage.verb == MessagingService.Verb.PAXOS_COMMIT
-             ? ((Commit) sentMessage.payload).makeMutation()
-             : (Mutation) sentMessage.payload;
-    }
-
     public boolean shouldHint()
     {
-        return allowHints
-            && sentMessage.verb != MessagingService.Verb.COUNTER_MUTATION
-            && consistencyLevel != ConsistencyLevel.ANY
-            && StorageProxy.shouldHint(target);
+        return mutation != null && StorageProxy.shouldHint(target);
     }
+
+    public Mutation mutation()
+    {
+        return getMutation(mutation);
+    }
+
+    private static Mutation getMutation(Object object)
+    {
+        assert object instanceof Commit || object instanceof Mutation : object;
+        return object instanceof Commit ? ((Commit) object).makeMutation()
+                                        : (Mutation) object;
+    }
+
+    private static Object shouldHint(boolean allowHints, MessageOut sentMessage, ConsistencyLevel consistencyLevel)
+    {
+        return allowHints
+               && sentMessage.verb != MessagingService.Verb.COUNTER_MUTATION
+               && consistencyLevel != ConsistencyLevel.ANY
+               ? sentMessage.payload : null;
+    }
+
 }

@@ -19,70 +19,37 @@ package org.apache.cassandra.io.util;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.zip.Adler32;
+import java.util.zip.CRC32;
 
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Throwables;
 
 public class ChecksummedRandomAccessReader extends RandomAccessReader
 {
     @SuppressWarnings("serial")
     public static class CorruptFileException extends RuntimeException
     {
-        public final File file;
+        public final String filePath;
 
-        public CorruptFileException(Exception cause, File file)
+        public CorruptFileException(Exception cause, String filePath)
         {
             super(cause);
-            this.file = file;
+            this.filePath = filePath;
         }
     }
 
     private final DataIntegrityMetadata.ChecksumValidator validator;
-    private final File file;
 
-    protected ChecksummedRandomAccessReader(File file, ChannelProxy channel, DataIntegrityMetadata.ChecksumValidator validator)
+    private ChecksummedRandomAccessReader(Builder builder)
     {
-        super(channel, validator.chunkSize, -1, BufferType.ON_HEAP, null);
-        this.validator = validator;
-        this.file = file;
+        super(builder);
+        this.validator = builder.validator;
     }
 
     @SuppressWarnings("resource")
-    public static ChecksummedRandomAccessReader open(File file, File crcFile) throws IOException
-    {
-        try (ChannelProxy channel = new ChannelProxy(file))
-        {
-            RandomAccessReader crcReader = RandomAccessReader.open(crcFile);
-            boolean closeCrcReader = true;
-            try
-            {
-                DataIntegrityMetadata.ChecksumValidator validator =
-                        new DataIntegrityMetadata.ChecksumValidator(new Adler32(), crcReader, file.getPath());
-                closeCrcReader = false;
-                boolean closeValidator = true;
-                try
-                {
-                    ChecksummedRandomAccessReader retval = new ChecksummedRandomAccessReader(file, channel, validator);
-                    closeValidator = false;
-                    return retval;
-                }
-                finally
-                {
-                    if (closeValidator)
-                        validator.close();
-                }
-            }
-            finally
-            {
-                if (closeCrcReader)
-                    crcReader.close();
-            }
-        }
-    }
-
     @Override
-    protected void reBuffer()
+    protected void reBufferStandard()
     {
         long desiredPosition = current();
         // align with buffer size, as checksums were computed in chunks of buffer size each.
@@ -107,10 +74,16 @@ public class ChecksummedRandomAccessReader extends RandomAccessReader
         }
         catch (IOException e)
         {
-            throw new CorruptFileException(e, file);
+            throw new CorruptFileException(e, channel.filePath());
         }
 
         buffer.position((int) (desiredPosition - bufferOffset));
+    }
+
+    @Override
+    protected void reBufferMmap()
+    {
+        throw new AssertionError("Unsupported operation");
     }
 
     @Override
@@ -123,7 +96,32 @@ public class ChecksummedRandomAccessReader extends RandomAccessReader
     @Override
     public void close()
     {
-        super.close();
-        validator.close();
+        Throwables.perform(channel.filePath(), Throwables.FileOpType.READ,
+                           super::close,
+                           validator::close,
+                           channel::close);
+    }
+
+    public static final class Builder extends RandomAccessReader.Builder
+    {
+        private final DataIntegrityMetadata.ChecksumValidator validator;
+
+        @SuppressWarnings("resource")
+        public Builder(File file, File crcFile) throws IOException
+        {
+            super(new ChannelProxy(file));
+            this.validator = new DataIntegrityMetadata.ChecksumValidator(new CRC32(),
+                                                                         RandomAccessReader.open(crcFile),
+                                                                         file.getPath());
+
+            super.bufferSize(validator.chunkSize)
+                 .bufferType(BufferType.ON_HEAP);
+        }
+
+        @Override
+        public RandomAccessReader build()
+        {
+            return new ChecksummedRandomAccessReader(this);
+        }
     }
 }

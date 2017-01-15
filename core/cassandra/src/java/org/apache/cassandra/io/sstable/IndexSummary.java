@@ -18,8 +18,6 @@
 package org.apache.cassandra.io.sstable;
 
 import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -28,11 +26,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.io.util.*;
-import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.concurrent.WrappedSharedCloseable;
 import org.apache.cassandra.utils.memory.MemoryUtil;
 
@@ -110,7 +108,7 @@ public class IndexSummary extends WrappedSharedCloseable
 
     // binary search is notoriously more difficult to get right than it looks; this is lifted from
     // Harmony's Collections implementation
-    public int binarySearch(RowPosition key)
+    public int binarySearch(PartitionPosition key)
     {
         // We will be comparing non-native Keys, so use a buffer with appropriate byte order
         ByteBuffer hollow = MemoryUtil.getHollowDirectByteBuffer().order(ByteOrder.BIG_ENDIAN);
@@ -162,6 +160,13 @@ public class IndexSummary extends WrappedSharedCloseable
         long start = getPositionInSummary(index);
         int keySize = (int) (calculateEnd(index) - start - 8L);
         entries.setByteBuffer(buffer, start, keySize);
+    }
+
+    public void addTo(Ref.IdentityCollection identities)
+    {
+        super.addTo(identities);
+        identities.add(offsets);
+        identities.add(entries);
     }
 
     public long getPosition(int index)

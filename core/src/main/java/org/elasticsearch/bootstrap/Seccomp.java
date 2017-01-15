@@ -31,7 +31,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.cassandra.utils.CLibrary;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.common.logging.ESLogger;
@@ -295,7 +294,7 @@ final class Seccomp {
             switch (errno) {
                 case ENOSYS: break; // ok
                 case EINVAL: break; // ok
-                default: throw new UnsupportedOperationException("seccomp(BOGUS_OPERATION): " + CLibrary.strerror(errno));
+                default: throw new UnsupportedOperationException("seccomp(BOGUS_OPERATION): " + JNACLibrary.strerror(errno));
             }
         }
 
@@ -308,7 +307,7 @@ final class Seccomp {
             switch (errno) {
                 case ENOSYS: break; // ok
                 case EINVAL: break; // ok
-                default: throw new UnsupportedOperationException("seccomp(SECCOMP_SET_MODE_FILTER, BOGUS_FLAG): " + CLibrary.strerror(errno));
+                default: throw new UnsupportedOperationException("seccomp(SECCOMP_SET_MODE_FILTER, BOGUS_FLAG): " + JNACLibrary.strerror(errno));
             }
         }
 
@@ -321,7 +320,7 @@ final class Seccomp {
             switch (errno) {
                 case ENOSYS: break; // ok
                 case EINVAL: break; // ok
-                default: throw new UnsupportedOperationException("prctl(BOGUS_OPTION): " + CLibrary.strerror(errno));
+                default: throw new UnsupportedOperationException("prctl(BOGUS_OPTION): " + JNACLibrary.strerror(errno));
             }
         }
 
@@ -336,7 +335,7 @@ final class Seccomp {
                 if (errno == EINVAL) {
                     throw new UnsupportedOperationException("seccomp unavailable: requires kernel 3.5+ with CONFIG_SECCOMP and CONFIG_SECCOMP_FILTER compiled in");
                 } else {
-                    throw new UnsupportedOperationException("prctl(PR_GET_NO_NEW_PRIVS): " + CLibrary.strerror(errno));
+                    throw new UnsupportedOperationException("prctl(PR_GET_NO_NEW_PRIVS): " + JNACLibrary.strerror(errno));
                 }
         }
         // check for SECCOMP
@@ -348,7 +347,7 @@ final class Seccomp {
                 if (errno == EINVAL) {
                     throw new UnsupportedOperationException("seccomp unavailable: CONFIG_SECCOMP not compiled into kernel, CONFIG_SECCOMP and CONFIG_SECCOMP_FILTER are needed");
                 } else {
-                    throw new UnsupportedOperationException("prctl(PR_GET_SECCOMP): " + CLibrary.strerror(errno));
+                    throw new UnsupportedOperationException("prctl(PR_GET_SECCOMP): " + JNACLibrary.strerror(errno));
                 }
         }
         // check for SECCOMP_MODE_FILTER
@@ -357,18 +356,18 @@ final class Seccomp {
             switch (errno) {
                 case EFAULT: break; // available
                 case EINVAL: throw new UnsupportedOperationException("seccomp unavailable: CONFIG_SECCOMP_FILTER not compiled into kernel, CONFIG_SECCOMP and CONFIG_SECCOMP_FILTER are needed");
-                default: throw new UnsupportedOperationException("prctl(PR_SET_SECCOMP): " + CLibrary.strerror(errno));
+                default: throw new UnsupportedOperationException("prctl(PR_SET_SECCOMP): " + JNACLibrary.strerror(errno));
             }
         }
 
         // ok, now set PR_SET_NO_NEW_PRIVS, needed to be able to set a seccomp filter as ordinary user
         if (linux_prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
-            throw new UnsupportedOperationException("prctl(PR_SET_NO_NEW_PRIVS): " + CLibrary.strerror(Native.getLastError()));
+            throw new UnsupportedOperationException("prctl(PR_SET_NO_NEW_PRIVS): " + JNACLibrary.strerror(Native.getLastError()));
         }
         
         // check it worked
         if (linux_prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) != 1) {
-            throw new UnsupportedOperationException("seccomp filter did not really succeed: prctl(PR_GET_NO_NEW_PRIVS): " + CLibrary.strerror(Native.getLastError()));
+            throw new UnsupportedOperationException("seccomp filter did not really succeed: prctl(PR_GET_NO_NEW_PRIVS): " + JNACLibrary.strerror(Native.getLastError()));
         }
         
         // BPF installed to check arch, limit, then syscall. See https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt for details.
@@ -396,18 +395,18 @@ final class Seccomp {
             method = 0;
             int errno1 = Native.getLastError();
             if (logger.isDebugEnabled()) {
-                logger.debug("seccomp(SECCOMP_SET_MODE_FILTER): " + CLibrary.strerror(errno1) + ", falling back to prctl(PR_SET_SECCOMP)...");
+                logger.debug("seccomp(SECCOMP_SET_MODE_FILTER): " + JNACLibrary.strerror(errno1) + ", falling back to prctl(PR_SET_SECCOMP)...");
             }
             if (linux_prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, pointer, 0, 0) != 0) {
                 int errno2 = Native.getLastError();
-                throw new UnsupportedOperationException("seccomp(SECCOMP_SET_MODE_FILTER): " + CLibrary.strerror(errno1) + 
-                                                        ", prctl(PR_SET_SECCOMP): " + CLibrary.strerror(errno2));
+                throw new UnsupportedOperationException("seccomp(SECCOMP_SET_MODE_FILTER): " + JNACLibrary.strerror(errno1) + 
+                                                        ", prctl(PR_SET_SECCOMP): " + JNACLibrary.strerror(errno2));
             }
         }
         
         // now check that the filter was really installed, we should be in filter mode.
         if (linux_prctl(PR_GET_SECCOMP, 0, 0, 0, 0) != 2) {
-            throw new UnsupportedOperationException("seccomp filter installation did not really succeed. seccomp(PR_GET_SECCOMP): " + CLibrary.strerror(Native.getLastError()));
+            throw new UnsupportedOperationException("seccomp filter installation did not really succeed. seccomp(PR_GET_SECCOMP): " + JNACLibrary.strerror(Native.getLastError()));
         }
 
         logger.debug("Linux seccomp filter installation successful, threads: [{}]", method == 1 ? "all" : "app" );
@@ -534,7 +533,7 @@ final class Seccomp {
 
         // drop a null-terminated list of privileges 
         if (libc_solaris.priv_set(PRIV_OFF, PRIV_ALLSETS, PRIV_PROC_FORK, PRIV_PROC_EXEC, null) != 0) {
-            throw new UnsupportedOperationException("priv_set unavailable: priv_set(): " + CLibrary.strerror(Native.getLastError()));
+            throw new UnsupportedOperationException("priv_set unavailable: priv_set(): " + JNACLibrary.strerror(Native.getLastError()));
         }
 
         logger.debug("Solaris priv_set initialization successful");

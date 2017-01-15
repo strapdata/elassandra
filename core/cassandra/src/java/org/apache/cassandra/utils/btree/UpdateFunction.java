@@ -18,21 +18,21 @@
  */
 package org.apache.cassandra.utils.btree;
 
+import java.util.function.BiFunction;
+
 import com.google.common.base.Function;
 /**
  * An interface defining a function to be applied to both the object we are replacing in a BTree and
  * the object that is intended to replace it, returning the object to actually replace it.
- *
- * @param <V>
  */
-public interface UpdateFunction<V> extends Function<V, V>
+public interface UpdateFunction<K, V> extends Function<K, V>
 {
     /**
      * @param replacing the value in the original tree we have matched
      * @param update the value in the updating collection that matched
      * @return the value to insert into the new tree
      */
-    V apply(V replacing, V update);
+    V apply(V replacing, K update);
 
     /**
      * @return true if we should fail the update
@@ -44,37 +44,29 @@ public interface UpdateFunction<V> extends Function<V, V>
      */
     void allocated(long heapSize);
 
-    public static final class NoOp<V> implements UpdateFunction<V>
+    public static final class Simple<V> implements UpdateFunction<V, V>
     {
-
-        private static final NoOp INSTANCE = new NoOp();
-        public static <V> NoOp<V> instance()
+        private final BiFunction<V, V, V> wrapped;
+        public Simple(BiFunction<V, V, V> wrapped)
         {
-            return INSTANCE;
-        }
-        
-        private NoOp()
-        {
+            this.wrapped = wrapped;
         }
 
-        public V apply(V replacing, V update)
-        {
-            return update;
-        }
+        public V apply(V v) { return v; }
+        public V apply(V replacing, V update) { return wrapped.apply(replacing, update); }
+        public boolean abortEarly() { return false; }
+        public void allocated(long heapSize) { }
 
-        public V apply(V update)
+        public static <V> Simple<V> of(BiFunction<V, V, V> f)
         {
-            return update;
-        }
-
-        public boolean abortEarly()
-        {
-            return false;
-        }
-
-        public void allocated(long heapSize)
-        {
+            return new Simple<>(f);
         }
     }
 
+    static final Simple<Object> noOp = Simple.of((a, b) -> a);
+
+    public static <K> UpdateFunction<K, K> noOp()
+    {
+        return (UpdateFunction<K, K>) noOp;
+    }
 }

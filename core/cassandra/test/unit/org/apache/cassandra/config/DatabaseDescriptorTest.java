@@ -25,8 +25,6 @@ import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.util.Enumeration;
 
-import junit.framework.Assert;
-
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -36,7 +34,8 @@ import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.gms.Gossiper;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.thrift.ThriftConversion;
 
@@ -53,7 +52,7 @@ public class DatabaseDescriptorTest
         // test serialization of all defined test CFs.
         for (String keyspaceName : Schema.instance.getNonSystemKeyspaces())
         {
-            for (CFMetaData cfm : Schema.instance.getKeyspaceMetaData(keyspaceName).values())
+            for (CFMetaData cfm : Schema.instance.getTablesAndViews(keyspaceName))
             {
                 CFMetaData cfmDupe = ThriftConversion.fromThrift(ThriftConversion.toThrift(cfm));
                 assertNotNull(cfmDupe);
@@ -68,8 +67,8 @@ public class DatabaseDescriptorTest
         for (String ks : Schema.instance.getNonSystemKeyspaces())
         {
             // Not testing round-trip on the KsDef via serDe() because maps
-            KSMetaData ksm = Schema.instance.getKSMetaData(ks);
-            KSMetaData ksmDupe = ThriftConversion.fromThrift(ThriftConversion.toThrift(ksm));
+            KeyspaceMetadata ksm = Schema.instance.getKSMetaData(ks);
+            KeyspaceMetadata ksmDupe = ThriftConversion.fromThrift(ThriftConversion.toThrift(ksm));
             assertNotNull(ksmDupe);
             assertEquals(ksm, ksmDupe);
         }
@@ -89,14 +88,14 @@ public class DatabaseDescriptorTest
         try
         {
             // add a few.
-            MigrationManager.announceNewKeyspace(KSMetaData.testMetadata("ks0", SimpleStrategy.class, KSMetaData.optsWithRF(3)));
-            MigrationManager.announceNewKeyspace(KSMetaData.testMetadata("ks1", SimpleStrategy.class, KSMetaData.optsWithRF(3)));
+            MigrationManager.announceNewKeyspace(KeyspaceMetadata.create("ks0", KeyspaceParams.simple(3)));
+            MigrationManager.announceNewKeyspace(KeyspaceMetadata.create("ks1", KeyspaceParams.simple(3)));
 
             assertNotNull(Schema.instance.getKSMetaData("ks0"));
             assertNotNull(Schema.instance.getKSMetaData("ks1"));
 
-            Schema.instance.clearKeyspaceDefinition(Schema.instance.getKSMetaData("ks0"));
-            Schema.instance.clearKeyspaceDefinition(Schema.instance.getKSMetaData("ks1"));
+            Schema.instance.clearKeyspaceMetadata(Schema.instance.getKSMetaData("ks0"));
+            Schema.instance.clearKeyspaceMetadata(Schema.instance.getKSMetaData("ks1"));
 
             assertNull(Schema.instance.getKSMetaData("ks0"));
             assertNull(Schema.instance.getKSMetaData("ks1"));
@@ -133,7 +132,7 @@ public class DatabaseDescriptorTest
         public Config loadConfig() throws ConfigurationException
         {
             Config testConfig = new Config();
-            testConfig.cluster_name = "ConfigurationLoader Test";;
+            testConfig.cluster_name = "ConfigurationLoader Test";
             return testConfig;
         }
     }

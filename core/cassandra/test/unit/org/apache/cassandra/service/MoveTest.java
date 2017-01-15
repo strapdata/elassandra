@@ -25,32 +25,39 @@ import java.util.*;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-import static org.junit.Assert.*;
-
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.marshal.BytesType;
-import org.apache.cassandra.gms.Gossiper;
-import org.apache.cassandra.locator.AbstractNetworkTopologySnitch;
-import org.apache.cassandra.locator.NetworkTopologyStrategy;
-import org.apache.cassandra.locator.PendingRangeMaps;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.config.KSMetaData;
-import org.apache.cassandra.dht.*;
+import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner.BigIntegerToken;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.gms.ApplicationState;
+import org.apache.cassandra.gms.Gossiper;
+import org.apache.cassandra.locator.AbstractNetworkTopologySnitch;
+import org.apache.cassandra.locator.NetworkTopologyStrategy;
+import org.apache.cassandra.locator.PendingRangeMaps;
 import org.apache.cassandra.gms.VersionedValue;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.SimpleSnitch;
 import org.apache.cassandra.locator.TokenMetadata;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.schema.Tables;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
 
 public class MoveTest
 {
@@ -132,21 +139,23 @@ public class MoveTest
             }
         });
 
-        Class<? extends AbstractReplicationStrategy> strategy = NetworkTopologyStrategy.class;
-        KSMetaData keyspace = KSMetaData.testMetadata(keyspaceName, strategy, configOptions(replicas),
-                CFMetaData.denseCFMetaData(keyspaceName, "CF1", BytesType.instance));
+        KeyspaceMetadata keyspace =  KeyspaceMetadata.create(keyspaceName,
+                                                             KeyspaceParams.nts(configOptions(replicas)),
+                                                             Tables.of(CFMetaData.Builder.create(keyspaceName, "CF1")
+                                                                                         .addPartitionKey("key", BytesType.instance).build()));
         MigrationManager.announceNewKeyspace(keyspace);
     }
 
-    private static Map<String, String> configOptions(Integer[] replicas)
+    private static Object[] configOptions(Integer[] replicas)
     {
-        Map<String, String> configOptions = new HashMap<>();
-        int i = 1;
+        Object[] configOptions = new Object[(replicas.length * 2)];
+        int i = 1, j=0;
         for(Integer replica : replicas)
         {
             if(replica == null)
                 continue;
-            configOptions.put("DC" + i++, String.valueOf(replica));
+            configOptions[j++] = "DC" + i++;
+            configOptions[j++] = replica;
         }
         return configOptions;
     }
@@ -493,7 +502,7 @@ public class MoveTest
     private void assertPendingRanges(TokenMetadata tmd, Map<Range<Token>,  Collection<InetAddress>> pendingRanges, String keyspaceName) throws ConfigurationException
     {
         boolean keyspaceFound = false;
-        for (String nonSystemKeyspaceName : Schema.instance.getNonSystemKeyspaces())
+        for (String nonSystemKeyspaceName : Schema.instance.getNonLocalStrategyKeyspaces())
         {
             if(!keyspaceName.equals(nonSystemKeyspaceName))
                 continue;
@@ -562,7 +571,7 @@ public class MoveTest
         assertTrue(tmd.isMoving(hosts.get(MOVING_NODE)));
 
         AbstractReplicationStrategy strategy;
-        for (String keyspaceName : Schema.instance.getNonSystemKeyspaces())
+        for (String keyspaceName : Schema.instance.getNonLocalStrategyKeyspaces())
         {
             strategy = getStrategy(keyspaceName, tmd);
             if(strategy instanceof NetworkTopologyStrategy)
@@ -992,13 +1001,13 @@ public class MoveTest
 
     private AbstractReplicationStrategy getStrategy(String keyspaceName, TokenMetadata tmd)
     {
-        KSMetaData ksmd = Schema.instance.getKSMetaData(keyspaceName);
+        KeyspaceMetadata ksmd = Schema.instance.getKSMetaData(keyspaceName);
         return AbstractReplicationStrategy.createReplicationStrategy(
                 keyspaceName,
-                ksmd.strategyClass,
+                ksmd.params.replication.klass,
                 tmd,
                 new SimpleSnitch(),
-                ksmd.strategyOptions);
+                ksmd.params.replication.options);
     }
 
     private Token positionToken(int position)

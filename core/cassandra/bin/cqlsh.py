@@ -70,8 +70,9 @@ except ImportError:
 CQL_LIB_PREFIX = 'cassandra-driver-internal-only-'
 
 CASSANDRA_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
-CASSANDRA_CQL_HTML_FALLBACK = 'https://cassandra.apache.org/doc/cql3/CQL-2.2.html'
+CASSANDRA_CQL_HTML_FALLBACK = 'https://cassandra.apache.org/doc/cql3/CQL-3.0.html'
 
+# default location of local CQL.html
 if os.path.exists(CASSANDRA_PATH + '/doc/cql3/CQL.html'):
     # default location of local CQL.html
     CASSANDRA_CQL_HTML = 'file://' + CASSANDRA_PATH + '/doc/cql3/CQL.html'
@@ -146,10 +147,12 @@ except ImportError, e:
 
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster
+from cassandra.marshal import int64_unpack
 from cassandra.metadata import (ColumnMetadata, KeyspaceMetadata,
                                 TableMetadata, protect_name, protect_names)
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement, ordered_dict_factory, TraceUnavailable
+from cassandra.util import datetime_from_timestamp
 
 # cqlsh should run correctly when run out of a Cassandra source tree,
 # out of an unpacked Cassandra tarball, and after a proper package install.
@@ -170,7 +173,7 @@ from cqlshlib.util import get_file_encoding_bomsize, trim_if_present
 
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 9042
-DEFAULT_CQLVER = '3.3.1'
+DEFAULT_CQLVER = '3.4.0'
 DEFAULT_PROTOCOL_VERSION = 4
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 5
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 10
@@ -259,8 +262,8 @@ if os.path.exists(OLD_HISTORY):
 # END history/config definition
 
 CQL_ERRORS = (
-    cassandra.AlreadyExists, cassandra.AuthenticationFailed, cassandra.InvalidRequest,
-    cassandra.Timeout, cassandra.Unauthorized, cassandra.OperationTimedOut,
+    cassandra.AlreadyExists, cassandra.AuthenticationFailed, cassandra.CoordinationFailure,
+    cassandra.InvalidRequest, cassandra.Timeout, cassandra.Unauthorized, cassandra.OperationTimedOut,
     cassandra.cluster.NoHostAvailable,
     cassandra.connection.ConnectionBusy, cassandra.connection.ProtocolError, cassandra.connection.ConnectionException,
     cassandra.protocol.ErrorMessage, cassandra.protocol.InternalError, cassandra.query.TraceUnavailable
@@ -332,12 +335,13 @@ cqlsh_extra_syntax_rules = r'''
                                   | "KEYSPACE" ksname=<keyspaceName>?
                                   | ( "COLUMNFAMILY" | "TABLE" ) cf=<columnFamilyName>
                                   | "INDEX" idx=<indexName>
+                                  | "MATERIALIZED" "VIEW" mv=<materializedViewName>
                                   | ( "COLUMNFAMILIES" | "TABLES" )
                                   | "FULL"? "SCHEMA"
                                   | "CLUSTER"
                                   | "TYPES"
                                   | "TYPE" ut=<userTypeName>
-                                  | (ksname=<keyspaceName> | cf=<columnFamilyName> | idx=<indexName>))
+                                  | (ksname=<keyspaceName> | cf=<columnFamilyName> | idx=<indexName> | mv=<materializedViewName>))
                     ;
 
 <consistencyCommand> ::= "CONSISTENCY" ( level=<consistencyLevel> )?
@@ -509,6 +513,10 @@ class IndexNotFound(Exception):
     pass
 
 
+class MaterializedViewNotFound(Exception):
+    pass
+
+
 class ObjectNotFound(Exception):
     pass
 
@@ -593,7 +601,7 @@ def insert_driver_hooks():
 
 def extend_cql_deserialization():
     """
-    The python driver returns BLOBs as string, but we expect them as bytearrays; therefore we change
+    The python driver returns BLOBs as string, but we expect them as bytearrays
     the implementation of cassandra.cqltypes.BytesType.deserialize.
 
     The deserializers package exists only when the driver has been compiled with cython extensions and
@@ -611,6 +619,25 @@ def extend_cql_deserialization():
             del cassandra.deserializers.DesBytesType
 
     cassandra.cqltypes.BytesType.deserialize = staticmethod(lambda byts, protocol_version: bytearray(byts))
+
+    class DateOverFlowWarning(RuntimeWarning):
+        pass
+
+    # Native datetime types blow up outside of datetime.[MIN|MAX]_YEAR. We will fall back to an int timestamp
+    def deserialize_date_fallback_int(byts, protocol_version):
+        timestamp_ms = int64_unpack(byts)
+        try:
+            return datetime_from_timestamp(timestamp_ms / 1000.0)
+        except OverflowError:
+            warnings.warn(DateOverFlowWarning("Some timestamps are larger than Python datetime can represent. Timestamps are displayed in milliseconds from epoch."))
+            return timestamp_ms
+
+    cassandra.cqltypes.DateType.deserialize = staticmethod(deserialize_date_fallback_int)
+
+    if hasattr(cassandra, 'deserializers'):
+        del cassandra.deserializers.DesDateType
+
+    # Return cassandra.cqltypes.EMPTY instead of None for empty values
     cassandra.cqltypes.CassandraType.support_empty_values = True
 
 
@@ -731,10 +758,6 @@ class Shell(cmd.Cmd):
 
         self.display_timezone = display_timezone
 
-        # If there is no schema metadata present (due to a schema mismatch), force schema refresh
-        if not self.conn.metadata.keyspaces:
-            self.refresh_schema_metadata_best_effort()
-
         self.session.default_timeout = request_timeout
         self.session.row_factory = ordered_dict_factory
         self.session.default_consistency_level = cassandra.ConsistencyLevel.ONE
@@ -790,15 +813,6 @@ class Shell(cmd.Cmd):
                           "to support {} encoding on Windows platforms.\n"
                           "If you experience encoding problems, change your console"
                           " codepage with 'chcp 65001' before starting cqlsh.\n".format(self.encoding))
-
-    def refresh_schema_metadata_best_effort(self):
-        try:
-            self.conn.refresh_schema_metadata(5)  # will throw exception if there is a schema mismatch
-        except Exception:
-            self.printerr("Warning: schema version mismatch detected, which might be caused by DOWN nodes; if "
-                          "this is not the case, check the schema versions of your nodes in system.local and "
-                          "system.peers.")
-            self.conn.refresh_schema_metadata(0)
 
     def set_expanded_cql_version(self, ver):
         ver, vertuple = full_cql_version(ver)
@@ -871,6 +885,12 @@ class Shell(cmd.Cmd):
             ksname = self.current_keyspace
 
         return map(str, self.get_keyspace_meta(ksname).tables.keys())
+
+    def get_materialized_view_names(self, ksname=None):
+        if ksname is None:
+            ksname = self.current_keyspace
+
+        return map(str, self.get_keyspace_meta(ksname).views.keys())
 
     def get_index_names(self, ksname=None):
         if ksname is None:
@@ -976,6 +996,15 @@ class Shell(cmd.Cmd):
 
         return ksmeta.indexes[idxname]
 
+    def get_view_meta(self, ksname, viewname):
+        if ksname is None:
+            ksname = self.current_keyspace
+        ksmeta = self.get_keyspace_meta(ksname)
+
+        if viewname not in ksmeta.views:
+            raise MaterializedViewNotFound("Materialized view %r not found" % viewname)
+        return ksmeta.views[viewname]
+
     def get_object_meta(self, ks, name):
         if name is None:
             if ks and ks in self.conn.metadata.keyspaces:
@@ -995,6 +1024,8 @@ class Shell(cmd.Cmd):
             return ksmeta.tables[name]
         elif name in ksmeta.indexes:
             return ksmeta.indexes[name]
+        elif name in ksmeta.views:
+            return ksmeta.views[name]
 
         raise ObjectNotFound("%r not found in keyspace %r" % (name, ks))
 
@@ -1109,7 +1140,7 @@ class Shell(cmd.Cmd):
                 except EOFError:
                     self.handle_eof()
                 except CQL_ERRORS, cqlerr:
-                    self.printerr(unicode(cqlerr))
+                    self.printerr(cqlerr.message.decode(encoding='utf-8'))
                 except KeyboardInterrupt:
                     self.reset_statement()
                     print
@@ -1224,7 +1255,7 @@ class Shell(cmd.Cmd):
 
             if self.tracing_enabled:
                 try:
-                    for trace in future.get_all_query_traces(self.max_trace_wait):
+                    for trace in future.get_all_query_traces(max_wait_per=self.max_trace_wait, query_cl=self.consistency_level):
                         print_trace(self, trace)
                 except TraceUnavailable:
                     msg = "Statement trace did not complete within %d seconds; trace data may be incomplete." % (self.session.max_trace_wait,)
@@ -1236,7 +1267,22 @@ class Shell(cmd.Cmd):
 
         return success
 
-    def parse_for_table_meta(self, query_string):
+    def parse_for_select_meta(self, query_string):
+        try:
+            parsed = cqlruleset.cql_parse(query_string)[1]
+        except IndexError:
+            return None
+        ks = self.cql_unprotect_name(parsed.get_binding('ksname', None))
+        name = self.cql_unprotect_name(parsed.get_binding('cfname', None))
+        try:
+            return self.get_table_meta(ks, name)
+        except ColumnFamilyNotFound:
+            try:
+                return self.get_view_meta(ks, name)
+            except MaterializedViewNotFound:
+                raise ObjectNotFound("%r not found in keyspace %r" % (name, ks))
+
+    def parse_for_update_meta(self, query_string):
         try:
             parsed = cqlruleset.cql_parse(query_string)[1]
         except IndexError:
@@ -1249,25 +1295,30 @@ class Shell(cmd.Cmd):
         if not statement:
             return False, None
 
-        while True:
+        future = self.session.execute_async(statement, trace=self.tracing_enabled)
+        result = None
+        try:
+            result = future.result()
+        except CQL_ERRORS, err:
+            self.printerr(unicode(err.__class__.__name__) + u": " + err.message.decode(encoding='utf-8'))
+        except Exception:
+            import traceback
+            self.printerr(traceback.format_exc())
+
+        # Even if statement failed we try to refresh schema if not agreed (see CASSANDRA-9689)
+        if not future.is_schema_agreed:
             try:
-                future = self.session.execute_async(statement, trace=self.tracing_enabled)
-                result = future.result()
-                break
-            except cassandra.OperationTimedOut, err:
-                self.refresh_schema_metadata_best_effort()
-                self.printerr(unicode(err.__class__.__name__) + u": " + unicode(err))
-                return False, None
-            except CQL_ERRORS, err:
-                self.printerr(unicode(err.__class__.__name__) + u": " + unicode(err))
-                return False, None
-            except Exception, err:
-                import traceback
-                self.printerr(traceback.format_exc())
-                return False, None
+                self.conn.refresh_schema_metadata(5)  # will throw exception if there is a schema mismatch
+            except Exception:
+                self.printerr("Warning: schema version mismatch detected; check the schema versions of your "
+                              "nodes in system.local and system.peers.")
+                self.conn.refresh_schema_metadata(-1)
+
+        if result is None:
+            return False, None
 
         if statement.query_string[:6].lower() == 'select':
-            self.print_result(result, self.parse_for_table_meta(statement.query_string))
+            self.print_result(result, self.parse_for_select_meta(statement.query_string))
         elif statement.query_string.lower().startswith("list users") or statement.query_string.lower().startswith("list roles"):
             self.print_result(result, self.get_table_meta('system_auth', 'roles'))
         elif statement.query_string.lower().startswith("list"):
@@ -1275,7 +1326,7 @@ class Shell(cmd.Cmd):
         elif result:
             # CAS INSERT/UPDATE
             self.writeresult("")
-            self.print_static_result(result.column_names, list(result), self.parse_for_table_meta(statement.query_string))
+            self.print_static_result(result.column_names, list(result), self.parse_for_update_meta(statement.query_string))
         self.flush_output()
         return True, future
 
@@ -1446,6 +1497,16 @@ class Shell(cmd.Cmd):
         out.write(self.get_index_meta(ksname, idxname).export_as_string())
         out.write("\n")
 
+    def print_recreate_materialized_view(self, ksname, viewname, out):
+        """
+        Output CQL commands which should be pasteable back into a CQL session
+        to recreate the given materialized view.
+
+        Writes output to the given out stream.
+        """
+        out.write(self.get_view_meta(ksname, viewname).export_as_string())
+        out.write("\n")
+
     def print_recreate_object(self, ks, name, out):
         """
         Output CQL commands which should be pasteable back into a CQL session
@@ -1478,6 +1539,15 @@ class Shell(cmd.Cmd):
     def describe_index(self, ksname, idxname):
         print
         self.print_recreate_index(ksname, idxname, sys.stdout)
+        print
+
+    def describe_materialized_view(self, ksname, viewname):
+        if ksname is None:
+            ksname = self.current_keyspace
+        if ksname is None:
+            raise NoKeyspaceError("No keyspace specified and no current keyspace")
+        print
+        self.print_recreate_materialized_view(ksname, viewname, sys.stdout)
         print
 
     def describe_object(self, ks, name):
@@ -1522,7 +1592,7 @@ class Shell(cmd.Cmd):
         functions = filter(lambda f: f.name == functionname, ksmeta.functions.values())
         if len(functions) == 0:
             raise FunctionNotFound("User defined function %r not found" % functionname)
-        print "\n\n".join(func.as_cql_query(formatted=True) for func in functions)
+        print "\n\n".join(func.export_as_string() for func in functions)
         print
 
     def describe_aggregates(self, ksname):
@@ -1549,7 +1619,7 @@ class Shell(cmd.Cmd):
         aggregates = filter(lambda f: f.name == aggregatename, ksmeta.aggregates.values())
         if len(aggregates) == 0:
             raise FunctionNotFound("User defined aggregate %r not found" % aggregatename)
-        print "\n\n".join(aggr.as_cql_query(formatted=True) for aggr in aggregates)
+        print "\n\n".join(aggr.export_as_string() for aggr in aggregates)
         print
 
     def describe_usertypes(self, ksname):
@@ -1577,7 +1647,7 @@ class Shell(cmd.Cmd):
             usertype = ksmeta.user_types[typename]
         except KeyError:
             raise UserTypeNotFound("User type %r not found" % typename)
-        print usertype.as_cql_query(formatted=True)
+        print usertype.export_as_string()
         print
 
     def describe_cluster(self):
@@ -1641,6 +1711,12 @@ class Shell(cmd.Cmd):
           In some cases, there may be index metadata which is not representable
           and which will not be shown.
 
+        DESCRIBE MATERIALIZED VIEW <viewname>
+
+          Output the CQL command that could be used to recreate the given materialized view.
+          In some cases, there may be materialized view metadata which is not representable
+          and which will not be shown.
+
         DESCRIBE CLUSTER
 
           Output information about the connected Cassandra cluster, such as the
@@ -1684,7 +1760,8 @@ class Shell(cmd.Cmd):
         DESCRIBE <objname>
 
           Output CQL commands that could be used to recreate the entire object schema,
-          where object can be either a keyspace or a table or an index (in this order).
+          where object can be either a keyspace or a table or an index or a materialized
+          view (in this order).
   """
         what = parsed.matched[1][1].lower()
         if what == 'functions':
@@ -1717,6 +1794,10 @@ class Shell(cmd.Cmd):
             ks = self.cql_unprotect_name(parsed.get_binding('ksname', None))
             idx = self.cql_unprotect_name(parsed.get_binding('idxname', None))
             self.describe_index(ks, idx)
+        elif what == 'materialized' and parsed.matched[2][1].lower() == 'view':
+            ks = self.cql_unprotect_name(parsed.get_binding('ksname', None))
+            mv = self.cql_unprotect_name(parsed.get_binding('mvname'))
+            self.describe_materialized_view(ks, mv)
         elif what in ('columnfamilies', 'tables'):
             self.describe_columnfamilies(self.current_keyspace)
         elif what == 'types':
@@ -1736,6 +1817,8 @@ class Shell(cmd.Cmd):
             name = self.cql_unprotect_name(parsed.get_binding('cfname'))
             if not name:
                 name = self.cql_unprotect_name(parsed.get_binding('idxname', None))
+            if not name:
+                name = self.cql_unprotect_name(parsed.get_binding('mvname', None))
             self.describe_object(ks, name)
     do_desc = do_describe
 
@@ -1793,7 +1876,7 @@ class Shell(cmd.Cmd):
           SKIPROWS=0              - the number of rows to skip
           SKIPCOLS=''             - a comma separated list of column names to skip
           MAXPARSEERRORS=-1       - the maximum global number of parsing errors, -1 means no maximum
-          MAXINSERTERRORS=-1      - the maximum global number of insert errors, -1 means no maximum
+          MAXINSERTERRORS=1000    - the maximum global number of insert errors, -1 means no maximum
           ERRFILE=''              - a file where to store all rows that could not be imported, by default this is
                                     import_ks_table.err where <ks> is your keyspace and <table> is your table name.
           PREPAREDSTATEMENTS=True - whether to use prepared statements when importing, by default True. Set this to
@@ -1911,15 +1994,21 @@ class Shell(cmd.Cmd):
         except IOError, e:
             self.printerr('Could not open %r: %s' % (fname, e))
             return
-        subshell = Shell(self.hostname, self.port,
-                         color=self.color, encoding=self.encoding, stdin=f,
-                         tty=False, use_conn=self.conn, cqlver=self.cql_version,
-                         keyspace=self.current_keyspace,
+        username = self.auth_provider.username if self.auth_provider else None
+        password = self.auth_provider.password if self.auth_provider else None
+        subshell = Shell(self.hostname, self.port, color=self.color,
+                         username=username, password=password,
+                         encoding=self.encoding, stdin=f, tty=False, use_conn=self.conn,
+                         cqlver=self.cql_version, keyspace=self.current_keyspace,
+                         tracing_enabled=self.tracing_enabled,
+                         display_nanotime_format=self.display_nanotime_format,
                          display_timestamp_format=self.display_timestamp_format,
                          display_date_format=self.display_date_format,
-                         display_nanotime_format=self.display_nanotime_format,
                          display_float_precision=self.display_float_precision,
-                         max_trace_wait=self.max_trace_wait)
+                         display_timezone=self.display_timezone,
+                         max_trace_wait=self.max_trace_wait, ssl=self.ssl,
+                         request_timeout=self.session.default_timeout,
+                         connect_timeout=self.conn.connect_timeout)
         subshell.cmdloop()
         f.close()
 

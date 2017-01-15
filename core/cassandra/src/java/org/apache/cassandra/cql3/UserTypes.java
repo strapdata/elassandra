@@ -21,11 +21,9 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import org.apache.cassandra.cql3.functions.Function;
-import org.apache.cassandra.db.marshal.CollectionType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.exceptions.InvalidRequestException;
-import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
@@ -44,7 +42,7 @@ public abstract class UserTypes
                                        ut.fieldType(field));
     }
 
-    public static class Literal implements Term.Raw
+    public static class Literal extends Term.Raw
     {
         public final Map<ColumnIdentifier, Term.Raw> entries;
 
@@ -120,8 +118,7 @@ public abstract class UserTypes
             }
         }
 
-        @Override
-        public String toString()
+        public String getText()
         {
             StringBuilder sb = new StringBuilder();
             sb.append("{");
@@ -129,7 +126,7 @@ public abstract class UserTypes
             while (iter.hasNext())
             {
                 Map.Entry<ColumnIdentifier, Term.Raw> entry = iter.next();
-                sb.append(entry.getKey()).append(":").append(entry.getValue());
+                sb.append(entry.getKey()).append(": ").append(entry.getValue().getText());
                 if (iter.hasNext())
                     sb.append(", ");
             }
@@ -150,9 +147,9 @@ public abstract class UserTypes
             this.values = values;
         }
 
-        public Iterable<Function> getFunctions()
+        public void addFunctionsTo(List<Function> functions)
         {
-            return Terms.getFunctions(values);
+            Terms.addFunctions(values, functions);
         }
 
         public boolean containsBindMarker()
@@ -171,8 +168,6 @@ public abstract class UserTypes
 
         private ByteBuffer[] bindInternal(QueryOptions options) throws InvalidRequestException
         {
-            int version = options.getProtocolVersion();
-
             ByteBuffer[] buffers = new ByteBuffer[values.size()];
             for (int i = 0; i < type.size(); i++)
             {
@@ -180,10 +175,6 @@ public abstract class UserTypes
                 // Since A UDT value is always written in its entirety Cassandra can't preserve a pre-existing value by 'not setting' the new value. Reject the query.
                 if (buffers[i] == ByteBufferUtil.UNSET_BYTE_BUFFER)
                     throw new InvalidRequestException(String.format("Invalid unset value for field '%s' of user defined type %s", type.fieldNameAsString(i), type.getNameAsString()));
-                // Inside UDT values, we must force the serialization of collections to v3 whatever protocol
-                // version is in use since we're going to store directly that serialized value.
-                if (version < Server.VERSION_3 && type.fieldType(i).isCollection() && buffers[i] != null)
-                    buffers[i] = ((CollectionType)type.fieldType(i)).getSerializer().reserializeToV3(buffers[i]);
             }
             return buffers;
         }

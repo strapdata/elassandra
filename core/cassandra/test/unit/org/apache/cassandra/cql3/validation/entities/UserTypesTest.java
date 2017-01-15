@@ -22,16 +22,17 @@ import java.util.UUID;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
+import org.apache.cassandra.service.StorageService;
 
 public class UserTypesTest extends CQLTester
 {
     @BeforeClass
     public static void setUpClass()
     {
-        DatabaseDescriptor.setPartitioner(new ByteOrderedPartitioner());
+        // Selecting partitioner for a table is not exposed on CREATE TABLE.
+        StorageService.instance.setPartitionerUnsafe(ByteOrderedPartitioner.instance);
     }
 
     @Test
@@ -42,6 +43,17 @@ public class UserTypesTest extends CQLTester
 
         // 's' is not a field of myType
         assertInvalid("INSERT INTO %s (k, v) VALUES (?, {s : ?})", 0, 1);
+    }
+
+    @Test
+    public void testInvalidInputForUserType() throws Throwable
+    {
+        String myType = createType("CREATE TYPE %s (f int)");
+        createTable("CREATE TABLE %s(pk int PRIMARY KEY, t frozen<" + myType + ">)");
+        assertInvalidMessage("Not enough bytes to read 0th field f",
+                             "INSERT INTO %s (pk, t) VALUES (?, ?)", 1, "test");
+        assertInvalidMessage("Not enough bytes to read 0th field f",
+                             "INSERT INTO %s (pk, t) VALUES (?, ?)", 1, Long.MAX_VALUE);
     }
 
     @Test
@@ -175,6 +187,34 @@ public class UserTypesTest extends CQLTester
                     row(3, map("thirdValue", userType(3, null))),
                     row(4, map("fourthValue", userType(null, 4))));
         }
+    }
+
+    @Test
+    public void testAlteringUserTypeNestedWithinNonFrozenMap() throws Throwable
+    {
+        String ut1 = createType("CREATE TYPE %s (a int)");
+        String columnType = KEYSPACE + "." + ut1;
+
+        createTable("CREATE TABLE %s (x int PRIMARY KEY, y map<text, frozen<" + columnType + ">>)");
+
+        execute("INSERT INTO %s (x, y) VALUES(1, {'firstValue': {a: 1}})");
+        assertRows(execute("SELECT * FROM %s"),
+                   row(1, map("firstValue", userType(1))));
+
+        flush();
+
+        execute("ALTER TYPE " + columnType + " ADD b int");
+        execute("UPDATE %s SET y['secondValue'] = {a: 2, b: 2} WHERE x = 1");
+
+        assertRows(execute("SELECT * FROM %s"),
+                   row(1, map("firstValue", userType(1),
+                              "secondValue", userType(2, 2))));
+
+        flush();
+
+        assertRows(execute("SELECT * FROM %s"),
+                   row(1, map("firstValue", userType(1),
+                              "secondValue", userType(2, 2))));
     }
 
     @Test
@@ -444,6 +484,74 @@ public class UserTypesTest extends CQLTester
         //
 
         assertInvalidMessage("would create a circular reference", "ALTER TYPE " + typeWithKs(type1) + " ADD needs_to_fail frozen<list<" + typeWithKs(type1) + ">>");
+    }
+
+    @Test
+    public void testTypeAlterUsedInFunction() throws Throwable
+    {
+        String type1 = createType("CREATE TYPE %s (foo ascii)");
+        assertComplexInvalidAlterDropStatements(type1, type1, "{foo: 'abc'}");
+
+        type1 = createType("CREATE TYPE %s (foo ascii)");
+        assertComplexInvalidAlterDropStatements(type1, "list<frozen<" + type1 + ">>", "[{foo: 'abc'}]");
+
+        type1 = createType("CREATE TYPE %s (foo ascii)");
+        assertComplexInvalidAlterDropStatements(type1, "set<frozen<" + type1 + ">>", "{{foo: 'abc'}}");
+
+        type1 = createType("CREATE TYPE %s (foo ascii)");
+        assertComplexInvalidAlterDropStatements(type1, "map<text, frozen<" + type1 + ">>", "{'key': {foo: 'abc'}}");
+
+        type1 = createType("CREATE TYPE %s (foo ascii)");
+        String type2 = createType("CREATE TYPE %s (foo frozen<" + type1 + ">)");
+        assertComplexInvalidAlterDropStatements(type1, type2, "{foo: 'abc'}");
+
+        type1 = createType("CREATE TYPE %s (foo ascii)");
+        type2 = createType("CREATE TYPE %s (foo frozen<" + type1 + ">)");
+        assertComplexInvalidAlterDropStatements(type1,
+                                                "list<frozen<" + type2 + ">>",
+                                                "[{foo: 'abc'}]");
+
+        type1 = createType("CREATE TYPE %s (foo ascii)");
+        type2 = createType("CREATE TYPE %s (foo frozen<set<" + type1 + ">>)");
+        assertComplexInvalidAlterDropStatements(type1,
+                                                "map<text, frozen<" + type2 + ">>",
+                                                "{'key': {foo: {{foo: 'abc'}}}}");
+
+        type1 = createType("CREATE TYPE %s (foo ascii)");
+        assertComplexInvalidAlterDropStatements(type1,
+                                                "tuple<text, frozen<" + type1 + ">>",
+                                                "('key', {foo: 'abc'})");
+
+        type1 = createType("CREATE TYPE %s (foo ascii)");
+        assertComplexInvalidAlterDropStatements(type1,
+                                                "tuple<text, frozen<tuple<tuple<" + type1 + ", int>, int>>>",
+                                                "('key', (({foo: 'abc'}, 0), 0))");
+
+        type1 = createType("CREATE TYPE %s (foo ascii)");
+        type2 = createType("CREATE TYPE %s (foo frozen<set<" + type1 + ">>)");
+        assertComplexInvalidAlterDropStatements(type1,
+                                                "tuple<text, frozen<" + type2 + ">>",
+                                                "('key', {foo: {{foo: 'abc'}}})");
+    }
+
+    private void assertComplexInvalidAlterDropStatements(String type1, String fArgType, String initcond) throws Throwable
+    {
+        String f = createFunction(KEYSPACE, type1, "CREATE FUNCTION %s(arg " + fArgType + ", col int) " +
+                                                   "RETURNS NULL ON NULL INPUT " +
+                                                   "RETURNS " + fArgType + ' ' +
+                                                   "LANGUAGE java AS 'return arg;'");
+        createAggregate(KEYSPACE, "int", "CREATE AGGREGATE %s(int) " +
+                                         "SFUNC " + shortFunctionName(f) + ' ' +
+                                         "STYPE " + fArgType + ' ' +
+                                         "INITCOND " + initcond);
+        assertInvalidAlterDropStatements(type1);
+    }
+
+    private void assertInvalidAlterDropStatements(String t) throws Throwable
+    {
+        assertInvalidMessage("Cannot alter user type " + typeWithKs(t), "ALTER TYPE " + typeWithKs(t) + " RENAME foo TO bar;");
+        assertInvalidMessage("Cannot alter user type " + typeWithKs(t), "ALTER TYPE " + typeWithKs(t) + " ALTER foo TYPE text;");
+        assertInvalidMessage("Cannot drop user type " + typeWithKs(t), "DROP TYPE " + typeWithKs(t) + ';');
     }
 
     private String typeWithKs(String type1)

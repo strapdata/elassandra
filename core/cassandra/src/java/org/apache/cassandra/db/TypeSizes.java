@@ -20,10 +20,12 @@ package org.apache.cassandra.db;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
-public abstract class TypeSizes
+import org.apache.cassandra.utils.vint.VIntCoding;
+
+public final class TypeSizes
 {
-    public static final TypeSizes NATIVE = new NativeDBTypeSizes();
-    public static final TypeSizes VINT = new VIntEncodedTypeSizes();
+
+    private TypeSizes(){}
 
     private static final int BOOL_SIZE = 1;
     private static final int SHORT_SIZE = 2;
@@ -31,14 +33,8 @@ public abstract class TypeSizes
     private static final int LONG_SIZE = 8;
     private static final int UUID_SIZE = 16;
 
-    public abstract int sizeof(boolean value);
-    public abstract int sizeof(short value);
-    public abstract int sizeof(int value);
-    public abstract int sizeof(long value);
-    public abstract int sizeof(UUID value);
-
     /** assumes UTF8 */
-    public int sizeof(String value)
+    public static int sizeof(String value)
     {
         int length = encodedUTF8Length(value);
         assert length <= Short.MAX_VALUE;
@@ -62,95 +58,53 @@ public abstract class TypeSizes
         return utflen;
     }
 
-    public int sizeofWithShortLength(ByteBuffer value)
+    public static int sizeofWithShortLength(ByteBuffer value)
     {
         return sizeof((short) value.remaining()) + value.remaining();
     }
 
-    public int sizeofWithLength(ByteBuffer value)
+    public static int sizeofWithLength(ByteBuffer value)
     {
         return sizeof(value.remaining()) + value.remaining();
     }
 
-    public static class NativeDBTypeSizes extends TypeSizes
+    public static int sizeofWithVIntLength(ByteBuffer value)
     {
-        public int sizeof(boolean value)
-        {
-            return BOOL_SIZE;
-        }
-
-        public int sizeof(short value)
-        {
-            return SHORT_SIZE;
-        }
-
-        public int sizeof(int value)
-        {
-            return INT_SIZE;
-        }
-
-        public int sizeof(long value)
-        {
-            return LONG_SIZE;
-        }
-
-        public int sizeof(UUID value)
-        {
-            return UUID_SIZE;
-        }
+        return sizeofUnsignedVInt(value.remaining()) + value.remaining();
     }
 
-    public static class VIntEncodedTypeSizes extends TypeSizes
+    public static int sizeof(boolean value)
     {
-        private static final int BOOL_SIZE = 1;
+        return BOOL_SIZE;
+    }
 
-        public int sizeofVInt(long i)
-        {
-            if (i >= -112 && i <= 127)
-                return 1;
+    public static int sizeof(short value)
+    {
+        return SHORT_SIZE;
+    }
 
-            int size = 0;
-            int len = -112;
-            if (i < 0)
-            {
-                i ^= -1L; // take one's complement'
-                len = -120;
-            }
-            long tmp = i;
-            while (tmp != 0)
-            {
-                tmp = tmp >> 8;
-                len--;
-            }
-            size++;
-            len = (len < -120) ? -(len + 120) : -(len + 112);
-            size += len;
-            return size;
-        }
+    public static int sizeof(int value)
+    {
+        return INT_SIZE;
+    }
 
-        public int sizeof(long i)
-        {
-            return sizeofVInt(i);
-        }
+    public static int sizeof(long value)
+    {
+        return LONG_SIZE;
+    }
 
-        public int sizeof(boolean i)
-        {
-            return BOOL_SIZE;
-        }
+    public static int sizeof(UUID value)
+    {
+        return UUID_SIZE;
+    }
 
-        public int sizeof(short i)
-        {
-            return sizeofVInt(i);
-        }
+    public static int sizeofVInt(long value)
+    {
+        return VIntCoding.computeVIntSize(value);
+    }
 
-        public int sizeof(int i)
-        {
-            return sizeofVInt(i);
-        }
-
-        public int sizeof(UUID value)
-        {
-            return sizeofVInt(value.getMostSignificantBits()) + sizeofVInt(value.getLeastSignificantBits());
-        }
+    public static int sizeofUnsignedVInt(long value)
+    {
+        return VIntCoding.computeUnsignedVIntSize(value);
     }
 }

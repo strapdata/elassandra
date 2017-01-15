@@ -21,6 +21,7 @@
 package org.apache.cassandra.cql3.selection;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -109,44 +110,20 @@ public class SelectionColumnMapping implements SelectionColumns
 
     public String toString()
     {
-        final Function<ColumnDefinition, String> getDefName = new Function<ColumnDefinition, String>()
-        {
-            public String apply(ColumnDefinition def)
-            {
-                return def.name.toString();
-            }
-        };
-        Function<Map.Entry<ColumnSpecification, Collection<ColumnDefinition>>, String> mappingEntryToString =
-        new Function<Map.Entry<ColumnSpecification, Collection<ColumnDefinition>>, String>(){
-            public String apply(Map.Entry<ColumnSpecification, Collection<ColumnDefinition>> entry)
-            {
-                StringBuilder builder = new StringBuilder();
-                builder.append(entry.getKey().name.toString());
-                builder.append(":[");
-                builder.append(Joiner.on(',').join(Iterables.transform(entry.getValue(), getDefName)));
-                builder.append("]");
-                return builder.toString();
-            }
-        };
-
-        Function<ColumnSpecification, String> colSpecToString = new Function<ColumnSpecification, String>()
-        {
-            public String apply(ColumnSpecification columnSpecification)
-            {
-                return columnSpecification.name.toString();
-            }
-        };
-
-        StringBuilder builder = new StringBuilder();
-        builder.append("{ Columns:[");
-        builder.append(Joiner.on(",")
-                             .join(Iterables.transform(columnSpecifications, colSpecToString)));
-        builder.append("], Mappings:[");
-        builder.append(Joiner.on(", ")
-                             .join(Iterables.transform(columnMappings.asMap().entrySet(),
-                                                       mappingEntryToString)));
-        builder.append("] }");
-        return builder.toString();
+        return columnMappings.asMap()
+                             .entrySet()
+                             .stream()
+                             .map(entry ->
+                                  entry.getValue()
+                                       .stream()
+                                       .map(colDef -> colDef.name.toString())
+                                       .collect(Collectors.joining(", ", entry.getKey().name.toString() + ":[", "]")))
+                             .collect(Collectors.joining(", ",
+                                                         columnSpecifications.stream()
+                                                                             .map(colSpec -> colSpec.name.toString())
+                                                                             .collect(Collectors.joining(", ",
+                                                                                                         "{ Columns:[",
+                                                                                                         "], Mappings:{")),
+                                                         "} }"));
     }
-
 }

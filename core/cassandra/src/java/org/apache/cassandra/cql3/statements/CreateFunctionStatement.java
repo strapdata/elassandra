@@ -29,6 +29,7 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.functions.*;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.exceptions.*;
+import org.apache.cassandra.schema.Functions;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
@@ -53,8 +54,6 @@ public final class CreateFunctionStatement extends SchemaAlteringStatement
 
     private List<AbstractType<?>> argTypes;
     private AbstractType<?> returnType;
-    private UDFunction udFunction;
-    private boolean replaced;
 
     public CreateFunctionStatement(FunctionName functionName,
                                    String language,
@@ -120,7 +119,7 @@ public final class CreateFunctionStatement extends SchemaAlteringStatement
 
     public void checkAccess(ClientState state) throws UnauthorizedException, InvalidRequestException
     {
-        if (Functions.find(functionName, argTypes) != null && orReplace)
+        if (Schema.instance.findFunction(functionName, argTypes).isPresent() && orReplace)
             state.ensureHasPermission(Permission.ALTER, FunctionResource.function(functionName.keyspace,
                                                                                   functionName.name,
                                                                                   argTypes));
@@ -130,8 +129,7 @@ public final class CreateFunctionStatement extends SchemaAlteringStatement
 
     public void validate(ClientState state) throws InvalidRequestException
     {
-        if (!DatabaseDescriptor.enableUserDefinedFunctions())
-            throw new InvalidRequestException("User-defined-functions are disabled in cassandra.yaml - set enable_user_defined_functions=true to enable if you are aware of the security risks");
+        UDFunction.assertUdfsEnabled(language);
 
         if (ifNotExists && orReplace)
             throw new InvalidRequestException("Cannot use both 'OR REPLACE' and 'IF NOT EXISTS' directives");
@@ -140,20 +138,14 @@ public final class CreateFunctionStatement extends SchemaAlteringStatement
             throw new InvalidRequestException(String.format("Cannot add function '%s' to non existing keyspace '%s'.", functionName.name, functionName.keyspace));
     }
 
-    public Event.SchemaChange changeEvent()
+    public Event.SchemaChange announceMigration(boolean isLocalOnly) throws RequestValidationException
     {
-        return new Event.SchemaChange(replaced ? Event.SchemaChange.Change.UPDATED : Event.SchemaChange.Change.CREATED,
-                                      Event.SchemaChange.Target.FUNCTION,
-                                      udFunction.name().keyspace, udFunction.name().name, AbstractType.asCQLTypeStringList(udFunction.argTypes()));
-    }
-
-    public boolean announceMigration(boolean isLocalOnly) throws RequestValidationException
-    {
-        Function old = Functions.find(functionName, argTypes);
-        if (old != null)
+        Function old = Schema.instance.findFunction(functionName, argTypes).orElse(null);
+        boolean replaced = old != null;
+        if (replaced)
         {
             if (ifNotExists)
-                return false;
+                return null;
             if (!orReplace)
                 throw new InvalidRequestException(String.format("Function %s already exists", old));
             if (!(old instanceof ScalarFunction))
@@ -162,20 +154,18 @@ public final class CreateFunctionStatement extends SchemaAlteringStatement
                 throw new InvalidRequestException(String.format("Function %s can only be replaced with %s", old,
                                                                 calledOnNullInput ? "CALLED ON NULL INPUT" : "RETURNS NULL ON NULL INPUT"));
 
-            if (!Functions.typeEquals(old.returnType(), returnType))
+            if (!Functions.typesMatch(old.returnType(), returnType))
                 throw new InvalidRequestException(String.format("Cannot replace function %s, the new return type %s is not compatible with the return type %s of existing function",
                                                                 functionName, returnType.asCQL3Type(), old.returnType().asCQL3Type()));
         }
 
-        this.udFunction = UDFunction.create(functionName, argNames, argTypes, returnType, calledOnNullInput, language, body);
-        this.replaced = old != null;
-
-        // add function to registry to prevent duplicate compilation on coordinator during migration
-        Functions.addOrReplaceFunction(udFunction);
+        UDFunction udFunction = UDFunction.create(functionName, argNames, argTypes, returnType, calledOnNullInput, language, body);
 
         MigrationManager.announceNewFunction(udFunction, isLocalOnly);
 
-        return true;
+        return new Event.SchemaChange(replaced ? Event.SchemaChange.Change.UPDATED : Event.SchemaChange.Change.CREATED,
+                                      Event.SchemaChange.Target.FUNCTION,
+                                      udFunction.name().keyspace, udFunction.name().name, AbstractType.asCQLTypeStringList(udFunction.argTypes()));
     }
 
     private AbstractType<?> prepareType(String typeName, CQL3Type.Raw rawType)

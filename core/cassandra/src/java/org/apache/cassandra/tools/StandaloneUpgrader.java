@@ -64,7 +64,7 @@ public class StandaloneUpgrader
             ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(options.cf);
 
             OutputHandler handler = new OutputHandler.SystemOutput(false, options.debug);
-            Directories.SSTableLister lister = cfs.directories.sstableLister();
+            Directories.SSTableLister lister = cfs.getDirectories().sstableLister(Directories.OnTxnErr.THROW);
             if (options.snapshot != null)
                 lister.onlyBackups(true).snapshots(options.snapshot);
             else
@@ -105,15 +105,7 @@ public class StandaloneUpgrader
                 try (LifecycleTransaction txn = LifecycleTransaction.offline(OperationType.UPGRADE_SSTABLES, sstable))
                 {
                     Upgrader upgrader = new Upgrader(cfs, txn, handler);
-                    upgrader.upgrade();
-
-                    if (!options.keepSource)
-                    {
-                        // Remove the sstable (it's been copied by upgrade)
-                        System.out.format("Deleting table %s.%n", sstable.descriptor.baseFilename());
-                        sstable.markObsolete(null);
-                        sstable.selfRef().release();
-                    }
+                    upgrader.upgrade(options.keepSource);
                 }
                 catch (Exception e)
                 {
@@ -121,9 +113,15 @@ public class StandaloneUpgrader
                     if (options.debug)
                         e.printStackTrace(System.err);
                 }
+                finally
+                {
+                    // we should have released this through commit of the LifecycleTransaction,
+                    // but in case the upgrade failed (or something else went wrong) make sure we don't retain a reference
+                    sstable.selfRef().ensureReleased();
+                }
             }
             CompactionManager.instance.finishCompactionsAndShutdown(5, TimeUnit.MINUTES);
-            SSTableDeletingTask.waitForDeletions();
+            LifecycleTransaction.waitForDeletions();
             System.exit(0);
         }
         catch (Exception e)

@@ -1,6 +1,26 @@
 Breaking changes and limitations
 ================================
 
+Deleting an index does not delete cassandra data
+------------------------------------------------
+
+By default, Cassandra is considered as a primary data storage for Elasticsearch, so deleteing an Elasticsearch index does not delete Cassandra content, keyspace and tables remain unchanged.
+If you want to use Elassandra as Elasticsearch, you can configure your cluster or only some indices with the ``drop_on delete_index`` like this.
+
+.. code::
+
+   $curl -XPUT "$NODE:9200/twitter/" -d'{ 
+      "settings":{ "index":{ "drop_on_delete_index":true } }
+   }'
+
+Or to set ``drop_on delete_index`` at cluster level :
+
+.. code::
+
+   $curl -XPUT "$NODE:9200/_cluster/settings" -d'{ 
+      "persistent":{ "cluster.default_drop_on_delete_index":true }
+   }'
+
 Cannot index document with empty mapping
 ----------------------------------------
 
@@ -9,7 +29,7 @@ on the partition key and there is no other indexed columns. Exemple :
 
 .. code::
 
-   $ curl -XPUT "$NODE:9200/foo/bar/1?pretty" -d'{}'
+   $curl -XPUT "$NODE:9200/foo/bar/1?pretty" -d'{}'
    {
      "_index" : "foo",
      "_type" : "bar",
@@ -23,7 +43,7 @@ on the partition key and there is no other indexed columns. Exemple :
      "created" : true
    }
 
-The underlying cassandra table foo.bar has only a primary key column with no secondary index. So, search operations won't return any result.
+The underlying cassandra table *foo.bar* has only a primary key column with no secondary index. So, search operations won't return any result.
 
 .. code::
 
@@ -55,6 +75,8 @@ The underlying cassandra table foo.bar has only a primary key column with no sec
    
    (1 rows)
 
+To get the same behavior as Elasticsearch, just add a dummy field in your mapping.
+
 Document version is meaningless
 -------------------------------
 
@@ -67,22 +89,22 @@ Because cassandra does not support special caraters in keyspace and table names,
 by underscore (_) in index and type names to create underlying Cassandra keyspace and table.
 When such a modification occurs, Elassandra keeps this change in memory to correctly convert keyspace/table to index/type.
 
-Morever, Cassandra table names are limited to 48 caraters, so type names is also limted to 48 caraters.
+Morever, Cassandra table names are limited to 48 caraters, so type names are also limted to 48 caraters.
 
 Elasticsearch unsupported feature
 ---------------------------------
 
 * Tribe node allows to query multiple Elasticsearch clusters. This feature is not currently supported by Elassandra.
-* Snapshot and Restore operations are diabled (See backup and restore in operations). 
+* Elasticsearch snapshot and restore operations are diabled (See backup and restore in operations). 
 
 Cassandra limitations
 ---------------------
 
  * Thrift protocol is not supported by Elassandra, only CQL3.
- * CQL3 *TRUNCATE* has not effect on elasticsearch indices.
+ * Only supports the murmur3 partitionner.
  * Elassandra synchronously indexes rows into Elasticsearch. This may increases the write duration, particulary when indexing complex document like `GeoShape <https://www.elastic.co/guide/en/elasticsearch/reference/current/geo-shape.html>`_, so Cassandra ``write_request_timeout_in_ms`` is set to 5 seconds (Cassandra default is 2000 ms, see `Cassandra config <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configCassandra_yaml_r.html>`_)
- * In order to avoid concurrent mapping updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommanded to have at least 3 nodes in 3 distincts racks (2 nodes datacenter won't accept any mapping update when a node is unavailable).
-
+ * In order to avoid concurrent mapping or persistent cluster settings updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommanded to have at least 3 nodes in 3 distincts racks (2 nodes datacenter won't accept any mapping update when a node is unavailable). 
+ * CQL3 *TRUNCATE* on a Cassandra table deletes all associated Elasticsearch documents by playing a delete_by_query where *_type = <table_name>*. Of course, such a delete_by_query comes with a perfomance cost.
 
 
 

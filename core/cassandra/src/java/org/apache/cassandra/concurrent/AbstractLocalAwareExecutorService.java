@@ -203,7 +203,8 @@ public abstract class AbstractLocalAwareExecutorService implements LocalAwareExe
 
         public T get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException
         {
-            await(timeout, unit);
+            if (!await(timeout, unit))
+                throw new TimeoutException();
             Object result = this.result;
             if (failure)
                 throw new ExecutionException((Throwable) result);

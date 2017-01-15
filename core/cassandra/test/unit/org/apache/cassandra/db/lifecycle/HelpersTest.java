@@ -18,6 +18,8 @@
 */
 package org.apache.cassandra.db.lifecycle;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,12 +32,12 @@ import org.junit.Test;
 
 import junit.framework.Assert;
 import org.apache.cassandra.MockSchema;
-import org.apache.cassandra.Util;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.io.sstable.format.big.BigTableReader;
-import org.apache.cassandra.utils.concurrent.Refs;
+
+import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.assertNotNull;
 
 public class HelpersTest
 {
@@ -150,19 +152,29 @@ public class HelpersTest
         for (SSTableReader reader : readers)
             Assert.assertTrue(reader.isReplaced());
         accumulate = Helpers.setReplaced(readers, null);
-        Assert.assertNotNull(accumulate);
+        assertNotNull(accumulate);
     }
 
     @Test
     public void testMarkObsolete()
     {
         ColumnFamilyStore cfs = MockSchema.newCFS();
+        LogTransaction txnLogs = new LogTransaction(OperationType.UNKNOWN);
         Iterable<SSTableReader> readers = Lists.newArrayList(MockSchema.sstable(1, cfs), MockSchema.sstable(2, cfs));
-        Throwable accumulate = Helpers.markObsolete(null, readers, null);
+
+        List<LogTransaction.Obsoletion> obsoletions = new ArrayList<>();
+        Assert.assertNull(Helpers.prepareForObsoletion(readers, txnLogs, obsoletions, null));
+        assertNotNull(obsoletions);
+        assertEquals(2, obsoletions.size());
+
+        Throwable accumulate = Helpers.markObsolete(obsoletions, null);
         Assert.assertNull(accumulate);
         for (SSTableReader reader : readers)
             Assert.assertTrue(reader.isMarkedCompacted());
-        accumulate = Helpers.markObsolete(null, readers, null);
-        Assert.assertNotNull(accumulate);
+
+        accumulate = Helpers.markObsolete(obsoletions, null);
+        assertNotNull(accumulate);
+
+        txnLogs.finish();
     }
 }

@@ -35,12 +35,15 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.exceptions.AlreadyExistsException;
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.Config;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateKeyspaceStatement;
+import org.apache.cassandra.cql3.statements.CreateTableStatement;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.stress.generate.*;
 import org.apache.cassandra.stress.generate.values.*;
+import org.apache.cassandra.stress.operations.userdefined.TokenRangeQuery;
 import org.apache.cassandra.stress.operations.userdefined.SchemaInsert;
 import org.apache.cassandra.stress.operations.userdefined.SchemaQuery;
 import org.apache.cassandra.stress.operations.userdefined.ValidatingSchemaQuery;
@@ -59,21 +62,25 @@ public class StressProfile implements Serializable
 {
     private String keyspaceCql;
     private String tableCql;
+    private List<String> extraSchemaDefinitions;
     private String seedStr;
 
     public String keyspaceName;
     public String tableName;
     private Map<String, GeneratorConfig> columnConfigs;
     private Map<String, StressYaml.QueryDef> queries;
+    public Map<String, StressYaml.TokenRangeQueryDef> tokenRangeQueries;
     private Map<String, String> insert;
 
     transient volatile TableMetadata tableMetaData;
+    transient volatile Set<TokenRange> tokenRanges;
 
     transient volatile GeneratorFactory generatorFactory;
 
     transient volatile BatchStatement.Type batchType;
     transient volatile DistributionFactory partitions;
     transient volatile RatioDistributionFactory selectchance;
+    transient volatile RatioDistributionFactory rowPopulation;
     transient volatile PreparedStatement insertStatement;
     transient volatile Integer thriftInsertId;
     transient volatile List<ValidatingSchemaQuery.Factory> validationFactories;
@@ -84,17 +91,28 @@ public class StressProfile implements Serializable
 
     private void init(StressYaml yaml) throws RequestValidationException
     {
+        // Use client mode. Otherwise, users with no read permission on /var/lib/commitlog won't be able to
+        // use cassandra-stress...
+        Config.setClientMode(true);
+
         keyspaceName = yaml.keyspace;
         keyspaceCql = yaml.keyspace_definition;
         tableName = yaml.table;
         tableCql = yaml.table_definition;
         seedStr = "seed for stress";
         queries = yaml.queries;
+        tokenRangeQueries = yaml.token_range_queries;
         insert = yaml.insert;
+
+        extraSchemaDefinitions = yaml.extra_definitions;
 
         assert keyspaceName != null : "keyspace name is required in yaml file";
         assert tableName != null : "table name is required in yaml file";
         assert queries != null : "queries map is required in yaml file";
+
+        for (String query : queries.keySet())
+            assert !tokenRangeQueries.containsKey(query) :
+                String.format("Found %s in both queries and token_range_queries, please use different names", query);
 
         if (keyspaceCql != null && keyspaceCql.length() > 0)
         {
@@ -117,12 +135,12 @@ public class StressProfile implements Serializable
         {
             try
             {
-                String name = CFMetaData.compile(tableCql, keyspaceName).cfName;
+                String name = ((CreateTableStatement.RawStatement) QueryProcessor.parseStatement(tableCql)).columnFamily();
                 assert name.equalsIgnoreCase(tableName) : "Name in table_definition doesn't match table property: '" + name + "' != '" + tableName + "'";
             }
             catch (RuntimeException e)
             {
-                throw new IllegalArgumentException("There was a problem parsing the table cql: " + e.getCause().getMessage());
+                throw new IllegalArgumentException("There was a problem parsing the table cql: " + e.getMessage());
             }
         }
         else
@@ -168,7 +186,7 @@ public class StressProfile implements Serializable
             }
         }
 
-        client.execute("use "+keyspaceName, org.apache.cassandra.db.ConsistencyLevel.ONE);
+        client.execute("use " + keyspaceName, org.apache.cassandra.db.ConsistencyLevel.ONE);
 
         if (tableCql != null)
         {
@@ -181,6 +199,24 @@ public class StressProfile implements Serializable
             }
 
             System.out.println(String.format("Created schema. Sleeping %ss for propagation.", settings.node.nodes.size()));
+            Uninterruptibles.sleepUninterruptibly(settings.node.nodes.size(), TimeUnit.SECONDS);
+        }
+
+        if (extraSchemaDefinitions != null)
+        {
+            for (String extraCql : extraSchemaDefinitions)
+            {
+
+                try
+                {
+                    client.execute(extraCql, org.apache.cassandra.db.ConsistencyLevel.ONE);
+                }
+                catch (AlreadyExistsException e)
+                {
+                }
+            }
+
+            System.out.println(String.format("Created extra schema. Sleeping %ss for propagation.", settings.node.nodes.size()));
             Uninterruptibles.sleepUninterruptibly(settings.node.nodes.size(), TimeUnit.SECONDS);
         }
 
@@ -232,8 +268,48 @@ public class StressProfile implements Serializable
         }
     }
 
-    public SchemaQuery getQuery(String name, Timer timer, PartitionGenerator generator, SeedManager seeds, StressSettings settings)
+    public Set<TokenRange> maybeLoadTokenRanges(StressSettings settings)
     {
+        maybeLoadSchemaInfo(settings); // ensure table metadata is available
+
+        JavaDriverClient client = settings.getJavaDriverClient();
+        synchronized (client)
+        {
+            if (tokenRanges != null)
+                return tokenRanges;
+
+            Cluster cluster = client.getCluster();
+            Metadata metadata = cluster.getMetadata();
+            if (metadata == null)
+                throw new RuntimeException("Unable to get metadata");
+
+            List<TokenRange> sortedRanges = new ArrayList<>(metadata.getTokenRanges().size() + 1);
+            for (TokenRange range : metadata.getTokenRanges())
+            {
+                //if we don't unwrap we miss the partitions between ring min and smallest range start value
+                if (range.isWrappedAround())
+                    sortedRanges.addAll(range.unwrap());
+                else
+                    sortedRanges.add(range);
+            }
+
+            Collections.sort(sortedRanges);
+            tokenRanges = new LinkedHashSet<>(sortedRanges);
+            return tokenRanges;
+        }
+    }
+
+    public Operation getQuery(String name,
+                              Timer timer,
+                              PartitionGenerator generator,
+                              SeedManager seeds,
+                              StressSettings settings,
+                              boolean isWarmup)
+    {
+        name = name.toLowerCase();
+        if (!queries.containsKey(name))
+            throw new IllegalArgumentException("No query defined with name " + name);
+
         if (queryStatements == null)
         {
             synchronized (this)
@@ -274,11 +350,17 @@ public class StressProfile implements Serializable
             }
         }
 
-        name = name.toLowerCase();
-        if (!queryStatements.containsKey(name))
-            throw new IllegalArgumentException("No query defined with name " + name);
         return new SchemaQuery(timer, settings, generator, seeds, thriftQueryIds.get(name), queryStatements.get(name),
                                ThriftConversion.fromThrift(settings.command.consistencyLevel), argSelects.get(name));
+    }
+
+    public Operation getBulkReadQueries(String name, Timer timer, StressSettings settings, TokenRangeIterator tokenRangeIterator, boolean isWarmup)
+    {
+        StressYaml.TokenRangeQueryDef def = tokenRangeQueries.get(name);
+        if (def == null)
+            throw new IllegalArgumentException("No bulk read query defined with name " + name);
+
+        return new TokenRangeQuery(timer, settings, tableMetaData, tokenRangeIterator, def, isWarmup);
     }
 
     public SchemaInsert getInsert(Timer timer, PartitionGenerator generator, SeedManager seedManager, StressSettings settings)
@@ -348,6 +430,7 @@ public class StressProfile implements Serializable
 
                     partitions = select(settings.insert.batchsize, "partitions", "fixed(1)", insert, OptionDistribution.BUILDER);
                     selectchance = select(settings.insert.selectRatio, "select", "fixed(1)/1", insert, OptionRatioDistribution.BUILDER);
+                    rowPopulation = select(settings.insert.rowPopulationRatio, "row-population", "fixed(1)/1", insert, OptionRatioDistribution.BUILDER);
                     batchType = settings.insert.batchType != null
                                 ? settings.insert.batchType
                                 : !insert.containsKey("batchtype")
@@ -398,7 +481,7 @@ public class StressProfile implements Serializable
             }
         }
 
-        return new SchemaInsert(timer, settings, generator, seedManager, partitions.get(), selectchance.get(), thriftInsertId, insertStatement, ThriftConversion.fromThrift(settings.command.consistencyLevel), batchType);
+        return new SchemaInsert(timer, settings, generator, seedManager, partitions.get(), selectchance.get(), rowPopulation.get(), thriftInsertId, insertStatement, ThriftConversion.fromThrift(settings.command.consistencyLevel), batchType);
     }
 
     public List<ValidatingSchemaQuery> getValidate(Timer timer, PartitionGenerator generator, SeedManager seedManager, StressSettings settings)
@@ -429,6 +512,7 @@ public class StressProfile implements Serializable
             return first;
         if (val != null && val.trim().length() > 0)
             return builder.apply(val);
+        
         return builder.apply(defValue);
     }
 

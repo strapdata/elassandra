@@ -19,15 +19,13 @@ package org.apache.cassandra.cql3.restrictions;
 
 import java.util.*;
 
-import com.google.common.collect.Iterables;
-
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.functions.Function;
-import org.apache.cassandra.cql3.restrictions.SingleColumnRestriction.Contains;
-import org.apache.cassandra.db.IndexExpression;
-import org.apache.cassandra.db.index.SecondaryIndexManager;
+import org.apache.cassandra.cql3.restrictions.SingleColumnRestriction.ContainsRestriction;
+import org.apache.cassandra.db.filter.RowFilter;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.index.SecondaryIndexManager;
 
 /**
  * Sets of column restrictions.
@@ -66,12 +64,10 @@ final class RestrictionSet implements Restrictions, Iterable<Restriction>
     }
 
     @Override
-    public final void addIndexExpressionTo(List<IndexExpression> expressions,
-                                           SecondaryIndexManager indexManager,
-                                           QueryOptions options) throws InvalidRequestException
+    public final void addRowFilterTo(RowFilter filter, SecondaryIndexManager indexManager, QueryOptions options) throws InvalidRequestException
     {
         for (Restriction restriction : restrictions.values())
-            restriction.addIndexExpressionTo(expressions, indexManager, options);
+            restriction.addRowFilterTo(filter, indexManager, options);
     }
 
     @Override
@@ -81,18 +77,18 @@ final class RestrictionSet implements Restrictions, Iterable<Restriction>
     }
 
     @Override
-    public Iterable<Function> getFunctions()
+    public void addFunctionsTo(List<Function> functions)
     {
-        com.google.common.base.Function<Restriction, Iterable<Function>> transform =
-            new com.google.common.base.Function<Restriction, Iterable<Function>>()
+        Restriction previous = null;
+        for (Restriction restriction : restrictions.values())
         {
-            public Iterable<Function> apply(Restriction restriction)
+            // For muti-column restriction, we can have multiple time the same restriction.
+            if (!restriction.equals(previous))
             {
-                return restriction.getFunctions();
+                previous = restriction;
+                restriction.addFunctionsTo(functions);
             }
-        };
-
-        return Iterables.concat(Iterables.transform(restrictions.values(), transform));
+        }
     }
 
     @Override
@@ -245,7 +241,7 @@ final class RestrictionSet implements Restrictions, Iterable<Restriction>
         {
             if (restriction.isContains())
             {
-                Contains contains = (Contains) restriction;
+                ContainsRestriction contains = (ContainsRestriction) restriction;
                 numberOfContains += (contains.numberOfValues() + contains.numberOfKeys() + contains.numberOfEntries());
             }
         }

@@ -23,6 +23,8 @@ import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.Collection;
 
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataInputPlus.DataInputStreamPlus;
 import org.apache.cassandra.io.util.DataOutputStreamPlus;
 import org.apache.cassandra.streaming.StreamRequest;
 import org.apache.cassandra.streaming.StreamSession;
@@ -32,9 +34,10 @@ public class PrepareMessage extends StreamMessage
 {
     public static Serializer<PrepareMessage> serializer = new Serializer<PrepareMessage>()
     {
+        @SuppressWarnings("resource") // Not closing constructed DataInputPlus's as the channel needs to remain open.
         public PrepareMessage deserialize(ReadableByteChannel in, int version, StreamSession session) throws IOException
         {
-            DataInput input = new DataInputStream(Channels.newInputStream(in));
+            DataInputPlus input = new DataInputStreamPlus(Channels.newInputStream(in));
             PrepareMessage message = new PrepareMessage();
             // requests
             int numRequests = input.readInt();

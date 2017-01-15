@@ -20,40 +20,20 @@ package org.apache.cassandra.utils.memory;
 import java.nio.ByteBuffer;
 
 import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.db.BufferDecoratedKey;
-import org.apache.cassandra.db.Cell;
-import org.apache.cassandra.db.CounterCell;
-import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.DeletedCell;
-import org.apache.cassandra.db.ExpiringCell;
+import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 
 public abstract class MemtableBufferAllocator extends MemtableAllocator
 {
-
     protected MemtableBufferAllocator(SubAllocator onHeap, SubAllocator offHeap)
     {
         super(onHeap, offHeap);
     }
 
-    public Cell clone(Cell cell, CFMetaData cfm, OpOrder.Group writeOp)
+    public Row.Builder rowBuilder(OpOrder.Group writeOp)
     {
-        return cell.localCopy(cfm, allocator(writeOp));
-    }
-
-    public CounterCell clone(CounterCell cell, CFMetaData cfm, OpOrder.Group writeOp)
-    {
-        return cell.localCopy(cfm, allocator(writeOp));
-    }
-
-    public DeletedCell clone(DeletedCell cell, CFMetaData cfm, OpOrder.Group writeOp)
-    {
-        return cell.localCopy(cfm, allocator(writeOp));
-    }
-
-    public ExpiringCell clone(ExpiringCell cell, CFMetaData cfm, OpOrder.Group writeOp)
-    {
-        return cell.localCopy(cfm, allocator(writeOp));
+        return allocator(writeOp).cloningBTreeRowBuilder();
     }
 
     public DecoratedKey clone(DecoratedKey key, OpOrder.Group writeOp)

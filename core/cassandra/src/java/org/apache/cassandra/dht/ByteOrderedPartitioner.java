@@ -116,6 +116,20 @@ public class ByteOrderedPartitioner implements IPartitioner
         {
             return token;
         }
+
+        @Override
+        public double size(Token next)
+        {
+            throw new UnsupportedOperationException(String.format("Token type %s does not support token allocation.",
+                                                                  getClass().getSimpleName()));
+        }
+
+        @Override
+        public Token increaseSlightly()
+        {
+            throw new UnsupportedOperationException(String.format("Token type %s does not support token allocation.",
+                                                                  getClass().getSimpleName()));
+        }
     }
 
     public BytesToken getToken(ByteBuffer key)
@@ -262,7 +276,7 @@ public class ByteOrderedPartitioner implements IPartitioner
 
         for (String ks : Schema.instance.getKeyspaces())
         {
-            for (CFMetaData cfmd : Schema.instance.getKSMetaData(ks).cfMetaData().values())
+            for (CFMetaData cfmd : Schema.instance.getTablesAndViews(ks))
             {
                 for (Range<Token> r : sortedRanges)
                 {
@@ -283,6 +297,11 @@ public class ByteOrderedPartitioner implements IPartitioner
     }
 
     public AbstractType<?> getTokenValidator()
+    {
+        return BytesType.instance;
+    }
+
+    public AbstractType<?> partitionOrdering()
     {
         return BytesType.instance;
     }

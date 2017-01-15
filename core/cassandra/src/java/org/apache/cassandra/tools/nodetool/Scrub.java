@@ -57,17 +57,19 @@ public class Scrub extends NodeToolCmd
     public void execute(NodeProbe probe)
     {
         List<String> keyspaces = parseOptionalKeyspace(args, probe);
-        String[] cfnames = parseOptionalColumnFamilies(args);
+        String[] tableNames = parseOptionalTables(args);
 
         for (String keyspace : keyspaces)
         {
             try
             {
-                probe.scrub(System.out, disableSnapshot, skipCorrupted, !noValidation, jobs, keyspace, cfnames);
-            } catch (IllegalArgumentException e)
+                probe.scrub(System.out, disableSnapshot, skipCorrupted, !noValidation, jobs, keyspace, tableNames);
+            }
+            catch (IllegalArgumentException e)
             {
                 throw e;
-            } catch (Exception e)
+            }
+            catch (Exception e)
             {
                 throw new RuntimeException("Error occurred during scrubbing", e);
             }

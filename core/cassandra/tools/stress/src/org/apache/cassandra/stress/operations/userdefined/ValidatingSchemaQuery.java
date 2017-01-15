@@ -34,6 +34,7 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.stress.Operation;
 import org.apache.cassandra.stress.generate.*;
 import org.apache.cassandra.stress.generate.Row;
+import org.apache.cassandra.stress.operations.PartitionOperation;
 import org.apache.cassandra.stress.settings.StressSettings;
 import org.apache.cassandra.stress.util.JavaDriverClient;
 import org.apache.cassandra.stress.util.ThriftClient;
@@ -46,7 +47,7 @@ import org.apache.cassandra.transport.SimpleClient;
 import org.apache.cassandra.utils.Pair;
 import org.apache.thrift.TException;
 
-public class ValidatingSchemaQuery extends Operation
+public class ValidatingSchemaQuery extends PartitionOperation
 {
     final Random random = new Random();
     private Pair<Row, Row> bounds;
@@ -65,7 +66,7 @@ public class ValidatingSchemaQuery extends Operation
 
     private ValidatingSchemaQuery(Timer timer, StressSettings settings, PartitionGenerator generator, SeedManager seedManager, ValidatingStatement[] statements, ConsistencyLevel cl, int clusteringComponents)
     {
-        super(timer, settings, new DataSpec(generator, seedManager, new DistributionFixed(1), 1));
+        super(timer, settings, new DataSpec(generator, seedManager, new DistributionFixed(1), settings.insert.rowPopulationRatio.get(), 1));
         this.statements = statements;
         this.cl = cl;
         argumentIndex = new int[statements[0].statement.getVariables().size()];

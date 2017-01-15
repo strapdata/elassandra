@@ -26,6 +26,7 @@ import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -35,7 +36,7 @@ public class PendingRangeCalculatorService
 
     private static Logger logger = LoggerFactory.getLogger(PendingRangeCalculatorService.class);
     private final JMXEnabledThreadPoolExecutor executor = new JMXEnabledThreadPoolExecutor(1, Integer.MAX_VALUE, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<Runnable>(1), new NamedThreadFactory("PendingRangeCalculator"), "internal");
+            new LinkedBlockingQueue<>(1), new NamedThreadFactory("PendingRangeCalculator"), "internal");
 
     private AtomicInteger updateJobs = new AtomicInteger(0);
 
@@ -55,13 +56,18 @@ public class PendingRangeCalculatorService
     {
         public void run()
         {
-            long start = System.currentTimeMillis();
-            for (String keyspaceName : Schema.instance.getNonSystemKeyspaces())
+            try
             {
-                calculatePendingRanges(Keyspace.open(keyspaceName).getReplicationStrategy(), keyspaceName);
+                long start = System.currentTimeMillis();
+                List<String> keyspaces = Schema.instance.getNonLocalStrategyKeyspaces();
+                for (String keyspaceName : keyspaces)
+                    calculatePendingRanges(Keyspace.open(keyspaceName).getReplicationStrategy(), keyspaceName);
+                logger.debug("finished calculation for {} keyspaces in {}ms", keyspaces.size(), System.currentTimeMillis() - start);
             }
-            PendingRangeCalculatorService.instance.finishUpdate();
-            logger.debug("finished calculation for {} keyspaces in {}ms", Schema.instance.getNonSystemKeyspaces().size(), System.currentTimeMillis() - start);
+            finally
+            {
+                PendingRangeCalculatorService.instance.finishUpdate();
+            }
         }
     }
 

@@ -48,21 +48,14 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
      *
      * @param session RepairSession that this RepairJob belongs
      * @param columnFamily name of the ColumnFamily to repair
-     * @param parallelismDegree how to run repair job in parallel
-     * @param repairedAt when the repair occurred (millis)
-     * @param taskExecutor Executor to run various repair tasks
      */
-    public RepairJob(RepairSession session,
-                     String columnFamily,
-                     RepairParallelism parallelismDegree,
-                     long repairedAt,
-                     ListeningExecutorService taskExecutor)
+    public RepairJob(RepairSession session, String columnFamily)
     {
         this.session = session;
-        this.desc = new RepairJobDesc(session.parentRepairSession, session.getId(), session.keyspace, columnFamily, session.getRange());
-        this.repairedAt = repairedAt;
-        this.taskExecutor = taskExecutor;
-        this.parallelismDegree = parallelismDegree;
+        this.desc = new RepairJobDesc(session.parentRepairSession, session.getId(), session.keyspace, columnFamily, session.getRanges());
+        this.repairedAt = session.repairedAt;
+        this.taskExecutor = session.taskExecutor;
+        this.parallelismDegree = session.parallelismDegree;
     }
 
     /**
@@ -178,7 +171,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
         String message = String.format("Requesting merkle trees for %s (to %s)", desc.columnFamily, endpoints);
         logger.info("[repair #{}] {}", desc.sessionId, message);
         Tracing.traceRepair(message);
-        int gcBefore = Keyspace.open(desc.keyspace).getColumnFamilyStore(desc.columnFamily).gcBefore(System.currentTimeMillis());
+        int gcBefore = Keyspace.open(desc.keyspace).getColumnFamilyStore(desc.columnFamily).gcBefore(FBUtilities.nowInSeconds());
         List<ListenableFuture<TreeResponse>> tasks = new ArrayList<>(endpoints.size());
         for (InetAddress endpoint : endpoints)
         {
@@ -198,7 +191,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
         String message = String.format("Requesting merkle trees for %s (to %s)", desc.columnFamily, endpoints);
         logger.info("[repair #{}] {}", desc.sessionId, message);
         Tracing.traceRepair(message);
-        int gcBefore = Keyspace.open(desc.keyspace).getColumnFamilyStore(desc.columnFamily).gcBefore(System.currentTimeMillis());
+        int gcBefore = Keyspace.open(desc.keyspace).getColumnFamilyStore(desc.columnFamily).gcBefore(FBUtilities.nowInSeconds());
         List<ListenableFuture<TreeResponse>> tasks = new ArrayList<>(endpoints.size());
 
         Queue<InetAddress> requests = new LinkedList<>(endpoints);
@@ -240,7 +233,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
         String message = String.format("Requesting merkle trees for %s (to %s)", desc.columnFamily, endpoints);
         logger.info("[repair #{}] {}", desc.sessionId, message);
         Tracing.traceRepair(message);
-        int gcBefore = Keyspace.open(desc.keyspace).getColumnFamilyStore(desc.columnFamily).gcBefore(System.currentTimeMillis());
+        int gcBefore = Keyspace.open(desc.keyspace).getColumnFamilyStore(desc.columnFamily).gcBefore(FBUtilities.nowInSeconds());
         List<ListenableFuture<TreeResponse>> tasks = new ArrayList<>(endpoints.size());
 
         Map<String, Queue<InetAddress>> requestsByDatacenter = new HashMap<>();

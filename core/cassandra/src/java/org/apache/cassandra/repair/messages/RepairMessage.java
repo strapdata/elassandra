@@ -17,10 +17,10 @@
  */
 package org.apache.cassandra.repair.messages;
 
-import java.io.DataInput;
 import java.io.IOException;
 
 import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
@@ -45,7 +45,6 @@ public abstract class RepairMessage
         SYNC_COMPLETE(3, SyncComplete.serializer),
         ANTICOMPACTION_REQUEST(4, AnticompactionRequest.serializer),
         PREPARE_MESSAGE(5, PrepareMessage.serializer),
-        PREPARE_GLOBAL_MESSAGE(8, PrepareMessage.globalSerializer),
         SNAPSHOT(6, SnapshotMessage.serializer),
         CLEANUP(7, CleanupMessage.serializer);
 
@@ -91,7 +90,7 @@ public abstract class RepairMessage
             message.messageType.serializer.serialize(message, out, version);
         }
 
-        public RepairMessage deserialize(DataInput in, int version) throws IOException
+        public RepairMessage deserialize(DataInputPlus in, int version) throws IOException
         {
             RepairMessage.Type messageType = RepairMessage.Type.fromByte(in.readByte());
             return messageType.serializer.deserialize(in, version);

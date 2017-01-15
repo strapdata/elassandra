@@ -152,7 +152,7 @@ public abstract class Selectable
             else if (functionName.equalsNativeFunction(ToStringFct.NAME))
                 fun = ToStringFct.getInstance(factories.getReturnTypes());
             else
-                fun = Functions.get(cfm.ksName, functionName, factories.newInstances(), cfm.ksName, cfm.cfName, null);
+                fun = FunctionResolver.get(cfm.ksName, functionName, factories.newInstances(), cfm.ksName, cfm.cfName, null);
 
             if (fun == null)
                 throw new InvalidRequestException(String.format("Unknown function '%s'", functionName));

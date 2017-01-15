@@ -28,9 +28,9 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.StringTokenizer;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.service.StorageService;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.ContextAndHeaderHolder;
 import org.elasticsearch.common.Nullable;
@@ -168,7 +168,7 @@ public abstract class RestRequest extends ContextAndHeaderHolder implements ToXC
         String value = param(key);
         if (value != null) {
             Collection<Range<Token>> tokenRanges = new ArrayList<Range<Token>>();
-            Token.TokenFactory tokenFactory = StorageService.instance.getPartitioner().getTokenFactory();
+            Token.TokenFactory tokenFactory = DatabaseDescriptor.getPartitioner().getTokenFactory();
             StringTokenizer stk = new StringTokenizer(value, "{[(,)]}");
             while (stk.hasMoreTokens()) {
                 Token leftToken = tokenFactory.fromString(stk.nextToken());

@@ -73,6 +73,7 @@ public class TribeIT extends ESIntegTestCase {
 
     @BeforeClass
     public static void setupSecondCluster() throws Exception {
+        /*
         ESIntegTestCase.beforeClass();
         NodeConfigurationSource nodeConfigurationSource = new NodeConfigurationSource() {
             @Override
@@ -91,6 +92,7 @@ public class TribeIT extends ESIntegTestCase {
 
         cluster2.beforeTest(getRandom(), 0.1);
         cluster2.ensureAtLeastNumDataNodes(2);
+        */
     }
 
     @AfterClass

@@ -224,7 +224,7 @@ public class DocumentMapperParser {
         }
         
         try {
-            this.mapperService.discoverTableMapping(this.indexSettings.get(IndexMetaData.SETTING_KEYSPACE, this.mapperService.index().getName()), mapping.v1(), mapping.v2());
+            this.mapperService.discoverTableMapping(mapping.v1(), mapping.v2());
         } catch (SyntaxException | ConfigurationException | IOException e) {
             logger.error("Failed to expand mapping", e);
         }

@@ -28,10 +28,10 @@ import org.slf4j.LoggerFactory;
 
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.exceptions.*;
+
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.hadoop.ColumnFamilyOutputFormat;
 import org.apache.cassandra.hadoop.ConfigHelper;
 import org.apache.cassandra.hadoop.HadoopCompat;
 import org.apache.cassandra.utils.FBUtilities;
@@ -39,6 +39,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.util.Progressable;
+
+import static java.util.stream.Collectors.toMap;
 
 /**
  * The <code>CqlRecordWriter</code> maps the output &lt;key, value&gt;
@@ -109,30 +111,23 @@ class CqlRecordWriter extends RecordWriter<Map<String, ByteBuffer>, List<ByteBuf
     CqlRecordWriter(Configuration conf)
     {
         this.conf = conf;
-        this.queueSize = conf.getInt(ColumnFamilyOutputFormat.QUEUE_SIZE, 32 * FBUtilities.getAvailableProcessors());
-        batchThreshold = conf.getLong(ColumnFamilyOutputFormat.BATCH_THRESHOLD, 32);
+        this.queueSize = conf.getInt(CqlOutputFormat.QUEUE_SIZE, 32 * FBUtilities.getAvailableProcessors());
+        batchThreshold = conf.getLong(CqlOutputFormat.BATCH_THRESHOLD, 32);
         this.clients = new HashMap<>();
         String keyspace = ConfigHelper.getOutputKeyspace(conf);
 
-        try (Cluster cluster = CqlConfigHelper.getOutputCluster(ConfigHelper.getOutputInitialAddress(conf), conf);
-             Session client = cluster.connect(keyspace))
+        try (Cluster cluster = CqlConfigHelper.getOutputCluster(ConfigHelper.getOutputInitialAddress(conf), conf))
         {
-            ringCache = new NativeRingCache(conf);
-            if (client != null)
-            {
-                TableMetadata tableMetadata = client.getCluster().getMetadata().getKeyspace(client.getLoggedKeyspace()).getTable(ConfigHelper.getOutputColumnFamily(conf));
-                clusterColumns = tableMetadata.getClusteringColumns();
-                partitionKeyColumns = tableMetadata.getPartitionKey();
+            Metadata metadata = cluster.getMetadata();
+            ringCache = new NativeRingCache(conf, metadata);
+            TableMetadata tableMetadata = metadata.getKeyspace(Metadata.quote(keyspace)).getTable(ConfigHelper.getOutputColumnFamily(conf));
+            clusterColumns = tableMetadata.getClusteringColumns();
+            partitionKeyColumns = tableMetadata.getPartitionKey();
 
-                String cqlQuery = CqlConfigHelper.getOutputCql(conf).trim();
-                if (cqlQuery.toLowerCase().startsWith("insert"))
-                    throw new UnsupportedOperationException("INSERT with CqlRecordWriter is not supported, please use UPDATE/DELETE statement");
-                cql = appendKeyWhereClauses(cqlQuery);
-            }
-            else
-            {
-                throw new IllegalArgumentException("Invalid configuration specified " + conf);
-            }
+            String cqlQuery = CqlConfigHelper.getOutputCql(conf).trim();
+            if (cqlQuery.toLowerCase(Locale.ENGLISH).startsWith("insert"))
+                throw new UnsupportedOperationException("INSERT with CqlRecordWriter is not supported, please use UPDATE/DELETE statement");
+            cql = appendKeyWhereClauses(cqlQuery);
         }
         catch (Exception e)
         {
@@ -295,6 +290,7 @@ class CqlRecordWriter extends RecordWriter<Map<String, ByteBuffer>, List<ByteBuf
         public void run()
         {
             Session session = null;
+
             try
             {
                 outer:
@@ -383,10 +379,9 @@ class CqlRecordWriter extends RecordWriter<Map<String, ByteBuffer>, List<ByteBuf
             finally
             {
                 closeSession(session);
+                // close all our connections once we are done.
+                closeInternal();
             }
-
-            // close all our connections once we are done.
-            closeInternal();
         }
 
         /** get prepared statement id from cache, otherwise prepare it from Cassandra server*/
@@ -495,33 +490,20 @@ class CqlRecordWriter extends RecordWriter<Map<String, ByteBuffer>, List<ByteBuf
         return "\"" + identifier.replaceAll("\"", "\"\"") + "\"";
     }
 
-    class NativeRingCache
+    static class NativeRingCache
     {
-        private Map<TokenRange, Set<Host>> rangeMap;
-        private Metadata metadata;
+        private final Map<TokenRange, Set<Host>> rangeMap;
+        private final Metadata metadata;
         private final IPartitioner partitioner;
-        private final Configuration conf;
 
-        public NativeRingCache(Configuration conf)
+        public NativeRingCache(Configuration conf, Metadata metadata)
         {
-            this.conf = conf;
             this.partitioner = ConfigHelper.getOutputPartitioner(conf);
-            refreshEndpointMap();
-        }
-
-
-        private void refreshEndpointMap()
-        {
+            this.metadata = metadata;
             String keyspace = ConfigHelper.getOutputKeyspace(conf);
-            try (Cluster cluster = CqlConfigHelper.getOutputCluster(ConfigHelper.getOutputInitialAddress(conf), conf);
-                 Session session = cluster.connect(keyspace))
-            {
-                rangeMap = new HashMap<>();
-                metadata = session.getCluster().getMetadata();
-                Set<TokenRange> ranges = metadata.getTokenRanges();
-                for (TokenRange range : ranges)
-                    rangeMap.put(range, metadata.getReplicas(keyspace, range));
-            }
+            this.rangeMap = metadata.getTokenRanges()
+                                    .stream()
+                                    .collect(toMap(p -> p, p -> metadata.getReplicas('"' + keyspace + '"', p)));
         }
 
         public TokenRange getRange(ByteBuffer key)

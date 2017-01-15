@@ -37,12 +37,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
+import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.dht.Bounds;
-import org.apache.cassandra.dht.LocalPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.ApplicationState;
@@ -53,7 +52,6 @@ import org.apache.cassandra.gms.IFailureDetector;
 import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
 import org.apache.cassandra.gms.IFailureDetectionEventListener;
 import org.apache.cassandra.gms.VersionedValue;
-import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.net.IAsyncCallbackWithFailure;
@@ -129,7 +127,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
      * @return Future for asynchronous call or null if there is no need to repair
      */
     public RepairSession submitRepairSession(UUID parentRepairSession,
-                                             Range<Token> range,
+                                             Collection<Range<Token>> range,
                                              String keyspace,
                                              RepairParallelism parallelismDegree,
                                              Set<InetAddress> endpoints,
@@ -187,7 +185,9 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
      *
      * @return neighbors with whom we share the provided range
      */
-    public static Set<InetAddress> getNeighbors(String keyspaceName, Collection<Range<Token>> keyspaceLocalRanges, Range<Token> toRepair, Collection<String> dataCenters, Collection<String> hosts)
+    public static Set<InetAddress> getNeighbors(String keyspaceName, Collection<Range<Token>> keyspaceLocalRanges,
+                                                Range<Token> toRepair, Collection<String> dataCenters,
+                                                Collection<String> hosts)
     {
         StorageService ss = StorageService.instance;
         Map<Range<Token>, List<InetAddress>> replicaSets = ss.getRangeToAddressMap(keyspaceName);
@@ -260,7 +260,8 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
 
     public synchronized UUID prepareForRepair(UUID parentRepairSession, InetAddress coordinator, Set<InetAddress> endpoints, RepairOption options, List<ColumnFamilyStore> columnFamilyStores)
     {
-        registerParentRepairSession(parentRepairSession, coordinator, columnFamilyStores, options.getRanges(), options.isIncremental(), options.isGlobal());
+        long timestamp = System.currentTimeMillis();
+        registerParentRepairSession(parentRepairSession, coordinator, columnFamilyStores, options.getRanges(), options.isIncremental(), timestamp, options.isGlobal());
         final CountDownLatch prepareLatch = new CountDownLatch(endpoints.size());
         final AtomicBoolean status = new AtomicBoolean(true);
         final Set<String> failedNodes = Collections.synchronizedSet(new HashSet<String>());
@@ -292,10 +293,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         {
             if (FailureDetector.instance.isAlive(neighbour))
             {
-                CassandraVersion peerVersion = SystemKeyspace.getReleaseVersion(neighbour);
-                boolean isGlobal = options.isGlobal() && peerVersion != null && peerVersion.compareTo(SUPPORTS_GLOBAL_PREPARE_FLAG_VERSION) >= 0;
-                logger.debug("Sending prepare message: options.isGlobal = {}, peerVersion = {}", options.isGlobal(), peerVersion);
-                PrepareMessage message = new PrepareMessage(parentRepairSession, cfIds, options.getRanges(), options.isIncremental(), isGlobal);
+                PrepareMessage message = new PrepareMessage(parentRepairSession, cfIds, options.getRanges(), options.isIncremental(), timestamp, options.isGlobal());
                 MessageOut<RepairMessage> msg = message.createMessage();
                 MessagingService.instance().sendRR(msg, neighbour, callback, TimeUnit.HOURS.toMillis(1), true);
             }
@@ -325,7 +323,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         return parentRepairSession;
     }
 
-    public void registerParentRepairSession(UUID parentRepairSession, InetAddress coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, boolean isIncremental, boolean isGlobal)
+    public void registerParentRepairSession(UUID parentRepairSession, InetAddress coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, boolean isIncremental, long timestamp, boolean isGlobal)
     {
         if (!registeredForEndpointChanges)
         {
@@ -333,7 +331,8 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             FailureDetector.instance.registerFailureDetectionEventListener(this);
             registeredForEndpointChanges = true;
         }
-        parentRepairSessions.put(parentRepairSession, new ParentRepairSession(coordinator, columnFamilyStores, ranges, isIncremental, isGlobal, System.currentTimeMillis()));
+
+        parentRepairSessions.put(parentRepairSession, new ParentRepairSession(coordinator, columnFamilyStores, ranges, isIncremental, timestamp, isGlobal));
     }
 
     public Set<SSTableReader> currentlyRepairing(UUID cfId, UUID parentRepairSession)
@@ -455,7 +454,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         {
             case VALIDATION_COMPLETE:
                 ValidationComplete validation = (ValidationComplete) message;
-                session.validationComplete(desc, endpoint, validation.tree);
+                session.validationComplete(desc, endpoint, validation.trees);
                 break;
             case SYNC_COMPLETE:
                 // one of replica is synced.
@@ -493,7 +492,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
          */
         private final Set<UUID> marked = new HashSet<>();
 
-        public ParentRepairSession(InetAddress coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, boolean isIncremental, boolean isGlobal, long repairedAt)
+        public ParentRepairSession(InetAddress coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, boolean isIncremental, long repairedAt, boolean isGlobal)
         {
             this.coordinator = coordinator;
             for (ColumnFamilyStore cfs : columnFamilyStores)
@@ -503,8 +502,8 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             }
             this.ranges = ranges;
             this.repairedAt = repairedAt;
-            this.isGlobal = isGlobal;
             this.isIncremental = isIncremental;
+            this.isGlobal = isGlobal;
         }
 
         /**
@@ -519,7 +518,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         {
             if (!marked.contains(cfId))
             {
-                List<SSTableReader> sstables = columnFamilyStores.get(cfId).select(isIncremental ? ColumnFamilyStore.UNREPAIRED_SSTABLES : ColumnFamilyStore.CANONICAL_SSTABLES).sstables;
+                List<SSTableReader> sstables = columnFamilyStores.get(cfId).select(View.select(SSTableSet.CANONICAL, (s) -> !isIncremental || !s.isRepaired())).sstables;
                 Set<SSTableReader> currentlyRepairing = ActiveRepairService.instance.currentlyRepairing(cfId, parentSessionId);
                 if (!Sets.intersection(currentlyRepairing, Sets.newHashSet(sstables)).isEmpty())
                 {
@@ -592,7 +591,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             {
                 throw new RuntimeException(e);
             }
-            for (SSTableReader sstable : cfs.select(ColumnFamilyStore.CANONICAL_SSTABLES).sstables)
+            for (SSTableReader sstable : cfs.getSSTables(SSTableSet.CANONICAL))
                 if (snapshotGenerations.contains(sstable.descriptor.generation))
                     activeSSTables.add(sstable);
             return activeSSTables;
@@ -609,7 +608,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
                     {
                         return sstable != null &&
                                (!isIncremental || !sstable.isRepaired()) &&
-                               !(sstable.partitioner instanceof LocalPartitioner) && // exclude SSTables from 2i
+                               !(sstable.metadata.isIndex()) && // exclude SSTables from 2i
                                new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(ranges);
                     }
                 }, true);
@@ -658,7 +657,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             Set<SSTableReader> activeSSTables = new HashSet<>();
             Set<String> activeSSTableNames = new HashSet<>();
             ColumnFamilyStore cfs = columnFamilyStores.get(cfId);
-            for (SSTableReader sstable : cfs.select(ColumnFamilyStore.CANONICAL_SSTABLES).sstables)
+            for (SSTableReader sstable : cfs.getSSTables(SSTableSet.CANONICAL))
             {
                 if (repairedSSTables.contains(sstable.getFilename()))
                 {

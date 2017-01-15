@@ -28,13 +28,15 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
+
+import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -57,11 +59,14 @@ public class LeveledManifest
      * that level into lower level compactions
      */
     private static final int NO_COMPACTION_LIMIT = 25;
-
+    // allocate enough generations for a PB of data, with a 1-MB sstable size.  (Note that if maxSSTableSize is
+    // updated, we will still have sstables of the older, potentially smaller size.  So don't make this
+    // dependent on maxSSTableSize.)
+    public static final int MAX_LEVEL_COUNT = (int) Math.log10(1000 * 1000 * 1000);
     private final ColumnFamilyStore cfs;
     @VisibleForTesting
     protected final List<SSTableReader>[] generations;
-    private final RowPosition[] lastCompactedKeys;
+    private final PartitionPosition[] lastCompactedKeys;
     private final long maxSSTableSizeInBytes;
     private final SizeTieredCompactionStrategyOptions options;
     private final int [] compactionCounter;
@@ -72,18 +77,14 @@ public class LeveledManifest
         this.maxSSTableSizeInBytes = maxSSTableSizeInMB * 1024L * 1024L;
         this.options = options;
 
-        // allocate enough generations for a PB of data, with a 1-MB sstable size.  (Note that if maxSSTableSize is
-        // updated, we will still have sstables of the older, potentially smaller size.  So don't make this
-        // dependent on maxSSTableSize.)
-        int n = (int) Math.log10(1000 * 1000 * 1000);
-        generations = new List[n];
-        lastCompactedKeys = new RowPosition[n];
+        generations = new List[MAX_LEVEL_COUNT];
+        lastCompactedKeys = new PartitionPosition[MAX_LEVEL_COUNT];
         for (int i = 0; i < generations.length; i++)
         {
             generations[i] = new ArrayList<>();
-            lastCompactedKeys[i] = cfs.partitioner.getMinimumToken().minKeyBound();
+            lastCompactedKeys[i] = cfs.getPartitioner().getMinimumToken().minKeyBound();
         }
-        compactionCounter = new int[n];
+        compactionCounter = new int[MAX_LEVEL_COUNT];
     }
 
     public static LeveledManifest create(ColumnFamilyStore cfs, int maxSSTableSize, List<SSTableReader> sstables)
@@ -104,7 +105,36 @@ public class LeveledManifest
         {
             manifest.repairOverlappingSSTables(i);
         }
+        manifest.calculateLastCompactedKeys();
         return manifest;
+    }
+
+    /**
+     * If we want to start compaction in level n, find the newest (by modification time) file in level n+1
+     * and use its last token for last compacted key in level n;
+     */
+    public void calculateLastCompactedKeys()
+    {
+        for (int i = 0; i < generations.length - 1; i++)
+        {
+            // this level is empty
+            if (generations[i + 1].isEmpty())
+                continue;
+
+            SSTableReader sstableWithMaxModificationTime = null;
+            long maxModificationTime = Long.MIN_VALUE;
+            for (SSTableReader ssTableReader : generations[i + 1])
+            {
+                long modificationTime = ssTableReader.getCreationTimeFor(Component.DATA);
+                if (modificationTime >= maxModificationTime)
+                {
+                    sstableWithMaxModificationTime = ssTableReader;
+                    maxModificationTime = modificationTime;
+                }
+            }
+
+            lastCompactedKeys[i] = sstableWithMaxModificationTime.last;
+        }
     }
 
     public synchronized void add(SSTableReader reader)
@@ -333,7 +363,7 @@ public class LeveledManifest
                     candidates = getOverlappingStarvedSSTables(nextLevel, candidates);
                     if (logger.isTraceEnabled())
                         logger.trace("Compaction candidates for L{} are {}", i, toString(candidates));
-                    return new CompactionCandidate(candidates, nextLevel, cfs.getCompactionStrategy().getMaxSSTableBytes());
+                    return new CompactionCandidate(candidates, nextLevel, cfs.getCompactionStrategyManager().getMaxSSTableBytes());
                 }
                 else
                 {
@@ -353,7 +383,7 @@ public class LeveledManifest
             // small in L0.
             return getSTCSInL0CompactionCandidate();
         }
-        return new CompactionCandidate(candidates, getNextLevel(candidates), cfs.getCompactionStrategy().getMaxSSTableBytes());
+        return new CompactionCandidate(candidates, getNextLevel(candidates), cfs.getCompactionStrategyManager().getMaxSSTableBytes());
     }
 
     private CompactionCandidate getSTCSInL0CompactionCandidate()
@@ -416,8 +446,8 @@ public class LeveledManifest
                     // say we are compacting 3 sstables: 0->30 in L1 and 0->12, 12->33 in L2
                     // this means that we will not create overlap in L2 if we add an sstable
                     // contained within 0 -> 33 to the compaction
-                    RowPosition max = null;
-                    RowPosition min = null;
+                    PartitionPosition max = null;
+                    PartitionPosition min = null;
                     for (SSTableReader candidate : candidates)
                     {
                         if (min == null || candidate.first.compareTo(min) < 0)
@@ -428,10 +458,10 @@ public class LeveledManifest
                     if (min == null || max == null || min.equals(max)) // single partition sstables - we cannot include a high level sstable.
                         return candidates;
                     Set<SSTableReader> compacting = cfs.getTracker().getCompacting();
-                    Range<RowPosition> boundaries = new Range<>(min, max);
+                    Range<PartitionPosition> boundaries = new Range<>(min, max);
                     for (SSTableReader sstable : getLevel(i))
                     {
-                        Range<RowPosition> r = new Range<RowPosition>(sstable.first, sstable.last);
+                        Range<PartitionPosition> r = new Range<PartitionPosition>(sstable.first, sstable.last);
                         if (boundaries.contains(r) && !compacting.contains(sstable))
                         {
                             logger.info("Adding high-level (L{}) {} to candidates", sstable.getSSTableLevel(), sstable);
@@ -560,8 +590,8 @@ public class LeveledManifest
         {
             Set<SSTableReader> compactingL0 = getCompacting(0);
 
-            RowPosition lastCompactingKey = null;
-            RowPosition firstCompactingKey = null;
+            PartitionPosition lastCompactingKey = null;
+            PartitionPosition firstCompactingKey = null;
             for (SSTableReader candidate : compactingL0)
             {
                 if (firstCompactingKey == null || candidate.first.compareTo(firstCompactingKey) < 0)

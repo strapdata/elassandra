@@ -38,7 +38,8 @@ import org.apache.cassandra.config.Config;
 import org.xerial.snappy.SnappyInputStream;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.UnknownColumnFamilyException;
-import org.apache.cassandra.gms.Gossiper;
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataInputPlus.DataInputStreamPlus;
 import org.apache.cassandra.io.util.NIODataInputStream;
 
 public class IncomingTcpConnection extends Thread implements Closeable
@@ -131,6 +132,7 @@ public class IncomingTcpConnection extends Thread implements Closeable
         }
     }
 
+    @SuppressWarnings("resource") // Not closing constructed DataInputPlus's as the stream needs to remain open.
     private void receiveMessages() throws IOException
     {
         // handshake (true) endpoint versions
@@ -139,7 +141,7 @@ public class IncomingTcpConnection extends Thread implements Closeable
         // to connect with, the other node will disconnect
         out.writeInt(MessagingService.current_version);
         out.flush();
-        DataInput in = new DataInputStream(socket.getInputStream());
+        DataInputPlus in = new DataInputStreamPlus(socket.getInputStream());
         int maxVersion = in.readInt();
         // outbound side will reconnect if necessary to upgrade version
         assert version <= MessagingService.current_version;
@@ -153,20 +155,19 @@ public class IncomingTcpConnection extends Thread implements Closeable
             logger.trace("Upgrading incoming connection to be compressed");
             if (version < MessagingService.VERSION_21)
             {
-                in = new DataInputStream(new SnappyInputStream(socket.getInputStream()));
+                in = new DataInputStreamPlus(new SnappyInputStream(socket.getInputStream()));
             }
             else
             {
                 LZ4FastDecompressor decompressor = LZ4Factory.fastestInstance().fastDecompressor();
                 Checksum checksum = XXHashFactory.fastestInstance().newStreamingHash32(OutboundTcpConnection.LZ4_HASH_SEED).asChecksum();
-                in = new DataInputStream(new LZ4BlockInputStream(socket.getInputStream(),
+                in = new DataInputStreamPlus(new LZ4BlockInputStream(socket.getInputStream(),
                                                                  decompressor,
                                                                  checksum));
             }
         }
         else
         {
-            @SuppressWarnings("resource")
             ReadableByteChannel channel = socket.getChannel();
             in = new NIODataInputStream(channel != null ? channel : Channels.newChannel(socket.getInputStream()), BUFFER_SIZE);
         }
@@ -178,7 +179,7 @@ public class IncomingTcpConnection extends Thread implements Closeable
         }
     }
 
-    private InetAddress receiveMessage(DataInput input, int version) throws IOException
+    private InetAddress receiveMessage(DataInputPlus input, int version) throws IOException
     {
         int id;
         if (version < MessagingService.VERSION_20)

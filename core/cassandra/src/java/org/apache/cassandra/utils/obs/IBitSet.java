@@ -21,7 +21,7 @@ import java.io.Closeable;
 import java.io.DataOutput;
 import java.io.IOException;
 
-import org.apache.cassandra.db.TypeSizes;
+import org.apache.cassandra.utils.concurrent.Ref;
 
 public interface IBitSet extends Closeable
 {
@@ -46,7 +46,7 @@ public interface IBitSet extends Closeable
 
     public void serialize(DataOutput out) throws IOException;
 
-    public long serializedSize(TypeSizes type);
+    public long serializedSize();
 
     public void clear();
 
@@ -57,4 +57,6 @@ public interface IBitSet extends Closeable
      * @return the amount of memory in bytes used off heap
      */
     public long offHeapSize();
+
+    public void addTo(Ref.IdentityCollection identities);
 }

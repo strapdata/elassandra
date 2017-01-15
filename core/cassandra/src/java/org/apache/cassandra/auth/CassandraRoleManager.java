@@ -81,11 +81,23 @@ public class CassandraRoleManager implements IRoleManager
     {
         public Role apply(UntypedResultSet.Row row)
         {
-            return new Role(row.getString("role"),
-                            row.getBoolean("is_superuser"),
-                            row.getBoolean("can_login"),
-                            row.has("member_of") ? row.getSet("member_of", UTF8Type.instance)
-                                                 : Collections.<String>emptySet());
+            try
+            {
+                return new Role(row.getString("role"),
+                         row.getBoolean("is_superuser"),
+                         row.getBoolean("can_login"),
+                         row.has("member_of") ? row.getSet("member_of", UTF8Type.instance)
+                                              : Collections.<String>emptySet());
+            }
+            // Failing to deserialize a boolean in is_superuser or can_login will throw an NPE
+            catch (NullPointerException e)
+            {
+                logger.warn("An invalid value has been detected in the {} table for role {}. If you are " +
+                            "unable to login, you may need to disable authentication and confirm " +
+                            "that values in that table are accurate", AuthKeyspace.ROLES, row.getString("role"));
+                throw new RuntimeException(String.format("Invalid metadata has been detected for role %s", row.getString("role")), e);
+            }
+
         }
     };
 
@@ -151,27 +163,18 @@ public class CassandraRoleManager implements IRoleManager
         // to be added.
         if (Schema.instance.getCFMetaData(AuthKeyspace.NAME, "users") != null)
         {
-             legacySelectUserStatement = (SelectStatement) prepare("SELECT * FROM %s.%s WHERE name = ?",
-                                                                   AuthKeyspace.NAME,
-                                                                   LEGACY_USERS_TABLE);
-            scheduleSetupTask(new Callable<Void>()
-            {
-                public Void call() throws Exception
-                {
-                    convertLegacyData();
-                    return null;
-                }
+            legacySelectUserStatement = prepareLegacySelectUserStatement();
+
+            scheduleSetupTask(() -> {
+                convertLegacyData();
+                return null;
             });
         }
         else
         {
-            scheduleSetupTask(new Callable<Void>()
-            {
-                public Void call() throws Exception
-                {
-                    setupDefaultRole();
-                    return null;
-                }
+            scheduleSetupTask(() -> {
+                setupDefaultRole();
+                return null;
             });
         }
     }
@@ -447,6 +450,13 @@ public class CassandraRoleManager implements IRoleManager
         }
     }
 
+    private SelectStatement prepareLegacySelectUserStatement()
+    {
+        return (SelectStatement) prepare("SELECT * FROM %s.%s WHERE name = ?",
+                                         AuthKeyspace.NAME,
+                                         LEGACY_USERS_TABLE);
+    }
+
     private CQLStatement prepare(String template, String keyspace, String table)
     {
         try
@@ -488,9 +498,14 @@ public class CassandraRoleManager implements IRoleManager
             // If it exists, try the legacy users table in case the cluster
             // is in the process of being upgraded and so is running with mixed
             // versions of the authn schema.
-            return (Schema.instance.getCFMetaData(AuthKeyspace.NAME, "users") != null)
-                    ? getRoleFromTable(name, legacySelectUserStatement, LEGACY_ROW_TO_ROLE)
-                    : getRoleFromTable(name, loadRoleStatement, ROW_TO_ROLE);
+            if (Schema.instance.getCFMetaData(AuthKeyspace.NAME, "users") == null)
+                return getRoleFromTable(name, loadRoleStatement, ROW_TO_ROLE);
+            else
+            {
+                if (legacySelectUserStatement == null)
+                    legacySelectUserStatement = prepareLegacySelectUserStatement();
+                return getRoleFromTable(name, legacySelectUserStatement, LEGACY_ROW_TO_ROLE);
+            }
         }
         catch (RequestExecutionException | RequestValidationException e)
         {

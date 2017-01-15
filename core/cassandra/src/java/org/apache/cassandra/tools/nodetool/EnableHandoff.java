@@ -17,29 +17,17 @@
  */
 package org.apache.cassandra.tools.nodetool;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import io.airlift.command.Arguments;
 import io.airlift.command.Command;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.tools.NodeTool.NodeToolCmd;
 
-@Command(name = "enablehandoff", description = "Reenable the future hints storing on the current node")
+@Command(name = "enablehandoff", description = "Reenable future hints storing on the current node")
 public class EnableHandoff extends NodeToolCmd
 {
-    @Arguments(usage = "<dc-name>,<dc-name>", description = "Enable hinted handoff only for these DCs")
-    private List<String> args = new ArrayList<>();
-
     @Override
     public void execute(NodeProbe probe)
     {
-        checkArgument(args.size() <= 1, "enablehandoff does not accept two args");
-        if(args.size() == 1)
-            probe.enableHintedHandoff(args.get(0));
-        else
-            probe.enableHintedHandoff();
+        probe.enableHintedHandoff();
     }
 }

@@ -75,10 +75,10 @@ import org.apache.cassandra.utils.*;
  */
 public class CounterContext
 {
-    private static final int HEADER_SIZE_LENGTH = TypeSizes.NATIVE.sizeof(Short.MAX_VALUE);
-    private static final int HEADER_ELT_LENGTH = TypeSizes.NATIVE.sizeof(Short.MAX_VALUE);
-    private static final int CLOCK_LENGTH = TypeSizes.NATIVE.sizeof(Long.MAX_VALUE);
-    private static final int COUNT_LENGTH = TypeSizes.NATIVE.sizeof(Long.MAX_VALUE);
+    private static final int HEADER_SIZE_LENGTH = TypeSizes.sizeof(Short.MAX_VALUE);
+    private static final int HEADER_ELT_LENGTH = TypeSizes.sizeof(Short.MAX_VALUE);
+    private static final int CLOCK_LENGTH = TypeSizes.sizeof(Long.MAX_VALUE);
+    private static final int COUNT_LENGTH = TypeSizes.sizeof(Long.MAX_VALUE);
     private static final int STEP_LENGTH = CounterId.LENGTH + CLOCK_LENGTH + COUNT_LENGTH;
 
     private static final Logger logger = LoggerFactory.getLogger(CounterContext.class);
@@ -111,7 +111,12 @@ public class CounterContext
 
     /**
      * Creates a counter context with a single local shard.
-     * For use by tests of compatibility with pre-2.1 counters only.
+     * This is only used in a PartitionUpdate until the update has gone through
+     * CounterMutation.apply(), at which point all the local shard are replaced by
+     * global ones. In other words, local shards should never hit the disk or
+     * memtables. And we use this so that if an update statement has multiple increment
+     * of the same counter we properly add them rather than keeping only one of them.
+     * (this is also used for tests of compatibility with pre-2.1 counters)
      */
     public ByteBuffer createLocal(long count)
     {
@@ -666,6 +671,22 @@ public class CounterContext
     public ClockAndCount getLocalClockAndCount(ByteBuffer context)
     {
         return getClockAndCountOf(context, CounterId.getLocalId());
+    }
+
+    /**
+     * Returns the count associated with the local counter id, or 0 if no such shard is present.
+     */
+    public long getLocalCount(ByteBuffer context)
+    {
+        return getLocalClockAndCount(context).count;
+    }
+
+    /**
+     * Checks if a context is local
+     */
+    public boolean isLocal(ByteBuffer context)
+    {
+        return ContextState.wrap(context).isLocal();
     }
 
     /**

@@ -19,8 +19,12 @@
 package org.apache.cassandra.db.marshal;
 
 import org.junit.Test;
+
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.dht.*;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 
@@ -29,7 +33,7 @@ public class TypeParserTest
     @Test
     public void testParse() throws ConfigurationException, SyntaxException
     {
-        AbstractType type;
+        AbstractType<?> type;
 
         type = TypeParser.parse(null);
         assert type == BytesType.instance;
@@ -39,12 +43,6 @@ public class TypeParserTest
 
         type = TypeParser.parse("    ");
         assert type == BytesType.instance;
-
-        type = TypeParser.parse("ByteType");
-        assert type == ByteType.instance;
-
-        type = TypeParser.parse("ShortType");
-        assert type == ShortType.instance;
 
         type = TypeParser.parse("LongType");
         assert type == LongType.instance;
@@ -60,11 +58,11 @@ public class TypeParserTest
 
         type = TypeParser.parse("LongType(reversed=true)");
         assert type == ReversedType.getInstance(LongType.instance);
-        assert ((ReversedType)type).baseType == LongType.instance;
+        assert ((ReversedType<?>)type).baseType == LongType.instance;
 
         type = TypeParser.parse("LongType(reversed)");
         assert type == ReversedType.getInstance(LongType.instance);
-        assert ((ReversedType)type).baseType == LongType.instance;
+        assert ((ReversedType<?>)type).baseType == LongType.instance;
     }
 
     @Test
@@ -75,13 +73,29 @@ public class TypeParserTest
             TypeParser.parse("y");
             fail("Should not pass");
         }
-        catch (ConfigurationException | SyntaxException e) {}
+        catch (ConfigurationException e) {}
+        catch (SyntaxException e) {}
 
         try
         {
             TypeParser.parse("LongType(reversed@)");
             fail("Should not pass");
         }
-        catch (ConfigurationException | SyntaxException e) {}
+        catch (ConfigurationException e) {}
+        catch (SyntaxException e) {}
+    }
+
+    @Test
+    public void testParsePartitionerOrder() throws ConfigurationException, SyntaxException
+    {
+        for (IPartitioner partitioner: new IPartitioner[] { Murmur3Partitioner.instance,
+                                                            ByteOrderedPartitioner.instance,
+                                                            RandomPartitioner.instance,
+                                                            OrderPreservingPartitioner.instance })
+        {
+            AbstractType<?> type = partitioner.partitionOrdering();
+            assertSame(type, TypeParser.parse(type.toString()));
+        }
+        assertSame(DatabaseDescriptor.getPartitioner().partitionOrdering(), TypeParser.parse("PartitionerDefinedOrder"));
     }
 }

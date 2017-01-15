@@ -32,6 +32,7 @@ import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.ChannelProxy;
 import org.apache.cassandra.io.util.DataOutputStreamPlus;
+import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.streaming.ProgressInfo;
 import org.apache.cassandra.streaming.StreamSession;
@@ -61,7 +62,7 @@ public class CompressedStreamWriter extends StreamWriter
         long totalSize = totalSize();
         logger.debug("[Stream #{}] Start streaming file {} to {}, repairedAt = {}, totalSize = {}", session.planId(),
                      sstable.getFilename(), session.peer, sstable.getSSTableMetadata().repairedAt, totalSize);
-        try (RandomAccessReader file = sstable.openDataReader(); final ChannelProxy fc = file.getChannel())
+        try (ChannelProxy fc = sstable.getDataChannel().sharedCopy())
         {
             long progress = 0L;
             // calculate chunks to transfer. we want to send continuous chunks altogether.
@@ -84,13 +85,7 @@ public class CompressedStreamWriter extends StreamWriter
                     final long bytesTransferredFinal = bytesTransferred;
                     final int toTransfer = (int) Math.min(CHUNK_SIZE, length - bytesTransferred);
                     limiter.acquire(toTransfer);
-                    long lastWrite = out.applyToChannel(new Function<WritableByteChannel, Long>()
-                    {
-                        public Long apply(WritableByteChannel wbc)
-                        {
-                            return fc.transferTo(section.left + bytesTransferredFinal, toTransfer, wbc);
-                        }
-                    });
+                    long lastWrite = out.applyToChannel((wbc) -> fc.transferTo(section.left + bytesTransferredFinal, toTransfer, wbc));
                     bytesTransferred += lastWrite;
                     progress += lastWrite;
                     session.progress(sstable.descriptor, ProgressInfo.Direction.OUT, progress, totalSize);

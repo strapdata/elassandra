@@ -20,34 +20,20 @@ package org.apache.cassandra.cql3;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
+import org.apache.cassandra.utils.AbstractIterator;
+
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.statements.SelectStatement;
-import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.BooleanType;
-import org.apache.cassandra.db.marshal.ByteType;
-import org.apache.cassandra.db.marshal.DoubleType;
-import org.apache.cassandra.db.marshal.FloatType;
-import org.apache.cassandra.db.marshal.InetAddressType;
-import org.apache.cassandra.db.marshal.Int32Type;
-import org.apache.cassandra.db.marshal.ListType;
-import org.apache.cassandra.db.marshal.LongType;
-import org.apache.cassandra.db.marshal.MapType;
-import org.apache.cassandra.db.marshal.SetType;
-import org.apache.cassandra.db.marshal.ShortType;
-import org.apache.cassandra.db.marshal.TimestampType;
-import org.apache.cassandra.db.marshal.UTF8Type;
-import org.apache.cassandra.db.marshal.UUIDType;
+import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.db.partitions.PartitionIterator;
+import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.service.pager.QueryPager;
-
-import com.google.common.collect.AbstractIterator;
+import org.apache.cassandra.transport.Server;
+import org.apache.cassandra.utils.FBUtilities;
 
 /** a utility for doing internal cql-based queries */
 public abstract class UntypedResultSet implements Iterable<UntypedResultSet.Row>
@@ -195,11 +181,16 @@ public abstract class UntypedResultSet implements Iterable<UntypedResultSet.Row>
 
                 protected Row computeNext()
                 {
+                    int nowInSec = FBUtilities.nowInSeconds();
                     while (currentPage == null || !currentPage.hasNext())
                     {
                         if (pager.isExhausted())
                             return endOfData();
-                        currentPage = select.process(pager.fetchPage(pageSize)).rows.iterator();
+
+                        try (ReadOrderGroup orderGroup = pager.startOrderGroup(); PartitionIterator iter = pager.fetchPageInternal(pageSize, orderGroup))
+                        {
+                            currentPage = select.process(iter, nowInSec).rows.iterator();
+                        }
                     }
                     return new Row(metadata, currentPage.next());
                 }
@@ -214,225 +205,178 @@ public abstract class UntypedResultSet implements Iterable<UntypedResultSet.Row>
 
     public static class Row
     {
-        final ByteBuffer[] colValues;
-        final String[]     colNames;
-        final List<ColumnSpecification> colSpec;
-        
+        private final Map<String, ByteBuffer> data = new HashMap<>();
+        private final List<ColumnSpecification> columns = new ArrayList<>();
+
         public Row(Map<String, ByteBuffer> data)
         {
-            this.colNames = data.keySet().toArray(new String[data.size()]);
-            this.colValues = new ByteBuffer[data.size()];
-            int i=0;
-            for(String key : colNames) {
-                colValues[i++] = data.get(key);
-            }
-            this.colSpec = null;
+            this.data.putAll(data);
         }
 
         public Row(List<ColumnSpecification> names, List<ByteBuffer> columns)
         {
-            this.colSpec = names;
-            this.colValues = columns.toArray(new ByteBuffer[columns.size()]);
-            this.colNames = new String[names.size()];
+            this.columns.addAll(names);
             for (int i = 0; i < names.size(); i++)
-                this.colNames[i] = names.get(i).name.toString();
+                data.put(names.get(i).name.toString(), columns.get(i));
         }
 
-        public ByteBuffer get(String name) {
-            for(int i=0; i < colNames.length; i++) {
-                if (colNames[i].equals(name)) {
-                    return colValues[i];
+        public static Row fromInternalRow(CFMetaData metadata, DecoratedKey key, org.apache.cassandra.db.rows.Row row)
+        {
+            Map<String, ByteBuffer> data = new HashMap<>();
+
+            ByteBuffer[] keyComponents = SelectStatement.getComponents(metadata, key);
+            for (ColumnDefinition def : metadata.partitionKeyColumns())
+                data.put(def.name.toString(), keyComponents[def.position()]);
+
+            Clustering clustering = row.clustering();
+            for (ColumnDefinition def : metadata.clusteringColumns())
+                data.put(def.name.toString(), clustering.get(def.position()));
+
+            for (ColumnDefinition def : metadata.partitionColumns())
+            {
+                if (def.isSimple())
+                {
+                    Cell cell = row.getCell(def);
+                    if (cell != null)
+                        data.put(def.name.toString(), cell.value());
+                }
+                else
+                {
+                    ComplexColumnData complexData = row.getComplexColumnData(def);
+                    if (complexData != null)
+                        data.put(def.name.toString(), ((CollectionType)def.type).serializeForNativeProtocol(def, complexData.iterator(), Server.VERSION_3));
                 }
             }
-            return null;
+
+            return new Row(data);
         }
-        
+
         public boolean has(String column)
         {
             // Note that containsKey won't work because we may have null values
-            return get(column) != null;
-        }
-        
-        public boolean has(int i)
-        {
-            // Note that containsKey won't work because we may have null values
-            return colValues[i] != null;
+            return data.get(column) != null;
         }
 
         public ByteBuffer getBlob(String column)
         {
-            return get(column);
-        }
-        
-        public ByteBuffer getBlob(int i)
-        {
-            return colValues[i];
+            return data.get(column);
         }
 
         public String getString(String column)
         {
-            return UTF8Type.instance.compose(get(column));
+            return UTF8Type.instance.compose(data.get(column));
         }
 
-        public String getString(int i)
-        {
-            return UTF8Type.instance.compose(colValues[i]);
-        }
-        
         public boolean getBoolean(String column)
         {
-            return BooleanType.instance.compose(get(column));
-        }
-        
-        public boolean getBoolean(int i)
-        {
-            return BooleanType.instance.compose(colValues[i]);
+            return BooleanType.instance.compose(data.get(column));
         }
 
         public byte getByte(String column)
         {
-            return ByteType.instance.compose(get(column));
-        }
-        
-        public byte getByte(int i)
-        {
-            return ByteType.instance.compose(colValues[i]);
+            return ByteType.instance.compose(data.get(column));
         }
 
         public short getShort(String column)
         {
-            return ShortType.instance.compose(get(column));
-        }
-        
-        public short getShort(int i)
-        {
-            return ShortType.instance.compose(colValues[i]);
+            return ShortType.instance.compose(data.get(column));
         }
 
         public int getInt(String column)
         {
-            return Int32Type.instance.compose(get(column));
+            return Int32Type.instance.compose(data.get(column));
         }
 
-        public int getInt(int i)
-        {
-            return Int32Type.instance.compose(colValues[i]);
-        }
-        
         public double getDouble(String column)
         {
-            return DoubleType.instance.compose(get(column));
-        }
-        
-        public double getDouble(int i)
-        {
-            return DoubleType.instance.compose(colValues[i]);
+            return DoubleType.instance.compose(data.get(column));
         }
 
         public ByteBuffer getBytes(String column)
         {
-            return get(column);
-        }
-        
-        public ByteBuffer getBytes(int i)
-        {
-            return colValues[i];
+            return data.get(column);
         }
 
         public InetAddress getInetAddress(String column)
         {
-            return InetAddressType.instance.compose(get(column));
-        }
-        
-        public InetAddress getInetAddress(int i)
-        {
-            return InetAddressType.instance.compose(colValues[i]);
+            return InetAddressType.instance.compose(data.get(column));
         }
 
         public UUID getUUID(String column)
         {
-            return UUIDType.instance.compose(get(column));
+            return UUIDType.instance.compose(data.get(column));
         }
 
-        public UUID getUUID(int i)
-        {
-            return UUIDType.instance.compose(colValues[i]);
-        }
-        
         public Date getTimestamp(String column)
         {
-            return TimestampType.instance.compose(get(column));
-        }
-        
-        public Date getTimestamp(int i)
-        {
-            return TimestampType.instance.compose(colValues[i]);
+            return TimestampType.instance.compose(data.get(column));
         }
 
         public long getLong(String column)
         {
-            return LongType.instance.compose(get(column));
+            return LongType.instance.compose(data.get(column));
         }
         
-        public long getLong(int i)
-        {
-            return LongType.instance.compose(colValues[i]);
-        }
-        
-        // add support for float (2016/05/10 vroyer)
         public float getFloat(String column)
         {
-            return FloatType.instance.compose(get(column));
-        }
-        
-        public float getFloat(int i)
-        {
-            return FloatType.instance.compose(colValues[i]);
+            return FloatType.instance.compose(data.get(column));
         }
 
         public <T> Set<T> getSet(String column, AbstractType<T> type)
         {
-            ByteBuffer raw = get(column);
+            ByteBuffer raw = data.get(column);
             return raw == null ? null : SetType.getInstance(type, true).compose(raw);
-        }
-        
-        public <T> Set<T> getSet(int i, AbstractType<T> type)
-        {
-            return colValues[i] == null ? null : SetType.getInstance(type, true).compose(colValues[i]);
         }
 
         public <T> List<T> getList(String column, AbstractType<T> type)
         {
-            ByteBuffer raw = get(column);
+            ByteBuffer raw = data.get(column);
             return raw == null ? null : ListType.getInstance(type, true).compose(raw);
-        }
-        
-        public <T> List<T> getList(int i, AbstractType<T> type)
-        {
-            return colValues[i] == null ? null : ListType.getInstance(type, true).compose(colValues[i]);
         }
 
         public <K, V> Map<K, V> getMap(String column, AbstractType<K> keyType, AbstractType<V> valueType)
         {
-            ByteBuffer raw = get(column);
+            ByteBuffer raw = data.get(column);
             return raw == null ? null : MapType.getInstance(keyType, valueType, true).compose(raw);
         }
-        
-        public <K, V> Map<K, V> getMap(int i, AbstractType<K> keyType, AbstractType<V> valueType)
+
+        public Map<String, String> getTextMap(String column)
         {
-            return colValues[i] == null ? null : MapType.getInstance(keyType, valueType, true).compose(colValues[i]);
+            return getMap(column, UTF8Type.instance, UTF8Type.instance);
+        }
+
+        public <T> Set<T> getFrozenSet(String column, AbstractType<T> type)
+        {
+            ByteBuffer raw = data.get(column);
+            return raw == null ? null : SetType.getInstance(type, false).compose(raw);
+        }
+
+        public <T> List<T> getFrozenList(String column, AbstractType<T> type)
+        {
+            ByteBuffer raw = data.get(column);
+            return raw == null ? null : ListType.getInstance(type, false).compose(raw);
+        }
+
+        public <K, V> Map<K, V> getFrozenMap(String column, AbstractType<K> keyType, AbstractType<V> valueType)
+        {
+            ByteBuffer raw = data.get(column);
+            return raw == null ? null : MapType.getInstance(keyType, valueType, false).compose(raw);
+        }
+
+        public Map<String, String> getFrozenTextMap(String column)
+        {
+            return getFrozenMap(column, UTF8Type.instance, UTF8Type.instance);
         }
 
         public List<ColumnSpecification> getColumns()
         {
-            return colSpec;
+            return columns;
         }
 
         @Override
         public String toString()
         {
-            return toString();
+            return data.toString();
         }
     }
-    
 }

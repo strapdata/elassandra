@@ -56,7 +56,7 @@ Logging configuration
 The cassandra logs in ``logs/system.log`` includes elasticsearch logs according to the your ``conf/logback.conf`` settings.
 See `cassandra logging configuration <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configLoggingLevels_r.html>`_.
 
-Per keyspace (or per table logging) level can be configured using the logger name ``org.elasticsearch.cassandra.index.ExtendedElasticSecondaryIndex.<keyspace>.<table>``.
+Per keyspace (or per table logging) level can be configured using the logger name ``org.elassandra.index.ExtendedElasticSecondaryIndex.<keyspace>.<table>``.
 
 
 Multi datacenter configuration
@@ -114,7 +114,7 @@ Index settings
 Sizing and tunning
 ------------------
 
-Elassandra write throughput should be half the cassandra write throughput if you index all columns. If you only index a subset of columns, performance would be better. 
+Basically, Elassandra requires much CPU than standelone Cassandra or Elasticsearch and Elassandra write throughput should be half the cassandra write throughput if you index all columns. If you only index a subset of columns, performance would be better. 
 
 Recommended production setting for Apache cassandra and Elasticsearch can be applied to Elassandra :
 

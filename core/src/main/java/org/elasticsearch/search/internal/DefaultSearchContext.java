@@ -848,4 +848,9 @@ public class DefaultSearchContext extends SearchContext {
     public ClusterService clusterService() {
         return this.indexService.clusterService();
     }
+
+    @Override
+    public SearchProcessor searchProcessor() {
+        return this.searchProcessor;
+    }
 }

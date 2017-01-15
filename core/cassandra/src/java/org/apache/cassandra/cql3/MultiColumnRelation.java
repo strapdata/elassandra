@@ -19,6 +19,7 @@ package org.apache.cassandra.cql3;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
@@ -114,9 +115,15 @@ public class MultiColumnRelation extends Relation
      * For non-IN relations, returns the Tuples.Literal or Tuples.Raw marker for a single tuple.
      * @return a Tuples.Literal for non-IN relations or Tuples.Raw marker for a single tuple.
      */
-    private Term.MultiColumnRaw getValue()
+    public Term.MultiColumnRaw getValue()
     {
         return relationType == Operator.IN ? inMarker : valuesOrMarker;
+    }
+
+    public List<? extends Term.Raw> getInValues()
+    {
+        assert relationType == Operator.IN;
+        return inValues;
     }
 
     @Override
@@ -131,7 +138,7 @@ public class MultiColumnRelation extends Relation
     {
         List<ColumnDefinition> receivers = receivers(cfm);
         Term term = toTerm(receivers, getValue(), cfm.ksName, boundNames);
-        return new MultiColumnRestriction.EQ(receivers, term);
+        return new MultiColumnRestriction.EQRestriction(receivers, term);
     }
 
     @Override
@@ -143,9 +150,9 @@ public class MultiColumnRelation extends Relation
         if (terms == null)
         {
             Term term = toTerm(receivers, getValue(), cfm.ksName, boundNames);
-            return new MultiColumnRestriction.InWithMarker(receivers, (AbstractMarker) term);
+            return new MultiColumnRestriction.InRestrictionWithMarker(receivers, (AbstractMarker) term);
         }
-        return new MultiColumnRestriction.InWithValues(receivers, terms);
+        return new MultiColumnRestriction.InRestrictionWithValues(receivers, terms);
     }
 
     @Override
@@ -156,7 +163,7 @@ public class MultiColumnRelation extends Relation
     {
         List<ColumnDefinition> receivers = receivers(cfm);
         Term term = toTerm(receivers(cfm), getValue(), cfm.ksName, boundNames);
-        return new MultiColumnRestriction.Slice(receivers, bound, inclusive, term);
+        return new MultiColumnRestriction.SliceRestriction(receivers, bound, inclusive, term);
     }
 
     @Override
@@ -164,7 +171,15 @@ public class MultiColumnRelation extends Relation
                                                  VariableSpecifications boundNames,
                                                  boolean isKey) throws InvalidRequestException
     {
-        throw invalidRequest("%s cannot be used for Multi-column relations", operator());
+        throw invalidRequest("%s cannot be used for multi-column relations", operator());
+    }
+
+    @Override
+    protected Restriction newIsNotRestriction(CFMetaData cfm,
+                                              VariableSpecifications boundNames) throws InvalidRequestException
+    {
+        // this is currently disallowed by the grammar
+        throw new AssertionError(String.format("%s cannot be used for multi-column relations", operator()));
     }
 
     @Override
@@ -196,6 +211,15 @@ public class MultiColumnRelation extends Relation
             previousPosition = def.position();
         }
         return names;
+    }
+
+    public Relation renameIdentifier(ColumnIdentifier.Raw from, ColumnIdentifier.Raw to)
+    {
+        if (!entities.contains(from))
+            return this;
+
+        List<ColumnIdentifier.Raw> newEntities = entities.stream().map(e -> e.equals(from) ? to : e).collect(Collectors.toList());
+        return new MultiColumnRelation(newEntities, operator(), valuesOrMarker, inValues, inMarker);
     }
 
     @Override

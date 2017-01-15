@@ -22,9 +22,6 @@ import java.io.IOException;
 import java.util.EnumSet;
 import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.handler.codec.ByteToMessageDecoder;
@@ -36,17 +33,10 @@ import org.apache.cassandra.transport.messages.ErrorMessage;
 
 public class Frame
 {
-    private static final Logger logger = LoggerFactory.getLogger(Frame.class);
-
     public static final byte PROTOCOL_VERSION_MASK = 0x7f;
 
     public final Header header;
     public final ByteBuf body;
-
-    /**
-     * <code>true</code> if the deprecation warning for protocol versions 1 and 2 has been logged.
-     */
-    private static boolean hasLoggedDeprecationWarning;
 
     /**
      * An on-wire frame consists of a header and a body.
@@ -57,16 +47,6 @@ public class Frame
      *   +---------+---------+---------+---------+---------+
      *   | version |  flags  |      stream       | opcode  |
      *   +---------+---------+---------+---------+---------+
-     *   |                length                 |
-     *   +---------+---------+---------+---------+
-     *
-     *
-     * In versions 1 and 2 the header has a smaller (1 byte) stream id, and is thus defined the following way:
-     *
-     *   0         8        16        24        32
-     *   +---------+---------+---------+---------+
-     *   | version |  flags  | stream  | opcode  |
-     *   +---------+---------+---------+---------+
      *   |                length                 |
      *   +---------+---------+---------+---------+
      */
@@ -94,9 +74,8 @@ public class Frame
 
     public static class Header
     {
-        // 8 bytes in protocol versions 1 and 2, 8 bytes in protocol version 3 and later
-        public static final int MODERN_LENGTH = 9;
-        public static final int LEGACY_LENGTH = 8;
+        // 9 bytes in protocol version 3 and later
+        public static final int LENGTH = 9;
 
         public static final int BODY_LENGTH_SIZE = 4;
 
@@ -183,48 +162,30 @@ public class Frame
                 return;
             }
 
-            // Wait until we have read at least the short header
-            if (buffer.readableBytes() < Header.LEGACY_LENGTH)
+            int readableBytes = buffer.readableBytes();
+            if (readableBytes == 0)
                 return;
 
             int idx = buffer.readerIndex();
 
+            // Check the first byte for the protocol version before we wait for a complete header.  Protocol versions
+            // 1 and 2 use a shorter header, so we may never have a complete header's worth of bytes.
             int firstByte = buffer.getByte(idx++);
             Message.Direction direction = Message.Direction.extractFromVersion(firstByte);
             int version = firstByte & PROTOCOL_VERSION_MASK;
+            if (version < Server.MIN_SUPPORTED_VERSION || version > Server.CURRENT_VERSION)
+                throw new ProtocolException(String.format("Invalid or unsupported protocol version (%d); the lowest supported version is %d and the greatest is %d",
+                                                          version, Server.MIN_SUPPORTED_VERSION, Server.CURRENT_VERSION),
+                                            version);
 
-            if (version > Server.CURRENT_VERSION)
-                throw new ProtocolException(String.format("Invalid or unsupported protocol version (%d); highest supported is %d ",
-                                                          version, Server.CURRENT_VERSION));
-
-            if (version < Server.VERSION_3 && !hasLoggedDeprecationWarning)
-            {
-                hasLoggedDeprecationWarning = true;
-                logger.warn("Detected connection using native protocol version {}. Both version 1 and 2"
-                          + " of the native protocol are now deprecated and support will be removed in Cassandra 3.0."
-                          + " You are encouraged to upgrade to a client driver using version 3 of the native protocol",
-                            version);
-            }
-
-            // Wait until we have the complete V3+ header
-            if (version >= Server.VERSION_3 && buffer.readableBytes() < Header.MODERN_LENGTH)
+            // Wait until we have the complete header
+            if (readableBytes < Header.LENGTH)
                 return;
 
             int flags = buffer.getByte(idx++);
 
-            int streamId, headerLength;
-            if (version >= Server.VERSION_3)
-            {
-                streamId = buffer.getShort(idx);
-                idx += 2;
-                headerLength = Header.MODERN_LENGTH;
-            }
-            else
-            {
-                streamId = buffer.getByte(idx);
-                idx++;
-                headerLength = Header.LEGACY_LENGTH;
-            }
+            int streamId = buffer.getShort(idx);
+            idx += 2;
 
             // This throws a protocol exceptions if the opcode is unknown
             Message.Type type;
@@ -239,7 +200,8 @@ public class Frame
 
             long bodyLength = buffer.getUnsignedInt(idx);
             idx += Header.BODY_LENGTH_SIZE;
-            long frameLength = bodyLength + headerLength;
+
+            long frameLength = bodyLength + Header.LENGTH;
             if (frameLength > MAX_FRAME_LENGTH)
             {
                 // Enter the discard mode and discard everything received so far.
@@ -306,15 +268,14 @@ public class Frame
         public void encode(ChannelHandlerContext ctx, Frame frame, List<Object> results)
         throws IOException
         {
-            int headerLength = frame.header.version >= Server.VERSION_3
-                             ? Header.MODERN_LENGTH
-                             : Header.LEGACY_LENGTH;
-            ByteBuf header = CBUtil.allocator.buffer(headerLength);
+            ByteBuf header = CBUtil.allocator.buffer(Header.LENGTH);
 
             Message.Type type = frame.header.type;
             header.writeByte(type.direction.addToVersion(frame.header.version));
             header.writeByte(Header.Flag.serialize(frame.header.flags));
 
+            // Continue to support writing pre-v3 headers so that we can give proper error messages to drivers that
+            // connect with the v1/v2 protocol. See CASSANDRA-11464.
             if (frame.header.version >= Server.VERSION_3)
                 header.writeShort(frame.header.streamId);
             else

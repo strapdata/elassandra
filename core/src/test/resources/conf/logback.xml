@@ -17,12 +17,12 @@
  under the License.
 -->
 
-<configuration scan="true" debug="false">
+<configuration scan="true" debug="true">
   <jmxConfigurator />
   <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-    <file>${cassandra.logdir}/system.log</file>
+    <file>${cassandra.logdir}/system_${cassandra.node_ordinal:-0}.log</file>
     <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
-      <fileNamePattern>${cassandra.logdir}/system.log.%i.zip</fileNamePattern>
+      <fileNamePattern>${cassandra.logdir}/system_${cassandra.node_ordinal:-0}.log.%i.zip</fileNamePattern>
       <minIndex>1</minIndex>
       <maxIndex>20</maxIndex>
     </rollingPolicy>
@@ -51,6 +51,7 @@
   <logger name="org.apache.cassandra" level="WARN" />
   <logger name="org.apache.cassandra.db.commitlog" level="WARN" />
   <logger name="org.apache.cassandra.db.compaction" level="WARN" />
+  <logger name="org.apache.cassandra.index" level="TRACE" />
   <logger name="org.apache.cassandra.config.DatabaseDescriptor" level="WARN" />
   <logger name="org.apache.cassandra.service.CassandraDaemon" level="DEBUG" />
   <logger name="org.apache.cassandra.service.ElassandraDaemon" level="DEBUG" />

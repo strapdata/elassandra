@@ -98,6 +98,7 @@ public class NodeTool
                 RemoveNode.class,
                 Assassinate.class,
                 Repair.class,
+                ReplayBatchlog.class,
                 SetCacheCapacity.class,
                 SetHintedHandoffThrottleInKB.class,
                 SetCompactionThreshold.class,
@@ -132,6 +133,8 @@ public class NodeTool
                 TopPartitions.class,
                 SetLoggingLevel.class,
                 GetLoggingLevels.class,
+                DisableHintsForDC.class,
+                EnableHintsForDC.class,
                 FailureDetectorInfo.class,
                 RefreshSizeEstimates.class
         );
@@ -312,19 +315,34 @@ public class NodeTool
             return nodeClient;
         }
 
-        protected List<String> parseOptionalKeyspace(List<String> cmdArgs, NodeProbe nodeProbe)
+        protected enum KeyspaceSet
         {
-            return parseOptionalKeyspace(cmdArgs, nodeProbe, false);
+            ALL, NON_SYSTEM, NON_LOCAL_STRATEGY
         }
 
-        protected List<String> parseOptionalKeyspace(List<String> cmdArgs, NodeProbe nodeProbe, boolean includeSystemKS)
+        protected List<String> parseOptionalKeyspace(List<String> cmdArgs, NodeProbe nodeProbe)
+        {
+            return parseOptionalKeyspace(cmdArgs, nodeProbe, KeyspaceSet.NON_SYSTEM);
+        }
+
+        protected List<String> parseOptionalKeyspace(List<String> cmdArgs, NodeProbe nodeProbe, KeyspaceSet defaultKeyspaceSet)
         {
             List<String> keyspaces = new ArrayList<>();
 
+
             if (cmdArgs == null || cmdArgs.isEmpty())
-                keyspaces.addAll(includeSystemKS ? nodeProbe.getKeyspaces() : nodeProbe.getNonSystemKeyspaces());
+            {
+                if (defaultKeyspaceSet == KeyspaceSet.NON_LOCAL_STRATEGY)
+                    keyspaces.addAll(keyspaces = nodeProbe.getNonLocalStrategyKeyspaces());
+                else if (defaultKeyspaceSet == KeyspaceSet.NON_SYSTEM)
+                    keyspaces.addAll(keyspaces = nodeProbe.getNonSystemKeyspaces());
+                else
+                    keyspaces.addAll(nodeProbe.getKeyspaces());
+            }
             else
+            {
                 keyspaces.add(cmdArgs.get(0));
+            }
 
             for (String keyspace : keyspaces)
             {
@@ -335,7 +353,7 @@ public class NodeTool
             return Collections.unmodifiableList(keyspaces);
         }
 
-        protected String[] parseOptionalColumnFamilies(List<String> cmdArgs)
+        protected String[] parseOptionalTables(List<String> cmdArgs)
         {
             return cmdArgs.size() <= 1 ? EMPTY_STRING_ARRAY : toArray(cmdArgs.subList(1, cmdArgs.size()), String.class);
         }

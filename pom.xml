@@ -89,7 +89,7 @@
         <tests.bwc.path>${project.basedir}/backwards</tests.bwc.path>
         <tests.locale>random</tests.locale>
         <tests.timezone>random</tests.timezone>
-        <es.logger.level>ERROR</es.logger.level>
+        <es.logger.level>DEBUG</es.logger.level>
         <tests.heap.size>1024m</tests.heap.size>
         <tests.heapdump.path>${project.build.directory}/heapdump/</tests.heapdump.path>
         <tests.topn>5</tests.topn>
@@ -821,14 +821,22 @@
                                     </execution-times>
                                 </balancers>
                                 <includes>
+                                  
                                     <include>**/*Tests.class</include>
+                                     <!--
+                                    <include>**/*IT.class</include>
+                                    -->
                                 </includes>
                                 <excludes>
                                     <exclude>**/*$*.class</exclude>
                                     <exclude>org/elasticsearch/tribe/**/*.class</exclude>
                                     <exclude>org/elasticsearch/index/engine/InternalEngineTests*.class</exclude>
                                     <exclude>org/elasticsearch/index/shard/IndexShardTests.class</exclude>
-                                    <exclude>org/elasticsearch/index/shard/IndexShardTests.class</exclude>
+                                    
+                                    <!-- require security manager -->
+                                    <exclude>org/elasticsearch/bootstrap/SecurityTests*.class</exclude>
+                                    <exclude>org/elasticsearch/bootstrap/ESPolicy*.class</exclude>
+                                    
                                     <!--  
                                     <exclude>org/elasticsearch/cluster/routing/ShardRoutingTests.class</exclude>
                                     <exclude>org/elasticsearch/plugins/PluginManagerPermissionTests.class</exclude>
@@ -975,11 +983,9 @@
                                 </excludeClasses>
                                 <rules>
                                     <checkSignatureRule implementation="org.codehaus.mojo.animal_sniffer.enforcer.CheckSignatureRule">
-                                    <!--
                                     <ignores>
                                         <ignore>java.lang.invoke.MethodHandle.invoke</ignore>
                                     </ignores>
-                                    -->
                                    </checkSignatureRule>
                                 </rules>
                             </configuration>

@@ -24,11 +24,11 @@ import org.junit.Test;
 
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.DeletedCell;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.OnDiskAtom;
-import org.apache.cassandra.db.RangeTombstone;
-import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
+import org.apache.cassandra.db.rows.Cell;
+import org.apache.cassandra.db.rows.Row;
+import org.apache.cassandra.db.rows.Unfiltered;
+import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 
@@ -49,7 +49,7 @@ public class NeverPurgeTest extends CQLTester
     }
 
     @Test
-    public void neverPurgeRangeTombstoneTest() throws Throwable
+    public void neverPurgeRowTombstoneTest() throws Throwable
     {
         testHelper("DELETE FROM %s WHERE a=1 AND b=2");
     }
@@ -80,9 +80,9 @@ public class NeverPurgeTest extends CQLTester
         execute("DELETE FROM %s WHERE a=3");
         cfs.forceBlockingFlush();
         cfs.enableAutoCompaction();
-        while (cfs.getSSTables().size() > 1)
+        while (cfs.getLiveSSTables().size() > 1)
             Thread.sleep(100);
-        verifyContainsTombstones(cfs.getSSTables(), 3);
+        verifyContainsTombstones(cfs.getLiveSSTables(), 3);
     }
 
     private void testHelper(String deletionStatement) throws Throwable
@@ -94,7 +94,7 @@ public class NeverPurgeTest extends CQLTester
         Thread.sleep(1000);
         cfs.forceBlockingFlush();
         cfs.forceMajorCompaction();
-        verifyContainsTombstones(cfs.getSSTables(), 1);
+        verifyContainsTombstones(cfs.getLiveSSTables(), 1);
     }
 
     private void verifyContainsTombstones(Collection<SSTableReader> sstables, int expectedTombstoneCount) throws Exception
@@ -106,16 +106,23 @@ public class NeverPurgeTest extends CQLTester
         {
             while (scanner.hasNext())
             {
-                try (OnDiskAtomIterator iter = scanner.next())
+                try (UnfilteredRowIterator iter = scanner.next())
                 {
-                    if (iter.getColumnFamily().deletionInfo().getTopLevelDeletion().localDeletionTime < Integer.MAX_VALUE)
+                    if (!iter.partitionLevelDeletion().isLive())
                         tombstoneCount++;
 
                     while (iter.hasNext())
                     {
-                        OnDiskAtom atom = iter.next();
-                        if (atom instanceof DeletedCell || atom instanceof RangeTombstone)
-                            tombstoneCount++;
+                        Unfiltered atom = iter.next();
+                        if (atom.isRow())
+                        {
+                            Row r = (Row)atom;
+                            if (!r.deletion().isLive())
+                                tombstoneCount++;
+                            for (Cell c : r.cells())
+                                if (c.isTombstone())
+                                    tombstoneCount++;
+                        }
                     }
                 }
             }

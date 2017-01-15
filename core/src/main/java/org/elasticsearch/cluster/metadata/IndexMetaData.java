@@ -190,6 +190,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public static final String SETTING_INCLUDE_NODE_ID = "index.include_node_id"; 
     public static final String SETTING_SYNCHRONOUS_REFRESH = "index.synchronous_refresh"; 
     public static final String SETTING_DROP_ON_DELETE_INDEX = "index.drop_on_delete_index"; 
+    public static final String SETTING_SNAPSHOT_WITH_SSTABLE = "index.snapshot_with_sstable"; 
     
 
     // hard-coded hash function as of 2.0

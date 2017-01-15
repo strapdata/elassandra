@@ -123,8 +123,8 @@ public class QueryPhase implements SearchPhase {
             searchContext.queryResult().profileResults(shardResults);
         }
         
-        if (searchContext.processor() != null) {
-            searchContext.processor().postProcess(searchContext);
+        if (searchContext.searchProcessor() != null) {
+            searchContext.searchProcessor().postProcess(searchContext);
         }
     }
 

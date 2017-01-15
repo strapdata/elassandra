@@ -28,10 +28,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.dht.Bounds;
-import org.apache.cassandra.dht.LocalPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -41,7 +39,6 @@ import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.repair.messages.*;
 import org.apache.cassandra.service.ActiveRepairService;
-import org.apache.cassandra.utils.CassandraVersion;
 
 /**
  * Handles all repair related message.
@@ -59,7 +56,6 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
         {
             switch (message.payload.messageType)
             {
-                case PREPARE_GLOBAL_MESSAGE:
                 case PREPARE_MESSAGE:
                     PrepareMessage prepareMessage = (PrepareMessage) message.payload;
                     logger.debug("Preparing, {}", prepareMessage);
@@ -75,18 +71,13 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         }
                         columnFamilyStores.add(columnFamilyStore);
                     }
-                    CassandraVersion peerVersion = SystemKeyspace.getReleaseVersion(message.from);
-                    // note that we default isGlobal to true since old version always default to true:
-                    boolean isGlobal = peerVersion == null ||
-                                       peerVersion.compareTo(ActiveRepairService.SUPPORTS_GLOBAL_PREPARE_FLAG_VERSION) < 0 ||
-                                       message.payload.messageType.equals(RepairMessage.Type.PREPARE_GLOBAL_MESSAGE);
-                    logger.debug("Received prepare message: global message = {}, peerVersion = {},", message.payload.messageType.equals(RepairMessage.Type.PREPARE_GLOBAL_MESSAGE), peerVersion);
                     ActiveRepairService.instance.registerParentRepairSession(prepareMessage.parentRepairSession,
                                                                              message.from,
                                                                              columnFamilyStores,
                                                                              prepareMessage.ranges,
                                                                              prepareMessage.isIncremental,
-                                                                             isGlobal);
+                                                                             prepareMessage.timestamp,
+                                                                             prepareMessage.isGlobal);
                     MessagingService.instance().sendReply(new MessageOut(MessagingService.Verb.INTERNAL_RESPONSE), id, message.from);
                     break;
 
@@ -106,14 +97,13 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     }
                     else
                     {
-                        final Range<Token> repairingRange = desc.range;
                         cfs.snapshot(desc.sessionId.toString(), new Predicate<SSTableReader>()
                         {
                             public boolean apply(SSTableReader sstable)
                             {
                                 return sstable != null &&
-                                       !(sstable.partitioner instanceof LocalPartitioner) && // exclude SSTables from 2i
-                                       new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(Collections.singleton(repairingRange));
+                                       !sstable.metadata.isIndex() && // exclude SSTables from 2i
+                                       new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(desc.ranges);
                             }
                         }, true); //ephemeral snapshot, if repair fails, it will be cleaned next startup
                     }

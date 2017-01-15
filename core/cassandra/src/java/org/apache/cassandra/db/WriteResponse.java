@@ -17,10 +17,10 @@
  */
 package org.apache.cassandra.db;
 
-import java.io.DataInput;
 import java.io.IOException;
 
 import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
@@ -28,24 +28,30 @@ import org.apache.cassandra.net.MessagingService;
 /*
  * This empty response is sent by a replica to inform the coordinator that the write succeeded
  */
-public class WriteResponse
+public final class WriteResponse
 {
-    public static final WriteResponseSerializer serializer = new WriteResponseSerializer();
+    public static final Serializer serializer = new Serializer();
 
-    public MessageOut<WriteResponse> createMessage()
+    private static final WriteResponse instance = new WriteResponse();
+
+    private WriteResponse()
     {
-        return new MessageOut<WriteResponse>(MessagingService.Verb.REQUEST_RESPONSE, this, serializer);
     }
 
-    public static class WriteResponseSerializer implements IVersionedSerializer<WriteResponse>
+    public static MessageOut<WriteResponse> createMessage()
+    {
+        return new MessageOut<>(MessagingService.Verb.REQUEST_RESPONSE, instance, serializer);
+    }
+
+    public static class Serializer implements IVersionedSerializer<WriteResponse>
     {
         public void serialize(WriteResponse wm, DataOutputPlus out, int version) throws IOException
         {
         }
 
-        public WriteResponse deserialize(DataInput in, int version) throws IOException
+        public WriteResponse deserialize(DataInputPlus in, int version) throws IOException
         {
-            return new WriteResponse();
+            return instance;
         }
 
         public long serializedSize(WriteResponse response, int version)

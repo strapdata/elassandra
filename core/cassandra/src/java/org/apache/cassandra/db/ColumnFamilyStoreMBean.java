@@ -32,7 +32,10 @@ public interface ColumnFamilyStoreMBean
     /**
      * @return the name of the column family
      */
+    @Deprecated
     public String getColumnFamilyName();
+
+    public String getTableName();
 
     /**
      * force a major compaction of this column family
@@ -85,18 +88,6 @@ public interface ColumnFamilyStoreMBean
      */
     public void setCompactionParameters(Map<String, String> options);
     public Map<String, String> getCompactionParameters();
-    /**
-     * Sets the compaction strategy by class name
-     * @param className the name of the compaction strategy class
-     */
-    @Deprecated
-    public void setCompactionStrategyClass(String className);
-
-    /**
-     * Gets the compaction strategy class name
-     */
-    @Deprecated
-    public String getCompactionStrategyClass();
 
     /**
      * Get the compression parameters
@@ -170,4 +161,14 @@ public interface ColumnFamilyStoreMBean
      * @return top <i>count</i> items for the sampler since beginLocalSampling was called
      */
     public CompositeData finishLocalSampling(String sampler, int count) throws OpenDataException;
+
+    /*
+        Is Compaction space check enabled
+     */
+    public boolean isCompactionDiskSpaceCheckEnabled();
+
+    /*
+       Enable/Disable compaction space check
+     */
+    public void compactionDiskSpaceCheck(boolean enable);
 }

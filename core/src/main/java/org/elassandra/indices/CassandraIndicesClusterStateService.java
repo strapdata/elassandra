@@ -227,7 +227,7 @@ public class CassandraIndicesClusterStateService extends AbstractLifecycleCompon
                             ShardRoutingState.INITIALIZING, 
                             event.state().metaData().version(), 
                             IndexRoutingTable.UNASSIGNED_INFO_INDEX_CREATED, 
-                            AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
+                            AbstractSearchStrategy.EMPTY_RANGE_TOKEN_LIST);
                     IndexShard indexShard = indexService.createShard(shardRouting);
                     indexShard.shardRouting(shardRouting);
                     indexShard.addFailedEngineListener(failedEngineHandler);

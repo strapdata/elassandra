@@ -440,13 +440,14 @@ public class FetchPhase implements SearchPhase {
                             searchContext.includeNode(indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE_ID, clusterService.settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_INCLUDE_NODE_ID, false)));
                             requiredColumns.remove(NodeFieldMapper.NAME);
                         }
-                        if (fieldVisitor.loadSource() && searchContext.mapperService().documentMapper(fieldVisitor.uid().type()).sourceMapper().enabled()) {
+                        DocumentMapper docMapper = searchContext.mapperService().documentMapper(fieldVisitor.uid().type());
+                        if (fieldVisitor.loadSource() && docMapper.sourceMapper().enabled()) {
                             requiredColumns.add(SourceFieldMapper.NAME);
                         }
                         if (requiredColumns.size() > 0) {
                             cqlQuery = clusterService.buildFetchQuery(
                                     indexMetaData.keyspace(), searchContext.request().index(), fieldVisitor.uid().type(),
-                                    requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument);
+                                    requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument, docMapper.getColumnDefinitions());
                             searchContext.putFetchQuery(typeKey, cqlQuery);
                         }
                     }

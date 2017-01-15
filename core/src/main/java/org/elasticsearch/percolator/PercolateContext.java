@@ -34,6 +34,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.Counter;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.percolate.PercolateShardRequest;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
@@ -798,6 +799,11 @@ public class PercolateContext extends SearchContext {
     @Override
     public ClusterService clusterService() {
         return this.indexService.clusterService();
+    }
+
+    @Override
+    public SearchProcessor searchProcessor() {
+        return null;
     }
     
 }

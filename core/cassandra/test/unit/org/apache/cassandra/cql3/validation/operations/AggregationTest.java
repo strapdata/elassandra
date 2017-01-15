@@ -18,27 +18,46 @@
 package org.apache.cassandra.cql3.validation.operations;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.Locale;
 import java.util.TimeZone;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.DoubleStream;
 
 import org.apache.commons.lang3.time.DateUtils;
 
 import org.junit.Test;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.TurboFilterList;
+import ch.qos.logback.classic.turbo.ReconfigureOnChangeFilter;
+import ch.qos.logback.classic.turbo.TurboFilter;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
-import org.apache.cassandra.cql3.functions.Functions;
 import org.apache.cassandra.cql3.functions.UDAggregate;
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.DynamicCompositeType;
+import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.exceptions.FunctionExecutionException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.transport.Event;
+import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.transport.messages.ResultMessage;
 
 import static org.junit.Assert.assertEquals;
@@ -51,10 +70,10 @@ public class AggregationTest extends CQLTester
     @Test
     public void testNonExistingOnes() throws Throwable
     {
-        assertInvalidMessage("Cannot drop non existing aggregate", "DROP AGGREGATE " + KEYSPACE + ".aggr_does_not_exist");
-        assertInvalidMessage("Cannot drop non existing aggregate", "DROP AGGREGATE " + KEYSPACE + ".aggr_does_not_exist(int,text)");
-        assertInvalidMessage("Cannot drop non existing aggregate", "DROP AGGREGATE keyspace_does_not_exist.aggr_does_not_exist");
-        assertInvalidMessage("Cannot drop non existing aggregate", "DROP AGGREGATE keyspace_does_not_exist.aggr_does_not_exist(int,text)");
+        assertInvalidThrowMessage("Cannot drop non existing aggregate", InvalidRequestException.class, "DROP AGGREGATE " + KEYSPACE + ".aggr_does_not_exist");
+        assertInvalidThrowMessage("Cannot drop non existing aggregate", InvalidRequestException.class, "DROP AGGREGATE " + KEYSPACE + ".aggr_does_not_exist(int,text)");
+        assertInvalidThrowMessage("Cannot drop non existing aggregate", InvalidRequestException.class, "DROP AGGREGATE keyspace_does_not_exist.aggr_does_not_exist");
+        assertInvalidThrowMessage("Cannot drop non existing aggregate", InvalidRequestException.class, "DROP AGGREGATE keyspace_does_not_exist.aggr_does_not_exist(int,text)");
 
         execute("DROP AGGREGATE IF EXISTS " + KEYSPACE + ".aggr_does_not_exist");
         execute("DROP AGGREGATE IF EXISTS " + KEYSPACE + ".aggr_does_not_exist(int,text)");
@@ -387,7 +406,7 @@ public class AggregationTest extends CQLTester
         assertRows(execute("SELECT " + copySign + "(c, d) FROM %s"), row(1.2), row(-1.3), row(1.4));
         assertRows(execute("SELECT max(" + copySign + "(c, d)) FROM %s"), row(1.4));
         assertRows(execute("SELECT " + copySign + "(c, max(c)) FROM %s"), row(1.2));
-        assertRows(execute("SELECT " + copySign + "(max(c), c) FROM %s"), row(-1.4));
+        assertRows(execute("SELECT " + copySign + "(max(c), c) FROM %s"), row(-1.4));;
     }
 
     @Test
@@ -863,6 +882,9 @@ public class AggregationTest extends CQLTester
                                    "FINALFUNC " + shortFunctionName(fFinal) + " " +
                                    "INITCOND 42");
 
+        assertRows(execute("SELECT initcond FROM system_schema.aggregates WHERE keyspace_name=? AND aggregate_name=?", KEYSPACE, shortFunctionName(a)),
+                   row("42"));
+
         // 42 + 1 + 2 + 3 = 48
         assertRows(execute("SELECT " + a + "(b) FROM %s"), row("48"));
 
@@ -949,6 +971,9 @@ public class AggregationTest extends CQLTester
                                    "STYPE tuple<bigint, int> "+
                                    "FINALFUNC " + shortFunctionName(fFinal) + " " +
                                    "INITCOND (0, 0)");
+
+        assertRows(execute("SELECT initcond FROM system_schema.aggregates WHERE keyspace_name=? AND aggregate_name=?", KEYSPACE, shortFunctionName(a)),
+                   row("(0, 0)"));
 
         // 1 + 2 + 3 = 6 / 3 = 2
         assertRows(execute("SELECT " + a + "(b) FROM %s"), row(2d));
@@ -1263,10 +1288,16 @@ public class AggregationTest extends CQLTester
                                    "SFUNC " + shortFunctionName(fState) + " " +
                                    "STYPE int ");
 
-        UDAggregate f = (UDAggregate) Functions.find(parseFunctionName(a)).get(0);
+        KeyspaceMetadata ksm = Schema.instance.getKSMetaData(keyspace());
+        UDAggregate f = (UDAggregate) ksm.functions.get(parseFunctionName(a)).iterator().next();
 
-        Functions.addOrReplaceFunction(UDAggregate.createBroken(f.name(), f.argTypes(), f.returnType(),
-                                                                null, new InvalidRequestException("foo bar is broken")));
+        UDAggregate broken = UDAggregate.createBroken(f.name(),
+                                                      f.argTypes(),
+                                                      f.returnType(),
+                                                      null,
+                                                      new InvalidRequestException("foo bar is broken"));
+
+        Schema.instance.setKeyspaceMetadata(ksm.withSwapped(ksm.functions.without(f.name(), f.argTypes()).with(broken)));
 
         assertInvalidThrowMessage("foo bar is broken", InvalidRequestException.class,
                                   "SELECT " + a + "(val) FROM %s");
@@ -1411,6 +1442,9 @@ public class AggregationTest extends CQLTester
                                              "STYPE set<int> " +
                                              "FINALFUNC " + parseFunctionName(fFinal).name + ' ' +
                                              "INITCOND null");
+
+        assertRows(execute("SELECT initcond FROM system_schema.aggregates WHERE keyspace_name=? AND aggregate_name=?", KEYSPACE, shortFunctionName(aggregation)),
+                   row((Object) null));
 
         assertRows(execute("SELECT " + aggregation + "(b) FROM %s"),
                    row(set(7, 8, 9)));
@@ -1648,6 +1682,9 @@ public class AggregationTest extends CQLTester
                                       "FINALFUNC " + shortFunctionName(fCONf) + ' ' +
                                       "INITCOND ''");
 
+        assertRows(execute("SELECT initcond FROM system_schema.aggregates WHERE keyspace_name=? AND aggregate_name=?", KEYSPACE, shortFunctionName(aCON)),
+                   row("''"));
+
         String fRNON = createFunction(KEYSPACE,
                                       "text, text",
                                       "CREATE FUNCTION %s(a text, b text) " +
@@ -1686,6 +1723,114 @@ public class AggregationTest extends CQLTester
     }
 
     @Test
+    public void testEmptyListAndNullInitcond() throws Throwable
+    {
+        String f = createFunction(KEYSPACE,
+                                      "list, int",
+                                      "CREATE FUNCTION %s(s list<text>, i int) " +
+                                      "CALLED ON NULL INPUT " +
+                                      "RETURNS list<text> " +
+                                      "LANGUAGE java " +
+                                      "AS 'if (i != null) s.add(String.valueOf(i)); return s;'");
+
+        String a = createAggregate(KEYSPACE,
+                                       "int",
+                                       "CREATE AGGREGATE %s(int) " +
+                                       "SFUNC " + shortFunctionName(f) + ' ' +
+                                       "STYPE list<text> " +
+                                       "INITCOND [  ]");
+
+        assertRows(execute("SELECT initcond FROM system_schema.aggregates WHERE keyspace_name=? AND aggregate_name=?", KEYSPACE, shortFunctionName(a)),
+                   row("[]"));
+
+        createTable("CREATE TABLE %s (a int primary key, b int)");
+        execute("INSERT INTO %s (a, b) VALUES (1, 1)");
+        execute("INSERT INTO %s (a, b) VALUES (2, null)");
+        execute("INSERT INTO %s (a, b) VALUES (3, 2)");
+        assertRows(execute("SELECT " + a + "(b) FROM %s"), row(Arrays.asList("1", "2")));
+    }
+
+    @Test
+    public void testLogbackReload() throws Throwable
+    {
+        // see https://issues.apache.org/jira/browse/CASSANDRA-11033
+
+        // make logback's scan interval 1ms - boilerplate, but necessary for this test
+        configureLogbackScanPeriod(1L);
+        try
+        {
+
+            createTable("CREATE TABLE %s (" +
+                        "   year int PRIMARY KEY," +
+                        "   country text," +
+                        "   title text)");
+
+            String[] countries = Locale.getISOCountries();
+            ThreadLocalRandom rand = ThreadLocalRandom.current();
+            for (int i = 0; i < 10000; i++)
+            {
+                execute("INSERT INTO %s (year, country, title) VALUES (1980,?,?)",
+                        countries[rand.nextInt(countries.length)],
+                        "title-" + i);
+            }
+
+            String albumCountByCountry = createFunction(KEYSPACE,
+                                                        "map<text,bigint>,text,text",
+                                                        "CREATE FUNCTION IF NOT EXISTS %s(state map<text,bigint>,country text, album_title text)\n" +
+                                                        " RETURNS NULL ON NULL INPUT\n" +
+                                                        " RETURNS map<text,bigint>\n" +
+                                                        " LANGUAGE java\n" +
+                                                        " AS $$\n" +
+                                                        "   if(state.containsKey(country)) {\n" +
+                                                        "       Long newCount = (Long)state.get(country) + 1;\n" +
+                                                        "       state.put(country, newCount);\n" +
+                                                        "   } else {\n" +
+                                                        "       state.put(country, 1L);\n" +
+                                                        "   }\n" +
+                                                        "   return state;\n" +
+                                                        " $$;");
+
+            String releasesByCountry = createAggregate(KEYSPACE,
+                                                       "text, text",
+                                                       " CREATE AGGREGATE IF NOT EXISTS %s(text, text)\n" +
+                                                       " SFUNC " + shortFunctionName(albumCountByCountry) + '\n' +
+                                                       " STYPE map<text,bigint>\n" +
+                                                       " INITCOND { };");
+
+            for (int i = 0; i < 1000; i++)
+            {
+                execute("SELECT " + releasesByCountry + "(country,title) FROM %s WHERE year=1980");
+            }
+        }
+        finally
+        {
+            configureLogbackScanPeriod(60000L);
+        }
+    }
+
+    private static void configureLogbackScanPeriod(long millis)
+    {
+        Logger l = LoggerFactory.getLogger(AggregationTest.class);
+        ch.qos.logback.classic.Logger logbackLogger = (ch.qos.logback.classic.Logger) l;
+        LoggerContext ctx = logbackLogger.getLoggerContext();
+        TurboFilterList turboFilterList = ctx.getTurboFilterList();
+        boolean done = false;
+        for (TurboFilter turboFilter : turboFilterList)
+        {
+            if (turboFilter instanceof ReconfigureOnChangeFilter)
+            {
+                ReconfigureOnChangeFilter reconfigureFilter = (ReconfigureOnChangeFilter) turboFilter;
+                reconfigureFilter.setRefreshPeriod(millis);
+                reconfigureFilter.stop();
+                reconfigureFilter.start(); // start() sets the next check timestammp
+                done = true;
+                break;
+            }
+        }
+        assertTrue("ReconfigureOnChangeFilter not in logback's turbo-filter list - do that by adding scan=\"true\" to logback-test.xml's configuration element", done);
+    }
+
+    @Test
     public void testOrReplaceOptionals() throws Throwable
     {
         String fState = createFunction(KEYSPACE,
@@ -1717,26 +1862,221 @@ public class AggregationTest extends CQLTester
                            "STYPE list<text> ";
 
         // Test replacing INITCOND
-        for (String condition : new String[]{"", "INITCOND null"})
-        {
-            execute(ddlPrefix + "INITCOND [  ] ");
-            checkOptionals(a, null, ByteBuffer.allocate(4));
+        execute(ddlPrefix + "INITCOND [  ] ");
+        checkOptionals(a, null, "[]");
 
-            execute(ddlPrefix + condition);
-            checkOptionals(a, null, null);
-        }
+        execute(ddlPrefix);
+        checkOptionals(a, null, null);
+
+        execute(ddlPrefix + "INITCOND [  ] ");
+        checkOptionals(a, null, "[]");
+
+        execute(ddlPrefix + "INITCOND null");
+        checkOptionals(a, null, null);
 
         // Test replacing FINALFUNC
-        execute(ddlPrefix + "FINALFUNC " + shortFunctionName(fFinal) + " ");
+        execute(ddlPrefix + "FINALFUNC " + shortFunctionName(fFinal) + ' ');
         checkOptionals(a, shortFunctionName(fFinal), null);
 
         execute(ddlPrefix);
         checkOptionals(a, null, null);
     }
 
-    private void checkOptionals(String aggregateName, String finalFunc, ByteBuffer initCond) throws Throwable
+    private void checkOptionals(String aggregateName, String finalFunc, String initCond) throws Throwable
     {
-        assertRows(execute("SELECT final_func, initcond FROM system.schema_aggregates WHERE keyspace_name=? AND aggregate_name=?", KEYSPACE, shortFunctionName(aggregateName)),
+        assertRows(execute("SELECT final_func, initcond FROM system_schema.aggregates WHERE keyspace_name=? AND aggregate_name=?", KEYSPACE, shortFunctionName(aggregateName)),
                    row(finalFunc, initCond));
+    }
+
+    public void testCustomTypeInitcond() throws Throwable
+    {
+        try
+        {
+            String type = "DynamicCompositeType(s => UTF8Type, i => Int32Type)";
+
+            executeNet(Server.CURRENT_VERSION,
+                       "CREATE FUNCTION " + KEYSPACE + ".f11064(i 'DynamicCompositeType(s => UTF8Type, i => Int32Type)')\n" +
+                       "RETURNS NULL ON NULL INPUT\n" +
+                       "RETURNS '" + type + "'\n" +
+                       "LANGUAGE java\n" +
+                       "AS 'return i;'");
+
+            // create aggregate using the 'composite syntax' for composite types
+            executeNet(Server.CURRENT_VERSION,
+                       "CREATE AGGREGATE " + KEYSPACE + ".a11064()\n" +
+                       "SFUNC f11064 " +
+                       "STYPE '" + type + "'\n" +
+                       "INITCOND 's@foo:i@32'");
+
+            AbstractType<?> compositeType = TypeParser.parse(type);
+            ByteBuffer compositeTypeValue = compositeType.fromString("s@foo:i@32");
+            String compositeTypeString = compositeType.asCQL3Type().toCQLLiteral(compositeTypeValue, Server.CURRENT_VERSION);
+            // ensure that the composite type is serialized using the 'blob syntax'
+            assertTrue(compositeTypeString.startsWith("0x"));
+
+            // ensure that the composite type is 'serialized' using the 'blob syntax' in the schema
+            assertRows(execute("SELECT initcond FROM system_schema.aggregates WHERE keyspace_name=? AND aggregate_name=?", KEYSPACE, "a11064"),
+                       row(compositeTypeString));
+
+            // create aggregate using the 'blob syntax' for composite types
+            executeNet(Server.CURRENT_VERSION,
+                       "CREATE AGGREGATE " + KEYSPACE + ".a11064_2()\n" +
+                       "SFUNC f11064 " +
+                       "STYPE '" + type + "'\n" +
+                       "INITCOND " + compositeTypeString);
+
+            // ensure that the composite type is 'serialized' using the 'blob syntax' in the schema
+            assertRows(execute("SELECT initcond FROM system_schema.aggregates WHERE keyspace_name=? AND aggregate_name=?", KEYSPACE, "a11064_2"),
+                       row(compositeTypeString));
+        }
+        finally
+        {
+            try
+            {
+                execute("DROP AGGREGATE " + KEYSPACE + ".a11064_2");
+            }
+            catch (Exception ignore)
+            {
+            }
+            try
+            {
+                execute("DROP AGGREGATE " + KEYSPACE + ".a11064");
+            }
+            catch (Exception ignore)
+            {
+            }
+            try
+            {
+                execute("DROP FUNCTION " + KEYSPACE + ".f11064");
+            }
+            catch (Exception ignore)
+            {
+            }
+        }
+    }
+
+    @Test
+    public void testArithmeticCorrectness() throws Throwable
+    {
+        createTable("create table %s (bucket int primary key, val decimal)");
+        execute("insert into %s (bucket, val) values (1, 0.25)");
+        execute("insert into %s (bucket, val) values (2, 0.25)");
+        execute("insert into %s (bucket, val) values (3, 0.5);");
+
+        BigDecimal a = new BigDecimal("0.25");
+        a = a.add(new BigDecimal("0.25"));
+        a = a.add(new BigDecimal("0.5"));
+        a = a.divide(new BigDecimal(3), RoundingMode.HALF_EVEN);
+
+        assertRows(execute("select avg(val) from %s where bucket in (1, 2, 3);"),
+                   row(a));
+    }
+
+    @Test
+    public void testAggregatesWithoutOverflow() throws Throwable
+    {
+        createTable("create table %s (bucket int primary key, v1 tinyint, v2 smallint, v3 int, v4 bigint, v5 varint)");
+        for (int i = 1; i <= 3; i++)
+            execute("insert into %s (bucket, v1, v2, v3, v4, v5) values (?, ?, ?, ?, ?, ?)", i,
+                    (byte) ((Byte.MAX_VALUE / 3) + i), (short) ((Short.MAX_VALUE / 3) + i), (Integer.MAX_VALUE / 3) + i, (Long.MAX_VALUE / 3) + i,
+                    BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.valueOf(i)));
+
+        assertRows(execute("select avg(v1), avg(v2), avg(v3), avg(v4), avg(v5) from %s where bucket in (1, 2, 3);"),
+                   row((byte) ((Byte.MAX_VALUE / 3) + 2), (short) ((Short.MAX_VALUE / 3) + 2), (Integer.MAX_VALUE / 3) + 2, (Long.MAX_VALUE / 3) + 2,
+                       BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.valueOf(2))));
+
+        for (int i = 1; i <= 3; i++)
+            execute("insert into %s (bucket, v1, v2, v3, v4, v5) values (?, ?, ?, ?, ?, ?)", i + 3,
+                    (byte) (100 + i), (short) (100 + i), 100 + i, 100L + i, BigInteger.valueOf(100 + i));
+
+        assertRows(execute("select avg(v1), avg(v2), avg(v3), avg(v4), avg(v5) from %s where bucket in (4, 5, 6);"),
+                   row((byte) 102, (short) 102, 102, 102L, BigInteger.valueOf(102)));
+    }
+
+    @Test
+    public void testAggregateOverflow() throws Throwable
+    {
+        createTable("create table %s (bucket int primary key, v1 tinyint, v2 smallint, v3 int, v4 bigint, v5 varint)");
+        for (int i = 1; i <= 3; i++)
+            execute("insert into %s (bucket, v1, v2, v3, v4, v5) values (?, ?, ?, ?, ?, ?)", i,
+                    Byte.MAX_VALUE, Short.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE, BigInteger.valueOf(Long.MAX_VALUE).multiply(BigInteger.valueOf(2)));
+
+        assertRows(execute("select avg(v1), avg(v2), avg(v3), avg(v4), avg(v5) from %s where bucket in (1, 2, 3);"),
+                   row(Byte.MAX_VALUE, Short.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE, BigInteger.valueOf(Long.MAX_VALUE).multiply(BigInteger.valueOf(2))));
+
+        execute("truncate %s");
+
+        for (int i = 1; i <= 3; i++)
+            execute("insert into %s (bucket, v1, v2, v3, v4, v5) values (?, ?, ?, ?, ?, ?)", i,
+                    Byte.MIN_VALUE, Short.MIN_VALUE, Integer.MIN_VALUE, Long.MIN_VALUE, BigInteger.valueOf(Long.MIN_VALUE).multiply(BigInteger.valueOf(2)));
+
+        assertRows(execute("select avg(v1), avg(v2), avg(v3), avg(v4), avg(v5) from %s where bucket in (1, 2, 3);"),
+                   row(Byte.MIN_VALUE, Short.MIN_VALUE, Integer.MIN_VALUE, Long.MIN_VALUE, BigInteger.valueOf(Long.MIN_VALUE).multiply(BigInteger.valueOf(2))));
+
+    }
+
+    @Test
+    public void testDoubleAggregatesPrecision() throws Throwable
+    {
+        createTable("create table %s (bucket int primary key, v1 float, v2 double, v3 decimal)");
+
+        for (int i = 1; i <= 3; i++)
+            execute("insert into %s (bucket, v1, v2, v3) values (?, ?, ?, ?)", i,
+                    Float.MAX_VALUE, Double.MAX_VALUE, BigDecimal.valueOf(Double.MAX_VALUE).add(BigDecimal.valueOf(2)));
+
+        assertRows(execute("select avg(v1), avg(v2), avg(v3) from %s where bucket in (1, 2, 3);"),
+                   row(Float.MAX_VALUE, Double.MAX_VALUE, BigDecimal.valueOf(Double.MAX_VALUE).add(BigDecimal.valueOf(2))));
+
+        execute("insert into %s (bucket, v1, v2, v3) values (?, ?, ?, ?)", 4, (float) 100.10, 100.10, BigDecimal.valueOf(100.10));
+        execute("insert into %s (bucket, v1, v2, v3) values (?, ?, ?, ?)", 5, (float) 110.11, 110.11, BigDecimal.valueOf(110.11));
+        execute("insert into %s (bucket, v1, v2, v3) values (?, ?, ?, ?)", 6, (float) 120.12, 120.12, BigDecimal.valueOf(120.12));
+
+        assertRows(execute("select avg(v1), avg(v2), avg(v3) from %s where bucket in (4, 5, 6);"),
+                   row((float) 110.11, 110.11, BigDecimal.valueOf(110.11)));
+    }
+
+    @Test
+    public void testNan() throws Throwable
+    {
+        createTable("create table %s (bucket int primary key, v1 float, v2 double)");
+
+        for (int i = 1; i <= 10; i++)
+            if (i != 5)
+                execute("insert into %s (bucket, v1, v2) values (?, ?, ?)", i, (float) i, (double) i);
+
+        execute("insert into %s (bucket, v1, v2) values (?, ?, ?)", 5, Float.NaN, Double.NaN);
+
+        assertRows(execute("select avg(v1), avg(v2) from %s where bucket in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10);"),
+                   row(Float.NaN, Double.NaN));
+    }
+
+    @Test
+    public void testInfinity() throws Throwable
+    {
+        createTable("create table %s (bucket int primary key, v1 float, v2 double)");
+        for (boolean positive: new boolean[] { true, false})
+        {
+            final float FLOAT_INFINITY = positive ? Float.POSITIVE_INFINITY : Float.NEGATIVE_INFINITY;
+            final double DOUBLE_INFINITY = positive ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+
+            for (int i = 1; i <= 10; i++)
+                if (i != 5)
+                    execute("insert into %s (bucket, v1, v2) values (?, ?, ?)", i, (float) i, (double) i);
+
+            execute("insert into %s (bucket, v1, v2) values (?, ?, ?)", 5, FLOAT_INFINITY, DOUBLE_INFINITY);
+
+            assertRows(execute("select avg(v1), avg(v2) from %s where bucket in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10);"),
+                       row(FLOAT_INFINITY, DOUBLE_INFINITY));
+            execute("truncate %s");
+        }
+    }
+
+    @Test
+    public void testSumPrecision() throws Throwable
+    {
+        createTable("create table %s (bucket int primary key, v1 float, v2 double, v3 decimal)");
+
+        for (int i = 1; i <= 17; i++)
+            execute("insert into %s (bucket, v1, v2, v3) values (?, ?, ?, ?)", i, (float) (i / 10.0), i / 10.0, BigDecimal.valueOf(i / 10.0));
     }
 }

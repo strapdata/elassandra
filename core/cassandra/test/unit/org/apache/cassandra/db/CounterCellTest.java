@@ -18,26 +18,27 @@
 */
 package org.apache.cassandra.db;
 
-import java.security.MessageDigest;
-
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
 import java.util.Arrays;
 
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
-import org.apache.cassandra.Util;
-import org.apache.cassandra.db.composites.CellNameType;
-import org.apache.cassandra.db.composites.SimpleDenseCellNameType;
+import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.db.rows.BufferCell;
+import org.apache.cassandra.db.rows.Cell;
+import org.apache.cassandra.db.rows.CellPath;
+import org.apache.cassandra.db.rows.Cells;
 import org.apache.cassandra.db.context.CounterContext;
-import org.apache.cassandra.db.marshal.UTF8Type;
-import org.apache.cassandra.io.util.DataOutputBuffer;
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.*;
 
-import static org.apache.cassandra.Util.cellname;
+import static org.junit.Assert.*;
 import static org.apache.cassandra.db.context.CounterContext.ContextState;
 
 public class CounterCellTest
@@ -49,6 +50,26 @@ public class CounterCellTest
     private static final int countLength;
 
     private static final int stepLength;
+
+    private static final String KEYSPACE1 = "CounterCacheTest";
+    private static final String COUNTER1 = "Counter1";
+    private static final String STANDARD1 = "Standard1";
+
+    @BeforeClass
+    public static void defineSchema() throws ConfigurationException
+    {
+        SchemaLoader.prepareServer();
+        SchemaLoader.createKeyspace(KEYSPACE1,
+                                    KeyspaceParams.simple(1),
+                                    SchemaLoader.standardCFMD(KEYSPACE1, STANDARD1),
+                                    SchemaLoader.counterCFMD(KEYSPACE1, COUNTER1));
+    }
+
+    @AfterClass
+    public static void cleanup()
+    {
+        SchemaLoader.cleanupSavedCaches();
+    }
 
     static
     {
@@ -62,241 +83,185 @@ public class CounterCellTest
     @Test
     public void testCreate()
     {
+        ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(COUNTER1);
         long delta = 3L;
-        CounterCell cell = new BufferCounterCell(Util.cellname("x"),
-                                           CounterContext.instance().createLocal(delta),
-                                           1L,
-                                           Long.MIN_VALUE);
 
-        Assert.assertEquals(delta, cell.total());
-        Assert.assertEquals(1, cell.value().getShort(0));
-        Assert.assertEquals(0, cell.value().getShort(2));
+        Cell cell = createLegacyCounterCell(cfs, ByteBufferUtil.bytes("val"), delta, 1);
+
+        assertEquals(delta, CounterContext.instance().total(cell.value()));
+        assertEquals(1, cell.value().getShort(0));
+        assertEquals(0, cell.value().getShort(2));
         Assert.assertTrue(CounterId.wrap(cell.value(), 4).isLocalId());
-        Assert.assertEquals(1L, cell.value().getLong(4 + idLength));
-        Assert.assertEquals(delta, cell.value().getLong(4 + idLength + clockLength));
+        assertEquals(1L, cell.value().getLong(4 + idLength));
+        assertEquals(delta, cell.value().getLong(4 + idLength + clockLength));
+
+    }
+
+    private Cell createLegacyCounterCell(ColumnFamilyStore cfs, ByteBuffer colName, long count, long ts)
+    {
+        ColumnDefinition cDef = cfs.metadata.getColumnDefinition(colName);
+        ByteBuffer val = CounterContext.instance().createLocal(count);
+        return BufferCell.live(cfs.metadata, cDef, ts, val);
+    }
+
+    private Cell createCounterCell(ColumnFamilyStore cfs, ByteBuffer colName, CounterId id, long count, long ts)
+    {
+        ColumnDefinition cDef = cfs.metadata.getColumnDefinition(colName);
+        ByteBuffer val = CounterContext.instance().createGlobal(id, ts, count);
+        return BufferCell.live(cfs.metadata, cDef, ts, val);
+    }
+
+    private Cell createCounterCellFromContext(ColumnFamilyStore cfs, ByteBuffer colName, ContextState context, long ts)
+    {
+        ColumnDefinition cDef = cfs.metadata.getColumnDefinition(colName);
+        return BufferCell.live(cfs.metadata, cDef, ts, context.context);
+    }
+
+    private Cell createDeleted(ColumnFamilyStore cfs, ByteBuffer colName, long ts, int localDeletionTime)
+    {
+        ColumnDefinition cDef = cfs.metadata.getColumnDefinition(colName);
+        return BufferCell.tombstone(cDef, ts, localDeletionTime);
     }
 
     @Test
     public void testReconcile()
     {
+        ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(COUNTER1);
+        ByteBuffer col = ByteBufferUtil.bytes("val");
+
         Cell left;
         Cell right;
-        Cell reconciled;
 
-        ByteBuffer context;
+        // both deleted, diff deletion time, same ts
+        left = createDeleted(cfs, col, 2, 5);
+        right = createDeleted(cfs, col, 2, 10);
+        assert Cells.reconcile(left, right, 10) == right;
 
-        // tombstone + tombstone
-        left  = new BufferDeletedCell(cellname("x"), 1, 1L);
-        right = new BufferDeletedCell(cellname("x"), 2, 2L);
+        // diff ts
+        right = createLegacyCounterCell(cfs, col, 1, 10);
+        assert Cells.reconcile(left, right, 10) == left;
 
-        assert left.reconcile(right).timestamp() == right.timestamp();
-        assert right.reconcile(left).timestamp() == right.timestamp();
+        // < tombstone
+        left = createDeleted(cfs, col, 6, 6);
+        right = createLegacyCounterCell(cfs, col, 1, 5);
+        assert Cells.reconcile(left, right, 10) == left;
 
-        // tombstone > live
-        left  = new BufferDeletedCell(cellname("x"), 1, 2L);
-        right = BufferCounterCell.createLocal(cellname("x"), 0L, 1L, Long.MIN_VALUE);
+        // > tombstone
+        left = createDeleted(cfs, col, 1, 1);
+        right = createLegacyCounterCell(cfs, col, 1, 5);
+        assert Cells.reconcile(left, right, 10) == left;
 
-        assert left.reconcile(right) == left;
-
-        // tombstone < live last delete
-        left  = new BufferDeletedCell(cellname("x"), 1, 1L);
-        right = BufferCounterCell.createLocal(cellname("x"), 0L, 4L, 2L);
-
-        assert left.reconcile(right) == left;
-
-        // tombstone == live last delete
-        left  = new BufferDeletedCell(cellname("x"), 1, 2L);
-        right = BufferCounterCell.createLocal(cellname("x"), 0L, 4L, 2L);
-
-        assert left.reconcile(right) == left;
-
-        // tombstone > live last delete
-        left  = new BufferDeletedCell(cellname("x"), 1, 4L);
-        right = BufferCounterCell.createLocal(cellname("x"), 0L, 9L, 1L);
-
-        assert left.reconcile(right) == left;
-
-        // live < tombstone
-        left  = BufferCounterCell.createLocal(cellname("x"), 0L, 1L, Long.MIN_VALUE);
-        right = new BufferDeletedCell(cellname("x"), 1, 2L);
-
-        assert left.reconcile(right) == right;
-
-        // live last delete > tombstone
-        left  = BufferCounterCell.createLocal(cellname("x"), 0L, 4L, 2L);
-        right = new BufferDeletedCell(cellname("x"), 1, 1L);
-
-        assert left.reconcile(right) == right;
-
-        // live last delete == tombstone
-        left  = BufferCounterCell.createLocal(cellname("x"), 0L, 4L, 2L);
-        right = new BufferDeletedCell(cellname("x"), 1, 2L);
-
-        assert left.reconcile(right) == right;
-
-        // live last delete < tombstone
-        left  = BufferCounterCell.createLocal(cellname("x"), 0L, 9L, 1L);
-        right = new BufferDeletedCell(cellname("x"), 1, 4L);
-
-        assert left.reconcile(right) == right;
-
-        // live < live last delete
-        left  = new BufferCounterCell(cellname("x"), cc.createRemote(CounterId.fromInt(1), 2L, 3L), 1L, Long.MIN_VALUE);
-        right = new BufferCounterCell(cellname("x"), cc.createRemote(CounterId.fromInt(1), 1L, 1L), 4L, 3L);
-
-        assert left.reconcile(right) == right;
-
-        // live last delete > live
-        left  = new BufferCounterCell(cellname("x"), cc.createRemote(CounterId.fromInt(1), 2L, 3L), 6L, 5L);
-        right = new BufferCounterCell(cellname("x"), cc.createRemote(CounterId.fromInt(1), 1L, 1L), 4L, 3L);
-
-        assert left.reconcile(right) == left;
+        // == tombstone
+        left = createDeleted(cfs, col, 8, 8);
+        right = createLegacyCounterCell(cfs, col, 1, 8);
+        assert Cells.reconcile(left, right, 10) == left;
 
         // live + live
-        left = new BufferCounterCell(cellname("x"), cc.createRemote(CounterId.fromInt(1), 1L, 1L), 4L, Long.MIN_VALUE);
-        right = new BufferCounterCell(cellname("x"), cc.createRemote(CounterId.fromInt(1), 2L, 3L), 1L, Long.MIN_VALUE);
+        left = createLegacyCounterCell(cfs, col, 1, 2);
+        right = createLegacyCounterCell(cfs, col, 3, 5);
+        Cell reconciled = Cells.reconcile(left, right, 10);
+        assertEquals(CounterContext.instance().total(reconciled.value()), 4);
+        assertEquals(reconciled.timestamp(), 5L);
 
-        reconciled = left.reconcile(right);
-        assert reconciled.name().equals(left.name());
-        assert ((CounterCell)reconciled).total() == 3L;
-        assert reconciled.timestamp() == 4L;
+        // Add, don't change TS
+        Cell addTen = createLegacyCounterCell(cfs, col, 10, 4);
+        reconciled = Cells.reconcile(reconciled, addTen, 10);
+        assertEquals(CounterContext.instance().total(reconciled.value()), 14);
+        assertEquals(reconciled.timestamp(), 5L);
 
-        left = reconciled;
-        right = new BufferCounterCell(cellname("x"), cc.createRemote(CounterId.fromInt(2), 1L, 5L), 2L, Long.MIN_VALUE);
+        // Add w/new TS
+        Cell addThree = createLegacyCounterCell(cfs, col, 3, 7);
+        reconciled = Cells.reconcile(reconciled, addThree, 10);
+        assertEquals(CounterContext.instance().total(reconciled.value()), 17);
+        assertEquals(reconciled.timestamp(), 7L);
 
-        reconciled = left.reconcile(right);
-        assert reconciled.name().equals(left.name());
-        assert ((CounterCell)reconciled).total() == 8L;
-        assert reconciled.timestamp() == 4L;
+        // Confirm no deletion time
+        assert reconciled.localDeletionTime() == Integer.MAX_VALUE;
 
-        left = reconciled;
-        right = new BufferCounterCell(cellname("x"), cc.createRemote(CounterId.fromInt(2), 2L, 2L), 6L, Long.MIN_VALUE);
-
-        reconciled = left.reconcile(right);
-        assert reconciled.name().equals(left.name());
-        assert ((CounterCell)reconciled).total() == 5L;
-        assert reconciled.timestamp() == 6L;
-
-        context = reconciled.value();
-        int hd = 2; // header
-        assert hd + 2 * stepLength == context.remaining();
-
-        assert Util.equalsCounterId(CounterId.fromInt(1), context, hd);
-        assert 2L == context.getLong(hd + idLength);
-        assert 3L == context.getLong(hd + idLength + clockLength);
-
-        assert Util.equalsCounterId(CounterId.fromInt(2), context, hd + stepLength);
-        assert 2L == context.getLong(hd + stepLength + idLength);
-        assert 2L == context.getLong(hd + stepLength + idLength + clockLength);
-
-        assert ((CounterCell)reconciled).timestampOfLastDelete() == Long.MIN_VALUE;
+        Cell deleted = createDeleted(cfs, col, 8, 8);
+        reconciled = Cells.reconcile(reconciled, deleted, 10);
+        assert reconciled.localDeletionTime() == 8;
     }
 
     @Test
     public void testDiff()
     {
-        ContextState left;
-        ContextState right;
+        ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(COUNTER1);
+        ByteBuffer col = ByteBufferUtil.bytes("val");
 
-        CounterCell leftCell;
-        CounterCell rightCell;
+        Cell leftCell;
+        Cell rightCell;
+
+        // Equal count
+        leftCell = createLegacyCounterCell(cfs, col, 2, 2);
+        rightCell = createLegacyCounterCell(cfs, col, 2, 1);
+        assertEquals(CounterContext.Relationship.EQUAL, CounterContext.instance().diff(leftCell.value(), rightCell.value()));
+
+        // Non-equal count
+        leftCell = createLegacyCounterCell(cfs, col, 1, 2);
+        rightCell = createLegacyCounterCell(cfs, col, 2, 1);
+        assertEquals(CounterContext.Relationship.DISJOINT, CounterContext.instance().diff(leftCell.value(), rightCell.value()));
 
         // timestamp
-        leftCell = BufferCounterCell.createLocal(cellname("x"), 0, 1L, Long.MIN_VALUE);
-        rightCell = BufferCounterCell.createLocal(cellname("x"), 0, 2L, Long.MIN_VALUE);
+        CounterId id = CounterId.generate();
+        leftCell = createCounterCell(cfs, col, id, 2, 2);
+        rightCell = createCounterCell(cfs, col, id, 2, 1);
+        assertEquals(CounterContext.Relationship.GREATER_THAN, CounterContext.instance().diff(leftCell.value(), rightCell.value()));
 
-        assert rightCell == leftCell.diff(rightCell);
-        assert null      == rightCell.diff(leftCell);
+        ContextState leftContext;
+        ContextState rightContext;
 
-        // timestampOfLastDelete
-        leftCell = BufferCounterCell.createLocal(cellname("x"), 0, 1L, 1L);
-        rightCell = BufferCounterCell.createLocal(cellname("x"), 0, 1L, 2L);
+        // Equal based on context w/shards etc
+        leftContext = ContextState.allocate(0, 0, 3);
+        leftContext.writeRemote(CounterId.fromInt(3), 3L, 0L);
+        leftContext.writeRemote(CounterId.fromInt(6), 2L, 0L);
+        leftContext.writeRemote(CounterId.fromInt(9), 1L, 0L);
+        rightContext = ContextState.wrap(ByteBufferUtil.clone(leftContext.context));
 
-        assert rightCell == leftCell.diff(rightCell);
-        assert null      == rightCell.diff(leftCell);
-
-        // equality: equal nodes, all counts same
-        left = ContextState.allocate(0, 0, 3);
-        left.writeRemote(CounterId.fromInt(3), 3L, 0L);
-        left.writeRemote(CounterId.fromInt(6), 2L, 0L);
-        left.writeRemote(CounterId.fromInt(9), 1L, 0L);
-        right = ContextState.wrap(ByteBufferUtil.clone(left.context));
-
-        leftCell  = new BufferCounterCell(cellname("x"), left.context,  1L);
-        rightCell = new BufferCounterCell(cellname("x"), right.context, 1L);
-        assert leftCell.diff(rightCell) == null;
+        leftCell = createCounterCellFromContext(cfs, col, leftContext, 1);
+        rightCell = createCounterCellFromContext(cfs, col, rightContext, 1);
+        assertEquals(CounterContext.Relationship.EQUAL, CounterContext.instance().diff(leftCell.value(), rightCell.value()));
 
         // greater than: left has superset of nodes (counts equal)
-        left = ContextState.allocate(0, 0, 4);
-        left.writeRemote(CounterId.fromInt(3), 3L, 0L);
-        left.writeRemote(CounterId.fromInt(6), 2L, 0L);
-        left.writeRemote(CounterId.fromInt(9), 1L, 0L);
-        left.writeRemote(CounterId.fromInt(12), 0L, 0L);
+        leftContext = ContextState.allocate(0, 0, 4);
+        leftContext.writeRemote(CounterId.fromInt(3), 3L, 0L);
+        leftContext.writeRemote(CounterId.fromInt(6), 2L, 0L);
+        leftContext.writeRemote(CounterId.fromInt(9), 1L, 0L);
+        leftContext.writeRemote(CounterId.fromInt(12), 0L, 0L);
 
-        right = ContextState.allocate(0, 0, 3);
-        right.writeRemote(CounterId.fromInt(3), 3L, 0L);
-        right.writeRemote(CounterId.fromInt(6), 2L, 0L);
-        right.writeRemote(CounterId.fromInt(9), 1L, 0L);
+        rightContext = ContextState.allocate(0, 0, 3);
+        rightContext.writeRemote(CounterId.fromInt(3), 3L, 0L);
+        rightContext.writeRemote(CounterId.fromInt(6), 2L, 0L);
+        rightContext.writeRemote(CounterId.fromInt(9), 1L, 0L);
 
-        leftCell  = new BufferCounterCell(cellname("x"), left.context,  1L);
-        rightCell = new BufferCounterCell(cellname("x"), right.context, 1L);
-        assert leftCell.diff(rightCell) == null;
-
-        // less than: right has subset of nodes (counts equal)
-        assert leftCell == rightCell.diff(leftCell);
+        leftCell = createCounterCellFromContext(cfs, col, leftContext, 1);
+        rightCell = createCounterCellFromContext(cfs, col, rightContext, 1);
+        assertEquals(CounterContext.Relationship.GREATER_THAN, CounterContext.instance().diff(leftCell.value(), rightCell.value()));
+        assertEquals(CounterContext.Relationship.LESS_THAN, CounterContext.instance().diff(rightCell.value(), leftCell.value()));
 
         // disjoint: right and left have disjoint node sets
-        left = ContextState.allocate(0, 0, 3);
-        left.writeRemote(CounterId.fromInt(3), 1L, 0L);
-        left.writeRemote(CounterId.fromInt(4), 1L, 0L);
-        left.writeRemote(CounterId.fromInt(9), 1L, 0L);
+        leftContext = ContextState.allocate(0, 0, 3);
+        leftContext.writeRemote(CounterId.fromInt(3), 1L, 0L);
+        leftContext.writeRemote(CounterId.fromInt(4), 1L, 0L);
+        leftContext.writeRemote(CounterId.fromInt(9), 1L, 0L);
 
-        right = ContextState.allocate(0, 0, 3);
-        right.writeRemote(CounterId.fromInt(3), 1L, 0L);
-        right.writeRemote(CounterId.fromInt(6), 1L, 0L);
-        right.writeRemote(CounterId.fromInt(9), 1L, 0L);
+        rightContext = ContextState.allocate(0, 0, 3);
+        rightContext.writeRemote(CounterId.fromInt(3), 1L, 0L);
+        rightContext.writeRemote(CounterId.fromInt(6), 1L, 0L);
+        rightContext.writeRemote(CounterId.fromInt(9), 1L, 0L);
 
-        leftCell  = new BufferCounterCell(cellname("x"), left.context,  1L);
-        rightCell = new BufferCounterCell(cellname("x"), right.context, 1L);
-        assert rightCell == leftCell.diff(rightCell);
-        assert leftCell  == rightCell.diff(leftCell);
-    }
-
-    @Test
-    public void testSerializeDeserialize() throws IOException
-    {
-        CounterContext.ContextState state = CounterContext.ContextState.allocate(0, 2, 2);
-        state.writeRemote(CounterId.fromInt(1), 4L, 4L);
-        state.writeLocal(CounterId.fromInt(2), 4L, 4L);
-        state.writeRemote(CounterId.fromInt(3), 4L, 4L);
-        state.writeLocal(CounterId.fromInt(4), 4L, 4L);
-
-        CellNameType type = new SimpleDenseCellNameType(UTF8Type.instance);
-        CounterCell original = new BufferCounterCell(cellname("x"), state.context, 1L);
-        byte[] serialized;
-        try (DataOutputBuffer bufOut = new DataOutputBuffer())
-        {
-            type.columnSerializer().serialize(original, bufOut);
-            serialized = bufOut.getData();
-        }
-
-
-        ByteArrayInputStream bufIn = new ByteArrayInputStream(serialized, 0, serialized.length);
-        CounterCell deserialized = (CounterCell) type.columnSerializer().deserialize(new DataInputStream(bufIn));
-        Assert.assertEquals(original, deserialized);
-
-        bufIn = new ByteArrayInputStream(serialized, 0, serialized.length);
-        CounterCell deserializedOnRemote = (CounterCell) type.columnSerializer().deserialize(new DataInputStream(bufIn), ColumnSerializer.Flag.FROM_REMOTE);
-        Assert.assertEquals(deserializedOnRemote.name(), original.name());
-        Assert.assertEquals(deserializedOnRemote.total(), original.total());
-        Assert.assertEquals(deserializedOnRemote.value(), cc.clearAllLocal(original.value()));
-        Assert.assertEquals(deserializedOnRemote.timestamp(), deserialized.timestamp());
-        Assert.assertEquals(deserializedOnRemote.timestampOfLastDelete(), deserialized.timestampOfLastDelete());
+        leftCell = createCounterCellFromContext(cfs, col, leftContext, 1);
+        rightCell = createCounterCellFromContext(cfs, col, rightContext, 1);
+        assertEquals(CounterContext.Relationship.DISJOINT, CounterContext.instance().diff(leftCell.value(), rightCell.value()));
+        assertEquals(CounterContext.Relationship.DISJOINT, CounterContext.instance().diff(rightCell.value(), leftCell.value()));
     }
 
     @Test
     public void testUpdateDigest() throws Exception
     {
+        ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(COUNTER1);
+        ByteBuffer col = ByteBufferUtil.bytes("val");
+
         MessageDigest digest1 = MessageDigest.getInstance("md5");
         MessageDigest digest2 = MessageDigest.getInstance("md5");
 
@@ -306,11 +271,13 @@ public class CounterCellTest
         state.writeRemote(CounterId.fromInt(3), 4L, 4L);
         state.writeLocal(CounterId.fromInt(4), 4L, 4L);
 
-        CounterCell original = new BufferCounterCell(cellname("x"), state.context, 1L);
-        CounterCell cleared = new BufferCounterCell(cellname("x"), cc.clearAllLocal(state.context), 1L);
+        Cell original = createCounterCellFromContext(cfs, col, state, 5);
 
-        original.updateDigest(digest1);
-        cleared.updateDigest(digest2);
+        ColumnDefinition cDef = cfs.metadata.getColumnDefinition(col);
+        Cell cleared = BufferCell.live(cfs.metadata, cDef, 5, CounterContext.instance().clearAllLocal(state.context));
+
+        CounterContext.instance().updateDigest(digest1, original.value());
+        CounterContext.instance().updateDigest(digest2, cleared.value());
 
         assert Arrays.equals(digest1.digest(), digest2.digest());
     }

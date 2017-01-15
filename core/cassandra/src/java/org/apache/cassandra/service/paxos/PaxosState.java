@@ -20,10 +20,12 @@
  */
 package org.apache.cassandra.service.paxos;
 
-import java.nio.ByteBuffer;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.Striped;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -39,14 +41,14 @@ public class PaxosState
     private final Commit accepted;
     private final Commit mostRecentCommit;
 
-    public PaxosState(ByteBuffer key, CFMetaData metadata)
+    public PaxosState(DecoratedKey key, CFMetaData metadata)
     {
         this(Commit.emptyCommit(key, metadata), Commit.emptyCommit(key, metadata), Commit.emptyCommit(key, metadata));
     }
 
     public PaxosState(Commit promised, Commit accepted, Commit mostRecentCommit)
     {
-        assert promised.key == accepted.key && accepted.key == mostRecentCommit.key;
+        assert promised.update.partitionKey().equals(accepted.update.partitionKey()) && accepted.update.partitionKey().equals(mostRecentCommit.update.partitionKey());
         assert promised.update.metadata() == accepted.update.metadata() && accepted.update.metadata() == mostRecentCommit.update.metadata();
 
         this.promised = promised;
@@ -59,7 +61,7 @@ public class PaxosState
         long start = System.nanoTime();
         try
         {
-            Lock lock = LOCKS.get(toPrepare.key);
+            Lock lock = LOCKS.get(toPrepare.update.partitionKey());
             lock.lock();
             try
             {
@@ -68,8 +70,8 @@ public class PaxosState
                 // on some replica and not others during a new proposal (in StorageProxy.beginAndRepairPaxos()), and no
                 // amount of re-submit will fix this (because the node on which the commit has expired will have a
                 // tombstone that hides any re-submit). See CASSANDRA-12043 for details.
-                long now = UUIDGen.unixTimestamp(toPrepare.ballot);
-                PaxosState state = SystemKeyspace.loadPaxosState(toPrepare.key, toPrepare.update.metadata(), now);
+                int nowInSec = UUIDGen.unixTimestampInSec(toPrepare.ballot);
+                PaxosState state = SystemKeyspace.loadPaxosState(toPrepare.update.partitionKey(), toPrepare.update.metadata(), nowInSec);
                 if (toPrepare.isAfter(state.promised))
                 {
                     Tracing.trace("Promising ballot {}", toPrepare.ballot);
@@ -100,12 +102,12 @@ public class PaxosState
         long start = System.nanoTime();
         try
         {
-            Lock lock = LOCKS.get(proposal.key);
+            Lock lock = LOCKS.get(proposal.update.partitionKey());
             lock.lock();
             try
             {
-                long now = UUIDGen.unixTimestamp(proposal.ballot);
-                PaxosState state = SystemKeyspace.loadPaxosState(proposal.key, proposal.update.metadata(), now);
+                int nowInSec = UUIDGen.unixTimestampInSec(proposal.ballot);
+                PaxosState state = SystemKeyspace.loadPaxosState(proposal.update.partitionKey(), proposal.update.metadata(), nowInSec);
                 if (proposal.hasBallot(state.promised.ballot) || proposal.isAfter(state.promised))
                 {
                     Tracing.trace("Accepting proposal {}", proposal);
@@ -145,7 +147,14 @@ public class PaxosState
             {
                 Tracing.trace("Committing proposal {}", proposal);
                 Mutation mutation = proposal.makeMutation();
-                Keyspace.open(mutation.getKeyspaceName()).apply(mutation, true);
+                try
+                {
+                    Uninterruptibles.getUninterruptibly(Keyspace.open(mutation.getKeyspaceName()).applyNotDeferrable(mutation, true));
+                }
+                catch (ExecutionException e)
+                {
+                    throw Throwables.propagate(e.getCause());
+                }
             }
             else
             {

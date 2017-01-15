@@ -37,27 +37,29 @@ import com.googlecode.concurrentlinkedhashmap.EntryWeigher;
 import com.googlecode.concurrentlinkedhashmap.EvictionListener;
 import org.antlr.runtime.*;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.functions.Function;
 import org.apache.cassandra.cql3.functions.FunctionName;
-import org.apache.cassandra.cql3.functions.Functions;
 import org.apache.cassandra.cql3.statements.*;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.composites.*;
+import org.apache.cassandra.db.rows.RowIterator;
+import org.apache.cassandra.db.partitions.PartitionIterator;
+import org.apache.cassandra.db.partitions.PartitionIterators;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.exceptions.*;
 import org.apache.cassandra.metrics.CQLMetrics;
 import org.apache.cassandra.service.*;
 import org.apache.cassandra.service.pager.QueryPager;
-import org.apache.cassandra.service.pager.QueryPagers;
 import org.apache.cassandra.thrift.ThriftClientState;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.*;
 import org.github.jamm.MemoryMeter;
 
 public class QueryProcessor implements QueryHandler
 {
-    public static final CassandraVersion CQL_VERSION = new CassandraVersion("3.3.1");
+    public static final CassandraVersion CQL_VERSION = new CassandraVersion("3.4.0");
 
     public static final QueryProcessor instance = new QueryProcessor();
 
@@ -193,28 +195,6 @@ public class QueryProcessor implements QueryHandler
         }
     }
 
-    public static void validateCellNames(Iterable<CellName> cellNames, CellNameType type) throws InvalidRequestException
-    {
-        for (CellName name : cellNames)
-            validateCellName(name, type);
-    }
-
-    public static void validateCellName(CellName name, CellNameType type) throws InvalidRequestException
-    {
-        validateComposite(name, type);
-        if (name.isEmpty())
-            throw new InvalidRequestException("Invalid empty value for clustering column of COMPACT TABLE");
-    }
-
-    public static void validateComposite(Composite name, CType type) throws InvalidRequestException
-    {
-        long serializedSize = type.serializer().serializedSize(name, TypeSizes.NATIVE);
-        if (serializedSize > Cell.MAX_NAME_LENGTH)
-            throw new InvalidRequestException(String.format("The sum of all clustering columns is too long (%s > %s)",
-                                                            serializedSize,
-                                                            Cell.MAX_NAME_LENGTH));
-    }
-
     public ResultMessage processStatement(CQLStatement statement, QueryState queryState, QueryOptions options)
     throws RequestExecutionException, RequestValidationException
     {
@@ -278,6 +258,11 @@ public class QueryProcessor implements QueryHandler
 
     private static QueryOptions makeInternalOptions(ParsedStatement.Prepared prepared, Object[] values)
     {
+        return makeInternalOptions(prepared, values, ConsistencyLevel.ONE);
+    }
+
+    private static QueryOptions makeInternalOptions(ParsedStatement.Prepared prepared, Object[] values, ConsistencyLevel cl)
+    {
         if (prepared.boundNames.size() != values.length)
             throw new IllegalArgumentException(String.format("Invalid number of values. Expecting %d but got %d", prepared.boundNames.size(), values.length));
 
@@ -288,7 +273,7 @@ public class QueryProcessor implements QueryHandler
             AbstractType type = prepared.boundNames.get(i).type;
             boundValues.add(value instanceof ByteBuffer || value == null ? (ByteBuffer)value : type.decompose(value));
         }
-        return QueryOptions.forInternalCalls(boundValues);
+        return QueryOptions.forInternalCalls(cl, boundValues);
     }
 
     public static ParsedStatement.Prepared prepareInternal(String query) throws RequestValidationException
@@ -314,6 +299,24 @@ public class QueryProcessor implements QueryHandler
             return null;
     }
 
+    public static UntypedResultSet execute(String query, ConsistencyLevel cl, QueryState state, Object... values)
+    throws RequestExecutionException
+    {
+        try
+        {
+            ParsedStatement.Prepared prepared = prepareInternal(query);
+            ResultMessage result = prepared.statement.execute(state, makeInternalOptions(prepared, values, cl));
+            if (result instanceof ResultMessage.Rows)
+                return UntypedResultSet.create(((ResultMessage.Rows)result).result);
+            else
+                return null;
+        }
+        catch (RequestValidationException e)
+        {
+            throw new RuntimeException("Error validating " + query, e);
+        }
+    }
+
     public static UntypedResultSet executeInternalWithPaging(String query, int pageSize, Object... values)
     {
         ParsedStatement.Prepared prepared = prepareInternal(query);
@@ -321,7 +324,7 @@ public class QueryProcessor implements QueryHandler
             throw new IllegalArgumentException("Only SELECTs can be paged");
 
         SelectStatement select = (SelectStatement)prepared.statement;
-        QueryPager pager = QueryPagers.localPager(select.getPageableCommand(makeInternalOptions(prepared, values)));
+        QueryPager pager = select.getQuery(makeInternalOptions(prepared, values), FBUtilities.nowInSeconds()).getPager(null, Server.CURRENT_VERSION);
         return UntypedResultSet.create(select, pager, pageSize);
     }
 
@@ -345,37 +348,29 @@ public class QueryProcessor implements QueryHandler
      * Note that this only make sense for Selects so this only accept SELECT statements and is only useful in rare
      * cases.
      */
-    public static UntypedResultSet executeInternalWithNow(long now, String query, Object... values)
+    public static UntypedResultSet executeInternalWithNow(int nowInSec, String query, Object... values)
     {
-        try
-        {
-            ParsedStatement.Prepared prepared = prepareInternal(query);
-            assert prepared.statement instanceof SelectStatement;
-            SelectStatement select = (SelectStatement)prepared.statement;
-            ResultMessage result = select.executeInternal(internalQueryState(), makeInternalOptions(prepared, values), now);
-            assert result instanceof ResultMessage.Rows;
-            return UntypedResultSet.create(((ResultMessage.Rows)result).result);
-        }
-        catch (RequestExecutionException e)
-        {
-            throw new RuntimeException(e);
-        }
-        catch (RequestValidationException e)
-        {
-            throw new RuntimeException("Error validating query " + query, e);
-        }
+        ParsedStatement.Prepared prepared = prepareInternal(query);
+        assert prepared.statement instanceof SelectStatement;
+        SelectStatement select = (SelectStatement)prepared.statement;
+        ResultMessage result = select.executeInternal(internalQueryState(), makeInternalOptions(prepared, values), nowInSec);
+        assert result instanceof ResultMessage.Rows;
+        return UntypedResultSet.create(((ResultMessage.Rows)result).result);
     }
 
-    public static UntypedResultSet resultify(String query, Row row)
+    public static UntypedResultSet resultify(String query, RowIterator partition)
     {
-        return resultify(query, Collections.singletonList(row));
+        return resultify(query, PartitionIterators.singletonIterator(partition));
     }
 
-    public static UntypedResultSet resultify(String query, List<Row> rows)
+    public static UntypedResultSet resultify(String query, PartitionIterator partitions)
     {
-        SelectStatement ss = (SelectStatement) getStatement(query, null).statement;
-        ResultSet cqlRows = ss.process(rows);
-        return UntypedResultSet.create(cqlRows);
+        try (PartitionIterator iter = partitions)
+        {
+            SelectStatement ss = (SelectStatement) getStatement(query, null).statement;
+            ResultSet cqlRows = ss.process(iter, FBUtilities.nowInSeconds());
+            return UntypedResultSet.create(cqlRows);
+        }
     }
 
     public ResultMessage.Prepared prepare(String query,
@@ -529,24 +524,7 @@ public class QueryProcessor implements QueryHandler
     {
         try
         {
-            // Lexer and parser
-            ErrorCollector errorCollector = new ErrorCollector(queryStr);
-            CharStream stream = new ANTLRStringStream(queryStr);
-            CqlLexer lexer = new CqlLexer(stream);
-            lexer.addErrorListener(errorCollector);
-
-            TokenStream tokenStream = new CommonTokenStream(lexer);
-            CqlParser parser = new CqlParser(tokenStream);
-            parser.addErrorListener(errorCollector);
-
-            // Parse the query string to a statement instance
-            ParsedStatement statement = parser.query();
-
-            // The errorCollector has queue up any errors that the lexer and parser may have encountered
-            // along the way, if necessary, we turn the last error into exceptions here.
-            errorCollector.throwFirstSyntaxError();
-
-            return statement;
+            return CQLFragmentParser.parseAnyUnhandled(CqlParser::query, queryStr);
         }
         catch (CassandraException ce)
         {
@@ -635,28 +613,26 @@ public class QueryProcessor implements QueryHandler
 
         public void onCreateFunction(String ksName, String functionName, List<AbstractType<?>> argTypes)
         {
-            if (Functions.getOverloadCount(new FunctionName(ksName, functionName)) > 1)
-            {
-                // in case there are other overloads, we have to remove all overloads since argument type
-                // matching may change (due to type casting)
-                removeAllInvalidPreparedStatementsForFunction(ksName, functionName);
-            }
+            onCreateFunctionInternal(ksName, functionName, argTypes);
         }
 
         public void onCreateAggregate(String ksName, String aggregateName, List<AbstractType<?>> argTypes)
         {
-            if (Functions.getOverloadCount(new FunctionName(ksName, aggregateName)) > 1)
-            {
-                // in case there are other overloads, we have to remove all overloads since argument type
-                // matching may change (due to type casting)
-                removeAllInvalidPreparedStatementsForFunction(ksName, aggregateName);
-            }
+            onCreateFunctionInternal(ksName, aggregateName, argTypes);
         }
 
-        public void onUpdateColumnFamily(String ksName, String cfName, boolean columnsDidChange)
+        private static void onCreateFunctionInternal(String ksName, String functionName, List<AbstractType<?>> argTypes)
+        {
+            // in case there are other overloads, we have to remove all overloads since argument type
+            // matching may change (due to type casting)
+            if (Schema.instance.getKSMetaData(ksName).functions.get(new FunctionName(ksName, functionName)).size() > 1)
+                removeAllInvalidPreparedStatementsForFunction(ksName, functionName);
+        }
+
+        public void onUpdateColumnFamily(String ksName, String cfName, boolean affectsStatements)
         {
             logger.trace("Column definitions for {}.{} changed, invalidating related prepared statements", ksName, cfName);
-            if (columnsDidChange)
+            if (affectsStatements)
                 removeInvalidPreparedStatements(ksName, cfName);
         }
 
@@ -700,7 +676,7 @@ public class QueryProcessor implements QueryHandler
             removeAllInvalidPreparedStatementsForFunction(ksName, aggregateName);
         }
 
-        private void removeAllInvalidPreparedStatementsForFunction(String ksName, String functionName)
+        private static void removeAllInvalidPreparedStatementsForFunction(String ksName, String functionName)
         {
             removeInvalidPreparedStatementsForFunction(internalStatements.values().iterator(), ksName, functionName);
             removeInvalidPreparedStatementsForFunction(preparedStatements.values().iterator(), ksName, functionName);
@@ -711,21 +687,8 @@ public class QueryProcessor implements QueryHandler
                                                                        final String ksName,
                                                                        final String functionName)
         {
-            final Predicate<Function> matchesFunction = new Predicate<Function>()
-            {
-                public boolean apply(Function f)
-                {
-                    return ksName.equals(f.name().keyspace) && functionName.equals(f.name().name);
-                }
-            };
-
-            Iterators.removeIf(statements, new Predicate<ParsedStatement.Prepared>()
-            {
-                public boolean apply(ParsedStatement.Prepared statement)
-                {
-                    return Iterables.any(statement.statement.getFunctions(), matchesFunction);
-                }
-            });
+            Predicate<Function> matchesFunction = f -> ksName.equals(f.name().keyspace) && functionName.equals(f.name().name);
+            Iterators.removeIf(statements, statement -> Iterables.any(statement.statement.getFunctions(), matchesFunction));
         }
     }
 }

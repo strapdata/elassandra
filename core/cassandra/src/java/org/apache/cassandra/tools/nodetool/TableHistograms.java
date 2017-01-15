@@ -46,7 +46,7 @@ public class TableHistograms extends NodeToolCmd
         String table = args.get(1);
 
         // calculate percentile of row size and column count
-        long[] estimatedRowSize = (long[]) probe.getColumnFamilyMetric(keyspace, table, "EstimatedRowSizeHistogram");
+        long[] estimatedPartitionSize = (long[]) probe.getColumnFamilyMetric(keyspace, table, "EstimatedPartitionSizeHistogram");
         long[] estimatedColumnCount = (long[]) probe.getColumnFamilyMetric(keyspace, table, "EstimatedColumnCountHistogram");
 
         // build arrays to store percentile values
@@ -54,7 +54,7 @@ public class TableHistograms extends NodeToolCmd
         double[] estimatedColumnCountPercentiles = new double[7];
         double[] offsetPercentiles = new double[]{0.5, 0.75, 0.95, 0.98, 0.99};
 
-        if (ArrayUtils.isEmpty(estimatedRowSize) || ArrayUtils.isEmpty(estimatedColumnCount))
+        if (ArrayUtils.isEmpty(estimatedPartitionSize) || ArrayUtils.isEmpty(estimatedColumnCount))
         {
             System.err.println("No SSTables exists, unable to calculate 'Partition Size' and 'Cell Count' percentiles");
 
@@ -66,19 +66,19 @@ public class TableHistograms extends NodeToolCmd
         }
         else
         {
-            EstimatedHistogram rowSizeHist = new EstimatedHistogram(estimatedRowSize);
+            EstimatedHistogram partitionSizeHist = new EstimatedHistogram(estimatedPartitionSize);
             EstimatedHistogram columnCountHist = new EstimatedHistogram(estimatedColumnCount);
 
-            if (rowSizeHist.isOverflowed())
+            if (partitionSizeHist.isOverflowed())
             {
-                System.err.println(String.format("Row sizes are larger than %s, unable to calculate percentiles", rowSizeHist.getLargestBucketOffset()));
+                System.err.println(String.format("Row sizes are larger than %s, unable to calculate percentiles", partitionSizeHist.getLargestBucketOffset()));
                 for (int i = 0; i < offsetPercentiles.length; i++)
                         estimatedRowSizePercentiles[i] = Double.NaN;
             }
             else
             {
                 for (int i = 0; i < offsetPercentiles.length; i++)
-                    estimatedRowSizePercentiles[i] = rowSizeHist.percentile(offsetPercentiles[i]);
+                    estimatedRowSizePercentiles[i] = partitionSizeHist.percentile(offsetPercentiles[i]);
             }
 
             if (columnCountHist.isOverflowed())
@@ -94,10 +94,10 @@ public class TableHistograms extends NodeToolCmd
             }
 
             // min value
-            estimatedRowSizePercentiles[5] = rowSizeHist.min();
+            estimatedRowSizePercentiles[5] = partitionSizeHist.min();
             estimatedColumnCountPercentiles[5] = columnCountHist.min();
             // max value
-            estimatedRowSizePercentiles[6] = rowSizeHist.max();
+            estimatedRowSizePercentiles[6] = partitionSizeHist.max();
             estimatedColumnCountPercentiles[6] = columnCountHist.max();
         }
 

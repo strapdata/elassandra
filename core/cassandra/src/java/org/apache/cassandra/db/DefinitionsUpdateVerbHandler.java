@@ -24,9 +24,10 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.MessageIn;
-import org.apache.cassandra.schema.LegacySchemaTables;
+import org.apache.cassandra.schema.SchemaKeyspace;
 import org.apache.cassandra.utils.WrappedRunnable;
 
 /**
@@ -45,9 +46,9 @@ public class DefinitionsUpdateVerbHandler implements IVerbHandler<Collection<Mut
 
         StageManager.getStage(Stage.MIGRATION).submit(new WrappedRunnable()
         {
-            public void runMayThrow() throws Exception
+            public void runMayThrow() throws ConfigurationException
             {
-                LegacySchemaTables.mergeSchema(message.payload);
+                SchemaKeyspace.mergeSchemaAndAnnounceVersion(message.payload);
             }
         });
     }

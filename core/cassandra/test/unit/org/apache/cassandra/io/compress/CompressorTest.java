@@ -33,6 +33,7 @@ import org.junit.Test;
 
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.memory.BufferPool;
 
 public class CompressorTest
 {
@@ -86,7 +87,7 @@ public class CompressorTest
 
         assertEquals(decompressedLength, len);
         assertArrayEquals(Arrays.copyOfRange(data, off, off + len),
-                Arrays.copyOfRange(restored, restoreOffset, restoreOffset + decompressedLength));
+                          Arrays.copyOfRange(restored, restoreOffset, restoreOffset + decompressedLength));
     }
 
     public void testArrayUncompress(byte[] data) throws IOException

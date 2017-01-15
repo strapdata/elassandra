@@ -19,6 +19,20 @@
 
 package org.elasticsearch.index.mapper.internal;
 
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeStringValue;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.index.IndexOptions;
@@ -44,22 +58,8 @@ import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
-import org.elasticsearch.index.mapper.MergeMappingException;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
-
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeStringValue;
 
 /**
  *
@@ -230,7 +230,10 @@ public class SourceFieldMapper extends MetadataFieldMapper {
             BytesReference bValue;
             if (value instanceof BytesRef) {
                 bValue = new BytesArray((BytesRef) value);
-            } else {
+            } else  if (value instanceof ByteBuffer) {
+                ByteBuffer bb = (ByteBuffer)value;
+                bValue = new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
+            } else{
                 bValue = (BytesReference) value;
             }
             try {

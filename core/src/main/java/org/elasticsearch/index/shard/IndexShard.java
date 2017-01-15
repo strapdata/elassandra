@@ -383,7 +383,7 @@ public class IndexShard extends AbstractIndexShardComponent {
                     ShardRoutingState.STARTED, 
                     1L, 
                     (state == IndexShardState.CREATED) ? IndexRoutingTable.UNASSIGNED_INFO_INDEX_CREATED : IndexRoutingTable.UNASSIGNED_INFO_INDEX_REOPEN, 
-                    AbstractSearchStrategy.EMPTY_RANGE_TOKEN);
+                    AbstractSearchStrategy.EMPTY_RANGE_TOKEN_LIST);
             changeState(IndexShardState.STARTED, "start shard [" + state + "]");
             indicesLifecycle.afterIndexShardStarted(this);
         }

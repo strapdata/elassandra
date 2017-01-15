@@ -15,30 +15,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.cql3.validation.operations;
 
-import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.UUID;
 
-import org.junit.Assert;
 import org.junit.Test;
+
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.config.TriggerDefinition;
 import org.apache.cassandra.cql3.CQLTester;
-import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.partitions.Partition;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.cassandra.schema.SchemaKeyspace;
 import org.apache.cassandra.triggers.ITrigger;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
+import static java.lang.String.format;
 import static junit.framework.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static junit.framework.Assert.fail;
+import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.assertTrue;
 
 public class CreateTest extends CQLTester
 {
@@ -403,12 +404,12 @@ public class CreateTest extends CQLTester
     {
         createTable("CREATE TABLE %s (a int, b int, c int, PRIMARY KEY (a))");
         execute("CREATE TRIGGER trigger_1 ON %s USING '" + TestTrigger.class.getName() + "'");
-        assertTriggerExists("trigger_1", TestTrigger.class);
+        assertTriggerExists("trigger_1");
         execute("CREATE TRIGGER trigger_2 ON %s USING '" + TestTrigger.class.getName() + "'");
-        assertTriggerExists("trigger_2", TestTrigger.class);
+        assertTriggerExists("trigger_2");
         assertInvalid("CREATE TRIGGER trigger_1 ON %s USING '" + TestTrigger.class.getName() + "'");
         execute("CREATE TRIGGER \"Trigger 3\" ON %s USING '" + TestTrigger.class.getName() + "'");
-        assertTriggerExists("Trigger 3", TestTrigger.class);
+        assertTriggerExists("Trigger 3");
     }
 
     @Test
@@ -417,10 +418,10 @@ public class CreateTest extends CQLTester
         createTable("CREATE TABLE %s (a int, b int, c int, PRIMARY KEY (a, b))");
 
         execute("CREATE TRIGGER IF NOT EXISTS trigger_1 ON %s USING '" + TestTrigger.class.getName() + "'");
-        assertTriggerExists("trigger_1", TestTrigger.class);
+        assertTriggerExists("trigger_1");
 
         execute("CREATE TRIGGER IF NOT EXISTS trigger_1 ON %s USING '" + TestTrigger.class.getName() + "'");
-        assertTriggerExists("trigger_1", TestTrigger.class);
+        assertTriggerExists("trigger_1");
     }
 
     @Test
@@ -429,21 +430,21 @@ public class CreateTest extends CQLTester
         createTable("CREATE TABLE %s (a int, b int, c int, PRIMARY KEY (a))");
 
         execute("CREATE TRIGGER trigger_1 ON %s USING '" + TestTrigger.class.getName() + "'");
-        assertTriggerExists("trigger_1", TestTrigger.class);
+        assertTriggerExists("trigger_1");
 
         execute("DROP TRIGGER trigger_1 ON %s");
-        assertTriggerDoesNotExists("trigger_1", TestTrigger.class);
+        assertTriggerDoesNotExists("trigger_1");
 
         execute("CREATE TRIGGER trigger_1 ON %s USING '" + TestTrigger.class.getName() + "'");
-        assertTriggerExists("trigger_1", TestTrigger.class);
+        assertTriggerExists("trigger_1");
 
         assertInvalid("DROP TRIGGER trigger_2 ON %s");
 
         execute("CREATE TRIGGER \"Trigger 3\" ON %s USING '" + TestTrigger.class.getName() + "'");
-        assertTriggerExists("Trigger 3", TestTrigger.class);
+        assertTriggerExists("Trigger 3");
 
         execute("DROP TRIGGER \"Trigger 3\" ON %s");
-        assertTriggerDoesNotExists("Trigger 3", TestTrigger.class);
+        assertTriggerDoesNotExists("Trigger 3");
     }
 
     @Test
@@ -452,13 +453,13 @@ public class CreateTest extends CQLTester
         createTable("CREATE TABLE %s (a int, b int, c int, PRIMARY KEY (a))");
 
         execute("DROP TRIGGER IF EXISTS trigger_1 ON %s");
-        assertTriggerDoesNotExists("trigger_1", TestTrigger.class);
+        assertTriggerDoesNotExists("trigger_1");
 
         execute("CREATE TRIGGER trigger_1 ON %s USING '" + TestTrigger.class.getName() + "'");
-        assertTriggerExists("trigger_1", TestTrigger.class);
+        assertTriggerExists("trigger_1");
 
         execute("DROP TRIGGER IF EXISTS trigger_1 ON %s");
-        assertTriggerDoesNotExists("trigger_1", TestTrigger.class);
+        assertTriggerDoesNotExists("trigger_1");
     }
 
     @Test
@@ -466,10 +467,10 @@ public class CreateTest extends CQLTester
     {
         createTable("CREATE TABLE %s (a int, b int , c int, PRIMARY KEY (a, b)) WITH COMPACT STORAGE;");
 
-        assertInvalidMessage("Secondary indexes are not supported on PRIMARY KEY columns in COMPACT STORAGE tables",
+        assertInvalidMessage("Secondary indexes are not supported on COMPACT STORAGE tables that have clustering columns",
                              "CREATE INDEX ON %s (a);");
 
-        assertInvalidMessage("Secondary indexes are not supported on PRIMARY KEY columns in COMPACT STORAGE tables",
+        assertInvalidMessage("Secondary indexes are not supported on COMPACT STORAGE tables that have clustering columns",
                              "CREATE INDEX ON %s (b);");
 
         assertInvalidMessage("Secondary indexes are not supported on COMPACT STORAGE tables that have clustering columns",
@@ -497,32 +498,134 @@ public class CreateTest extends CQLTester
     // tests CASSANDRA-9565
     public void testDoubleWith() throws Throwable
     {
-        String[] stmts = new String[] { "CREATE KEYSPACE WITH WITH DURABLE_WRITES = true",
-                                        "CREATE KEYSPACE ks WITH WITH DURABLE_WRITES = true" };
+        String[] stmts = { "CREATE KEYSPACE WITH WITH DURABLE_WRITES = true",
+                           "CREATE KEYSPACE ks WITH WITH DURABLE_WRITES = true" };
 
-        for (String stmt : stmts) {
+        for (String stmt : stmts)
             assertInvalidSyntaxMessage("no viable alternative at input 'WITH'", stmt);
-        }
     }
 
-    private void assertTriggerExists(String name, Class<?> clazz)
+    @Test
+    public void testCreateTableWithCompression() throws Throwable
     {
-        CFMetaData cfm = Schema.instance.getCFMetaData(keyspace(), currentTable()).copy();
-        assertTrue("the trigger does not exist", cfm.containsTriggerDefinition(TriggerDefinition.create(name,
-                                                                                                        clazz.getName())));
+        createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))");
+
+        assertRows(execute(format("SELECT compression FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
+                                  SchemaKeyspace.NAME,
+                                  SchemaKeyspace.TABLES),
+                           KEYSPACE,
+                           currentTable()),
+                   row(map("chunk_length_in_kb", "64", "class", "org.apache.cassandra.io.compress.LZ4Compressor")));
+
+        createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                + " WITH compression = { 'class' : 'SnappyCompressor', 'chunk_length_in_kb' : 32 };");
+
+        assertRows(execute(format("SELECT compression FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
+                                  SchemaKeyspace.NAME,
+                                  SchemaKeyspace.TABLES),
+                           KEYSPACE,
+                           currentTable()),
+                   row(map("chunk_length_in_kb", "32", "class", "org.apache.cassandra.io.compress.SnappyCompressor")));
+
+        createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                + " WITH compression = { 'class' : 'SnappyCompressor', 'chunk_length_in_kb' : 32, 'enabled' : true };");
+
+        assertRows(execute(format("SELECT compression FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
+                                  SchemaKeyspace.NAME,
+                                  SchemaKeyspace.TABLES),
+                           KEYSPACE,
+                           currentTable()),
+                   row(map("chunk_length_in_kb", "32", "class", "org.apache.cassandra.io.compress.SnappyCompressor")));
+
+        createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                + " WITH compression = { 'sstable_compression' : 'SnappyCompressor', 'chunk_length_kb' : 32 };");
+
+        assertRows(execute(format("SELECT compression FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
+                                  SchemaKeyspace.NAME,
+                                  SchemaKeyspace.TABLES),
+                           KEYSPACE,
+                           currentTable()),
+                   row(map("chunk_length_in_kb", "32", "class", "org.apache.cassandra.io.compress.SnappyCompressor")));
+
+        createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                + " WITH compression = { 'sstable_compression' : '', 'chunk_length_kb' : 32 };");
+
+        assertRows(execute(format("SELECT compression FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
+                                  SchemaKeyspace.NAME,
+                                  SchemaKeyspace.TABLES),
+                           KEYSPACE,
+                           currentTable()),
+                   row(map("enabled", "false")));
+
+        createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                + " WITH compression = { 'enabled' : 'false'};");
+
+        assertRows(execute(format("SELECT compression FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
+                                  SchemaKeyspace.NAME,
+                                  SchemaKeyspace.TABLES),
+                           KEYSPACE,
+                           currentTable()),
+                   row(map("enabled", "false")));
+
+        assertThrowsConfigurationException("Missing sub-option 'class' for the 'compression' option.",
+                                           "CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                                           + " WITH compression = {'chunk_length_in_kb' : 32};");
+
+        assertThrowsConfigurationException("The 'class' option must not be empty. To disable compression use 'enabled' : false",
+                                           "CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                                           + " WITH compression = { 'class' : ''};");
+
+        assertThrowsConfigurationException("If the 'enabled' option is set to false no other options must be specified",
+                                           "CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                                           + " WITH compression = { 'enabled' : 'false', 'class' : 'SnappyCompressor'};");
+
+        assertThrowsConfigurationException("If the 'enabled' option is set to false no other options must be specified",
+                                           "CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                                           + " WITH compression = { 'enabled' : 'false', 'chunk_length_in_kb' : 32};");
+
+        assertThrowsConfigurationException("The 'sstable_compression' option must not be used if the compression algorithm is already specified by the 'class' option",
+                                           "CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                                           + " WITH compression = { 'sstable_compression' : 'SnappyCompressor', 'class' : 'SnappyCompressor'};");
+
+        assertThrowsConfigurationException("The 'chunk_length_kb' option must not be used if the chunk length is already specified by the 'chunk_length_in_kb' option",
+                                           "CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                                           + " WITH compression = { 'class' : 'SnappyCompressor', 'chunk_length_kb' : 32 , 'chunk_length_in_kb' : 32 };");
+
+        assertThrowsConfigurationException("Unknown compression options unknownOption",
+                                           "CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                                            + " WITH compression = { 'class' : 'SnappyCompressor', 'unknownOption' : 32 };");
     }
 
-    private void assertTriggerDoesNotExists(String name, Class<?> clazz)
+     private void assertThrowsConfigurationException(String errorMsg, String createStmt) {
+         try
+         {
+             createTable(createStmt);
+             fail("Query should be invalid but no error was thrown. Query is: " + createStmt);
+         }
+         catch (RuntimeException e)
+         {
+             Throwable cause = e.getCause();
+             assertTrue("The exception should be a ConfigurationException", cause instanceof ConfigurationException);
+             assertEquals(errorMsg, cause.getMessage());
+         }
+     }
+
+    private void assertTriggerExists(String name)
     {
         CFMetaData cfm = Schema.instance.getCFMetaData(keyspace(), currentTable()).copy();
-        Assert.assertFalse("the trigger exists", cfm.containsTriggerDefinition(TriggerDefinition.create(name,
-                                                                                                        clazz.getName())));
+        assertTrue("the trigger does not exist", cfm.getTriggers().get(name).isPresent());
+    }
+
+    private void assertTriggerDoesNotExists(String name)
+    {
+        CFMetaData cfm = Schema.instance.getCFMetaData(keyspace(), currentTable()).copy();
+        assertFalse("the trigger exists", cfm.getTriggers().get(name).isPresent());
     }
 
     public static class TestTrigger implements ITrigger
     {
         public TestTrigger() { }
-        public Collection<Mutation> augment(ByteBuffer key, ColumnFamily update)
+        public Collection<Mutation> augment(Partition update)
         {
             return Collections.emptyList();
         }

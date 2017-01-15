@@ -20,12 +20,13 @@
 package org.apache.cassandra;
 
 import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataInputPlus.DataInputStreamPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputStreamPlus;
 import org.apache.cassandra.io.util.BufferedDataOutputStreamPlus;
 import org.apache.cassandra.net.MessagingService;
 
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -35,7 +36,7 @@ import java.util.Map;
 
 public class AbstractSerializationsTester
 {
-    protected static final String CUR_VER = System.getProperty("cassandra.version", "2.1");
+    protected static final String CUR_VER = System.getProperty("cassandra.version", "3.0");
     protected static final Map<String, Integer> VERSION_MAP = new HashMap<String, Integer> ()
     {{
         put("0.7", 1);
@@ -43,6 +44,8 @@ public class AbstractSerializationsTester
         put("1.2", MessagingService.VERSION_12);
         put("2.0", MessagingService.VERSION_20);
         put("2.1", MessagingService.VERSION_21);
+        put("2.2", MessagingService.VERSION_22);
+        put("3.0", MessagingService.VERSION_30);
     }};
 
     protected static final boolean EXECUTE_WRITES = Boolean.getBoolean("cassandra.test-serialization-writes");
@@ -59,17 +62,28 @@ public class AbstractSerializationsTester
         assert out.getLength() == serializer.serializedSize(obj, getVersion());
     }
 
-    protected static DataInputStream getInput(String name) throws IOException
+    protected static DataInputStreamPlus getInput(String name) throws IOException
     {
-        File f = new File("test/data/serialization/" + CUR_VER + "/" + name);
+        return getInput(CUR_VER, name);
+    }
+
+    protected static DataInputStreamPlus getInput(String version, String name) throws IOException
+    {
+        File f = new File("test/data/serialization/" + version + '/' + name);
         assert f.exists() : f.getPath();
-        return new DataInputStream(new FileInputStream(f));
+        return new DataInputPlus.DataInputStreamPlus(new FileInputStream(f));
     }
 
     @SuppressWarnings("resource")
     protected static DataOutputStreamPlus getOutput(String name) throws IOException
     {
-        File f = new File("test/data/serialization/" + CUR_VER + "/" + name);
+        return getOutput(CUR_VER, name);
+    }
+
+    @SuppressWarnings("resource")
+    protected static DataOutputStreamPlus getOutput(String version, String name) throws IOException
+    {
+        File f = new File("test/data/serialization/" + version + '/' + name);
         f.getParentFile().mkdirs();
         return new BufferedDataOutputStreamPlus(new FileOutputStream(f).getChannel());
     }

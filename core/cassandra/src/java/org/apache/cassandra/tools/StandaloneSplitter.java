@@ -154,20 +154,18 @@ public class StandaloneSplitter
                 try (LifecycleTransaction transaction = LifecycleTransaction.offline(OperationType.UNKNOWN, sstable))
                 {
                     new SSTableSplitter(cfs, transaction, options.sizeInMB).split();
-
-                    // Remove the sstable (it's been copied by split and snapshotted)
-                    sstable.markObsolete(null);
-                    sstable.selfRef().release();
                 }
                 catch (Exception e)
                 {
                     System.err.println(String.format("Error splitting %s: %s", sstable, e.getMessage()));
                     if (options.debug)
                         e.printStackTrace(System.err);
+
+                    sstable.selfRef().release();
                 }
             }
             CompactionManager.instance.finishCompactionsAndShutdown(5, TimeUnit.MINUTES);
-            SSTableDeletingTask.waitForDeletions();
+            LifecycleTransaction.waitForDeletions();
             System.exit(0); // We need that to stop non daemonized threads
         }
         catch (Exception e)

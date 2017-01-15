@@ -36,7 +36,12 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  */
 public abstract class AbstractCompositeType extends AbstractType<ByteBuffer>
 {
-    public int compare(ByteBuffer o1, ByteBuffer o2)
+    protected AbstractCompositeType()
+    {
+        super(ComparisonType.CUSTOM);
+    }
+
+    public int compareCustom(ByteBuffer o1, ByteBuffer o2)
     {
         if (!o1.hasRemaining() || !o2.hasRemaining())
             return o1.hasRemaining() ? 1 : o2.hasRemaining() ? -1 : 0;
@@ -103,38 +108,6 @@ public abstract class AbstractCompositeType extends AbstractType<ByteBuffer>
         return l.toArray(new ByteBuffer[l.size()]);
     }
 
-    public static class CompositeComponent
-    {
-        public AbstractType<?> comparator;
-        public ByteBuffer   value;
-
-        public CompositeComponent( AbstractType<?> comparator, ByteBuffer value )
-        {
-            this.comparator = comparator;
-            this.value      = value;
-        }
-    }
-
-    public List<CompositeComponent> deconstruct( ByteBuffer bytes )
-    {
-        List<CompositeComponent> list = new ArrayList<CompositeComponent>();
-
-        ByteBuffer bb = bytes.duplicate();
-        readIsStatic(bb);
-        int i = 0;
-
-        while (bb.remaining() > 0)
-        {
-            AbstractType comparator = getComparator(i, bb);
-            ByteBuffer value = ByteBufferUtil.readBytesWithShortLength(bb);
-
-            list.add( new CompositeComponent(comparator,value) );
-
-            byte b = bb.get(); // Ignore; not relevant here
-            ++i;
-        }
-        return list;
-    }
 
     /*
      * Escapes all occurences of the ':' character from the input, replacing them by "\:".
@@ -316,6 +289,12 @@ public abstract class AbstractCompositeType extends AbstractType<ByteBuffer>
     public TypeSerializer<ByteBuffer> getSerializer()
     {
         return BytesSerializer.instance;
+    }
+
+    @Override
+    public boolean referencesUserType(String name)
+    {
+        return getComponents().stream().anyMatch(f -> f.referencesUserType(name));
     }
 
     /**

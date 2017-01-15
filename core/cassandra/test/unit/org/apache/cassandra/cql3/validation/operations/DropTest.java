@@ -28,7 +28,7 @@ public class DropTest extends CQLTester
     public void testNonExistingOnes() throws Throwable
     {
         assertInvalidMessage("Cannot drop non existing table", "DROP TABLE " + KEYSPACE + ".table_does_not_exist");
-        assertInvalidMessage("Cannot drop non existing table", "DROP TABLE keyspace_does_not_exist.table_does_not_exist");
+        assertInvalidMessage("Cannot drop table in unknown keyspace", "DROP TABLE keyspace_does_not_exist.table_does_not_exist");
 
         execute("DROP TABLE IF EXISTS " + KEYSPACE + ".table_does_not_exist");
         execute("DROP TABLE IF EXISTS keyspace_does_not_exist.table_does_not_exist");

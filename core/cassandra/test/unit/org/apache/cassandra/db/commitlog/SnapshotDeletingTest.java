@@ -25,15 +25,15 @@ import static org.junit.Assert.*;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.db.WindowsFailedSnapshotTracker;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.SnapshotDeletingTask;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.GCInspector;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -44,28 +44,25 @@ public class SnapshotDeletingTest
     private static final String CF_STANDARD1 = "CF_STANDARD1";
 
     @BeforeClass
-    public static void defineSchema() throws ConfigurationException
+    public static void defineSchema() throws Exception
     {
+        GCInspector.register();
+        // Needed to init the output file where we print failed snapshots. This is called on node startup.
+        WindowsFailedSnapshotTracker.deleteOldSnapshots();
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
+                                    KeyspaceParams.simple(1),
                                     SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1));
     }
 
     @Test
-    public void testSnapshotDeletionFailure() throws Exception
+    public void testCompactionHook() throws Exception
     {
         Assume.assumeTrue(FBUtilities.isWindows());
-
-        GCInspector.register();
 
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF_STANDARD1);
         store.clearUnsafe();
-
-        // Needed to init the output file where we print failed snapshots. This is called on node startup.
-        WindowsFailedSnapshotTracker.deleteOldSnapshots();
 
         populate(10000);
         store.snapshot("snapshot1");
@@ -90,20 +87,20 @@ public class SnapshotDeletingTest
         assertEquals(0, SnapshotDeletingTask.pendingDeletionCount());
     }
 
-    private long populate(int rowCount)
-    {
+    private void populate(int rowCount) {
         long timestamp = System.currentTimeMillis();
+        CFMetaData cfm = Keyspace.open(KEYSPACE1).getColumnFamilyStore(CF_STANDARD1).metadata;
         for (int i = 0; i <= rowCount; i++)
         {
             DecoratedKey key = Util.dk(Integer.toString(i));
-            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
             for (int j = 0; j < 10; j++)
-                rm.add(CF_STANDARD1,  Util.cellname(Integer.toString(j)),
-                       ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                       timestamp,
-                       0);
-            rm.applyUnsafe();
+            {
+                new RowUpdateBuilder(cfm, timestamp, 0, key.getKey())
+                    .clustering(Integer.toString(j))
+                    .add("val", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                    .build()
+                    .applyUnsafe();
+            }
         }
-        return timestamp;
     }
 }

@@ -109,6 +109,11 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeAct
                     super.onAllNodesAcked(t);
                 }
             }
+            
+            @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
 
             @Override
             public void onAckTimeout() {

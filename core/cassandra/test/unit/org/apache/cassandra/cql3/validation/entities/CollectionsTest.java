@@ -17,11 +17,18 @@
  */
 package org.apache.cassandra.cql3.validation.entities;
 
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.Arrays;
 import java.util.UUID;
 
 import org.junit.Test;
 
 import org.apache.cassandra.cql3.CQLTester;
+import org.apache.cassandra.utils.FBUtilities;
+
+import static org.junit.Assert.assertEquals;
 
 public class CollectionsTest extends CQLTester
 {
@@ -237,7 +244,7 @@ public class CollectionsTest extends CQLTester
         assertInvalidMessage("Attempted to set an element on a list which is null",
                              "UPDATE %s SET l[0] = ? WHERE k=0", list("v10"));
 
-        execute("UPDATE %s SET l = l - ? WHERE k=0 ", list("v11"));
+        execute("UPDATE %s SET l = l - ? WHERE k=0", list("v11"));
 
         assertRows(execute("SELECT l FROM %s WHERE k = 0"), row((Object) null));
     }
@@ -585,9 +592,84 @@ public class CollectionsTest extends CQLTester
         assertInvalid("alter table %s add v set<int>");
     }
 
-    /**
-     * Test for 9838.
-     */
+    @Test
+    public void testDropAndReaddDroppedCollection() throws Throwable
+    {
+        createTable("create table %s (k int primary key, v frozen<set<text>>, x int)");
+        execute("insert into %s (k, v) VALUES (0, {'fffffffff'})");
+        flush();
+        execute("alter table %s drop v");
+        execute("alter table %s add v set<int>");
+    }
+
+    @Test
+    public void testMapWithLargePartition() throws Throwable
+    {
+        Random r = new Random();
+        long seed = System.nanoTime();
+        System.out.println("Seed " + seed);
+        r.setSeed(seed);
+
+        int len = (1024 * 1024)/100;
+        createTable("CREATE TABLE %s (userid text PRIMARY KEY, properties map<int, text>) with compression = {}");
+
+        final int numKeys = 200;
+        for (int i = 0; i < numKeys; i++)
+        {
+            byte[] b = new byte[len];
+            r.nextBytes(b);
+            execute("UPDATE %s SET properties[?] = ? WHERE userid = 'user'", i, new String(b));
+        }
+
+        flush();
+
+        Object[][] rows = getRows(execute("SELECT properties from %s where userid = 'user'"));
+        assertEquals(1, rows.length);
+        assertEquals(numKeys, ((Map) rows[0][0]).size());
+    }
+
+    @Test
+    public void testMapWithTwoSStables() throws Throwable
+    {
+        createTable("CREATE TABLE %s (userid text PRIMARY KEY, properties map<int, text>) with compression = {}");
+
+        final int numKeys = 100;
+        for (int i = 0; i < numKeys; i++)
+            execute("UPDATE %s SET properties[?] = ? WHERE userid = 'user'", i, "prop_" + Integer.toString(i));
+
+        flush();
+
+        for (int i = numKeys; i < 2*numKeys; i++)
+            execute("UPDATE %s SET properties[?] = ? WHERE userid = 'user'", i, "prop_" + Integer.toString(i));
+
+        flush();
+
+        Object[][] rows = getRows(execute("SELECT properties from %s where userid = 'user'"));
+        assertEquals(1, rows.length);
+        assertEquals(numKeys * 2, ((Map) rows[0][0]).size());
+    }
+
+    @Test
+    public void testSetWithTwoSStables() throws Throwable
+    {
+        createTable("CREATE TABLE %s (userid text PRIMARY KEY, properties set<text>) with compression = {}");
+
+        final int numKeys = 100;
+        for (int i = 0; i < numKeys; i++)
+            execute("UPDATE %s SET properties = properties + ? WHERE userid = 'user'", set("prop_" + Integer.toString(i)));
+
+        flush();
+
+        for (int i = numKeys; i < 2*numKeys; i++)
+            execute("UPDATE %s SET properties = properties + ? WHERE userid = 'user'", set("prop_" + Integer.toString(i)));
+
+        flush();
+
+        Object[][] rows = getRows(execute("SELECT properties from %s where userid = 'user'"));
+        assertEquals(1, rows.length);
+        assertEquals(numKeys * 2, ((Set) rows[0][0]).size());
+    }
+
     @Test
     public void testUpdateStaticList() throws Throwable
     {
@@ -607,4 +689,221 @@ public class CollectionsTest extends CQLTester
         assertRows(execute("select s_list from %s where k1='a'"), row(list(0)));
     }
 
+    @Test
+    public void testListWithElementsBiggerThan64K() throws Throwable
+    {
+        createTable("CREATE TABLE %s (k int PRIMARY KEY, l list<text>)");
+
+        byte[] bytes = new byte[FBUtilities.MAX_UNSIGNED_SHORT + 10];
+        Arrays.fill(bytes, (byte) 1);
+        String largeText = new String(bytes);
+
+        bytes = new byte[FBUtilities.MAX_UNSIGNED_SHORT + 10];
+        Arrays.fill(bytes, (byte) 2);
+        String largeText2 = new String(bytes);
+
+        execute("INSERT INTO %s(k, l) VALUES (0, ?)", list(largeText, "v2"));
+        flush();
+
+        assertRows(execute("SELECT l FROM %s WHERE k = 0"), row(list(largeText, "v2")));
+
+        execute("DELETE l[?] FROM %s WHERE k = 0", 0);
+
+        assertRows(execute("SELECT l FROM %s WHERE k = 0"), row(list("v2")));
+
+        execute("UPDATE %s SET l[?] = ? WHERE k = 0", 0, largeText);
+
+        assertRows(execute("SELECT l FROM %s WHERE k = 0"), row(list(largeText)));
+
+        // Full overwrite
+        execute("UPDATE %s SET l = ? WHERE k = 0", list("v1", largeText));
+        flush();
+
+        assertRows(execute("SELECT l FROM %s WHERE k = 0"), row(list("v1", largeText)));
+
+        execute("UPDATE %s SET l = l + ? WHERE k = 0", list("v2", largeText2));
+
+        assertRows(execute("SELECT l FROM %s WHERE k = 0"), row(list("v1", largeText, "v2", largeText2)));
+
+        execute("UPDATE %s SET l = l - ? WHERE k = 0", list(largeText, "v2"));
+
+        assertRows(execute("SELECT l FROM %s WHERE k = 0"), row(list("v1", largeText2)));
+
+        execute("DELETE l FROM %s WHERE k = 0");
+
+        assertRows(execute("SELECT l FROM %s WHERE k = 0"), row((Object) null));
+
+        execute("INSERT INTO %s(k, l) VALUES (0, ['" + largeText + "', 'v2'])");
+        flush();
+
+        assertRows(execute("SELECT l FROM %s WHERE k = 0"), row(list(largeText, "v2")));
+    }
+
+    @Test
+    public void testMapsWithElementsBiggerThan64K() throws Throwable
+    {
+        byte[] bytes = new byte[FBUtilities.MAX_UNSIGNED_SHORT + 10];
+        Arrays.fill(bytes, (byte) 1);
+        String largeText = new String(bytes);
+        bytes = new byte[FBUtilities.MAX_UNSIGNED_SHORT + 10];
+        Arrays.fill(bytes, (byte) 2);
+        String largeText2 = new String(bytes);
+
+        createTable("CREATE TABLE %s (k int PRIMARY KEY, m map<text, text>)");
+
+        execute("INSERT INTO %s(k, m) VALUES (0, ?)", map("k1", largeText, largeText, "v2"));
+        flush();
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"),
+                   row(map("k1", largeText, largeText, "v2")));
+
+        execute("UPDATE %s SET m[?] = ? WHERE k = 0", "k3", largeText);
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"),
+                   row(map("k1", largeText, largeText, "v2", "k3", largeText)));
+
+        execute("UPDATE %s SET m[?] = ? WHERE k = 0", largeText2, "v4");
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"),
+                   row(map("k1", largeText, largeText, "v2", "k3", largeText, largeText2, "v4")));
+
+        execute("DELETE m[?] FROM %s WHERE k = 0", "k1");
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"),
+                   row(map(largeText, "v2", "k3", largeText, largeText2, "v4")));
+
+        execute("DELETE m[?] FROM %s WHERE k = 0", largeText2);
+        flush();
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"),
+                   row(map(largeText, "v2", "k3", largeText)));
+
+        // Full overwrite
+        execute("UPDATE %s SET m = ? WHERE k = 0", map("k5", largeText, largeText, "v6"));
+        flush();
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"),
+                   row(map("k5", largeText, largeText, "v6")));
+
+        execute("UPDATE %s SET m = m + ? WHERE k = 0", map("k7", largeText));
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"),
+                   row(map("k5", largeText, largeText, "v6", "k7", largeText)));
+
+        execute("UPDATE %s SET m = m + ? WHERE k = 0", map(largeText2, "v8"));
+        flush();
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"),
+                   row(map("k5", largeText, largeText, "v6", "k7", largeText, largeText2, "v8")));
+
+        execute("DELETE m FROM %s WHERE k = 0");
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"), row((Object) null));
+
+        execute("INSERT INTO %s(k, m) VALUES (0, {'" + largeText + "' : 'v1', 'k2' : '" + largeText + "'})");
+        flush();
+
+        assertRows(execute("SELECT m FROM %s WHERE k = 0"),
+                   row(map(largeText, "v1", "k2", largeText)));
+    }
+
+    @Test
+    public void testSetsWithElementsBiggerThan64K() throws Throwable
+    {
+        createTable("CREATE TABLE %s (k int PRIMARY KEY, s set<text>)");
+
+        byte[] bytes = new byte[FBUtilities.MAX_UNSIGNED_SHORT + 10];
+        Arrays.fill(bytes, (byte) 1);
+        String largeText = new String(bytes);
+
+        bytes = new byte[FBUtilities.MAX_UNSIGNED_SHORT + 10];
+        Arrays.fill(bytes, (byte) 2);
+        String largeText2 = new String(bytes);
+
+        execute("INSERT INTO %s(k, s) VALUES (0, ?)", set(largeText, "v2"));
+        flush();
+
+        assertRows(execute("SELECT s FROM %s WHERE k = 0"), row(set(largeText, "v2")));
+
+        execute("DELETE s[?] FROM %s WHERE k = 0", largeText);
+
+        assertRows(execute("SELECT s FROM %s WHERE k = 0"), row(set("v2")));
+
+        // Full overwrite
+        execute("UPDATE %s SET s = ? WHERE k = 0", set("v1", largeText));
+        flush();
+
+        assertRows(execute("SELECT s FROM %s WHERE k = 0"), row(set("v1", largeText)));
+
+        execute("UPDATE %s SET s = s + ? WHERE k = 0", set("v2", largeText2));
+
+        assertRows(execute("SELECT s FROM %s WHERE k = 0"), row(set("v1", largeText, "v2", largeText2)));
+
+        execute("UPDATE %s SET s = s - ? WHERE k = 0", set(largeText, "v2"));
+
+        assertRows(execute("SELECT s FROM %s WHERE k = 0"), row(set("v1", largeText2)));
+
+        execute("DELETE s FROM %s WHERE k = 0");
+
+        assertRows(execute("SELECT s FROM %s WHERE k = 0"), row((Object) null));
+
+        execute("INSERT INTO %s(k, s) VALUES (0, {'" + largeText + "', 'v2'})");
+        flush();
+
+        assertRows(execute("SELECT s FROM %s WHERE k = 0"), row(set(largeText, "v2")));
+    }
+
+    @Test
+    public void testRemovalThroughUpdate() throws Throwable
+    {
+        createTable("CREATE TABLE %s (k int PRIMARY KEY, l list<int>)");
+
+         execute("INSERT INTO %s(k, l) VALUES(?, ?)", 0, list(1, 2, 3));
+         assertRows(execute("SELECT * FROM %s"), row(0, list(1, 2, 3)));
+
+         execute("UPDATE %s SET l[0] = null WHERE k=0");
+         assertRows(execute("SELECT * FROM %s"), row(0, list(2, 3)));
+    }
+
+    @Test
+    public void testInvalidInputForList() throws Throwable
+    {
+        createTable("CREATE TABLE %s(pk int PRIMARY KEY, l list<text>)");
+        assertInvalidMessage("Not enough bytes to read a list",
+                             "INSERT INTO %s (pk, l) VALUES (?, ?)", 1, "test");
+        assertInvalidMessage("Not enough bytes to read a list",
+                             "INSERT INTO %s (pk, l) VALUES (?, ?)", 1, Long.MAX_VALUE);
+        assertInvalidMessage("Not enough bytes to read a list",
+                             "INSERT INTO %s (pk, l) VALUES (?, ?)", 1, "");
+        assertInvalidMessage("The data cannot be deserialized as a list",
+                             "INSERT INTO %s (pk, l) VALUES (?, ?)", 1, -1);
+    }
+
+    @Test
+    public void testInvalidInputForSet() throws Throwable
+    {
+        createTable("CREATE TABLE %s(pk int PRIMARY KEY, s set<text>)");
+        assertInvalidMessage("Not enough bytes to read a set",
+                             "INSERT INTO %s (pk, s) VALUES (?, ?)", 1, "test");
+        assertInvalidMessage("String didn't validate.",
+                             "INSERT INTO %s (pk, s) VALUES (?, ?)", 1, Long.MAX_VALUE);
+        assertInvalidMessage("Not enough bytes to read a set",
+                             "INSERT INTO %s (pk, s) VALUES (?, ?)", 1, "");
+        assertInvalidMessage("The data cannot be deserialized as a set",
+                             "INSERT INTO %s (pk, s) VALUES (?, ?)", 1, -1);
+    }
+
+    @Test
+    public void testInvalidInputForMap() throws Throwable
+    {
+        createTable("CREATE TABLE %s(pk int PRIMARY KEY, m map<text, text>)");
+        assertInvalidMessage("Not enough bytes to read a map",
+                             "INSERT INTO %s (pk, m) VALUES (?, ?)", 1, "test");
+        assertInvalidMessage("String didn't validate.",
+                             "INSERT INTO %s (pk, m) VALUES (?, ?)", 1, Long.MAX_VALUE);
+        assertInvalidMessage("Not enough bytes to read a map",
+                             "INSERT INTO %s (pk, m) VALUES (?, ?)", 1, "");
+        assertInvalidMessage("The data cannot be deserialized as a map",
+                             "INSERT INTO %s (pk, m) VALUES (?, ?)", 1, -1);
+    }
 }

@@ -21,10 +21,12 @@ package org.apache.cassandra.db.lifecycle;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import com.google.common.base.Function;
 import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -33,7 +35,7 @@ import junit.framework.Assert;
 import org.apache.cassandra.MockSchema;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Memtable;
-import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 
@@ -59,16 +61,17 @@ public class ViewTest
         {
             for (int j = i ; j < 5 ; j++)
             {
-                RowPosition min = MockSchema.readerBounds(i);
-                RowPosition max = MockSchema.readerBounds(j);
+                PartitionPosition min = MockSchema.readerBounds(i);
+                PartitionPosition max = MockSchema.readerBounds(j);
                 for (boolean minInc : new boolean[] { true })//, false} )
                 {
                     for (boolean maxInc : new boolean[] { true })//, false} )
                     {
                         if (i == j && !(minInc && maxInc))
                             continue;
-                        AbstractBounds<RowPosition> bounds = AbstractBounds.bounds(min, minInc, max, maxInc);
-                        List<SSTableReader> r = initialView.sstablesInBounds(bounds.left, bounds.right);
+
+                        AbstractBounds<PartitionPosition> bounds = AbstractBounds.bounds(min, minInc, max, maxInc);
+                        List<SSTableReader> r = ImmutableList.copyOf(initialView.liveSSTablesInBounds(bounds.left, bounds.right));
                         Assert.assertEquals(String.format("%d(%s) %d(%s)", i, minInc, j, maxInc), j - i + (minInc ? 0 : -1) + (maxInc ? 1 : 0), r.size());
                     }
                 }
@@ -80,7 +83,7 @@ public class ViewTest
     public void testCompaction()
     {
         ColumnFamilyStore cfs = MockSchema.newCFS();
-        View initialView = fakeView(0, 5, cfs);
+        View initialView = fakeView(0, 5, cfs, true);
         View cur = initialView;
         List<SSTableReader> readers = ImmutableList.copyOf(initialView.sstables);
         Assert.assertTrue(View.permitCompacting(readers).apply(cur));
@@ -97,8 +100,8 @@ public class ViewTest
         Assert.assertFalse(View.permitCompacting(readers.subList(1, 2)).apply(cur));
         Assert.assertTrue(readers.subList(2, 5).containsAll(copyOf(cur.getUncompacting(readers))));
         Assert.assertEquals(3, copyOf(cur.getUncompacting(readers)).size());
-        Assert.assertTrue(cur.nonCompactingSStables().containsAll(readers.subList(2, 5)));
-        Assert.assertEquals(3, cur.nonCompactingSStables().size());
+        Assert.assertTrue(ImmutableSet.copyOf(cur.select(SSTableSet.NONCOMPACTING)).containsAll(readers.subList(2, 5)));
+        Assert.assertEquals(3, ImmutableSet.copyOf(cur.select(SSTableSet.NONCOMPACTING)).size());
 
         // check marking already compacting readers fails with an exception
         testFailure(View.updateCompacting(emptySet(), readers.subList(0, 1)), cur);
@@ -126,9 +129,13 @@ public class ViewTest
         testFailure(View.updateCompacting(copyOf(readers.subList(0, 2)), emptySet()), cur);
         Assert.assertTrue(copyOf(concat(readers.subList(0, 1), readers.subList(2, 5))).containsAll(copyOf(cur.getUncompacting(readers))));
         Assert.assertEquals(4, copyOf(cur.getUncompacting(readers)).size());
-        Assert.assertTrue(cur.nonCompactingSStables().containsAll(readers.subList(2, 5)));
-        Assert.assertTrue(cur.nonCompactingSStables().containsAll(readers.subList(0, 1)));
-        Assert.assertEquals(4, cur.nonCompactingSStables().size());
+        Set<SSTableReader> nonCompacting = ImmutableSet.copyOf(cur.select(SSTableSet.NONCOMPACTING));
+        Assert.assertTrue(nonCompacting.containsAll(readers.subList(2, 5)));
+        Assert.assertTrue(nonCompacting.containsAll(readers.subList(0, 1)));
+        Assert.assertEquals(4, nonCompacting.size());
+
+        for (SSTableReader sstable : initialView.sstables)
+            sstable.selfRef().release();
     }
 
     private static void testFailure(Function<View, ?> function, View view)
@@ -191,7 +198,7 @@ public class ViewTest
         Assert.assertEquals(memtable3, cur.getCurrentMemtable());
 
         SSTableReader sstable = MockSchema.sstable(1, cfs);
-        cur = View.replaceFlushed(memtable1, sstable).apply(cur);
+        cur = View.replaceFlushed(memtable1, Collections.singleton(sstable)).apply(cur);
         Assert.assertEquals(0, cur.flushingMemtables.size());
         Assert.assertEquals(1, cur.liveMemtables.size());
         Assert.assertEquals(memtable3, cur.getCurrentMemtable());
@@ -201,13 +208,18 @@ public class ViewTest
 
     static View fakeView(int memtableCount, int sstableCount, ColumnFamilyStore cfs)
     {
+        return fakeView(memtableCount, sstableCount, cfs, false);
+    }
+
+    static View fakeView(int memtableCount, int sstableCount, ColumnFamilyStore cfs, boolean keepRef)
+    {
         List<Memtable> memtables = new ArrayList<>();
         List<SSTableReader> sstables = new ArrayList<>();
         for (int i = 0 ; i < memtableCount ; i++)
             memtables.add(MockSchema.memtable(cfs));
         for (int i = 0 ; i < sstableCount ; i++)
-            sstables.add(MockSchema.sstable(i, cfs));
+            sstables.add(MockSchema.sstable(i, keepRef, cfs));
         return new View(ImmutableList.copyOf(memtables), Collections.<Memtable>emptyList(), Helpers.identityMap(sstables),
-                        Collections.<SSTableReader>emptySet(), Collections.<SSTableReader>emptySet(), SSTableIntervalTree.build(sstables));
+                        Collections.<SSTableReader, SSTableReader>emptyMap(), SSTableIntervalTree.build(sstables));
     }
 }

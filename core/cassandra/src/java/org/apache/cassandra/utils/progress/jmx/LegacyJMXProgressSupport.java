@@ -18,13 +18,12 @@
 
 package org.apache.cassandra.utils.progress.jmx;
 
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import javax.management.Notification;
 import javax.management.NotificationBroadcasterSupport;
 import javax.management.ObjectName;
-
-import com.google.common.base.Optional;
 
 import org.apache.cassandra.utils.progress.ProgressEvent;
 import org.apache.cassandra.utils.progress.ProgressListener;
@@ -76,7 +75,7 @@ public class LegacyJMXProgressSupport implements ProgressListener
             result[1] = status.get().ordinal();
             return Optional.of(result);
         }
-        return Optional.absent();
+        return Optional.empty();
     }
 
     protected static Optional<Status> getStatus(ProgressEvent event)
@@ -98,7 +97,7 @@ public class LegacyJMXProgressSupport implements ProgressListener
                 }
         }
 
-        return Optional.absent();
+        return Optional.empty();
     }
 
     protected static int getCmd(String tag)

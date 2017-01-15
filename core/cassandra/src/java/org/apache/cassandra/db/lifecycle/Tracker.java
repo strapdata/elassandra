@@ -37,18 +37,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.StorageMetrics;
 import org.apache.cassandra.notifications.*;
 import org.apache.cassandra.utils.Pair;
+import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 
 import static com.google.common.base.Predicates.and;
-import static com.google.common.base.Predicates.in;
-import static com.google.common.base.Predicates.not;
 import static com.google.common.collect.ImmutableSet.copyOf;
 import static com.google.common.collect.Iterables.filter;
 import static java.util.Collections.singleton;
@@ -166,9 +164,11 @@ public class Tracker
                 accumulate = merge(accumulate, t);
             }
         }
+
         StorageMetrics.load.inc(add - subtract);
         cfstore.metric.liveDiskSpaceUsed.inc(add - subtract);
-        // we don't subtract from total until the sstable is deleted
+
+        // we don't subtract from total until the sstable is deleted, see TransactionLogs.SSTableTidier
         cfstore.metric.totalDiskSpaceUsed.inc(add);
         return accumulate;
     }
@@ -178,7 +178,7 @@ public class Tracker
     public void addInitialSSTables(Iterable<SSTableReader> sstables)
     {
         if (!isDummy())
-            setupKeycache(sstables);
+            setupOnline(sstables);
         apply(updateLiveSet(emptySet(), sstables));
         maybeFail(updateSizeTracking(emptySet(), sstables, null));
         // no notifications or backup necessary
@@ -187,11 +187,8 @@ public class Tracker
     public void addSSTables(Iterable<SSTableReader> sstables)
     {
         addInitialSSTables(sstables);
-        for (SSTableReader sstable : sstables)
-        {
-            maybeIncrementallyBackup(sstable);
-            notifyAdded(sstable);
-        }
+        maybeIncrementallyBackup(sstables);
+        notifyAdded(sstables);
     }
 
     /** (Re)initializes the tracker, purging all references. */
@@ -203,8 +200,7 @@ public class Tracker
                                     : ImmutableList.<Memtable>of(),
                          ImmutableList.<Memtable>of(),
                          Collections.<SSTableReader, SSTableReader>emptyMap(),
-                         Collections.<SSTableReader>emptySet(),
-                         Collections.<SSTableReader>emptySet(),
+                         Collections.<SSTableReader, SSTableReader>emptyMap(),
                          SSTableIntervalTree.empty()));
     }
 
@@ -230,28 +226,46 @@ public class Tracker
      */
     public Throwable dropSSTables(final Predicate<SSTableReader> remove, OperationType operationType, Throwable accumulate)
     {
-        Pair<View, View> result = apply(new Function<View, View>()
+        try (LogTransaction txnLogs = new LogTransaction(operationType, this))
         {
-            public View apply(View view)
-            {
+            Pair<View, View> result = apply(view -> {
                 Set<SSTableReader> toremove = copyOf(filter(view.sstables, and(remove, notIn(view.compacting))));
                 return updateLiveSet(toremove, emptySet()).apply(view);
+            });
+
+            Set<SSTableReader> removed = Sets.difference(result.left.sstables, result.right.sstables);
+            assert Iterables.all(removed, remove);
+
+            // It is important that any method accepting/returning a Throwable never throws an exception, and does its best
+            // to complete the instructions given to it
+            List<LogTransaction.Obsoletion> obsoletions = new ArrayList<>();
+            accumulate = prepareForObsoletion(removed, txnLogs, obsoletions, accumulate);
+            try
+            {
+                txnLogs.finish();
+                if (!removed.isEmpty())
+                {
+                    accumulate = markObsolete(obsoletions, accumulate);
+                    accumulate = updateSizeTracking(removed, emptySet(), accumulate);
+                    accumulate = release(selfRefs(removed), accumulate);
+                    // notifySSTablesChanged -> LeveledManifest.promote doesn't like a no-op "promotion"
+                    accumulate = notifySSTablesChanged(removed, Collections.<SSTableReader>emptySet(), txnLogs.type(), accumulate);
+                }
             }
-        });
-
-        Set<SSTableReader> removed = Sets.difference(result.left.sstables, result.right.sstables);
-        assert Iterables.all(removed, remove);
-
-        if (!removed.isEmpty())
-        {
-            // notifySSTablesChanged -> LeveledManifest.promote doesn't like a no-op "promotion"
-            accumulate = notifySSTablesChanged(removed, Collections.<SSTableReader>emptySet(), operationType, accumulate);
-            accumulate = updateSizeTracking(removed, emptySet(), accumulate);
-            accumulate = markObsolete(this, removed, accumulate);
-            accumulate = release(selfRefs(removed), accumulate);
+            catch (Throwable t)
+            {
+                accumulate = abortObsoletion(obsoletions, accumulate);
+                accumulate = Throwables.merge(accumulate, t);
+            }
         }
+        catch (Throwable t)
+        {
+            accumulate = Throwables.merge(accumulate, t);
+        }
+
         return accumulate;
     }
+
 
     /**
      * Removes every SSTable in the directory from the Tracker's view.
@@ -314,10 +328,10 @@ public class Tracker
         apply(View.markFlushing(memtable));
     }
 
-    public void replaceFlushed(Memtable memtable, SSTableReader sstable)
+    public void replaceFlushed(Memtable memtable, Collection<SSTableReader> sstables)
     {
         assert !isDummy();
-        if (sstable == null)
+        if (sstables.isEmpty())
         {
             // sstable may be null if we flushed batchlog and nothing needed to be retained
             // if it's null, we don't care what state the cfstore is in, we just replace it and continue
@@ -325,66 +339,35 @@ public class Tracker
             return;
         }
 
-        sstable.setupKeyCache();
+        sstables.forEach(SSTableReader::setupOnline);
         // back up before creating a new Snapshot (which makes the new one eligible for compaction)
-        maybeIncrementallyBackup(sstable);
+        maybeIncrementallyBackup(sstables);
 
-        apply(View.replaceFlushed(memtable, sstable));
+        apply(View.replaceFlushed(memtable, sstables));
 
         Throwable fail;
-        fail = updateSizeTracking(emptySet(), singleton(sstable), null);
+        fail = updateSizeTracking(emptySet(), sstables, null);
+        // TODO: if we're invalidated, should we notifyadded AND removed, or just skip both?
+        fail = notifyAdded(sstables, fail);
+
+        if (!isDummy() && !cfstore.isValid())
+            dropSSTables();
 
         maybeFail(fail);
-    }
-
-    /**
-     * permit compaction of the provided sstable; this translates to notifying compaction
-     * strategies of its existence, and potentially submitting a background task
-     */
-    public void permitCompactionOfFlushed(SSTableReader sstable)
-    {
-        if (sstable == null)
-            return;
-
-        apply(View.permitCompactionOfFlushed(sstable));
-
-        if (isDummy())
-            return;
-
-        if (cfstore.isValid())
-        {
-            notifyAdded(sstable);
-            CompactionManager.instance.submitBackground(cfstore);
-        }
-        else
-        {
-            dropSSTables();
-        }
     }
 
 
 
     // MISCELLANEOUS public utility calls
 
-    public Set<SSTableReader> getSSTables()
-    {
-        return view.get().sstables;
-    }
-
-    public Iterable<SSTableReader> getPermittedToCompact()
-    {
-        View view = this.view.get();
-        return filter(view.sstables, not(in(view.premature)));
-    }
-
     public Set<SSTableReader> getCompacting()
     {
         return view.get().compacting;
     }
 
-    public Set<SSTableReader> getUncompacting()
+    public Iterable<SSTableReader> getUncompacting()
     {
-        return view.get().nonCompactingSStables();
+        return view.get().select(SSTableSet.NONCOMPACTING);
     }
 
     public Iterable<SSTableReader> getUncompacting(Iterable<SSTableReader> candidates)
@@ -392,15 +375,17 @@ public class Tracker
         return view.get().getUncompacting(candidates);
     }
 
-    public void maybeIncrementallyBackup(final SSTableReader sstable)
+    public void maybeIncrementallyBackup(final Iterable<SSTableReader> sstables)
     {
         if (!DatabaseDescriptor.isIncrementalBackupsEnabled())
             return;
 
-        File backupsDir = Directories.getBackupsDirectory(sstable.descriptor);
-        sstable.createLinks(FileUtils.getCanonicalPath(backupsDir));
+        for (SSTableReader sstable : sstables)
+        {
+            File backupsDir = Directories.getBackupsDirectory(sstable.descriptor);
+            sstable.createLinks(FileUtils.getCanonicalPath(backupsDir));
+        }
     }
-
 
     // NOTIFICATION
 
@@ -421,7 +406,7 @@ public class Tracker
         return accumulate;
     }
 
-    Throwable notifyAdded(SSTableReader added, Throwable accumulate)
+    Throwable notifyAdded(Iterable<SSTableReader> added, Throwable accumulate)
     {
         INotification notification = new SSTableAddedNotification(added);
         for (INotificationConsumer subscriber : subscribers)
@@ -438,7 +423,7 @@ public class Tracker
         return accumulate;
     }
 
-    public void notifyAdded(SSTableReader added)
+    public void notifyAdded(Iterable<SSTableReader> added)
     {
         maybeFail(notifyAdded(added, null));
     }

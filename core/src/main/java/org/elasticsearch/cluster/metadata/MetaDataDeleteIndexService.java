@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.Schema;
 import org.elassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.action.support.master.MasterNodeRequest;
@@ -31,7 +32,6 @@ import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.block.ClusterBlocks;
-import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -39,6 +39,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.FutureUtils;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
@@ -100,7 +101,8 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                     final IndexMetaData indexMetaData = currentState.metaData().index(index);
                     // record keyspace.table having useless 2i 
                     for(ObjectCursor<MappingMetaData> type:indexMetaData.getMappings().values()) 
-                        unindexedTables.put(indexMetaData, InternalCassandraClusterService.typeToCfName(type.value.type()));
+                        if (!MapperService.DEFAULT_MAPPING.equals(type.value.type()))
+                            unindexedTables.put(indexMetaData, InternalCassandraClusterService.typeToCfName(type.value.type()));
                 }
                
                 MetaData newMetaData = metaDataBuilder.build();
@@ -115,19 +117,27 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 
                 boolean clusterDropOnDelete = currentState.metaData().settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_DROP_ON_DELETE_INDEX, false);
                 for(IndexMetaData imd : unindexedTables.keySet()) {
-                    if (imd.getSettings().getAsBoolean(IndexMetaData.SETTING_DROP_ON_DELETE_INDEX, clusterDropOnDelete)) {
-                        if (Schema.instance.getKeyspaceInstance(imd.keyspace()).getMetadata().cfMetaData().keySet().size() == unindexedTables.get(imd).size()) {
-                            // drop keyspace
-                            MetaDataDeleteIndexService.this.clusterService.dropIndexKeyspace(imd.keyspace());
+                    if (Schema.instance.getKeyspaceInstance(imd.keyspace()) != null) {
+                        // keyspace still exists.
+                        if (imd.getSettings().getAsBoolean(IndexMetaData.SETTING_DROP_ON_DELETE_INDEX, clusterDropOnDelete)) {
+                            int tableCount = 0;
+                            for(CFMetaData tableOrView : Schema.instance.getKeyspaceInstance(imd.keyspace()).getMetadata().tablesAndViews()) {
+                                if (tableOrView.isCQLTable())
+                                    tableCount++;
+                            }
+                            if (tableCount == unindexedTables.get(imd).size()) {
+                                // drop keyspace instead of droping all tables.
+                                MetaDataDeleteIndexService.this.clusterService.dropIndexKeyspace(imd.keyspace());
+                            } else {
+                                // drop tables
+                                for(String table : unindexedTables.get(imd))
+                                    MetaDataDeleteIndexService.this.clusterService.dropTable(imd.keyspace(), table);
+                            }
                         } else {
-                            // drop tables
+                            // drop secondary indices
                             for(String table : unindexedTables.get(imd))
-                                MetaDataDeleteIndexService.this.clusterService.dropTable(imd.keyspace(), table);
+                                MetaDataDeleteIndexService.this.clusterService.dropSecondaryIndex(imd.keyspace(), table);
                         }
-                    } else {
-                        // drop secondary indices
-                        for(String table : unindexedTables.get(imd))
-                            MetaDataDeleteIndexService.this.clusterService.dropSecondaryIndex(imd.keyspace(), table);
                     }
                 }
                 

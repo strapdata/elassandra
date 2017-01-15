@@ -51,6 +51,7 @@ for jar in "$CASSANDRA_HOME"/lib/*.jar; do
     CLASSPATH="$CLASSPATH:$jar"
 done
 
+# Uncomment this only if your jsr223 contains jar files.
 # JSR223 - collect all JSR223 engines' jars
 #for jsr223jar in "$CASSANDRA_HOME"/lib/jsr223/*/*.jar; do
 #    CLASSPATH="$CLASSPATH:$jsr223jar"

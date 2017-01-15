@@ -59,8 +59,8 @@ public class CountersTest extends CQLTester
     @Test
     public void testRegularCounters() throws Throwable
     {
-        assertInvalidThrowMessage("Cannot add a non counter column",
-                                  ConfigurationException.class,
+        assertInvalidThrowMessage("Cannot mix counter and non counter columns in the same table",
+                                  InvalidRequestException.class,
                                   String.format("CREATE TABLE %s.%s (id bigint PRIMARY KEY, count counter, things set<text>)", KEYSPACE, createTableName()));
     }
 
@@ -113,6 +113,80 @@ public class CountersTest extends CQLTester
         );
     }
 
+    @Test
+    public void testCounterFiltering() throws Throwable
+    {
+        for (String compactStorageClause: new String[] {"", " WITH COMPACT STORAGE"})
+        {
+            createTable("CREATE TABLE %s (k int PRIMARY KEY, a counter)" + compactStorageClause);
+
+            for (int i = 0; i < 10; i++)
+                execute("UPDATE %s SET a = a + ? WHERE k = ?", (long) i, i);
+
+            execute("UPDATE %s SET a = a + ? WHERE k = ?", 6L, 10);
+
+            // GT
+            assertRowsIgnoringOrder(execute("SELECT * FROM %s WHERE a > ? ALLOW FILTERING", 5L),
+                                    row(6, 6L),
+                                    row(7, 7L),
+                                    row(8, 8L),
+                                    row(9, 9L),
+                                    row(10, 6L));
+
+            // GTE
+            assertRowsIgnoringOrder(execute("SELECT * FROM %s WHERE a >= ? ALLOW FILTERING", 6L),
+                                    row(6, 6L),
+                                    row(7, 7L),
+                                    row(8, 8L),
+                                    row(9, 9L),
+                                    row(10, 6L));
+
+            // LT
+            assertRowsIgnoringOrder(execute("SELECT * FROM %s WHERE a < ? ALLOW FILTERING", 3L),
+                                    row(0, 0L),
+                                    row(1, 1L),
+                                    row(2, 2L));
+
+            // LTE
+            assertRowsIgnoringOrder(execute("SELECT * FROM %s WHERE a <= ? ALLOW FILTERING", 3L),
+                                    row(0, 0L),
+                                    row(1, 1L),
+                                    row(2, 2L),
+                                    row(3, 3L));
+
+            // EQ
+            assertRowsIgnoringOrder(execute("SELECT * FROM %s WHERE a = ? ALLOW FILTERING", 6L),
+                                    row(6, 6L),
+                                    row(10, 6L));
+        }
+    }
+
+    @Test
+    public void testCounterFilteringWithNull() throws Throwable
+    {
+        for (String compactStorageClause : new String[]{ "", " WITH COMPACT STORAGE" })
+        {
+            createTable("CREATE TABLE %s (k int PRIMARY KEY, a counter, b counter)" + compactStorageClause);
+            execute("UPDATE %s SET a = a + ? WHERE k = ?", 1L, 1);
+
+            assertRows(execute("SELECT * FROM %s WHERE a > ? ALLOW FILTERING", 0L),
+                       row(1, 1L, null));
+            // GT
+            assertEmpty(execute("SELECT * FROM %s WHERE b > ? ALLOW FILTERING", 1L));
+            // GTE
+            assertEmpty(execute("SELECT * FROM %s WHERE b >= ? ALLOW FILTERING", 1L));
+            // LT
+            assertEmpty(execute("SELECT * FROM %s WHERE b < ? ALLOW FILTERING", 1L));
+            // LTE
+            assertEmpty(execute("SELECT * FROM %s WHERE b <= ? ALLOW FILTERING", 1L));
+            // EQ
+            assertEmpty(execute("SELECT * FROM %s WHERE b = ? ALLOW FILTERING", 1L));
+            // with null
+            assertInvalidMessage("Invalid null value for counter increment/decrement",
+                                 "SELECT * FROM %s WHERE b = null ALLOW FILTERING");
+        }
+    }
+
     /**
      * Test for the validation bug of #9395.
      */
@@ -122,5 +196,4 @@ public class CountersTest extends CQLTester
         assertInvalidThrowMessage("counter type is not supported for PRIMARY KEY part a",
                                   InvalidRequestException.class, String.format("CREATE TABLE %s.%s (a counter, b int, PRIMARY KEY (b, a)) WITH CLUSTERING ORDER BY (a desc);", KEYSPACE, createTableName()));
     }
-
 }

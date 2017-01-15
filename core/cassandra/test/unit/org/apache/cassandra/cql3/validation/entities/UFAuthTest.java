@@ -25,17 +25,15 @@ import com.google.common.collect.ImmutableSet;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.auth.*;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.Attributes;
 import org.apache.cassandra.cql3.CQLStatement;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.functions.Function;
 import org.apache.cassandra.cql3.functions.FunctionName;
-import org.apache.cassandra.cql3.functions.Functions;
 import org.apache.cassandra.cql3.statements.BatchStatement;
 import org.apache.cassandra.cql3.statements.ModificationStatement;
 import org.apache.cassandra.cql3.CQLTester;
@@ -49,8 +47,6 @@ import static org.junit.Assert.fail;
 
 public class UFAuthTest extends CQLTester
 {
-    private static final Logger logger = LoggerFactory.getLogger(UFAuthTest.class);
-
     String roleName = "test_role";
     AuthenticatedUser user;
     RoleResource role;
@@ -261,6 +257,17 @@ public class UFAuthTest extends CQLTester
     }
 
     @Test
+    public void functionInStaticColumnRestrictionInSelect() throws Throwable
+    {
+        setupTable("CREATE TABLE %s (k int, s int STATIC, v1 int, v2 int, PRIMARY KEY(k, v1))");
+        String functionName = createSimpleFunction();
+        String cql = String.format("SELECT k FROM %s WHERE k = 0 AND s = %s ALLOW FILTERING",
+                                   KEYSPACE + "." + currentTable(),
+                                   functionCall(functionName));
+        assertPermissionsOnFunction(cql, functionName);
+    }
+
+    @Test
     public void functionInRegularCondition() throws Throwable
     {
         String functionName = createSimpleFunction();
@@ -308,14 +315,14 @@ public class UFAuthTest extends CQLTester
     public void systemFunctionsRequireNoExplicitPrivileges() throws Throwable
     {
         // with terminal arguments, so evaluated at prepare time
-        String cql = String.format("UPDATE %s SET v2 = 0 WHERE k = blobasint(intasblob(0))",
+        String cql = String.format("UPDATE %s SET v2 = 0 WHERE k = blobasint(intasblob(0)) and v1 = 0",
                                    KEYSPACE + "." + currentTable());
         getStatement(cql).checkAccess(clientState);
 
         // with non-terminal arguments, so evaluated at execution
         String functionName = createSimpleFunction();
         grantExecuteOnFunction(functionName);
-        cql = String.format("UPDATE %s SET v2 = 0 WHERE k = blobasint(intasblob(%s))",
+        cql = String.format("UPDATE %s SET v2 = 0 WHERE k = blobasint(intasblob(%s)) and v1 = 0",
                             KEYSPACE + "." + currentTable(),
                             functionCall(functionName));
         getStatement(cql).checkAccess(clientState);
@@ -607,12 +614,12 @@ public class UFAuthTest extends CQLTester
         // It is here to avoid having to duplicate the functionality of CqlParser
         // for transforming cql types into AbstractTypes
         FunctionName fn = parseFunctionName(functionName);
-        List<Function> functions = Functions.find(fn);
+        Collection<Function> functions = Schema.instance.getFunctions(fn);
         assertEquals(String.format("Expected a single function definition for %s, but found %s",
                                    functionName,
                                    functions.size()),
                      1, functions.size());
-        return FunctionResource.function(fn.keyspace, fn.name, functions.get(0).argTypes());
+        return FunctionResource.function(fn.keyspace, fn.name, functions.iterator().next().argTypes());
     }
 
     private String functionCall(String functionName, String...args)

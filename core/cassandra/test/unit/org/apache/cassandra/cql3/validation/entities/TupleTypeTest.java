@@ -110,7 +110,7 @@ public class TupleTypeTest extends CQLTester
             row(0, 4, tuple(null, "1"))
         );
 
-        assertInvalidMessage("Invalid tuple literal: too many elements. Type tuple<int, text> expects 2 but got 3",
+        assertInvalidMessage("Invalid tuple literal: too many elements. Type frozen<tuple<int, text>> expects 2 but got 3",
                              "INSERT INTO %s(k, t) VALUES (1,'1:2:3')");
     }
 
@@ -121,7 +121,7 @@ public class TupleTypeTest extends CQLTester
 
         assertInvalidSyntax("INSERT INTO %s (k, t) VALUES (0, ())");
 
-        assertInvalidMessage("Invalid tuple literal for t: too many elements. Type tuple<int, text, double> expects 3 but got 4",
+        assertInvalidMessage("Invalid tuple literal for t: too many elements. Type frozen<tuple<int, text, double>> expects 3 but got 4",
                              "INSERT INTO %s (k, t) VALUES (0, (2, 'foo', 3.1, 'bar'))");
     }
 
@@ -192,5 +192,15 @@ public class TupleTypeTest extends CQLTester
         assertRows(execute("SELECT * FROM %s WHERE k=0 AND (c1, c2) IN ((0, 'b'), (0, 'c'))"),
                    row(0, 0, "b"),
                    row(0, 0, "c"));
+    }
+
+    @Test
+    public void testInvalidInputForTuple() throws Throwable
+    {
+        createTable("CREATE TABLE %s(pk int PRIMARY KEY, t tuple<text, text>)");
+        assertInvalidMessage("Not enough bytes to read 0th component",
+                             "INSERT INTO %s (pk, t) VALUES (?, ?)", 1, "test");
+        assertInvalidMessage("Not enough bytes to read 0th component",
+                             "INSERT INTO %s (pk, t) VALUES (?, ?)", 1, Long.MAX_VALUE);
     }
 }

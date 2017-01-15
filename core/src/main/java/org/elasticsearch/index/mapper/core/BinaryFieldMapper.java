@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.store.ByteArrayDataOutput;
@@ -169,7 +170,7 @@ public class BinaryFieldMapper extends FieldMapper {
                 bytes = new BytesArray((byte[]) value);
             } else if (value instanceof ByteBuffer) {
                 ByteBuffer bb = (ByteBuffer)value;
-                bytes = new BytesArray(bb.array());
+                bytes = new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
             } else {
                 try {
                     bytes = new BytesArray(Base64.decode(value.toString()));

@@ -21,11 +21,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -34,25 +32,26 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Iterables;
-import com.google.common.util.concurrent.*;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.commitlog.CommitLogSegment.Allocation;
 import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.utils.Pair;
-import org.apache.cassandra.utils.concurrent.WaitQueue;
 import org.apache.cassandra.utils.JVMStabilityInspector;
+import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.WrappedRunnable;
+import org.apache.cassandra.utils.concurrent.WaitQueue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import static org.apache.cassandra.db.commitlog.CommitLogSegment.Allocation;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.Runnables;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 /**
  * Performs eager-creation of commit log segments in a background thread. All the
@@ -116,11 +115,11 @@ public class CommitLogSegmentManager
                         if (task == null)
                         {
                             // if we have no more work to do, check if we should create a new segment
-                            if (availableSegments.isEmpty() && (activeSegments.isEmpty() || createReserveSegments))
+                            if (!atSegmentLimit() && availableSegments.isEmpty() && (activeSegments.isEmpty() || createReserveSegments))
                             {
                                 logger.trace("No segments in reserve; creating a fresh one");
                                 // TODO : some error handling in case we fail to create a new segment
-                                availableSegments.add(CommitLogSegment.createSegment(commitLog));
+                                availableSegments.add(CommitLogSegment.createSegment(commitLog, () -> wakeManager()));
                                 hasAvailableSegments.signalAll();
                             }
 
@@ -165,6 +164,12 @@ public class CommitLogSegmentManager
                     }
                 }
             }
+
+            private boolean atSegmentLimit()
+            {
+                return CommitLogSegment.usesBufferPool(commitLog) && CompressedSegment.hasReachedPoolLimit();
+            }
+
         };
 
         run = true;
@@ -295,15 +300,7 @@ public class CommitLogSegmentManager
 
         // make sure the writes have materialized inside of the memtables by waiting for all outstanding writes
         // on the relevant keyspaces to complete
-        Set<Keyspace> keyspaces = new HashSet<>();
-        for (UUID cfId : last.getDirtyCFIDs())
-        {
-            ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(cfId);
-            if (cfs != null)
-                keyspaces.add(cfs.keyspace);
-        }
-        for (Keyspace keyspace : keyspaces)
-            keyspace.writeOrder.awaitNewBarrier();
+        Keyspace.writeOrder.awaitNewBarrier();
 
         // flush and wait for all CFs that are dirty in segments up-to and including 'last'
         Future<?> future = flushDataFrom(segmentsToRecycle, true);
@@ -313,7 +310,7 @@ public class CommitLogSegmentManager
 
             for (CommitLogSegment segment : activeSegments)
                 for (UUID cfId : droppedCfs)
-                    segment.markClean(cfId, segment.getContext());
+                    segment.markClean(cfId, ReplayPosition.NONE, segment.getContext());
 
             // now recycle segments that are unused, as we may not have triggered a discardCompletedSegments()
             // if the previous active segment was the only one to recycle (since an active segment isn't
@@ -454,7 +451,7 @@ public class CommitLogSegmentManager
                     // even though we remove the schema entry before a final flush when dropping a CF,
                     // it's still possible for a writer to race and finish his append after the flush.
                     logger.trace("Marking clean CF {} that doesn't exist anymore", dirtyCFId);
-                    segment.markClean(dirtyCFId, segment.getContext());
+                    segment.markClean(dirtyCFId, ReplayPosition.NONE, segment.getContext());
                 }
                 else if (!flushes.containsKey(dirtyCFId))
                 {
@@ -567,5 +564,6 @@ public class CommitLogSegmentManager
     {
         return Collections.unmodifiableCollection(activeSegments);
     }
+
 }
 

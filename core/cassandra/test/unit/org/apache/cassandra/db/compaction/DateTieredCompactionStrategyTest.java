@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -29,14 +29,14 @@ import com.google.common.collect.Lists;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.RowUpdateBuilder;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.Pair;
 
 import static org.apache.cassandra.db.compaction.DateTieredCompactionStrategy.getBuckets;
@@ -55,9 +55,8 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
     {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
-                                    SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1));
+                KeyspaceParams.simple(1),
+                SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1));
     }
 
     @Test
@@ -224,14 +223,15 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         for (int r = 0; r < numSSTables; r++)
         {
             DecoratedKey key = Util.dk(String.valueOf(r));
-            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
-            rm.add(CF_STANDARD1, Util.cellname("column"), value, r);
-            rm.apply();
+            new RowUpdateBuilder(cfs.metadata, r, key.getKey())
+                .clustering("column")
+                .add("val", value).build().applyUnsafe();
+
             cfs.forceBlockingFlush();
         }
         cfs.forceBlockingFlush();
 
-        List<SSTableReader> sstrs = new ArrayList<>(cfs.getSSTables());
+        List<SSTableReader> sstrs = new ArrayList<>(cfs.getLiveSSTables());
 
         List<SSTableReader> newBucket = newestBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32, 9, 10, Long.MAX_VALUE, new SizeTieredCompactionStrategyOptions());
         assertTrue("incoming bucket should not be accepted when it has below the min threshold SSTables", newBucket.isEmpty());
@@ -259,15 +259,16 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         for (int r = 0; r < numSSTables; r++)
         {
             DecoratedKey key = Util.dk(String.valueOf(r));
-            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
-            rm.add(CF_STANDARD1, Util.cellname("column"), value, r);
-            rm.apply();
+            new RowUpdateBuilder(cfs.metadata, r, key.getKey())
+                .clustering("column")
+                .add("val", value).build().applyUnsafe();
+
             cfs.forceBlockingFlush();
         }
         cfs.forceBlockingFlush();
 
         Iterable<SSTableReader> filtered;
-        List<SSTableReader> sstrs = new ArrayList<>(cfs.getSSTables());
+        List<SSTableReader> sstrs = new ArrayList<>(cfs.getLiveSSTables());
 
         filtered = filterOldSSTables(sstrs, 0, 2);
         assertEquals("when maxSSTableAge is zero, no sstables should be filtered", sstrs.size(), Iterables.size(filtered));
@@ -295,18 +296,21 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
 
         // create 2 sstables
         DecoratedKey key = Util.dk(String.valueOf("expired"));
-        Mutation rm = new Mutation(KEYSPACE1, key.getKey());
-        rm.add(CF_STANDARD1, Util.cellname("column"), value, System.currentTimeMillis(), 1);
-        rm.apply();
+        new RowUpdateBuilder(cfs.metadata, System.currentTimeMillis(), 1, key.getKey())
+            .clustering("column")
+            .add("val", value).build().applyUnsafe();
+
         cfs.forceBlockingFlush();
-        SSTableReader expiredSSTable = cfs.getSSTables().iterator().next();
+        SSTableReader expiredSSTable = cfs.getLiveSSTables().iterator().next();
         Thread.sleep(10);
+
         key = Util.dk(String.valueOf("nonexpired"));
-        rm = new Mutation(KEYSPACE1, key.getKey());
-        rm.add(CF_STANDARD1, Util.cellname("column"), value, System.currentTimeMillis());
-        rm.apply();
+        new RowUpdateBuilder(cfs.metadata, System.currentTimeMillis(), key.getKey())
+            .clustering("column")
+            .add("val", value).build().applyUnsafe();
+
         cfs.forceBlockingFlush();
-        assertEquals(cfs.getSSTables().size(), 2);
+        assertEquals(cfs.getLiveSSTables().size(), 2);
 
         Map<String, String> options = new HashMap<>();
 
@@ -315,7 +319,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         options.put(DateTieredCompactionStrategyOptions.MAX_SSTABLE_AGE_KEY, Double.toString((1d / (24 * 60 * 60))));
         options.put(DateTieredCompactionStrategyOptions.EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS_KEY, "0");
         DateTieredCompactionStrategy dtcs = new DateTieredCompactionStrategy(cfs, options);
-        for (SSTableReader sstable : cfs.getSSTables())
+        for (SSTableReader sstable : cfs.getLiveSSTables())
             dtcs.addSSTable(sstable);
         dtcs.startup();
         assertNull(dtcs.getNextBackgroundTask((int) (System.currentTimeMillis() / 1000)));
@@ -345,9 +349,9 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
             for (int i = 0; i < 10; i++)
             {
                 DecoratedKey key = Util.dk(String.valueOf(r));
-                Mutation rm = new Mutation(KEYSPACE1, key.getKey());
-                rm.add(CF_STANDARD1, Util.cellname("column"), bigValue, timestamp);
-                rm.apply();
+                new RowUpdateBuilder(cfs.metadata, timestamp, key.getKey())
+                    .clustering("column")
+                    .add("val", bigValue).build().applyUnsafe();
             }
             cfs.forceBlockingFlush();
         }
@@ -355,18 +359,19 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         for (int r = 0; r < numSSTables / 2; r++)
         {
             DecoratedKey key = Util.dk(String.valueOf(r));
-            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
-            rm.add(CF_STANDARD1, Util.cellname("column"), value, timestamp);
-            rm.apply();
+            new RowUpdateBuilder(cfs.metadata, timestamp, key.getKey())
+                .clustering("column")
+                .add("val", value).build().applyUnsafe();
             cfs.forceBlockingFlush();
         }
         Map<String, String> options = new HashMap<>();
         options.put(SizeTieredCompactionStrategyOptions.MIN_SSTABLE_SIZE_KEY, "1");
         DateTieredCompactionStrategy dtcs = new DateTieredCompactionStrategy(cfs, options);
-        for (SSTableReader sstable : cfs.getSSTables())
+        for (SSTableReader sstable : cfs.getSSTables(SSTableSet.CANONICAL))
             dtcs.addSSTable(sstable);
         AbstractCompactionTask task = dtcs.getNextBackgroundTask(0);
         assertEquals(20, task.transaction.originals().size());
         task.transaction.abort();
+        cfs.truncateBlocking();
     }
 }

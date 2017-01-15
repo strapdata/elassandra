@@ -216,12 +216,12 @@ public class OrderPreservingPartitioner implements IPartitioner
 
         for (String ks : Schema.instance.getKeyspaces())
         {
-            for (CFMetaData cfmd : Schema.instance.getKSMetaData(ks).cfMetaData().values())
+            for (CFMetaData cfmd : Schema.instance.getTablesAndViews(ks))
             {
                 for (Range<Token> r : sortedRanges)
                 {
                     // Looping over every KS:CF:Range, get the splits size and add it to the count
-                    allTokens.put(r.right, allTokens.get(r.right) + StorageService.instance.getSplits(ks, cfmd.cfName, r, cfmd.getMinIndexInterval()).size());
+                    allTokens.put(r.right, allTokens.get(r.right) + StorageService.instance.getSplits(ks, cfmd.cfName, r, cfmd.params.minIndexInterval).size());
                 }
             }
         }
@@ -237,6 +237,11 @@ public class OrderPreservingPartitioner implements IPartitioner
     }
 
     public AbstractType<?> getTokenValidator()
+    {
+        return UTF8Type.instance;
+    }
+
+    public AbstractType<?> partitionOrdering()
     {
         return UTF8Type.instance;
     }

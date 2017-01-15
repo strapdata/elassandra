@@ -70,7 +70,7 @@ public interface Term
      */
     public abstract boolean containsBindMarker();
 
-    Iterable<Function> getFunctions();
+    public void addFunctionsTo(List<Function> functions);
 
     /**
      * A parsed, non prepared (thus untyped) term.
@@ -81,7 +81,7 @@ public interface Term
      *   - a function call
      *   - a marker
      */
-    public interface Raw extends AssignmentTestable
+    public abstract class Raw implements AssignmentTestable
     {
         /**
          * This method validates this RawTerm is valid for provided column
@@ -93,12 +93,23 @@ public interface Term
          * case this RawTerm describe a list index or a map key, etc...
          * @return the prepared term.
          */
-        public Term prepare(String keyspace, ColumnSpecification receiver) throws InvalidRequestException;
+        public abstract Term prepare(String keyspace, ColumnSpecification receiver) throws InvalidRequestException;
+
+        /**
+         * @return a String representation of the raw term that can be used when reconstructing a CQL query string.
+         */
+        public abstract String getText();
+
+        @Override
+        public String toString()
+        {
+            return getText();
+        }
     }
 
-    public interface MultiColumnRaw extends Raw
+    public abstract class MultiColumnRaw extends Term.Raw
     {
-        public Term prepare(String keyspace, List<? extends ColumnSpecification> receiver) throws InvalidRequestException;
+        public abstract Term prepare(String keyspace, List<? extends ColumnSpecification> receiver) throws InvalidRequestException;
     }
 
     /**
@@ -120,9 +131,8 @@ public interface Term
         public void collectMarkerSpecification(VariableSpecifications boundNames) {}
         public Terminal bind(QueryOptions options) { return this; }
 
-        public Set<Function> getFunctions()
+        public void addFunctionsTo(List<Function> functions)
         {
-            return Collections.emptySet();
         }
 
         // While some NonTerminal may not have bind markers, no Term can be Terminal

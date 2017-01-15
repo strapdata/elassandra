@@ -70,8 +70,7 @@ public class DropRecreateAndRestoreTest extends CQLTester
         {
             // Restore to point in time.
             CommitLog.instance.archiver.restorePointInTime = time;
-            CommitLog.instance.resetUnsafe(true);
-            CommitLog.instance.recover();
+            CommitLog.instance.resetUnsafe(false);
         }
         finally
         {

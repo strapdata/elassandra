@@ -471,7 +471,7 @@ elassandra can backup data by taking a snapshot of cassandra SSTables and Elasti
 1. ``nodetool snapshot --tag <snapshot_name> <keyspace_name>``
 2. For all indices associated to <keyspace_name>
    
-   ``cp -al $CASSANDRA_DATA/elasticsearch.data/<cluster_name>/nodes/0/indices/<index_name>/0/index/(_*|segement*) $CASSANDRA_DATA/elasticsearch.data/snapshots/<index_name>/<snapshot_name>/``
+   ``cp -al $CASSANDRA_DATA/elasticsearch.data/<cluster_name>/nodes/0/indices/<index_name>/0/index/(_*|segment*) $CASSANDRA_DATA/elasticsearch.data/snapshots/<index_name>/<snapshot_name>/``
 
 Of course, rebuilding elasticsearch indices after a cassandra restore is another option.
 

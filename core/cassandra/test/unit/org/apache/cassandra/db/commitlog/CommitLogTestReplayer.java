@@ -18,25 +18,25 @@
 */
 package org.apache.cassandra.db.commitlog;
 
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 
 import com.google.common.base.Predicate;
 
 import org.junit.Assert;
-
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.ColumnSerializer;
 import org.apache.cassandra.db.Mutation;
-import org.apache.cassandra.io.util.FastByteArrayInputStream;
+import org.apache.cassandra.db.rows.SerializationHelper;
+import org.apache.cassandra.io.util.DataInputBuffer;
+import org.apache.cassandra.io.util.NIODataInputStream;
+import org.apache.cassandra.io.util.RebufferingInputStream;
 
 /**
  * Utility class for tests needing to examine the commitlog contents.
  */
 public class CommitLogTestReplayer extends CommitLogReplayer
 {
-    static public void examineCommitLog(Predicate<Mutation> processor) throws IOException
+    public static void examineCommitLog(Predicate<Mutation> processor) throws IOException
     {
         CommitLog.instance.sync(true);
 
@@ -61,13 +61,13 @@ public class CommitLogTestReplayer extends CommitLogReplayer
     @Override
     void replayMutation(byte[] inputBuffer, int size, final int entryLocation, final CommitLogDescriptor desc)
     {
-        FastByteArrayInputStream bufIn = new FastByteArrayInputStream(inputBuffer, 0, size);
+        RebufferingInputStream bufIn = new DataInputBuffer(inputBuffer, 0, size);
         Mutation mutation;
         try
         {
-            mutation = Mutation.serializer.deserialize(new DataInputStream(bufIn),
+            mutation = Mutation.serializer.deserialize(bufIn,
                                                            desc.getMessagingVersion(),
-                                                           ColumnSerializer.Flag.LOCAL);
+                                                           SerializationHelper.Flag.LOCAL);
             Assert.assertTrue(processor.apply(mutation));
         }
         catch (IOException e)

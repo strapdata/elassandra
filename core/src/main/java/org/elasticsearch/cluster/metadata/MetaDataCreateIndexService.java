@@ -440,15 +440,15 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder).build();
                     }
                     */
-                    //removalReason = "cleaning up after validating index on master";
+                    removalReason = "cleaning up after validating index on master";
                     return updatedState;
                 } catch(Throwable e) {
                     removalReason = "error:" + e.toString();
                     throw e;
                 } finally {
-                    if (indexCreated  && removalReason != null) {
+                    if (indexCreated) {
                         // Index was already partially created - need to clean up
-                        indicesService.removeIndex(request.index(), removalReason);
+                        indicesService.removeIndex(request.index(), removalReason != null ? removalReason : "failed to create index");
                     }
                 }
             }

@@ -19,19 +19,17 @@ package org.apache.cassandra.io.compress;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.zip.Adler32;
+import java.util.zip.Checksum;
+import java.util.function.Supplier;
 
-
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.util.*;
-import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.memory.BufferPool;
 
 /**
  * CRAR extends RAR to transparently uncompress blocks from the file into RAR.buffer.  Most of the RAR
@@ -39,63 +37,60 @@ import org.apache.cassandra.utils.FBUtilities;
  */
 public class CompressedRandomAccessReader extends RandomAccessReader
 {
-    public static CompressedRandomAccessReader open(ChannelProxy channel, CompressionMetadata metadata)
-    {
-        return new CompressedRandomAccessReader(channel, metadata, null, null);
-    }
-
-    public static CompressedRandomAccessReader open(ICompressedFile file)
-    {
-        return new CompressedRandomAccessReader(file.channel(),
-                                                file.getMetadata(),
-                                                file,
-                                                file instanceof PoolingSegmentedFile ? (PoolingSegmentedFile) file : null);
-    }
-
-    private final TreeMap<Long, MappedByteBuffer> chunkSegments;
-
     private final CompressionMetadata metadata;
 
     // we read the raw compressed bytes into this buffer, then move the uncompressed ones into super.buffer.
     private ByteBuffer compressed;
 
     // re-use single crc object
-    private final Adler32 checksum;
+    private final Checksum checksum;
 
     // raw checksum bytes
     private ByteBuffer checksumBytes;
 
-    protected CompressedRandomAccessReader(ChannelProxy channel, CompressionMetadata metadata, ICompressedFile file, PoolingSegmentedFile owner)
+    @VisibleForTesting
+    public double getCrcCheckChance()
     {
-        super(channel, metadata.chunkLength(), metadata.compressedFileLength, metadata.compressor().preferredBufferType(), owner);
-        this.metadata = metadata;
-        checksum = new Adler32();
+        return metadata.parameters.getCrcCheckChance();
+    }
 
-        chunkSegments = file == null ? null : file.chunkSegments();
-        if (chunkSegments == null)
+    protected CompressedRandomAccessReader(Builder builder)
+    {
+        super(builder);
+        this.metadata = builder.metadata;
+        this.checksum = metadata.checksumType.newInstance();
+
+        if (regions == null)
         {
-            compressed = super.allocateBuffer(metadata.compressor().initialCompressedBufferLength(metadata.chunkLength()), metadata.compressor().preferredBufferType());
+            compressed = allocateBuffer(metadata.compressor().initialCompressedBufferLength(metadata.chunkLength()), bufferType);
             checksumBytes = ByteBuffer.wrap(new byte[4]);
         }
     }
 
     @Override
-    protected ByteBuffer allocateBuffer(int bufferSize, BufferType bufferType)
+    protected void releaseBuffer()
     {
-        assert Integer.bitCount(bufferSize) == 1;
-        return bufferType.allocate(bufferSize);
+        try
+        {
+            if (buffer != null)
+            {
+                BufferPool.put(buffer);
+                buffer = null;
+            }
+        }
+        finally
+        {
+            // this will always be null if using mmap access mode (unlike in parent, where buffer is set to a region)
+            if (compressed != null)
+            {
+                BufferPool.put(compressed);
+                compressed = null;
+            }
+        }
     }
 
     @Override
-    public void deallocate()
-    {
-        super.deallocate();
-        if (compressed != null)
-            FileUtils.clean(compressed);
-        compressed = null;
-    }
-
-    private void reBufferStandard()
+    protected void reBufferStandard()
     {
         try
         {
@@ -105,13 +100,19 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
 
             if (compressed.capacity() < chunk.length)
-                compressed = allocateBuffer(chunk.length, metadata.compressor().preferredBufferType());
+            {
+                BufferPool.put(compressed);
+                compressed = allocateBuffer(chunk.length, bufferType);
+            }
             else
+            {
                 compressed.clear();
-            compressed.limit(chunk.length);
+            }
 
+            compressed.limit(chunk.length);
             if (channel.read(compressed, chunk.offset) != chunk.length)
                 throw new CorruptBlockException(getPath(), chunk);
+
             compressed.flip();
             buffer.clear();
 
@@ -121,17 +122,17 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             }
             catch (IOException e)
             {
-                throw new CorruptBlockException(getPath(), chunk);
+                throw new CorruptBlockException(getPath(), chunk, e);
             }
             finally
             {
                 buffer.flip();
             }
 
-            if (metadata.parameters.getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
+            if (getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
             {
                 compressed.rewind();
-                FBUtilities.directCheckSum(checksum, compressed);
+                metadata.checksumType.update( checksum, (compressed));
 
                 if (checksum(chunk) != (int) checksum.getValue())
                     throw new CorruptBlockException(getPath(), chunk);
@@ -158,7 +159,8 @@ public class CompressedRandomAccessReader extends RandomAccessReader
         }
     }
 
-    private void reBufferMmap()
+    @Override
+    protected void reBufferMmap()
     {
         try
         {
@@ -167,10 +169,10 @@ public class CompressedRandomAccessReader extends RandomAccessReader
 
             CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
 
-            Map.Entry<Long, MappedByteBuffer> entry = chunkSegments.floorEntry(chunk.offset);
-            long segmentOffset = entry.getKey();
+            MmappedRegions.Region region = regions.floor(chunk.offset);
+            long segmentOffset = region.bottom();
             int chunkOffset = Ints.checkedCast(chunk.offset - segmentOffset);
-            ByteBuffer compressedChunk = entry.getValue().duplicate(); // TODO: change to slice(chunkOffset) when we upgrade LZ4-java
+            ByteBuffer compressedChunk = region.buffer.duplicate(); // TODO: change to slice(chunkOffset) when we upgrade LZ4-java
 
             compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
 
@@ -182,18 +184,18 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             }
             catch (IOException e)
             {
-                throw new CorruptBlockException(getPath(), chunk);
+                throw new CorruptBlockException(getPath(), chunk, e);
             }
             finally
             {
                 buffer.flip();
             }
 
-            if (metadata.parameters.getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
+            if (getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
             {
                 compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
 
-                FBUtilities.directCheckSum(checksum, compressedChunk);
+                metadata.checksumType.update( checksum, compressedChunk);
 
                 compressedChunk.limit(compressedChunk.capacity());
                 if (compressedChunk.getInt() != (int) checksum.getValue())
@@ -218,19 +220,6 @@ public class CompressedRandomAccessReader extends RandomAccessReader
 
     }
 
-    @Override
-    protected void reBuffer()
-    {
-        if (chunkSegments != null)
-        {
-            reBufferMmap();
-        }
-        else
-        {
-            reBufferStandard();
-        }
-    }
-
     private int checksum(CompressionMetadata.Chunk chunk) throws IOException
     {
         long position = chunk.offset + chunk.length;
@@ -238,11 +227,6 @@ public class CompressedRandomAccessReader extends RandomAccessReader
         if (channel.read(checksumBytes, position) != checksumBytes.capacity())
             throw new CorruptBlockException(getPath(), chunk);
         return checksumBytes.getInt(0);
-    }
-
-    public int getTotalBufferSize()
-    {
-        return super.getTotalBufferSize() + (chunkSegments != null ? 0 : compressed.capacity());
     }
 
     @Override
@@ -255,5 +239,48 @@ public class CompressedRandomAccessReader extends RandomAccessReader
     public String toString()
     {
         return String.format("%s - chunk length %d, data length %d.", getPath(), metadata.chunkLength(), metadata.dataLength);
+    }
+
+    public final static class Builder extends RandomAccessReader.Builder
+    {
+        private final CompressionMetadata metadata;
+
+        public Builder(ICompressedFile file)
+        {
+            super(file.channel());
+            this.metadata = applyMetadata(file.getMetadata());
+            this.regions = file.regions();
+        }
+
+        public Builder(ChannelProxy channel, CompressionMetadata metadata)
+        {
+            super(channel);
+            this.metadata = applyMetadata(metadata);
+        }
+
+        private CompressionMetadata applyMetadata(CompressionMetadata metadata)
+        {
+            this.overrideLength = metadata.compressedFileLength;
+            this.bufferSize = metadata.chunkLength();
+            this.bufferType = metadata.compressor().preferredBufferType();
+
+            assert Integer.bitCount(this.bufferSize) == 1; //must be a power of two
+
+            return metadata;
+        }
+
+        @Override
+        protected ByteBuffer createBuffer()
+        {
+            buffer = allocateBuffer(bufferSize, bufferType);
+            buffer.limit(0);
+            return buffer;
+        }
+
+        @Override
+        public RandomAccessReader build()
+        {
+            return new CompressedRandomAccessReader(this);
+        }
     }
 }

@@ -110,8 +110,7 @@ public class TransportXShardBulkAction extends TransportShardBulkAction {
                 DeleteRequest deleteRequest = translate.action();
                 
                 try {
-                    String mappedKeyspace = this.clusterService.state().metaData().index(deleteRequest.index()).keyspace();
-                    clusterService.deleteRow((mappedKeyspace == null) ? deleteRequest.index() : mappedKeyspace, deleteRequest.type(), deleteRequest.id(), deleteRequest.consistencyLevel().toCassandraConsistencyLevel());
+                    clusterService.deleteRow(deleteRequest.index(), deleteRequest.type(), deleteRequest.id(), deleteRequest.consistencyLevel().toCassandraConsistencyLevel());
                     DeleteResponse deleteResponse = new DeleteResponse(deleteRequest.index(), deleteRequest.type(), deleteRequest.id(), deleteRequest.version(), true);
                     WriteResult<DeleteResponse> result = new WriteResult<DeleteResponse>(deleteResponse, null);
                     return new UpdateResult(translate, deleteRequest, result);

@@ -17,10 +17,10 @@
  */
 package org.apache.cassandra.io.sstable.metadata;
 
-import java.io.DataInput;
 import java.io.IOException;
 
 import org.apache.cassandra.io.sstable.format.Version;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 
 /**
@@ -31,21 +31,26 @@ public interface IMetadataComponentSerializer<T extends MetadataComponent>
     /**
      * Calculate and return serialized size.
      *
+     *
+     *
+     * @param version
      * @param component MetadataComponent to calculate serialized size
      * @return serialized size of this component
      * @throws IOException
      */
-    int serializedSize(T component, Version version) throws IOException;
+    int serializedSize(Version version, T component) throws IOException;
 
     /**
      * Serialize metadata component to given output.
      *
      *
+     *
+     * @param version
      * @param component MetadataComponent to serialize
      * @param out  serialize destination
      * @throws IOException
      */
-    void serialize(T component, Version version, DataOutputPlus out) throws IOException;
+    void serialize(Version version, T component, DataOutputPlus out) throws IOException;
 
     /**
      * Deserialize metadata component from given input.
@@ -55,5 +60,5 @@ public interface IMetadataComponentSerializer<T extends MetadataComponent>
      * @return Deserialized component
      * @throws IOException
      */
-    T deserialize(Version version, DataInput in) throws IOException;
+    T deserialize(Version version, DataInputPlus in) throws IOException;
 }

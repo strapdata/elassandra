@@ -14,6 +14,15 @@
     </dependencySets>
     <fileSets>
         <fileSet>
+            <directory>../../core/cassandra/lib</directory>
+            <outputDirectory>lib</outputDirectory>
+            <fileMode>0644</fileMode>
+            <includes>
+                <include>cassandra-driver-core-3.0.1-shaded.jar</include>
+            </includes>
+        </fileSet>
+        
+        <fileSet>
             <directory>${project.build.directory}/modules</directory>
             <outputDirectory>modules</outputDirectory>
         </fileSet>
@@ -70,7 +79,6 @@
             <directory>../src/main/resources/bin</directory>
             <outputDirectory>bin</outputDirectory>
             <fileMode>0755</fileMode>
-            <directoryMode>0755</directoryMode>
             <lineEnding>unix</lineEnding>
             <includes>
                 <include>plugin</include>
@@ -84,7 +92,6 @@
             <directory>../../core/cassandra/bin</directory>
             <outputDirectory>/bin</outputDirectory>
             <fileMode>0755</fileMode>
-            <directoryMode>0755</directoryMode>
             <lineEnding>dos</lineEnding>
             <includes>
                 <include>cassandra.in.bat</include>
@@ -104,7 +111,6 @@
             <directory>../../core/cassandra/bin</directory>
             <outputDirectory>/bin</outputDirectory>
             <fileMode>0755</fileMode>
-            <directoryMode>0755</directoryMode>
             <lineEnding>unix</lineEnding>
             <includes>
                 <include>nodetool</include>
@@ -124,7 +130,6 @@
             <directory>../../core/cassandra/pylib</directory>
             <outputDirectory>pylib</outputDirectory>
             <fileMode>0755</fileMode>
-            <directoryMode>0755</directoryMode>
             <includes>
                 <include>**/*</include>
             </includes>
@@ -134,7 +139,6 @@
             <directory>../../core/cassandra/tools</directory>
             <outputDirectory>tools</outputDirectory>
             <fileMode>0755</fileMode>
-            <directoryMode>0755</directoryMode>
             <includes>
                 <include>**/*</include>
             </includes>
@@ -144,7 +148,6 @@
             <directory>../../core/cassandra/lib</directory>
             <outputDirectory>/lib</outputDirectory>
             <fileMode>0755</fileMode>
-            <directoryMode>0755</directoryMode>
             <includes>
                 <include>jsr223/*/**</include>
                 <include>licenses/*</include>

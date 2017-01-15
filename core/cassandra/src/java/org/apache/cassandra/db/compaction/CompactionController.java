@@ -19,15 +19,18 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.*;
 
+import org.apache.cassandra.db.Memtable;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
+import com.google.common.collect.Iterables;
+
+import org.apache.cassandra.db.partitions.Partition;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.Memtable;
-import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
 
 import org.apache.cassandra.utils.OverlapIterator;
@@ -44,11 +47,12 @@ public class CompactionController implements AutoCloseable
     static final boolean NEVER_PURGE_TOMBSTONES = Boolean.getBoolean("cassandra.never_purge_tombstones");
 
     public final ColumnFamilyStore cfs;
+    private final boolean compactingRepaired;
     // note that overlapIterator and overlappingSSTables will be null if NEVER_PURGE_TOMBSTONES is set - this is a
     // good thing so that noone starts using them and thinks that if overlappingSSTables is empty, there
     // is no overlap.
     private Refs<SSTableReader> overlappingSSTables;
-    private OverlapIterator<RowPosition, SSTableReader> overlapIterator;
+    private OverlapIterator<PartitionPosition, SSTableReader> overlapIterator;
     private final Iterable<SSTableReader> compacting;
 
     public final int gcBefore;
@@ -64,12 +68,13 @@ public class CompactionController implements AutoCloseable
         this.cfs = cfs;
         this.gcBefore = gcBefore;
         this.compacting = compacting;
+        compactingRepaired = compacting != null && compacting.stream().allMatch(SSTableReader::isRepaired);
         refreshOverlaps();
         if (NEVER_PURGE_TOMBSTONES)
             logger.warn("You are running with -Dcassandra.never_purge_tombstones=true, this is dangerous!");
     }
 
-    void maybeRefreshOverlaps()
+    public void maybeRefreshOverlaps()
     {
         if (NEVER_PURGE_TOMBSTONES)
         {
@@ -98,7 +103,7 @@ public class CompactionController implements AutoCloseable
         if (compacting == null)
             overlappingSSTables = Refs.tryRef(Collections.<SSTableReader>emptyList());
         else
-            overlappingSSTables = cfs.getAndReferenceOverlappingSSTables(compacting);
+            overlappingSSTables = cfs.getAndReferenceOverlappingLiveSSTables(compacting);
         this.overlapIterator = new OverlapIterator<>(buildIntervals(overlappingSSTables));
     }
 
@@ -129,6 +134,9 @@ public class CompactionController implements AutoCloseable
 
         if (compacting == null || NEVER_PURGE_TOMBSTONES)
             return Collections.<SSTableReader>emptySet();
+
+        if (cfStore.getCompactionStrategyManager().onlyPurgeRepairedTombstones() && !Iterables.all(compacting, SSTableReader::isRepaired))
+            return Collections.emptySet();
 
         List<SSTableReader> candidates = new ArrayList<>();
 
@@ -194,7 +202,7 @@ public class CompactionController implements AutoCloseable
      */
     public long maxPurgeableTimestamp(DecoratedKey key)
     {
-        if (NEVER_PURGE_TOMBSTONES)
+        if (!compactingRepaired() || NEVER_PURGE_TOMBSTONES)
             return Long.MIN_VALUE;
 
         long min = Long.MAX_VALUE;
@@ -211,9 +219,9 @@ public class CompactionController implements AutoCloseable
 
         for (Memtable memtable : cfs.getTracker().getView().getAllMemtables())
         {
-            ColumnFamily cf = memtable.getColumnFamily(key);
-            if (cf != null)
-                min = Math.min(min, memtable.getMinTimestamp());
+            Partition partition = memtable.getPartition(key);
+            if (partition != null)
+                min = Math.min(min, partition.stats().minTimestamp);
         }
         return min;
     }
@@ -222,6 +230,11 @@ public class CompactionController implements AutoCloseable
     {
         if (overlappingSSTables != null)
             overlappingSSTables.release();
+    }
+
+    public boolean compactingRepaired()
+    {
+        return !cfs.getCompactionStrategyManager().onlyPurgeRepairedTombstones() || compactingRepaired;
     }
 
 }

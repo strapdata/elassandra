@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.db.marshal;
 
+import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -25,13 +27,23 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.Term;
+import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 
+import org.apache.cassandra.utils.FastByteOperations;
 import org.github.jamm.Unmetered;
+import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.utils.ByteBufferUtil;
+
+import static org.apache.cassandra.db.marshal.AbstractType.ComparisonType.CUSTOM;
 
 /**
  * Specifies a Comparator for a specific type of ByteBuffer.
@@ -44,26 +56,48 @@ import org.github.jamm.Unmetered;
 @Unmetered
 public abstract class AbstractType<T> implements Comparator<ByteBuffer>
 {
+    private static final Logger logger = LoggerFactory.getLogger(AbstractType.class);
+
     public final Comparator<ByteBuffer> reverseComparator;
 
-    protected AbstractType()
+    public enum ComparisonType
     {
-        reverseComparator = new Comparator<ByteBuffer>()
-        {
-            public int compare(ByteBuffer o1, ByteBuffer o2)
-            {
-                if (o1.remaining() == 0)
-                {
-                    return o2.remaining() == 0 ? 0 : -1;
-                }
-                if (o2.remaining() == 0)
-                {
-                    return 1;
-                }
+        /**
+         * This type should never be compared
+         */
+        NOT_COMPARABLE,
+        /**
+         * This type is always compared by its sequence of unsigned bytes
+         */
+        BYTE_ORDER,
+        /**
+         * This type can only be compared by calling the type's compareCustom() method, which may be expensive.
+         * Support for this may be removed in a major release of Cassandra, however upgrade facilities will be
+         * provided if and when this happens.
+         */
+        CUSTOM
+    }
 
-                return AbstractType.this.compare(o2, o1);
-            }
-        };
+    public final ComparisonType comparisonType;
+    public final boolean isByteOrderComparable;
+
+    protected AbstractType(ComparisonType comparisonType)
+    {
+        this.comparisonType = comparisonType;
+        this.isByteOrderComparable = comparisonType == ComparisonType.BYTE_ORDER;
+        reverseComparator = (o1, o2) -> AbstractType.this.compare(o2, o1);
+        try
+        {
+            Method custom = getClass().getMethod("compareCustom", ByteBuffer.class, ByteBuffer.class);
+            if ((custom.getDeclaringClass() == AbstractType.class) == (comparisonType == CUSTOM))
+                throw new IllegalStateException((comparisonType == CUSTOM ? "compareCustom must be overridden if ComparisonType is CUSTOM"
+                                                                         : "compareCustom should not be overridden if ComparisonType is not CUSTOM")
+                                                + " (" + getClass().getSimpleName() + ")");
+        }
+        catch (NoSuchMethodException e)
+        {
+            throw new IllegalStateException();
+        }
     }
 
     public static List<String> asCQLTypeStringList(List<AbstractType<?>> abstractTypes)
@@ -84,9 +118,12 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
         return getSerializer().serialize(value);
     }
 
-    /** get a string representation of the bytes suitable for log messages */
+    /** get a string representation of the bytes used for various identifier (NOT just for log messages) */
     public String getString(ByteBuffer bytes)
     {
+        if (bytes == null)
+            return "null";
+
         TypeSerializer<T> serializer = getSerializer();
         serializer.validate(bytes);
 
@@ -113,6 +150,27 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
         getSerializer().validate(bytes);
     }
 
+    public final int compare(ByteBuffer left, ByteBuffer right)
+    {
+        return isByteOrderComparable
+               ? FastByteOperations.compareUnsigned(left, right)
+               : compareCustom(left, right);
+    }
+
+    /**
+     * Implement IFF ComparisonType is CUSTOM
+     *
+     * Compares the ByteBuffer representation of two instances of this class,
+     * for types where this cannot be done by simple in-order comparison of the
+     * unsigned bytes
+     *
+     * Standard Java compare semantics
+     */
+    public int compareCustom(ByteBuffer left, ByteBuffer right)
+    {
+        throw new UnsupportedOperationException();
+    }
+
     /**
      * Validate cell value. Unlike {@linkplain #validate(java.nio.ByteBuffer)},
      * cell value is passed to validate its content.
@@ -130,6 +188,17 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
     public CQL3Type asCQL3Type()
     {
         return new CQL3Type.Custom(this);
+    }
+
+    /**
+     * Same as compare except that this ignore ReversedType. This is to be use when
+     * comparing 2 values to decide for a CQL condition (see Operator.isSatisfiedBy) as
+     * for CQL, ReversedType is simply an "hint" to the storage engine but it does not
+     * change the meaning of queries per-se.
+     */
+    public int compareForCQL(ByteBuffer v1, ByteBuffer v2)
+    {
+        return compare(v1, v2);
     }
 
     public abstract TypeSerializer<T> getSerializer();
@@ -215,15 +284,6 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
     }
 
     /**
-     * @return true IFF the byte representation of this type can be compared unsigned
-     * and always return the same result as calling this object's compare or compareCollectionMembers methods
-     */
-    public boolean isByteOrderComparable()
-    {
-        return false;
-    }
-
-    /**
      * An alternative comparison function used by CollectionsType in conjunction with CompositeType.
      *
      * This comparator is only called to compare components of a CompositeType. It gets the value of the
@@ -296,11 +356,69 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
     }
 
     /**
-     * Checks whether this type or any of the types this type contains references the given type.
+     * The length of values for this type if all values are of fixed length, -1 otherwise.
      */
-    public boolean references(AbstractType<?> check)
+    protected int valueLengthIfFixed()
     {
-        return this.equals(check);
+        return -1;
+    }
+
+    // This assumes that no empty values are passed
+    public void writeValue(ByteBuffer value, DataOutputPlus out) throws IOException
+    {
+        assert value.hasRemaining();
+        if (valueLengthIfFixed() >= 0)
+            out.write(value);
+        else
+            ByteBufferUtil.writeWithVIntLength(value, out);
+    }
+
+    public long writtenLength(ByteBuffer value)
+    {
+        assert value.hasRemaining();
+        return valueLengthIfFixed() >= 0
+             ? value.remaining()
+             : TypeSizes.sizeofWithVIntLength(value);
+    }
+
+    public ByteBuffer readValue(DataInputPlus in) throws IOException
+    {
+        return readValue(in, Integer.MAX_VALUE);
+    }
+
+    public ByteBuffer readValue(DataInputPlus in, int maxValueSize) throws IOException
+    {
+        int length = valueLengthIfFixed();
+
+        if (length >= 0)
+            return ByteBufferUtil.read(in, length);
+        else
+        {
+            int l = (int)in.readUnsignedVInt();
+            if (l < 0)
+                throw new IOException("Corrupt (negative) value length encountered");
+
+            if (l > maxValueSize)
+                throw new IOException(String.format("Corrupt value length %d encountered, as it exceeds the maximum of %d, " +
+                                                    "which is set via max_value_size_in_mb in cassandra.yaml",
+                                                    l, maxValueSize));
+
+            return ByteBufferUtil.read(in, l);
+        }
+    }
+
+    public void skipValue(DataInputPlus in) throws IOException
+    {
+        int length = valueLengthIfFixed();
+        if (length >= 0)
+            in.skipBytesFully(length);
+        else
+            ByteBufferUtil.skipWithVIntLength(in);
+    }
+
+    public boolean referencesUserType(String userTypeName)
+    {
+        return false;
     }
 
     /**
@@ -314,5 +432,14 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
     public String toString()
     {
         return getClass().getName();
+    }
+
+    public void checkComparable()
+    {
+        switch (comparisonType)
+        {
+            case NOT_COMPARABLE:
+                throw new IllegalArgumentException(this + " cannot be used in comparisons, so cannot be used as a clustering column");
+        }
     }
 }

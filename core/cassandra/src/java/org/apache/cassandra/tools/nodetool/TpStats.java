@@ -34,8 +34,8 @@ public class TpStats extends NodeToolCmd
     {
         System.out.printf("%-25s%10s%10s%15s%10s%18s%n", "Pool Name", "Active", "Pending", "Completed", "Blocked", "All time blocked");
 
-        Multimap<String, String> threadPools = probe.getThreadPools();
 
+        Multimap<String, String> threadPools = probe.getThreadPools();
         for (Map.Entry<String, String> tpool : threadPools.entries())
         {
             System.out.printf("%-25s%10s%10s%15s%10s%18s%n",

@@ -20,8 +20,7 @@ package org.apache.cassandra.cql3.functions;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-
-import com.google.common.collect.Iterables;
+import java.util.stream.Collectors;
 
 import org.apache.cassandra.cql3.*;
 import org.apache.cassandra.cql3.statements.RequestValidations;
@@ -41,9 +40,10 @@ public class FunctionCall extends Term.NonTerminal
         this.terms = terms;
     }
 
-    public Iterable<Function> getFunctions()
+    public void addFunctionsTo(List<Function> functions)
     {
-        return Iterables.concat(Terms.getFunctions(terms), fun.getFunctions());
+        Terms.addFunctions(terms, functions);
+        fun.addFunctionsTo(functions);
     }
 
     public void collectMarkerSpecification(VariableSpecifications boundNames)
@@ -110,7 +110,7 @@ public class FunctionCall extends Term.NonTerminal
         throw new AssertionError();
     }
 
-    public static class Raw implements Term.Raw
+    public static class Raw extends Term.Raw
     {
         private FunctionName name;
         private final List<Term.Raw> terms;
@@ -123,7 +123,7 @@ public class FunctionCall extends Term.NonTerminal
 
         public Term prepare(String keyspace, ColumnSpecification receiver) throws InvalidRequestException
         {
-            Function fun = Functions.get(keyspace, name, terms, receiver.ksName, receiver.cfName, receiver.type);
+            Function fun = FunctionResolver.get(keyspace, name, terms, receiver.ksName, receiver.cfName, receiver.type);
             if (fun == null)
                 throw new InvalidRequestException(String.format("Unknown function %s called", name));
             if (fun.isAggregate())
@@ -145,7 +145,7 @@ public class FunctionCall extends Term.NonTerminal
             List<Term> parameters = new ArrayList<>(terms.size());
             for (int i = 0; i < terms.size(); i++)
             {
-                Term t = terms.get(i).prepare(keyspace, Functions.makeArgSpec(receiver.ksName, receiver.cfName, scalarFun, i));
+                Term t = terms.get(i).prepare(keyspace, FunctionResolver.makeArgSpec(receiver.ksName, receiver.cfName, scalarFun, i));
                 parameters.add(t);
             }
 
@@ -160,7 +160,7 @@ public class FunctionCall extends Term.NonTerminal
             // later with a more helpful error message that if we were to return false here.
             try
             {
-                Function fun = Functions.get(keyspace, name, terms, receiver.ksName, receiver.cfName, receiver.type);
+                Function fun = FunctionResolver.get(keyspace, name, terms, receiver.ksName, receiver.cfName, receiver.type);
 
                 // Because fromJson() can return whatever type the receiver is, we'll always get EXACT_MATCH.  To
                 // handle potentially ambiguous function calls with fromJson() as an argument, always return
@@ -181,18 +181,9 @@ public class FunctionCall extends Term.NonTerminal
             }
         }
 
-        @Override
-        public String toString()
+        public String getText()
         {
-            StringBuilder sb = new StringBuilder();
-            sb.append(name).append("(");
-            for (int i = 0; i < terms.size(); i++)
-            {
-                if (i > 0)
-                    sb.append(", ");
-                sb.append(terms.get(i));
-            }
-            return sb.append(")").toString();
+            return name + terms.stream().map(Term.Raw::getText).collect(Collectors.joining(", ", "(", ")"));
         }
     }
 }

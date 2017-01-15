@@ -62,7 +62,7 @@ public class CompactionMetrics implements CompactionManager.CompactionExecutorSt
                 for (String keyspaceName : Schema.instance.getKeyspaces())
                 {
                     for (ColumnFamilyStore cfs : Keyspace.open(keyspaceName).getColumnFamilyStores())
-                        n += cfs.getCompactionStrategy().getEstimatedRemainingTasks();
+                        n += cfs.getCompactionStrategyManager().getEstimatedRemainingTasks();
                 }
                 // add number of currently running compactions
                 return n + compactions.size();

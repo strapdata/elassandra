@@ -50,7 +50,6 @@ class JNANatives {
     // otherwise they are only inherited for new threads (ES app threads)
     static boolean LOCAL_SECCOMP_ALL = false;
 
-    /*
     static void tryMlockall() {
         int errno = Integer.MIN_VALUE;
         String errMsg = null;
@@ -116,7 +115,6 @@ class JNANatives {
     }
 
     /** Returns true if user is root, false if not, or if we don't know */
-    /*
     static boolean definitelyRunningAsRoot() {
         if (Constants.WINDOWS) {
             return false; // don't know
@@ -128,8 +126,6 @@ class JNANatives {
             return false;
         }
     }
-
-    */
  
     static void tryVirtualLock() {
         JNAKernel32Library kernel = JNAKernel32Library.getInstance();

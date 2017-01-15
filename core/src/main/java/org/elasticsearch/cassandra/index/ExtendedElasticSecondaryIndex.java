@@ -18,13 +18,17 @@
  */
 package org.elasticsearch.cassandra.index;
 
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.schema.IndexMetadata;
+
 /**
  * For backward compatibility with existing Cassandra schema.
  */
+@Deprecated
 public class ExtendedElasticSecondaryIndex extends org.elassandra.index.ExtendedElasticSecondaryIndex {
 
-    public ExtendedElasticSecondaryIndex() {
-        super();
+    public ExtendedElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
+        super(baseCfs, indexDef);
     }
     
 }

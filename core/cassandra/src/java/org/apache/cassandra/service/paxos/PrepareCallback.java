@@ -30,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.DecoratedKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,7 +50,7 @@ public class PrepareCallback extends AbstractPaxosCallback<PrepareResponse>
 
     private final Map<InetAddress, Commit> commitsByReplica = new ConcurrentHashMap<InetAddress, Commit>();
 
-    public PrepareCallback(ByteBuffer key, CFMetaData metadata, int targets, ConsistencyLevel consistency)
+    public PrepareCallback(DecoratedKey key, CFMetaData metadata, int targets, ConsistencyLevel consistency)
     {
         super(targets, consistency);
         // need to inject the right key in the empty commit so comparing with empty commits in the reply works as expected
@@ -89,7 +90,7 @@ public class PrepareCallback extends AbstractPaxosCallback<PrepareResponse>
         latch.countDown();
     }
 
-    public Iterable<InetAddress> replicasMissingMostRecentCommit(CFMetaData metadata, long now)
+    public Iterable<InetAddress> replicasMissingMostRecentCommit(CFMetaData metadata, int nowInSec)
     {
         // In general, we need every replicas that have answered to the prepare (a quorum) to agree on the MRC (see
         // coment in StorageProxy.beginAndRepairPaxos(), but basically we need to make sure at least a quorum of nodes
@@ -100,8 +101,8 @@ public class PrepareCallback extends AbstractPaxosCallback<PrepareResponse>
         // explained on CASSANDRA-12043. To avoid that, we ignore a MRC that is too old, i.e. older than the TTL we set
         // on paxos tables. For such old commit, we rely on hints and repair to ensure the commit has indeed be
         // propagated to all nodes.
-        long paxosTtlMicros = SystemKeyspace.paxosTtl(metadata) * 1000 * 1000;
-        if (UUIDGen.microsTimestamp(mostRecentCommit.ballot) + paxosTtlMicros < now)
+        long paxosTtlSec = SystemKeyspace.paxosTtlSec(metadata);
+        if (UUIDGen.unixTimestampInSec(mostRecentCommit.ballot) + paxosTtlSec < nowInSec)
             return Collections.emptySet();
 
         return Iterables.filter(commitsByReplica.keySet(), new Predicate<InetAddress>()

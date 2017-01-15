@@ -16,7 +16,6 @@
 
 
 class CQL3HelpTopics(object):
-
     def get_help_topics(self):
         return [t[5:] for t in dir(self) if t.startswith('help_')]
 
@@ -145,6 +144,15 @@ class CQL3HelpTopics(object):
     def help_drop_trigger(self):
         return 'dropTriggerStmt'
 
+    def help_create_materialized_view(self):
+        return 'createMVStmt'
+
+    def help_alter_materialized_view(self):
+        return 'alterMVStmt'
+
+    def help_drop_materialized_view(self):
+        return 'dropMVStmt'
+
     def help_keywords(self):
         return 'appendixA'
 
@@ -159,6 +167,15 @@ class CQL3HelpTopics(object):
 
     def help_list_users(self):
         return 'listUsersStmt'
+
+    def help_create_role(self):
+        return 'createRoleStmt'
+
+    def help_drop_role(self):
+        return 'dropRoleStmt'
+
+    def help_list_roles(self):
+        return 'listRolesStmt'
 
     def help_permissions(self):
         return 'permissions'

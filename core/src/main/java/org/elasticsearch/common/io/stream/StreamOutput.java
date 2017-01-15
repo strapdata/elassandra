@@ -30,9 +30,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.service.StorageService;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
@@ -419,7 +419,7 @@ public abstract class StreamOutput extends OutputStream {
             writeGeoPoint((GeoPoint) value);
         } else if (value instanceof Token) {
             writeByte((byte) 64);
-            IPartitioner p = StorageService.instance.getPartitioner();
+            IPartitioner p = DatabaseDescriptor.getPartitioner();
             ByteBuffer b = p.getTokenFactory().toByteArray((Token) value);
             writeVInt(b.array().length);
             writeBytes(b.array());

@@ -18,27 +18,32 @@
  */
 package org.apache.cassandra.utils.btree;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.NavigableSet;
-import java.util.SortedSet;
+import java.util.*;
 
-public class BTreeSet<V> implements NavigableSet<V>
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Ordering;
+
+import org.apache.cassandra.utils.btree.BTree.Dir;
+
+import static org.apache.cassandra.utils.btree.BTree.findIndex;
+import static org.apache.cassandra.utils.btree.BTree.lower;
+import static org.apache.cassandra.utils.btree.BTree.toArray;
+
+public class BTreeSet<V> implements NavigableSet<V>, List<V>
 {
-    protected final Comparator<V> comparator;
+    protected final Comparator<? super V> comparator;
     protected final Object[] tree;
 
-    public BTreeSet(Object[] tree, Comparator<V> comparator)
+    public BTreeSet(Object[] tree, Comparator<? super V> comparator)
     {
         this.tree = tree;
         this.comparator = comparator;
     }
 
-    public BTreeSet<V> update(Collection<V> updateWith, boolean isSorted)
+    public BTreeSet<V> update(Collection<V> updateWith)
     {
-        return new BTreeSet<>(BTree.update(tree, comparator, updateWith, isSorted, UpdateFunction.NoOp.<V>instance()), comparator);
+        return new BTreeSet<>(BTree.update(tree, comparator, updateWith, UpdateFunction.<V>noOp()), comparator);
     }
 
     @Override
@@ -47,33 +52,64 @@ public class BTreeSet<V> implements NavigableSet<V>
         return comparator;
     }
 
-    protected Cursor<V, V> slice(boolean forwards, boolean permitInversion)
+    protected BTreeSearchIterator<V, V> slice(Dir dir)
     {
-        return BTree.slice(tree, forwards);
+        return BTree.slice(tree, comparator, dir);
+    }
+
+    public Object[] tree()
+    {
+        return tree;
+    }
+
+    /**
+     * The index of the item within the list, or its insertion point otherwise. i.e. binarySearch semantics
+     */
+    public int indexOf(Object item)
+    {
+        return findIndex(tree, comparator, (V) item);
+    }
+
+    /**
+     * The converse of indexOf: provided an index between 0 and size, returns the i'th item, in set order.
+     */
+    public V get(int index)
+    {
+        return BTree.<V>findByIndex(tree, index);
+    }
+
+    public int lastIndexOf(Object o)
+    {
+        return indexOf(o);
+    }
+
+    public BTreeSet<V> subList(int fromIndex, int toIndex)
+    {
+        return new BTreeRange<V>(tree, comparator, fromIndex, toIndex - 1);
     }
 
     @Override
     public int size()
     {
-        return slice(true, false).count();
+        return BTree.size(tree);
     }
 
     @Override
     public boolean isEmpty()
     {
-        return slice(true, false).hasNext();
+        return BTree.isEmpty(tree);
     }
 
     @Override
-    public Iterator<V> iterator()
+    public BTreeSearchIterator<V, V> iterator()
     {
-        return slice(true, true);
+        return slice(Dir.ASC);
     }
 
     @Override
-    public Iterator<V> descendingIterator()
+    public BTreeSearchIterator<V, V> descendingIterator()
     {
-        return slice(false, true);
+        return slice(Dir.DESC);
     }
 
     @Override
@@ -85,29 +121,37 @@ public class BTreeSet<V> implements NavigableSet<V>
     @Override
     public <T> T[] toArray(T[] a)
     {
+        return toArray(a, 0);
+    }
+
+    public <T> T[] toArray(T[] a, int offset)
+    {
         int size = size();
-        if (a.length < size)
+        if (a.length < size + offset)
             a = Arrays.copyOf(a, size);
-        int i = 0;
-        for (V v : this)
-            a[i++] = (T) v;
+        BTree.toArray(tree, a, offset);
         return a;
     }
 
+    public Spliterator<V> spliterator()
+    {
+        return Spliterators.spliterator(this, Spliterator.ORDERED | Spliterator.DISTINCT | Spliterator.IMMUTABLE | Spliterator.NONNULL | Spliterator.SIZED);
+    }
+
     @Override
-    public NavigableSet<V> subSet(V fromElement, boolean fromInclusive, V toElement, boolean toInclusive)
+    public BTreeSet<V> subSet(V fromElement, boolean fromInclusive, V toElement, boolean toInclusive)
     {
         return new BTreeRange<>(tree, comparator, fromElement, fromInclusive, toElement, toInclusive);
     }
 
     @Override
-    public NavigableSet<V> headSet(V toElement, boolean inclusive)
+    public BTreeSet<V> headSet(V toElement, boolean inclusive)
     {
         return new BTreeRange<>(tree, comparator, null, true, toElement, inclusive);
     }
 
     @Override
-    public NavigableSet<V> tailSet(V fromElement, boolean inclusive)
+    public BTreeSet<V> tailSet(V fromElement, boolean inclusive)
     {
         return new BTreeRange<>(tree, comparator, fromElement, inclusive, null, true);
     }
@@ -131,19 +175,80 @@ public class BTreeSet<V> implements NavigableSet<V>
     }
 
     @Override
+    public BTreeSet<V> descendingSet()
+    {
+        return new BTreeRange<V>(this.tree, this.comparator).descendingSet();
+    }
+
+    @Override
     public V first()
     {
-        throw new UnsupportedOperationException();
+        return get(0);
     }
 
     @Override
     public V last()
     {
-        throw new UnsupportedOperationException();
+        return get(size() - 1);
+    }
+
+    @Override
+    public V lower(V v)
+    {
+        return BTree.lower(tree, comparator, v);
+    }
+
+    @Override
+    public V floor(V v)
+    {
+        return BTree.floor(tree, comparator, v);
+    }
+
+    @Override
+    public V ceiling(V v)
+    {
+        return BTree.ceil(tree, comparator, v);
+    }
+
+    @Override
+    public V higher(V v)
+    {
+        return BTree.higher(tree, comparator, v);
+    }
+
+    @Override
+    public boolean contains(Object o)
+    {
+        return indexOf((V) o) >= 0;
+    }
+
+    @Override
+    public boolean containsAll(Collection<?> c)
+    {
+        // TODO: if we ever use this method, it can be specialized quite easily for SortedSet arguments
+        for (Object o : c)
+            if (!contains(o))
+                return false;
+        return true;
+    }
+
+    public int hashCode()
+    {
+        // we can't just delegate to Arrays.deepHashCode(),
+        // because two equivalent sets may be represented by differently shaped trees
+        int result = 1;
+        for (V v : this)
+            result = 31 * result + Objects.hashCode(v);
+        return result;
     }
 
     @Override
     public boolean addAll(Collection<? extends V> c)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    public boolean addAll(int index, Collection<? extends V> c)
     {
         throw new UnsupportedOperationException();
     }
@@ -190,156 +295,187 @@ public class BTreeSet<V> implements NavigableSet<V>
         throw new UnsupportedOperationException();
     }
 
-    @Override
-    public V lower(V v)
+    public V set(int index, V element)
     {
         throw new UnsupportedOperationException();
     }
 
-    @Override
-    public V floor(V v)
+    public void add(int index, V element)
     {
         throw new UnsupportedOperationException();
     }
 
-    @Override
-    public V ceiling(V v)
+    public V remove(int index)
     {
         throw new UnsupportedOperationException();
     }
 
-    @Override
-    public V higher(V v)
+    public ListIterator<V> listIterator()
     {
         throw new UnsupportedOperationException();
     }
 
-    @Override
-    public boolean contains(Object o)
+    public ListIterator<V> listIterator(int index)
     {
         throw new UnsupportedOperationException();
     }
 
-    @Override
-    public boolean containsAll(Collection<?> c)
+    public static class BTreeRange<V> extends BTreeSet<V>
     {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public NavigableSet<V> descendingSet()
-    {
-        return new BTreeRange<>(this.tree, this.comparator).descendingSet();
-    }
-
-    public static class BTreeRange<V> extends BTreeSet<V> implements NavigableSet<V>
-    {
-
-        protected final V lowerBound, upperBound;
-        protected final boolean inclusiveLowerBound, inclusiveUpperBound;
-
-        BTreeRange(Object[] tree, Comparator<V> comparator)
+        // both inclusive
+        protected final int lowerBound, upperBound;
+        BTreeRange(Object[] tree, Comparator<? super V> comparator)
         {
             this(tree, comparator, null, true, null, true);
         }
 
         BTreeRange(BTreeRange<V> from)
         {
-            this(from.tree, from.comparator, from.lowerBound, from.inclusiveLowerBound, from.upperBound, from.inclusiveUpperBound);
+            super(from.tree, from.comparator);
+            this.lowerBound = from.lowerBound;
+            this.upperBound = from.upperBound;
         }
 
-        BTreeRange(Object[] tree, Comparator<V> comparator, V lowerBound, boolean inclusiveLowerBound, V upperBound, boolean inclusiveUpperBound)
+        BTreeRange(Object[] tree, Comparator<? super V> comparator, int lowerBound, int upperBound)
         {
             super(tree, comparator);
+            if (upperBound < lowerBound - 1)
+                upperBound = lowerBound - 1;
             this.lowerBound = lowerBound;
             this.upperBound = upperBound;
-            this.inclusiveLowerBound = inclusiveLowerBound;
-            this.inclusiveUpperBound = inclusiveUpperBound;
+        }
+
+        BTreeRange(Object[] tree, Comparator<? super V> comparator, V lowerBound, boolean inclusiveLowerBound, V upperBound, boolean inclusiveUpperBound)
+        {
+            this(tree, comparator,
+                 lowerBound == null ? 0 : inclusiveLowerBound ? BTree.ceilIndex(tree, comparator, lowerBound)
+                                                              : BTree.higherIndex(tree, comparator, lowerBound),
+                 upperBound == null ? BTree.size(tree) - 1 : inclusiveUpperBound ? BTree.floorIndex(tree, comparator, upperBound)
+                                                                                 : BTree.lowerIndex(tree, comparator, upperBound));
         }
 
         // narrowing range constructor - makes this the intersection of the two ranges over the same tree b
         BTreeRange(BTreeRange<V> a, BTreeRange<V> b)
         {
-            super(a.tree, a.comparator);
+            this(a.tree, a.comparator, Math.max(a.lowerBound, b.lowerBound), Math.min(a.upperBound, b.upperBound));
             assert a.tree == b.tree;
-            final BTreeRange<V> lb, ub;
-
-            if (a.lowerBound == null)
-            {
-                lb = b;
-            }
-            else if (b.lowerBound == null)
-            {
-                lb = a;
-            }
-            else
-            {
-                int c = comparator.compare(a.lowerBound, b.lowerBound);
-                if (c < 0)
-                    lb = b;
-                else if (c > 0)
-                    lb = a;
-                else if (!a.inclusiveLowerBound)
-                    lb = a;
-                else
-                    lb = b;
-            }
-
-            if (a.upperBound == null)
-            {
-                ub = b;
-            }
-            else if (b.upperBound == null)
-            {
-                ub = a;
-            }
-            else
-            {
-                int c = comparator.compare(b.upperBound, a.upperBound);
-                if (c < 0)
-                    ub = b;
-                else if (c > 0)
-                    ub = a;
-                else if (!a.inclusiveUpperBound)
-                    ub = a;
-                else
-                    ub = b;
-            }
-
-            lowerBound = lb.lowerBound;
-            inclusiveLowerBound = lb.inclusiveLowerBound;
-            upperBound = ub.upperBound;
-            inclusiveUpperBound = ub.inclusiveUpperBound;
         }
 
         @Override
-        protected Cursor<V, V> slice(boolean forwards, boolean permitInversion)
+        protected BTreeSearchIterator<V, V> slice(Dir dir)
         {
-            return BTree.slice(tree, comparator, lowerBound, inclusiveLowerBound, upperBound, inclusiveUpperBound, forwards);
+            return new BTreeSearchIterator<>(tree, comparator, dir, lowerBound, upperBound);
         }
 
         @Override
-        public NavigableSet<V> subSet(V fromElement, boolean fromInclusive, V toElement, boolean toInclusive)
+        public boolean isEmpty()
+        {
+            return upperBound < lowerBound;
+        }
+
+        public int size()
+        {
+            return (upperBound - lowerBound) + 1;
+        }
+
+        boolean outOfBounds(int i)
+        {
+            return (i < lowerBound) | (i > upperBound);
+        }
+
+        public V get(int index)
+        {
+            index += lowerBound;
+            if (outOfBounds(index))
+                throw new NoSuchElementException();
+            return super.get(index);
+        }
+
+        public int indexOf(Object item)
+        {
+            int i = super.indexOf(item);
+            boolean negate = i < 0;
+            if (negate)
+                i = -1 - i;
+            if (outOfBounds(i))
+                return i < lowerBound ? -1 : -1 - size();
+            i = i - lowerBound;
+            if (negate)
+                i = -1 -i;
+            return i;
+        }
+
+        public V lower(V v)
+        {
+            return maybe(Math.min(upperBound, BTree.lowerIndex(tree, comparator, v)));
+        }
+
+        public V floor(V v)
+        {
+            return maybe(Math.min(upperBound, BTree.floorIndex(tree, comparator, v)));
+        }
+
+        public V ceiling(V v)
+        {
+            return maybe(Math.max(lowerBound, BTree.ceilIndex(tree, comparator, v)));
+        }
+
+        public V higher(V v)
+        {
+            return maybe(Math.max(lowerBound, BTree.higherIndex(tree, comparator, v)));
+        }
+
+        private V maybe(int i)
+        {
+            if (outOfBounds(i))
+                return null;
+            return super.get(i);
+        }
+
+        @Override
+        public BTreeSet<V> subSet(V fromElement, boolean fromInclusive, V toElement, boolean toInclusive)
         {
             return new BTreeRange<>(this, new BTreeRange<>(tree, comparator, fromElement, fromInclusive, toElement, toInclusive));
         }
 
         @Override
-        public NavigableSet<V> headSet(V toElement, boolean inclusive)
+        public BTreeSet<V> headSet(V toElement, boolean inclusive)
         {
-            return new BTreeRange<>(this, new BTreeRange<>(tree, comparator, lowerBound, true, toElement, inclusive));
+            return new BTreeRange<>(this, new BTreeRange<>(tree, comparator, null, true, toElement, inclusive));
         }
 
         @Override
-        public NavigableSet<V> tailSet(V fromElement, boolean inclusive)
+        public BTreeSet<V> tailSet(V fromElement, boolean inclusive)
         {
             return new BTreeRange<>(this, new BTreeRange<>(tree, comparator, fromElement, inclusive, null, true));
         }
 
         @Override
-        public NavigableSet<V> descendingSet()
+        public BTreeSet<V> descendingSet()
         {
             return new BTreeDescRange<>(this);
+        }
+
+        public BTreeSet<V> subList(int fromIndex, int toIndex)
+        {
+            if (fromIndex < 0 || toIndex > size())
+                throw new IndexOutOfBoundsException();
+            return new BTreeRange<V>(tree, comparator, lowerBound + fromIndex, lowerBound + toIndex - 1);
+        }
+
+        @Override
+        public <T> T[] toArray(T[] a)
+        {
+            return toArray(a, 0);
+        }
+
+        public <T> T[] toArray(T[] a, int offset)
+        {
+            if (size() + offset < a.length)
+                a = Arrays.copyOf(a, size() + offset);
+
+            BTree.toArray(tree, lowerBound, upperBound + 1, a, offset);
+            return a;
         }
     }
 
@@ -347,37 +483,162 @@ public class BTreeSet<V> implements NavigableSet<V>
     {
         BTreeDescRange(BTreeRange<V> from)
         {
-            super(from.tree, from.comparator, from.lowerBound, from.inclusiveLowerBound, from.upperBound, from.inclusiveUpperBound);
+            super(from.tree, from.comparator, from.lowerBound, from.upperBound);
         }
 
         @Override
-        protected Cursor<V, V> slice(boolean forwards, boolean permitInversion)
+        protected BTreeSearchIterator<V, V> slice(Dir dir)
         {
-            return super.slice(permitInversion ? !forwards : forwards, false);
+            return super.slice(dir.invert());
+        }
+
+        /* Flip the methods we call for inequality searches */
+
+        public V higher(V v)
+        {
+            return super.lower(v);
+        }
+
+        public V ceiling(V v)
+        {
+            return super.floor(v);
+        }
+
+        public V floor(V v)
+        {
+            return super.ceiling(v);
+        }
+
+        public V lower(V v)
+        {
+            return super.higher(v);
+        }
+
+        public V get(int index)
+        {
+            index = upperBound - index;
+            if (outOfBounds(index))
+                throw new NoSuchElementException();
+            return BTree.findByIndex(tree, index);
+        }
+
+        public int indexOf(Object item)
+        {
+            int i = super.indexOf(item);
+            // i is in range [-1 - size()..size())
+            // so we just need to invert by adding/subtracting from size
+            return i < 0 ? -2 - size() - i  : size() - (i + 1);
+        }
+
+        public BTreeSet<V> subList(int fromIndex, int toIndex)
+        {
+            if (fromIndex < 0 || toIndex > size())
+                throw new IndexOutOfBoundsException();
+            return new BTreeDescRange<V>(new BTreeRange<V>(tree, comparator, upperBound - (toIndex - 1), upperBound - fromIndex));
         }
 
         @Override
-        public NavigableSet<V> subSet(V fromElement, boolean fromInclusive, V toElement, boolean toInclusive)
+        public BTreeSet<V> subSet(V fromElement, boolean fromInclusive, V toElement, boolean toInclusive)
         {
             return super.subSet(toElement, toInclusive, fromElement, fromInclusive).descendingSet();
         }
 
         @Override
-        public NavigableSet<V> headSet(V toElement, boolean inclusive)
+        public BTreeSet<V> headSet(V toElement, boolean inclusive)
         {
             return super.tailSet(toElement, inclusive).descendingSet();
         }
 
         @Override
-        public NavigableSet<V> tailSet(V fromElement, boolean inclusive)
+        public BTreeSet<V> tailSet(V fromElement, boolean inclusive)
         {
             return super.headSet(fromElement, inclusive).descendingSet();
         }
 
         @Override
-        public NavigableSet<V> descendingSet()
+        public BTreeSet<V> descendingSet()
         {
             return new BTreeRange<>(this);
         }
+
+        public Comparator<V> comparator()
+        {
+            return (a, b) -> comparator.compare(b, a);
+        }
+
+        public <T> T[] toArray(T[] a, int offset)
+        {
+            a = super.toArray(a, offset);
+            int count = size();
+            int flip = count / 2;
+            for (int i = 0 ; i < flip ; i++)
+            {
+                int j = count - (i + 1);
+                T t = a[i + offset];
+                a[i + offset] = a[j + offset];
+                a[j + offset] = t;
+            }
+            return a;
+        }
+    }
+
+    public static class Builder<V>
+    {
+        final BTree.Builder<V> builder;
+        protected Builder(Comparator<? super V> comparator)
+        {
+            builder= BTree.builder(comparator);
+        }
+
+        public Builder<V> add(V v)
+        {
+            builder.add(v);
+            return this;
+        }
+
+        public Builder<V> addAll(Collection<V> iter)
+        {
+            builder.addAll(iter);
+            return this;
+        }
+
+        public boolean isEmpty()
+        {
+            return builder.isEmpty();
+        }
+        public BTreeSet<V> build()
+        {
+            return new BTreeSet<>(builder.build(), builder.comparator);
+        }
+    }
+
+    public static <V> Builder<V> builder(Comparator<? super V> comparator)
+    {
+        return new Builder<>(comparator);
+    }
+
+    public static <V> BTreeSet<V> wrap(Object[] btree, Comparator<V> comparator)
+    {
+        return new BTreeSet<>(btree, comparator);
+    }
+
+    public static <V extends Comparable<V>> BTreeSet<V> of(Collection<V> sortedValues)
+    {
+        return new BTreeSet<>(BTree.build(sortedValues, UpdateFunction.<V>noOp()), Ordering.<V>natural());
+    }
+
+    public static <V extends Comparable<V>> BTreeSet<V> of(V value)
+    {
+        return new BTreeSet<>(BTree.build(ImmutableList.of(value), UpdateFunction.<V>noOp()), Ordering.<V>natural());
+    }
+
+    public static <V> BTreeSet<V> empty(Comparator<? super V> comparator)
+    {
+        return new BTreeSet<>(BTree.empty(), comparator);
+    }
+
+    public static <V> BTreeSet<V> of(Comparator<? super V> comparator, V value)
+    {
+        return new BTreeSet<>(BTree.build(ImmutableList.of(value), UpdateFunction.<V>noOp()), comparator);
     }
 }

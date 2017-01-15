@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,27 +18,32 @@
 package org.apache.cassandra.db.compaction;
 
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
-import org.apache.cassandra.Util;
-import org.apache.cassandra.config.KSMetaData;
-import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.metrics.RestorableMeter;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.Pair;
 
 import static org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy.getBuckets;
 import static org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy.mostInterestingBucket;
 import static org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy.trimToThresholdWithHotness;
 import static org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy.validateOptions;
-
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class SizeTieredCompactionStrategyTest
 {
@@ -48,14 +53,10 @@ public class SizeTieredCompactionStrategyTest
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
-        Map<String, String> leveledOptions = new HashMap<>();
-        leveledOptions.put("sstable_size_in_mb", "1");
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
-                                    SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1)
-                                                .compactionStrategyOptions(leveledOptions));
+                                    KeyspaceParams.simple(1),
+                                    SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1));
     }
 
     @Test
@@ -156,15 +157,15 @@ public class SizeTieredCompactionStrategyTest
         int numSSTables = 3;
         for (int r = 0; r < numSSTables; r++)
         {
-            DecoratedKey key = Util.dk(String.valueOf(r));
-            Mutation rm = new Mutation(ksname, key.getKey());
-            rm.add(cfname, Util.cellname("column"), value, 0);
-            rm.applyUnsafe();
+            String key = String.valueOf(r);
+            new RowUpdateBuilder(cfs.metadata, 0, key)
+                .clustering("column").add("val", value)
+                .build().applyUnsafe();
             cfs.forceBlockingFlush();
         }
         cfs.forceBlockingFlush();
 
-        List<SSTableReader> sstrs = new ArrayList<>(cfs.getSSTables());
+        List<SSTableReader> sstrs = new ArrayList<>(cfs.getLiveSSTables());
         Pair<List<SSTableReader>, Double> bucket;
 
         List<SSTableReader> interestingBucket = mostInterestingBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32);

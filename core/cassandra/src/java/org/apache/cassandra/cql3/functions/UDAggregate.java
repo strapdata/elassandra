@@ -21,12 +21,12 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.schema.Functions;
 import org.apache.cassandra.tracing.Tracing;
 
 /**
@@ -55,7 +55,8 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
         this.initcond = initcond;
     }
 
-    public static UDAggregate create(FunctionName name,
+    public static UDAggregate create(Functions functions,
+                                     FunctionName name,
                                      List<AbstractType<?>> argTypes,
                                      AbstractType<?> returnType,
                                      FunctionName stateFunc,
@@ -71,8 +72,8 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
         return new UDAggregate(name,
                                argTypes,
                                returnType,
-                               resolveScalar(name, stateFunc, stateTypes),
-                               finalFunc != null ? resolveScalar(name, finalFunc, finalTypes) : null,
+                               resolveScalar(functions, name, stateFunc, stateTypes),
+                               finalFunc != null ? resolveScalar(functions, name, finalFunc, finalTypes) : null,
                                initcond);
     }
 
@@ -99,14 +100,17 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
         return stateFunction == function || finalFunction == function;
     }
 
-    public Iterable<Function> getFunctions()
+    @Override
+    public void addFunctionsTo(List<Function> functions)
     {
-        if (stateFunction == null)
-            return Collections.emptySet();
-        if (finalFunction != null)
-            return ImmutableSet.of(this, stateFunction, finalFunction);
-        else
-            return ImmutableSet.of(this, stateFunction);
+        functions.add(this);
+        if (stateFunction != null)
+        {
+            stateFunction.addFunctionsTo(functions);
+
+            if (finalFunction != null)
+                finalFunction.addFunctionsTo(functions);
+        }
     }
 
     public boolean isAggregate()
@@ -162,7 +166,7 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
                 {
                     UDFunction udf = (UDFunction)stateFunction;
                     if (udf.isCallableWrtNullable(fArgs))
-                        state = udf.executeUserDefined(protocolVersion, fArgs);
+                        state = udf.execute(protocolVersion, fArgs);
                 }
                 else
                 {
@@ -192,16 +196,21 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
         };
     }
 
-    private static ScalarFunction resolveScalar(FunctionName aName, FunctionName fName, List<AbstractType<?>> argTypes) throws InvalidRequestException
+    private static ScalarFunction resolveScalar(Functions functions, FunctionName aName, FunctionName fName, List<AbstractType<?>> argTypes) throws InvalidRequestException
     {
-        Function func = Functions.find(fName, argTypes);
-        if (func == null)
+        Optional<Function> fun = functions.find(fName, argTypes);
+        if (!fun.isPresent())
             throw new InvalidRequestException(String.format("Referenced state function '%s %s' for aggregate '%s' does not exist",
-                                                            fName, Arrays.toString(UDHelper.driverTypes(argTypes)), aName));
-        if (!(func instanceof ScalarFunction))
+                                                            fName,
+                                                            Arrays.toString(UDHelper.driverTypes(argTypes)),
+                                                            aName));
+
+        if (!(fun.get() instanceof ScalarFunction))
             throw new InvalidRequestException(String.format("Referenced state function '%s %s' for aggregate '%s' is not a scalar function",
-                                                            fName, Arrays.toString(UDHelper.driverTypes(argTypes)), aName));
-        return (ScalarFunction) func;
+                                                            fName,
+                                                            Arrays.toString(UDHelper.driverTypes(argTypes)),
+                                                            aName));
+        return (ScalarFunction) fun.get();
     }
 
     @Override
@@ -212,8 +221,8 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
 
         UDAggregate that = (UDAggregate) o;
         return Objects.equal(name, that.name)
-            && Functions.typeEquals(argTypes, that.argTypes)
-            && Functions.typeEquals(returnType, that.returnType)
+            && Functions.typesMatch(argTypes, that.argTypes)
+            && Functions.typesMatch(returnType, that.returnType)
             && Objects.equal(stateFunction, that.stateFunction)
             && Objects.equal(finalFunction, that.finalFunction)
             && Objects.equal(stateType, that.stateType)

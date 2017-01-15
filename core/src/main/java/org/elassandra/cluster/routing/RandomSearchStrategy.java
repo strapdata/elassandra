@@ -14,22 +14,15 @@
  */
 package org.elassandra.cluster.routing;
 
-import java.net.InetAddress;
 import java.util.BitSet;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.UUID;
 
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.utils.FBUtilities;
-import org.elassandra.cluster.routing.AbstractSearchStrategy.Router;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
@@ -60,7 +53,7 @@ public class RandomSearchStrategy extends AbstractSearchStrategy {
                 pivotNode = greenShards.keySet().iterator().next();
             }
             BitSet pivotBitset = this.greenShards.get(pivotNode);
-            Map<DiscoveryNode, BitSet> selectedShards = new HashMap<DiscoveryNode, BitSet>();
+            final Map<DiscoveryNode, BitSet> selectedShards = new HashMap<DiscoveryNode, BitSet>();
             selectedShards.put(pivotNode, pivotBitset);
             
             List<DiscoveryNode> randomAvailableNodes = Lists.newArrayList(greenShards.keySet());
@@ -98,7 +91,7 @@ public class RandomSearchStrategy extends AbstractSearchStrategy {
                 }
             };
         }
-        
+
     }
 
     @Override

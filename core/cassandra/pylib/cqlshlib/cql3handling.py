@@ -34,8 +34,8 @@ class UnexpectedTableStructure(UserWarning):
     def __str__(self):
         return 'Unexpected table structure; may not translate correctly to CQL. ' + self.msg
 
-SYSTEM_KEYSPACES = ('system', 'system_traces', 'system_auth', 'system_distributed')
-NONALTERBALE_KEYSPACES = ('system')
+SYSTEM_KEYSPACES = ('system', 'system_schema', 'system_traces', 'system_auth', 'system_distributed')
+NONALTERBALE_KEYSPACES = ('system', 'system_schema')
 
 
 class Cql3ParsingRuleSet(CqlParsingRuleSet):
@@ -57,7 +57,7 @@ class Cql3ParsingRuleSet(CqlParsingRuleSet):
         # (CQL3 option name, schema_columnfamilies column name (or None if same),
         #  list of known map keys)
         ('compaction', 'compaction_strategy_options',
-            ('class', 'max_threshold', 'tombstone_compaction_interval', 'tombstone_threshold', 'enabled', 'unchecked_tombstone_compaction')),
+            ('class', 'max_threshold', 'tombstone_compaction_interval', 'tombstone_threshold', 'enabled', 'unchecked_tombstone_compaction', 'only_purge_repaired_tombstones')),
         ('compression', 'compression_parameters',
             ('sstable_compression', 'chunk_length_kb', 'crc_check_chance')),
         ('caching', None,
@@ -238,6 +238,7 @@ JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
 <schemaChangeStatement> ::= <createKeyspaceStatement>
                           | <createColumnFamilyStatement>
                           | <createIndexStatement>
+                          | <createMaterializedViewStatement>
                           | <createUserTypeStatement>
                           | <createFunctionStatement>
                           | <createAggregateStatement>
@@ -245,6 +246,7 @@ JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
                           | <dropKeyspaceStatement>
                           | <dropColumnFamilyStatement>
                           | <dropIndexStatement>
+                          | <dropMaterializedViewStatement>
                           | <dropUserTypeStatement>
                           | <dropFunctionStatement>
                           | <dropAggregateStatement>
@@ -291,6 +293,8 @@ JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
                          ;
 
 <columnFamilyName> ::= ( ksname=<cfOrKsName> dot="." )? cfname=<cfOrKsName> ;
+
+<materializedViewName> ::= ( ksname=<cfOrKsName> dot="." )? mvname=<cfOrKsName> ;
 
 <userTypeName> ::= ( ksname=<cfOrKsName> dot="." )? utname=<cfOrKsName> ;
 
@@ -511,6 +515,13 @@ def cf_prop_val_mapkey_completer(ctxt, cass):
             opts.add('min_threshold')
             opts.add('max_window_size_seconds')
             opts.add('timestamp_resolution')
+        elif csc == 'TimeWindowCompactionStrategy':
+            opts.add('compaction_window_unit')
+            opts.add('compaction_window_size')
+            opts.add('min_threshold')
+            opts.add('max_threshold')
+            opts.add('timestamp_resolution')
+
         return map(escape_value, opts)
     return ()
 
@@ -569,6 +580,7 @@ def cf_ks_name_completer(ctxt, cass):
     return [maybe_escape_name(ks) + '.' for ks in cass.get_keyspace_names()]
 
 completer_for('columnFamilyName', 'ksname')(cf_ks_name_completer)
+completer_for('materializedViewName', 'ksname')(cf_ks_name_completer)
 
 
 def cf_ks_dot_completer(ctxt, cass):
@@ -578,6 +590,7 @@ def cf_ks_dot_completer(ctxt, cass):
     return []
 
 completer_for('columnFamilyName', 'dot')(cf_ks_dot_completer)
+completer_for('materializedViewName', 'dot')(cf_ks_dot_completer)
 
 
 @completer_for('columnFamilyName', 'cfname')
@@ -592,6 +605,20 @@ def cf_name_completer(ctxt, cass):
             return ()
         raise
     return map(maybe_escape_name, cfnames)
+
+
+@completer_for('materializedViewName', 'mvname')
+def mv_name_completer(ctxt, cass):
+    ks = ctxt.get_binding('ksname', None)
+    if ks is not None:
+        ks = dequote_name(ks)
+    try:
+        mvnames = cass.get_materialized_view_names(ks)
+    except Exception:
+        if ks is None:
+            return ()
+        raise
+    return map(maybe_escape_name, mvnames)
 
 completer_for('userTypeName', 'ksname')(cf_ks_name_completer)
 
@@ -649,7 +676,7 @@ syntax_rules += r'''
 <useStatement> ::= "USE" <keyspaceName>
                  ;
 <selectStatement> ::= "SELECT" ( "JSON" )? <selectClause>
-                        "FROM" cf=<columnFamilyName>
+                        "FROM" (cf=<columnFamilyName> | mv=<materializedViewName>)
                           ( "WHERE" <whereClause> )?
                           ( "ORDER" "BY" <orderByClause> ( "," <orderByClause> )* )?
                           ( "LIMIT" limit=<wholenumber> )?
@@ -880,7 +907,7 @@ syntax_rules += r'''
                ;
 <conditions> ::=  <condition> ( "AND" <condition> )*
                ;
-<condition> ::= <cident> ( "[" <term> "]" )? ( ( "=" | "<" | ">" | "<=" | ">=" | "!=" ) <term>
+<condition> ::= <cident> ( "[" <term> "]" )? (("=" | "<" | ">" | "<=" | ">=" | "!=") <term>
                                              | "IN" "(" <term> ( "," <term> )* ")")
               ;
 '''
@@ -1141,6 +1168,11 @@ syntax_rules += r'''
                                ( "USING" <stringLiteral> ( "WITH" "OPTIONS" "=" <mapLiteral> )? )?
                          ;
 
+<createMaterializedViewStatement> ::= "CREATE" "MATERIALIZED" "VIEW" ("IF" "NOT" "EXISTS")? <materializedViewName>?
+                                      "AS" <selectStatement>
+                                      "PRIMARY" "KEY" <pkDef>
+                                    ;
+
 <createUserTypeStatement> ::= "CREATE" "TYPE" ( ks=<nonSystemKeyspaceName> dot="." )? typename=<cfOrKsName> "(" newcol=<cident> <storageType>
                                 ( "," [newcolname]=<cident> <storageType> )*
                             ")"
@@ -1199,6 +1231,9 @@ syntax_rules += r'''
 
 <dropIndexStatement> ::= "DROP" "INDEX" ("IF" "EXISTS")? idx=<indexName>
                        ;
+
+<dropMaterializedViewStatement> ::= "DROP" "MATERIALIZED" "VIEW" ("IF" "EXISTS")? mv=<materializedViewName>
+                                  ;
 
 <dropUserTypeStatement> ::= "DROP" "TYPE" ut=<userTypeName>
                           ;

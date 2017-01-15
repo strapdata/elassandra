@@ -31,14 +31,14 @@ public class LongType extends AbstractType<Long>
 {
     public static final LongType instance = new LongType();
 
-    LongType() {} // singleton
+    LongType() {super(ComparisonType.CUSTOM);} // singleton
 
     public boolean isEmptyValueMeaningless()
     {
         return true;
     }
 
-    public int compare(ByteBuffer o1, ByteBuffer o2)
+    public int compareCustom(ByteBuffer o1, ByteBuffer o2)
     {
         return compareLongs(o1, o2);
     }
@@ -118,4 +118,9 @@ public class LongType extends AbstractType<Long>
         return LongSerializer.instance;
     }
 
+    @Override
+    protected int valueLengthIfFixed()
+    {
+        return 8;
+    }
 }

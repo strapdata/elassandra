@@ -40,6 +40,7 @@ import org.apache.commons.lang3.StringUtils;
 import com.datastax.driver.core.AuthProvider;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.HostDistance;
+import com.datastax.driver.core.JdkSSLOptions;
 import com.datastax.driver.core.PlainTextAuthProvider;
 import com.datastax.driver.core.ProtocolVersion;
 import com.datastax.driver.core.policies.LoadBalancingPolicy;
@@ -445,7 +446,7 @@ public class CqlConfigHelper
             if (maxConnections.isPresent())
                 poolingOptions.setMaxConnectionsPerHost(hostDistance, maxConnections.get());
             if (maxSimultaneousRequests.isPresent())
-                poolingOptions.setMaxSimultaneousRequestsPerConnectionThreshold(hostDistance, maxSimultaneousRequests.get());
+                poolingOptions.setNewConnectionThreshold(hostDistance, maxSimultaneousRequests.get());
         }
 
         return poolingOptions;
@@ -501,11 +502,26 @@ public class CqlConfigHelper
         return new LimitedLocalNodeFirstLocalBalancingPolicy(stickHosts);
     }
 
+    private static Optional<AuthProvider> getDefaultAuthProvider(Configuration conf)
+    {
+        Optional<String> username = getStringSetting(USERNAME, conf);
+        Optional<String> password = getStringSetting(PASSWORD, conf);
+
+        if (username.isPresent() && password.isPresent())
+        {
+            return Optional.of(new PlainTextAuthProvider(username.get(), password.get()));
+        }
+        else
+        {
+            return Optional.absent();
+        }
+    }
+
     private static Optional<AuthProvider> getAuthProvider(Configuration conf)
     {
         Optional<String> authProvider = getInputNativeAuthProvider(conf);
         if (!authProvider.isPresent())
-            return Optional.absent();
+            return getDefaultAuthProvider(conf);
 
         return Optional.of(getClientAuthProvider(authProvider.get(), conf));
     }
@@ -530,10 +546,13 @@ public class CqlConfigHelper
             {
                 throw new RuntimeException(e);
             }
-            String[] css = SSLOptions.DEFAULT_SSL_CIPHER_SUITES;
+            String[] css = null;
             if (cipherSuites.isPresent())
                 css = cipherSuites.get().split(",");
-            return Optional.of(new SSLOptions(context,css));
+            return Optional.of(JdkSSLOptions.builder()
+                                            .withSSLContext(context)
+                                            .withCipherSuites(css)
+                                            .build());
         }
         return Optional.absent();
     }

@@ -23,7 +23,6 @@ package org.apache.cassandra.db.commitlog;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -39,12 +38,16 @@ import org.junit.Test;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.db.Cell;
-import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.Mutation;
-import org.apache.cassandra.db.commitlog.CommitLogReplayer.CommitLogReplayException;
+import org.apache.cassandra.db.rows.Cell;
+import org.apache.cassandra.db.rows.Row;
+import org.apache.cassandra.db.marshal.AsciiType;
+import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.partitions.PartitionUpdate;
+import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.KillerForTests;
+import org.apache.cassandra.db.commitlog.CommitLogReplayer.CommitLogReplayException;
 
 public class CommitLogUpgradeTest
 {
@@ -89,6 +92,24 @@ public class CommitLogUpgradeTest
     }
 
     @Test
+
+    public void test22() throws Exception
+    {
+        testRestore(DATA_DIR + "2.2");
+    }
+
+    @Test
+    public void test22_LZ4() throws Exception
+    {
+        testRestore(DATA_DIR + "2.2-lz4");
+    }
+
+    @Test
+    public void test22_Snappy() throws Exception
+    {
+        testRestore(DATA_DIR + "2.2-snappy");
+    }
+
     public void test22_truncated() throws Exception
     {
         testRestore(DATA_DIR + "2.2-lz4-truncated");
@@ -133,8 +154,16 @@ public class CommitLogUpgradeTest
     @BeforeClass
     static public void initialize() throws FileNotFoundException, IOException, InterruptedException
     {
+        CFMetaData metadata = CFMetaData.Builder.createDense(KEYSPACE, TABLE, false, false)
+                                                .addPartitionKey("key", AsciiType.instance)
+                                                .addClusteringColumn("col", AsciiType.instance)
+                                                .addRegularColumn("val", BytesType.instance)
+                                                .build()
+                                                .compression(SchemaLoader.getCompressionParameters());
         SchemaLoader.loadSchema();
-        SchemaLoader.schemaDefinition("");
+        SchemaLoader.createKeyspace(KEYSPACE,
+                                    KeyspaceParams.simple(1),
+                                    metadata);
     }
 
     public void testRestore(String location) throws IOException, InterruptedException
@@ -151,21 +180,14 @@ public class CommitLogUpgradeTest
             if (Schema.instance.getCF(cfid) == null)
             {
                 CFMetaData cfm = Schema.instance.getCFMetaData(KEYSPACE, TABLE);
-                Schema.instance.purge(cfm);
+                Schema.instance.unload(cfm);
                 Schema.instance.load(cfm.copy(cfid));
             }
         }
 
         Hasher hasher = new Hasher();
         CommitLogTestReplayer replayer = new CommitLogTestReplayer(CommitLog.instance, hasher);
-        File[] files = new File(location).listFiles(new FilenameFilter()
-        {
-            @Override
-            public boolean accept(File dir, String name)
-            {
-                return name.endsWith(".log");
-            }
-        });
+        File[] files = new File(location).listFiles((file, name) -> name.endsWith(".log"));
         replayer.recover(files);
 
         Assert.assertEquals(cells, hasher.cells);
@@ -191,16 +213,18 @@ public class CommitLogUpgradeTest
         @Override
         public boolean apply(Mutation mutation)
         {
-            for (ColumnFamily cf : mutation.getColumnFamilies())
+            for (PartitionUpdate update : mutation.getPartitionUpdates())
             {
-                for (Cell c : cf.getSortedColumns())
-                {
-                    if (new String(c.name().toByteBuffer().array(), StandardCharsets.UTF_8).startsWith(CELLNAME))
+                for (Row row : update)
+                    if (row.clustering().size() > 0 &&
+                        AsciiType.instance.compose(row.clustering().get(0)).startsWith(CELLNAME))
                     {
-                        hash = hash(hash, c.value());
-                        ++cells;
+                        for (Cell cell : row.cells())
+                        {
+                            hash = hash(hash, cell.value());
+                            ++cells;
+                        }
                     }
-                }
             }
             return true;
         }

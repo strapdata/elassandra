@@ -219,8 +219,6 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 }
 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocksBuilder).build();
-
-                RoutingTable rtBuilder = RoutingTable.build(MetaDataIndexStateService.this.clusterService, updatedState);
                 /*
                 RoutingTable.Builder rtBuilder = RoutingTable.builder(updatedState.routingTable());
                 for (String index : indicesToOpen) {
@@ -232,7 +230,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
                         "indices opened [" + indicesAsString + "]");
                 */
                 //no explicit wait for other nodes needed as we use AckedClusterStateUpdateTask
-                return ClusterState.builder(updatedState).incrementVersion().routingTable(rtBuilder).build();
+                return ClusterState.builder(updatedState).incrementVersion().build();
             }
         });
     }

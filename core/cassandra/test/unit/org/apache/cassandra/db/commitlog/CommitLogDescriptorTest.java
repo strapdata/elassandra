@@ -28,8 +28,7 @@ import org.junit.Test;
 
 import org.apache.cassandra.config.ParameterizedClass;
 import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.io.util.ByteBufferDataInput;
-import org.apache.cassandra.io.util.FileDataInput;
+import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.net.MessagingService;
 
 import static org.junit.Assert.assertEquals;
@@ -59,14 +58,13 @@ public class CommitLogDescriptorTest
     {
         ByteBuffer buf = ByteBuffer.allocate(1024);
         CommitLogDescriptor.writeHeader(buf, desc);
-        long length = buf.position();
         // Put some extra data in the stream.
         buf.putDouble(0.1);
         buf.flip();
-        try (FileDataInput input = new ByteBufferDataInput(buf, "input", 0, 0))
+
+        try (DataInputBuffer input = new DataInputBuffer(buf, false))
         {
             CommitLogDescriptor read = CommitLogDescriptor.readHeader(input);
-            assertEquals("Descriptor length", length, input.getFilePointer());
             assertEquals("Descriptors", desc, read);
         }
     }
@@ -76,20 +74,21 @@ public class CommitLogDescriptorTest
     {
         testDescriptorPersistence(new CommitLogDescriptor(11, null));
         testDescriptorPersistence(new CommitLogDescriptor(CommitLogDescriptor.VERSION_21, 13, null));
-        testDescriptorPersistence(new CommitLogDescriptor(CommitLogDescriptor.VERSION_22, 15, null));
-        testDescriptorPersistence(new CommitLogDescriptor(CommitLogDescriptor.VERSION_22, 17, new ParameterizedClass("LZ4Compressor", null)));
-        testDescriptorPersistence(new CommitLogDescriptor(CommitLogDescriptor.VERSION_22, 19,
+        testDescriptorPersistence(new CommitLogDescriptor(CommitLogDescriptor.VERSION_30, 15, null));
+        testDescriptorPersistence(new CommitLogDescriptor(CommitLogDescriptor.VERSION_30, 17, new ParameterizedClass("LZ4Compressor", null)));
+        testDescriptorPersistence(new CommitLogDescriptor(CommitLogDescriptor.VERSION_30, 19,
                 new ParameterizedClass("StubbyCompressor", ImmutableMap.of("parameter1", "value1", "flag2", "55", "argument3", "null"))));
     }
 
     @Test
     public void testDescriptorInvalidParametersSize() throws IOException
     {
-        Map<String, String> params = new HashMap<>();
-        for (int i=0; i<6000; ++i)
+        final int numberOfParameters = 65535;
+        Map<String, String> params = new HashMap<>(numberOfParameters);
+        for (int i=0; i<numberOfParameters; ++i)
             params.put("key"+i, Integer.toString(i, 16));
         try {
-            CommitLogDescriptor desc = new CommitLogDescriptor(CommitLogDescriptor.VERSION_22,
+            CommitLogDescriptor desc = new CommitLogDescriptor(CommitLogDescriptor.VERSION_30,
                                                                21,
                                                                new ParameterizedClass("LZ4Compressor", params));
             ByteBuffer buf = ByteBuffer.allocate(1024000);

@@ -65,7 +65,7 @@ Table of Contents
   Each frame contains a fixed size header (9 bytes) followed by a variable size
   body. The header is described in Section 2. The content of the body depends
   on the header opcode value (the body can in particular be empty for some
-  opcode values). The list of allowed opcode is defined Section 2.3 and the
+  opcode values). The list of allowed opcode is defined Section 2.4 and the
   details of each corresponding message is described Section 4.
 
   The protocol distinguishes 2 types of frames: requests and responses. Requests
@@ -921,6 +921,9 @@ Table of Contents
     <result_page_size> results. While the current implementation always respect
     the exact value of <result_page_size>, we reserve ourselves the right to return
     slightly smaller or bigger pages in the future for performance reasons.
+  - The <paging_state> is specific to a protocol version and drivers should not
+    send a <paging_state> returned by a node using the protocol v3 to query a node
+    using the protocol v4 for instance.
 
 
 9. Error codes

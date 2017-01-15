@@ -22,15 +22,17 @@ import java.util.UUID;
 
 import org.junit.Test;
 
-import junit.framework.Assert;
+import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.restrictions.StatementRestrictions;
 import org.apache.cassandra.exceptions.InvalidRequestException;
-import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.cql3.CQLTester;
 
+import static org.apache.cassandra.utils.ByteBufferUtil.EMPTY_BYTE_BUFFER;
+import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+
+import junit.framework.Assert;
 
 /**
  * Test column ranges and ordering with static column in table
@@ -370,7 +372,7 @@ public class SelectTest extends CQLTester
     }
 
     @Test
-    public void testSetContains() throws Throwable
+    public void testSetContainsWithIndex() throws Throwable
     {
         createTable("CREATE TABLE %s (account text, id int, categories set<text>, PRIMARY KEY (account, id))");
         createIndex("CREATE INDEX ON %s(categories)");
@@ -403,7 +405,7 @@ public class SelectTest extends CQLTester
     }
 
     @Test
-    public void testListContains() throws Throwable
+    public void testListContainsWithIndex() throws Throwable
     {
         createTable("CREATE TABLE %s (account text, id int, categories list<text>, PRIMARY KEY (account, id))");
         createIndex("CREATE INDEX ON %s(categories)");
@@ -438,7 +440,7 @@ public class SelectTest extends CQLTester
     }
 
     @Test
-    public void testListContainsWithFiltering() throws Throwable
+    public void testListContainsWithIndexAndFiltering() throws Throwable
     {
         createTable("CREATE TABLE %s (e int PRIMARY KEY, f list<text>, s int)");
         createIndex("CREATE INDEX ON %s(f)");
@@ -456,7 +458,7 @@ public class SelectTest extends CQLTester
     }
 
     @Test
-    public void testMapKeyContains() throws Throwable
+    public void testMapKeyContainsWithIndex() throws Throwable
     {
         createTable("CREATE TABLE %s (account text, id int, categories map<text,text>, PRIMARY KEY (account, id))");
         createIndex("CREATE INDEX ON %s(keys(categories))");
@@ -494,7 +496,7 @@ public class SelectTest extends CQLTester
     }
 
     @Test
-    public void testMapValueContains() throws Throwable
+    public void testMapValueContainsWithIndex() throws Throwable
     {
         createTable("CREATE TABLE %s (account text, id int, categories map<text,text>, PRIMARY KEY (account, id))");
         createIndex("CREATE INDEX ON %s(categories)");
@@ -522,11 +524,11 @@ public class SelectTest extends CQLTester
                              "SELECT * FROM %s WHERE account = ? AND id = ? AND categories CONTAINS ?", "test", 5, unset());
 
         assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
-                             "SELECT * FROM %s WHERE account = ? AND id = ? AND categories CONTAINS ? AND categories CONTAINS ?"
-                            , "test", 5, "foo", "notPresent");
+                             "SELECT * FROM %s WHERE account = ? AND id = ? AND categories CONTAINS ? AND categories CONTAINS ?",
+                             "test", 5, "foo", "notPresent");
 
-        assertEmpty(execute("SELECT * FROM %s WHERE account = ? AND id = ? AND categories CONTAINS ? AND categories CONTAINS ? ALLOW FILTERING"
-                           , "test", 5, "foo", "notPresent"));
+        assertEmpty(execute("SELECT * FROM %s WHERE account = ? AND id = ? AND categories CONTAINS ? AND categories CONTAINS ? ALLOW FILTERING",
+                            "test", 5, "foo", "notPresent"));
     }
 
     // See CASSANDRA-7525
@@ -553,7 +555,7 @@ public class SelectTest extends CQLTester
 
     // See CASSANDRA-8033
     @Test
-    public void testFilterForContains() throws Throwable
+    public void testFilterWithIndexForContains() throws Throwable
     {
         createTable("CREATE TABLE %s (k1 int, k2 int, v set<int>, PRIMARY KEY ((k1, k2)))");
         createIndex("CREATE INDEX ON %s(k2)");
@@ -609,7 +611,7 @@ public class SelectTest extends CQLTester
         execute("INSERT INTO %s (account, id , categories) VALUES (?, ?, ?)", "test", 5, map("lmn", "foo"));
         execute("INSERT INTO %s (account, id , categories) VALUES (?, ?, ?)", "test", 6, map("lmn", "foo2"));
 
-        assertInvalidMessage("Predicates on non-primary-key columns (categories) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE account = ? AND categories CONTAINS ?", "test", "foo");
 
         assertRows(execute("SELECT * FROM %s WHERE account = ? AND categories CONTAINS KEY ?", "test", "lmn"),
@@ -632,7 +634,7 @@ public class SelectTest extends CQLTester
         execute("INSERT INTO %s (account, id , categories) VALUES (?, ?, ?)", "test", 5, map("lmn", "foo"));
         execute("INSERT INTO %s (account, id , categories) VALUES (?, ?, ?)", "test", 6, map("lmn2", "foo"));
 
-        assertInvalidMessage("Predicates on non-primary-key columns (categories) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE account = ? AND categories CONTAINS KEY ?", "test", "lmn");
 
         assertRows(execute("SELECT * FROM %s WHERE account = ? AND categories CONTAINS ?", "test", "foo"),
@@ -1264,7 +1266,7 @@ public class SelectTest extends CQLTester
             execute("INSERT INTO %s (k, a, b) VALUES (?, ?, ?)", i, i * 10, i * 10);
         }
 
-        String distinctQueryErrorMsg = "SELECT DISTINCT with WHERE clause only supports restriction by partition key.";
+        String distinctQueryErrorMsg = "SELECT DISTINCT with WHERE clause only supports restriction by partition key and/or static columns.";
         assertInvalidMessage(distinctQueryErrorMsg,
                              "SELECT DISTINCT k FROM %s WHERE a >= 80 ALLOW FILTERING");
 
@@ -1296,6 +1298,33 @@ public class SelectTest extends CQLTester
                    row(50),
                    row(60),
                    row(70));
+    }
+
+    @Test
+    public void testSelectDistinctWithWhereClauseOnStaticColumn() throws Throwable
+    {
+        createTable("CREATE TABLE %s (k int, a int, s int static, s1 int static, b int, PRIMARY KEY (k, a))");
+
+        for (int i = 0; i < 10; i++)
+        {
+            execute("INSERT INTO %s (k, a, b, s, s1) VALUES (?, ?, ?, ?, ?)", i, i, i, i, i);
+            execute("INSERT INTO %s (k, a, b, s, s1) VALUES (?, ?, ?, ?, ?)", i, i * 10, i * 10, i * 10, i * 10);
+        }
+
+        execute("INSERT INTO %s (k, a, b, s, s1) VALUES (?, ?, ?, ?, ?)", 2, 10, 10, 10, 10);
+
+        assertRows(execute("SELECT DISTINCT k, s, s1 FROM %s WHERE s = 90 AND s1 = 90 ALLOW FILTERING"),
+                   row(9, 90, 90));
+
+        assertRows(execute("SELECT DISTINCT k, s, s1 FROM %s WHERE s = 90 AND s1 = 90 ALLOW FILTERING"),
+                   row(9, 90, 90));
+
+        assertRows(execute("SELECT DISTINCT k, s, s1 FROM %s WHERE s = 10 AND s1 = 10 ALLOW FILTERING"),
+                   row(1, 10, 10),
+                   row(2, 10, 10));
+
+        assertRows(execute("SELECT DISTINCT k, s, s1 FROM %s WHERE k = 1 AND s = 10 AND s1 = 10 ALLOW FILTERING"),
+                   row(1, 10, 10));
     }
 
     /**
@@ -1384,95 +1413,144 @@ public class SelectTest extends CQLTester
     }
 
     @Test
-    public void testFilteringWithoutIndices() throws Throwable
+    public void testFilteringOnStaticColumnsWithRowsWithOnlyStaticValues() throws Throwable
     {
-        createTable("CREATE TABLE %s (a int, b int, c int, d int, e map<int, int>, PRIMARY KEY (a, b))");
+        createTable("CREATE TABLE %s (a int, b int, s int static, c int, d int, primary key (a, b))");
 
-        // Checks filtering
-        assertInvalidMessage("Predicates on non-primary-key columns (c, d) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c = 1 AND d = 2 ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE a = 1 AND b = 1 AND c = 2 ALLOW FILTERING");
-        assertInvalidMessage("IN predicates on non-primary-key columns (c) is not yet supported",
-                             "SELECT * FROM %s WHERE a IN (1, 2) AND c IN (2, 3) ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c > 2 ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e CONTAINS 1 ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e CONTAINS KEY 1 ALLOW FILTERING");
+        for (int i = 0; i < 5; i++)
+        {
+            execute("INSERT INTO %s (a, s) VALUES (?, ?)", i, i);
+            if (i != 2)
+                for (int j = 0; j < 4; j++)
+                    execute("INSERT INTO %s (a, b, c, d) VALUES (?, ?, ?, ?)", i, j, j, i + j);
+        }
 
-        // Checks filtering with null
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c = null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c > null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e CONTAINS null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e CONTAINS KEY null ALLOW FILTERING");
-
-        // Checks filtering with unset
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c = ? ALLOW FILTERING", unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c > ? ALLOW FILTERING", unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e CONTAINS ? ALLOW FILTERING", unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e CONTAINS KEY ? ALLOW FILTERING", unset());
-
-        createTable("CREATE TABLE %s (a int, b int, c int, PRIMARY KEY(a)) WITH COMPACT STORAGE");
-
-        execute("INSERT INTO %s (a, b, c) VALUES (1, 2, 4)");
-        execute("INSERT INTO %s (a, b, c) VALUES (2, 2, 8)");
-        execute("INSERT INTO %s (a, b, c) VALUES (3, 6, 4)");
-
-        assertRows(execute("SELECT * FROM %s WHERE c = 4 ALLOW FILTERING"),
-                   row(1, 2, 4),
-                   row(3, 6, 4));
-
-        // Checks filtering with null
-        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE, "SELECT * FROM %s WHERE c = null");
-        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE, "SELECT * FROM %s WHERE c > null");
-        assertInvalidMessage("Unsupported null value for column c", "SELECT * FROM %s WHERE c = null ALLOW FILTERING");
-        assertInvalidMessage("Unsupported null value for column c", "SELECT * FROM %s WHERE c > null ALLOW FILTERING");
-
-        // Checks filtering with unset
-        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
-                             "SELECT * FROM %s WHERE c = ?", unset());
-        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
-                             "SELECT * FROM %s WHERE c > ?", unset());
-        assertInvalidMessage("Unsupported unset value for column c",
-                             "SELECT * FROM %s WHERE c = ? ALLOW FILTERING", unset());
-        assertInvalidMessage("Unsupported unset value for column c",
-                             "SELECT * FROM %s WHERE c > ? ALLOW FILTERING", unset());
+        assertRows(execute("SELECT * FROM %s WHERE c = 2 AND s >= 1 LIMIT 2 ALLOW FILTERING"),
+                   row(1, 2, 1, 2, 3),
+                   row(4, 2, 4, 2, 6));
     }
 
     @Test
-    public void testFilteringOnStaticColumnWithoutIndices() throws Throwable
+    public void testFilteringWithoutIndices() throws Throwable
     {
-        createTable("CREATE TABLE %s (a int, b int, s int static, c int, PRIMARY KEY (a, b))");
+        createTable("CREATE TABLE %s (a int, b int, c int, d int, s int static, PRIMARY KEY (a, b))");
+
+        execute("INSERT INTO %s (a, b, c, d) VALUES (1, 2, 4, 8)");
+        execute("INSERT INTO %s (a, b, c, d) VALUES (1, 3, 6, 12)");
+        execute("INSERT INTO %s (a, b, c, d) VALUES (1, 4, 4, 8)");
+        execute("INSERT INTO %s (a, b, c, d) VALUES (2, 3, 7, 12)");
+        execute("UPDATE %s SET s = 1 WHERE a = 1");
+        execute("UPDATE %s SET s = 2 WHERE a = 2");
+        execute("UPDATE %s SET s = 3 WHERE a = 3");
+
+        // Adds tomstones
+        execute("INSERT INTO %s (a, b, c, d) VALUES (1, 1, 4, 8)");
+        execute("INSERT INTO %s (a, b, c, d) VALUES (2, 2, 7, 12)");
+        execute("DELETE FROM %s WHERE a = 1 AND b = 1");
+        execute("DELETE FROM %s WHERE a = 2 AND b = 2");
+
+        flush();
 
         // Checks filtering
-        assertInvalidMessage("Predicates on non-primary-key columns (c, s) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c = 1 AND s = 2 ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (s) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE a = 1 AND b = 1 AND s = 2 ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (s) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE s > 2 ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c = 4 AND d = 8");
+
+        assertRows(execute("SELECT * FROM %s WHERE c = 4 AND d = 8 ALLOW FILTERING"),
+                   row(1, 2, 1, 4, 8),
+                   row(1, 4, 1, 4, 8));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE a = 1 AND b = 4 AND d = 8");
+
+        assertRows(execute("SELECT * FROM %s WHERE a = 1 AND b = 4 AND d = 8 ALLOW FILTERING"),
+                   row(1, 4, 1, 4, 8));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE s = 1 AND d = 12");
+
+        assertRows(execute("SELECT * FROM %s WHERE s = 1 AND d = 12 ALLOW FILTERING"),
+                   row(1, 3, 1, 6, 12));
+
+        assertInvalidMessage("IN predicates on non-primary-key columns (c) is not yet supported",
+                             "SELECT * FROM %s WHERE a IN (1, 2) AND c IN (6, 7)");
+
+        assertInvalidMessage("IN predicates on non-primary-key columns (c) is not yet supported",
+                             "SELECT * FROM %s WHERE a IN (1, 2) AND c IN (6, 7) ALLOW FILTERING");
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c > 4");
+
+        assertRows(execute("SELECT * FROM %s WHERE c > 4 ALLOW FILTERING"),
+                   row(1, 3, 1, 6, 12),
+                   row(2, 3, 2, 7, 12));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                "SELECT * FROM %s WHERE s > 1");
+
+        assertRows(execute("SELECT * FROM %s WHERE s > 1 ALLOW FILTERING"),
+                   row(2, 3, 2, 7, 12),
+                   row(3, null, 3, null, null));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE b < 3 AND c <= 4");
+
+        assertRows(execute("SELECT * FROM %s WHERE b < 3 AND c <= 4 ALLOW FILTERING"),
+                   row(1, 2, 1, 4, 8));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c >= 3 AND c <= 6");
+
+        assertRows(execute("SELECT * FROM %s WHERE c >= 3 AND c <= 6 ALLOW FILTERING"),
+                   row(1, 2, 1, 4, 8),
+                   row(1, 3, 1, 6, 12),
+                   row(1, 4, 1, 4, 8));
+
+        assertRows(execute("SELECT * FROM %s WHERE s >= 1 LIMIT 2 ALLOW FILTERING"),
+                   row(1, 2, 1, 4, 8),
+                   row(1, 3, 1, 6, 12));
 
         // Checks filtering with null
-        assertInvalidMessage("Predicates on non-primary-key columns (s) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE s = null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (s) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c = null");
+        assertInvalidMessage("Unsupported null value for column c",
+                             "SELECT * FROM %s WHERE c = null ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c > null");
+        assertInvalidMessage("Unsupported null value for column c",
+                             "SELECT * FROM %s WHERE c > null ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE s > null");
+        assertInvalidMessage("Unsupported null value for column s",
                              "SELECT * FROM %s WHERE s > null ALLOW FILTERING");
 
         // Checks filtering with unset
-        assertInvalidMessage("Predicates on non-primary-key columns (s) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE s = ? ALLOW FILTERING", unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (s) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE s > ? ALLOW FILTERING", unset());
+        assertInvalidMessage("Unsupported unset value for column c",
+                             "SELECT * FROM %s WHERE c = ? ALLOW FILTERING",
+                             unset());
+        assertInvalidMessage("Unsupported unset value for column s",
+                             "SELECT * FROM %s WHERE s = ? ALLOW FILTERING",
+                             unset());
+        assertInvalidMessage("Unsupported unset value for column c",
+                             "SELECT * FROM %s WHERE c > ? ALLOW FILTERING",
+                             unset());
+    }
+
+    @Test
+    public void testIndexQueryWithCompositePartitionKey() throws Throwable
+    {
+        createTable("CREATE TABLE %s (p1 int, p2 int, v int, PRIMARY KEY ((p1, p2)))");
+        assertInvalidMessage("Partition key parts: p2 must be restricted as other parts are",
+                             "SELECT * FROM %s WHERE p1 = 1 AND v = 3 ALLOW FILTERING");
+
+        createIndex("CREATE INDEX ON %s(v)");
+
+        execute("INSERT INTO %s(p1, p2, v) values (?, ?, ?)", 1, 1, 3);
+        execute("INSERT INTO %s(p1, p2, v) values (?, ?, ?)", 1, 2, 3);
+        execute("INSERT INTO %s(p1, p2, v) values (?, ?, ?)", 2, 1, 3);
+
+        assertRows(execute("SELECT * FROM %s WHERE p1 = 1 AND v = 3 ALLOW FILTERING"),
+                   row(1, 2, 3),
+                   row(1, 1, 3));
     }
 
     @Test
@@ -1488,7 +1566,7 @@ public class SelectTest extends CQLTester
         execute("INSERT INTO %s (a, b, c) VALUES (1, 4, 4)");
         execute("INSERT INTO %s (a, b, c) VALUES (2, 3, 7)");
 
-        // Lets add some tombstones to make sure that filtering handle them properly
+        // Adds tomstones
         execute("INSERT INTO %s (a, b, c) VALUES (1, 1, 4)");
         execute("INSERT INTO %s (a, b, c) VALUES (2, 2, 7)");
         execute("DELETE FROM %s WHERE a = 1 AND b = 1");
@@ -1497,30 +1575,54 @@ public class SelectTest extends CQLTester
         flush();
 
         // Checks filtering
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = 4 ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = 4");
+
+        assertRows(execute("SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = 4 ALLOW FILTERING"),
+                   row(1, 4, 4));
+
+        assertInvalidMessage("IN predicates on non-primary-key columns (c) is not yet supported",
+                             "SELECT * FROM %s WHERE a IN (1, 2) AND c IN (6, 7)");
 
         assertInvalidMessage("IN predicates on non-primary-key columns (c) is not yet supported",
                              "SELECT * FROM %s WHERE a IN (1, 2) AND c IN (6, 7) ALLOW FILTERING");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c > 4 ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c > 4");
+
+        assertRows(execute("SELECT * FROM %s WHERE c > 4 ALLOW FILTERING"),
+                   row(1, 3, 6),
+                   row(2, 3, 7));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE b < 3 AND c <= 4");
+
+        assertRows(execute("SELECT * FROM %s WHERE b < 3 AND c <= 4 ALLOW FILTERING"),
+                   row(1, 2, 4));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c >= 3 AND c <= 6");
+
+        assertRows(execute("SELECT * FROM %s WHERE c >= 3 AND c <= 6 ALLOW FILTERING"),
+                   row(1, 2, 4),
+                   row(1, 3, 6),
+                   row(1, 4, 4));
 
         // Checks filtering with null
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c = null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c = null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c > null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c > null ALLOW FILTERING");
 
-        // Checks filtering with unset
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        // // Checks filtering with unset
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c = ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c > ? ALLOW FILTERING",
                              unset());
 
@@ -1534,7 +1636,7 @@ public class SelectTest extends CQLTester
         execute("INSERT INTO %s (a, b, c) VALUES (3, 2, 4)");
         execute("INSERT INTO %s (a, b, c) VALUES (4, 1, 7)");
 
-        // Lets add some tombstones to make sure that filtering handle them properly
+        // Adds tomstones
         execute("INSERT INTO %s (a, b, c) VALUES (0, 1, 4)");
         execute("INSERT INTO %s (a, b, c) VALUES (5, 2, 7)");
         execute("DELETE FROM %s WHERE a = 0");
@@ -1587,7 +1689,7 @@ public class SelectTest extends CQLTester
         assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c > null ALLOW FILTERING");
 
-        // Checks filtering with unset
+        // // Checks filtering with unset
         assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c = ? ALLOW FILTERING",
                              unset());
@@ -1609,51 +1711,79 @@ public class SelectTest extends CQLTester
         flush();
 
         // Checks filtering for lists
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c CONTAINS 2");
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 AND c CONTAINS 3 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
 
         // Checks filtering for sets
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE d CONTAINS 4 ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE d CONTAINS 4");
+
+        assertRows(execute("SELECT * FROM %s WHERE d CONTAINS 4 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE d CONTAINS 4 AND d CONTAINS 6 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
 
         // Checks filtering for maps
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e CONTAINS 2 ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE e CONTAINS 2");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e CONTAINS KEY 2 ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE e CONTAINS 2 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE e CONTAINS KEY 1 ALLOW FILTERING"),
+                   row(1, 2, list(1, 6), set(2, 12), map(1, 6)),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE e[1] = 6 ALLOW FILTERING"),
+                   row(1, 2, list(1, 6), set(2, 12), map(1, 6)));
+
+        assertRows(execute("SELECT * FROM %s WHERE e CONTAINS KEY 1 AND e CONTAINS 2 ALLOW FILTERING"),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 AND d CONTAINS 4 AND e CONTAINS KEY 3 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
 
         // Checks filtering with null
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column d",
                              "SELECT * FROM %s WHERE d CONTAINS null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column e",
                              "SELECT * FROM %s WHERE e CONTAINS null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column e",
                              "SELECT * FROM %s WHERE e CONTAINS KEY null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null map key for column e",
                              "SELECT * FROM %s WHERE e[null] = 2 ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null map value for column e",
                              "SELECT * FROM %s WHERE e[1] = null ALLOW FILTERING");
 
         // Checks filtering with unset
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column d",
                              "SELECT * FROM %s WHERE d CONTAINS ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column e",
                              "SELECT * FROM %s WHERE e CONTAINS ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column e",
                              "SELECT * FROM %s WHERE e CONTAINS KEY ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset map key for column e",
                              "SELECT * FROM %s WHERE e[?] = 2 ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset map value for column e",
                              "SELECT * FROM %s WHERE e[1] = ? ALLOW FILTERING",
                              unset());
     }
@@ -1671,52 +1801,112 @@ public class SelectTest extends CQLTester
         flush();
 
         // Checks filtering for lists
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c = [3, 2] ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c = [3, 2]");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c > [1, 5] AND c < [3, 6] ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE c = [3, 2] ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c > [1, 5] AND c < [3, 6]");
+
+        assertRows(execute("SELECT * FROM %s WHERE c > [1, 5] AND c < [3, 6] ALLOW FILTERING"),
+                   row(1, 2, list(1, 6), set(2, 12), map(1, 6)),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE c >= [1, 6] AND c < [3, 3] ALLOW FILTERING"),
+                   row(1, 2, list(1, 6), set(2, 12), map(1, 6)),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                "SELECT * FROM %s WHERE c CONTAINS 2");
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 AND c CONTAINS 3 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
 
         // Checks filtering for sets
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE d = {6, 4} ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE d = {6, 4}");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE d > {4, 5} AND d < {6} ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE d = {6, 4} ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
 
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE d CONTAINS 4 ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE d > {4, 5} AND d < {6}");
+
+        assertRows(execute("SELECT * FROM %s WHERE d > {4, 5} AND d < {6} ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE d >= {2, 12} AND d <= {4, 6} ALLOW FILTERING"),
+                   row(1, 2, list(1, 6), set(2, 12), map(1, 6)),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE d CONTAINS 4");
+
+        assertRows(execute("SELECT * FROM %s WHERE d CONTAINS 4 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE d CONTAINS 4 AND d CONTAINS 6 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
 
         // Checks filtering for maps
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e = {1 : 2} ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE e = {1 : 2}");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                "SELECT * FROM %s WHERE e > {1 : 4} AND e < {3 : 6} ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE e = {1 : 2} ALLOW FILTERING"),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
 
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE e CONTAINS 2 ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                "SELECT * FROM %s WHERE e > {1 : 4} AND e < {3 : 6}");
+
+        assertRows(execute("SELECT * FROM %s WHERE e > {1 : 4} AND e < {3 : 6} ALLOW FILTERING"),
+                   row(1, 2, list(1, 6), set(2, 12), map(1, 6)),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE e >= {1 : 6} AND e <= {3 : 2} ALLOW FILTERING"),
+                   row(1, 2, list(1, 6), set(2, 12), map(1, 6)),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE e CONTAINS 2");
+
+        assertRows(execute("SELECT * FROM %s WHERE e CONTAINS 2 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE e CONTAINS KEY 1 ALLOW FILTERING"),
+                   row(1, 2, list(1, 6), set(2, 12), map(1, 6)),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
 
         assertInvalidMessage("Map-entry equality predicates on frozen map column e are not supported",
                              "SELECT * FROM %s WHERE e[1] = 6 ALLOW FILTERING");
 
+        assertRows(execute("SELECT * FROM %s WHERE e CONTAINS KEY 1 AND e CONTAINS 2 ALLOW FILTERING"),
+                   row(1, 4, list(1, 2), set(2, 4), map(1, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 AND d CONTAINS 4 AND e CONTAINS KEY 3 ALLOW FILTERING"),
+                   row(1, 3, list(3, 2), set(6, 4), map(3, 2)));
+
         // Checks filtering with null
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c = null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column d",
                              "SELECT * FROM %s WHERE d = null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column d",
                              "SELECT * FROM %s WHERE d CONTAINS null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column e",
                              "SELECT * FROM %s WHERE e = null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column e",
                              "SELECT * FROM %s WHERE e CONTAINS null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column e",
                              "SELECT * FROM %s WHERE e CONTAINS KEY null ALLOW FILTERING");
         assertInvalidMessage("Map-entry equality predicates on frozen map column e are not supported",
                              "SELECT * FROM %s WHERE e[null] = 2 ALLOW FILTERING");
@@ -1724,25 +1914,25 @@ public class SelectTest extends CQLTester
                              "SELECT * FROM %s WHERE e[1] = null ALLOW FILTERING");
 
         // Checks filtering with unset
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c = ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column d",
                              "SELECT * FROM %s WHERE d = ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (d) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column d",
                              "SELECT * FROM %s WHERE d CONTAINS ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column e",
                              "SELECT * FROM %s WHERE e = ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column e",
                              "SELECT * FROM %s WHERE e CONTAINS ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (e) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column e",
                              "SELECT * FROM %s WHERE e CONTAINS KEY ? ALLOW FILTERING",
                              unset());
         assertInvalidMessage("Map-entry equality predicates on frozen map column e are not supported",
@@ -1769,43 +1959,67 @@ public class SelectTest extends CQLTester
         flush();
 
         // Checks filtering
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = [4, 1] ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = [4, 1]");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c > [4, 2] ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = [4, 1] ALLOW FILTERING"),
+                   row(1, 4, list(4, 1)));
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE b <= 3 AND c < [6, 2] ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c > [4, 2]");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE c > [4, 2] ALLOW FILTERING"),
+                   row(1, 3, list(6, 2)),
+                   row(2, 3, list(7, 1)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE b <= 3 AND c < [6, 2]");
+
+        assertRows(execute("SELECT * FROM %s WHERE b <= 3 AND c < [6, 2] ALLOW FILTERING"),
+                   row(1, 2, list(4, 2)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c >= [4, 2] AND c <= [6, 4]");
+
+        assertRows(execute("SELECT * FROM %s WHERE c >= [4, 2] AND c <= [6, 4] ALLOW FILTERING"),
+                   row(1, 2, list(4, 2)),
+                   row(1, 3, list(6, 2)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c CONTAINS 2");
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING"),
+                   row(1, 2, list(4, 2)),
+                   row(1, 3, list(6, 2)));
 
         assertInvalidMessage("Cannot use CONTAINS KEY on non-map column c",
                              "SELECT * FROM %s WHERE c CONTAINS KEY 2 ALLOW FILTERING");
 
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 AND c CONTAINS 6 ALLOW FILTERING"),
+                   row(1, 3, list(6, 2)));
+
         // Checks filtering with null
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c = null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c = null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c > null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c > null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c CONTAINS null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS null ALLOW FILTERING");
 
         // Checks filtering with unset
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c = ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c > ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS ? ALLOW FILTERING",
                              unset());
 
@@ -1903,43 +2117,67 @@ public class SelectTest extends CQLTester
         flush();
 
         // Checks filtering
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = {4, 1} ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = {4, 1}");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c > {4, 2} ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = {4, 1} ALLOW FILTERING"),
+                   row(1, 4, set(4, 1)));
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c >= {4, 2} AND c <= {6, 4} ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c > {4, 2}");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE c > {4, 2} ALLOW FILTERING"),
+                   row(1, 3, set(6, 2)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE b <= 3 AND c < {6, 2}");
+
+        assertRows(execute("SELECT * FROM %s WHERE b <= 3 AND c < {6, 2} ALLOW FILTERING"),
+                   row(1, 2, set(2, 4)),
+                   row(2, 3, set(1, 7)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c >= {4, 2} AND c <= {6, 4}");
+
+        assertRows(execute("SELECT * FROM %s WHERE c >= {4, 2} AND c <= {6, 4} ALLOW FILTERING"),
+                   row(1, 2, set(4, 2)),
+                   row(1, 3, set(6, 2)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c CONTAINS 2");
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING"),
+                   row(1, 2, set(4, 2)),
+                   row(1, 3, set(6, 2)));
 
         assertInvalidMessage("Cannot use CONTAINS KEY on non-map column c",
                              "SELECT * FROM %s WHERE c CONTAINS KEY 2 ALLOW FILTERING");
 
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 AND c CONTAINS 6 ALLOW FILTERING"),
+                   row(1, 3, set(6, 2)));
+
         // Checks filtering with null
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c = null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c = null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c > null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c > null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c CONTAINS null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS null ALLOW FILTERING");
 
         // Checks filtering with unset
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c = ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c > ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS ? ALLOW FILTERING",
                              unset());
 
@@ -2027,11 +2265,31 @@ public class SelectTest extends CQLTester
         createTable("CREATE TABLE %s (a int, b int, c blob, PRIMARY KEY (a, b))");
         createIndex("CREATE INDEX test ON %s (c)");
 
-        execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?)", 0, 0, ByteBufferUtil.bytes(1));
-        execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?)", 0, 1, ByteBufferUtil.bytes(2));
+        execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?)", 0, 0, bytes(1));
+        execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?)", 0, 1, bytes(2));
 
         assertInvalidMessage("Index expression values may not be larger than 64K",
                              "SELECT * FROM %s WHERE c = ?  ALLOW FILTERING", TOO_BIG);
+
+        dropIndex("DROP INDEX %s.test");
+        assertEmpty(execute("SELECT * FROM %s WHERE c = ?  ALLOW FILTERING", TOO_BIG));
+    }
+
+    @Test
+    public void testPKQueryWithValueOver64K() throws Throwable
+    {
+        createTable("CREATE TABLE %s (a text, b text, PRIMARY KEY (a, b))");
+
+        assertInvalidThrow(InvalidRequestException.class,
+                           "SELECT * FROM %s WHERE a = ?", new String(TOO_BIG.array()));
+    }
+
+    @Test
+    public void testCKQueryWithValueOver64K() throws Throwable
+    {
+        createTable("CREATE TABLE %s (a text, b text, PRIMARY KEY (a, b))");
+
+        execute("SELECT * FROM %s WHERE a = 'foo' AND b = ?", new String(TOO_BIG.array()));
     }
 
     @Test
@@ -2050,45 +2308,72 @@ public class SelectTest extends CQLTester
         flush();
 
         // Checks filtering
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = {4 : 1} ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = {4 : 1}");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c > {4 : 2} ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE a = 1 AND b = 4 AND c = {4 : 1} ALLOW FILTERING"),
+                   row(1, 4, map(4, 1)));
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE b <= 3 AND c < {6 : 2} ALLOW FILTERING");
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c > {4 : 2}");
 
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
-                             "SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING");
+        assertRows(execute("SELECT * FROM %s WHERE c > {4 : 2} ALLOW FILTERING"),
+                   row(1, 3, map(6, 2)),
+                   row(2, 3, map(7, 1)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE b <= 3 AND c < {6 : 2}");
+
+        assertRows(execute("SELECT * FROM %s WHERE b <= 3 AND c < {6 : 2} ALLOW FILTERING"),
+                   row(1, 2, map(4, 2)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c >= {4 : 2} AND c <= {6 : 4}");
+
+        assertRows(execute("SELECT * FROM %s WHERE c >= {4 : 2} AND c <= {6 : 4} ALLOW FILTERING"),
+                   row(1, 2, map(4, 2)),
+                   row(1, 3, map(6, 2)));
+
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
+                             "SELECT * FROM %s WHERE c CONTAINS 2");
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 ALLOW FILTERING"),
+                   row(1, 2, map(4, 2)),
+                   row(1, 3, map(6, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS KEY 6 ALLOW FILTERING"),
+                   row(1, 3, map(6, 2)));
+
+        assertRows(execute("SELECT * FROM %s WHERE c CONTAINS 2 AND c CONTAINS KEY 6 ALLOW FILTERING"),
+                   row(1, 3, map(6, 2)));
 
         // Checks filtering with null
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c = null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c = null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c > null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c > null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage(StatementRestrictions.REQUIRES_ALLOW_FILTERING_MESSAGE,
                              "SELECT * FROM %s WHERE c CONTAINS null");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS null ALLOW FILTERING");
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported null value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS KEY null ALLOW FILTERING");
 
         // Checks filtering with unset
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c = ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c > ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS ? ALLOW FILTERING",
                              unset());
-        assertInvalidMessage("Predicates on non-primary-key columns (c) are not yet supported for non secondary index queries",
+        assertInvalidMessage("Unsupported unset value for column c",
                              "SELECT * FROM %s WHERE c CONTAINS KEY ? ALLOW FILTERING",
                              unset());
 
@@ -2252,30 +2537,390 @@ public class SelectTest extends CQLTester
     }
 
     @Test
-    public void testOverlyLargeSelectPK() throws Throwable
+    public void testFilteringWithSecondaryIndex() throws Throwable
     {
-        createTable("CREATE TABLE %s (a text, b text, PRIMARY KEY ((a), b))");
+        createTable("CREATE TABLE %s (pk int, " +
+                    "c1 int, " +
+                    "c2 int, " +
+                    "c3 int, " +
+                    "v int, " +
+                    "PRIMARY KEY (pk, c1, c2, c3))");
+        createIndex("CREATE INDEX v_idx_1 ON %s (v);");
 
-        assertInvalidThrow(InvalidRequestException.class,
-                           "SELECT * FROM %s WHERE a = ?", new String(TOO_BIG.array()));
+        for (int i = 1; i <= 5; i++)
+        {
+            execute("INSERT INTO %s (pk, c1, c2, c3, v) VALUES (?, ?, ?, ?, ?)", 1, 1, 1, 1, i);
+            execute("INSERT INTO %s (pk, c1, c2, c3, v) VALUES (?, ?, ?, ?, ?)", 1, 1, 1, i, i);
+            execute("INSERT INTO %s (pk, c1, c2, c3, v) VALUES (?, ?, ?, ?, ?)", 1, 1, i, i, i);
+            execute("INSERT INTO %s (pk, c1, c2, c3, v) VALUES (?, ?, ?, ?, ?)", 1, i, i, i, i);
+        }
+
+        assertRows(execute("SELECT * FROM %s WHERE pk = 1 AND  c1 > 0 AND c1 < 5 AND c2 = 1 AND v = 3 ALLOW FILTERING;"),
+                   row(1, 1, 1, 3, 3));
+
+        assertEmpty(execute("SELECT * FROM %s WHERE pk = 1 AND  c1 > 1 AND c1 < 5 AND c2 = 1 AND v = 3 ALLOW FILTERING;"));
+
+        assertRows(execute("SELECT * FROM %s WHERE pk = 1 AND  c1 > 1 AND c2 > 2 AND c3 > 2 AND v = 3 ALLOW FILTERING;"),
+                   row(1, 3, 3, 3, 3));
+
+        assertRows(execute("SELECT * FROM %s WHERE pk = 1 AND  c1 > 1 AND c2 > 2 AND c3 = 3 AND v = 3 ALLOW FILTERING;"),
+                   row(1, 3, 3, 3, 3));
+
+        assertRows(execute("SELECT * FROM %s WHERE pk = 1 AND  c1 IN(0,1,2) AND c2 = 1 AND v = 3 ALLOW FILTERING;"),
+                   row(1, 1, 1, 3, 3));
+
+        assertRows(execute("SELECT * FROM %s WHERE pk = 1 AND  c1 IN(0,1,2) AND c2 = 1 AND v = 3"),
+                   row(1, 1, 1, 3, 3));
+
+        assertInvalidMessage("Clustering column \"c2\" cannot be restricted (preceding column \"c1\" is restricted by a non-EQ relation)",
+                             "SELECT * FROM %s WHERE pk = 1 AND  c1 > 0 AND c1 < 5 AND c2 = 1 ALLOW FILTERING;");
+
+        assertInvalidMessage("PRIMARY KEY column \"c2\" cannot be restricted as preceding column \"c1\" is not restricted",
+                             "SELECT * FROM %s WHERE pk = 1 AND  c2 = 1 ALLOW FILTERING;");
     }
 
     @Test
-    public void testOverlyLargeSelectCK() throws Throwable
+    public void testEmptyRestrictionValue() throws Throwable
     {
-        createTable("CREATE TABLE %s (a text, b text, PRIMARY KEY ((a), b))");
+        for (String options : new String[] { "", " WITH COMPACT STORAGE" })
+        {
+            createTable("CREATE TABLE %s (pk blob, c blob, v blob, PRIMARY KEY ((pk), c))" + options);
+            execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                    bytes("foo123"), bytes("1"), bytes("1"));
+            execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                    bytes("foo123"), bytes("2"), bytes("2"));
 
-        assertInvalidThrow(InvalidRequestException.class,
-                           "SELECT * FROM %s WHERE a = 'foo' AND b = ?", new String(TOO_BIG.array()));
+            beforeAndAfterFlush(() -> {
+
+                assertInvalidMessage("Key may not be empty", "SELECT * FROM %s WHERE pk = textAsBlob('');");
+                assertInvalidMessage("Key may not be empty", "SELECT * FROM %s WHERE pk IN (textAsBlob(''), textAsBlob('1'));");
+
+                assertInvalidMessage("Key may not be empty",
+                                     "INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                                     EMPTY_BYTE_BUFFER, bytes("2"), bytes("2"));
+
+                // Test clustering columns restrictions
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c = textAsBlob('');"));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) = (textAsBlob(''));"));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c IN (textAsBlob(''), textAsBlob('1'));"),
+                           row(bytes("foo123"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) IN ((textAsBlob('')), (textAsBlob('1')));"),
+                           row(bytes("foo123"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c > textAsBlob('');"),
+                           row(bytes("foo123"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("2"), bytes("2")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) > (textAsBlob(''));"),
+                           row(bytes("foo123"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("2"), bytes("2")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c >= textAsBlob('');"),
+                           row(bytes("foo123"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("2"), bytes("2")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) >= (textAsBlob(''));"),
+                           row(bytes("foo123"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("2"), bytes("2")));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c <= textAsBlob('');"));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) <= (textAsBlob(''));"));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c < textAsBlob('');"));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) < (textAsBlob(''));"));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c > textAsBlob('') AND c < textAsBlob('');"));
+            });
+
+            if (options.contains("COMPACT"))
+            {
+                assertInvalidMessage("Invalid empty or null value for column c",
+                                     "INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                                     bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4"));
+            }
+            else
+            {
+                execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                        bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4"));
+
+                beforeAndAfterFlush(() -> {
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c = textAsBlob('');"),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) = (textAsBlob(''));"),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c IN (textAsBlob(''), textAsBlob('1'));"),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")),
+                               row(bytes("foo123"), bytes("1"), bytes("1")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) IN ((textAsBlob('')), (textAsBlob('1')));"),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")),
+                               row(bytes("foo123"), bytes("1"), bytes("1")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c > textAsBlob('');"),
+                               row(bytes("foo123"), bytes("1"), bytes("1")),
+                               row(bytes("foo123"), bytes("2"), bytes("2")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) > (textAsBlob(''));"),
+                               row(bytes("foo123"), bytes("1"), bytes("1")),
+                               row(bytes("foo123"), bytes("2"), bytes("2")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c >= textAsBlob('');"),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")),
+                               row(bytes("foo123"), bytes("1"), bytes("1")),
+                               row(bytes("foo123"), bytes("2"), bytes("2")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) >= (textAsBlob(''));"),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")),
+                               row(bytes("foo123"), bytes("1"), bytes("1")),
+                               row(bytes("foo123"), bytes("2"), bytes("2")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c <= textAsBlob('');"),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) <= (textAsBlob(''));"),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")));
+
+                    assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c < textAsBlob('');"));
+
+                    assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c) < (textAsBlob(''));"));
+
+                    assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c >= textAsBlob('') AND c < textAsBlob('');"));
+                });
+            }
+
+            // Test restrictions on non-primary key value
+            assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND v = textAsBlob('') ALLOW FILTERING;"));
+
+            execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                    bytes("foo123"), bytes("3"), EMPTY_BYTE_BUFFER);
+
+            beforeAndAfterFlush(() -> {
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND v = textAsBlob('') ALLOW FILTERING;"),
+                           row(bytes("foo123"), bytes("3"), EMPTY_BYTE_BUFFER));
+            });
+        }
     }
 
     @Test
-    public void testOverlyLargeSelectKeyIn() throws Throwable
+    public void testEmptyRestrictionValueWithMultipleClusteringColumns() throws Throwable
     {
-        createTable("CREATE TABLE %s (a text, b text, c text, d text, PRIMARY KEY ((a, b, c), d))");
+        for (String options : new String[] { "", " WITH COMPACT STORAGE" })
+        {
+            createTable("CREATE TABLE %s (pk blob, c1 blob, c2 blob, v blob, PRIMARY KEY (pk, c1, c2))" + options);
+            execute("INSERT INTO %s (pk, c1, c2, v) VALUES (?, ?, ?, ?)", bytes("foo123"), bytes("1"), bytes("1"), bytes("1"));
+            execute("INSERT INTO %s (pk, c1, c2, v) VALUES (?, ?, ?, ?)", bytes("foo123"), bytes("1"), bytes("2"), bytes("2"));
 
-        assertInvalidThrow(InvalidRequestException.class,
-                           "SELECT * FROM %s WHERE a = 'foo' AND b= 'bar' AND c IN (?, ?)",
-                           new String(TOO_BIG.array()), new String(TOO_BIG.array()));
+            beforeAndAfterFlush(() -> {
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('');"));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('1') AND c2 = textAsBlob('');"));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) = (textAsBlob('1'), textAsBlob(''));"));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 IN (textAsBlob(''), textAsBlob('1')) AND c2 = textAsBlob('1');"),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('1') AND c2 IN (textAsBlob(''), textAsBlob('1'));"),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) IN ((textAsBlob(''), textAsBlob('1')), (textAsBlob('1'), textAsBlob('1')));"),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 > textAsBlob('');"),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('1') AND c2 > textAsBlob('');"),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) > (textAsBlob(''), textAsBlob('1'));"),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('1') AND c2 >= textAsBlob('');"),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('1') AND c2 <= textAsBlob('');"));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) <= (textAsBlob('1'), textAsBlob(''));"));
+            });
+
+            execute("INSERT INTO %s (pk, c1, c2, v) VALUES (?, ?, ?, ?)",
+                    bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4"));
+
+            beforeAndAfterFlush(() -> {
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('');"),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('') AND c2 = textAsBlob('1');"),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) = (textAsBlob(''), textAsBlob('1'));"),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 IN (textAsBlob(''), textAsBlob('1')) AND c2 = textAsBlob('1');"),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) IN ((textAsBlob(''), textAsBlob('1')), (textAsBlob('1'), textAsBlob('1')));"),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) > (textAsBlob(''), textAsBlob('1'));"),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) >= (textAsBlob(''), textAsBlob('1'));"),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) <= (textAsBlob(''), textAsBlob('1'));"),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) < (textAsBlob(''), textAsBlob('1'));"));
+            });
+        }
+    }
+
+    @Test
+    public void testEmptyRestrictionValueWithOrderBy() throws Throwable
+    {
+        for (String options : new String[] { "",
+                                             " WITH COMPACT STORAGE",
+                                             " WITH CLUSTERING ORDER BY (c DESC)",
+                                             " WITH COMPACT STORAGE AND CLUSTERING ORDER BY (c DESC)"})
+        {
+            String orderingClause = options.contains("ORDER") ? "" : "ORDER BY c DESC" ;
+
+            createTable("CREATE TABLE %s (pk blob, c blob, v blob, PRIMARY KEY ((pk), c))" + options);
+            execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                    bytes("foo123"),
+                    bytes("1"),
+                    bytes("1"));
+            execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                    bytes("foo123"),
+                    bytes("2"),
+                    bytes("2"));
+
+            beforeAndAfterFlush(() -> {
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c > textAsBlob('')" + orderingClause),
+                           row(bytes("foo123"), bytes("2"), bytes("2")),
+                           row(bytes("foo123"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c >= textAsBlob('')" + orderingClause),
+                           row(bytes("foo123"), bytes("2"), bytes("2")),
+                           row(bytes("foo123"), bytes("1"), bytes("1")));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c < textAsBlob('')" + orderingClause));
+
+                assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c <= textAsBlob('')" + orderingClause));
+
+            });
+
+            if (options.contains("COMPACT"))
+            {
+                assertInvalidMessage("Invalid empty or null value for column c",
+                                     "INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                                     bytes("foo123"),
+                                     EMPTY_BYTE_BUFFER,
+                                     bytes("4"));
+            }
+            else
+            {
+                execute("INSERT INTO %s (pk, c, v) VALUES (?, ?, ?)",
+                        bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4"));
+
+                beforeAndAfterFlush(() -> {
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c IN (textAsBlob(''), textAsBlob('1'))" + orderingClause),
+                               row(bytes("foo123"), bytes("1"), bytes("1")),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c > textAsBlob('')" + orderingClause),
+                               row(bytes("foo123"), bytes("2"), bytes("2")),
+                               row(bytes("foo123"), bytes("1"), bytes("1")));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c >= textAsBlob('')" + orderingClause),
+                               row(bytes("foo123"), bytes("2"), bytes("2")),
+                               row(bytes("foo123"), bytes("1"), bytes("1")),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")));
+
+                    assertEmpty(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c < textAsBlob('')" + orderingClause));
+
+                    assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c <= textAsBlob('')" + orderingClause),
+                               row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("4")));
+                });
+            }
+        }
+    }
+
+    @Test
+    public void testEmptyRestrictionValueWithMultipleClusteringColumnsAndOrderBy() throws Throwable
+    {
+        for (String options : new String[] { "",
+                " WITH COMPACT STORAGE",
+                " WITH CLUSTERING ORDER BY (c1 DESC, c2 DESC)",
+                " WITH COMPACT STORAGE AND CLUSTERING ORDER BY (c1 DESC, c2 DESC)"})
+        {
+            String orderingClause = options.contains("ORDER") ? "" : "ORDER BY c1 DESC, c2 DESC" ;
+
+            createTable("CREATE TABLE %s (pk blob, c1 blob, c2 blob, v blob, PRIMARY KEY (pk, c1, c2))" + options);
+            execute("INSERT INTO %s (pk, c1, c2, v) VALUES (?, ?, ?, ?)", bytes("foo123"), bytes("1"), bytes("1"), bytes("1"));
+            execute("INSERT INTO %s (pk, c1, c2, v) VALUES (?, ?, ?, ?)", bytes("foo123"), bytes("1"), bytes("2"), bytes("2"));
+
+            beforeAndAfterFlush(() -> {
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 > textAsBlob('')" + orderingClause),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('1') AND c2 > textAsBlob('')" + orderingClause),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) > (textAsBlob(''), textAsBlob('1'))" + orderingClause),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 = textAsBlob('1') AND c2 >= textAsBlob('')" + orderingClause),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+            });
+
+            execute("INSERT INTO %s (pk, c1, c2, v) VALUES (?, ?, ?, ?)",
+                    bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4"));
+
+            beforeAndAfterFlush(() -> {
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND c1 IN (textAsBlob(''), textAsBlob('1')) AND c2 = textAsBlob('1')" + orderingClause),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) IN ((textAsBlob(''), textAsBlob('1')), (textAsBlob('1'), textAsBlob('1')))" + orderingClause),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) > (textAsBlob(''), textAsBlob('1'))" + orderingClause),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")));
+
+                assertRows(execute("SELECT * FROM %s WHERE pk = textAsBlob('foo123') AND (c1, c2) >= (textAsBlob(''), textAsBlob('1'))" + orderingClause),
+                           row(bytes("foo123"), bytes("1"), bytes("2"), bytes("2")),
+                           row(bytes("foo123"), bytes("1"), bytes("1"), bytes("1")),
+                           row(bytes("foo123"), EMPTY_BYTE_BUFFER, bytes("1"), bytes("4")));
+            });
+        }
     }
 }

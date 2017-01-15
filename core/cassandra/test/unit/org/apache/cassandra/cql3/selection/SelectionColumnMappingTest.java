@@ -53,7 +53,7 @@ public class SelectionColumnMappingTest extends CQLTester
     @BeforeClass
     public static void setUpClass()
     {
-        DatabaseDescriptor.setPartitioner(ByteOrderedPartitioner.instance);
+        DatabaseDescriptor.setPartitionerUnsafe(ByteOrderedPartitioner.instance);
     }
 
     @Test
@@ -68,7 +68,7 @@ public class SelectionColumnMappingTest extends CQLTester
                                 " v1 int," +
                                 " v2 ascii," +
                                 " v3 frozen<" + typeName + ">)");
-        userType = Schema.instance.getKSMetaData(KEYSPACE).userTypes.getType(ByteBufferUtil.bytes(typeName));
+        userType = Schema.instance.getKSMetaData(KEYSPACE).types.get(ByteBufferUtil.bytes(typeName)).get();
         functionName = createFunction(KEYSPACE, "int, ascii",
                                       "CREATE FUNCTION %s (i int, a ascii) " +
                                       "CALLED ON NULL INPUT " +
@@ -159,7 +159,6 @@ public class SelectionColumnMappingTest extends CQLTester
                                                                 .addMapping(kSpec, columnDefinition("k"))
                                                                 .addMapping(v1Spec, columnDefinition("v1"))
                                                                 .addMapping(v2Spec, columnDefinition("v2"));
-
         verify(expected, "SELECT k AS k_alias, v1 AS v1_alias, v2 AS v2_alias FROM %s");
     }
 

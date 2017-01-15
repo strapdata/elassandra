@@ -24,6 +24,7 @@ import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.cluster.ClusterService;
@@ -717,5 +718,11 @@ public class TestSearchContext extends SearchContext {
     @Override
     public ClusterState getClusterState() {
         return clusterService.state();
+    }
+
+    @Override
+    public SearchProcessor searchProcessor() {
+        // TODO Auto-generated method stub
+        return null;
     }
 }

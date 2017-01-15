@@ -21,15 +21,18 @@ package org.apache.cassandra.utils;
 import java.math.BigInteger;
 import java.util.*;
 
-import com.google.common.collect.AbstractIterator;
-import com.google.common.io.ByteArrayDataInput;
-import com.google.common.io.ByteStreams;
+import org.apache.cassandra.utils.AbstractIterator;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.dht.*;
+import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner.BigIntegerToken;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.util.DataInputBuffer;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.MerkleTree.Hashable;
@@ -64,7 +67,7 @@ public class MerkleTreeTest
         TOKEN_SCALE = new BigInteger("8");
         partitioner = RandomPartitioner.instance;
         // TODO need to trickle TokenSerializer
-        DatabaseDescriptor.setPartitioner(partitioner);
+        DatabaseDescriptor.setPartitionerUnsafe(partitioner);
         mt = new MerkleTree(partitioner, fullRange(), RECOMMENDED_DEPTH, Integer.MAX_VALUE);
     }
 
@@ -397,7 +400,7 @@ public class MerkleTreeTest
         MerkleTree.serializer.serialize(mt, out, MessagingService.current_version);
         byte[] serialized = out.toByteArray();
 
-        ByteArrayDataInput in = ByteStreams.newDataInput(serialized);
+        DataInputPlus in = new DataInputBuffer(serialized);
         MerkleTree restored = MerkleTree.serializer.deserialize(in, MessagingService.current_version);
 
         assertHashEquals(initialhash, restored.hash(full));

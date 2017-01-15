@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.DataOutputStreamPlus;
@@ -45,8 +47,16 @@ public class OutgoingFileMessage extends StreamMessage
 
         public void serialize(OutgoingFileMessage message, DataOutputStreamPlus out, int version, StreamSession session) throws IOException
         {
-            message.serialize(out, version, session);
-            session.fileSent(message.header);
+            message.startTransfer();
+            try
+            {
+                message.serialize(out, version, session);
+                session.fileSent(message.header);
+            }
+            finally
+            {
+                message.finishTransfer();
+            }
         }
     };
 
@@ -54,6 +64,7 @@ public class OutgoingFileMessage extends StreamMessage
     private final Ref<SSTableReader> ref;
     private final String filename;
     private boolean completed = false;
+    private boolean transferring = false;
 
     public OutgoingFileMessage(Ref<SSTableReader> ref, int sequenceNumber, long estimatedKeys, List<Pair<Long, Long>> sections, long repairedAt, boolean keepSSTableLevel)
     {
@@ -64,13 +75,14 @@ public class OutgoingFileMessage extends StreamMessage
         filename = sstable.getFilename();
         this.header = new FileMessageHeader(sstable.metadata.cfId,
                                             sequenceNumber,
-                                            sstable.descriptor.version.toString(),
+                                            sstable.descriptor.version,
                                             sstable.descriptor.formatType,
                                             estimatedKeys,
                                             sections,
                                             sstable.compression ? sstable.getCompressionMetadata() : null,
                                             repairedAt,
-                                            keepSSTableLevel ? sstable.getSSTableLevel() : 0);
+                                            keepSSTableLevel ? sstable.getSSTableLevel() : 0,
+                                            sstable.header == null ? null : sstable.header.toComponent());
     }
 
     public synchronized void serialize(DataOutputStreamPlus out, int version, StreamSession session) throws IOException
@@ -90,12 +102,36 @@ public class OutgoingFileMessage extends StreamMessage
         writer.write(out);
     }
 
+    @VisibleForTesting
+    public synchronized void finishTransfer()
+    {
+        transferring = false;
+        //session was aborted mid-transfer, now it's safe to release
+        if (completed)
+        {
+            ref.release();
+        }
+    }
+
+    @VisibleForTesting
+    public synchronized void startTransfer()
+    {
+        if (completed)
+            throw new RuntimeException(String.format("Transfer of file %s already completed or aborted (perhaps session failed?).",
+                                                     filename));
+        transferring = true;
+    }
+
     public synchronized void complete()
     {
         if (!completed)
         {
             completed = true;
-            ref.release();
+            //release only if not transferring
+            if (!transferring)
+            {
+                ref.release();
+            }
         }
     }
 

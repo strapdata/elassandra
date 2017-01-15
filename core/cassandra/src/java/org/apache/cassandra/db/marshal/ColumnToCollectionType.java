@@ -31,6 +31,9 @@ import org.apache.cassandra.serializers.BytesSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
+/*
+ * This class is deprecated and only kept for backward compatibility.
+ */
 public class ColumnToCollectionType extends AbstractType<ByteBuffer>
 {
     // interning instances
@@ -58,10 +61,11 @@ public class ColumnToCollectionType extends AbstractType<ByteBuffer>
 
     private ColumnToCollectionType(Map<ByteBuffer, CollectionType> defined)
     {
+        super(ComparisonType.CUSTOM);
         this.defined = ImmutableMap.copyOf(defined);
     }
 
-    public int compare(ByteBuffer o1, ByteBuffer o2)
+    public int compareCustom(ByteBuffer o1, ByteBuffer o2)
     {
         throw new UnsupportedOperationException("ColumnToCollectionType should only be used in composite types, never alone");
     }

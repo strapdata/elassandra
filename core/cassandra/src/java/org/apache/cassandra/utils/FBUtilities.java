@@ -19,8 +19,6 @@ package org.apache.cassandra.utils;
 
 import java.io.*;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.net.*;
 import java.nio.ByteBuffer;
@@ -28,14 +26,14 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.zip.Adler32;
+import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
-import com.google.common.collect.AbstractIterator;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,12 +43,18 @@ import org.apache.cassandra.auth.IAuthorizer;
 import org.apache.cassandra.auth.IRoleManager;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.LocalPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.IVersionedSerializer;
-import org.apache.cassandra.io.compress.CompressionParameters;
+import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
+import org.apache.cassandra.io.sstable.metadata.MetadataType;
+import org.apache.cassandra.io.sstable.metadata.ValidationMetadata;
+import org.apache.cassandra.schema.CompressionParams;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputBufferFixed;
 import org.apache.cassandra.io.util.FileUtils;
@@ -74,6 +78,7 @@ public class FBUtilities
 
     private static volatile InetAddress localInetAddress;
     private static volatile InetAddress broadcastInetAddress;
+    private static volatile InetAddress broadcastRpcAddress;
 
     public static int getAvailableProcessors()
     {
@@ -145,6 +150,16 @@ public class FBUtilities
                                  ? getLocalAddress()
                                  : DatabaseDescriptor.getBroadcastAddress();
         return broadcastInetAddress;
+    }
+
+
+    public static InetAddress getBroadcastRpcAddress()
+    {
+        if (broadcastRpcAddress == null)
+            broadcastRpcAddress = DatabaseDescriptor.getBroadcastRpcAddress() == null
+                                   ? DatabaseDescriptor.getRpcAddress()
+                                   : DatabaseDescriptor.getBroadcastRpcAddress();
+        return broadcastRpcAddress;
     }
 
     public static Collection<InetAddress> getAllLocalAddresses()
@@ -352,6 +367,11 @@ public class FBUtilities
         return System.currentTimeMillis() * 1000;
     }
 
+    public static int nowInSeconds()
+    {
+        return (int) (System.currentTimeMillis() / 1000);
+    }
+
     public static <T> List<T> waitOnFutures(Iterable<? extends Future<? extends T>> futures)
     {
         List<T> results = new ArrayList<>();
@@ -362,9 +382,9 @@ public class FBUtilities
             {
                 results.add(f.get());
             }
-            catch (InterruptedException | ExecutionException e)
+            catch (Throwable t)
             {
-                fail = Throwables.merge(fail, e);
+                fail = Throwables.merge(fail, t);
             }
         }
         Throwables.maybeFail(fail);
@@ -391,6 +411,28 @@ public class FBUtilities
     {
         for (AsyncOneResponse result : results)
             result.get(ms, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Create a new instance of a partitioner defined in an SSTable Descriptor
+     * @param desc Descriptor of an sstable
+     * @return a new IPartitioner instance
+     * @throws IOException
+     */
+    public static IPartitioner newPartitioner(Descriptor desc) throws IOException
+    {
+        EnumSet<MetadataType> types = EnumSet.of(MetadataType.VALIDATION, MetadataType.HEADER);
+        Map<MetadataType, MetadataComponent> sstableMetadata = desc.getMetadataSerializer().deserialize(desc, types);
+        ValidationMetadata validationMetadata = (ValidationMetadata) sstableMetadata.get(MetadataType.VALIDATION);
+        SerializationHeader.Component header = (SerializationHeader.Component) sstableMetadata.get(MetadataType.HEADER);
+        if (validationMetadata.partitioner.endsWith("LocalPartitioner"))
+        {
+            return new LocalPartitioner(header.getKeyType());
+        }
+        else
+        {
+            return newPartitioner(validationMetadata.partitioner);
+        }
     }
 
     public static IPartitioner newPartitioner(String partitionerClassName) throws ConfigurationException
@@ -495,11 +537,16 @@ public class FBUtilities
         }
     }
 
-    public static <T> SortedSet<T> singleton(T column, Comparator<? super T> comparator)
+    public static <T> NavigableSet<T> singleton(T column, Comparator<? super T> comparator)
     {
-        SortedSet<T> s = new TreeSet<T>(comparator);
+        NavigableSet<T> s = new TreeSet<T>(comparator);
         s.add(column);
         return s;
+    }
+
+    public static <T> NavigableSet<T> emptySortedSet(Comparator<? super T> comparator)
+    {
+        return new TreeSet<T>(comparator);
     }
 
     /**
@@ -630,18 +677,32 @@ public class FBUtilities
         checksum.update((v >>> 0) & 0xFF);
     }
 
-    private static Method directUpdate;
-    static
+    /**
+      * Updates checksum with the provided ByteBuffer at the given offset + length.
+      * Resets position and limit back to their original values on return.
+      * This method is *NOT* thread-safe.
+      */
+    public static void updateChecksum(CRC32 checksum, ByteBuffer buffer, int offset, int length)
     {
-        try
-        {
-            directUpdate = Adler32.class.getDeclaredMethod("update", new Class[]{ByteBuffer.class});
-            directUpdate.setAccessible(true);
-        } catch (NoSuchMethodException e)
-        {
-            logger.warn("JVM doesn't support Adler32 byte buffer access");
-            directUpdate = null;
-        }
+        int position = buffer.position();
+        int limit = buffer.limit();
+
+        buffer.position(offset).limit(offset + length);
+        checksum.update(buffer);
+
+        buffer.position(position).limit(limit);
+    }
+
+    /**
+     * Updates checksum with the provided ByteBuffer.
+     * Resets position back to its original values on return.
+     * This method is *NOT* thread-safe.
+     */
+    public static void updateChecksum(CRC32 checksum, ByteBuffer buffer)
+    {
+        int position = buffer.position();
+        checksum.update(buffer);
+        buffer.position(position);
     }
 
     private static final ThreadLocal<byte[]> threadLocalScratchBuffer = new ThreadLocal<byte[]>()
@@ -649,52 +710,13 @@ public class FBUtilities
         @Override
         protected byte[] initialValue()
         {
-            return new byte[CompressionParameters.DEFAULT_CHUNK_LENGTH];
+            return new byte[CompressionParams.DEFAULT_CHUNK_LENGTH];
         }
     };
 
     public static byte[] getThreadLocalScratchBuffer()
     {
         return threadLocalScratchBuffer.get();
-    }
-
-    //Java 7 has this method but it's private till Java 8. Thanks JDK!
-    public static boolean supportsDirectChecksum()
-    {
-        return directUpdate != null;
-    }
-
-    public static void directCheckSum(Adler32 checksum, ByteBuffer bb)
-    {
-        if (directUpdate != null)
-        {
-            try
-            {
-                directUpdate.invoke(checksum, bb);
-                return;
-            }
-            catch (IllegalAccessException e)
-            {
-                directUpdate = null;
-                logger.warn("JVM doesn't support Adler32 byte buffer access");
-            }
-            catch (InvocationTargetException e)
-            {
-                throw new RuntimeException(e);
-            }
-        }
-
-        //Fallback
-        byte[] buffer = getThreadLocalScratchBuffer();
-
-        int remaining;
-        while ((remaining = bb.remaining()) > 0)
-        {
-            remaining = Math.min(remaining, buffer.length);
-            ByteBufferUtil.arrayCopy(bb, bb.position(), buffer, 0, remaining);
-            bb.position(bb.position() + remaining);
-            checksum.update(buffer, 0, remaining);
-        }
     }
 
     public static long abs(long index)
@@ -809,6 +831,32 @@ public class FBUtilities
         digest.update((byte)  ((val >>> 0) & 0xFF));
     }
 
+    public static void updateWithBoolean(MessageDigest digest, boolean val)
+    {
+        updateWithByte(digest, val ? 0 : 1);
+    }
+
+    public static void closeAll(List<? extends AutoCloseable> l) throws Exception
+    {
+        Exception toThrow = null;
+        for (AutoCloseable c : l)
+        {
+            try
+            {
+                c.close();
+            }
+            catch (Exception e)
+            {
+                if (toThrow == null)
+                    toThrow = e;
+                else
+                    toThrow.addSuppressed(e);
+            }
+        }
+        if (toThrow != null)
+            throw toThrow;
+    }
+
     public static byte[] toWriteUTFBytes(String s)
     {
         try
@@ -823,5 +871,13 @@ public class FBUtilities
         {
             throw new RuntimeException(e);
         }
+    }
+
+    @VisibleForTesting
+    protected static void reset()
+    {
+        localInetAddress = null;
+        broadcastInetAddress = null;
+        broadcastRpcAddress = null;
     }
 }

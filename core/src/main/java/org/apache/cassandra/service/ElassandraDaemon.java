@@ -4,6 +4,8 @@ import static com.google.common.collect.Sets.newHashSet;
 
 import java.lang.management.ManagementFactory;
 import java.nio.file.Paths;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -12,18 +14,14 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
 
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.QueryProcessor;
-import org.apache.cassandra.db.SystemKeyspace;
-import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.utils.FBUtilities;
 import org.elassandra.NoPersistedMetaDataException;
 import org.elassandra.cluster.InternalCassandraClusterService;
 import org.elassandra.discovery.CassandraDiscovery;
-import org.elassandra.index.BaseElasticSecondaryIndex;
-import org.elassandra.shard.CassandraShardStartedBarrier;
+import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
 import org.elasticsearch.bootstrap.Bootstrap;
@@ -33,7 +31,6 @@ import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.metadata.MetaData;
-import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.common.cli.Terminal;
 import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Injector;
@@ -44,12 +41,12 @@ import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.logging.logback.LogbackESLoggerFactory;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
-import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.monitor.jvm.JvmInfo;
 import org.elasticsearch.monitor.process.ProcessProbe;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeBuilder;
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
+import org.elasticsearch.plugins.Plugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -94,11 +91,11 @@ public class ElassandraDaemon extends CassandraDaemon {
         return node;
     }
     
-    public void activate(boolean addShutdownHook, Settings settings, Environment env) {
-        instance.setup(addShutdownHook, settings, env); 
+    public void activate(boolean addShutdownHook, Settings settings, Environment env, Collection<Class<? extends Plugin>> pluginList) {
+        instance.setup(addShutdownHook, settings, env, pluginList); 
         
         //enable indexing in cassandra.
-        BaseElasticSecondaryIndex.runsElassandra = true;
+        ElasticSecondaryIndex.runsElassandra = true;
         
         try {
             MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
@@ -110,13 +107,6 @@ public class ElassandraDaemon extends CassandraDaemon {
         
         // add a workload column to system.local and system.peer, initialized to "elasticsearch"
         try {
-            CFMetaData peers = SystemKeyspace.definition().cfMetaData().get(SystemKeyspace.PEERS);
-            peers.addColumnDefinition(ColumnDefinition.regularDef(peers, UTF8Type.instance.fromString("workload"), UTF8Type.instance, Integer.valueOf(0)));
-            peers.rebuild();
-            
-            CFMetaData local = SystemKeyspace.definition().cfMetaData().get(SystemKeyspace.LOCAL);
-            local.addColumnDefinition(ColumnDefinition.regularDef(local, UTF8Type.instance.fromString("workload"), UTF8Type.instance, Integer.valueOf(0)));
-            local.rebuild();
             QueryProcessor.executeOnceInternal("INSERT INTO system.local (key, workload) VALUES (?,?)" , new Object[] { "local","elasticsearch" });
             logger.debug("Internal workload set to elasticsearch");
         } catch (ConfigurationException e) {
@@ -142,13 +132,11 @@ public class ElassandraDaemon extends CassandraDaemon {
     public void systemKeyspaceInitialized() {
         try {
             systemMetadata = node.clusterService().readMetaDataAsComment();
-            if (node != null) {
-                if (systemMetadata != null) {
-                    logger.debug("Starting Elasticsearch shards before open user keyspaces...");
-                    node.clusterService().addShardStartedBarrier();
-                    node.activate();
-                    node.clusterService().blockUntilShardsStarted();
-                }
+            if (node != null && systemMetadata != null) {
+                logger.debug("Starting Elasticsearch shards before open user keyspaces...");
+                node.clusterService().addShardStartedBarrier();
+                node.activate();
+                node.clusterService().blockUntilShardsStarted();
             }
         } catch(NoPersistedMetaDataException e) {
             logger.debug("Start Elasticsearch later, no mapping available");
@@ -160,9 +148,10 @@ public class ElassandraDaemon extends CassandraDaemon {
     
     @Override
     public void userKeyspaceInitialized() {
+        ElasticSecondaryIndex.userKeyspaceInitialized = true;
+        
         final ClusterService clusterService = node.clusterService();
         clusterService.submitStateUpdateTask("user-keyspaces-initialized",new ClusterStateUpdateTask() {
-
             @Override
             public ClusterState execute(ClusterState currentState) {
                 ClusterState newClusterState = clusterService.updateNumberOfShards( currentState );
@@ -173,7 +162,6 @@ public class ElassandraDaemon extends CassandraDaemon {
             public void onFailure(String source, Throwable t) {
                 logger.error("unexpected failure during [{}]", t, source);
             }
-
         });
     }
     
@@ -184,7 +172,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     @Override
-    public void tokensReady() {
+    public void ringReady() {
         node.activate();
     }
 
@@ -229,7 +217,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             keepAliveLatch.countDown();
     }
 
-    public void setup(boolean addShutdownHook, Settings settings, Environment environment) {
+    public void setup(boolean addShutdownHook, Settings settings, Environment environment, Collection<Class<? extends Plugin>> pluginList) {
         this.settings = settings;
         this.env = environment;
         org.elasticsearch.bootstrap.Bootstrap.initializeNatives(
@@ -282,15 +270,15 @@ public class ElassandraDaemon extends CassandraDaemon {
         nodeBuilder.clusterName(clusterName).data(true).settings()
                 .put("name", CassandraDiscovery.buildNodeName())
                 .put("network.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
-                .put("network.publish_host", DatabaseDescriptor.getBroadcastRpcAddress().getHostAddress())
+                .put("network.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
                 .put("transport.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
-                .put("transport.publish_host", DatabaseDescriptor.getBroadcastRpcAddress().getHostAddress())
+                .put("transport.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
                 //.put("http.netty.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
                 //.put("http.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
                 //.put("http.host", DatabaseDescriptor.getRpcAddress().getHostAddress())
                 ;
 
-        this.node = nodeBuilder.build();
+        this.node = nodeBuilder.build(pluginList);
     }
   
     public static Client client() {
@@ -387,8 +375,8 @@ public class ElassandraDaemon extends CassandraDaemon {
                         .build(), 
                     foreground ? Terminal.DEFAULT : null);
             
-            instance.activate(true, env.settings(), env);
-
+            instance.activate(true, env.settings(), env,  Collections.<Class<? extends Plugin>>emptyList());
+            
             if (!foreground) {
                 System.err.close();
             }

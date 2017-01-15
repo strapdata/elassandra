@@ -52,4 +52,12 @@ public class BytesSerializer implements TypeSerializer<ByteBuffer>
     {
         return ByteBuffer.class;
     }
+
+    @Override
+    public String toCQLLiteral(ByteBuffer buffer)
+    {
+        return buffer == null
+             ? "null"
+             : "0x" + toString(deserialize(buffer));
+    }
 }

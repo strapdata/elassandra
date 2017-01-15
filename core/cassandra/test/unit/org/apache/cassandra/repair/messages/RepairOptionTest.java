@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.cassandra.repair.messages;
 
 import java.util.HashMap;
@@ -35,7 +36,9 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.utils.FBUtilities;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class RepairOptionTest
 {
@@ -94,6 +97,26 @@ public class RepairOptionTest
         expectedHosts.add("127.0.0.2");
         expectedHosts.add("127.0.0.3");
         assertEquals(expectedHosts, option.getHosts());
+    }
+
+    @Test
+    public void testPrWithLocalParseOptions()
+    {
+        DatabaseDescriptor.forceStaticInitialization();
+
+        Map<String, String> options = new HashMap<>();
+        options.put(RepairOption.PARALLELISM_KEY, "parallel");
+        options.put(RepairOption.PRIMARY_RANGE_KEY, "true");
+        options.put(RepairOption.INCREMENTAL_KEY, "false");
+        options.put(RepairOption.COLUMNFAMILIES_KEY, "cf1,cf2,cf3");
+        options.put(RepairOption.DATACENTERS_KEY, "datacenter1");
+
+        RepairOption option = RepairOption.parse(options, Murmur3Partitioner.instance);
+        assertTrue(option.isPrimaryRange());
+
+        Set<String> expectedDCs = new HashSet<>(3);
+        expectedDCs.add("datacenter1");
+        assertEquals(expectedDCs, option.getDataCenters());
     }
 
     @Test

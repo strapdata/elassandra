@@ -339,6 +339,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 if (!dn.getStatus().equals(status)) {
                     dn.status(status);
                     updatedNode = true;
+                    logger.debug("node id={} new state={}",dn.id(), dn.status().toString());
                 }
             }
             if (updatedNode)
@@ -522,10 +523,16 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     }
    
     @Override
-    public void onRemove(InetAddress arg0) {
+    public void onRemove(InetAddress endpoint) {
         // TODO: support onRemove (hostId unavailable)
-        logger.warn("onRemove Endpoint={}  => disconnecting", arg0);
-        disconnectFromNode(arg0);
+        DiscoveryNode removedNode = this.nodes().findByInetAddress(endpoint);
+        if (removedNode != null) {
+            logger.warn("Removing node ip={} node={}  => disconnecting", endpoint, removedNode);
+            this.clusterGroup.remove(removedNode.getId());
+            updateRoutingTable("node-removed-"+removedNode.getId());
+            disconnectFromNode(endpoint);
+        }
+        
     }
 
     @Override

@@ -18,9 +18,9 @@
 
 package org.apache.cassandra.utils.progress.jmx;
 
+import java.util.Optional;
 import java.util.UUID;
 
-import com.google.common.base.Optional;
 import org.junit.Test;
 
 import org.apache.cassandra.dht.Murmur3Partitioner;

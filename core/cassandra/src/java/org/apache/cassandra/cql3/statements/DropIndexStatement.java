@@ -19,12 +19,12 @@ package org.apache.cassandra.cql3.statements;
 
 import org.apache.cassandra.auth.Permission;
 import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.ColumnDefinition;
-import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.cql3.*;
+import org.apache.cassandra.cql3.IndexName;
+import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.db.KeyspaceNotDefinedException;
 import org.apache.cassandra.exceptions.*;
+import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
@@ -36,9 +36,6 @@ public class DropIndexStatement extends SchemaAlteringStatement
     public final String indexName;
     public final boolean ifExists;
 
-    // initialized in announceMigration()
-    private String indexedCF;
-
     public DropIndexStatement(IndexName indexName, boolean ifExists)
     {
         super(indexName.getCfName());
@@ -48,23 +45,13 @@ public class DropIndexStatement extends SchemaAlteringStatement
 
     public String columnFamily()
     {
-        if (indexedCF != null)
-            return indexedCF;
-
-        try
-        {
-            CFMetaData cfm = findIndexedCF();
-            return cfm == null ? null : cfm.cfName;
-        }
-        catch (InvalidRequestException ire)
-        {
-            throw new RuntimeException(ire);
-        }
+        CFMetaData cfm = lookupIndexedTable();
+        return cfm == null ? null : cfm.cfName;
     }
 
     public void checkAccess(ClientState state) throws UnauthorizedException, InvalidRequestException
     {
-        CFMetaData cfm = findIndexedCF();
+        CFMetaData cfm = lookupIndexedTable();
         if (cfm == null)
             return;
 
@@ -73,70 +60,54 @@ public class DropIndexStatement extends SchemaAlteringStatement
 
     public void validate(ClientState state)
     {
-        // validated in findIndexedCf()
-    }
-
-    public Event.SchemaChange changeEvent()
-    {
-        // Dropping an index is akin to updating the CF
-        return new Event.SchemaChange(Event.SchemaChange.Change.UPDATED, Event.SchemaChange.Target.TABLE, keyspace(), columnFamily());
+        // validated in lookupIndexedTable()
     }
 
     @Override
     public ResultMessage execute(QueryState state, QueryOptions options) throws RequestValidationException
     {
-        announceMigration(false);
-        return indexedCF == null ? null : new ResultMessage.SchemaChange(changeEvent());
+        Event.SchemaChange ce = announceMigration(false);
+        return ce == null ? null : new ResultMessage.SchemaChange(ce);
     }
 
-    public boolean announceMigration(boolean isLocalOnly) throws InvalidRequestException, ConfigurationException
+    public Event.SchemaChange announceMigration(boolean isLocalOnly) throws InvalidRequestException, ConfigurationException
     {
-        CFMetaData cfm = findIndexedCF();
+        CFMetaData cfm = lookupIndexedTable();
         if (cfm == null)
-            return false;
+            return null;
 
-        CFMetaData updatedCfm = updateCFMetadata(cfm);
-        indexedCF = updatedCfm.cfName;
+        CFMetaData updatedCfm = cfm.copy();
+        updatedCfm.indexes(updatedCfm.getIndexes().without(indexName));
         MigrationManager.announceColumnFamilyUpdate(updatedCfm, isLocalOnly);
-        return true;
+        // Dropping an index is akin to updating the CF
+        // Note that we shouldn't call columnFamily() at this point because the index has been dropped and the call to lookupIndexedTable()
+        // in that method would now throw.
+        return new Event.SchemaChange(Event.SchemaChange.Change.UPDATED, Event.SchemaChange.Target.TABLE, cfm.ksName, cfm.cfName);
     }
 
-    private CFMetaData updateCFMetadata(CFMetaData cfm)
+    /**
+     * The table for which the index should be dropped, or null if the index doesn't exist
+     *
+     * @return the metadata for the table containing the dropped index, or {@code null}
+     * if the index to drop cannot be found but "IF EXISTS" is set on the statement.
+     *
+     * @throws InvalidRequestException if the index cannot be found and "IF EXISTS" is not
+     * set on the statement.
+     */
+    private CFMetaData lookupIndexedTable()
     {
-        ColumnDefinition column = findIndexedColumn(cfm);
-        assert column != null;
-        CFMetaData cloned = cfm.copy();
-        ColumnDefinition toChange = cloned.getColumnDefinition(column.name);
-        assert toChange.getIndexName() != null && toChange.getIndexName().equals(indexName);
-        toChange.setIndexName(null);
-        toChange.setIndexType(null, null);
-        return cloned;
-    }
-
-    private CFMetaData findIndexedCF() throws InvalidRequestException
-    {
-        KSMetaData ksm = Schema.instance.getKSMetaData(keyspace());
+        KeyspaceMetadata ksm = Schema.instance.getKSMetaData(keyspace());
         if (ksm == null)
             throw new KeyspaceNotDefinedException("Keyspace " + keyspace() + " does not exist");
-        for (CFMetaData cfm : ksm.cfMetaData().values())
-        {
-            if (findIndexedColumn(cfm) != null)
-                return cfm;
-        }
 
-        if (ifExists)
-            return null;
-        else
-            throw new InvalidRequestException("Index '" + indexName + "' could not be found in any of the tables of keyspace '" + keyspace() + '\'');
-    }
-
-    private ColumnDefinition findIndexedColumn(CFMetaData cfm)
-    {
-        for (ColumnDefinition column : cfm.allColumns())
-        {
-            if (column.getIndexType() != null && column.getIndexName() != null && column.getIndexName().equals(indexName))
-                return column;
-        }
-        return null;
+        return ksm.findIndexedTable(indexName)
+                  .orElseGet(() -> {
+                      if (ifExists)
+                          return null;
+                      else
+                          throw new InvalidRequestException(String.format("Index '%s' could not be found in any " +
+                                                                          "of the tables of keyspace '%s'",
+                                                                          indexName, keyspace()));
+                  });
     }
 }

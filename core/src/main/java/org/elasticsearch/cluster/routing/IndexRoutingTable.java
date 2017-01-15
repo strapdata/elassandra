@@ -416,7 +416,6 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
                 return;
             try {
                 PrimaryFirstSearchStrategy.PrimaryFirstRouter router = clusterService.updateRouter(targetIndexMetaData, targetState);
-                
                 AbstractSearchStrategy.Router.Route route = router.newRoute(null, null);
                 for(IndexShardRoutingTable isrt : route.getShardRouting()) {
                     // TODO: keep only nodes matching at least one routing entry

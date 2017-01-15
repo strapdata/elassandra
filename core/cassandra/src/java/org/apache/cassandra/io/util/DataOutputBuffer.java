@@ -151,7 +151,7 @@ public class DataOutputBuffer extends BufferedDataOutputStreamPlus
             return true;
         }
 
-        public void close() throws IOException
+        public void close()
         {
         }
     }
@@ -176,6 +176,16 @@ public class DataOutputBuffer extends BufferedDataOutputStreamPlus
     public int getLength()
     {
         return buffer.position();
+    }
+
+    public boolean hasPosition()
+    {
+        return true;
+    }
+
+    public long position()
+    {
+        return getLength();
     }
 
     public byte[] toByteArray()

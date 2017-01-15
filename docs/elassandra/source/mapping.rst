@@ -31,28 +31,32 @@ Here is the mapping from Elasticsearch field basic types to CQL3 types :
 +----------------------+--------------------------+----------------------------+
 | geo_point            | UDT geo_point            | Built-In User Defined Type |
 +----------------------+--------------------------+----------------------------+
-| geo_shape            | UDT geo_shape            | **Not yet implemented**    |
+| geo_shape            | UDT geo_shape            | Require _source enable (1) |
 +----------------------+--------------------------+----------------------------+
 | object, nested       | Custom User Defined Type |                            |
 +----------------------+--------------------------+----------------------------+
 
+(1) Geo shapes require _source to be enabled (default is disabled) to store the original JSON document.
+ 
 These parameters control the cassandra mapping.
    
 .. cssclass:: table-bordered
 
-+---------------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Parameter                 | Values                     | Description                                                                                                                                                                                                            |
-+===========================+============================+========================================================================================================================================================================================================================+
-| ``cql_collection``        | **list**, set or singleton | Control how the field of type X is mapped to a column list<X>, set<X> or X. Default is **list** because Elasticsearch fields are multivalued.                                                                          |
-+---------------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_struct``            | **udt** or map             | Control how an object or nested field is mapped to a User Defined Type or to a cassandra map<text,?>. Default is **udt**.                                                                                              |
-+---------------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_mandatory``         | **true** or false          | Elasticsearch index full document. For partial CQL updates, this control which fields should be read to index a full document from a row. Default is **true** meaning that updates involve reading all missing fields. |
-+---------------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_primary_key_order`` | **integer**                | Field position in the cassandra the primary key of the underlying cassandra table. Default is **-1** meaning that the field is not part of the cassandra primary key.                                                  |
-+---------------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_partition_key``     | true or **false**          | When the cql_primary_key_order >= 0, specify if the field is part of the cassandra partition key. Default is **false** meaning that the field is not part of the cassandra partition key.                              |
-+---------------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Parameter                 | Values                        | Description                                                                                                                                                                                                            |
++===========================+===============================+========================================================================================================================================================================================================================+
+| ``cql_collection``        | **list**, set or singleton    | Control how the field of type X is mapped to a column list<X>, set<X> or X. Default is **list** because Elasticsearch fields are multivalued.                                                                          |
++---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_struct``            | **udt** or map                | Control how an object or nested field is mapped to a User Defined Type or to a cassandra map<text,?>. Default is **udt**.                                                                                              |
++---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_mandatory``         | **true** or false             | Elasticsearch index full document. For partial CQL updates, this control which fields should be read to index a full document from a row. Default is **true** meaning that updates involve reading all missing fields. |
++---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_primary_key_order`` | **integer**                   | Field position in the cassandra the primary key of the underlying cassandra table. Default is **-1** meaning that the field is not part of the cassandra primary key.                                                  |
++---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_partition_key``     | true or **false**             | When the cql_primary_key_order >= 0, specify if the field is part of the cassandra partition key. Default is **false** meaning that the field is not part of the cassandra partition key.                              |
++---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_udt_name``          | **<table_name>_<field_name>** | Specify the Cassandra User Defined Type name to use to store an object. By default, this is automatically build (dots in *field_names* are replaced by underscores)                                                    |
++---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 For more information about cassandra collection types and compound primary key, see `CQL Collections <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_collections_c.html>`_ and `Compound keys <https://docs.datastax.com/en/cql/3.1/cql/ddl/ddl_compound_keys_c.html>`_.
 
@@ -92,9 +96,11 @@ By default, all text columns are mapped with ``"index":"not_analyzed"``.
 
    .. code::
 
-      nodetool rebuild_index <keyspace_name> <table_name> elastic_<table_name>
+      nodetool rebuild_index --threads <N> <keyspace_name> <table_name> elastic_<table_name>_<column_name>_idx
 
-   When deleting an elasticsearch index, elasticsearch index files are removed form the data/elasticsearch.data directory, but cassandra secondary indices remains in the CQL schema until the last associated elasticsearch index is removed. Cassandra keyspace and tables are never removed when deleting the elasticsearch mapping.
+   * *column_name* is any indexed columns (or elasticsearch top-level document field).
+   * *rebuild_index* reindexes SSTables from disk, but not from MEMtables. In order to index the very last inserted document, run a **nodetool flush <kespace_name>** before rebuilding your elasticsearch indices.
+   * When deleting an elasticsearch index, elasticsearch index files are removed form the data/elasticsearch.data directory, but cassandra secondary indices remains in the CQL schema until the last associated elasticsearch index is removed. Cassandra is acting as a primary data storage, so keyspace and tables and data are never removed when deleting an elasticsearch index.
 
 Meta-Fields
 -----------
@@ -104,7 +110,7 @@ Meta-Fields
 * ``_index`` is the index name mapped to the underlying cassandra keyspace name (dash [-] and dot[.] are automatically replaced by underscore [_]).
 * ``_type`` is the document type name mapped to the underlying cassandra table name (dash [-] and dot[.] are automatically replaced by underscore [_]).
 * ``_id`` is the document ID is a string representation of the primary key of the underlying cassandra table. Single field primary key is converted to a string, compound primary key is converted to a JSON array.
-* ``_source`` is the indexed JSON document. By default, *_source* is disabled in ELassandra, meaning that *_source* is rebuild from the underlying cassandra columns. If *_source* is enabled (see `Mapping _source field <https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-source-field.html>`_) ELassandra stores documents indexed by with the Elasticsearch API in a dedicated Cassandra column named *_source*. This allows to retreive the orginal JSON document for `GeoShape Query<https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-geo-shape-query.html>`_.
+* ``_source`` is the indexed JSON document. By default, *_source* is disabled in ELassandra, meaning that *_source* is rebuild from the underlying cassandra columns. If *_source* is enabled (see `Mapping _source field <https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-source-field.html>`_) ELassandra stores documents indexed by with the Elasticsearch API in a dedicated Cassandra text column named *_source*. This allows to retreive the orginal JSON document for `GeoShape Query<https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-geo-shape-query.html>`_.
 * ``_routing`` is valued with a string representation of the partition key of the underlying cassandra table. Single partition key is converted to a string, compound partition key is converted to a JSON array. Specifying ``_routing`` on get, index or delete operations is useless, since the partition key is included in ``_id``. On search operations, Elassandra compute the cassandra token associated to ``_routing`` for the search type, and reduce the search only to a cassandra node hosting this token. (WARNING: Without any search types, Elassandra cannot compute the cassandra token and returns an error **all shards failed**). 
 * ``_ttl``  and ``_timestamp`` are mapped to the cassandra `TTL <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ttl_t.html>`_ and `WRITIME <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_writetime.html>`_. The returned ``_ttl``  and ``_timestamp`` for a document will be the one of a regular cassandra columns if there is one in the underlying table. Moreover, when indexing a document throught the Elasticearch API, all cassandra cells carry the same WRITETIME and TTL, but this could be different when upserting some cells using CQL.
 * ``_parent`` is string representation of the parent document primary key. If the parent document primary key is composite, this is string representation of columns defined by ``cql_parent_pk`` in the mapping. See `Parent-Child Relationship`_.
@@ -143,9 +149,10 @@ You can set a specific mapping for **twitter2** and re-index existing data on ea
 
 .. code::
 
-   nodetool rebuild_index twitter [--threads <N>] tweet elastic_tweet
+   nodetool rebuild_index [--threads <N>] twitter tweet elastic_tweet_message_idx
 
-By default, **rebuild_index** use only one thread, but Elassandra supports multi-threaded index rebuild with the new parameter **--threads**.  
+By default, **rebuild_index** use only one thread, but Elassandra supports multi-threaded index rebuild with the new parameter **--threads**.
+Index name is <elastic>_<table_name>_<column_name>_idx where *column_name* is any indexed column name.
 Once your **twitter2** index is ready, set an alias **twitter** for **twitter2** to switch from the old mapping to the new one, and delete the old **twitter** index.
 
 .. code::
@@ -383,7 +390,6 @@ Create an index company (a cassandra keyspace), a cassandra table, insert 2 rows
    EOF
 
    curl -XPUT "http://$NODE:9200/company2" -d '{
-      "settings": { "index.secondary_index_class":"org.elasticsearch.cassandra.index.ElasticSecondaryIndex" },
       "mappings" : {
        "employee" : {
                "discover" : ".*",

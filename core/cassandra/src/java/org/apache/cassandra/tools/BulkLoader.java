@@ -19,6 +19,8 @@ package org.apache.cassandra.tools;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.UnknownHostException;
@@ -28,6 +30,9 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import org.apache.commons.cli.*;
 
+import com.datastax.driver.core.AuthProvider;
+import com.datastax.driver.core.JdkSSLOptions;
+import com.datastax.driver.core.PlainTextAuthProvider;
 import com.datastax.driver.core.SSLOptions;
 import javax.net.ssl.SSLContext;
 import org.apache.cassandra.config.*;
@@ -50,6 +55,7 @@ public class BulkLoader
     private static final String NATIVE_PORT_OPTION = "port";
     private static final String USER_OPTION = "username";
     private static final String PASSWD_OPTION = "password";
+    private static final String AUTH_PROVIDER_OPTION = "auth-provider";
     private static final String THROTTLE_MBITS = "throttle";
     private static final String INTER_DC_THROTTLE_MBITS = "inter-dc-throttle";
 
@@ -68,15 +74,14 @@ public class BulkLoader
     public static void main(String args[])
     {
         Config.setClientMode(true);
-        LoaderOptions options = LoaderOptions.parseArgs(args);
+        LoaderOptions options = LoaderOptions.parseArgs(args).validateArguments();
         OutputHandler handler = new OutputHandler.SystemOutput(options.verbose, options.debug);
         SSTableLoader loader = new SSTableLoader(
-                options.directory,
+                options.directory.getAbsoluteFile(),
                 new ExternalClient(
                         options.hosts,
                         options.nativePort,
-                        options.user,
-                        options.passwd,
+                        options.authProvider,
                         options.storagePort,
                         options.sslStoragePort,
                         options.serverEncOptions,
@@ -268,7 +273,10 @@ public class BulkLoader
             throw new RuntimeException("Could not create SSL Context.", e);
         }
 
-        return new SSLOptions(sslContext, clientEncryptionOptions.cipher_suites);
+        return JdkSSLOptions.builder()
+                            .withSSLContext(sslContext)
+                            .withCipherSuites(clientEncryptionOptions.cipher_suites)
+                            .build();
     }
 
     static class ExternalClient extends NativeSSTableLoaderClient
@@ -279,14 +287,13 @@ public class BulkLoader
 
         public ExternalClient(Set<InetAddress> hosts,
                               int port,
-                              String user,
-                              String passwd,
+                              AuthProvider authProvider,
                               int storagePort,
                               int sslStoragePort,
                               EncryptionOptions.ServerEncryptionOptions serverEncryptionOptions,
                               SSLOptions sslOptions)
         {
-            super(hosts, port, user, passwd, sslOptions);
+            super(hosts, port, authProvider, sslOptions);
             this.storagePort = storagePort;
             this.sslStoragePort = sslStoragePort;
             this.serverEncOptions = serverEncryptionOptions;
@@ -309,6 +316,8 @@ public class BulkLoader
         public int nativePort = 9042;
         public String user;
         public String passwd;
+        public String authProviderName;
+        public AuthProvider authProvider;
         public int throttle = 0;
         public int interDcThrottle = 0;
         public int storagePort;
@@ -376,6 +385,9 @@ public class BulkLoader
 
                 if (cmd.hasOption(PASSWD_OPTION))
                     opts.passwd = cmd.getOptionValue(PASSWD_OPTION);
+
+                if (cmd.hasOption(AUTH_PROVIDER_OPTION))
+                    opts.authProviderName = cmd.getOptionValue(AUTH_PROVIDER_OPTION);
 
                 if (cmd.hasOption(INITIAL_HOST_ADDRESS_OPTION))
                 {
@@ -512,6 +524,64 @@ public class BulkLoader
             }
         }
 
+        public LoaderOptions validateArguments()
+        {
+            // Both username and password need to be provided
+            if ((user != null) != (passwd != null))
+                errorMsg("Username and password must both be provided", getCmdLineOptions());
+
+            if (user != null)
+            {
+                // Support for 3rd party auth providers that support plain text credentials.
+                // In this case the auth provider must provide a constructor of the form:
+                //
+                // public MyAuthProvider(String username, String password)
+                if (authProviderName != null)
+                {
+                    try
+                    {
+                        Class authProviderClass = Class.forName(authProviderName);
+                        Constructor constructor = authProviderClass.getConstructor(String.class, String.class);
+                        authProvider = (AuthProvider)constructor.newInstance(user, passwd);
+                    }
+                    catch (ClassNotFoundException e)
+                    {
+                        errorMsg("Unknown auth provider: " + e.getMessage(), getCmdLineOptions());
+                    }
+                    catch (NoSuchMethodException e)
+                    {
+                        errorMsg("Auth provider does not support plain text credentials: " + e.getMessage(), getCmdLineOptions());
+                    }
+                    catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e)
+                    {
+                        errorMsg("Could not create auth provider with plain text credentials: " + e.getMessage(), getCmdLineOptions());
+                    }
+                }
+                else
+                {
+                    // If a 3rd party auth provider wasn't provided use the driver plain text provider
+                    authProvider = new PlainTextAuthProvider(user, passwd);
+                }
+            }
+            // Alternate support for 3rd party auth providers that don't use plain text credentials.
+            // In this case the auth provider must provide a nullary constructor of the form:
+            //
+            // public MyAuthProvider()
+            else if (authProviderName != null)
+            {
+                try
+                {
+                    authProvider = (AuthProvider)Class.forName(authProviderName).newInstance();
+                }
+                catch (ClassNotFoundException | InstantiationException | IllegalAccessException e)
+                {
+                    errorMsg("Unknown auth provider" + e.getMessage(), getCmdLineOptions());
+                }
+            }
+
+            return this;
+        }
+
         private static void errorMsg(String msg, CmdLineOptions options)
         {
             System.err.println(msg);
@@ -532,6 +602,7 @@ public class BulkLoader
             options.addOption("idct",  INTER_DC_THROTTLE_MBITS, "inter-dc-throttle", "inter-datacenter throttle speed in Mbits (default unlimited)");
             options.addOption("u",  USER_OPTION, "username", "username for cassandra authentication");
             options.addOption("pw", PASSWD_OPTION, "password", "password for cassandra authentication");
+            options.addOption("ap", AUTH_PROVIDER_OPTION, "auth provider", "custom AuthProvider class name for cassandra authentication");
             options.addOption("cph", CONNECTIONS_PER_HOST, "connectionsPerHost", "number of concurrent connections-per-host.");
             // ssl connection-related options
             options.addOption("ts", SSL_TRUSTSTORE, "TRUSTSTORE", "Client SSL: full path to truststore");

@@ -22,32 +22,35 @@ import java.io.StringWriter;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.schema.Tables;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
 public final class SystemDistributedKeyspace
 {
-    private static Logger logger = LoggerFactory.getLogger(SystemDistributedKeyspace.class);
+    private SystemDistributedKeyspace()
+    {
+    }
+
+    private static final Logger logger = LoggerFactory.getLogger(SystemDistributedKeyspace.class);
 
     public static final String NAME = "system_distributed";
 
@@ -95,10 +98,9 @@ public final class SystemDistributedKeyspace
                          .comment(description);
     }
 
-    public static KSMetaData definition()
+    public static KeyspaceMetadata metadata()
     {
-        List<CFMetaData> tables = Arrays.asList(RepairHistory, ParentRepairHistory);
-        return new KSMetaData(NAME, SimpleStrategy.class, ImmutableMap.of("replication_factor", "3"), true, tables);
+        return KeyspaceMetadata.create(NAME, KeyspaceParams.simple(3), Tables.of(RepairHistory, ParentRepairHistory));
     }
 
     public static void startParentRepair(UUID parent_id, String keyspaceName, String[] cfnames, Collection<Range<Token>> ranges)
@@ -128,7 +130,7 @@ public final class SystemDistributedKeyspace
         processSilent(fmtQuery);
     }
 
-    public static void startRepairs(UUID id, UUID parent_id, String keyspaceName, String[] cfnames, Range<Token> range, Iterable<InetAddress> endpoints)
+    public static void startRepairs(UUID id, UUID parent_id, String keyspaceName, String[] cfnames, Collection<Range<Token>> ranges, Iterable<InetAddress> endpoints)
     {
         String coordinator = FBUtilities.getBroadcastAddress().getHostAddress();
         Set<String> participants = Sets.newHashSet(coordinator);
@@ -142,17 +144,20 @@ public final class SystemDistributedKeyspace
 
         for (String cfname : cfnames)
         {
-            String fmtQry = String.format(query, NAME, REPAIR_HISTORY,
-                                          keyspaceName,
-                                          cfname,
-                                          id.toString(),
-                                          parent_id.toString(),
-                                          range.left.toString(),
-                                          range.right.toString(),
-                                          coordinator,
-                                          Joiner.on("', '").join(participants),
-                    RepairState.STARTED.toString());
-            processSilent(fmtQry);
+            for (Range<Token> range : ranges)
+            {
+                String fmtQry = String.format(query, NAME, REPAIR_HISTORY,
+                                              keyspaceName,
+                                              cfname,
+                                              id.toString(),
+                                              parent_id.toString(),
+                                              range.left.toString(),
+                                              range.right.toString(),
+                                              coordinator,
+                                              Joiner.on("', '").join(participants),
+                                              RepairState.STARTED.toString());
+                processSilent(fmtQry);
+            }
         }
     }
 

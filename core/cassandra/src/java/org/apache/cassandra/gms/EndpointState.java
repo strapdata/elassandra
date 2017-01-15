@@ -26,11 +26,10 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
-
 /**
  * This abstraction represents both the HeartBeatState and the ApplicationState in an EndpointState
  * instance. Any state for a given endpoint can be retrieved from this instance.
@@ -180,7 +179,7 @@ class EndpointStateSerializer implements IVersionedSerializer<EndpointState>
         }
     }
 
-    public EndpointState deserialize(DataInput in, int version) throws IOException
+    public EndpointState deserialize(DataInputPlus in, int version) throws IOException
     {
         HeartBeatState hbState = HeartBeatState.serializer.deserialize(in, version);
 
@@ -200,11 +199,11 @@ class EndpointStateSerializer implements IVersionedSerializer<EndpointState>
     {
         long size = HeartBeatState.serializer.serializedSize(epState.getHeartBeatState(), version);
         Set<Map.Entry<ApplicationState, VersionedValue>> states = epState.states();
-        size += TypeSizes.NATIVE.sizeof(states.size());
+        size += TypeSizes.sizeof(states.size());
         for (Map.Entry<ApplicationState, VersionedValue> state : states)
         {
             VersionedValue value = state.getValue();
-            size += TypeSizes.NATIVE.sizeof(state.getKey().ordinal());
+            size += TypeSizes.sizeof(state.getKey().ordinal());
             size += VersionedValue.serializer.serializedSize(value, version);
         }
         return size;

@@ -23,10 +23,10 @@ import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.functions.Function;
 import org.apache.cassandra.cql3.statements.Bound;
-import org.apache.cassandra.db.IndexExpression;
-import org.apache.cassandra.db.composites.CompositesBuilder;
-import org.apache.cassandra.db.index.SecondaryIndexManager;
+import org.apache.cassandra.db.MultiCBuilder;
+import org.apache.cassandra.db.filter.RowFilter;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.index.SecondaryIndexManager;
 
 /**
  * A restriction/clause on a column.
@@ -41,6 +41,7 @@ public interface Restriction
     public boolean isEQ();
     public boolean isIN();
     public boolean isContains();
+    public boolean isNotNull();
     public boolean isMultiColumn();
 
     /**
@@ -62,11 +63,11 @@ public interface Restriction
     public List<ColumnDefinition> getColumnDefs();
 
     /**
-     * Return an Iterable over all of the functions (both native and user-defined) used by any component
-     * of the restriction
-     * @return functions all functions found (may contain duplicates)
+     * Adds all functions (native and user-defined) used by any component of the restriction
+     * to the specified list.
+     * @param functions the list to add to
      */
-    public Iterable<Function> getFunctions();
+    void addFunctionsTo(List<Function> functions);
 
     /**
      * Checks if the specified bound is set or not.
@@ -104,35 +105,34 @@ public interface Restriction
     public boolean hasSupportingIndex(SecondaryIndexManager indexManager);
 
     /**
-     * Adds to the specified list the <code>IndexExpression</code>s corresponding to this <code>Restriction</code>.
+     * Adds to the specified row filter the expressions corresponding to this <code>Restriction</code>.
      *
-     * @param expressions the list to add the <code>IndexExpression</code>s to
+     * @param filter the row filter to add expressions to
      * @param indexManager the secondary index manager
      * @param options the query options
-     * @throws InvalidRequestException if this <code>Restriction</code> cannot be converted into 
-     * <code>IndexExpression</code>s
+     * @throws InvalidRequestException if this <code>Restriction</code> cannot be converted into a row filter
      */
-    public void addIndexExpressionTo(List<IndexExpression> expressions,
-                                     SecondaryIndexManager indexManager,
-                                     QueryOptions options)
-                                     throws InvalidRequestException;
+    public void addRowFilterTo(RowFilter filter,
+                               SecondaryIndexManager indexManager,
+                               QueryOptions options)
+                               throws InvalidRequestException;
 
     /**
      * Appends the values of this <code>Restriction</code> to the specified builder.
      *
-     * @param builder the <code>CompositesBuilder</code> to append to.
+     * @param builder the <code>MultiCBuilder</code> to append to.
      * @param options the query options
-     * @return the <code>CompositesBuilder</code>
+     * @return the <code>MultiCBuilder</code>
      */
-    public CompositesBuilder appendTo(CompositesBuilder builder, QueryOptions options);
+    public MultiCBuilder appendTo(MultiCBuilder builder, QueryOptions options);
 
     /**
      * Appends the values of the <code>Restriction</code> for the specified bound to the specified builder.
      *
-     * @param builder the <code>CompositesBuilder</code> to append to.
+     * @param builder the <code>MultiCBuilder</code> to append to.
      * @param bound the bound
      * @param options the query options
-     * @return the <code>CompositesBuilder</code>
+     * @return the <code>MultiCBuilder</code>
      */
-    public CompositesBuilder appendBoundTo(CompositesBuilder builder, Bound bound, QueryOptions options);
+    public MultiCBuilder appendBoundTo(MultiCBuilder builder, Bound bound, QueryOptions options);
 }

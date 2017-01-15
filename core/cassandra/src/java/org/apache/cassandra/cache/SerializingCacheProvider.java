@@ -17,15 +17,14 @@
  */
 package org.apache.cassandra.cache;
 
-import java.io.DataInput;
 import java.io.IOException;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.TypeSizes;
+import org.apache.cassandra.db.partitions.CachedPartition;
 import org.apache.cassandra.io.ISerializer;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
-import org.apache.cassandra.net.MessagingService;
 
 public class SerializingCacheProvider implements CacheProvider<RowCacheKey, IRowCacheEntry>
 {
@@ -45,24 +44,25 @@ public class SerializingCacheProvider implements CacheProvider<RowCacheKey, IRow
             if (isSentinel)
                 out.writeLong(((RowCacheSentinel) entry).sentinelId);
             else
-                ColumnFamily.serializer.serialize((ColumnFamily) entry, out, MessagingService.current_version);
+                CachedPartition.cacheSerializer.serialize((CachedPartition)entry, out);
         }
 
-        public IRowCacheEntry deserialize(DataInput in) throws IOException
+        public IRowCacheEntry deserialize(DataInputPlus in) throws IOException
         {
             boolean isSentinel = in.readBoolean();
             if (isSentinel)
                 return new RowCacheSentinel(in.readLong());
-            return ColumnFamily.serializer.deserialize(in, MessagingService.current_version);
+
+            return CachedPartition.cacheSerializer.deserialize(in);
         }
 
-        public long serializedSize(IRowCacheEntry entry, TypeSizes typeSizes)
+        public long serializedSize(IRowCacheEntry entry)
         {
-            int size = typeSizes.sizeof(true);
+            int size = TypeSizes.sizeof(true);
             if (entry instanceof RowCacheSentinel)
-                size += typeSizes.sizeof(((RowCacheSentinel) entry).sentinelId);
+                size += TypeSizes.sizeof(((RowCacheSentinel) entry).sentinelId);
             else
-                size += ColumnFamily.serializer.serializedSize((ColumnFamily) entry, typeSizes, MessagingService.current_version);
+                size += CachedPartition.cacheSerializer.serializedSize((CachedPartition) entry);
             return size;
         }
     }

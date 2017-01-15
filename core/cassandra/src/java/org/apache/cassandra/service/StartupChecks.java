@@ -199,33 +199,30 @@ public class StartupChecks
         }
     };
 
-    public static final StartupCheck checkDataDirs = new StartupCheck()
+    public static final StartupCheck checkDataDirs = () ->
     {
-        public void execute() throws StartupException
+        // check all directories(data, commitlog, saved cache) for existence and permission
+        Iterable<String> dirs = Iterables.concat(Arrays.asList(DatabaseDescriptor.getAllDataFileLocations()),
+                                                 Arrays.asList(DatabaseDescriptor.getCommitLogLocation(),
+                                                               DatabaseDescriptor.getSavedCachesLocation(),
+                                                               DatabaseDescriptor.getHintsDirectory().getAbsolutePath()));
+        for (String dataDir : dirs)
         {
-            // check all directories(data, commitlog, saved cache) for existence and permission
-            Iterable<String> dirs = Iterables.concat(Arrays.asList(DatabaseDescriptor.getAllDataFileLocations()),
-                                                     Arrays.asList(DatabaseDescriptor.getCommitLogLocation(),
-                                                                   DatabaseDescriptor.getSavedCachesLocation()));
-            for (String dataDir : dirs)
+            logger.debug("Checking directory {}", dataDir);
+            File dir = new File(dataDir);
+
+            // check that directories exist.
+            if (!dir.exists())
             {
-                logger.debug("Checking directory {}", dataDir);
-                File dir = new File(dataDir);
-
-                // check that directories exist.
-                if (!dir.exists())
-                {
-                    logger.warn("Directory {} doesn't exist", dataDir);
-                    // if they don't, failing their creation, stop cassandra.
-                    if (!dir.mkdirs())
-                        throw new StartupException(3, "Has no permission to create directory "+ dataDir);
-                }
-
-                // if directories exist verify their permissions
-                if (!Directories.verifyFullPermissions(dir, dataDir))
-                    throw new StartupException(3, "Insufficient permissions on directory " + dataDir);
-
+                logger.warn("Directory {} doesn't exist", dataDir);
+                // if they don't, failing their creation, stop cassandra.
+                if (!dir.mkdirs())
+                    throw new StartupException(3, "Has no permission to create directory "+ dataDir);
             }
+
+            // if directories exist verify their permissions
+            if (!Directories.verifyFullPermissions(dir, dataDir))
+                throw new StartupException(3, "Insufficient permissions on directory " + dataDir);
         }
     };
 
@@ -237,12 +234,13 @@ public class StartupChecks
             final Set<String> nonSSTablePaths = new HashSet<>();
             nonSSTablePaths.add(FileUtils.getCanonicalPath(DatabaseDescriptor.getCommitLogLocation()));
             nonSSTablePaths.add(FileUtils.getCanonicalPath(DatabaseDescriptor.getSavedCachesLocation()));
+            nonSSTablePaths.add(FileUtils.getCanonicalPath(DatabaseDescriptor.getHintsDirectory()));
 
             FileVisitor<Path> sstableVisitor = new SimpleFileVisitor<Path>()
             {
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException
                 {
-                    if (!file.toString().endsWith(".db"))
+                    if (!Descriptor.isValidFile(file.getFileName().toString()))
                         return FileVisitResult.CONTINUE;
 
                     try
@@ -260,8 +258,8 @@ public class StartupChecks
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException
                 {
                     String name = dir.getFileName().toString();
-                    return (name.equals("snapshots")
-                            || name.equals("backups")
+                    return (name.equals(Directories.SNAPSHOT_SUBDIR)
+                            || name.equals(Directories.BACKUPS_SUBDIR)
                             || nonSSTablePaths.contains(dir.toFile().getCanonicalPath()))
                            ? FileVisitResult.SKIP_SUBTREE
                            : FileVisitResult.CONTINUE;
@@ -298,7 +296,7 @@ public class StartupChecks
             // we do a one-off scrub of the system keyspace first; we can't load the list of the rest of the keyspaces,
             // until system keyspace is opened.
 
-            for (CFMetaData cfm : Schema.instance.getKeyspaceMetaData(SystemKeyspace.NAME).values())
+            for (CFMetaData cfm : Schema.instance.getTablesAndViews(SystemKeyspace.NAME))
                 ColumnFamilyStore.scrubDataDirectories(cfm);
 
             try

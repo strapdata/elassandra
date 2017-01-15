@@ -30,8 +30,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.Config;
-import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.service.StorageService;
 
 public class CQLSSTableWriterLongTest
@@ -39,8 +37,7 @@ public class CQLSSTableWriterLongTest
     @BeforeClass
     public static void setup() throws Exception
     {
-        SchemaLoader.cleanupAndLeaveDirs();
-        Keyspace.setInitialized();
+        SchemaLoader.prepareServer();
         StorageService.instance.initServer();
     }
 
@@ -86,7 +83,6 @@ public class CQLSSTableWriterLongTest
         CQLSSTableWriter writer = CQLSSTableWriter.builder()
                                                   .inDirectory(dataDir)
                                                   .forTable(schema)
-                                                  .withPartitioner(StorageService.instance.getPartitioner())
                                                   .using(insert)
                                                   .withBufferSizeInMB(1)
                                                   .build();

@@ -21,6 +21,7 @@ import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.zip.CRC32;
 
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -32,24 +33,23 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.commons.lang3.StringUtils;
 
-import com.github.tjake.ICRC32;
-
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.ParameterizedClass;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.io.FSWriteError;
-import org.apache.cassandra.io.compress.CompressionParameters;
+import org.apache.cassandra.schema.CompressionParams;
 import org.apache.cassandra.io.compress.ICompressor;
 import org.apache.cassandra.io.util.BufferedDataOutputStreamPlus;
 import org.apache.cassandra.io.util.DataOutputBufferFixed;
 import org.apache.cassandra.metrics.CommitLogMetrics;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.utils.CRC32Factory;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 
 import static org.apache.cassandra.db.commitlog.CommitLogSegment.*;
+import static org.apache.cassandra.utils.FBUtilities.updateChecksum;
+import static org.apache.cassandra.utils.FBUtilities.updateChecksumInt;
 
 /*
  * Commit Log tracks every write operation into the system. The aim of the commit log is to be able to
@@ -63,7 +63,7 @@ public class CommitLog implements CommitLogMBean
 
     // we only permit records HALF the size of a commit log, to ensure we don't spin allocating many mostly
     // empty segments when writing large records
-    private final long MAX_MUTATION_SIZE = DatabaseDescriptor.getCommitLogSegmentSize() >> 1;
+    private final long MAX_MUTATION_SIZE = DatabaseDescriptor.getMaxMutationSize();
 
     public final CommitLogSegmentManager allocator;
     public final CommitLogArchiver archiver;
@@ -73,7 +73,7 @@ public class CommitLog implements CommitLogMBean
     volatile Configuration configuration;
     final public String location;
 
-    static private CommitLog construct()
+    private static CommitLog construct()
     {
         CommitLog log = new CommitLog(DatabaseDescriptor.getCommitLogLocation(), CommitLogArchiver.construct());
 
@@ -248,9 +248,9 @@ public class CommitLog implements CommitLogMBean
     {
         assert mutation != null;
 
-        long size = Mutation.serializer.serializedSize(mutation, MessagingService.current_version);
+        int size = (int) Mutation.serializer.serializedSize(mutation, MessagingService.current_version);
 
-        long totalSize = size + ENTRY_OVERHEAD_SIZE;
+        int totalSize = size + ENTRY_OVERHEAD_SIZE;
         if (totalSize > MAX_MUTATION_SIZE)
         {
             throw new IllegalArgumentException(String.format("Mutation of %s bytes is too large for the maximum size of %s",
@@ -258,20 +258,19 @@ public class CommitLog implements CommitLogMBean
         }
 
         Allocation alloc = allocator.allocate(mutation, (int) totalSize);
-        ICRC32 checksum = CRC32Factory.instance.create();
+        CRC32 checksum = new CRC32();
         final ByteBuffer buffer = alloc.getBuffer();
         try (BufferedDataOutputStreamPlus dos = new DataOutputBufferFixed(buffer))
         {
             // checksummed length
-            dos.writeInt((int) size);
-            checksum.update(buffer, buffer.position() - 4, 4);
-            buffer.putInt(checksum.getCrc());
+            dos.writeInt(size);
+            updateChecksumInt(checksum, size);
+            buffer.putInt((int) checksum.getValue());
 
-            int start = buffer.position();
             // checksummed mutation
             Mutation.serializer.serialize(mutation, dos, MessagingService.current_version);
-            checksum.update(buffer, start, (int) size);
-            buffer.putInt(checksum.getCrc());
+            updateChecksum(checksum, buffer, buffer.position() - size, size);
+            buffer.putInt((int) checksum.getValue());
         }
         catch (IOException e)
         {
@@ -291,11 +290,12 @@ public class CommitLog implements CommitLogMBean
      * given. Discards any commit log segments that are no longer used.
      *
      * @param cfId    the column family ID that was flushed
-     * @param context the replay position of the flush
+     * @param lowerBound the lowest covered replay position of the flush
+     * @param lowerBound the highest covered replay position of the flush
      */
-    public void discardCompletedSegments(final UUID cfId, final ReplayPosition context)
+    public void discardCompletedSegments(final UUID cfId, final ReplayPosition lowerBound, final ReplayPosition upperBound)
     {
-        logger.trace("discard completed log segments for {}, table {}", context, cfId);
+        logger.trace("discard completed log segments for {}-{}, table {}", lowerBound, upperBound, cfId);
 
         // Go thru the active segment files, which are ordered oldest to newest, marking the
         // flushed CF as clean, until we reach the segment file containing the ReplayPosition passed
@@ -304,7 +304,7 @@ public class CommitLog implements CommitLogMBean
         for (Iterator<CommitLogSegment> iter = allocator.getActiveSegments().iterator(); iter.hasNext();)
         {
             CommitLogSegment segment = iter.next();
-            segment.markClean(cfId, context);
+            segment.markClean(cfId, lowerBound, upperBound);
 
             if (segment.isUnused())
             {
@@ -313,13 +313,14 @@ public class CommitLog implements CommitLogMBean
             }
             else
             {
-                logger.trace("Not safe to delete{} commit log segment {}; dirty is {}",
-                        (iter.hasNext() ? "" : " active"), segment, segment.dirtyString());
+                if (logger.isTraceEnabled())
+                    logger.trace("Not safe to delete{} commit log segment {}; dirty is {}",
+                            (iter.hasNext() ? "" : " active"), segment, segment.dirtyString());
             }
 
             // Don't mark or try to delete any newer segments once we've reached the one containing the
             // position of the flush.
-            if (segment.contains(context))
+            if (segment.contains(upperBound))
                 break;
         }
     }
@@ -436,7 +437,7 @@ public class CommitLog implements CommitLogMBean
      */
     public void resetConfiguration()
     {
-        this.configuration = new Configuration(DatabaseDescriptor.getCommitLogCompression());
+        configuration = new Configuration(DatabaseDescriptor.getCommitLogCompression());
     }
 
     /**
@@ -510,7 +511,7 @@ public class CommitLog implements CommitLogMBean
         public Configuration(ParameterizedClass compressorClass)
         {
             this.compressorClass = compressorClass;
-            this.compressor = compressorClass != null ? CompressionParameters.createCompressor(compressorClass) : null;
+            this.compressor = compressorClass != null ? CompressionParams.createCompressor(compressorClass) : null;
         }
 
         /**

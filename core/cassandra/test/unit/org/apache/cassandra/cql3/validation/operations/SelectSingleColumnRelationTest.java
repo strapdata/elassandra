@@ -62,6 +62,10 @@ public class SelectSingleColumnRelationTest extends CQLTester
                              "SELECT * FROM %s WHERE c = 0 AND b <= ?", set(0));
         assertInvalidMessage("Collection column 'b' (set<int>) cannot be restricted by a 'IN' relation",
                              "SELECT * FROM %s WHERE c = 0 AND b IN (?)", set(0));
+        assertInvalidMessage("Unsupported \"!=\" relation: b != 5",
+                "SELECT * FROM %s WHERE c = 0 AND b != 5");
+        assertInvalidMessage("Unsupported restriction: b IS NOT NULL",
+                "SELECT * FROM %s WHERE c = 0 AND b IS NOT NULL");
     }
 
     @Test
@@ -142,7 +146,7 @@ public class SelectSingleColumnRelationTest extends CQLTester
 
         assertRows(execute("select * from %s where a = ? and c < ? and b in (?, ?)", "first", 7, 3, 2),
                    row("first", 2, 6, 2));
-//---
+
         assertRows(execute("select * from %s where a = ? and c >= ? and c <= ? and b in (?, ?)", "first", 6, 7, 3, 2),
                    row("first", 2, 6, 2),
                    row("first", 3, 7, 3));
@@ -294,6 +298,25 @@ public class SelectSingleColumnRelationTest extends CQLTester
 
         assertInvalid("SELECT * FROM %s WHERE a = ? AND b = ?");
         assertRows(execute("SELECT * FROM %s WHERE a = ? AND b = ? ALLOW FILTERING", 20, 200), row(2, 20, 200));
+    }
+
+    @Test
+    public void testAllowFilteringWithIndexedColumnAndStaticColumns() throws Throwable
+    {
+        createTable("CREATE TABLE %s (a int, b int, c int, s int static, PRIMARY KEY(a, b))");
+        createIndex("CREATE INDEX ON %s(c)");
+
+        execute("INSERT INTO %s(a, b, c, s) VALUES(?, ?, ?, ?)", 1, 1, 1, 1);
+        execute("INSERT INTO %s(a, b, c) VALUES(?, ?, ?)", 1, 2, 1);
+        execute("INSERT INTO %s(a, s) VALUES(?, ?)", 3, 3);
+        execute("INSERT INTO %s(a, b, c, s) VALUES(?, ?, ?, ?)", 2, 1, 1, 2);
+
+        assertRows(execute("SELECT * FROM %s WHERE c = ? AND s > ? ALLOW FILTERING", 1, 1),
+                   row(2, 1, 2, 1));
+
+        assertRows(execute("SELECT * FROM %s WHERE c = ? AND s < ? ALLOW FILTERING", 1, 2),
+                   row(1, 1, 1, 1),
+                   row(1, 2, 1, 1));
     }
 
     @Test

@@ -63,8 +63,6 @@ public class CassandraGatewayService extends GatewayService {
      * (may be update when replaying the cassandra logs)
      */
     public void enableMetaDataPersictency() {
-        
-
         clusterService.submitStateUpdateTask("gateway-cassandra-ring-ready", new ClusterStateUpdateTask() {
             @Override
             public ClusterState execute(ClusterState currentState) {
@@ -150,16 +148,14 @@ public class CassandraGatewayService extends GatewayService {
                         blocks.addBlocks(indexMetaData);
                     }
                     
-                    
+
                     // update the state to reflect the new metadata and routing
                     ClusterState updatedState = ClusterState.builder(currentState)
                             .blocks(blocks)
                             .metaData(metaDataBuilder)
                             .build();
 
-                    // initialize all index routing tables as empty
-                    RoutingTable routingTable = RoutingTable.build(CassandraGatewayService.this.clusterService, updatedState);
-                    return ClusterState.builder(updatedState).incrementVersion().routingTable(routingTable).build();
+                    return ClusterState.builder(updatedState).incrementVersion().build();
                 }
 
                 @Override

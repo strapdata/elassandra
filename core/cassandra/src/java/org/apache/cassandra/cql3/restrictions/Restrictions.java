@@ -23,9 +23,9 @@ import java.util.List;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.functions.Function;
-import org.apache.cassandra.db.IndexExpression;
-import org.apache.cassandra.db.index.SecondaryIndexManager;
+import org.apache.cassandra.db.filter.RowFilter;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.index.SecondaryIndexManager;
 
 /**
  * Sets of restrictions
@@ -39,11 +39,11 @@ interface Restrictions
     public Collection<ColumnDefinition> getColumnDefs();
 
     /**
-     * Return an Iterable over all of the functions (both native and user-defined) used by any component
-     * of the restrictions
-     * @return functions all functions found (may contain duplicates)
+     * Adds all functions (native and user-defined) used by any component of the restriction
+     * to the specified list.
+     * @param functions the list to add to
      */
-    public Iterable<Function> getFunctions();
+    public void addFunctionsTo(List<Function> functions);
 
     /**
      * Check if the restriction is on indexed columns.
@@ -54,18 +54,14 @@ interface Restrictions
     public boolean hasSupportingIndex(SecondaryIndexManager indexManager);
 
     /**
-     * Adds to the specified list the <code>IndexExpression</code>s corresponding to this <code>Restriction</code>.
+     * Adds to the specified row filter the expressions corresponding to this <code>Restrictions</code>.
      *
-     * @param expressions the list to add the <code>IndexExpression</code>s to
+     * @param filter the row filter to add expressions to
      * @param indexManager the secondary index manager
      * @param options the query options
-     * @throws InvalidRequestException if this <code>Restriction</code> cannot be converted into
-     * <code>IndexExpression</code>s
+     * @throws InvalidRequestException if this <code>Restrictions</code> cannot be converted into a row filter
      */
-    public void addIndexExpressionTo(List<IndexExpression> expressions,
-                                     SecondaryIndexManager indexManager,
-                                     QueryOptions options)
-                                     throws InvalidRequestException;
+    public void addRowFilterTo(RowFilter filter, SecondaryIndexManager indexManager, QueryOptions options) throws InvalidRequestException;
 
     /**
      * Checks if this <code>PrimaryKeyRestrictionSet</code> is empty or not.

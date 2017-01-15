@@ -26,6 +26,7 @@ import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.cluster.ClusterService;
@@ -543,5 +544,10 @@ public abstract class FilteredSearchContext extends SearchContext {
     @Override
     public Profilers getProfilers() {
         return in.getProfilers();
+    }
+    
+    @Override
+    public SearchProcessor searchProcessor() {
+        return in.searchProcessor();
     }
 }

@@ -307,14 +307,14 @@ public abstract class ESRestTestCase extends ESIntegTestCase {
 
     @Override
     protected int maximumNumberOfShards() {
-        return 3; // never go crazy in the REST tests
+        return 1; // never go crazy in the REST tests
     }
 
     @Override
     protected int maximumNumberOfReplicas() {
         // hardcoded 1 since this is what clients also do and our tests must expect that we have only node
         // with replicas set to 1 ie. the cluster won't be green
-        return 1;
+        return 0;
 
     }
 

@@ -33,7 +33,7 @@ public class SelectLimitTest extends CQLTester
     @BeforeClass
     public static void setUp()
     {
-        DatabaseDescriptor.setPartitioner(ByteOrderedPartitioner.instance);
+        DatabaseDescriptor.setPartitionerUnsafe(ByteOrderedPartitioner.instance);
     }
 
     /**
@@ -125,8 +125,43 @@ public class SelectLimitTest extends CQLTester
                    row(1, 1),
                    row(1, 2),
                    row(1, 3));
+        assertRows(execute("SELECT * FROM %s WHERE v > 1 AND v <= 3 LIMIT 6 ALLOW FILTERING"),
+                   row(0, 2),
+                   row(0, 3),
+                   row(1, 2),
+                   row(1, 3),
+                   row(2, 2),
+                   row(2, 3));
+    }
 
-        // strict bound (v > 1) over a range of partitions is not supported for compact storage if limit is provided
-        assertInvalidThrow(InvalidRequestException.class, "SELECT * FROM %s WHERE v > 1 AND v <= 3 LIMIT 6 ALLOW FILTERING");
+    @Test
+    public void testLimitWithDeletedRowsAndStaticColumns() throws Throwable
+    {
+        createTable("CREATE TABLE %s (pk int, c int, v int, s int static, PRIMARY KEY (pk, c))");
+
+        execute("INSERT INTO %s (pk, c, v, s) VALUES (1, -1, 1, 1)");
+        execute("INSERT INTO %s (pk, c, v, s) VALUES (2, -1, 1, 1)");
+        execute("INSERT INTO %s (pk, c, v, s) VALUES (3, -1, 1, 1)");
+        execute("INSERT INTO %s (pk, c, v, s) VALUES (4, -1, 1, 1)");
+        execute("INSERT INTO %s (pk, c, v, s) VALUES (5, -1, 1, 1)");
+
+        assertRows(execute("SELECT * FROM %s"),
+                   row(1, -1, 1, 1),
+                   row(2, -1, 1, 1),
+                   row(3, -1, 1, 1),
+                   row(4, -1, 1, 1),
+                   row(5, -1, 1, 1));
+
+        execute("DELETE FROM %s WHERE pk = 2");
+
+        assertRows(execute("SELECT * FROM %s"),
+                   row(1, -1, 1, 1),
+                   row(3, -1, 1, 1),
+                   row(4, -1, 1, 1),
+                   row(5, -1, 1, 1));
+
+        assertRows(execute("SELECT * FROM %s LIMIT 2"),
+                   row(1, -1, 1, 1),
+                   row(3, -1, 1, 1));
     }
 }

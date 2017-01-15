@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.repair.messages;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -27,6 +26,7 @@ import java.util.UUID;
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.UUIDSerializer;
@@ -34,32 +34,28 @@ import org.apache.cassandra.utils.UUIDSerializer;
 
 public class PrepareMessage extends RepairMessage
 {
-    public final static MessageSerializer serializer = new PrepareMessageSerializer(false);
-    public final static MessageSerializer globalSerializer = new PrepareMessageSerializer(true);
+    public final static MessageSerializer serializer = new PrepareMessageSerializer();
     public final List<UUID> cfIds;
     public final Collection<Range<Token>> ranges;
 
     public final UUID parentRepairSession;
     public final boolean isIncremental;
+    public final long timestamp;
+    public final boolean isGlobal;
 
-    public PrepareMessage(UUID parentRepairSession, List<UUID> cfIds, Collection<Range<Token>> ranges, boolean isIncremental, boolean isGlobal)
+    public PrepareMessage(UUID parentRepairSession, List<UUID> cfIds, Collection<Range<Token>> ranges, boolean isIncremental, long timestamp, boolean isGlobal)
     {
-        super(isGlobal ? Type.PREPARE_GLOBAL_MESSAGE : Type.PREPARE_MESSAGE, null);
+        super(Type.PREPARE_MESSAGE, null);
         this.parentRepairSession = parentRepairSession;
         this.cfIds = cfIds;
         this.ranges = ranges;
         this.isIncremental = isIncremental;
+        this.timestamp = timestamp;
+        this.isGlobal = isGlobal;
     }
 
     public static class PrepareMessageSerializer implements MessageSerializer<PrepareMessage>
     {
-        private final boolean isGlobal;
-
-        public PrepareMessageSerializer(boolean global)
-        {
-            this.isGlobal = global;
-        }
-
         public void serialize(PrepareMessage message, DataOutputPlus out, int version) throws IOException
         {
             out.writeInt(message.cfIds.size());
@@ -73,9 +69,11 @@ public class PrepareMessage extends RepairMessage
                 Range.tokenSerializer.serialize(r, out, version);
             }
             out.writeBoolean(message.isIncremental);
+            out.writeLong(message.timestamp);
+            out.writeBoolean(message.isGlobal);
         }
 
-        public PrepareMessage deserialize(DataInput in, int version) throws IOException
+        public PrepareMessage deserialize(DataInputPlus in, int version) throws IOException
         {
             int cfIdCount = in.readInt();
             List<UUID> cfIds = new ArrayList<>(cfIdCount);
@@ -87,22 +85,24 @@ public class PrepareMessage extends RepairMessage
             for (int i = 0; i < rangeCount; i++)
                 ranges.add((Range<Token>) Range.tokenSerializer.deserialize(in, MessagingService.globalPartitioner(), version));
             boolean isIncremental = in.readBoolean();
-
-            return new PrepareMessage(parentRepairSession, cfIds, ranges, isIncremental, isGlobal);
+            long timestamp = in.readLong();
+            boolean isGlobal = in.readBoolean();
+            return new PrepareMessage(parentRepairSession, cfIds, ranges, isIncremental, timestamp, isGlobal);
         }
 
         public long serializedSize(PrepareMessage message, int version)
         {
             long size;
-            TypeSizes sizes = TypeSizes.NATIVE;
-            size = sizes.sizeof(message.cfIds.size());
+            size = TypeSizes.sizeof(message.cfIds.size());
             for (UUID cfId : message.cfIds)
                 size += UUIDSerializer.serializer.serializedSize(cfId, version);
             size += UUIDSerializer.serializer.serializedSize(message.parentRepairSession, version);
-            size += sizes.sizeof(message.ranges.size());
+            size += TypeSizes.sizeof(message.ranges.size());
             for (Range<Token> r : message.ranges)
                 size += Range.tokenSerializer.serializedSize(r, version);
-            size += sizes.sizeof(message.isIncremental);
+            size += TypeSizes.sizeof(message.isIncremental);
+            size += TypeSizes.sizeof(message.timestamp);
+            size += TypeSizes.sizeof(message.isGlobal);
             return size;
         }
     }
@@ -115,6 +115,8 @@ public class PrepareMessage extends RepairMessage
                 ", ranges=" + ranges +
                 ", parentRepairSession=" + parentRepairSession +
                 ", isIncremental="+isIncremental +
+                ", timestamp=" + timestamp +
+                ", isGlobal=" + isGlobal +
                 '}';
     }
 }

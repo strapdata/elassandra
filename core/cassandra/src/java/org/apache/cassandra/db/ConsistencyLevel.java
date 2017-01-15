@@ -183,6 +183,14 @@ public enum ConsistencyLevel
     public List<InetAddress> filterForQuery(Keyspace keyspace, List<InetAddress> liveEndpoints, ReadRepairDecision readRepair)
     {
         /*
+         * If we are doing an each quorum query, we have to make sure that the endpoints we select
+         * provide a quorum for each data center. If we are not using a NetworkTopologyStrategy,
+         * we should fall through and grab a quorum in the replication strategy.
+         */
+        if (this == EACH_QUORUM && keyspace.getReplicationStrategy() instanceof NetworkTopologyStrategy)
+            return filterForEachQuorum(keyspace, liveEndpoints, readRepair);
+
+        /*
          * Endpoints are expected to be restricted to live replicas, sorted by snitch preference.
          * For LOCAL_QUORUM, move local-DC replicas in front first as we need them there whether
          * we do read repair (since the first replica gets the data read) or not (since we'll take
@@ -215,6 +223,37 @@ public enum ConsistencyLevel
             default:
                 throw new AssertionError();
         }
+    }
+
+    private List<InetAddress> filterForEachQuorum(Keyspace keyspace, List<InetAddress> liveEndpoints, ReadRepairDecision readRepair)
+    {
+        NetworkTopologyStrategy strategy = (NetworkTopologyStrategy) keyspace.getReplicationStrategy();
+
+        // quickly drop out if read repair is GLOBAL, since we just use all of the live endpoints
+        if (readRepair == ReadRepairDecision.GLOBAL)
+            return liveEndpoints;
+
+        Map<String, List<InetAddress>> dcsEndpoints = new HashMap<>();
+        for (String dc: strategy.getDatacenters())
+            dcsEndpoints.put(dc, new ArrayList<>());
+
+        for (InetAddress add : liveEndpoints)
+        {
+            String dc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(add);
+            dcsEndpoints.get(dc).add(add);
+        }
+
+        List<InetAddress> waitSet = new ArrayList<>();
+        for (Map.Entry<String, List<InetAddress>> dcEndpoints : dcsEndpoints.entrySet())
+        {
+            List<InetAddress> dcEndpoint = dcEndpoints.getValue();
+            if (readRepair == ReadRepairDecision.DC_LOCAL && dcEndpoints.getKey().equals(DatabaseDescriptor.getLocalDataCenter()))
+                waitSet.addAll(dcEndpoint);
+            else
+                waitSet.addAll(dcEndpoint.subList(0, Math.min(localQuorumFor(keyspace, dcEndpoints.getKey()), dcEndpoint.size())));
+        }
+
+        return waitSet;
     }
 
     public boolean isSufficientLiveNodes(Keyspace keyspace, Iterable<InetAddress> liveEndpoints)
@@ -282,7 +321,7 @@ public enum ConsistencyLevel
                         int dcBlockFor = localQuorumFor(keyspace, entry.getKey());
                         int dcLive = entry.getValue();
                         if (dcLive < dcBlockFor)
-                            throw new UnavailableException(this, dcBlockFor, dcLive);
+                            throw new UnavailableException(this, entry.getKey(), dcBlockFor, dcLive);
                     }
                     break;
                 }
@@ -304,8 +343,6 @@ public enum ConsistencyLevel
         {
             case ANY:
                 throw new InvalidRequestException("ANY ConsistencyLevel is only supported for writes");
-            case EACH_QUORUM:
-                throw new InvalidRequestException("EACH_QUORUM ConsistencyLevel is only supported for writes");
         }
     }
 

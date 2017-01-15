@@ -17,15 +17,11 @@
  */
 package org.apache.cassandra.cql3;
 
-import io.netty.buffer.ByteBuf;
-
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
+import com.google.common.collect.ImmutableList;
+import io.netty.buffer.ByteBuf;
 
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.ConsistencyLevel;
@@ -38,8 +34,6 @@ import org.apache.cassandra.transport.CBUtil;
 import org.apache.cassandra.transport.ProtocolException;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.Pair;
-
-import com.google.common.collect.ImmutableList;
 
 /**
  * Options for a query.
@@ -57,17 +51,7 @@ public abstract class QueryOptions
     // A cache of bind values parsed as JSON, see getJsonColumnValue for details.
     private List<Map<ColumnIdentifier, Term>> jsonValuesCache;
 
-    public static QueryOptions fromProtocolV1(ConsistencyLevel consistency, List<ByteBuffer> values)
-    {
-        return new DefaultQueryOptions(consistency, values, false, SpecificOptions.DEFAULT, Server.VERSION_1);
-    }
-
-    public static QueryOptions fromProtocolV2(ConsistencyLevel consistency, List<ByteBuffer> values)
-    {
-        return new DefaultQueryOptions(consistency, values, false, SpecificOptions.DEFAULT, Server.VERSION_2);
-    }
-
-    public static QueryOptions forInternalCalls(ConsistencyLevel consistency, List<ByteBuffer> values)
+    public static QueryOptions fromThrift(ConsistencyLevel consistency, List<ByteBuffer> values)
     {
         return new DefaultQueryOptions(consistency, values, false, SpecificOptions.DEFAULT, Server.VERSION_3);
     }
@@ -77,14 +61,14 @@ public abstract class QueryOptions
         return new DefaultQueryOptions(consistency, values, false, new SpecificOptions(-1, null, serialConsistency, Long.MIN_VALUE), 3);
     }
     
+    public static QueryOptions forInternalCalls(ConsistencyLevel consistency, List<ByteBuffer> values)
+    {
+        return new DefaultQueryOptions(consistency, values, false, SpecificOptions.DEFAULT, Server.VERSION_3);
+    }
+
     public static QueryOptions forInternalCalls(List<ByteBuffer> values)
     {
         return new DefaultQueryOptions(ConsistencyLevel.ONE, values, false, SpecificOptions.DEFAULT, Server.VERSION_3);
-    }
-
-    public static QueryOptions fromPreV3Batch(ConsistencyLevel consistency)
-    {
-        return new DefaultQueryOptions(consistency, Collections.<ByteBuffer>emptyList(), false, SpecificOptions.DEFAULT, Server.VERSION_2);
     }
 
     public static QueryOptions forProtocolVersion(int protocolVersion)
@@ -420,8 +404,6 @@ public abstract class QueryOptions
 
         public QueryOptions decode(ByteBuf body, int version)
         {
-            assert version >= 2;
-
             ConsistencyLevel consistency = CBUtil.readConsistencyLevel(body);
             EnumSet<Flag> flags = Flag.deserialize((int)body.readByte());
 
@@ -449,7 +431,7 @@ public abstract class QueryOptions
             if (!flags.isEmpty())
             {
                 int pageSize = flags.contains(Flag.PAGE_SIZE) ? body.readInt() : -1;
-                PagingState pagingState = flags.contains(Flag.PAGING_STATE) ? PagingState.deserialize(CBUtil.readValue(body)) : null;
+                PagingState pagingState = flags.contains(Flag.PAGING_STATE) ? PagingState.deserialize(CBUtil.readValue(body), version) : null;
                 ConsistencyLevel serialConsistency = flags.contains(Flag.SERIAL_CONSISTENCY) ? CBUtil.readConsistencyLevel(body) : ConsistencyLevel.SERIAL;
                 long timestamp = Long.MIN_VALUE;
                 if (flags.contains(Flag.TIMESTAMP))
@@ -468,8 +450,6 @@ public abstract class QueryOptions
 
         public void encode(QueryOptions options, ByteBuf dest, int version)
         {
-            assert version >= 2;
-
             CBUtil.writeConsistencyLevel(options.getConsistency(), dest);
 
             EnumSet<Flag> flags = gatherFlags(options);
@@ -480,7 +460,7 @@ public abstract class QueryOptions
             if (flags.contains(Flag.PAGE_SIZE))
                 dest.writeInt(options.getPageSize());
             if (flags.contains(Flag.PAGING_STATE))
-                CBUtil.writeValue(options.getPagingState().serialize(), dest);
+                CBUtil.writeValue(options.getPagingState().serialize(version), dest);
             if (flags.contains(Flag.SERIAL_CONSISTENCY))
                 CBUtil.writeConsistencyLevel(options.getSerialConsistency(), dest);
             if (flags.contains(Flag.TIMESTAMP))
@@ -505,7 +485,7 @@ public abstract class QueryOptions
             if (flags.contains(Flag.PAGE_SIZE))
                 size += 4;
             if (flags.contains(Flag.PAGING_STATE))
-                size += CBUtil.sizeOfValue(options.getPagingState().serialize());
+                size += CBUtil.sizeOfValue(options.getPagingState().serializedSize(version));
             if (flags.contains(Flag.SERIAL_CONSISTENCY))
                 size += CBUtil.sizeOfConsistencyLevel(options.getSerialConsistency());
             if (flags.contains(Flag.TIMESTAMP))

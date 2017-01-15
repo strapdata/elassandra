@@ -19,11 +19,11 @@ package org.apache.cassandra.cql3;
 
 import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.List;
 
 import com.google.common.collect.Iterables;
 
 import org.apache.cassandra.cql3.functions.Function;
-import org.apache.cassandra.db.ExpiringCell;
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.exceptions.InvalidRequestException;
@@ -36,6 +36,8 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  */
 public class Attributes
 {
+    public static final int MAX_TTL = 20 * 365 * 24 * 60 * 60; // 20 years in seconds
+
     private final Term timestamp;
     private final Term timeToLive;
 
@@ -50,16 +52,12 @@ public class Attributes
         this.timeToLive = timeToLive;
     }
 
-    public Iterable<Function> getFunctions()
+    public void addFunctionsTo(List<Function> functions)
     {
-        if (timestamp != null && timeToLive != null)
-            return Iterables.concat(timestamp.getFunctions(), timeToLive.getFunctions());
-        else if (timestamp != null)
-            return timestamp.getFunctions();
-        else if (timeToLive != null)
-            return timeToLive.getFunctions();
-        else
-            return Collections.emptySet();
+        if (timestamp != null)
+            timestamp.addFunctionsTo(functions);
+        if (timeToLive != null)
+            timeToLive.addFunctionsTo(functions);
     }
 
     public boolean isTimestampSet()
@@ -121,8 +119,8 @@ public class Attributes
         if (ttl < 0)
             throw new InvalidRequestException("A TTL must be greater or equal to 0, but was " + ttl);
 
-        if (ttl > ExpiringCell.MAX_TTL)
-            throw new InvalidRequestException(String.format("ttl is too large. requested (%d) maximum (%d)", ttl, ExpiringCell.MAX_TTL));
+        if (ttl > MAX_TTL)
+            throw new InvalidRequestException(String.format("ttl is too large. requested (%d) maximum (%d)", ttl, MAX_TTL));
 
         return ttl;
     }

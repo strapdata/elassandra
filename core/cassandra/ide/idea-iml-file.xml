@@ -18,7 +18,7 @@
   -->
 
 <module type="JAVA_MODULE" version="4">
-    <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_1_7" inherit-compiler-output="false">
+    <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_1_8" inherit-compiler-output="false">
         <output url="file://$MODULE_DIR$/.idea/out/main" />
         <output-test url="file://$MODULE_DIR$/.idea/out/test" />
         <exclude-output />
@@ -32,7 +32,6 @@
             <sourceFolder url="file://$MODULE_DIR$/test/long" isTestSource="true" />
             <sourceFolder url="file://$MODULE_DIR$/test/microbench" isTestSource="true" />
             <sourceFolder url="file://$MODULE_DIR$/test/burn" isTestSource="true" />
-            <sourceFolder url="file://$MODULE_DIR$/test/pig" isTestSource="true" />
             <sourceFolder url="file://$MODULE_DIR$/test/resources" type="java-test-resource" />
             <excludeFolder url="file://$MODULE_DIR$/.idea" />
             <excludeFolder url="file://$MODULE_DIR$/.settings" />

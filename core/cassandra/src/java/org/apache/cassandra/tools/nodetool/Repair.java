@@ -56,7 +56,7 @@ public class Repair extends NodeToolCmd
     private boolean localDC = false;
 
     @Option(title = "specific_dc", name = {"-dc", "--in-dc"}, description = "Use -dc to repair specific datacenters")
-    private List<String> specificDataCenters = new ArrayList<>();
+    private List<String> specificDataCenters = new ArrayList<>();;
 
     @Option(title = "specific_host", name = {"-hosts", "--in-hosts"}, description = "Use -hosts to repair specific hosts")
     private List<String> specificHosts = new ArrayList<>();
@@ -84,8 +84,8 @@ public class Repair extends NodeToolCmd
     @Override
     public void execute(NodeProbe probe)
     {
-        List<String> keyspaces = parseOptionalKeyspace(args, probe);
-        String[] cfnames = parseOptionalColumnFamilies(args);
+        List<String> keyspaces = parseOptionalKeyspace(args, probe, KeyspaceSet.NON_LOCAL_STRATEGY);
+        String[] cfnames = parseOptionalTables(args);
 
         if (primaryRange && (!specificDataCenters.isEmpty() || !specificHosts.isEmpty()))
             throw new RuntimeException("Primary range repair should be performed on all nodes in the cluster.");
