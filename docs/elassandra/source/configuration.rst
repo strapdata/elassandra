@@ -108,7 +108,7 @@ Index settings
 * ``index.search_strategy_class`` : Set the search strategy class overriding the default cluster search strategy.
 * ``index.include_node_id`` : If true, indexes the cassandra hostId in the _node field. Default is **false**.
 * ``index.synchronous_refresh`` : If true, synchrounously refreshes the elasticsearch index on each index update. Default is **false**.
-* ``index.drop_on_delete_index`` : If true, delete underlying cassandra table and keyspace when deleting an index. Default is **false**.
+* ``index.drop_on_delete_index`` : If true, delete underlying cassandra table and keyspace when deleting an index (Keyspace is deleted only if all its tables are deleted by removing the index). Default is **false**.
 
 
 Sizing and tunning

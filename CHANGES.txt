@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2.4.2-4 - 2017-01-16
   * Upgrade to Cassandra 3.0.10
   * Support CQL TRUNCATE
@@ -5,6 +6,11 @@
 2.4.2-3 - 2017-01-04
   * Fix search and indexing issue when cassandra replcation factor > 1 
   
+=======
+2.4.2-3 - 2017-01-04
+  * Fix search and indexing issue when cassandra replcation factor > 1 
+
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
 2.4.2-2 - 2016-12-25
   * Fix useless compactions when creating an index.
   * Support for ES Object fields w/ enabled settings 

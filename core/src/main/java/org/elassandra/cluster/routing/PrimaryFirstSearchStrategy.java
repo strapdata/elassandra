@@ -106,6 +106,16 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
                     }
                 }
             }
+            
+            if (logger.isTraceEnabled())
+                logger.trace("index={} keyspace={} greenShards={} yellowShards={} redShards={}", index, ksName, greenShards, yellowShards, redShards);
+            
+            this.route = new Router.Route() {
+                @Override
+                public Map<DiscoveryNode, BitSet> selectedShards() {
+                    return greenShards;
+                }
+            };
         }
 
         @Override

@@ -53,7 +53,6 @@ import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.BigArrays;
-import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.IndexService;
@@ -67,9 +66,6 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Rule;
-
-import com.carrotsearch.randomizedtesting.rules.StaticFieldsInvariantRule;
 
 /**
  * A test that keep a singleton node started for all tests that can be used to get
@@ -93,6 +89,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         System.out.println("cassandra.config.dir="+System.getProperty("cassandra.config.dir"));
         System.out.println("cassandra-rackdc.properties="+System.getProperty("cassandra-rackdc.properties"));
         System.out.println("cassandra.storagedir="+System.getProperty("cassandra.storagedir"));
+
         System.out.println("settings="+testSettings.getAsMap());
         System.out.println("plugins="+classpathPlugins);
         DatabaseDescriptor.createAllDirectories();
@@ -208,7 +205,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     protected boolean resetNodeAfterTest() {
         return true;
     }
-
 
     /**
      * Returns a collection of plugins that should be loaded on each node.

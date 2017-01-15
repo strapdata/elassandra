@@ -298,6 +298,7 @@
             <artifactId>libthrift</artifactId>
             <version>0.9.2</version>
             <optional>true</optional>
+            
         </dependency>
 
         <dependency>

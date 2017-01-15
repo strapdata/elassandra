@@ -526,7 +526,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
     }
     
     // see https://docs.datastax.com/en/cql/3.0/cql/cql_reference/keywords_r.html
-    public static final Pattern keywordsPattern = Pattern.compile("(ADD|ALLOW|ALTER|AND|ANY|APPLY|ASC|AUTHORIZE|BATCH|BEGIN|BY|COLUMNFAMILY|CREATE|DELETE|DESC|DROP|EACH_QUORUM|FROM|GRANT|IN|INDEX|INET|INSERT|INTO|KEYSPACE|KEYSPACES|LIMIT|LOCAL_ONE|LOCAL_QUORUM|MODIFY|NOT|NORECURSIVE|OF|ON|ONE|ORDER|PASSWORD|PRIMARY|QUORUM|RENAME|REVOKE|SCHEMA|SELECT|SET|TABLE|TO|TOKEN|THREE|TRUNCATE|TWO|UNLOGGED|UPDATE|USE|USING|WHERE|WITH)"); 
+    public static final Pattern keywordsPattern = Pattern.compile("(ADD|ALLOW|ALTER|AND|ANY|APPLY|ASC|AUTHORIZE|BATCH|BEGIN|BY|COLUMNFAMILY|CREATE|DELETE|DESC|DROP|EACH_QUORUM|GRANT|IN|INDEX|INET|INSERT|INTO|KEYSPACE|KEYSPACES|LIMIT|LOCAL_ONE|LOCAL_QUORUM|MODIFY|NOT|NORECURSIVE|OF|ON|ONE|ORDER|PASSWORD|PRIMARY|QUORUM|RENAME|REVOKE|SCHEMA|SELECT|SET|TABLE|TO|TOKEN|THREE|TRUNCATE|TWO|UNLOGGED|UPDATE|USE|USING|WHERE|WITH)"); 
     
     public static boolean isReservedKeyword(String identifier) {
         return keywordsPattern.matcher(identifier.toUpperCase(Locale.ROOT)).matches();
@@ -1557,8 +1557,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
     @Override
     public void deleteRow(final String index, final String type, final String id, final ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
             IOException {
-        String cfName = typeToCfName(type);
         IndexService indexService = this.indexServiceSafe(index);
+        String cfName = typeToCfName(type);
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
         process(cl, buildDeleteQuery(docMapper, indexService.keyspace(), cfName, id), parseElasticId(index, type, id).values);
     }
@@ -1979,7 +1979,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 if (map.get(m) == null && m.indexOf('.') == -1 && metadata.getColumnDefinition(objectMappers.get(m).cqlName()) != null)
                     map.put(m, null);
             }
-            
             values = new ByteBuffer[map.size()];
             query = buildInsertQuery(keyspaceName, cfName, map, id, 
                     false,      
