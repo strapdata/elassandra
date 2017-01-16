@@ -375,7 +375,12 @@ public class ElassandraDaemon extends CassandraDaemon {
                         .build(), 
                     foreground ? Terminal.DEFAULT : null);
             
+<<<<<<< HEAD
             instance.activate(true, env.settings(), env,  Collections.<Class<? extends Plugin>>emptyList());
+=======
+            instance.activate(true, env.settings(), env, Collections.<Class<? extends Plugin>>emptyList());
+
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
             if (!foreground) {
                 System.err.close();
             }

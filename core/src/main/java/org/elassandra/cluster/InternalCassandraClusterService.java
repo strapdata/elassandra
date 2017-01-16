@@ -786,8 +786,14 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
                 
                 if (isReservedKeyword(shortName))
+<<<<<<< HEAD
                     logger.warn("Allowing a CQL reserved keyword in ES: {}", shortName);
                 
+=======
+                {
+                    logger.warn("Allowing Reserved Keyword in ES: {}", shortName);
+                }
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
                 create.append('\"').append(shortName).append("\" ");
                 if (mapper instanceof ObjectMapper) {
                     if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(mapper.cqlCollectionTag()).append("<");
@@ -832,7 +838,13 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 int lastDotIndex = mapper.name().lastIndexOf('.');
                 String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
                 if (isReservedKeyword(shortName))
+<<<<<<< HEAD
                     logger.warn("Allowing a CQL reserved keyword in ES: {}", shortName);
+=======
+                {
+                    logger.warn("Allowing Reserved Keyword in ES: {}", shortName);
+                }
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
                 
                 StringBuilder update = new StringBuilder(String.format(Locale.ROOT, "ALTER TYPE \"%s\".\"%s\" ADD \"%s\" ", ksName, typeName, shortName));
                 if (!udt.left.contains(shortName)) {
@@ -996,7 +1008,13 @@ public class InternalCassandraClusterService extends InternalClusterService {
             int partitionKeyLength = 0;
             for (String column : columns) {
                 if (isReservedKeyword(column))
+<<<<<<< HEAD
                     logger.warn("Allowing a CQL reserved keyword in ES: {}", column);
+=======
+                {
+                    logger.warn("Allowing Reserved Keyword in ES: {}", column);
+                }
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
                 
                 if (column.equals(TokenFieldMapper.NAME))
                     continue; // ignore pseudo column known by Elasticsearch
@@ -1559,8 +1577,12 @@ public class InternalCassandraClusterService extends InternalClusterService {
             IOException {
         IndexService indexService = this.indexServiceSafe(index);
         String cfName = typeToCfName(type);
+<<<<<<< HEAD
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
         process(cl, buildDeleteQuery(docMapper, indexService.keyspace(), cfName, id), parseElasticId(index, type, id).values);
+=======
+        process(cl, buildDeleteQuery(indexService.keyspace(), cfName, id), parseElasticId(index, type, id).values);
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
     }
     
     @Override
@@ -1623,6 +1645,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 case ASCII:
                 case TEXT:
                 case VARCHAR:
+<<<<<<< HEAD
                     values[i] = row.getString(columnName);
                     if (values[i] != null && fieldMapper == null) {
                         ObjectMapper objectMapper = documentMapper.objectMappers().get(columnName);
@@ -1630,6 +1653,16 @@ public class InternalCassandraClusterService extends InternalClusterService {
                             // parse text as JSON Map (not enabled object)
                             values[i] = FBUtilities.fromJsonMap(row.getString(columnName));
                         }
+=======
+                    if (fieldMapper == null) {
+                        ObjectMapper objectMapper = documentMapper.objectMappers().get(columnName);
+                        if (objectMapper != null && !objectMapper.isEnabled()) {
+                            // parse text as JSON Map (not enabled object)
+                            values[columnIndex] = FBUtilities.fromJsonMap(row.getString(columnName));
+                        }
+                    } else {
+                        values[columnIndex] = row.getString(columnName);
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
                     }
                     break;
                 case TIMEUUID:
@@ -1979,6 +2012,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 if (map.get(m) == null && m.indexOf('.') == -1 && metadata.getColumnDefinition(objectMappers.get(m).cqlName()) != null)
                     map.put(m, null);
             }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
             values = new ByteBuffer[map.size()];
             query = buildInsertQuery(keyspaceName, cfName, map, id, 
                     false,      

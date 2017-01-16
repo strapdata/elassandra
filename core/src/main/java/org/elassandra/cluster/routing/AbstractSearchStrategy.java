@@ -131,7 +131,7 @@ public abstract class AbstractSearchStrategy {
             for(Token token: tokens) {
                 if (TOKEN_MIN.equals(token))
                     continue;
-                
+
                 // greenshard = available node -> token range bitset, 
                 boolean orphanRange = true;
                 for(InetAddress endpoint : tokenToEndpointsMap.get(token)) {

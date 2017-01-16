@@ -78,10 +78,14 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
 
      
     private static final Semaphore available = new Semaphore(1);
+<<<<<<< HEAD
     
     protected static Node NODE;
     protected static Settings settings;
     
+=======
+        
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
     static void initNode(Settings testSettings, Collection<Class<? extends Plugin>> classpathPlugins)  {
         System.out.println("cassandra.home="+System.getProperty("cassandra.home"));
         System.out.println("cassandra.config.loader="+System.getProperty("cassandra.config.loader"));
@@ -89,6 +93,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         System.out.println("cassandra.config.dir="+System.getProperty("cassandra.config.dir"));
         System.out.println("cassandra-rackdc.properties="+System.getProperty("cassandra-rackdc.properties"));
         System.out.println("cassandra.storagedir="+System.getProperty("cassandra.storagedir"));
+<<<<<<< HEAD
 
         System.out.println("settings="+testSettings.getAsMap());
         System.out.println("plugins="+classpathPlugins);
@@ -96,6 +101,14 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
 
         settings = Settings.builder()
                 .put(ClusterName.SETTING, DatabaseDescriptor.getClusterName())
+=======
+        System.out.println("settings="+testSettings);
+        System.out.println("plugins="+classpathPlugins);
+        DatabaseDescriptor.createAllDirectories();
+        
+        Settings settings = Settings.builder()
+                .put(ClusterName.SETTING, InternalTestCluster.clusterName("single-node-cluster",1))
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
                 
                 .put("path.home", System.getProperty("cassandra.home"))
                 .put("path.conf", System.getProperty("cassandra.config.dir"))
@@ -114,6 +127,11 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
                 .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
                 .put(testSettings)
                 .build();
+<<<<<<< HEAD
+=======
+        System.out.println("settings="+settings.getAsMap());
+        System.out.println("plugins="+classpathPlugins);
+>>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
         
         ElassandraDaemon.instance.activate(false,  settings, new Environment(settings), classpathPlugins);
         try {
