@@ -137,11 +137,7 @@ public class Node implements Releasable {
     public Node(Settings preparedSettings) {
         this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), Version.CURRENT, Collections.<Class<? extends Plugin>>emptyList());
     }
-<<<<<<< HEAD
-    
-=======
 
->>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
     public Node(Settings preparedSettings, Collection<Class<? extends Plugin>> classpathPlugins) {
         this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), Version.CURRENT, classpathPlugins);
     }

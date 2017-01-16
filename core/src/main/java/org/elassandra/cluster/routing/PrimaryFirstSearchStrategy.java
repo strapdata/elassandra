@@ -60,15 +60,10 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
                     public Map<DiscoveryNode, BitSet> selectedShards() {
                         return greenShards;
                     }
-<<<<<<< HEAD
-=======
-                    
->>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
                 };
                 return;
             }
             
-<<<<<<< HEAD
             // clear replica ranges from bitset of greenShards.
             for(DiscoveryNode node : greenShards.keySet()) {
                 for(Range<Token> primaryRange : StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, node.getInetAddress())) {
@@ -82,17 +77,6 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
                     
                     if (rightTokenIndex >= 0)
                         clearReplicaRange(node.getInetAddress(), rightTokenIndex, primaryRange.right, clusterState);
-=======
-            // remove replica ranges from bitset of greenShards for available shards.
-            for(DiscoveryNode node : greenShards.keySet()) {
-                Collection<Range<Token>> primaryRanges = StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, node.getInetAddress());
-                Range<Token> wrappedRange = null;        
-                for(Range<Token> range : primaryRanges) {
-                    if (range.isWrapAround()) {
-                        wrappedRange = range;
-                        break;
-                    }
->>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
                 }
             }
             
@@ -104,7 +88,6 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
                 public Map<DiscoveryNode, BitSet> selectedShards() {
                     return greenShards;
                 }
-<<<<<<< HEAD
             };
         }
         
@@ -120,20 +103,6 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
                     } else {
                         if (logger.isTraceEnabled())
                             logger.trace("uuid={} for replica={} node found", uuid, replica);
-=======
-                // unset all primary range bits on started replica shards.
-                for(Range<Token> range : primaryRanges) {
-                    int idx = this.tokens.indexOf(range);
-                    if (this.rangeToEndpointsMap.get(range) != null) {
-                        for(InetAddress replica : this.rangeToEndpointsMap.get(range)) {
-                            UUID uuid = StorageService.instance.getHostId(replica);
-                            if (uuid != null && !node.uuid().equals(uuid) && ShardRoutingState.STARTED.equals(shardStates.get(uuid))) {
-                                DiscoveryNode n = clusterState.nodes().get( uuid.toString() );
-                                if (this.greenShards.get(n) != null)
-                                    this.greenShards.get(n).set(idx, false);
-                            }
-                        }
->>>>>>> 962afa9ab2656f30ad625a01eeea5430c2c9347d
                     }
                 }
             }
