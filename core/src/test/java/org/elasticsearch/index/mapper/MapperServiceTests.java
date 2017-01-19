@@ -168,7 +168,7 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
     @Test
     public void testSearchFilter() {
         IndexService indexService = createIndex("index1", client().admin().indices().prepareCreate("index1")
-            .addMapping("type1", "field1", "type=nested")
+            .addMapping("type1", "{\"type1\":{\"properties\":{ \"field1\":{\"type\":\"nested\", \"properties\":{ \"foo\":{\"type\":\"string\"}}}}}}")
             .addMapping("type2", new Object[0])
         );
 

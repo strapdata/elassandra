@@ -20,10 +20,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
@@ -43,6 +41,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -64,7 +63,6 @@ import org.apache.cassandra.db.Clustering;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
-import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.LivenessInfo;
 import org.apache.cassandra.db.PartitionColumns;
 import org.apache.cassandra.db.RangeTombstone;
@@ -406,6 +404,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 geoPointFieldMapper.parse(this, geoPoint, null);
             }  else if (mapper instanceof FieldMapper) {
                 FieldMapper fieldMapper = (FieldMapper)mapper;
+                if (value instanceof UUID)
+                    value = value.toString();   // #74 uuid stored as string
                 if (fieldMapper.fieldType().indexOptions() != IndexOptions.NONE)
                     fieldMapper.createField(this, value);
             } else if (mapper instanceof ObjectMapper) {

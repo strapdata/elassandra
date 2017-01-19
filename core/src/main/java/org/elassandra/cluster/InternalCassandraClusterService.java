@@ -66,9 +66,11 @@ import org.apache.cassandra.db.marshal.CollectionType;
 import org.apache.cassandra.db.marshal.ListType;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.marshal.SetType;
+import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.TupleType;
 import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -78,7 +80,6 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.exceptions.UnavailableException;
-import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.schema.IndexMetadata;
@@ -261,6 +262,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
             .put("boolean", "boolean")
             .put("blob", "binary")
             .put("inet", "ip" )
+            .put("uuid", "string" )
+            .put("timeuuid", "string" )
             .build();
     
 
@@ -617,6 +620,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
            }
            for(String subField : map.keySet()) {
                Object subValue = map.get(subField);
+               if (subValue == null)
+                   continue;
+               
                if (subValue instanceof Collection && ((Collection)subValue).size() == 1)
                    subValue = ((Collection)subValue).iterator().next();
 
@@ -1080,12 +1086,12 @@ public class InternalCassandraClusterService extends InternalClusterService {
                         }
                         //logger.debug("Expecting column [{}] to be a map<text,?>", column);
                     } else  if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
-                        if (!objectMapper.iterator().hasNext()) {
-                            // opaque json object
-                            cqlType = "text";
-                        } else {
+                        if (objectMapper.isEnabled()) {
                             // Cassandra 2.1.8 : Non-frozen collections are not allowed inside collections
                             cqlType = "frozen<\"" + buildCql(ksName, cfName, column, objectMapper) + "\">";
+                        } else {
+                            // enabled=false => opaque json object
+                            cqlType = "text";
                         }
                         if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON) && 
                             !(cfName.equals(PERCOLATOR_TABLE) && column.equals("query"))) {
@@ -1124,9 +1130,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
                             String existingCqlType = cdef.type.asCQL3Type().toString();
                             if (!cdef.type.isCollection()) {
                                 // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
-                                if (!existingCqlType.equals(cqlType) && !cqlType.equals("frozen<"+existingCqlType+">")) {
+                                if (!existingCqlType.equals(cqlType) && 
+                                    !cqlType.equals("frozen<"+existingCqlType+">") &&
+                                    !(existingCqlType.endsWith("uuid") && cqlType.equals("text")) ) // #74 uuid is mapped as text
                                     throw new IOException("Existing column "+column+" mismatch type "+cqlType);
-                                }
                             }
                         }
                     }
@@ -2609,6 +2616,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
             // Native cassandra type, encoded with mapper if available.
             if (mapper != null) {
                 if (mapper instanceof FieldMapper) {
+                    if (mapper instanceof StringFieldMapper && (type instanceof TimeUUIDType || type instanceof UUIDType))
+                        return type.decompose( UUID.fromString((String)value) ) ; // #74 uuid is mapped as text
                     return type.decompose( value((FieldMapper) mapper, value) );
                 } else if (mapper instanceof ObjectMapper && !((ObjectMapper)mapper).isEnabled()) {
                     // enabled=false => store field as json text
