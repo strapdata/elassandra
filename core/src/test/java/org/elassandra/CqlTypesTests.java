@@ -42,7 +42,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         ensureGreen("ks1");
         
         process(ConsistencyLevel.ONE,
-                "CREATE TABLE ks1.natives (c1 text primary key, c2 text, c3 timestamp, c4 int, c5 bigint, c6 double, c7 float, c8 boolean, c9 blob)");
+                "CREATE TABLE ks1.natives (c1 text primary key, c2 text, c3 timestamp, c4 int, c5 bigint, c6 double, c7 float, c8 boolean, c9 blob, c10 uuid, c11 timeuuid)");
         assertAcked(client().admin().indices()
                 .preparePutMapping("ks1")
                 .setType("natives")
@@ -51,7 +51,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         
         // {"c2": "toto", "c3" : "2016-10-10", "c4": 1, "c5":44, "c6":1.0, "c7":2.22, "c8": true, "c9":"U29tZSBiaW5hcnkgYmxvYg==" }
         assertThat(client().prepareIndex("ks1", "natives", "1")
-                .setSource("{\"c2\": \"toto\", \"c3\" : \"2016-10-10\", \"c4\": 1, \"c5\":44, \"c6\":1.0, \"c7\":2.22, \"c8\": true, \"c9\":\"U29tZSBiaW5hcnkgYmxvYg==\" }")
+                .setSource("{\"c2\": \"toto\", \"c3\" : \"2016-10-10\", \"c4\": 1, \"c5\":44, \"c6\":1.0, \"c7\":2.22, \"c8\": true, \"c9\":\"U29tZSBiaW5hcnkgYmxvYg==\", \"c10\":\"ae8c9260-dd02-11e6-b9d5-bbfb41c263ba\",\"c11\":\"ae8c9260-dd02-11e6-b9d5-bbfb41c263ba\"  }")
                 .get().isCreated(), equalTo(true));
         Map<String,Object> fields = client().prepareSearch("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("c2:toto"))
                 .get().getHits().getHits()[0]
@@ -65,7 +65,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(fields.get("c8"),equalTo(true));
         assertThat(fields.get("c9"),equalTo("U29tZSBiaW5hcnkgYmxvYg=="));
         
-        process(ConsistencyLevel.ONE,"insert into ks1.natives (c1,c2,c3,c4,c5,c6,c7,c8,c9) VALUES ('tutu', 'titi', '2016-11-11', 1, 45, 1.0, 2.23, false,textAsBlob('bdb14fbe076f6b94444c660e36a400151f26fc6f'))");
+        process(ConsistencyLevel.ONE,"insert into ks1.natives (c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) VALUES ('tutu', 'titi', '2016-11-11', 1, 45, 1.0, 2.23, false,textAsBlob('bdb14fbe076f6b94444c660e36a400151f26fc6f'),ae8c9260-dd02-11e6-b9d5-bbfb41c263ba,ae8c9260-dd02-11e6-b9d5-bbfb41c263ba)");
         assertThat(client().prepareSearch().setIndices("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(2L));
         
         fields = client().prepareSearch().setIndices("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("c5:45")).get().getHits().getHits()[0].getSource();
@@ -74,7 +74,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         sdf.setTimeZone(TimeZone.getTimeZone(System.getProperty("tests.timezone")));
         
         assertThat(fields.get("c2"), equalTo("titi"));
-//        assertThat(fields.get("c3"), equalTo(new SimpleDateFormat("yyyy-MM-dd").parse("2016-11-11").toLocaleString()));
+        //assertThat(fields.get("c3"), equalTo(new SimpleDateFormat("yyyy-MM-dd").parse("2016-11-11").toLocaleString()));
         assertThat(fields.get("c4"),equalTo(1));
         assertThat(fields.get("c5"),equalTo(45));
         assertThat(fields.get("c6"),equalTo(1.0));
