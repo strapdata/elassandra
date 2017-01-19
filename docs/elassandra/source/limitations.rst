@@ -77,6 +77,11 @@ The underlying cassandra table *foo.bar* has only a primary key column with no s
 
 To get the same behavior as Elasticsearch, just add a dummy field in your mapping.
 
+Nested or Object types cannot be empty
+--------------------------------------
+
+Because Elasticsearch nested and object types are backed by a Cassandra User Defined Type, it requires at least one sub-field.
+
 Document version is meaningless
 -------------------------------
 
@@ -100,8 +105,8 @@ Elasticsearch unsupported feature
 Cassandra limitations
 ---------------------
 
- * Thrift protocol is not supported by Elassandra, only CQL3.
- * Only supports the murmur3 partitionner.
+ * Elassandra only supports the murmur3 partitionner.
+ * The thrift protocol is supported only for read operations.
  * Elassandra synchronously indexes rows into Elasticsearch. This may increases the write duration, particulary when indexing complex document like `GeoShape <https://www.elastic.co/guide/en/elasticsearch/reference/current/geo-shape.html>`_, so Cassandra ``write_request_timeout_in_ms`` is set to 5 seconds (Cassandra default is 2000 ms, see `Cassandra config <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configCassandra_yaml_r.html>`_)
  * In order to avoid concurrent mapping or persistent cluster settings updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommanded to have at least 3 nodes in 3 distincts racks (2 nodes datacenter won't accept any mapping update when a node is unavailable). 
  * CQL3 *TRUNCATE* on a Cassandra table deletes all associated Elasticsearch documents by playing a delete_by_query where *_type = <table_name>*. Of course, such a delete_by_query comes with a perfomance cost.
