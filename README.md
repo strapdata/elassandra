@@ -8,7 +8,7 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 
 ## News
 
-[![Build Status](https://travis-ci.org/strapdata/elassandra.svg)](https://travis-ci.org/strapdata/elassandra)
+[![Build Status](https://travis-ci.org/strapdata/elassandra.svg)](https://travis-ci.org/strapdata/elassandra) [![Doc Status](https://readthedocs.org/projects/elassandra/badge/?version=latest)
 
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
