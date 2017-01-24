@@ -29,15 +29,18 @@ Here is the mapping from Elasticsearch field basic types to CQL3 types :
 +----------------------+--------------------------+----------------------------+
 | ip                   | inet                     | Internet address           |
 +----------------------+--------------------------+----------------------------+
+| string               | uuid,timeuuid            | Specific mapping (1)       |
++----------------------+--------------------------+----------------------------+
 | geo_point            | UDT geo_point            | Built-In User Defined Type |
 +----------------------+--------------------------+----------------------------+
-| geo_shape            | UDT geo_shape            | Require _source enable (1) |
+| geo_shape            | UDT geo_shape            | Require _source enable (2) |
 +----------------------+--------------------------+----------------------------+
 | object, nested       | Custom User Defined Type |                            |
 +----------------------+--------------------------+----------------------------+
 
-(1) Geo shapes require _source to be enabled (default is disabled) to store the original JSON document.
- 
+(1) Exsisting Cassandra uuid and timeuuid columns are mapped to Elasticsearch string, but such columns cannot be created through the elasticsearch mapping.
+(2) Geo shapes require _source to be enabled to store the original JSON document (default is disabled).
+
 These parameters control the cassandra mapping.
    
 .. cssclass:: table-bordered
@@ -718,4 +721,5 @@ In the following exemple, we have 1000 accounts documents in a keysace with RF=2
      }
    }
    
+Of course, according to your use case, you should add a filter to this query to ignore write operations occuring during this check.
 

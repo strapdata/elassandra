@@ -105,11 +105,9 @@ Elasticsearch unsupported feature
 Cassandra limitations
 ---------------------
 
- * Elassandra only supports the murmur3 partitionner.
- * The thrift protocol is supported only for read operations.
- * Elassandra synchronously indexes rows into Elasticsearch. This may increases the write duration, particulary when indexing complex document like `GeoShape <https://www.elastic.co/guide/en/elasticsearch/reference/current/geo-shape.html>`_, so Cassandra ``write_request_timeout_in_ms`` is set to 5 seconds (Cassandra default is 2000 ms, see `Cassandra config <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configCassandra_yaml_r.html>`_)
- * In order to avoid concurrent mapping or persistent cluster settings updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommanded to have at least 3 nodes in 3 distincts racks (2 nodes datacenter won't accept any mapping update when a node is unavailable). 
- * CQL3 *TRUNCATE* on a Cassandra table deletes all associated Elasticsearch documents by playing a delete_by_query where *_type = <table_name>*. Of course, such a delete_by_query comes with a perfomance cost.
-
-
+* Elassandra only supports the murmur3 partitionner.
+* The thrift protocol is supported only for read operations.
+* Elassandra synchronously indexes rows into Elasticsearch. This may increases the write duration, particulary when indexing complex document like `GeoShape <https://www.elastic.co/guide/en/elasticsearch/reference/current/geo-shape.html>`_, so Cassandra ``write_request_timeout_in_ms`` is set to 5 seconds (Cassandra default is 2000 ms, see `Cassandra config <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configCassandra_yaml_r.html>`_)
+* In order to avoid concurrent mapping or persistent cluster settings updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommanded to have at least 3 nodes in 3 distincts racks (2 nodes datacenter won't accept any mapping update when a node is unavailable). 
+* CQL3 *TRUNCATE* on a Cassandra table deletes all associated Elasticsearch documents by playing a delete_by_query where *_type = <table_name>*. Of course, such a delete_by_query comes with a perfomance cost.
 
