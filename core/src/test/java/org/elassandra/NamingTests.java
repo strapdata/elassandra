@@ -68,4 +68,15 @@ public class NamingTests extends ESSingleNodeTestCase {
         assertThat(client().admin().indices().prepareDelete("test_index-2016.12.29").get().isAcknowledged(), equalTo(true));
         assertThat(client().admin().indices().prepareDeleteTemplate("test_template").get().isAcknowledged(), equalTo(true));
     }
+    
+    // ES Auto-Discovery fails when Cassandra table has at least one UDT field (#77)
+    @Test
+    public void testDiscoverUDT() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE,"create type test.fullname (firstname text, lastname text);");
+        process(ConsistencyLevel.ONE,"create table test.testudt (id uuid, name frozen<fullname>, primary key (id));");
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("testudt").setSource("{ \"testudt\" : { \"discover\" : \".*\" }}").get());
+    }
 }

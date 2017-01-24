@@ -399,8 +399,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 externalValue = null;
             } else if (mapper instanceof GeoPointFieldMapper || mapper instanceof GeoPointFieldMapperLegacy) {
                 BaseGeoPointFieldMapper geoPointFieldMapper = (BaseGeoPointFieldMapper) mapper;
-                Map<String, Double> geo_point =  (Map<String, Double>) value;
-                GeoPoint geoPoint = new GeoPoint(geo_point.get(BaseGeoPointFieldMapper.Names.LAT), geo_point.get(BaseGeoPointFieldMapper.Names.LON));
+                GeoPoint geoPoint;
+                if (value instanceof String) {
+                    // geo_point stored as text
+                    geoPoint = new GeoPoint((String)value);
+                } else {
+                    // geo_point stored in UDT.
+                    Map<String, Double> geo_point =  (Map<String, Double>) value;
+                    geoPoint = new GeoPoint(geo_point.get(BaseGeoPointFieldMapper.Names.LAT), geo_point.get(BaseGeoPointFieldMapper.Names.LON));
+                }
                 geoPointFieldMapper.parse(this, geoPoint, null);
             }  else if (mapper instanceof FieldMapper) {
                 FieldMapper fieldMapper = (FieldMapper)mapper;

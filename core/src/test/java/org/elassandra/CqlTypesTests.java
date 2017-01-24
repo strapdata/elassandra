@@ -3,14 +3,23 @@ package org.elassandra;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
+import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.UUID;
 
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.marshal.DoubleType;
+import org.apache.cassandra.db.marshal.TupleType;
+import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.common.geo.GeoPoint;
+import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.junit.Test;
 
 public class CqlTypesTests extends ESSingleNodeTestCase {
     
@@ -37,6 +46,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("cmdb").setTypes("server").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(3L));
     }
 
+    @Test
     public void testAllTypesTest() throws Exception {
         createIndex("ks1");
         ensureGreen("ks1");
@@ -82,4 +92,27 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(fields.get("c8"),equalTo(false));
     }
 
+    @Test
+    public void testTextGeohashMapping() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE,"create type test.geo_point (lat double, lon double);");
+        process(ConsistencyLevel.ONE,"create table test.geoloc (geohash text, id uuid, coord frozen<geo_point>, comment text, primary key ((geohash),id));");
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("geoloc")
+                .setSource("{ \"geoloc\" : { \"discover\":\"^((?!geohash).*)\", \"properties\": { \"geohash\": { \"type\": \"geo_point\", \"cql_collection\":\"singleton\",\"cql_partition_key\" : true,\"cql_primary_key_order\" : 0, \"index\" : \"not_analyzed\" } }}}").get());
+        GeoPoint geo_point = new GeoPoint(-25.068403, 29.411767);
+        ByteBuffer[] elements = new ByteBuffer[] {
+                InternalCassandraClusterService.serializeType("test", "geoloc", DoubleType.instance, GeoPointFieldMapper.Names.LAT, -25.068403, null),
+                InternalCassandraClusterService.serializeType("test", "geoloc", DoubleType.instance, GeoPointFieldMapper.Names.LON, 29.411767, null)
+        };
+        process(ConsistencyLevel.ONE,"INSERT INTO test.geoloc (geohash, id, coord, comment) VALUES (?,?,?,?)",
+                geo_point.geohash(), UUID.randomUUID(), TupleType.buildValue(elements), "blabla");
+        SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("geoloc")
+                .setQuery(QueryBuilders.boolQuery()
+                    .must(QueryBuilders.matchAllQuery())
+                    .filter(QueryBuilders.geoDistanceQuery("geohash").distance("20km").point(-25.068403, 29.411767)))
+                .get();
+        assertThat(rsp.getHits().getTotalHits(),equalTo(1L));
+    }
 }

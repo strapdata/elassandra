@@ -10,36 +10,37 @@ Here is the mapping from Elasticsearch field basic types to CQL3 types :
 
 .. cssclass:: table-bordered
 
-+----------------------+--------------------------+----------------------------+
-| Elasticearch Types   | CQL Types                | Comment                    |
-+======================+==========================+============================+
-| string               | text                     |                            |
-+----------------------+--------------------------+----------------------------+
-| integer, short, byte | timestamp                |                            |
-+----------------------+--------------------------+----------------------------+
-| long                 | bigint                   |                            |
-+----------------------+--------------------------+----------------------------+
-| double               | double                   |                            |
-+----------------------+--------------------------+----------------------------+
-| float                | float                    |                            |
-+----------------------+--------------------------+----------------------------+
-| boolean              | boolean                  |                            |
-+----------------------+--------------------------+----------------------------+
-| binary               | blob                     |                            |
-+----------------------+--------------------------+----------------------------+
-| ip                   | inet                     | Internet address           |
-+----------------------+--------------------------+----------------------------+
-| string               | uuid, timeuuid           | Specific mapping (1)       |
-+----------------------+--------------------------+----------------------------+
-| geo_point            | UDT geo_point            | Built-In User Defined Type |
-+----------------------+--------------------------+----------------------------+
-| geo_shape            | UDT geo_shape            | Require _source enable (2) |
-+----------------------+--------------------------+----------------------------+
-| object, nested       | Custom User Defined Type |                            |
-+----------------------+--------------------------+----------------------------+
++----------------------+--------------------------+--------------------------------+
+| Elasticearch Types   | CQL Types                | Comment                        |
++======================+==========================+================================+
+| string               | text                     |                                |
++----------------------+--------------------------+--------------------------------+
+| integer, short, byte | timestamp                |                                |
++----------------------+--------------------------+--------------------------------+
+| long                 | bigint                   |                                |
++----------------------+--------------------------+--------------------------------+
+| double               | double                   |                                |
++----------------------+--------------------------+--------------------------------+
+| float                | float                    |                                |
++----------------------+--------------------------+--------------------------------+
+| boolean              | boolean                  |                                |
++----------------------+--------------------------+--------------------------------+
+| binary               | blob                     |                                |
++----------------------+--------------------------+--------------------------------+
+| ip                   | inet                     | Internet address               |
++----------------------+--------------------------+--------------------------------+
+| string               | uuid, timeuuid           | Specific mapping (1)           |
++----------------------+--------------------------+--------------------------------+
+| geo_point            | UDT geo_point or text    | Built-In User Defined Type (3) |
++----------------------+--------------------------+--------------------------------+
+| geo_shape            | text                     | Require _source enable (2)     |
++----------------------+--------------------------+--------------------------------+
+| object, nested       | Custom User Defined Type |                                |
++----------------------+--------------------------+--------------------------------+
 
-(1) Exsisting Cassandra uuid and timeuuid columns are mapped to Elasticsearch string, but such columns cannot be created through the elasticsearch mapping.
-(2) Geo shapes require _source to be enabled to store the original JSON document (default is disabled).
+(1) Existing Cassandra uuid and timeuuid columns are mapped to Elasticsearch string, but such columns cannot be created through the elasticsearch mapping.
+(2) Existing Cassandra text columns containing a geohash string can be mapped to an Elasticsearch geo_point.
+(3) Geo shapes require _source to be enabled to store the original JSON document (default is disabled).
 
 These parameters control the cassandra mapping.
    

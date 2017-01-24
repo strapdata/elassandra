@@ -50,9 +50,10 @@ import org.apache.cassandra.db.marshal.ListType;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.marshal.SetType;
 import org.apache.cassandra.db.marshal.TupleType;
-import org.apache.cassandra.db.marshal.TypeParser;
+import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.cassandra.utils.Pair;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.DelegatingAnalyzerWrapper;
 import org.apache.lucene.index.IndexOptions;
@@ -251,12 +252,15 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                 logger.error("CQL type "+cql3type.toString()+" not supported");
             }
         } else if (cql3type instanceof CQL3Type.UserDefined) {
+            UserType userType = (UserType)type;
             mapping.put("type", ObjectMapper.NESTED_CONTENT_TYPE);
             mapping.put(TypeParsers.CQL_STRUCT, "udt");
+            mapping.put(TypeParsers.CQL_UDT_NAME, userType.getNameAsString());
             Map<String, Object> properties = Maps.newHashMap();
-            TupleType tuple = (TupleType)type;
-            for(int i=0; i< tuple.size(); i++) {
-                buildCollectionMapping(properties, tuple.type(i));
+            for(int i=0; i< userType.size(); i++) {
+                Map<String, Object> fieldProps = Maps.newHashMap();
+                buildCollectionMapping(fieldProps, userType.type(i));
+                properties.put(userType.fieldNameAsString(i), fieldProps);
             }
             mapping.put("properties", properties);
         }

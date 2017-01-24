@@ -1,3 +1,7 @@
+2.4.2-6 - 2017-01-25
+  * Fix ES Auto-Discovery fails when Cassandra table has at least one UDT field (#77)
+  * Allows a text columns containing a geohash to be mapped to a geo_point.
+  
 2.4.2-5 - 2017-01-18
   * Add support for uuid and timeuuid Cassandra Types #74
 

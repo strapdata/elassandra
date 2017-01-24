@@ -91,10 +91,10 @@ Index and type names
 --------------------
 
 Because cassandra does not support special caraters in keyspace and table names, Elassandra automatically replaces dot (.) and dash (-) caraters 
-by underscore (_) in index and type names to create underlying Cassandra keyspace and table.
+by underscore (_) in index and type names to create underlying Cassandra keyspaces and tables.
 When such a modification occurs, Elassandra keeps this change in memory to correctly convert keyspace/table to index/type.
 
-Morever, Cassandra table names are limited to 48 caraters, so type names are also limted to 48 caraters.
+Morever, Cassandra table names are limited to 48 caraters, so Elasticsearch type names are also limted to 48 caraters.
 
 Elasticsearch unsupported feature
 ---------------------------------
@@ -108,6 +108,6 @@ Cassandra limitations
 * Elassandra only supports the murmur3 partitionner.
 * The thrift protocol is supported only for read operations.
 * Elassandra synchronously indexes rows into Elasticsearch. This may increases the write duration, particulary when indexing complex document like `GeoShape <https://www.elastic.co/guide/en/elasticsearch/reference/current/geo-shape.html>`_, so Cassandra ``write_request_timeout_in_ms`` is set to 5 seconds (Cassandra default is 2000 ms, see `Cassandra config <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configCassandra_yaml_r.html>`_)
-* In order to avoid concurrent mapping or persistent cluster settings updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommanded to have at least 3 nodes in 3 distincts racks (2 nodes datacenter won't accept any mapping update when a node is unavailable). 
-* CQL3 *TRUNCATE* on a Cassandra table deletes all associated Elasticsearch documents by playing a delete_by_query where *_type = <table_name>*. Of course, such a delete_by_query comes with a perfomance cost.
+* In order to avoid concurrent mapping or persistent cluster settings updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommanded to have at least 3 nodes in 3 distincts racks (A 2 nodes datacenter won't accept any mapping update when a node is unavailable). 
+* CQL3 **TRUNCATE** on a Cassandra table deletes all associated Elasticsearch documents by playing a delete_by_query where *_type = <table_name>*. Of course, such a delete_by_query comes with a perfomance cost.
 

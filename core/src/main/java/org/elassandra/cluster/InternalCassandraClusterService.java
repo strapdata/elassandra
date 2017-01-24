@@ -496,10 +496,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     }
 
-    public Pair<List<String>, List<String>> getUDTInfo(final String ksName, final String typeName) {
+    public static Pair<List<String>, List<String>> getUDTInfo(final String ksName, final String typeName) {
         try {
-            UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT field_names, field_types FROM system_schema.types WHERE keyspace_name = ? AND type_name = ?", new Object[] { ksName,
-                    typeName });
+            UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT field_names, field_types FROM system_schema.types WHERE keyspace_name = ? AND type_name = ?", 
+                    new Object[] { ksName, typeName });
             Row row = result.one();
             if ((row != null) && row.has("field_names")) {
                 List<String> field_names = row.getList("field_names", UTF8Type.instance);
@@ -796,23 +796,29 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 
                 create.append('\"').append(shortName).append("\" ");
                 if (mapper instanceof ObjectMapper) {
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(mapper.cqlCollectionTag()).append("<");
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(mapper.cqlCollectionTag()).append("<");
                     create.append("frozen<")
                         .append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_'))
                         .append(">");
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(">");
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
+                        create.append(">");
                 } else if (mapper instanceof BaseGeoPointFieldMapper) {
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(mapper.cqlCollectionTag()).append("<");
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(mapper.cqlCollectionTag()).append("<");
                     create.append("frozen<")
                         .append(GEO_POINT_TYPE)
                         .append(">");
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(">");
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(">");
                 } else if (mapper instanceof GeoShapeFieldMapper) {
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(mapper.cqlCollectionTag()).append("<");
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(mapper.cqlCollectionTag()).append("<");
                     create.append("frozen<")
                         .append("text")
                         .append(">");
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) create.append(">");
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(">");
                 } else {
                     String cqlType = mapperToCql.get(mapper.getClass());
                     if (mapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
@@ -843,17 +849,21 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 StringBuilder update = new StringBuilder(String.format(Locale.ROOT, "ALTER TYPE \"%s\".\"%s\" ADD \"%s\" ", ksName, typeName, shortName));
                 if (!udt.left.contains(shortName)) {
                     if (mapper instanceof ObjectMapper) {
-                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(mapper.cqlCollectionTag()).append("<");
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                            update.append(mapper.cqlCollectionTag()).append("<");
                         update.append("frozen<")
                             .append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_'))
                             .append(">");
-                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(">");
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                            update.append(">");
                     } else if (mapper instanceof GeoPointFieldMapper) {
-                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(mapper.cqlCollectionTag()).append("<");
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                            update.append(mapper.cqlCollectionTag()).append("<");
                         update.append("frozen<")
                             .append(GEO_POINT_TYPE)
                             .append(">");
-                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) update.append(">");
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                            update.append(">");
                     } else {
                         String cqlType = mapperToCql.get(mapper.getClass());
                         if (mapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
@@ -1011,13 +1021,19 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     columnsList.append(',');
                 
                 String cqlType = null;
-                String cqlNativeType = null;
                 boolean isStatic = false;
                 FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
                 if (fieldMapper != null) {
                     if (fieldMapper instanceof GeoPointFieldMapper || fieldMapper instanceof GeoPointFieldMapperLegacy) {
-                        cqlType = GEO_POINT_TYPE;
-                        buildGeoPointType(ksName);
+                        ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+                        if (cdef != null && cdef.type instanceof UTF8Type) {
+                            // index geohash stored as text in cassandra.
+                            cqlType = "text";
+                        } else {
+                            // create a geo_point UDT to store lat,lon
+                            cqlType = GEO_POINT_TYPE;
+                            buildGeoPointType(ksName);
+                        }
                     } else if (fieldMapper instanceof GeoShapeFieldMapper) {
                         cqlType = "text";
                     } else if (fieldMapper instanceof CompletionFieldMapper) {
@@ -1086,15 +1102,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
                         }
                         //logger.debug("Expecting column [{}] to be a map<text,?>", column);
                     } else  if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
-                        if (objectMapper.isEnabled()) {
-                            // Cassandra 2.1.8 : Non-frozen collections are not allowed inside collections
-                            cqlType = "frozen<\"" + buildCql(ksName, cfName, column, objectMapper) + "\">";
-                        } else {
-                            // enabled=false => opaque json object
-                            cqlType = "text";
-                        }
-                        if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON) && 
-                            !(cfName.equals(PERCOLATOR_TABLE) && column.equals("query"))) {
+                        // enabled=false => opaque json object
+                        cqlType = (objectMapper.isEnabled()) ? "frozen<" + ColumnIdentifier.maybeQuote(buildCql(ksName, cfName, column, objectMapper)) + ">" : "text";
+                        if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON) && !(cfName.equals(PERCOLATOR_TABLE) && column.equals("query"))) {
                             cqlType = objectMapper.cqlCollectionTag()+"<"+cqlType+">";
                         }
                     }
