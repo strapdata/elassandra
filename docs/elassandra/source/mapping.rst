@@ -29,7 +29,7 @@ Here is the mapping from Elasticsearch field basic types to CQL3 types :
 +----------------------+--------------------------+----------------------------+
 | ip                   | inet                     | Internet address           |
 +----------------------+--------------------------+----------------------------+
-| string               | uuid,timeuuid            | Specific mapping (1)       |
+| string               | uuid, timeuuid           | Specific mapping (1)       |
 +----------------------+--------------------------+----------------------------+
 | geo_point            | UDT geo_point            | Built-In User Defined Type |
 +----------------------+--------------------------+----------------------------+
@@ -172,7 +172,7 @@ Thus, old data can be removed by simply deleting old indices.
 
 Partitionned index also allows to index more than 2^31 documents on a node (2^31 is the lucene max documents per index).
 
-An index partition function act as a selector when many indices are associated to a cassandra table. A partition function is defined by 3 or more fields separated by a space character :
+An index partition function acts as a selector when many indices are associated to a cassandra table. A partition function is defined by 3 or more fields separated by a space character :
 
 * Function name.
 * Index name pattern.
@@ -205,7 +205,7 @@ All those indices will be mapped to the keyspace **logs**, and all columns of th
    }'
 
 .. TIP::
-   When creating the first elasticsearch index for a cassandra table, elassandra may create some cassandra secondary indice.  Only the first created secondary index trigger a compaction to index the existing data.  So, if you create a partitionned index on a table having some data, the index rebuild may start before all partition are created, and some rows could be ignored if matching a not yet created partitioned index. To avoid this situation, create partitioned indices before injecting data or rebuild the secondary index entirely. 
+   When creating the first elasticsearch index for a cassandra table, elassandra may create some cassandra secondary indices.  Only the first created secondary index trigger a compaction to index the existing data. So, if you create a partitionned index on a table having some data, the index rebuild may start before all partition are created, and some rows could be ignored if matching a not yet created partitioned index. To avoid this situation, create partitioned indices before injecting data or rebuild the secondary index entirely. 
 
 To remove an old index.
 
