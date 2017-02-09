@@ -4613,7 +4613,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                                            .collect(toList())
                                            .toArray(new String[idxNames.length]);
 
-        ColumnFamilyStore.rebuildSecondaryIndex(ksName, cfName, indices);
+        ColumnFamilyStore.rebuildSecondaryIndex(indexThreads, ksName, cfName, indices);
     }
 
     public void resetLocalSchema() throws IOException

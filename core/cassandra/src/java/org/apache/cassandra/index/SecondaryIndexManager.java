@@ -243,7 +243,11 @@ public class SecondaryIndexManager implements IndexRegistry
     * @param sstables the data to build from
     * @param indexNames the list of indexes to be rebuilt
     */
-    public void rebuildIndexesBlocking(Collection<SSTableReader> sstables, Set<String> indexNames)
+    public void rebuildIndexesBlocking(Collection<SSTableReader> sstables, Set<String> indexNames) {
+        rebuildIndexesBlocking(1, sstables, indexNames);
+    }
+    
+    public void rebuildIndexesBlocking(int indexThreads, Collection<SSTableReader> sstables, Set<String> indexNames)
     {
         Set<Index> toRebuild = indexes.values().stream()
                                                .filter(index -> indexNames.contains(index.getIndexMetadata().name))
@@ -257,7 +261,7 @@ public class SecondaryIndexManager implements IndexRegistry
 
         toRebuild.forEach(indexer -> markIndexRemoved(indexer.getIndexMetadata().name));
 
-        buildIndexesBlocking(sstables, toRebuild);
+        buildIndexesBlocking(indexThreads, sstables, toRebuild);
 
         toRebuild.forEach(indexer -> markIndexBuilt(indexer.getIndexMetadata().name));
     }
@@ -357,6 +361,11 @@ public class SecondaryIndexManager implements IndexRegistry
 
     private void buildIndexesBlocking(Collection<SSTableReader> sstables, Set<Index> indexes)
     {
+        buildIndexesBlocking(1, sstables, indexes);
+    }
+    
+    private void buildIndexesBlocking(int indexThreads, Collection<SSTableReader> sstables, Set<Index> indexes)
+    {
         if (indexes.isEmpty())
             return;
 
@@ -364,7 +373,8 @@ public class SecondaryIndexManager implements IndexRegistry
                     indexes.stream().map(i -> i.getIndexMetadata().name).collect(Collectors.joining(",")),
                     sstables.stream().map(SSTableReader::toString).collect(Collectors.joining(",")));
 
-        SecondaryIndexBuilder builder = new SecondaryIndexBuilder(baseCfs,
+        SecondaryIndexBuilder builder = new SecondaryIndexBuilder(indexThreads,
+                                                                  baseCfs,
                                                                   indexes,
                                                                   new ReducingKeyIterator(sstables));
         Future<?> future = CompactionManager.instance.submitIndexBuild(builder);
