@@ -450,11 +450,13 @@ Search for employee documents having a parent document where *country* match UK.
 Indexing cassandra static columns
 ---------------------------------
 
-In a table that use clustering columns, a `static columns <http://docs.datastax.com/en/cql/3.1/cql/cql_reference/refStaticCol.html>`_ is shared by all the rows with the same partition key. 
-A slight modification of cassandra code provides support of secondary index on static columns, allowing to search on static columns values (CQL search on static columns remains unsupported). 
+When a Cassandra table have one or more clustering columns, a `static columns <http://docs.datastax.com/en/cql/3.1/cql/cql_reference/refStaticCol.html>`_ is shared by all the rows with the same partition key.
 
+.. image:: images/cassandra-wide-row.png
+
+A slight modification of cassandra code provides support of secondary index on static columns, allowing to search on static columns values (CQL search on static columns remains unsupported).
 Each time a static columns is modified, a document containing the partition key and only static columns is indexed in Elasticserach. 
-Static columns are not indexed with every `wide rows <http://www.planetcassandra.org/blog/wide-rows-in-cassandra-cql/>`_ because any update on a static column would require reindexation of all wide rows. 
+By default, static columns are not indexed with every `wide rows <http://www.planetcassandra.org/blog/wide-rows-in-cassandra-cql/>`_ because any update on a static column would require reindexation of all wide rows.
 However, you can request for fields backed by a static columns on any get/search request.
 
 The following example demonstrates how to use static columns to store meta information of timeseries.
@@ -517,7 +519,7 @@ Search for wide rows only where v=10 and fetch the meta.region field.
 
 .. code::
 
-   curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=v:10&fields=m,t,v,meta.region"
+   curl -XGET "http://localhost:9200/test/timeseries/_search?pretty=true&q=v:10&fields=m,t,v,meta.region,_source"
 
    "hits" : [ {
          "_index" : "test",
@@ -525,6 +527,12 @@ Search for wide rows only where v=10 and fetch the meta.region field.
          "_id" : "[\"server1-cpu\",1460287800000]",
          "_score" : 1.9162908,
          "_routing" : "server1-cpu",
+         "_source" : {
+               "t" : "2016-04-10T11:30:00.000Z",
+               "v" : 10.0,
+               "meta" : { "region" : "west" },
+               "m" : "server1-cpu"
+         },
          "fields" : {
            "meta.region" : [ "west" ],
            "t" : [ "2016-04-10T11:30:00.000Z" ],
@@ -537,7 +545,7 @@ Search for rows where meta.region=west, returns only the partition key and stati
 
 .. code::
 
-   curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:west&fields=m,t,v,meta.region"
+   curl -XGET "http://localhost:9200/test/timeseries/_search?pretty=true&q=meta.region:west&fields=m,t,v,meta.region"
    "hits" : {
        "total" : 1,
        "max_score" : 1.5108256,
@@ -553,6 +561,17 @@ Search for rows where meta.region=west, returns only the partition key and stati
          }
        } ]
 
+If needed, you can change the default behavior for a specific cassandra table (or elasticsearch document type), by using the following custom metadata :
+
+* ``index_static_columns`` controls whether or not static columns are included in indexed documents (default is *false*).
+* ``index_static_only`` if *true*, it ony indexes documents with partition key as ``_id`` and static columns as fields.
+
+In our example with the following mapping, static columns are indexed in every documents, allowing to search on.
+
+.. code::
+
+   curl -XPUT http://localhost:9200/test/_mapping/timeseries -d '{ "sensor": { "timeseries" : ".*", "_meta": { "index_static_columns":true } }}'
+   
 Elassandra as a JSON-REST Gateway
 ---------------------------------
 
@@ -722,5 +741,5 @@ In the following exemple, we have 1000 accounts documents in a keysace with RF=2
      }
    }
    
-Of course, according to your use case, you should add a filter to this query to ignore write operations occuring during this check.
+Of course, according to your use case, you should add a filter to this query to ignore write operations occuring during the check.
 

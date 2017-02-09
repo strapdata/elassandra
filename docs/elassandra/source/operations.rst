@@ -314,6 +314,7 @@ Re-index extisting data rely on the cassandra compaction manager. You can trigge
 If the compaction manager is busy, secondary index rebuild is added as a pending task and executed later on. You can check current running compactions with a **nodetool compactionstats** and check pending compaction tasks with a **nodetool tpstats**.
 
 .. code::
+
    nodetool -h 52.43.156.196 compactionstats
    pending tasks: 1
                                      id         compaction type   keyspace      table   completed       total    unit   progress

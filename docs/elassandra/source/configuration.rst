@@ -68,11 +68,11 @@ By default, all elassandra datacenters share the same Elasticsearch cluster name
 
 |
 
-If you want to manage distinct Elasticsearch clusters inside a cassandra cluster (when indexing differents tables in different datacenter), you can set a ``datacenter.group`` in **conf/elasticsearch.yml** and thus, all elassandra datacenters sharing the same datacenter group name will share the same mapping. 
-Those elasticsearch cluster will be named <cluster_name>@<datacenter.group> and mapping will be stored in a dedicated keyspace.table ``elastic_admin_<datacenter.group>.metadata``.
+If you want to manage distinct Elasticsearch clusters inside a cassandra cluster (when indexing differents tables in different datacenter), you can set a ``datacenter.group`` in **conf/elasticsearch.yml** and thus, all elassandra datacenters sharing the same datacenter group name will share the same mapping.
+Those elasticsearch clusters will be named <cluster_name>@<datacenter.group> and mapping will be stored in a dedicated keyspace.table ``elastic_admin_<datacenter.group>.metadata``.
 
-All ``elastic_admin[_<datacenter.group>]`` keyspace are configured with **NetworkReplicationStrategy** (see `data replication <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html>`_). 
-where the replication factor is automatically set to the number of nodes in the datacenter. This ensure maximum availibility for the elaticsearch metadata. When removing a node from an elassandra datacenter, descrease the ``elastic_admin[_<datacenter.group>]`` replication factor to the number of nodes.
+All ``elastic_admin[_<datacenter.group>]`` keyspaces are configured with **NetworkReplicationStrategy** (see `data replication <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html>`_).
+where the replication factor is automatically set to the number of nodes in each datacenter. This ensure maximum availibility for the elaticsearch metadata. When removing a node from an elassandra datacenter, you should manually decrease the ``elastic_admin[_<datacenter.group>]`` replication factor to the number of nodes.
 
 When a mapping change occurs, Elassandra updates Elasticsearch metadata in `elastic_admin[_<datacenter.group>].metadata` within a `lightweight transaction <https://docs.datastax.com/en/cassandra/2.1/cassandra/dml/dml_ltwt_transaction_c.html>`_ to avoid conflit with concurrent updates.
 This transaction requires QUORUM available nodes, that is more than half the nodes of one or more datacenters regarding your ``datacenter.group`` configuration.
@@ -97,7 +97,7 @@ Default index configuration :
 * ``cluster.default_search_strategy_class`` : Set the default search strategy class. Default is the **org.elasticsearch.cassandra.cluster.routing.PrimaryFirstSearchStrategy**.
 * ``cluster.default_include_node_id`` : If true, indexes the cassandra hostId in the _node field. Default is **false**.
 * ``cluster.default_synchronous_refresh`` : If true, synchrounously refreshes the elasticsearch index on each index update. Default is **false**.
-* ``cluster.default_drop_on_delete_index`` : If true, delete underlying cassandra table and keyspace when deleting an index. Default is **false**.
+* ``cluster.default_drop_on_delete_index`` : If true, drop underlying cassandra tables and keyspace when deleting an index. Default is **false**.
 
 Index settings
 ..............
@@ -108,7 +108,7 @@ Index settings
 * ``index.search_strategy_class`` : Set the search strategy class overriding the default cluster search strategy.
 * ``index.include_node_id`` : If true, indexes the cassandra hostId in the _node field. Default is **false**.
 * ``index.synchronous_refresh`` : If true, synchrounously refreshes the elasticsearch index on each index update. Default is **false**.
-* ``index.drop_on_delete_index`` : If true, delete underlying cassandra table and keyspace when deleting an index (Keyspace is deleted only if all its tables are deleted by removing the index). Default is **false**.
+* ``index.drop_on_delete_index`` : If true, drop underlying cassandra tables and keyspace when deleting an index (Keyspace is deleted only if all its tables are deleted by removing the index). Default is **false**.
 
 
 Sizing and tunning
