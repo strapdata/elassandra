@@ -351,7 +351,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             this.indexInfo = ii;
             this.docMapper = ii.indexService.mapperService().documentMapper(uid.type());
             assert this.docMapper != null;
-            this.document = (baseCfs.metadata.hasStaticColumns() || ii.indexStaticOnly()) ? new StaticDocument("",null, uid) : new Document();
+            this.document = ii.indexStaticOnly() ? new StaticDocument("",null, uid) : new Document();
             this.documents.add(this.document);
         }
         
@@ -359,7 +359,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             this.indexInfo = ii;
             this.docMapper = ii.indexService.mapperService().documentMapper(uid.type());
             assert this.docMapper != null;
-            this.document = (baseCfs.metadata.hasStaticColumns() || ii.indexStaticOnly()) ? new StaticDocument("",null, uid) : new Document();
+            this.document = ii.indexStaticOnly() ? new StaticDocument("",null, uid) : new Document();
             this.documents.clear();
             this.documents.add(this.document);
             this.id = null;
@@ -887,6 +887,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         final long metadataVersion;
         final String nodeId;
         final String typeName = InternalCassandraClusterService.cfNameToType(ElasticSecondaryIndex.this.baseCfs.name);
+        boolean index_static_columns = false;
         boolean index_static_only = false;
         
         MappingInfo(final ClusterState state) {
@@ -927,12 +928,16 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
                         if (mappingMap.get("_meta") != null) {
                             Map<String,Object> meta = (Map<String,Object>)mappingMap.get("_meta");
-                            if (XContentMapValues.nodeBooleanValue(meta.get("index_static_only"))) {
-                                logger.debug("_meta index_static_only for index [{}]" , index);
+                            if (meta.get("index_static_only") != null && XContentMapValues.nodeBooleanValue(meta.get("index_static_only"))) {
+                                logger.debug("_meta index_static_only=true for index [{}]" , index);
                                 index_static_only = true;
                             }
-                                
+                            if (meta.get("index_static_columns") != null && XContentMapValues.nodeBooleanValue(meta.get("index_static_fields"))) {
+                                logger.debug("_meta index_static_fields=true for index [{}]" , index);
+                                index_static_columns = true;
+                            }
                         }
+                        
                         if (mappingMap.get("properties") != null) {
                             IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
                             IndexService indexService = indicesService.indexService(index);
@@ -1467,10 +1472,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     // add missing or collection columns that should be read before indexing the document.
                     // read missing static columns (with limit 1) or regular columns if  
                     final BitSet mustReadFields = (BitSet)fieldsToRead.clone();
+                    boolean completeOnlyStatic = isStatic;
                     if (staticColumns != null) {
-                        if (this.isStatic) {
+                        if (this.isStatic || MappingInfo.this.index_static_columns) {
                             // ignore regular columns, we are updating static ones.
+                            int prev_cardinality = mustReadFields.cardinality();
                             mustReadFields.and(staticColumns);
+                            // ensure that we don't request for static columns only.
+                            if (mustReadFields.cardinality() < prev_cardinality)
+                                completeOnlyStatic = true;
                         } else {
                             // ignore static columns, we got only regular columns.
                             mustReadFields.andNot(staticColumns);
@@ -1497,17 +1507,17 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                             final String[] missingColumns = new String[x];
                             System.arraycopy(mustReadColumns, 0, missingColumns, 0, x);
                             Object[] pk = pkCols;
-                            if (isStatic) {
+                            if (completeOnlyStatic) {
                                 pk = new Object[baseCfs.metadata.partitionKeyColumns().size()];
                                 System.arraycopy(pkCols, 0, pk, 0, baseCfs.metadata.partitionKeyColumns().size());
                             }
                             try {
                                 // fetch missing fields from the local cassandra row to update Elasticsearch index
                                 if (logger.isTraceEnabled()) {
-                                    logger.trace(" {}.{} id={} missing columns names={} isStatic={}",baseCfs.metadata.ksName, baseCfs.metadata.cfName, id, missingColumns, isStatic);
+                                    logger.trace(" {}.{} id={} missing columns names={} completeOnlyStatic={}",baseCfs.metadata.ksName, baseCfs.metadata.cfName, id, missingColumns, completeOnlyStatic);
                                 }
                                 MappingInfo.IndexInfo indexInfo = MappingInfo.this.indices.values().iterator().next();
-                                UntypedResultSet results = clusterService.fetchRowInternal(baseCfs.metadata.ksName, indexInfo.name, indexInfo.type, missingColumns, pk, isStatic, MappingInfo.this.columnsDefs);
+                                UntypedResultSet results = clusterService.fetchRowInternal(baseCfs.metadata.ksName, indexInfo.name, indexInfo.type, missingColumns, pk, completeOnlyStatic, MappingInfo.this.columnsDefs);
                                 if (!results.isEmpty()) {
                                     Object[] missingValues = rowAsArray(results.one());
                                     for(int i=0; i < x; i++) {
@@ -1516,7 +1526,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                     }
                                 }
                             } catch (RequestValidationException | IOException e) {
-                                logger.error("Failed to fetch columns {}", missingColumns, e);
+                                logger.error("Failed to fetch columns {}", e, missingColumns);
                             }
                         }
                     }
@@ -1997,7 +2007,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 logger.debug("secondary index=[{}] metadata.version={} mappingInfo.indices={}",
                         this.index_name, event.state().metaData().version(), mappingInfo.indices.keySet() );
             } catch(Exception e) {
-                logger.error("Failed to update mapping index=[{}]", index_name);
+                logger.error("Failed to update mapping index=[{}]", e, index_name);
             } finally {
                 mappingInfoLock.writeLock().unlock();
             }
