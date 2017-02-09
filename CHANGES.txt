@@ -1,5 +1,5 @@
 2.4.2-7 - 2017-02-09
-  * Add support for multi-threading rebuild_index.
+  * Enable support for multi-threading rebuild_index on Cassandra 3.
   * Add new _meta fields in order to index static columns.
   * Fix a minor bug on type checking.
 
