@@ -1122,9 +1122,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     if (cqlType != null) {
                         if (cdef == null) {
                             for(int i=0; i < primaryKeyLength; i++) {
-                                if (primaryKeyList[i] == null)
-                                    throw new Exception("Primary key ["+column+"] not found in table ["+cfm.ksName+"."+cfm.cfName+"]");
-                                if (primaryKeyList[i].equals(column))
+                                if (primaryKeyList[i] != null && primaryKeyList[i].equals(column))
                                     throw new Exception("Cannot alter primary key of an existing table");
                             }
                             try {
@@ -1132,7 +1130,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                                 logger.debug(query);
                                 QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
                             } catch (Exception e) {
-                                logger.warn("Cannot alter table {}.{} column {} with type {}", e, ksName, cfName, column, cqlType);
+                                logger.warn("Failed to alter table {}.{} column [{}] with type [{}]", e, ksName, cfName, column, cqlType);
                             }
                         } else {
                             // check that the existing column matches the provided mapping
