@@ -49,6 +49,7 @@ import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.common.StopWatch;
+import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.component.Lifecycle;
 import org.elasticsearch.common.component.LifecycleComponent;
 import org.elasticsearch.common.inject.Injector;
@@ -289,6 +290,7 @@ public class Node implements Releasable {
     /**
      * finish ElasticSearch start when we have joined the ring.
      */
+    @SuppressForbidden(reason = "System#out")
     public Node start() {
         ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
         logger.info("starting ...");
@@ -318,7 +320,6 @@ public class Node implements Releasable {
         // start after cluster service so the local disco is known
         //DiscoveryService discoService = injector.getInstance(DiscoveryService.class).start();
 
-
         transportService.acceptIncomingRequests();
         
         if (settings.getAsBoolean("http.enabled", true)) {
@@ -345,6 +346,8 @@ public class Node implements Releasable {
         
         logger.info("Elasticsearch started state={}", clusterService.state().toString());
         
+        // Added for esrally when started in foreground.
+        System.out.println("Elassandra started"); 
         return this;
     }
 
