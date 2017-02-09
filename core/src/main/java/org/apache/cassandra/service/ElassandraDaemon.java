@@ -367,8 +367,7 @@ public class ElassandraDaemon extends CassandraDaemon {
 
             Environment env = InternalSettingsPreparer.prepareEnvironment(
                     Settings.settingsBuilder()
-                        .put("node.name","titi")
-                        .put("path.home",getHomeDir())
+                        .put("node.name","node0")
                         .put("path.home",getHomeDir())
                         .put("path.conf",getConfigDir())
                         .put("path.data",getElastisearchDataDir())
