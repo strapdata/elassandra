@@ -48,8 +48,13 @@ function cstatus() {
 }
 
 function cleanall() {
-   rm -rf $CASSANDRA_DATA/*
-   rm -rf $CASSANDRA_LOGS/*
+   read -r -p "Want to remove data+logs ? [y/n]" response
+   response=${response,,} # tolower
+   if [[ $response =~ ^(yes|y| ) ]]; then
+      rm -rf $CASSANDRA_DATA/*
+      rm -rf $CASSANDRA_LOGS/*
+      echo "Done."
+   fi
 }
 
 function cleanlogs() {
@@ -108,17 +113,18 @@ alias eldebug='$CASSANDRA_HOME/bin/cassandra -d -e'
 # Elasticsearch aliases
 alias health='curl -XGET http://$NODE:9200/_cluster/health/?pretty=true'
 alias state='curl -XGET http://$NODE:9200/_cluster/state/?pretty=true'
-alias status='curl -XGET http://$NODE:9200/_status/?pretty=true'
 alias stats='curl -XGET http://$NODE:9200/_stats?pretty=true'
 alias shards='curl -s -XGET http://$NODE:9200/_cat/shards?v | sort'
 alias indices='curl -s -XGET http://$NODE:9200/_cat/indices?v | sort'
 alias fielddata='curl -XGET http://$NODE:9200/_cat/fielddata/body,text?v'
-alias thread_pool='curl -XGET http://$NODE:9200/_cat/thread_pool?v'
+alias threads='curl -XGET http://$NODE:9200/_cat/thread_pool?v'
 alias pending_tasks='curl -XGET http://$NODE:9200/_cat/pending_tasks?v'
 alias segments='curl -XGET http://$NODE:9200/_cat/segments?v'
 alias allocation='curl -XGET http://$NODE:9200/_cat/allocation?v'
 alias nodes='curl -XGET http://$NODE:9200/_cat/nodes?h=id,ip,heapPercent,ramPercent,fileDescriptorPercent,segmentsCount,segmentsMemory'
 alias settings='curl -XGET http://$NODE:9200/_cluster/settings?pretty=true'
+alias plugins='curl http://localhost:9200/_nodes?plugin=true&pretty'
+alias tasks='curl http://localhost:9200/_tasks?pretty'
 
 alias open='open'
 alias close='close'
