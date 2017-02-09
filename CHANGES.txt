@@ -1,3 +1,8 @@
+2.4.2-7 - 2017-02-09
+  * Add support for multi-threading rebuild_index.
+  * Add new _meta fields in order to index static columns.
+  * Fix a minor bug on type checking.
+
 2.4.2-6 - 2017-01-25
   * Fix ES Auto-Discovery fails when Cassandra table has at least one UDT field (#77)
   * Allows a text columns containing a geohash to be mapped to a geo_point.
