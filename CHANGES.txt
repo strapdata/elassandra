@@ -1,3 +1,6 @@
+2.4.2-8 - 2017-02-15
+  * Fix support for uuid and timeuuid Cassandra Types #74
+
 2.4.2-7 - 2017-02-09
   * Enable support for multi-threading rebuild_index on Cassandra 3.
   * Add new _meta fields in order to index static columns.

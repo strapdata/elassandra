@@ -42,6 +42,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.service.ClientState;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.codehaus.jackson.JsonGenerationException;
@@ -627,20 +628,6 @@ public class TestClusterService implements ClusterService {
     }
 
     @Override
-    public UntypedResultSet process(ConsistencyLevel cl, String query)
-            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public UntypedResultSet process(ConsistencyLevel cl, String query, Object... values)
-            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
     public void updateDocument(IndicesService indicesService, IndexRequest request, IndexMetaData indexMetaData)
             throws Exception {
         // TODO Auto-generated method stub
@@ -755,6 +742,26 @@ public class TestClusterService implements ClusterService {
     public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String[] columns,
             Object[] pkColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs)
             throws ConfigurationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query)
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query, Object... values)
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public String getElasticAdminKeyspaceName() {
         // TODO Auto-generated method stub
         return null;
     }

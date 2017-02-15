@@ -21,7 +21,6 @@ package org.elasticsearch.cluster;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +37,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.service.ClientState;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.codehaus.jackson.JsonGenerationException;
@@ -300,6 +300,7 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> fields);
 
     public void createOrUpdateElasticAdminKeyspace();
+    public String getElasticAdminKeyspaceName();
     
     public void createIndexKeyspace(String index, int replicationFactor) throws IOException;
     public void dropIndexKeyspace(String ksName) throws IOException;
@@ -403,6 +404,6 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public ShardInfo shardInfo(String index, ConsistencyLevel cl);
     
-    public UntypedResultSet process(ConsistencyLevel cl, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException;
-    public UntypedResultSet process(ConsistencyLevel cl, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException;
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException;
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException;
 }

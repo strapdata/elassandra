@@ -103,8 +103,8 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .setSource("{ \"geoloc\" : { \"discover\":\"^((?!geohash).*)\", \"properties\": { \"geohash\": { \"type\": \"geo_point\", \"cql_collection\":\"singleton\",\"cql_partition_key\" : true,\"cql_primary_key_order\" : 0, \"index\" : \"not_analyzed\" } }}}").get());
         GeoPoint geo_point = new GeoPoint(-25.068403, 29.411767);
         ByteBuffer[] elements = new ByteBuffer[] {
-                InternalCassandraClusterService.serializeType("test", "geoloc", DoubleType.instance, GeoPointFieldMapper.Names.LAT, -25.068403, null),
-                InternalCassandraClusterService.serializeType("test", "geoloc", DoubleType.instance, GeoPointFieldMapper.Names.LON, 29.411767, null)
+                InternalCassandraClusterService.serialize("test", "geoloc", DoubleType.instance, GeoPointFieldMapper.Names.LAT, -25.068403, null),
+                InternalCassandraClusterService.serialize("test", "geoloc", DoubleType.instance, GeoPointFieldMapper.Names.LON, 29.411767, null)
         };
         process(ConsistencyLevel.ONE,"INSERT INTO test.geoloc (geohash, id, coord, comment) VALUES (?,?,?,?)",
                 geo_point.geohash(), UUID.randomUUID(), TupleType.buildValue(elements), "blabla");
@@ -114,5 +114,21 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                     .filter(QueryBuilders.geoDistanceQuery("geohash").distance("20km").point(-25.068403, 29.411767)))
                 .get();
         assertThat(rsp.getHits().getTotalHits(),equalTo(1L));
+    }
+    
+    // #74 test
+    @Test
+    public void testUUID() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE,"create table test.pk_uuid (pk_uuid uuid, column_not_uuid text, primary key(pk_uuid));");
+        process(ConsistencyLevel.ONE,"create table test.pk_not_uuid (pk_not_uuid text, column_uuid uuid, primary key(pk_not_uuid));");
+        
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("pk_uuid").setSource("{ \"pk_uuid\" : { \"discover\" : \".*\"}}").get());
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("pk_not_uuid").setSource("{ \"pk_not_uuid\" : { \"discover\" : \".*\"}}").get());
+        
+        assertThat(client().prepareIndex("test", "pk_uuid", "bacc6c75-91b8-4a86-a408-ff7bafac535d").setSource("{ \"column_not_uuid\": \"a value\" }").get().isCreated(), equalTo(true));
+        assertThat(client().prepareIndex("test", "pk_not_uuid", "pk2").setSource("{ \"column_uuid\": \"bacc6c75-91b8-4a86-a408-ff7bafac535d\" }").get().isCreated(), equalTo(true));
     }
 }

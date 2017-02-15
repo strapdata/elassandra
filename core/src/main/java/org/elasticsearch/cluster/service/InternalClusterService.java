@@ -51,6 +51,8 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.service.QueryState;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.codehaus.jackson.JsonGenerationException;
@@ -1518,19 +1520,19 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
-    public UntypedResultSet process(ConsistencyLevel cl, String query)
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         // TODO Auto-generated method stub
         return null;
     }
 
     @Override
-    public UntypedResultSet process(ConsistencyLevel cl, String query, Object... values)
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query, Object... values)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         // TODO Auto-generated method stub
         return null;
     }
-
+    
     @Override
     public BytesReference source(DocumentMapper docMapper, Map sourceAsMap, String index, String type, String id)
             throws JsonParseException, JsonMappingException, IOException {
@@ -1542,6 +1544,11 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     public BytesReference source(DocumentMapper docMapper, Map sourceAsMap, String index, Uid uid)
             throws JsonParseException, JsonMappingException, IOException {
         // TODO Auto-generated method stub
+        return null;
+    }
+    
+    @Override
+    public String getElasticAdminKeyspaceName() {
         return null;
     }
 }

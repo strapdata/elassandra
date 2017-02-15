@@ -34,7 +34,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         ensureGreen("test");
         
         // INSERT INTO test.t2 (id, surname, name, phonetic_name, nicks) VALUES (22, 'Genesis', 'Abraham', 'ai-b-ram', ['the-A', 'ab'])
-        clusterService().process(ConsistencyLevel.ONE,"INSERT INTO test.t2 (id, surname, name, phonetic_name, nicks) VALUES (22, 'Genesis', 'Abraham', 'ai-b-ram', ['the-A', 'ab'])");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.t2 (id, surname, name, phonetic_name, nicks) VALUES (22, 'Genesis', 'Abraham', 'ai-b-ram', ['the-A', 'ab'])");
 
         SearchResponse rsp = client().prepareSearch().setQuery("{ \"match_all\" : {} }").get();
         assertThat(rsp.getHits().getTotalHits(), equalTo(2L));

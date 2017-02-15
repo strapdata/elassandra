@@ -34,7 +34,9 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.commons.compress.utils.Charsets;
 import org.elassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;
@@ -128,10 +130,15 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         ClusterHealthResponse clusterHealthResponse = clusterAdminClient.prepareHealth().setWaitForGreenStatus().get();
         assertFalse(clusterHealthResponse.isTimedOut());
         
+        String usernameAndPassword = "cassandra" + ":" + "cassandra";
+        String token = "Basic " + java.util.Base64.getEncoder().encodeToString( usernameAndPassword.getBytes(Charsets.UTF_8) );
+        
         Settings.Builder settingsBuilder = Settings.builder()
                 .put(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_SYNCHRONOUS_REFRESH, true)
                 .put(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_DROP_ON_DELETE_INDEX, true);
-        ClusterUpdateSettingsResponse clusterUpdateSettingsResponse = clusterAdminClient.prepareUpdateSettings().setTransientSettings(settingsBuilder).get();
+        ClusterUpdateSettingsResponse clusterUpdateSettingsResponse = clusterAdminClient.prepareUpdateSettings()
+                .putHeader("Authorization", token)
+                .setTransientSettings(settingsBuilder).get();
         assertTrue(clusterUpdateSettingsResponse.isAcknowledged());
     }
     
@@ -238,11 +245,19 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     }
     
     public UntypedResultSet process(ConsistencyLevel cl, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return clusterService().process(cl, query);
+        return clusterService().process(cl, ClientState.forInternalCalls(), query);
+    }
+    
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return clusterService().process(cl, clientState, query);
     }
     
     public UntypedResultSet process(ConsistencyLevel cl, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return clusterService().process(cl, query, values);
+        return clusterService().process(cl, ClientState.forInternalCalls(), query, values);
+    }
+    
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return clusterService().process(cl, clientState, query, values);
     }
     
     /**
