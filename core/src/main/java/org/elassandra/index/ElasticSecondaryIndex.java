@@ -932,8 +932,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 logger.debug("_meta index_static_only=true for index [{}]" , index);
                                 index_static_only = true;
                             }
-                            if (meta.get("index_static_columns") != null && XContentMapValues.nodeBooleanValue(meta.get("index_static_fields"))) {
-                                logger.debug("_meta index_static_fields=true for index [{}]" , index);
+                            if (meta.get("index_static_columns") != null && XContentMapValues.nodeBooleanValue(meta.get("index_static_columns"))) {
+                                logger.debug("_meta index_static_columns=true for index [{}]" , index);
                                 index_static_columns = true;
                             }
                         }
@@ -1977,7 +1977,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
            logger.debug("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={}", 
                    index_name, mappingInfo.metadataVersion,  mappingInfo.indices.keySet());
         } catch(Exception e) {
-             logger.error("Failed to update mapping index=[{}]", index_name);
+             logger.error("Failed to update mapping index=[{}]",e ,index_name);
         } finally {
             mappingInfoLock.writeLock().unlock();
         }
