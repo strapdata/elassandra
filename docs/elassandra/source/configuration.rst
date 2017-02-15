@@ -27,7 +27,7 @@ Elasticsearch paths are set according to the following environement variables an
 Configuration
 -------------
 
-Elasticsearch configuration rely on cassandra configuration file 'conf/cassandra.yaml' for the following parameters. 
+Elasticsearch configuration rely on cassandra configuration file **conf/cassandra.yaml** for the following parameters. 
 
 .. cssclass:: table-bordered
 
@@ -46,6 +46,7 @@ Elasticsearch configuration rely on cassandra configuration file 'conf/cassandra
 Node role (master, primary, data) is automatically set by elassandra, standard configuration should only set **cluster_name**, **rpc_address** in the ``conf/cassandra.yaml``.
 
 ..TIP::
+
    If you use the `GossipPropertyFile <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureSnitchGossipPF_c.html>'_  Snitch to configure your cassandra datacenter and rack properties in **conf/cassandra-rackdc.properties**, keep
    in mind this snitch falls back to the PropertyFileSnitch when gossip is not enabled. So, when starting a node, dead nodes can appear in the default DC and rack configured in **conf/cassandra-topologies.properties**.
 
