@@ -547,6 +547,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         else if (typeSerializer instanceof DecimalSerializer) an.add( new BigDecimal(value.toString()) );
         else if (typeSerializer instanceof FloatSerializer) an.add( Float.parseFloat(value.toString()) );
         else if (typeSerializer instanceof TimestampSerializer) an.add( ((Date) value).getTime() );
+        else if (typeSerializer instanceof UUIDSerializer) an.add( value.toString() ); 
         else an.add(stringify(type, value));
         return an;
     }

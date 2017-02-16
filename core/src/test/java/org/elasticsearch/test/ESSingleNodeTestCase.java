@@ -130,15 +130,10 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         ClusterHealthResponse clusterHealthResponse = clusterAdminClient.prepareHealth().setWaitForGreenStatus().get();
         assertFalse(clusterHealthResponse.isTimedOut());
         
-        String usernameAndPassword = "cassandra" + ":" + "cassandra";
-        String token = "Basic " + java.util.Base64.getEncoder().encodeToString( usernameAndPassword.getBytes(Charsets.UTF_8) );
-        
         Settings.Builder settingsBuilder = Settings.builder()
                 .put(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_SYNCHRONOUS_REFRESH, true)
                 .put(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_DROP_ON_DELETE_INDEX, true);
-        ClusterUpdateSettingsResponse clusterUpdateSettingsResponse = clusterAdminClient.prepareUpdateSettings()
-                .putHeader("Authorization", token)
-                .setTransientSettings(settingsBuilder).get();
+        ClusterUpdateSettingsResponse clusterUpdateSettingsResponse = clusterAdminClient.prepareUpdateSettings().setTransientSettings(settingsBuilder).get();
         assertTrue(clusterUpdateSettingsResponse.isAcknowledged());
     }
     
