@@ -459,7 +459,7 @@ public class SecondaryIndexManager implements IndexRegistry
      */
     public void flushAllIndexesBlocking()
     {
-        flushIndexesBlocking(ImmutableSet.copyOf(indexes.values()));
+       flushIndexesBlocking(ImmutableSet.copyOf(indexes.values()));
     }
 
     /**
@@ -492,7 +492,7 @@ public class SecondaryIndexManager implements IndexRegistry
      */
     public void flushAllNonCFSBackedIndexesBlocking()
     {
-        executeAllBlocking(indexes.values()
+        executeAllBlocking(indexesSet
                                   .stream()
                                   .filter(index -> !index.getBackingTable().isPresent()),
                            Index::getBlockingFlushTask);
@@ -704,7 +704,7 @@ public class SecondaryIndexManager implements IndexRegistry
         String name = index.getIndexMetadata().name;
         indexes.put(name, index);
         indexesSet.add(index);
-        logger.trace("Registered index {}={}", name,index);
+        logger.trace("Registered index {}={}", name, index);
     }
 
     public void unregisterIndex(Index index)
