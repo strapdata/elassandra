@@ -36,14 +36,6 @@ import org.elasticsearch.action.admin.cluster.node.tasks.cancel.CancelTasksActio
 import org.elasticsearch.action.admin.cluster.node.tasks.cancel.TransportCancelTasksAction;
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksAction;
 import org.elasticsearch.action.admin.cluster.node.tasks.list.TransportListTasksAction;
-import org.elasticsearch.action.admin.cluster.repositories.delete.DeleteRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.delete.TransportDeleteRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.get.GetRepositoriesAction;
-import org.elasticsearch.action.admin.cluster.repositories.get.TransportGetRepositoriesAction;
-import org.elasticsearch.action.admin.cluster.repositories.put.PutRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.put.TransportPutRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.verify.TransportVerifyRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.verify.VerifyRepositoryAction;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsAction;
 import org.elasticsearch.action.admin.cluster.settings.TransportClusterUpdateSettingsAction;
 import org.elasticsearch.action.admin.cluster.shards.ClusterSearchShardsAction;
@@ -128,10 +120,10 @@ import org.elasticsearch.action.admin.indices.warmer.get.TransportGetWarmersActi
 import org.elasticsearch.action.admin.indices.warmer.put.PutWarmerAction;
 import org.elasticsearch.action.admin.indices.warmer.put.TransportPutWarmerAction;
 import org.elasticsearch.action.bulk.BulkAction;
-import org.elasticsearch.action.bulk.TransportXBulkAction;
-import org.elasticsearch.action.bulk.TransportXShardBulkAction;
+import org.elasticsearch.action.bulk.TransportBulkAction;
+import org.elasticsearch.action.bulk.TransportShardBulkAction;
 import org.elasticsearch.action.delete.DeleteAction;
-import org.elasticsearch.action.delete.TransportXDeleteAction;
+import org.elasticsearch.action.delete.TransportDeleteAction;
 import org.elasticsearch.action.exists.ExistsAction;
 import org.elasticsearch.action.exists.TransportExistsAction;
 import org.elasticsearch.action.explain.ExplainAction;
@@ -144,7 +136,7 @@ import org.elasticsearch.action.get.TransportGetAction;
 import org.elasticsearch.action.get.TransportMultiGetAction;
 import org.elasticsearch.action.get.TransportShardMultiGetAction;
 import org.elasticsearch.action.index.IndexAction;
-import org.elasticsearch.action.index.TransportXIndexAction;
+import org.elasticsearch.action.index.TransportIndexAction;
 import org.elasticsearch.action.indexedscripts.delete.DeleteIndexedScriptAction;
 import org.elasticsearch.action.indexedscripts.delete.TransportDeleteIndexedScriptAction;
 import org.elasticsearch.action.indexedscripts.get.GetIndexedScriptAction;
@@ -177,7 +169,7 @@ import org.elasticsearch.action.termvectors.TransportMultiTermVectorsAction;
 import org.elasticsearch.action.termvectors.TransportShardMultiTermsVectorAction;
 import org.elasticsearch.action.termvectors.TransportTermVectorsAction;
 import org.elasticsearch.action.termvectors.dfs.TransportDfsOnlyAction;
-import org.elasticsearch.action.update.TransportXUpdateAction;
+import org.elasticsearch.action.update.TransportUpdateAction;
 import org.elasticsearch.action.update.UpdateAction;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.multibindings.MapBinder;
@@ -301,19 +293,19 @@ public class ActionModule extends AbstractModule {
         registerAction(AliasesExistAction.INSTANCE, TransportAliasesExistAction.class);
         registerAction(GetSettingsAction.INSTANCE, TransportGetSettingsAction.class);
 
-        registerAction(IndexAction.INSTANCE, TransportXIndexAction.class);
+        registerAction(IndexAction.INSTANCE, TransportIndexAction.class);
         registerAction(GetAction.INSTANCE, TransportGetAction.class);
         registerAction(TermVectorsAction.INSTANCE, TransportTermVectorsAction.class,
                 TransportDfsOnlyAction.class);
         registerAction(MultiTermVectorsAction.INSTANCE, TransportMultiTermVectorsAction.class,
                 TransportShardMultiTermsVectorAction.class);
-        registerAction(DeleteAction.INSTANCE, TransportXDeleteAction.class);
+        registerAction(DeleteAction.INSTANCE, TransportDeleteAction.class);
         registerAction(ExistsAction.INSTANCE, TransportExistsAction.class);
         registerAction(SuggestAction.INSTANCE, TransportSuggestAction.class);
-        registerAction(UpdateAction.INSTANCE, TransportXUpdateAction.class);
+        registerAction(UpdateAction.INSTANCE, TransportUpdateAction.class);
         registerAction(MultiGetAction.INSTANCE, TransportMultiGetAction.class,
                 TransportShardMultiGetAction.class);
-        registerAction(BulkAction.INSTANCE, TransportXBulkAction.class, TransportXShardBulkAction.class);
+        registerAction(BulkAction.INSTANCE, TransportBulkAction.class, TransportShardBulkAction.class);
         registerAction(SearchAction.INSTANCE, TransportSearchAction.class);
         registerAction(SearchScrollAction.INSTANCE, TransportSearchScrollAction.class);
         registerAction(MultiSearchAction.INSTANCE, TransportMultiSearchAction.class);

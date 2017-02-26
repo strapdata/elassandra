@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Vincent Royer (vroyer@vroyer.org).
+ * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -78,6 +78,7 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.exceptions.UnavailableException;
+import org.apache.cassandra.index.Index;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.schema.IndexMetadata;
@@ -121,7 +122,6 @@ import org.apache.lucene.util.BytesRef;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
-import org.codehaus.jackson.node.ArrayNode;
 import org.elassandra.ConcurrentMetaDataUpdateException;
 import org.elassandra.NoPersistedMetaDataException;
 import org.elassandra.cluster.routing.AbstractSearchStrategy;
@@ -225,7 +225,6 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 
 
 
@@ -535,72 +534,41 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public static boolean isReservedKeyword(String identifier) {
         return keywordsPattern.matcher(identifier.toUpperCase(Locale.ROOT)).matches();
     }
-
-    public static final org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
     
-    public static ArrayNode addToJsonArray(final AbstractType<?> type, final Object value, ArrayNode an) {
-        TypeSerializer<?> typeSerializer = type.getSerializer();
-        if (typeSerializer instanceof BooleanSerializer) an.add((Boolean)value); 
-        else if ((typeSerializer instanceof IntegerSerializer) || (typeSerializer instanceof Int32Serializer)) an.add( Integer.parseInt(value.toString() ));
-        else if (typeSerializer instanceof LongSerializer) an.add( Long.parseLong(value.toString()) );
-        else if (typeSerializer instanceof DoubleSerializer) an.add( Double.parseDouble(value.toString()) );
-        else if (typeSerializer instanceof DecimalSerializer) an.add( new BigDecimal(value.toString()) );
-        else if (typeSerializer instanceof FloatSerializer) an.add( Float.parseFloat(value.toString()) );
-        else if (typeSerializer instanceof TimestampSerializer) an.add( ((Date) value).getTime() );
-        else if (typeSerializer instanceof UUIDSerializer) an.add( value.toString() ); 
-        else an.add(stringify(type, value));
-        return an;
+    public static String toJsonValue(Object o) {
+        if (o instanceof Date)
+            return Long.toString( ((Date)o).getTime() );
+        if (o instanceof Integer)
+            return Integer.toString((Integer)o);
+        if (o instanceof Long)
+            return Long.toString((Long)o);
+        if (o instanceof Double)
+            return Double.toString((Double)o);
+        if (o instanceof Float)
+            return Float.toString((Float)o);
+        return o.toString();
     }
     
-    public static ArrayNode addToJsonArray(final Object v, ArrayNode an) {
-        if (v instanceof Boolean) an.add( (Boolean) v);
-        else if (v instanceof Integer) an.add( (Integer) v);
-        else if (v instanceof Long) an.add( (Long) v);
-        else if (v instanceof Double) an.add( (Double) v);
-        else if (v instanceof BigDecimal) an.add( (BigDecimal) v);
-        else if (v instanceof Float) an.add( (Float) v);
-        else if (v instanceof Date) an.add( ((Date) v).getTime());
-        else an.add( v.toString() );
-        return an;
+    private static String stringify(Object o) {
+        if (o instanceof String || o instanceof UUID)
+            return "\""+o+"\"";
+        return toJsonValue(o);
     }
     
-    public static String writeValueAsString(ArrayNode an) throws JsonGenerationException, JsonMappingException, IOException {
-        if (an.size() == 1) {
-            return an.get(0).asText();
+    public static String stringify(Object[] cols, int length) {
+        if (cols.length == 1)
+            return toJsonValue(cols[0]);
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        for(int i = 0; i < length; i++) {
+            if (i > 0)
+                sb.append(",");
+            sb.append(stringify(cols[i]));
         }
-        return jsonMapper.writeValueAsString(an);
+        return sb.append("]").toString();
     }
-    
-    public static String stringify(Object object) throws JsonGenerationException, JsonMappingException, IOException {
-        return jsonMapper.writeValueAsString(object);
-    }
-    
-    public static String stringify(AbstractType<?> type, ByteBuffer buf) {
-        return stringify(type, type.compose(buf));
-    }
-    
-    public static String stringify(AbstractType<?> type, Object value) {
-        // Thanks' generics !
-        TypeSerializer<?> typeSerializer = type.getSerializer();
-        if (typeSerializer instanceof AsciiSerializer) return ((AsciiSerializer)typeSerializer).toString( (String)value);
-        if (typeSerializer instanceof UTF8Serializer) return ((UTF8Serializer)typeSerializer).toString( (String)value);
-        if (typeSerializer instanceof BooleanSerializer) return ((BooleanSerializer)typeSerializer).toString( (Boolean)value );
-        if (typeSerializer instanceof BytesSerializer) return ((BytesSerializer)typeSerializer).toString( (ByteBuffer)value );
-        if (typeSerializer instanceof DecimalSerializer) return ((DecimalSerializer)typeSerializer).toString( (BigDecimal)value );
-        if (typeSerializer instanceof DoubleSerializer) return ((DoubleSerializer)typeSerializer).toString( (Double)value );
-        if (typeSerializer instanceof FloatSerializer) return ((FloatSerializer)typeSerializer).toString( (Float)value );
-        if (typeSerializer instanceof LongSerializer) return ((LongSerializer)typeSerializer).toString( (Long)value );
-        if (typeSerializer instanceof Int32Serializer) return ((Int32Serializer)typeSerializer).toString( (Integer)value );
-        if (typeSerializer instanceof IntegerSerializer) return ((IntegerSerializer)typeSerializer).toString( (BigInteger)value );
-        if (typeSerializer instanceof TimestampSerializer) return ((TimestampSerializer)typeSerializer).toString( (Date)value );
-        if (typeSerializer instanceof TimeUUIDSerializer) return ((TimeUUIDSerializer)typeSerializer).toString( (UUID)value );
-        if (typeSerializer instanceof UUIDSerializer) return ((UUIDSerializer)typeSerializer).toString( (UUID)value );
-        if (typeSerializer instanceof ListSerializer) return ((ListSerializer)typeSerializer).toString( (List)value );
-        if (typeSerializer instanceof SetSerializer) return ((SetSerializer)typeSerializer).toString( (Set)value );
-        if (typeSerializer instanceof MapSerializer) return ((MapSerializer)typeSerializer).toString( (Map)value );
-        if (typeSerializer instanceof EmptySerializer) return ((EmptySerializer)typeSerializer).toString( (Void)value );
-        return null;
-    }
+
     
     public static void toXContent(XContentBuilder builder, Mapper mapper, String field, Object value) throws IOException {
         if (value instanceof Collection) {
@@ -686,7 +654,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON).humanReadable(true);
         builder.startObject();
         for(String field : docMap.keySet()) {
-            if (field.equals("_parent")) continue;
+            if (field.equals(ParentFieldMapper.NAME)) continue;
             FieldMapper fieldMapper = documentMapper.mappers().smartNameFieldMapper(field);
             if (fieldMapper != null) {
                 if (forStaticDocument && !isStaticOrPartitionKey(fieldMapper)) 
@@ -707,7 +675,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         builder.endObject();
         return builder;
     }
-        
+
     public static boolean isStaticOrPartitionKey(Mapper mapper) {
         return mapper.cqlStaticColumn() || mapper.cqlPartitionKey();
     }
@@ -908,10 +876,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
     }
     
-   
-   
-    
-    
+
     public ClusterState updateNumberOfShards(ClusterState currentState) {
         int numberOfNodes = currentState.nodes().size();
         assert numberOfNodes > 0;
@@ -978,14 +943,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
         });
     }
     
-    /*
-     * (non-Javadoc)
-     * 
-     * @see
-     * org.elasticsearch.cassandra.ElasticSchemaService#updateTableSchema(java
-     * .lang.String, java.lang.String, java.util.Set,
-     * org.elasticsearch.index.mapper.DocumentMapper)
-     */
     @Override
     public void updateTableSchema(final IndexService indexService, final MappingMetaData mappingMd) throws IOException {
         try {
@@ -1230,8 +1187,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
                         }
                         ColumnDefinition cdef = (cfm == null) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
                         if ((cdef != null) && !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY )) {
-                            query = String.format(Locale.ROOT, "CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s'",
-                                    buildIndexName(cfName, column), ksName, cfName, column, className);
+                            query = String.format(Locale.ROOT, "CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s' %s",
+                                    buildIndexName(cfName, column), ksName, cfName, column, className, cdef.isStatic() ? "WITH options = { 'enforce':'true' }" : "");
                             logger.debug(query);
                             QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
                         } 
@@ -1338,7 +1295,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return flatFields;
     }
 
-    
     public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> flatMap) {
         if ((node instanceof List) || (node instanceof Set)) {
             for(Object o : ((Collection)node)) {
@@ -1440,39 +1396,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return QueryProcessor.executeInternal(buildFetchQuery(ksName, index, cfName, columns, forStaticDocument, columnDefs), pkColumns);
     }
   
-    /**
-     * Load percolator queries.
-     * @param indexService
-     * @return
-     */
-    @Override
-    public Map<BytesRef, Query> loadQueries(final IndexService indexService, PercolatorQueriesRegistry percolator) {
-        final String ksName = indexService.indexSettings().get(IndexMetaData.SETTING_KEYSPACE, indexService.index().name());
-        final String cql = String.format(Locale.ROOT, "SELECT \"_id\", query FROM \"%s\".\"%s\"",ksName, PERCOLATOR_TABLE);
-        UntypedResultSet results = QueryProcessor.executeInternal(cql);
-        Map<BytesRef, Query> queries = new HashMap<BytesRef, Query>();
-        if (!results.isEmpty()) {
-            for(Row row : results) {
-                String query = row.getString("query");
-                String id = row.getString("_id");
-                try {
-                    // id is only used for logging, if we fail we log the id in the catch statement
-                    /*
-                    final Query parseQuery = percolator.parsePercolatorDocument(null, new BytesArray(query.getBytes("UTF-8")));
-                    if (parseQuery != null) {
-                        queries.put(new BytesRef(id), parseQuery);
-                    } else {
-                        logger.warn("failed to add query [{}] - parser returned null", id);
-                    }
-                    */
-                } catch (Exception e) {
-                    logger.warn("failed to add query [{}]", e, id);
-                }
-            }
-        }
-        return queries;
-    }
-    
     private String regularColumn(final String index, final String type) throws IOException {
         IndexService indexService = indexService(index);
         if (indexService != null) {
@@ -1875,23 +1798,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         
         // normalize the _id and may find some column value in _id.
         // if the provided columns does not contains all the primary key columns, parse the _id to populate the columns in map.
-        boolean buildId = true;
-        ArrayNode array = jsonMapper.createArrayNode();
-        for(ColumnDefinition cd: Iterables.concat(metadata.partitionKeyColumns(), metadata.clusteringColumns())) {
-            if (cd.name.toString().equals("_id")) {
-                sourceMap.put("_id", request.id());
-            }
-            Object value = sourceMap.get(cd.name.toString());
-            if (value != null) {
-                addToJsonArray(cd.type, value, array);
-            } else {
-                buildId = false;
-                parseElasticId(request.index(), cfName, request.id(), sourceMap);
-            }
-        }
-        if (buildId) {
-            id = writeValueAsString(array);
-        }
+        parseElasticId(request.index(), cfName, request.id(), sourceMap);
         
         // workaround because ParentFieldMapper.value() and UidFieldMapper.value() create an Uid.
         if (sourceMap.get(ParentFieldMapper.NAME) != null && ((String)sourceMap.get(ParentFieldMapper.NAME)).indexOf(Uid.DELIMITER) < 0) {
@@ -2059,20 +1966,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return source( docMapper, sourceAsMap, index, new Uid(type, id));
     }
 
-    @Override
-    public void index(String[] indices, Collection<Range<Token>> tokenRanges) {
-        /*
-        ImmutableBiMap<Pair<String, String>, Pair<String, String>> immutableMapping = ImmutableBiMap.<Pair<String, String>, Pair<String, String>> copyOf(ElasticSecondaryIndex.mapping);
-        for (String index : indices) {
-            for (Entry<Pair<String, String>, Pair<String, String>> entry : immutableMapping.entrySet()) {
-                if (entry.getKey().left.equals(index)) {
-                    indexColumnFamilly(entry.getValue().left, entry.getValue().right, index, entry.getKey().right, tokenRanges);
-                }
-            }
-        }
-        */
-    }
-
     
     public DocPrimaryKey parseElasticId(final String index, final String type, final String id) throws IOException {
         return parseElasticId(index, type, id, null);
@@ -2097,6 +1990,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         
         if (id.startsWith("[") && id.endsWith("]")) {
             // _id is JSON array of values.
+            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
             Object[] elements = jsonMapper.readValue(id, Object[].class);
             Object[] values = (map != null) ? null : new Object[elements.length];
             String[] names = (map != null) ? null : new String[elements.length];
@@ -2135,6 +2029,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         int ptLen = partitionColumns.size();
         if (routing.startsWith("[") && routing.endsWith("]")) {
             // _routing is JSON array of values.
+            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
             Object[] elements = jsonMapper.readValue(routing, Object[].class);
             Object[] values = new Object[elements.length];
             String[] names = new String[elements.length];
@@ -2162,6 +2057,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         CFMetaData metadata = getCFMetaData(indexService.keyspace(), typeToCfName(uid.type()));
         String id = uid.id();
         if (id.startsWith("[") && id.endsWith("]")) {
+            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
             Object[] elements = jsonMapper.readValue(id, Object[].class);
             return metadata.clusteringColumns().size() > 0 && elements.length == metadata.partitionKeyColumns().size();
         } else {
@@ -2493,6 +2389,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     }
     
+    public static int defaultPrecisionStep = 8;
     public static Query newTokenRangeQuery(Collection<Range<Token>> tokenRanges) {
         Query tokenRangeQuery = null;
         if (tokenRanges != null) {
@@ -2505,14 +2402,14 @@ public class InternalCassandraClusterService extends InternalClusterService {
                         // full search range, so don't add any filter.
                         break;
                     
-                    NumericRangeQuery<Long> nrq2 = NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, 16, (Long) unique_range.left.getTokenValue(), (Long) unique_range.right.getTokenValue(), false, true);
+                    NumericRangeQuery<Long> nrq2 = NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, defaultPrecisionStep, (Long) unique_range.left.getTokenValue(), (Long) unique_range.right.getTokenValue(), false, true);
                     tokenRangeQuery = nrq2;
                     break;
                 default:
                     BooleanQuery.Builder bq2 = new BooleanQuery.Builder();
                     for (Range<Token> range : tokenRanges) {
                         // TODO: check the best precisionStep (6 by default), see https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html
-                        NumericRangeQuery<Long> nrq = NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, 16, (Long) range.left.getTokenValue(), (Long) range.right.getTokenValue(), false, true);
+                        NumericRangeQuery<Long> nrq = NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, defaultPrecisionStep, (Long) range.left.getTokenValue(), (Long) range.right.getTokenValue(), false, true);
                         bq2.add(nrq, Occur.SHOULD);
                     }
                     tokenRangeQuery = bq2.build();

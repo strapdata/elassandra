@@ -1376,12 +1376,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
-    public Map<BytesRef, Query> loadQueries(IndexService indexService, PercolatorQueriesRegistry percolator) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
     public Map<String, Object> rowAsMap(String index, String type, Row row) throws IOException {
         // TODO Auto-generated method stub
         return null;
@@ -1418,12 +1412,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     
     @Override
     public void insertDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData) throws Exception {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public void index(String[] indices, Collection<Range<Token>> tokenRanges) {
         // TODO Auto-generated method stub
         
     }

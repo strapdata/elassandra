@@ -20,15 +20,14 @@
 package org.elasticsearch.index.shard;
 
 import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.common.Classes;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.multibindings.Multibinder;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.cache.query.index.IndexQueryCache;
+import org.elasticsearch.index.engine.EngineFactory;
 import org.elasticsearch.index.engine.IndexSearcherWrapper;
 import org.elasticsearch.index.engine.IndexSearcherWrappingService;
-import org.elasticsearch.index.engine.EngineFactory;
 import org.elasticsearch.index.engine.InternalEngineFactory;
+import org.elasticsearch.index.engine.VersionLessInternalEngineFactory;
 import org.elasticsearch.index.percolator.stats.ShardPercolateService;
 import org.elasticsearch.index.termvectors.ShardTermVectorsService;
 import org.elasticsearch.index.translog.TranslogService;
@@ -60,6 +59,10 @@ public class IndexShardModule extends AbstractModule {
     protected boolean useShadowEngine() {
         return primary == false && IndexMetaData.isIndexUsingShadowReplicas(settings);
     }
+    
+    protected boolean useVersionLessEngine() {
+        return IndexMetaData.isIndexUsingVersionLessEngine(settings);
+    }
 
     @Override
     protected void configure() {
@@ -71,7 +74,12 @@ public class IndexShardModule extends AbstractModule {
             bind(TranslogService.class).asEagerSingleton();
         }
 
-        bind(EngineFactory.class).to(engineFactoryImpl);
+        if (useVersionLessEngine()) {
+            bind(EngineFactory.class).to(VersionLessInternalEngineFactory.class);
+        } else {
+            bind(EngineFactory.class).to(engineFactoryImpl);
+        }
+        
         bind(StoreRecoveryService.class).asEagerSingleton();
         bind(ShardPercolateService.class).asEagerSingleton();
         bind(ShardTermVectorsService.class).asEagerSingleton();

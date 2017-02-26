@@ -71,9 +71,6 @@ public abstract class AggregateFcts
         functions.add(avgFunctionForVarint);
         functions.add(avgFunctionForCounter);
 
-        // time aggregation function
-        functions.add(RangeAggregateFcts.rangeAggregationFunctionForTimestampToDouble);
-        
         // count, max, and min for all standard types
         for (CQL3Type type : CQL3Type.Native.values())
         {

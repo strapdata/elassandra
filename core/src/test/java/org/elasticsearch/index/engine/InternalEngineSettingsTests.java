@@ -18,20 +18,21 @@
  */
 package org.elasticsearch.index.engine;
 
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
+
+import java.util.concurrent.TimeUnit;
+
 import org.apache.lucene.index.LiveIndexWriterConfig;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 
-import java.util.concurrent.TimeUnit;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-
 public class InternalEngineSettingsTests extends ESSingleNodeTestCase {
 
     public void testSettingsUpdate() {
-        final IndexService service = createIndex("foo");
+        final IndexService service = createIndex("foo", Settings.builder().put(IndexMetaData.SETTING_VERSION_LESS_ENGINE, false).build());
         // INDEX_COMPOUND_ON_FLUSH
         InternalEngine engine = ((InternalEngine)engine(service));
         assertThat(engine.getCurrentIndexWriterConfig().getUseCompoundFile(), is(true));

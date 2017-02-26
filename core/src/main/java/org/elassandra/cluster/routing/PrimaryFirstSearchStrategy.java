@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
+ * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
+ * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -92,21 +93,17 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
         }
         
         private void clearReplicaRange(InetAddress endpoint, int tokenIndex, Token token, ClusterState clusterState) {
-            for(InetAddress replica : tokenToEndpointsMap.get(token)) {
-                if (!endpoint.equals(replica)) {
-                    UUID uuid = StorageService.instance.getHostId(replica);
-                    DiscoveryNode n = clusterState.nodes().get( uuid.toString() );
-                    if (this.greenShards.get(n) != null) {
-                        if (logger.isTraceEnabled())
-                            logger.trace("clear bit={} for token={} node={}", tokenIndex, token, n);
-                        this.greenShards.get(n).set(tokenIndex, false);
-                    } else {
-                        if (logger.isTraceEnabled())
-                            logger.trace("uuid={} for replica={} node found", uuid, replica);
-                    }
-                }
+            for(DiscoveryNode node : this.tokenToNodes.get(token)) {
+                if (this.greenShards.get(node) != null) {
+                    if (logger.isTraceEnabled())
+                        logger.trace("clear bit={} for token={} node={}", tokenIndex, token, node);
+                    this.greenShards.get(node).set(tokenIndex, false);
+                } else {
+                    if (logger.isTraceEnabled())
+                        logger.trace("uuid={} for replica={} node found", node.uuid(), node.getInetAddress());
+                } 
             }
-            
+
             if (logger.isTraceEnabled())
                 logger.trace("index={} keyspace={} greenShards={} yellowShards={} redShards={}", index, ksName, greenShards, yellowShards, redShards);
             

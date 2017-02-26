@@ -570,7 +570,7 @@ In our example with the following mapping, static columns are indexed in every d
 
 .. code::
 
-   curl -XPUT http://localhost:9200/test/_mapping/timeseries -d '{ "sensor": { "timeseries" : ".*", "_meta": { "index_static_columns":true } }}'
+   curl -XPUT http://localhost:9200/test/_mapping/timeseries -d '{ "timeseries": { "discover" : ".*", "_meta": { "index_static_columns":true } }}'
    
 Elassandra as a JSON-REST Gateway
 ---------------------------------

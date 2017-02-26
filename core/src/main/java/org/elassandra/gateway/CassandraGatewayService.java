@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
+ * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -15,8 +15,6 @@
  */
 package org.elassandra.gateway;
 
-
-
 import java.util.EnumSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -28,7 +26,6 @@ import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
-import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -43,7 +40,6 @@ public class CassandraGatewayService extends GatewayService {
     public static final ClusterBlock NO_CASSANDRA_RING_BLOCK = new ClusterBlock(12, "no cassandra ring", true, true, RestStatus.SERVICE_UNAVAILABLE, EnumSet.of(ClusterBlockLevel.READ));
 
     private final ClusterService clusterService;
-    private final AllocationService allocationService;
     private final Gateway gateway;
     private final ThreadPool threadPool;
     
@@ -53,7 +49,6 @@ public class CassandraGatewayService extends GatewayService {
     public CassandraGatewayService(Settings settings, Gateway gateway, AllocationService allocationService, ClusterService clusterService, DiscoveryService discoveryService, ThreadPool threadPool) {
         super(settings, gateway, allocationService, clusterService, discoveryService, threadPool);
         this.clusterService = clusterService;
-        this.allocationService = allocationService;
         this.gateway = gateway;
         this.threadPool = threadPool;
     }
@@ -90,40 +85,23 @@ public class CassandraGatewayService extends GatewayService {
     
     @Override
     protected void checkStateMeetsSettingsAndMaybeRecover(ClusterState state) {
-        /*
-        if (state.nodes().localNodeMaster() == false) {
-            // not our job to recover
-            return;
-        }
-        */
         if (state.blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
             // already recovered
             return;
         }
-        
         performStateRecovery();
     }
     
     private void performStateRecovery() {
         final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener();
         gateway.performStateRecovery(recoveryListener);
-        /*
-        if (recovered.compareAndSet(false, true)) {
-            threadPool.generic().execute(new Runnable() {
-                @Override
-                public void run() {
-                    gateway.performStateRecovery(recoveryListener);
-                }
-            });
-        }
-        */
     }
 
     class GatewayRecoveryListener implements Gateway.GatewayStateRecoveredListener {
 
         @Override
         public void onSuccess(final ClusterState recoveredState) {
-            logger.trace("successful state recovery, importing cluster state...");
+            logger.trace("Successful state recovery, importing cluster state...");
             clusterService.submitStateUpdateTask("local-gateway-elected-state", new ClusterStateUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
@@ -160,13 +138,13 @@ public class CassandraGatewayService extends GatewayService {
 
                 @Override
                 public void onFailure(String source, Throwable t) {
-                    logger.error("unexpected failure during [{}]", t, source);
+                    logger.error("Unexpected failure during [{}]", t, source);
                     GatewayRecoveryListener.this.onFailure("failed to updated cluster state");
                 }
 
                 @Override
                 public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                    logger.info("recovered [{}] indices into cluster_state", newState.metaData().indices().size());
+                    logger.info("Recovered [{}] indices into cluster_state", newState.metaData().indices().size());
                 }
             });
         }
@@ -175,7 +153,7 @@ public class CassandraGatewayService extends GatewayService {
         public void onFailure(String message) {
             recovered.set(false);
             // don't remove the block here, we don't want to allow anything in such a case
-            logger.info("metadata state not restored, reason: {}", message);
+            logger.info("Metadata state not restored, reason: {}", message);
         }
 
     }

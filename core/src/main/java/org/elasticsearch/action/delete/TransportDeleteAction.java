@@ -19,6 +19,10 @@
 
 package org.elasticsearch.action.delete;
 
+import java.io.IOException;
+
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.RoutingMissingException;
@@ -53,7 +57,8 @@ public class TransportDeleteAction extends TransportReplicationAction<DeleteRequ
 
     private final AutoCreateIndex autoCreateIndex;
     private final TransportCreateIndexAction createIndexAction;
-
+    private final ClusterService clusterService;
+    
     @Inject
     public TransportDeleteAction(Settings settings, TransportService transportService, ClusterService clusterService,
                                  IndicesService indicesService, ThreadPool threadPool,
@@ -65,6 +70,7 @@ public class TransportDeleteAction extends TransportReplicationAction<DeleteRequ
                 DeleteRequest.class, DeleteRequest.class, ThreadPool.Names.INDEX);
         this.createIndexAction = createIndexAction;
         this.autoCreateIndex = autoCreateIndex;
+        this.clusterService = clusterService;
     }
 
     @Override
@@ -122,7 +128,14 @@ public class TransportDeleteAction extends TransportReplicationAction<DeleteRequ
     }
 
     protected void innerExecute(Task task, final DeleteRequest request, final ActionListener<DeleteResponse> listener) {
-        super.doExecute(task, request, listener);
+        try {
+            clusterService.deleteRow(request.index(), request.type(), request.id(), request.consistencyLevel().toCassandraConsistencyLevel());
+            DeleteResponse response = new DeleteResponse(request.index(), request.type(), request.id(), 0L, true);
+            response.setShardInfo(clusterService.shardInfo(request.index(), request.consistencyLevel().toCassandraConsistencyLevel()));
+            listener.onResponse(response);
+        } catch (Exception e) {
+            listener.onFailure(e);
+        }
     }
 
     @Override
@@ -133,34 +146,24 @@ public class TransportDeleteAction extends TransportReplicationAction<DeleteRequ
     @Override
     protected Tuple<DeleteResponse, DeleteRequest> shardOperationOnPrimary(MetaData metaData, DeleteRequest request) {
         IndexShard indexShard = indicesService.indexServiceSafe(request.shardId().getIndex()).shardSafe(request.shardId().id());
-        final WriteResult<DeleteResponse> result = executeDeleteRequestOnPrimary(request, indexShard);
+        final WriteResult<DeleteResponse> result = executeDeleteRequestOnPrimary(clusterService, request, indexShard);
         processAfterWrite(request.refresh(), indexShard, result.location);
         return new Tuple<>(result.response, request);
     }
 
-    public static WriteResult<DeleteResponse> executeDeleteRequestOnPrimary(DeleteRequest request, IndexShard indexShard) {
-        Engine.Delete delete = indexShard.prepareDeleteOnPrimary(request.type(), request.id(), request.version(), request.versionType());
-        indexShard.delete(delete);
-        // update the request with teh version so it will go to the replicas
-        request.versionType(delete.versionType().versionTypeForReplicationAndRecovery());
-        request.version(delete.version());
-
-        assert request.versionType().validateVersionForWrites(request.version());
-        return new WriteResult<>(new DeleteResponse(indexShard.shardId().getIndex(), request.type(), request.id(), delete.version(), delete.found()), delete.getTranslogLocation());
-
+    public static WriteResult<DeleteResponse> executeDeleteRequestOnPrimary(ClusterService clusterService, DeleteRequest request, IndexShard indexShard) {
+        try {
+            clusterService.deleteRow(request.index(), request.type(), request.id(), request.consistencyLevel().toCassandraConsistencyLevel());
+            DeleteResponse response = new DeleteResponse(request.index(), request.type(), request.id(), 1L, true);
+            response.setShardInfo(clusterService.shardInfo(request.index(), request.consistencyLevel().toCassandraConsistencyLevel()));
+            return new WriteResult<>(response, null);
+        } catch (RequestExecutionException | RequestValidationException | IOException e) {
+            throw new RuntimeException(e);
+        }
     }
-
-    public static Engine.Delete executeDeleteRequestOnReplica(DeleteRequest request, IndexShard indexShard) {
-        Engine.Delete delete = indexShard.prepareDeleteOnReplica(request.type(), request.id(), request.version(), request.versionType());
-        indexShard.delete(delete);
-        return delete;
-    }
-
-
+    
     @Override
     protected void shardOperationOnReplica(DeleteRequest request) {
-        IndexShard indexShard = indicesService.indexServiceSafe(request.shardId().getIndex()).shardSafe(request.shardId().id());
-        Engine.Delete delete = executeDeleteRequestOnReplica(request, indexShard);
-        processAfterWrite(request.refresh(), indexShard, delete.getTranslogLocation());
+
     }
 }

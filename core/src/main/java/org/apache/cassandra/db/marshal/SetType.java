@@ -55,7 +55,7 @@ public class SetType<T> extends CollectionType<Set<T>>
         return getInstance(l.get(0), true);
     }
 
-    public static synchronized <T> SetType<T> getInstance(AbstractType<T> elements, boolean isMultiCell)
+    public static <T> SetType<T> getInstance(AbstractType<T> elements, boolean isMultiCell)
     {
         ConcurrentMap<AbstractType<?>, SetType> internMap = isMultiCell ? instances : frozenInstances;
         SetType<T> t = internMap.get(elements);

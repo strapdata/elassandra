@@ -19,6 +19,11 @@
 
 package org.elasticsearch.action.bulk;
 
+import java.io.IOException;
+import java.util.Map;
+
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionRequest;
@@ -28,7 +33,6 @@ import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.delete.TransportDeleteAction;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
-import org.elasticsearch.action.index.TransportIndexAction;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.replication.TransportReplicationAction;
 import org.elasticsearch.action.update.UpdateHelper;
@@ -36,7 +40,6 @@ import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
@@ -49,18 +52,14 @@ import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.engine.DocumentAlreadyExistsException;
-import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.VersionConflictEngineException;
 import org.elasticsearch.index.shard.IndexShard;
-import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
-
-import java.util.Map;
 
 /**
  * Performs the index operation.
@@ -153,7 +152,7 @@ public class TransportShardBulkAction extends TransportReplicationAction<BulkSha
 
                 try {
                     // add the response
-                    final WriteResult<DeleteResponse> writeResult = TransportDeleteAction.executeDeleteRequestOnPrimary(deleteRequest, indexShard);
+                    final WriteResult<DeleteResponse> writeResult = TransportDeleteAction.executeDeleteRequestOnPrimary(clusterService, deleteRequest, indexShard);
                     DeleteResponse deleteResponse = writeResult.response();
                     location = locationToSync(location, writeResult.location);
                     setResponse(item, new BulkItemResponse(item.id(), OP_TYPE_DELETE, deleteResponse));
@@ -309,9 +308,7 @@ public class TransportShardBulkAction extends TransportReplicationAction<BulkSha
         }
     }
 
-    protected WriteResult<IndexResponse> shardIndexOperation(BulkShardRequest request, IndexRequest indexRequest, MetaData metaData,
-                                            IndexShard indexShard, boolean processed) throws Throwable {
-
+    protected WriteResult shardIndexOperation(BulkShardRequest request, IndexRequest indexRequest, MetaData metaData, IndexShard indexShard, boolean processed) throws Throwable {
         // validate, if routing is required, that we got routing
         MappingMetaData mappingMd = metaData.index(request.index()).mappingOrDefault(indexRequest.type());
         if (mappingMd != null && mappingMd.routing().required()) {
@@ -324,7 +321,13 @@ public class TransportShardBulkAction extends TransportReplicationAction<BulkSha
             indexRequest.process(metaData, mappingMd, allowIdGeneration, request.index());
         }
 
-        return TransportIndexAction.executeIndexRequestOnPrimary(request, indexRequest, indexShard, mappingUpdatedAction);
+        Long writetime = new Long(1);
+        clusterService.insertDocument(indicesService, indexRequest, metaData.index(request.index()));
+
+        assert indexRequest.versionType().validateVersionForWrites(indexRequest.version());
+
+        IndexResponse indexResponse = new IndexResponse(request.index(), indexRequest.type(), indexRequest.id(), writetime, true);
+        return new WriteResult(indexResponse, null);
     }
 
     static class UpdateResult {
@@ -399,17 +402,17 @@ public class TransportShardBulkAction extends TransportReplicationAction<BulkSha
                 }
             case DELETE:
                 DeleteRequest deleteRequest = translate.action();
+                
                 try {
-                    WriteResult<DeleteResponse> result = TransportDeleteAction.executeDeleteRequestOnPrimary(deleteRequest, indexShard);
+                    clusterService.deleteRow(deleteRequest.index(), deleteRequest.type(), deleteRequest.id(), deleteRequest.consistencyLevel().toCassandraConsistencyLevel());
+                    DeleteResponse deleteResponse = new DeleteResponse(deleteRequest.index(), deleteRequest.type(), deleteRequest.id(), deleteRequest.version(), true);
+                    WriteResult<DeleteResponse> result = new WriteResult<DeleteResponse>(deleteResponse, null);
                     return new UpdateResult(translate, deleteRequest, result);
-                } catch (Throwable t) {
-                    t = ExceptionsHelper.unwrapCause(t);
-                    boolean retry = false;
-                    if (t instanceof VersionConflictEngineException) {
-                        retry = true;
-                    }
-                    return new UpdateResult(translate, deleteRequest, retry, t, null);
+                } catch (RequestExecutionException | RequestValidationException | IOException e) {
+                    logger.error("[{}].[{}] failed to delete id = [{}]", e, deleteRequest.index(), deleteRequest.type(), deleteRequest.id());
+                    return new UpdateResult(translate, deleteRequest, false, e, null);
                 }
+                
             case NONE:
                 UpdateResponse updateResponse = translate.action();
                 indexShard.indexingService().noopUpdate(updateRequest.type());
@@ -422,45 +425,7 @@ public class TransportShardBulkAction extends TransportReplicationAction<BulkSha
 
     @Override
     protected void shardOperationOnReplica(BulkShardRequest request) {
-        final ShardId shardId = request.shardId();
-        IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
-        IndexShard indexShard = indexService.shardSafe(shardId.id());
-        Translog.Location location = null;
-        for (int i = 0; i < request.items().length; i++) {
-            BulkItemRequest item = request.items()[i];
-            if (item == null || item.isIgnoreOnReplica()) {
-                continue;
-            }
-            if (item.request() instanceof IndexRequest) {
-                IndexRequest indexRequest = (IndexRequest) item.request();
-                try {
-                    Engine.IndexingOperation operation = TransportIndexAction.executeIndexRequestOnReplica(indexRequest, indexShard);
-                    location = locationToSync(location, operation.getTranslogLocation());
-                } catch (Throwable e) {
-                    // if its not an ignore replica failure, we need to make sure to bubble up the failure
-                    // so we will fail the shard
-                    if (!ignoreReplicaException(e)) {
-                        throw e;
-                    }
-                }
-            } else if (item.request() instanceof DeleteRequest) {
-                DeleteRequest deleteRequest = (DeleteRequest) item.request();
-                try {
-                    Engine.Delete delete = TransportDeleteAction.executeDeleteRequestOnReplica(deleteRequest, indexShard);
-                    location = locationToSync(location, delete.getTranslogLocation());
-                } catch (Throwable e) {
-                    // if its not an ignore replica failure, we need to make sure to bubble up the failure
-                    // so we will fail the shard
-                    if (!ignoreReplicaException(e)) {
-                        throw e;
-                    }
-                }
-            } else {
-                throw new IllegalStateException("Unexpected index operation: " + item.request());
-            }
-        }
-
-        processAfterWrite(request.refresh(), indexShard, location);
+        
     }
 
     private void applyVersion(BulkItemRequest item, long version, VersionType versionType) {

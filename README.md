@@ -12,6 +12,7 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
+* **2017-02-25 Release 2.4.2-9 Significant write performance improvement**
 * **2017-01-15 Release 2.4.2-4 Upgrade to Cassandra 3.0.10**
 * **2016-12-25 Release 2.4.2-2 Upgrade to Elasticsearch 2.4.2 + pass 3000 unit tests from Elasticsearch**
 * **2016-10-24 Release 2.1.1-18 Add multi-threaded index rebuild and optimized search routing (see RandomSearchStrategy)**
@@ -62,7 +63,7 @@ For Elasticsearch users, elassandra provides useful features :
 # Support
 
  * Support available via [elassandra google groups](https://groups.google.com/forum/#!forum/elassandra).
- * Post feature requests and bugs on https://github.com/vroyer/elassandra/issues
+ * Post feature requests and bugs on https://github.com/strapdata/elassandra/issues
  
 # Contribute
 
@@ -73,7 +74,7 @@ Contributors are welcome to test and enhance Elassandra.
 ```
 This software is licensed under the Apache License, version 2 ("ALv2"), quoted below.
 
-Copyright 2015-2016, Vincent Royer (vroyer@vroyer.org).
+Copyright 2015-2017, Vincent Royer (vroyer@vroyer.org).
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not
 use this file except in compliance with the License. You may obtain a copy of
@@ -90,5 +91,5 @@ the License.
 
 ## Acknowledgments
 
-Elasticsearch and Kibana are trademarks of Elasticsearch BV, registered in the U.S. and in other
-countries.
+* Elasticsearch and Kibana are trademarks of Elasticsearch BV, registered in the U.S. and in other countries.
+* Apache Cassandra, Apache, and Cassandra are trademarks of the Apache Software Foundation.

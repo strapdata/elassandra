@@ -14,9 +14,13 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
 
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.QueryProcessor;
-import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.utils.FBUtilities;
 import org.elassandra.NoPersistedMetaDataException;
 import org.elassandra.cluster.InternalCassandraClusterService;
@@ -68,6 +72,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     private static volatile CountDownLatch keepAliveLatch;
 
     public static ElassandraDaemon instance = new ElassandraDaemon();
+    public static boolean hasWorkloadColumn = false;
     
     private Node node = null;
     private Settings settings;
@@ -105,14 +110,21 @@ public class ElassandraDaemon extends CassandraDaemon {
             // Allow the server to start even if the bean can't be registered
         }
         
-        // add a workload column to system.local and system.peer, initialized to "elasticsearch"
+        // Set workload it to "elasticsearch"
         try {
-            QueryProcessor.executeOnceInternal("INSERT INTO system.local (key, workload) VALUES (?,?)" , new Object[] { "local","elasticsearch" });
-            logger.debug("Internal workload set to elasticsearch");
-        } catch (ConfigurationException e) {
-            logger.error("Failed to set internal workload",e);
+            ColumnIdentifier workload = new ColumnIdentifier("workload",false);
+            CFMetaData local = SystemKeyspace.metadata().getTableOrViewNullable(SystemKeyspace.LOCAL);
+            if (local.getColumnDefinition(workload) != null) {
+                QueryProcessor.executeOnceInternal("INSERT INTO system.local (key, workload) VALUES (?,?)" , new Object[] { "local","elasticsearch" });
+                logger.info("Internal workload set to elasticsearch");
+                
+                CFMetaData system = SystemKeyspace.metadata().getTableOrViewNullable(SystemKeyspace.LOCAL);
+                hasWorkloadColumn = system.getColumnDefinition(workload) != null;
+            }
+        } catch (Exception e1) {
+            logger.error("Failed to set the workload to elasticsearch.",e1);
         }
-    
+        
         super.setup(); // start bootstrap CassandraDaemon 
         super.start(); // start Thrift+RPC service
 

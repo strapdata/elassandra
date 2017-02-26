@@ -30,6 +30,7 @@ import org.elasticsearch.action.RoutingMissingException;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
+import org.elasticsearch.action.bulk.TransportBulkAction.ConcreteIndices;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.TransportDeleteAction;
 import org.elasticsearch.action.index.IndexRequest;
@@ -264,8 +265,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             if (request instanceof IndexRequest) {
                 IndexRequest indexRequest = (IndexRequest) request;
                 String concreteIndex = concreteIndices.getConcreteIndex(indexRequest.index());
-                //ShardId shardId = clusterService.operationRouting().indexShards(clusterState, concreteIndex, indexRequest.type(), indexRequest.id(), indexRequest.routing()).shardId();
-                ShardId shardId = new ShardId(concreteIndex,0);
+                ShardId shardId = clusterService.operationRouting().indexShards(clusterState, concreteIndex, indexRequest.type(), indexRequest.id(), indexRequest.routing()).shardId();
                 List<BulkItemRequest> list = requestsByShard.get(shardId);
                 if (list == null) {
                     list = new ArrayList<>();
@@ -275,8 +275,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             } else if (request instanceof DeleteRequest) {
                 DeleteRequest deleteRequest = (DeleteRequest) request;
                 String concreteIndex = concreteIndices.getConcreteIndex(deleteRequest.index());
-                //ShardId shardId = clusterService.operationRouting().indexShards(clusterState, concreteIndex, deleteRequest.type(), deleteRequest.id(), deleteRequest.routing()).shardId();
-                ShardId shardId = new ShardId(concreteIndex,0);
+                ShardId shardId = clusterService.operationRouting().indexShards(clusterState, concreteIndex, deleteRequest.type(), deleteRequest.id(), deleteRequest.routing()).shardId();
                 List<BulkItemRequest> list = requestsByShard.get(shardId);
                 if (list == null) {
                     list = new ArrayList<>();
@@ -286,8 +285,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             } else if (request instanceof UpdateRequest) {
                 UpdateRequest updateRequest = (UpdateRequest) request;
                 String concreteIndex = concreteIndices.getConcreteIndex(updateRequest.index());
-                //ShardId shardId = clusterService.operationRouting().indexShards(clusterState, concreteIndex, updateRequest.type(), updateRequest.id(), updateRequest.routing()).shardId();
-                ShardId shardId = new ShardId(concreteIndex,0);
+                ShardId shardId = clusterService.operationRouting().indexShards(clusterState, concreteIndex, updateRequest.type(), updateRequest.id(), updateRequest.routing()).shardId();
                 List<BulkItemRequest> list = requestsByShard.get(shardId);
                 if (list == null) {
                     list = new ArrayList<>();
@@ -353,7 +351,8 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             });
         }
     }
-
+    
+    
     protected boolean addFailureIfIndexIsUnavailable(DocumentRequest request, BulkRequest bulkRequest, AtomicArray<BulkItemResponse> responses, int idx,
                                               final ConcreteIndices concreteIndices,
                                               final MetaData metaData) {

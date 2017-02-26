@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
+ * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -19,9 +19,6 @@ import org.elasticsearch.ElasticsearchException;
 
 public class NoPersistedMetaDataException extends ElasticsearchException {
 
-    /**
-     * 
-     */
     private static final long serialVersionUID = 6343514139588332455L;
 
     public NoPersistedMetaDataException(String msg) {

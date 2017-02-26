@@ -191,6 +191,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public static final String SETTING_SYNCHRONOUS_REFRESH = "index.synchronous_refresh"; 
     public static final String SETTING_DROP_ON_DELETE_INDEX = "index.drop_on_delete_index"; 
     public static final String SETTING_SNAPSHOT_WITH_SSTABLE = "index.snapshot_with_sstable"; 
+    public static final String SETTING_VERSION_LESS_ENGINE = "index.version_less_engine"; 
     
 
     // hard-coded hash function as of 2.0
@@ -967,6 +968,15 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         return settings.getAsBoolean(SETTING_SHADOW_REPLICAS, false);
     }
 
+    /**
+     * Returns <code>true</code> if the given settings indicate that the index associated
+     * with these settings uses a version less engine (i.e no more version number stored in lucene index). Otherwise <code>false</code>. The default
+     * setting for this is <code>true</code>.
+     */
+    public static boolean isIndexUsingVersionLessEngine(Settings settings) {
+        return settings.getAsBoolean(SETTING_VERSION_LESS_ENGINE, true);
+    }
+    
     /**
      * Adds human readable version and creation date settings.
      * This method is used to display the settings in a human readable format in REST API

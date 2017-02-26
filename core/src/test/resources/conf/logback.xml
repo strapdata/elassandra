@@ -59,7 +59,6 @@
 
   <logger name="org.elassandra.cluster" level="TRACE" />
   <logger name="org.elassandra.index" level="TRACE" />
-  <logger name="org.elassandra.index" level="DEBUG" />
   <logger name="org.elassandra.index.shard" level="DEBUG" />
   <logger name="org.elassandra.shard" level="DEBUG" />
   

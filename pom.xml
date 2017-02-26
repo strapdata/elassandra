@@ -485,12 +485,13 @@
                 <version>${slf4j.version}</version>
             </dependency>
 
+<!-- 
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-log4j12</artifactId>
                 <version>${slf4j.version}</version>
             </dependency>
-
+ -->
             <dependency>
                 <groupId>net.java.dev.jna</groupId>
                 <artifactId>jna</artifactId>
@@ -683,7 +684,7 @@
                     <!-- general test configuration, used for both unit and integ tests -->
                     <configuration>
                         <jvm>${jvm.executable}</jvm>
-                        <argLine>${tests.jvm.argline} -Des.max-open-files -Dcassandra.home=${project.basedir}/target/tests/ -Dcassandra.logdir=${project.basedir}/target/tests/ -Dlogback.configurationFile=${project.basedir}/src/test/resources/conf/logback.xml -Djava.library.path=${project.basedir}/cassandra/lib/sigar-bin -Dcassandra.config=file://${project.basedir}/src/test/resources/conf/cassandra.yaml -Dcassandra.config.dir=${project.basedir}/src/test/resources/conf -Dcassandra-rackdc.properties=file://${project.basedir}/src/test/resources/conf/cassandra-rackdc.properties -Dcassandra.config.loader=org.elassandra.config.YamlTestConfigurationLoader -Dcassandra.storagedir=${project.basedir}/target/tests/</argLine>
+                        <argLine>${tests.jvm.argline} -Des.max-open-files -Dcassandra.home=${project.basedir}/target/tests/ -Dcassandra.logdir=${project.basedir}/target/tests/ -Dlogback.configurationFile=${project.basedir}/src/test/resources/conf/logback.xml -Djava.library.path=${session.executionRootDirectory}/core/cassandra/lib/sigar-bin -Dcassandra.config=file://${project.basedir}/src/test/resources/conf/cassandra.yaml -Dcassandra.config.dir=${project.basedir}/src/test/resources/conf -Dcassandra-rackdc.properties=file://${project.basedir}/src/test/resources/conf/cassandra-rackdc.properties -Dcassandra.config.loader=org.elassandra.config.YamlTestConfigurationLoader -Dcassandra.storagedir=${project.basedir}/target/tests/</argLine>
                         <heartbeat>10</heartbeat>
                         <jvmOutputAction>pipe,warn</jvmOutputAction>
                         <leaveTemporary>true</leaveTemporary>

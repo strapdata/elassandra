@@ -41,7 +41,6 @@ import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.thrift.ThriftValidation;
 import org.apache.cassandra.transport.Event;
-import org.elassandra.index.ExtendedElasticSecondaryIndex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,8 +116,9 @@ public class CreateIndexStatement extends SchemaAlteringStatement
             // would pull the full partition every time the static column of partition is 'bar', which sounds like offering a
             // fair potential for foot-shooting, so I prefer leaving that to a follow up ticket once we have identified cases where
             // such indexing is actually useful.
-            if (!cfm.isCompactTable() && cd.isStatic() && !properties.customClass.equals(ExtendedElasticSecondaryIndex.class.getName()))
-                throw new InvalidRequestException("Secondary indexes are not allowed on static columns");
+            if (!cfm.isCompactTable() && cd.isStatic() && 
+                !(properties.isCustom && properties.getMap("options") != null && properties.getMap("options").containsKey("enforce") && properties.getMap("options").get("enforce").equals("true")))
+                throw new InvalidRequestException("Secondary indexes are not allowed on static columns unless 'enforce' option is set to true");
             
             if (cd.kind == ColumnDefinition.Kind.PARTITION_KEY && cfm.getKeyValidatorAsClusteringComparator().size() == 1)
                 throw new InvalidRequestException(String.format("Cannot create secondary index on partition key column %s", target.column));

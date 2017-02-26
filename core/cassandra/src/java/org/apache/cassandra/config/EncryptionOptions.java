@@ -33,9 +33,6 @@ public abstract class EncryptionOptions
     public String store_type = "JKS";
     public boolean require_client_auth = false;
 
-    public boolean hostname_verification = true;
-    public boolean resolve_hostname = true;
-    
     public static class ClientEncryptionOptions extends EncryptionOptions
     {
         public boolean enabled = false;

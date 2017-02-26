@@ -91,6 +91,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         System.out.println("cassandra.config.dir="+System.getProperty("cassandra.config.dir"));
         System.out.println("cassandra-rackdc.properties="+System.getProperty("cassandra-rackdc.properties"));
         System.out.println("cassandra.storagedir="+System.getProperty("cassandra.storagedir"));
+        System.out.println("logback.configurationFile="+System.getProperty("logback.configurationFile"));
 
         System.out.println("settings="+testSettings.getAsMap());
         System.out.println("plugins="+classpathPlugins);

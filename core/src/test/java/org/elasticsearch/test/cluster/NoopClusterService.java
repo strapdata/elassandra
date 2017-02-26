@@ -329,12 +329,6 @@ public class NoopClusterService implements ClusterService {
     }
 
     @Override
-    public Map<BytesRef, Query> loadQueries(IndexService indexService, PercolatorQueriesRegistry percolator) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
     public Map<String, Object> rowAsMap(String index, String type, Row row) throws IOException {
         // TODO Auto-generated method stub
         return null;
@@ -361,12 +355,6 @@ public class NoopClusterService implements ClusterService {
     @Override
     public void deleteRow(String index, String type, String id, ConsistencyLevel cl)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public void index(String[] indices, Collection<Range<Token>> tokenRanges) {
         // TODO Auto-generated method stub
         
     }

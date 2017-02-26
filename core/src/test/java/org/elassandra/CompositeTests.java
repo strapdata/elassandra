@@ -1,3 +1,18 @@
+/*
+ * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
+ * Contains some code from Elasticsearch (http://www.elastic.co)
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.elassandra;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
@@ -15,6 +30,11 @@ import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
+/**
+ * Elassandra composite key tests.
+ * @author vroyer
+ *
+ */
 public class CompositeTests extends ESSingleNodeTestCase {
     
     @Test
@@ -102,9 +122,9 @@ public class CompositeTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("composite").setTypes("t12").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(2L));
         assertThat(client().prepareSearch().setIndices("composite").setTypes("t13").setQuery(QueryBuilders.queryStringQuery("d:3")).get().getHits().getTotalHits(), equalTo(2L));
         
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t11").setQuery(QueryBuilders.queryStringQuery("s1:b")).get().getHits().getTotalHits(), equalTo(1L));
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t12").setQuery(QueryBuilders.queryStringQuery("s1:a2")).get().getHits().getTotalHits(), equalTo(1L));
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t13").setQuery(QueryBuilders.queryStringQuery("s1:ab5")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t11").setQuery(QueryBuilders.queryStringQuery("s1:b")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t12").setQuery(QueryBuilders.queryStringQuery("s1:a2")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t13").setQuery(QueryBuilders.queryStringQuery("s1:ab5")).get().getHits().getTotalHits(), equalTo(2L));
         
         assertThat(client().prepareMultiGet().add("composite", "t1", "[\"a\",\"b1\"]", "[\"b\",\"b1\"]").get().getResponses()[0].getIndex(), equalTo("composite") );
         assertThat(client().prepareMultiGet().add("composite", "t2", "[\"a\",\"b2\",2]", "[\"a\",\"b2\",3]").get().getResponses()[0].getIndex(), equalTo("composite") );
@@ -234,6 +254,80 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                 .get();
         hits = rsp.getHits();
         source = hits.hits()[0].getSource();
+        assertThat(hits.getTotalHits(), equalTo(1L));
+        assertThat(source.get("m"), equalTo("server1-cpu"));
+        assertThat(((Map)source.get("meta")).get("region"), equalTo("west"));
+    }
+    
+    @Test
+    public void testTimeserieIndexStaticColumnsTest() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("m").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("t").field("type", "date").field("cql_collection", "singleton").field("cql_primary_key_order", 1).endObject()
+                        .startObject("v").field("type", "double").field("cql_collection", "singleton").endObject()
+                        .startObject("meta").field("type", "nested").field("cql_collection", "singleton").field("cql_struct", "map").field("cql_static_column", true).field("include_in_parent", true)
+                            .startObject("properties")
+                                .startObject("region").field("type", "string").field("index", "analyzed").endObject()
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                    .startObject("_meta")
+                        .field("index_static_columns",true)
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("timeseries", mapping));
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, meta) VALUES ('server1-cpu', { 'region':'west' } );");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:30', 10);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:31', 20);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:32', 15);");
+        
+        SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("timeseries")
+                .setQuery(QueryBuilders.queryStringQuery("meta.region:west"))
+                .setFetchSource(new String[] { "m",  "t", "v", "meta.region"}, null)
+                .get();
+        SearchHits hits = rsp.getHits();
+        Map<String, Object> source = hits.hits()[0].getSource();
+        assertThat(hits.getTotalHits(), equalTo(4L));
+        assertThat(source.get("m"), equalTo("server1-cpu"));
+        assertThat(((Map)source.get("meta")).get("region"), equalTo("west"));
+    }
+    
+    @Test
+    public void testTimeserieWithIndexedStaticOnlyTest() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("m").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("t").field("type", "date").field("cql_collection", "singleton").field("cql_primary_key_order", 1).endObject()
+                        .startObject("v").field("type", "double").field("cql_collection", "singleton").endObject()
+                        .startObject("meta").field("type", "nested").field("cql_collection", "singleton").field("cql_struct", "map").field("cql_static_column", true).field("include_in_parent", true)
+                            .startObject("properties")
+                                .startObject("region").field("type", "string").field("index", "analyzed").endObject()
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                    .startObject("_meta")
+                        .field("index_static_only",true)
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("timeseries", mapping));
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, meta) VALUES ('server1-cpu', { 'region':'west' } );");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:30', 10);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:31', 20);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:32', 15);");
+        
+        SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("timeseries")
+                .setQuery(QueryBuilders.queryStringQuery("meta.region:west"))
+                .setFetchSource(new String[] { "m",  "t", "v", "meta.region"}, null)
+                .get();
+        SearchHits hits = rsp.getHits();
+        Map<String, Object> source = hits.hits()[0].getSource();
         assertThat(hits.getTotalHits(), equalTo(1L));
         assertThat(source.get("m"), equalTo("server1-cpu"));
         assertThat(((Map)source.get("meta")).get("region"), equalTo("west"));

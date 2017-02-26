@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
+ * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -31,7 +31,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
@@ -41,6 +40,7 @@ import org.apache.cassandra.gms.EndpointState;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
 import org.apache.cassandra.gms.VersionedValue;
+import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 import org.codehaus.jackson.JsonGenerationException;
@@ -78,7 +78,7 @@ import com.google.common.collect.Maps;
 
 /**
  * Discover the cluster topology from cassandra snitch and settings, mappings, blocks from the elastic_admin keyspace.
- * Publishing is just a nofification to refresh in memory configuration from the cassandra table.
+ * Publishing is just a notification to refresh in memory configuration from the cassandra table.
  * @author vroyer
  *
  */
@@ -88,7 +88,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
     private final ClusterName clusterName;
     private final Version version;
 
-    private final AtomicBoolean initialStateSent = new AtomicBoolean();
     private final CopyOnWriteArrayList<MetaDataVersionListener> metaDataVersionListeners = new CopyOnWriteArrayList<>();
 
     private DiscoveryNode localNode;
@@ -137,14 +136,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         this.nodeService = nodeService;
     }
 
-
-    
-
-    /**
-     * TODO: provide customizable node name factory.
-     * @param addr
-     * @return
-     */
     public static String buildNodeName() {
         return buildNodeName(FBUtilities.getLocalAddress());
     }
@@ -157,11 +148,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 (int) (addr.getAddress()[0] & 0xFF), (int) (addr.getAddress()[1] & 0xFF), 
                 (int) (addr.getAddress()[2] & 0xFF), (int) (addr.getAddress()[3] & 0xFF));
     }
-
     
     @Override
     protected void doStart()  {
-
         synchronized (clusterGroup) {
             logger.debug("Connected to cluster [{}]", clusterName.value());
             // initialize cluster from cassandra system.peers 
@@ -194,8 +183,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
             updateRoutingTable("starting-cassandra-discovery");
         }
     }
-    
-    
+
     public DiscoveryNodes nodes() {
         return this.clusterGroup.nodes();
     }
@@ -281,7 +269,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                                     NetworkAddress.format(entry.getKey()), dn.getId(), dn.getName(), entry.getValue().isAlive(), entry.getValue().getUpdateTimestamp());
                         }
                         clusterGroup.put(dn.getId(), dn);
-                        if (entry.getValue().getApplicationState(ApplicationState.X1) != null || entry.getValue().getApplicationState(ApplicationState.X2) !=null) {
+                        if (ElassandraDaemon.hasWorkloadColumn && (entry.getValue().getApplicationState(ApplicationState.X1) != null || entry.getValue().getApplicationState(ApplicationState.X2) !=null)) {
                             SystemKeyspace.updatePeerInfo(entry.getKey(), "workload", "elasticsearch");
                         }
                     } else {
@@ -330,7 +318,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 logger.debug("New node soure=updateNode internal_ip={} rpc_address={}, node_name={} host_id={} status={} timestamp={}", 
                         NetworkAddress.format(addr), NetworkAddress.format(rpc_address), dn.getId(), dn.getName(), status, state.getUpdateTimestamp());
                 clusterGroup.members.put(dn.getId(), dn);
-                if (state.getApplicationState(ApplicationState.X1) != null || state.getApplicationState(ApplicationState.X2) !=null) {
+                if (ElassandraDaemon.hasWorkloadColumn && (state.getApplicationState(ApplicationState.X1) != null || state.getApplicationState(ApplicationState.X2) !=null)) {
                     SystemKeyspace.updatePeerInfo(addr, "workload", "elasticsearch");
                 }
                 updatedNode = true;
@@ -347,14 +335,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         }
     }
 
-   
-    
-    
     public boolean awaitMetaDataVersion(long version, TimeValue timeout) throws InterruptedException {
         MetaDataVersionListener listener = new MetaDataVersionListener(version);
         return listener.await(timeout.millis(), TimeUnit.MILLISECONDS);
     }
-    
     
     /**
      * Release listeners who have reached the expected metadat version.
@@ -524,7 +508,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
    
     @Override
     public void onRemove(InetAddress endpoint) {
-        // TODO: support onRemove (hostId unavailable)
         DiscoveryNode removedNode = this.nodes().findByInetAddress(endpoint);
         if (removedNode != null) {
             logger.warn("Removing node ip={} node={}  => disconnecting", endpoint, removedNode);
@@ -552,15 +535,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
         }
     }
 
-    /**
-     * ELASTIC_INDEX_STATES = Map<IndexUid,ShardRoutingState>
-     */
     private static final ApplicationState ELASTIC_SHARDS_STATES = ApplicationState.X1;
     private static final ApplicationState ELASTIC_META_DATA = ApplicationState.X2;
     private static final ObjectMapper jsonMapper = new ObjectMapper();
     private static final TypeReference<Map<String, ShardRoutingState>> indexShardStateTypeReference = new TypeReference<Map<String, ShardRoutingState>>() {};
 
-    
     @Override
     public Map<UUID, ShardRoutingState> getShardRoutingStates(String index) {
         Map<UUID, ShardRoutingState> shardsStates = new HashMap<UUID, ShardRoutingState>(this.clusterGroup.members.size());
@@ -636,9 +615,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                         shardsStateMap.put(irt.getIndex(), shardRouting.state());
                 }
             }
-            String newValue;
             try {
-                newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(shardsStateMap);
+                String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(shardsStateMap);
                 Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
             } catch (IOException e) {
                 logger.error("Unxepected error", e);

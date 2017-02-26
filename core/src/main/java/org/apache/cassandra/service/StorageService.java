@@ -2591,6 +2591,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         return ret;
     }
 
+    /*
     public Set<InetAddress> getLiveLocalRingMembers(boolean excludeDeadStates)
     {
         Set<InetAddress> ret = new HashSet<>();
@@ -2612,7 +2613,8 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         }
         return ret;
     }
-
+    */
+    
     public List<String> getUnreachableNodes()
     {
         return stringify(Gossiper.instance.getUnreachableMembers());
@@ -3292,7 +3294,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
         return localDCPrimaryRanges;
     }
-    
+    /*
     // returns local token range 
     public Collection<Token> getPrimaryTokenForEndpointWithinDC(String keyspace, InetAddress referenceEndpoint)
     {
@@ -3325,6 +3327,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
         return localDCPrimaryToken;
     }
+    */
 
     /**
      * Get all ranges an endpoint is responsible for (by keyspace)

@@ -1,3 +1,9 @@
+2.4.2-9 - 2017-02-26
+  * Significant write performance improvement.
+  * New optimized version less internal engine (don't store any more version number in lucene files).
+  * Fix erroneous deletion when compacting SSTables.
+  * Fix a routing table issue in a multi-node single-rack cluster.
+
 2.4.2-8 - 2017-02-15
   * Fix support for uuid and timeuuid Cassandra Types #74
 

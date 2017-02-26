@@ -19,6 +19,16 @@
 
 package org.elasticsearch.index.engine;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
@@ -45,7 +55,6 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.InfoStream;
 import org.elasticsearch.ExceptionsHelper;
-import org.elasticsearch.cluster.routing.DjbHashFunction;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.logging.ESLogger;
@@ -54,44 +63,26 @@ import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.lucene.index.ElasticsearchDirectoryReader;
 import org.elasticsearch.common.lucene.index.ElasticsearchLeafReader;
 import org.elasticsearch.common.lucene.uid.Versions;
-import org.elasticsearch.common.math.MathUtils;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
-import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.util.concurrent.KeyedLock;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.index.deletionpolicy.SnapshotIndexCommit;
 import org.elasticsearch.index.indexing.ShardIndexingService;
-import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.merge.MergeStats;
 import org.elasticsearch.index.merge.OnGoingMerge;
 import org.elasticsearch.index.search.nested.IncludeNestedDocsQuery;
 import org.elasticsearch.index.shard.ElasticsearchMergePolicy;
 import org.elasticsearch.index.shard.MergeSchedulerConfig;
 import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.index.shard.TranslogRecoveryPerformer;
 import org.elasticsearch.index.translog.Translog;
-import org.elasticsearch.index.translog.TranslogConfig;
 import org.elasticsearch.index.translog.TranslogCorruptedException;
 import org.elasticsearch.indices.IndicesWarmer;
-import org.elasticsearch.threadpool.ThreadPool;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
- 
 /**
  *
  */
-public class InternalEngine extends Engine {
+public class VersionLessInternalEngine extends Engine {
     /**
      * When we last pruned expired tombstones from versionMap.deletes:
      */
@@ -113,19 +104,19 @@ public class InternalEngine extends Engine {
 
     // A uid (in the form of BytesRef) to the version map
     // we use the hashed variant since we iterate over it and check removal and additions on existing keys
-    private final LiveVersionMap versionMap;
+    //private final LiveVersionMap versionMap;
 
     private final KeyedLock<BytesRef> keyedLock = new KeyedLock<>();
 
-    private final AtomicBoolean versionMapRefreshPending = new AtomicBoolean();
+    //private final AtomicBoolean versionMapRefreshPending = new AtomicBoolean();
 
     private volatile SegmentInfos lastCommittedSegmentInfos;
 
     private final IndexThrottle throttle;
 
-    public InternalEngine(EngineConfig engineConfig, boolean skipInitialTranslogRecovery) throws EngineException {
+    public VersionLessInternalEngine(EngineConfig engineConfig, boolean skipInitialTranslogRecovery) throws EngineException {
         super(engineConfig);
-        this.versionMap = new LiveVersionMap();
+        //this.versionMap = new LiveVersionMap();
         store.incRef();
         IndexWriter writer = null;
         Translog translog = null;
@@ -162,7 +153,7 @@ public class InternalEngine extends Engine {
             this.translog = translog;
             manager = createSearcherManager();
             this.searcherManager = manager;
-            this.versionMap.setManager(searcherManager);
+            //this.versionMap.setManager(searcherManager);
             try {
                 if (skipInitialTranslogRecovery) {
                     // make sure we point at the latest translog from now on..
@@ -177,7 +168,7 @@ public class InternalEngine extends Engine {
         } finally {
             if (success == false) {
                 IOUtils.closeWhileHandlingException(writer, translog, manager, scheduler);
-                versionMap.clear();
+                //versionMap.clear();
                 if (isClosed.get() == false) {
                     // failure we need to dec the store reference
                     store.decRef();
@@ -188,7 +179,7 @@ public class InternalEngine extends Engine {
     }
 
     private Translog openTranslog(EngineConfig engineConfig, IndexWriter writer, boolean createNew) throws IOException {
-    boolean success = false;
+        boolean success = false;
         try {
             commitIndexWriter(writer, translog);
             success = true;
@@ -290,12 +281,14 @@ public class InternalEngine extends Engine {
         }
     }
 
+    
     @Override
     public GetResult get(Get get) throws EngineException {
+        /*
         try (ReleasableLock lock = readLock.acquire()) {
             ensureOpen();
             if (get.realtime()) {
-                VersionValue versionValue = versionMap.getUnderLock(get.uid().bytes());
+                //VersionValue versionValue = versionMap.getUnderLock(get.uid().bytes());
                 if (versionValue != null) {
                     if (versionValue.delete()) {
                         return GetResult.NOT_EXISTS;
@@ -314,8 +307,11 @@ public class InternalEngine extends Engine {
             // no version, get the version from the index, we know that we refresh on flush
             return getFromSearcher(get);
         }
+        */
+        return null;
     }
-
+    
+    
     @Override
     public void create(Create create) throws EngineException {
         try (ReleasableLock lock = readLock.acquire()) {
@@ -332,10 +328,12 @@ public class InternalEngine extends Engine {
             maybeFailEngine("create", t);
             throw new CreateFailedEngineException(shardId, create.type(), create.id(), t);
         }
-        checkVersionMapRefresh();
+        //checkVersionMapRefresh();
     }
 
     private void innerCreate(Create create) throws IOException {
+        innerCreateNoLock(create, Versions.NOT_FOUND, null);
+        /*
         if (engineConfig.isOptimizeAutoGenerateId() && create.autoGeneratedId() && !create.canHaveDuplicates()) {
             // We don't need to lock because this ID cannot be concurrently updated:
             innerCreateNoLock(create, Versions.NOT_FOUND, null);
@@ -357,11 +355,13 @@ public class InternalEngine extends Engine {
                 innerCreateNoLock(create, currentVersion, versionValue);
             }
         }
+        */
     }
 
     private void innerCreateNoLock(Create create, long currentVersion, VersionValue versionValue) throws IOException {
 
         // same logic as index
+        /*
         long updatedVersion;
         long expectedVersion = create.version();
         if (create.versionType().isVersionConflictForWrites(currentVersion, expectedVersion)) {
@@ -392,6 +392,7 @@ public class InternalEngine extends Engine {
                  * To avoid this we have to make sure that the index request is treated as an update and set updatedVersion to 1.
                  * See also discussion on https://github.com/elasticsearch/elasticsearch/pull/9125
                  */
+        /*
                 doUpdate = true;
                 updatedVersion = 1;
             } else {
@@ -420,6 +421,14 @@ public class InternalEngine extends Engine {
 
         versionMap.putUnderLock(create.uid().bytes(), new VersionValue(updatedVersion, translogLocation));
         create.setTranslogLocation(translogLocation);
+        */
+        
+        if (create.docs().size() > 1) {
+            indexWriter.updateDocuments(create.uid(), create.docs());
+        } else {
+            indexWriter.updateDocument(create.uid(), create.docs().get(0));
+        }
+        
         indexingService.postCreateUnderLock(create);
     }
 
@@ -440,13 +449,14 @@ public class InternalEngine extends Engine {
             maybeFailEngine("index", t);
             throw new IndexFailedEngineException(shardId, index.type(), index.id(), t);
         }
-        checkVersionMapRefresh();
+        //checkVersionMapRefresh();
         return created;
     }
 
     /**
      * Forces a refresh if the versionMap is using too much RAM
      */
+    /*
     private void checkVersionMapRefresh() {
         if (versionMap.ramBytesUsedForRefresh() > config().getVersionMapSize().bytes() && versionMapRefreshPending.getAndSet(true) ==
                 false) {
@@ -471,9 +481,11 @@ public class InternalEngine extends Engine {
             }
         }
     }
-
+    */
+    
     private boolean innerIndex(Index index) throws IOException {
         try (Releasable ignored = acquireLock(index.uid())) {
+        /*
             final long currentVersion;
             VersionValue versionValue = versionMap.getUnderLock(index.uid().bytes());
             if (versionValue == null) {
@@ -522,11 +534,19 @@ public class InternalEngine extends Engine {
             }
             //Translog.Location translogLocation = translog.add(new Translog.Index(index));
             Translog.Location translogLocation = translog.add(null);
+         
             
             versionMap.putUnderLock(index.uid().bytes(), new VersionValue(updatedVersion, translogLocation));
             index.setTranslogLocation(translogLocation);
+            */
+        
+            if (index.docs().size() > 1) {
+                indexWriter.updateDocuments(index.uid(), index.docs());
+            } else {
+                indexWriter.updateDocument(index.uid(), index.docs().get(0));
+            }
             indexingService.postIndexUnderLock(index);
-            return created;
+            return true;
         }
     }
 
@@ -542,20 +562,23 @@ public class InternalEngine extends Engine {
         }
 
         maybePruneDeletedTombstones();
-        checkVersionMapRefresh();
+        //checkVersionMapRefresh();
     }
 
     private void maybePruneDeletedTombstones() {
         // It's expensive to prune because we walk the deletes map acquiring dirtyLock for each uid so we only do it
         // every 1/4 of gcDeletesInMillis:
+        /*
         if (engineConfig.isEnableGcDeletes() && engineConfig.getThreadPool().estimatedTimeInMillis() - lastDeleteVersionPruneTimeMSec >
                 engineConfig.getGcDeletesInMillis() * 0.25) {
             pruneDeletedTombstones();
         }
+        */
     }
 
     private void innerDelete(Delete delete) throws IOException {
         try (Releasable ignored = acquireLock(delete.uid())) {
+            /*
             final long currentVersion;
             VersionValue versionValue = versionMap.getUnderLock(delete.uid().bytes());
             if (versionValue == null) {
@@ -597,6 +620,8 @@ public class InternalEngine extends Engine {
             versionMap.putUnderLock(delete.uid().bytes(), new DeleteVersionValue(updatedVersion, engineConfig.getThreadPool()
                     .estimatedTimeInMillis(), translogLocation));
             delete.setTranslogLocation(translogLocation);
+            */
+            indexWriter.deleteDocuments(delete.uid());
             indexingService.postDeleteUnderLock(delete);
         }
     }
@@ -664,7 +689,7 @@ public class InternalEngine extends Engine {
         // We check for pruning in each delete request, but we also prune here e.g. in case a delete burst comes in and then no more deletes
         // for a long time:
         maybePruneDeletedTombstones();
-        versionMapRefreshPending.set(false);
+        //versionMapRefreshPending.set(false);
         mergeScheduler.refreshConfig();
     }
 
@@ -785,7 +810,7 @@ public class InternalEngine extends Engine {
         long timeMSec = engineConfig.getThreadPool().estimatedTimeInMillis();
 
         // TODO: not good that we reach into LiveVersionMap here; can we move this inside VersionMap instead?  problem is the dirtyLock...
-
+        /*
         // we only need to prune the deletes map; the current/old version maps are cleared on refresh:
         for (Map.Entry<BytesRef, VersionValue> entry : versionMap.getAllTombstones()) {
             BytesRef uid = entry.getKey();
@@ -801,7 +826,7 @@ public class InternalEngine extends Engine {
                 }
             }
         }
-
+        */
         lastDeleteVersionPruneTimeMSec = timeMSec;
     }
 
@@ -918,7 +943,7 @@ public class InternalEngine extends Engine {
 
     @Override
     protected final void writerSegmentStats(SegmentsStats stats) {
-        stats.addVersionMapMemoryInBytes(versionMap.ramBytesUsed());
+        stats.addVersionMapMemoryInBytes(0);
         stats.addIndexWriterMemoryInBytes(indexWriter.ramBytesUsed());
         stats.addIndexWriterMaxMemoryInBytes((long) (indexWriter.getConfig().getRAMBufferSizeMB() * 1024 * 1024));
     }
@@ -960,7 +985,7 @@ public class InternalEngine extends Engine {
             assert rwl.isWriteLockedByCurrentThread() || failEngineLock.isHeldByCurrentThread() : "Either the write lock must be held or " +
                     "the engine must be currently be failing itself";
             try {
-                this.versionMap.clear();
+                //this.versionMap.clear();
                 try {
                     IOUtils.close(searcherManager);
                 } catch (Throwable t) {
@@ -1007,9 +1032,12 @@ public class InternalEngine extends Engine {
     }
 
     private long loadCurrentVersionFromIndex(Term uid) throws IOException {
+        return 1; // version is always 1 for version less engine.
+        /*
         try (final Searcher searcher = acquireSearcher("load_version", false)) {
             return Versions.loadVersion(searcher.reader(), uid);
         }
+        */
     }
 
     private IndexWriter createWriter(boolean create) throws IOException {
@@ -1253,7 +1281,7 @@ public class InternalEngine extends Engine {
         mergeScheduler.refreshConfig();
         updateIndexWriterSettings();
         // config().getVersionMapSize() may have changed:
-        checkVersionMapRefresh();
+        //checkVersionMapRefresh();
         // config().isEnableGcDeletes() or config.getGcDeletesInMillis() may have changed:
         maybePruneDeletedTombstones();
     }

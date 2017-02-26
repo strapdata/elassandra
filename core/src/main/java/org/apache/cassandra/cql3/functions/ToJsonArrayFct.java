@@ -23,11 +23,15 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.ListType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
+/**
+ * CQL toJsonArray function. 
+ * @author vroyer
+ *
+ */
 public class ToJsonArrayFct extends NativeScalarFunction
 {
     public static final FunctionName NAME = FunctionName.nativeFunction("tojsonarray");

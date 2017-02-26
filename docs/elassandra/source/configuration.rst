@@ -45,10 +45,10 @@ Elasticsearch configuration rely on cassandra configuration file **conf/cassandr
 
 Node role (master, primary, data) is automatically set by elassandra, standard configuration should only set **cluster_name**, **rpc_address** in the ``conf/cassandra.yaml``.
 
-..TIP::
-
+.. CAUTION::
    If you use the `GossipPropertyFile <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureSnitchGossipPF_c.html>'_  Snitch to configure your cassandra datacenter and rack properties in **conf/cassandra-rackdc.properties**, keep
-   in mind this snitch falls back to the PropertyFileSnitch when gossip is not enabled. So, when starting a node, dead nodes can appear in the default DC and rack configured in **conf/cassandra-topologies.properties**.
+   in mind this snitch falls back to the PropertyFileSnitch when gossip is not enabled. So, when re-starting the first node, dead nodes can appear in the default DC and rack configured in **conf/cassandra-topology.properties**. This also
+   breaks the replica placement strategy and the computation of the Elasticsearch routing tables. So it is strongly recommended to set the same default rack and datacenter in both the **conf/cassandra-topology.properties** and **conf/cassandra-rackdc.properties**.
 
 
 Logging configuration
@@ -57,7 +57,7 @@ Logging configuration
 The cassandra logs in ``logs/system.log`` includes elasticsearch logs according to the your ``conf/logback.conf`` settings.
 See `cassandra logging configuration <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configLoggingLevels_r.html>`_.
 
-Per keyspace (or per table logging) level can be configured using the logger name ``org.elassandra.index.ExtendedElasticSecondaryIndex.<keyspace>.<table>``.
+Per keyspace (or per table) logging level can be configured using the logger name ``org.elassandra.index.ExtendedElasticSecondaryIndex.<keyspace>.<table>``.
 
 
 Multi datacenter configuration

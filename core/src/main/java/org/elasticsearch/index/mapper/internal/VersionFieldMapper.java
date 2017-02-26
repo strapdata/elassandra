@@ -131,19 +131,23 @@ public class VersionFieldMapper extends MetadataFieldMapper {
         super.parse(context);
     }
 
+    // allocate only once the default version values.
+    private final static Field DEFAULT_VERSION = new NumericDocValuesField(VersionFieldMapper.NAME, -1L);
+    private final static Field DEFAULT_NESTED_VERSION = new NumericDocValuesField(NAME, 1L);
+
     @Override
     public void createField(ParseContext context, Object value) throws IOException {
-        final Field version = new NumericDocValuesField(NAME, -1L);
-        context.version(version);
-        context.doc().add(version);
+        //final Field version = new NumericDocValuesField(NAME, -1L);
+        context.version(DEFAULT_VERSION);
+        context.doc().add(DEFAULT_VERSION);
     }
     
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         // see InternalEngine.updateVersion to see where the real version value is set
-        final Field version = new NumericDocValuesField(NAME, -1L);
-        context.version(version);
-        fields.add(version);
+        //final Field version = new NumericDocValuesField(NAME, -1L);
+        context.version(DEFAULT_VERSION);
+        fields.add(DEFAULT_VERSION);
     }
 
     @Override
@@ -152,13 +156,14 @@ public class VersionFieldMapper extends MetadataFieldMapper {
         return null;
     }
 
+    
     @Override
     public void postParse(ParseContext context) throws IOException {
         // In the case of nested docs, let's fill nested docs with version=1 so that Lucene doesn't write a Bitset for documents
         // that don't have the field. This is consistent with the default value for efficiency.
         for (int i = 1; i < context.docs().size(); i++) {
             final Document doc = context.docs().get(i);
-            doc.add(new NumericDocValuesField(NAME, 1L));
+            doc.add(DEFAULT_NESTED_VERSION);
         }
     }
 
@@ -168,7 +173,7 @@ public class VersionFieldMapper extends MetadataFieldMapper {
         // that don't have the field. This is consistent with the default value for efficiency.
         for (int i = 1; i < context.docs().size(); i++) {
             final Document doc = context.docs().get(i);
-            doc.add(new NumericDocValuesField(NAME, 1L));
+            doc.add(DEFAULT_NESTED_VERSION);
         }
     }
     

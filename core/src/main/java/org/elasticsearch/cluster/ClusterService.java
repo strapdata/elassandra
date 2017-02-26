@@ -341,8 +341,6 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     
     public Engine.GetResult fetchSourceInternal(String ksName, String index, String type, String id) throws IOException;
     
-    public Map<BytesRef, Query> loadQueries(final IndexService indexService,  PercolatorQueriesRegistry percolator);
-    
     public Map<String, Object> rowAsMap(final String index, final String type, UntypedResultSet.Row row) throws IOException;
     public int rowAsMap(final String index, final String type, UntypedResultSet.Row row, Map<String, Object> map) throws IOException;
     public Object[] rowAsArray(final String index, final String type, UntypedResultSet.Row row) throws IOException;
@@ -356,16 +354,8 @@ public interface ClusterService extends LifecycleComponent<ClusterService> {
     public BytesReference source(DocumentMapper docMapper, Map sourceAsMap, String index, Uid uid) throws JsonParseException, JsonMappingException, IOException;
     public BytesReference source(DocumentMapper docMapper, Map sourceAsMap, String index, String type, String id) throws JsonParseException, JsonMappingException, IOException;
      
-    public void index(String[] indices, Collection<Range<Token>> tokenRanges);
-
-    //public void index(String index, String type, String id, Object[] sourceData);
-
-    public void blockingMappingUpdate(IndexService indexService, String type, String source) throws Exception;
     
-    /*
-    public Token getToken(ByteBuffer rowKey, ColumnFamily cf);
-    public Token getToken(String index, String type, String routing) throws JsonParseException, JsonMappingException, IOException;
-    */
+    public void blockingMappingUpdate(IndexService indexService, String type, String source) throws Exception;
     
     public boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Collection<Range<Token>> requestTokenRange);
     public boolean tokenRangesContains(Collection<Range<Token>> shardTokenRanges, Token token);

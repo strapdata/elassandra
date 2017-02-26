@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Vincent Royer (vroyer@vroyer.org).
+ * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
+ * Contains some code from Elasticsearch (http://www.elastic.co)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -25,11 +26,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.dht.Murmur3Partitioner.LongToken;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.locator.AbstractReplicationStrategy;
+import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 import org.elasticsearch.cluster.ClusterState;
@@ -46,8 +50,10 @@ import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.shard.ShardId;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Multimap;
 
 /**
  * Only support Murmur3 Long Token.
@@ -75,13 +81,16 @@ public abstract class AbstractSearchStrategy {
         final long version;
         final DiscoveryNode localNode;
         final Map<UUID, ShardRoutingState> shardStates;
-        protected Map<Range<Token>, List<InetAddress>> rangeToEndpointsMap; // range to endpoints map
-        protected Map<Token, List<InetAddress>> tokenToEndpointsMap;
+        
+        protected Multimap<Token,DiscoveryNode> tokenToNodes = ArrayListMultimap.create();
         protected Map<DiscoveryNode, BitSet> greenShards;            // available   node to bitset of ranges => started primary.
         protected Map<DiscoveryNode, BitSet> redShards;            // unavailable node to bitset of orphan ranges => unassigned primary
         protected List<DiscoveryNode> yellowShards;                 // unassigned replica
         protected List<Token> tokens;
         protected boolean isConsistent = true;
+
+        protected final TokenMetadata metadata;
+        protected final AbstractReplicationStrategy strategy;
         
         public Router(final String index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) 
         {
@@ -91,37 +100,22 @@ public abstract class AbstractSearchStrategy {
             this.localNode = clusterState.nodes().localNode();
             this.shardStates = shardStates;
             
-            if (Keyspace.isInitialized() && StorageService.instance.isJoined()) 
+            if (Keyspace.isInitialized() && StorageService.instance.isJoined()) {
                 // only available when keyspaces are initialized and node joined
-                this.rangeToEndpointsMap = StorageService.instance.getRangeToAddressMapInLocalDC(ksName);
-            
-            if (this.rangeToEndpointsMap == null || rangeToEndpointsMap.isEmpty())
-                // keyspace not yet available or map empty, but generates a fake routing table for local shard, in order to makes C* 2i ready to index.
-                this.rangeToEndpointsMap = ImmutableMap.<Range<Token>, List<InetAddress>>of(FULL_RANGE_TOKEN, Collections.singletonList(localNode.getInetAddress()));
-            
-            this.tokenToEndpointsMap = new HashMap<Token, List<InetAddress>>();
-            Range<Token> wrappedAround = null;        
-            for(Range<Token> rt : rangeToEndpointsMap.keySet()) {
-                if (rt.isWrapAround()) {
-                    wrappedAround = rt;
-                } else {
-                    tokenToEndpointsMap.put(rt.right, rangeToEndpointsMap.get(rt));
+                //this.rangeToEndpointsMap = StorageService.instance.getRangeToAddressMapInLocalDC(ksName);
+                this.strategy = Keyspace.open(ksName).getReplicationStrategy();
+                this.metadata = StorageService.instance.getTokenMetadata().cloneOnlyTokenMap();
+                for(DiscoveryNode node : clusterState.nodes()) {
+                    for(Token token : this.metadata.getTokens(node.getInetAddress())) 
+                        this.tokenToNodes.put(token, node);
                 }
-            }
-            if (wrappedAround != null) {
-                List<InetAddress> endpoints =  this.rangeToEndpointsMap.remove(wrappedAround);
-                Range<Token> range1 = new Range<Token>(new LongToken((Long) wrappedAround.left.getTokenValue()), TOKEN_MAX);
-                Range<Token> range2 = new Range<Token>(TOKEN_MIN, new LongToken((Long) wrappedAround.right.getTokenValue()));
-                this.rangeToEndpointsMap.put( range1 , endpoints );
-                this.rangeToEndpointsMap.put( range2 , endpoints );
-                this.tokenToEndpointsMap.put(range1.right, endpoints);
-                this.tokenToEndpointsMap.put(range2.right, endpoints);
+            } else {
+                this.strategy = null;
+                this.metadata = null;
+                this.tokenToNodes.put(TOKEN_MAX, localNode);
             }
             
-            if (logger.isTraceEnabled())
-                logger.trace("index=[{}] keyspace=[{}] rangeToEndpointsMap={} tokenToEndpointsMap={}", index, ksName, this.rangeToEndpointsMap, tokenToEndpointsMap);
-
-            this.tokens = new ArrayList<Token>(tokenToEndpointsMap.keySet());
+            this.tokens = new ArrayList<Token>(this.tokenToNodes.keys());
             Collections.sort(tokens);
             if (logger.isTraceEnabled())
                 logger.trace("index=[{}] keyspace=[{}] ordered tokens={}",index, ksName, this.tokens);
@@ -134,7 +128,7 @@ public abstract class AbstractSearchStrategy {
 
                 // greenshard = available node -> token range bitset, 
                 boolean orphanRange = true;
-                for(InetAddress endpoint : tokenToEndpointsMap.get(token)) {
+                for(InetAddress endpoint :  (this.metadata == null) ? Collections.singletonList(localNode.getInetAddress()) : this.strategy.calculateNaturalEndpoints(token, this.metadata)) {
                     UUID uuid = StorageService.instance.getHostId(endpoint);
                     DiscoveryNode node =  (uuid == null) ? clusterState.nodes().findByInetAddress(endpoint) : clusterState.nodes().get(uuid.toString());
                     assert node != null : "Cannot find node with ip = " + endpoint ;
@@ -148,22 +142,19 @@ public abstract class AbstractSearchStrategy {
                         bs.set(i);
                     }
                 }
+                
                 // redshards = unavailable node->token range bitset, 
                 if (orphanRange) {
                     isConsistent = false;
                     if (redShards == null) 
                         redShards = new HashMap<DiscoveryNode, BitSet>();
-                    for(InetAddress endpoint : tokenToEndpointsMap.get(token)) {
-                        UUID uuid = StorageService.instance.getHostId(endpoint);
-                        DiscoveryNode node =  (uuid == null) ? clusterState.nodes().findByInetAddress(endpoint) : clusterState.nodes().get(uuid.toString());
-                        if (node != null) {
-                            BitSet bs = redShards.get(node);
-                            if (bs == null) {
-                                bs = new BitSet(tokens.size() - 1);
-                                redShards.put(node, bs);
-                            }
-                            bs.set(i);
+                    for(DiscoveryNode node : tokenToNodes.get(token)) {
+                        BitSet bs = redShards.get(node);
+                        if (bs == null) {
+                            bs = new BitSet(tokens.size() - 1);
+                            redShards.put(node, bs);
                         }
+                        bs.set(i);
                     }
                 }
                 i++;
@@ -171,13 +162,16 @@ public abstract class AbstractSearchStrategy {
             
             // yellow shards = unavailable nodes hosting token range available somewhere else in greenShards.
             for(DiscoveryNode node : clusterState.nodes()) {
-                if (this.greenShards.get(node) == null && (this.redShards == null || this.redShards.get(node)==null)) {
+                if (!this.greenShards.containsKey(node) && (this.redShards == null || !this.redShards.containsKey(node))) {
                     if (this.yellowShards == null) {
                         this.yellowShards  = new ArrayList<DiscoveryNode>();
                     }
                     this.yellowShards.add(node);
                 }
             }
+            
+            if (logger.isTraceEnabled())
+                logger.trace("index=[{}] keyspace=[{}] isConsistent={} greenShards={} redShards={} yellowShards={}",index, ksName, this.isConsistent, this.greenShards, this.redShards, this.yellowShards);
         }
         
         public abstract Route newRoute(@Nullable String preference, TransportAddress src);
@@ -192,7 +186,6 @@ public abstract class AbstractSearchStrategy {
         }
         
         public Collection<Range<Token>> getTokenRanges(BitSet bs) {
-            logger.trace("tokens={} bitset={}", tokens, bs);
             List<Range<Token>> l = new ArrayList<Range<Token>>();
             int i = 0;
             while (i >= 0 && i < bs.length()) {

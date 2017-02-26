@@ -33,6 +33,7 @@ import org.elasticsearch.action.support.replication.TransportReplicationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
@@ -133,7 +134,28 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
     }
 
     protected void innerExecute(Task task, final IndexRequest request, final ActionListener<IndexResponse> listener) {
-        super.doExecute(task, request, listener);
+        try {
+            final ClusterState state = clusterService.state();
+            ClusterBlockException blockException = state.blocks().globalBlockedException(globalBlockLevel());
+            if (blockException != null)
+                throw blockException;
+           
+            final String concreteIndex = resolveIndex() ? indexNameExpressionResolver.concreteSingleIndex(state, request) : request.index();
+            blockException = state.blocks().indexBlockedException(indexBlockLevel(), concreteIndex);
+            if (blockException != null)
+                throw blockException;
+            
+            // request does not have a shardId yet, we need to pass the concrete index to resolve shardId
+            resolveRequest(state.metaData(), concreteIndex, request);
+            
+            clusterService.insertDocument(indicesService, request, state.metaData().index(concreteIndex));
+            request.versionType(request.versionType().versionTypeForReplicationAndRecovery());
+            IndexResponse response = new IndexResponse(concreteIndex, request.type(), request.id(), new Long(1), true);
+            response.setShardInfo(clusterService.shardInfo(concreteIndex, request.consistencyLevel().toCassandraConsistencyLevel()));
+            listener.onResponse(response);
+        } catch (Exception e) {
+            listener.onFailure(e);
+        }
     }
 
     @Override

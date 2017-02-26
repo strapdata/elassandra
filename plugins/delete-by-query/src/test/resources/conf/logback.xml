@@ -58,19 +58,16 @@
 
   <logger name="org.elassandra.cluster" level="TRACE" />
   <logger name="org.elassandra.index" level="TRACE" />
-  <logger name="org.elassandra.index" level="DEBUG" />
-  <logger name="org.elassandra.index.shard" level="DEBUG" />
-  <logger name="org.elassandra.shard" level="DEBUG" />
-  
-  <!--
-  <logger name="org.elassandra.cluster.routing" level="DEBUG" />
-    -->
+  <logger name="org.elassandra.index.shard" level="WARN" />
+
+  <logger name="org.elasticsearch.action.deletebyquery" level="TRACE" />
+  <logger name="org.elasticsearch.action.bulk" level="TRACE" />
     
   <logger name="org.elasticsearch" level="WARN" />
   <logger name="org.elasticsearch.http" level="WARN"/>
   <logger name="org.elasticsearch.transport" level="WARN"/>
 
-  <root level="WARN">
+  <root level="DEBUG">
     <appender-ref ref="FILE" />
     <!--<appender-ref ref="STDOUT" />-->
   </root>

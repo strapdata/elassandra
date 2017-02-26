@@ -33,6 +33,7 @@ import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.CollectionSerializer;
+import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.ListSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.slf4j.Logger;
@@ -59,7 +60,7 @@ public class ListType<T> extends CollectionType<List<T>>
         return getInstance(l.get(0), true);
     }
     
-    public static  <T> ListType<T> getInstance(AbstractType<T> elements, final Boolean isMultiCell)
+    public static <T> ListType<T> getInstance(AbstractType<T> elements, final Boolean isMultiCell)
     {
         ConcurrentMap<AbstractType<?>, ListType> internMap = isMultiCell ? instances : frozenInstances;
         ListType<T> t = internMap.get(elements);
