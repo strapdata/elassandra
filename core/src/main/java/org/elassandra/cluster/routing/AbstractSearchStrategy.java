@@ -92,7 +92,7 @@ public abstract class AbstractSearchStrategy {
         protected final TokenMetadata metadata;
         protected final AbstractReplicationStrategy strategy;
         
-        public Router(final String index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) 
+        public Router(final String index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState, boolean includeReplica) 
         {
             this.index = index;
             this.ksName = ksName;
@@ -112,10 +112,10 @@ public abstract class AbstractSearchStrategy {
             } else {
                 this.strategy = null;
                 this.metadata = null;
-                this.tokenToNodes.put(TOKEN_MAX, localNode);
             }
             
             this.tokens = new ArrayList<Token>(this.tokenToNodes.keys());
+            this.tokens.add(TOKEN_MAX);
             Collections.sort(tokens);
             if (logger.isTraceEnabled())
                 logger.trace("index=[{}] keyspace=[{}] ordered tokens={}",index, ksName, this.tokens);
@@ -132,14 +132,18 @@ public abstract class AbstractSearchStrategy {
                     UUID uuid = StorageService.instance.getHostId(endpoint);
                     DiscoveryNode node =  (uuid == null) ? clusterState.nodes().findByInetAddress(endpoint) : clusterState.nodes().get(uuid.toString());
                     assert node != null : "Cannot find node with ip = " + endpoint ;
-                    if (node != null && ShardRoutingState.STARTED.equals(shardStates.get(node.uuid()))) {
-                        orphanRange = false;
-                        BitSet bs = greenShards.get(node);
-                        if (bs == null) {
-                            bs = new BitSet(tokens.size() - 1);
-                            greenShards.put(node, bs);
+                    if (node != null) {
+                        if (ShardRoutingState.STARTED.equals(shardStates.get(node.uuid()))) {
+                            orphanRange = false;
+                            BitSet bs = greenShards.get(node);
+                            if (bs == null) {
+                                bs = new BitSet(tokens.size() - 1);
+                                greenShards.put(node, bs);
+                            }
+                            bs.set(i);
+                            if (!includeReplica)
+                                break;
                         }
-                        bs.set(i);
                     }
                 }
                 

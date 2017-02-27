@@ -2389,7 +2389,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     }
     
-    public static int defaultPrecisionStep = 8;
+    public static int defaultPrecisionStep = 16;
     public static Query newTokenRangeQuery(Collection<Range<Token>> tokenRanges) {
         Query tokenRangeQuery = null;
         if (tokenRanges != null) {

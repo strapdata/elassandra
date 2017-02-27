@@ -49,7 +49,7 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
         Route route;
         
         public PrimaryFirstRouter(final String index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-            super(index, ksName, shardStates, clusterState);
+            super(index, ksName, shardStates, clusterState, false);
             
             if (!StorageService.instance.isJoined() || !Keyspace.isInitialized()) {
                 // temporary fake routing table in order to start local shards before cassandra services.
@@ -63,22 +63,6 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
                     }
                 };
                 return;
-            }
-            
-            // clear replica ranges from bitset of greenShards.
-            for(DiscoveryNode node : greenShards.keySet()) {
-                for(Range<Token> primaryRange : StorageService.instance.getPrimaryRangeForEndpointWithinDC(ksName, node.getInetAddress())) {
-                    int rightTokenIndex = this.tokens.indexOf(primaryRange.right);
-                    if (logger.isTraceEnabled())
-                        logger.trace("primaryRange={} idx={} wrapped={}", primaryRange, rightTokenIndex, primaryRange.isWrapAround());
-                    
-                    if (primaryRange.isWrapAround()) 
-                        // remove the higher token even if the current token belongs to another DC
-                        clearReplicaRange(node.getInetAddress(), this.tokens.size() - 1, TOKEN_MAX, clusterState);
-                    
-                    if (rightTokenIndex >= 0)
-                        clearReplicaRange(node.getInetAddress(), rightTokenIndex, primaryRange.right, clusterState);
-                }
             }
             
             if (logger.isTraceEnabled())

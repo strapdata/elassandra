@@ -44,7 +44,7 @@ public class RandomSearchStrategy extends AbstractSearchStrategy {
         Random rnd = new Random();
         
         public RandomRouter(final String index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-            super(index, ksName, shardStates, clusterState);
+            super(index, ksName, shardStates, clusterState, true);
         }
         
         @Override
