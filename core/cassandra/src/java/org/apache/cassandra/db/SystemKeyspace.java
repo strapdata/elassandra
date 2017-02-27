@@ -167,6 +167,7 @@ public final class SystemKeyspace
                 + "thrift_version text,"
                 + "tokens set<varchar>,"
                 + "truncated_at map<uuid, blob>,"
+                + "workload text,"
                 + "PRIMARY KEY ((key)))");
 
     private static final CFMetaData Peers =
@@ -182,6 +183,7 @@ public final class SystemKeyspace
                 + "rpc_address inet,"
                 + "schema_version uuid,"
                 + "tokens set<varchar>,"
+                + "workload text,"
                 + "PRIMARY KEY ((peer)))");
 
     private static final CFMetaData PeerEvents =
