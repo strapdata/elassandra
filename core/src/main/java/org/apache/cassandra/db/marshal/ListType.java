@@ -18,11 +18,7 @@
 package org.apache.cassandra.db.marshal;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -35,7 +31,7 @@ import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.ListSerializer;
-import org.apache.cassandra.serializers.MarshalException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,11 +61,7 @@ public class ListType<T> extends CollectionType<List<T>>
         ConcurrentMap<AbstractType<?>, ListType> internMap = isMultiCell ? instances : frozenInstances;
         ListType<T> t = internMap.get(elements);
         if (t == null)
-        {
-            t = new ListType<T>(elements, isMultiCell);
-            ListType<T> t2 = internMap.putIfAbsent(elements, t);
-            t = (t2 == null) ? t : t2;
-        }
+            t = internMap.computeIfAbsent(elements, K -> new ListType<>(K, isMultiCell) );
         return t;
     }
 

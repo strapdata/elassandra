@@ -18,8 +18,10 @@ package org.elassandra;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
@@ -28,6 +30,7 @@ import java.util.UUID;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.TupleType;
+import org.apache.cassandra.service.StorageService;
 import org.elassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.geo.GeoPoint;
@@ -35,6 +38,8 @@ import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
+
+import com.google.common.net.InetAddresses;
 
 /**
  * Elassandra CQL types mapping tests.
@@ -112,6 +117,89 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(fields.get("c8"),equalTo(false));
     }
 
+    // mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testSinglePkTypesTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    @Test
+    public void testSinglePkTypesTest() throws Exception {
+        createIndex("ks1");
+        ensureGreen("ks1");
+        
+        String[] types = new String[] { "text","int","bigint","double","float","boolean","blob","timestamp","inet","uuid" };
+        Object[] values = new Object[] { "foo",1,2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID() };
+        for(int i=0; i < types.length; i++) {
+            String type = types[i];
+            Object value = values[i];
+            System.out.println("insert pk type="+type);
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"CREATE TABLE ks1.t%s (pk%s %s PRIMARY KEY, v text)", type, type, type));
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"INSERT INTO ks1.t%s (pk%s, v) VALUES (?, 'foobar')", type, type), value);
+        }
+        
+        // flush for rebuild_index
+        StorageService.instance.forceKeyspaceFlush("ks1");
+        for(int i=0; i < types.length; i++) {
+            String type = types[i];
+            System.out.println("discover pk type="+type);
+            assertAcked(client().admin().indices()
+                    .preparePutMapping("ks1")
+                    .setType(String.format(Locale.ROOT,"t%s",type))
+                    .setSource(String.format(Locale.ROOT,"{ \"t%s\" : { \"discover\" : \".*\" }}",type)).get());
+        }
+        
+        // search
+        Thread.sleep(2000);
+        for(int i=0; i < types.length; i++) {
+            String type = types[i];
+            System.out.println("search pk type="+type);
+        
+            assertThat(client().prepareSearch()
+                    .setIndices("ks1")
+                    .setTypes(String.format(Locale.ROOT,"t%s",type))
+                    .setQuery(QueryBuilders.queryStringQuery("*:*"))
+                    .get().getHits().getTotalHits(), equalTo(1L));
+        }
+    }
+    
+    // mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testCompoundPkTypesTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    @Test
+    public void testCompoundPkTypesTest() throws Exception {
+        createIndex("ks2");
+        ensureGreen("ks2");
+        
+        String[] types = new String[] { "text", "int","bigint","double","float","boolean","blob","timestamp","inet","uuid" };
+        Object[] values = new Object[] { "foo", 1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID() };
+        int randomCk = this.randomInt(types.length);
+        int randomVal= this.randomInt(types.length);
+        for(int i=0; i < types.length; i++) {
+            String type = types[i];
+            System.out.println("insert pk type="+type);
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"CREATE TABLE ks2.t%s (pk%s %s, ck %s, v %s, PRIMARY KEY (pk%s,ck))", type, type, type, types[randomCk], types[randomVal], type));
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"INSERT INTO ks2.t%s (pk%s, ck, v) VALUES (?, ?, ?)", type, type), values[i], values[randomCk], values[randomVal]);
+        }
+        
+        // flush for rebuild_index
+        StorageService.instance.forceKeyspaceFlush("ks2");
+        for(int i=0; i < types.length; i++) {
+            String type = types[i];
+            System.out.println("discover pk type="+type);
+            assertAcked(client().admin().indices()
+                    .preparePutMapping("ks2")
+                    .setType(String.format(Locale.ROOT,"t%s",type))
+                    .setSource(String.format(Locale.ROOT,"{ \"t%s\" : { \"discover\" : \".*\" }}",type)).get());
+        }
+        
+        // search
+        Thread.sleep(2000);
+        for(int i=0; i < types.length; i++) {
+            String type = types[i];
+            System.out.println("search pk type="+type);
+        
+            assertThat(client().prepareSearch()
+                    .setIndices("ks2")
+                    .setTypes(String.format(Locale.ROOT,"t%s",type))
+                    .setQuery(QueryBuilders.queryStringQuery("*:*"))
+                    .get().getHits().getTotalHits(), equalTo(1L));
+        }
+    }
+    
     @Test
     public void testTextGeohashMapping() throws Exception {
         createIndex("test");

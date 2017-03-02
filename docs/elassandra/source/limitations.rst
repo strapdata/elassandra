@@ -111,6 +111,11 @@ When such a modification occurs, Elassandra keeps this change in memory to corre
 
 Morever, Cassandra table names are limited to 48 caraters, so Elasticsearch type names are also limted to 48 caraters.
 
+Column names
+------------
+
+For Elasticsearch, field mapping is unique in an index. So, two columns having the same name, indexed in an index, should have the same CQL type and share the same Elasticsearch mapping.
+
 Elasticsearch unsupported feature
 ---------------------------------
 

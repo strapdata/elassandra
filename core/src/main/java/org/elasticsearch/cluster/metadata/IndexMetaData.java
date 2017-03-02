@@ -32,9 +32,10 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
+import org.apache.cassandra.utils.FBUtilities;
 import org.elassandra.cluster.InternalCassandraClusterService;
-import org.elassandra.cluster.routing.AbstractSearchStrategy;
-import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
+import org.elassandra.index.MessageFormatPartitionFunction;
+import org.elassandra.index.PartitionFunction;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.Diff;
@@ -187,6 +188,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public static final String SETTING_SECONDARY_INDEX_CLASS = "index.secondary_index_class"; 
     public static final String SETTING_SEARCH_STRATEGY_CLASS = "index.search_strategy_class"; 
     public static final String SETTING_PARTITION_FUNCTION = "index.partition_function"; 
+    public static final String SETTING_PARTITION_FUNCTION_CLASS = "index.partition_function_class"; 
     public static final String SETTING_INCLUDE_NODE_ID = "index.include_node_id"; 
     public static final String SETTING_SYNCHRONOUS_REFRESH = "index.synchronous_refresh"; 
     public static final String SETTING_DROP_ON_DELETE_INDEX = "index.drop_on_delete_index"; 
@@ -416,6 +418,11 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
             }
         }
         return null;
+    }
+    
+    public PartitionFunction partitionFunctionClass() {
+        String partFuncClass = getSettings().get(IndexMetaData.SETTING_PARTITION_FUNCTION_CLASS, MessageFormatPartitionFunction.class.getName());
+        return FBUtilities.instanceOrConstruct(partFuncClass, "PartitionFunction class used to generate index name from document fields");
     }
     
     public ImmutableOpenMap<String, AliasMetaData> getAliases() {

@@ -19,10 +19,9 @@ import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
 
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -84,25 +83,9 @@ import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.schema.ReplicationParams;
-import org.apache.cassandra.serializers.AsciiSerializer;
-import org.apache.cassandra.serializers.BooleanSerializer;
-import org.apache.cassandra.serializers.BytesSerializer;
 import org.apache.cassandra.serializers.CollectionSerializer;
-import org.apache.cassandra.serializers.DecimalSerializer;
-import org.apache.cassandra.serializers.DoubleSerializer;
-import org.apache.cassandra.serializers.EmptySerializer;
-import org.apache.cassandra.serializers.FloatSerializer;
-import org.apache.cassandra.serializers.Int32Serializer;
-import org.apache.cassandra.serializers.IntegerSerializer;
-import org.apache.cassandra.serializers.ListSerializer;
-import org.apache.cassandra.serializers.LongSerializer;
 import org.apache.cassandra.serializers.MapSerializer;
 import org.apache.cassandra.serializers.MarshalException;
-import org.apache.cassandra.serializers.SetSerializer;
-import org.apache.cassandra.serializers.TimeUUIDSerializer;
-import org.apache.cassandra.serializers.TimestampSerializer;
-import org.apache.cassandra.serializers.TypeSerializer;
-import org.apache.cassandra.serializers.UTF8Serializer;
 import org.apache.cassandra.serializers.UUIDSerializer;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
@@ -118,7 +101,6 @@ import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.util.BytesRef;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.map.JsonMappingException;
@@ -129,7 +111,6 @@ import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elassandra.index.ExtendedElasticSecondaryIndex;
 import org.elassandra.index.mapper.internal.NodeFieldMapper;
 import org.elassandra.index.mapper.internal.TokenFieldMapper;
-import org.elassandra.shard.CassandraShardStartedBarrier;
 import org.elasticsearch.ElasticsearchTimeoutException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
@@ -152,6 +133,7 @@ import org.elasticsearch.cluster.node.DiscoveryNodeService;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.InternalClusterService;
+import org.elasticsearch.common.Base64;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -211,7 +193,6 @@ import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
 import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
 import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
-import org.elasticsearch.index.percolator.PercolatorQueriesRegistry;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.indices.IndicesLifecycle;
@@ -225,12 +206,9 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.InetAddresses;
 
 
-
-/**
- *
- */
 public class InternalCassandraClusterService extends InternalClusterService {
 
     public static final String ELASTIC_ID_COLUMN_NAME = "_id";
@@ -262,7 +240,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
             .put("uuid", "string" )
             .put("timeuuid", "string" )
             .build();
-    
 
     public static Map<Class, String> mapperToCql = new java.util.HashMap<Class, String>() {
         {
@@ -305,7 +282,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
     private final DiscoveryService discoveryService;
     protected final MappingUpdatedAction mappingUpdatedAction;
     
-    public final static Class defaultSecondaryIndexClass = ExtendedElasticSecondaryIndex.class;
+    public final static Class<? extends Index> defaultSecondaryIndexClass = ExtendedElasticSecondaryIndex.class;
     
     protected final PrimaryFirstSearchStrategy primaryFirstSearchStrategy = new PrimaryFirstSearchStrategy();
     protected final Map<String, AbstractSearchStrategy> strategies = new ConcurrentHashMap<String, AbstractSearchStrategy>();
@@ -319,9 +296,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
     private final String selectMetadataQuery;
     private final String insertMetadataQuery;
     private final String updateMetaDataQuery;
-    
-    private CassandraShardStartedBarrier shardStateObserver = null;
-    
+        
     @Inject
     public InternalCassandraClusterService(Settings settings, DiscoveryService discoveryService, OperationRouting operationRouting, 
             TransportService transportService, NodeSettingsService nodeSettingsService,
@@ -463,7 +438,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
     
     /**
      * Don't use QueryProcessor.executeInternal, we need to propagate this on all nodes.
-     * 
      * @see org.elasticsearch.cassandra.ElasticSchemaService#createIndexKeyspace(java.lang.String, int)
      **/
     @Override
@@ -523,7 +497,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 }
             }
         } catch (Exception e) {
-            
         }
         return null;
     }
@@ -535,40 +508,54 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return keywordsPattern.matcher(identifier.toUpperCase(Locale.ROOT)).matches();
     }
     
-    public static String toJsonValue(Object o) {
+    private static Object toJsonValue(Object o) {
+        if (o instanceof UUID)
+            return o.toString();
         if (o instanceof Date)
-            return Long.toString( ((Date)o).getTime() );
-        if (o instanceof Integer)
-            return Integer.toString((Integer)o);
-        if (o instanceof Long)
-            return Long.toString((Long)o);
-        if (o instanceof Double)
-            return Double.toString((Double)o);
-        if (o instanceof Float)
-            return Float.toString((Float)o);
-        return o.toString();
+            return ((Date)o).getTime();
+        if (o instanceof ByteBuffer) {
+            // encode byte[] as Base64 encoded string
+            ByteBuffer bb = ByteBufferUtil.clone((ByteBuffer)o);
+            CharBuffer encoded = CharBuffer.allocate(4 * (bb.capacity()+2) / 3);
+            Base64.encode(bb, encoded);
+            encoded.position(0);
+            return encoded.toString();
+        }
+        if (o instanceof InetAddress)
+            return InetAddresses.toAddrString((InetAddress)o);
+        return o;
     }
     
+    // wrap string values with quotes
     private static String stringify(Object o) {
-        if (o instanceof String || o instanceof UUID)
-            return "\""+o+"\"";
-        return toJsonValue(o);
+        Object v = toJsonValue(o);
+        return v instanceof String ?  "\""+v+"\"" : v.toString();
     }
     
     public static String stringify(Object[] cols, int length) {
         if (cols.length == 1)
-            return toJsonValue(cols[0]);
+            return toJsonValue(cols[0]).toString();
         
         StringBuilder sb = new StringBuilder();
         sb.append("[");
         for(int i = 0; i < length; i++) {
             if (i > 0)
                 sb.append(",");
-            sb.append(stringify(cols[i]));
+            Object val = toJsonValue(cols[i]);
+            if (val instanceof String) {
+                sb.append('"').append(val).append('"');
+            } else {
+                sb.append(val);
+            }
         }
         return sb.append("]").toString();
     }
 
+    public static ByteBuffer fromString(AbstractType<?> atype, String v) throws IOException {
+        if (atype instanceof BytesType)
+            return ByteBuffer.wrap(Base64.decode(v));
+        return atype.fromString(v);
+    }
     
     public static void toXContent(XContentBuilder builder, Mapper mapper, String field, Object value) throws IOException {
         if (value instanceof Collection) {
@@ -1693,8 +1680,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return values;
     }
 
-    
-
     public static class BlockingActionListener implements ActionListener<ClusterStateUpdateResponse> {
         private final CountDownLatch latch = new CountDownLatch(1);
         private volatile Throwable error = null;
@@ -1723,7 +1708,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     }
 
-    
     @Override
     public void blockingMappingUpdate(IndexService indexService, String type, String source) throws Exception {
         BlockingActionListener mappingUpdateListener = new BlockingActionListener();
@@ -1743,7 +1727,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         upsertDocument(indicesService, request, indexMetaData, false);
     }
     
-    public void upsertDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation) throws Exception {
+    private void upsertDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation) throws Exception {
         final IndexService indexService = indicesService.indexServiceSafe(request.index());
         final IndexShard indexShard = indexService.shardSafe(0);
         
@@ -2002,9 +1986,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 AbstractType<?> atype = cd.type;
                 if (map == null) {
                     names[i] = cd.name.toString();
-                    values[i] = atype.compose( atype.fromString(elements[i].toString()) );
+                    values[i] = atype.compose( fromString(atype, elements[i].toString()) );
                 } else {
-                    map.put(cd.name.toString(), atype.compose( atype.fromString(elements[i].toString()) ) );
+                    map.put(cd.name.toString(), atype.compose( fromString(atype, elements[i].toString()) ) );
                 }
             }
             return (map != null) ? null : new DocPrimaryKey(names, values, (clusteringColumns.size() > 0 && elements.length == partitionColumns.size()) ) ;
@@ -2012,14 +1996,14 @@ public class InternalCassandraClusterService extends InternalClusterService {
             // _id is a single columns, parse its value.
             AbstractType<?> atype = partitionColumns.get(0).type;
             if (map == null) {
-                return new DocPrimaryKey( new String[] { partitionColumns.get(0).name.toString() } , new Object[] { atype.compose( atype.fromString(id) ) }, clusteringColumns.size() != 0);
+                return new DocPrimaryKey( new String[] { partitionColumns.get(0).name.toString() } , new Object[] { atype.compose(fromString(atype, id)) }, clusteringColumns.size() != 0);
             } else {
-                map.put(partitionColumns.get(0).name.toString(), atype.compose( atype.fromString(id) ) );
+                map.put(partitionColumns.get(0).name.toString(), atype.compose( fromString(atype, id) ) );
                 return null;
             }
         }
     }
-
+    
     public DocPrimaryKey parseElasticRouting(final String index, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
         IndexService indexService = indexServiceSafe(index);
         String ksName = indexService.settingsService().getSettings().get(IndexMetaData.SETTING_KEYSPACE,index);
@@ -2040,14 +2024,14 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 ColumnDefinition cd = partitionColumns.get(i);
                 AbstractType<?> atype = cd.type;
                 names[i] = cd.name.toString();
-                values[i] = atype.compose( atype.fromString(elements[i].toString()) );
+                values[i] = atype.compose( fromString(atype, elements[i].toString()) );
                 i++;
             }
             return new DocPrimaryKey(names, values) ;
         } else {
             // _id is a single columns, parse its value.
             AbstractType<?> atype = partitionColumns.get(0).type;
-            return new DocPrimaryKey( new String[] { partitionColumns.get(0).name.toString() } , new Object[] { atype.compose( atype.fromString(routing) ) });
+            return new DocPrimaryKey( new String[] { partitionColumns.get(0).name.toString() } , new Object[] { atype.compose( fromString(atype, routing) ) });
         }
     }
     
@@ -2268,20 +2252,6 @@ public class InternalCassandraClusterService extends InternalClusterService {
             }
         }
     }
-    
-    /*
-    private boolean checkConsistency(String ksName, ConsistencyLevel cl) {
-        Keyspace adminKeypsace = Schema.instance.getKeyspaceInstance(ksName);
-        DatacenterReplicationStrategy replicationStrategy = (DatacenterReplicationStrategy)adminKeypsace.getReplicationStrategy();
-        Collection<InetAddress> aliveNodes = replicationStrategy.getAliveEndpoints();
-        if (!cl.isSufficientLiveNodes(adminKeypsace, aliveNodes)) {
-            logger.warn("Only {}/{} live nodes on keyspace [{}], cannot succeed transaction with CL={}", 
-                    aliveNodes.size(), replicationStrategy.getEndpoints().size(),  ksName, metadataWriteCL);
-            return false;
-        }
-        return true;
-    }
-    */
     
     @Override
     public ShardInfo shardInfo(String index, ConsistencyLevel cl) {

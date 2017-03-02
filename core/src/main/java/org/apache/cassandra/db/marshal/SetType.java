@@ -18,12 +18,7 @@
 package org.apache.cassandra.db.marshal;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -60,11 +55,7 @@ public class SetType<T> extends CollectionType<Set<T>>
         ConcurrentMap<AbstractType<?>, SetType> internMap = isMultiCell ? instances : frozenInstances;
         SetType<T> t = internMap.get(elements);
         if (t == null)
-        {
-            t = new SetType<T>(elements, isMultiCell);
-            SetType<T> t2 = internMap.putIfAbsent(elements, t);
-            t = (t2 == null) ? t : t2;
-        }
+            t = internMap.computeIfAbsent(elements, K -> new SetType<>(K, isMultiCell) );
         return t;
     }
 
