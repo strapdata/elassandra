@@ -173,12 +173,6 @@
                 <enabled>true</enabled>
             </snapshots>
         </repository>
-        <!--
-        <repository>
-            <id>Lucene snapshots</id>
-            <url>https://download.elasticsearch.org/lucenesnapshots/${lucene.snapshot.revision}</url>
-        </repository>
-        -->
         <repository>
             <id>maven2</id>
             <url>http://repo1.maven.org/maven2</url>
@@ -485,13 +479,6 @@
                 <version>${slf4j.version}</version>
             </dependency>
 
-<!-- 
-            <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-log4j12</artifactId>
-                <version>${slf4j.version}</version>
-            </dependency>
- -->
             <dependency>
                 <groupId>net.java.dev.jna</groupId>
                 <artifactId>jna</artifactId>
@@ -724,6 +711,7 @@
                             <param>-Xdebug</param>
                             <param>-Xnoagent</param>
                             <param>-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4242</param>
+                            <param>-Djavax.net.debug=ssl,handshake</param>
                         </jvmArgs>
                         <shuffleOnSlave>${tests.shuffle}</shuffleOnSlave>
                         <sysouts>${tests.verbose}</sysouts>

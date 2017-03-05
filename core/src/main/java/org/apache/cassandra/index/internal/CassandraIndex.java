@@ -197,7 +197,8 @@ public abstract class CassandraIndex implements Index
         };
     }
 
-    public Callable<?> getSnapshotWithoutFlushTask(String snapshotName) {
+    public Callable<?> getSnapshotWithoutFlushTask(String snapshotName) 
+    {
         return null;
     }
     

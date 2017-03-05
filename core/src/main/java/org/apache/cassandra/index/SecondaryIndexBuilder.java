@@ -124,7 +124,8 @@ public class SecondaryIndexBuilder extends CompactionInfo.Holder
                 if (isMultithreaded) 
                 {
                     Long token = (Long) key.getToken().getTokenValue();
-                    try {
+                    try 
+                    {
                         this.queues[ (int) (((token % indexThreads) + indexThreads) % indexThreads) ].put(key);
                     } catch (InterruptedException e) {
                         logger.error(compactionId+" failed to put key "+key);
@@ -138,7 +139,8 @@ public class SecondaryIndexBuilder extends CompactionInfo.Holder
         {
             iter.close();
             
-            try {
+            try 
+            {
                 if (isMultithreaded) 
                 {
                     logger.debug(compactionId+" awating termination of index rebuild on "+cfs.metadata.ksName+"."+cfs.metadata.cfName);

@@ -37,6 +37,26 @@ governing permissions and limitations under the License. -->
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
             </plugin>
+            <plugin>
+                    <groupId>com.carrotsearch.randomizedtesting</groupId>
+                    <artifactId>junit4-maven-plugin</artifactId>
+                    <version>${testframework.version}</version>
+                    <executions>
+                        <execution>
+                            <id>tests</id>
+                            <phase>test</phase>
+                            <goals>
+                                <goal>junit4</goal>
+                            </goals>
+                            <configuration>
+                                <excludes>
+                                    <!-- mapper-size integration tests -->
+                                    <exclude>org/elasticsearch/index/mapper/size/SizeFieldMapperUpgradeTests*.class</exclude>
+                                </excludes>
+                            </configuration>
+                        </execution>
+                    </executions>
+            </plugin>
         </plugins>
     </build>
 
