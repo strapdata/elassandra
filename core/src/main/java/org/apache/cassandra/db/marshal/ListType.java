@@ -56,7 +56,7 @@ public class ListType<T> extends CollectionType<List<T>>
         return getInstance(l.get(0), true);
     }
     
-    public static <T> ListType<T> getInstance(AbstractType<T> elements, final Boolean isMultiCell)
+    public static <T> ListType<T> getInstance(AbstractType<T> elements, final boolean isMultiCell)
     {
         ConcurrentMap<AbstractType<?>, ListType> internMap = isMultiCell ? instances : frozenInstances;
         ListType<T> t = internMap.get(elements);
