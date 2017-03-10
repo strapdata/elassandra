@@ -115,7 +115,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 
                 logger.debug("unindexed tables={}", unindexedTables);
                 
-                boolean clusterDropOnDelete = currentState.metaData().settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_DROP_ON_DELETE_INDEX, false);
+                boolean clusterDropOnDelete = currentState.metaData().settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_DROP_ON_DELETE_INDEX, Boolean.getBoolean("es.drop_on_delete_index"));
                 for(IndexMetaData imd : unindexedTables.keySet()) {
                     if (Schema.instance.getKeyspaceInstance(imd.keyspace()) != null) {
                         // keyspace still exists.
