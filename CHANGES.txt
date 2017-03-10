@@ -1,3 +1,6 @@
+2.4.2-11 - 2017-03-10
+  * Fix indexing in debug mode only #84
+
 2.4.2-10 - 2017-03-02
   * Add support for blob and inet CQL types in primary key (in elasticsearch _id).
   * Fix partitioned index #83 and provides customizable partition function implementations.
