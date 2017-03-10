@@ -25,7 +25,6 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -810,9 +809,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 this.indexService = indexService;
                 this.mapping = mappingMetaData.sourceAsMap();
                 this.type = mappingMetaData.type();
-                this.refresh = indexService.indexSettings().getAsBoolean(IndexMetaData.SETTING_SYNCHRONOUS_REFRESH, metadata.settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_SYNCHRONOUS_REFRESH, false));
-                this.snapshot = indexService.indexSettings().getAsBoolean(IndexMetaData.SETTING_SNAPSHOT_WITH_SSTABLE, metadata.settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_SNAPSHOT_WITH_SSTABLE, false));
-                this.includeNodeId = indexService.indexSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE_ID, metadata.settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_INCLUDE_NODE_ID, false));
+                this.refresh = indexService.indexSettings().getAsBoolean(IndexMetaData.SETTING_SYNCHRONOUS_REFRESH, metadata.settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_SYNCHRONOUS_REFRESH, Boolean.getBoolean("es.synchronous_refresh")));
+                this.snapshot = indexService.indexSettings().getAsBoolean(IndexMetaData.SETTING_SNAPSHOT_WITH_SSTABLE, metadata.settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_SNAPSHOT_WITH_SSTABLE, Boolean.getBoolean("es.snapshot_with_sstable")));
+                this.includeNodeId = indexService.indexSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE_ID, metadata.settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_INCLUDE_NODE_ID, Boolean.getBoolean("es.include_node_id")));
                 
                 boolean _index_static_columns = false;
                 boolean _index_static_only = false;
@@ -1811,11 +1810,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                     startTime, 
                                     false);
                             
+                            final boolean created = operation.execute(indexShard);
+                            
                             if (logger.isDebugEnabled()) {
                                 logger.debug("document CF={}.{} index={} type={} id={} version={} created={} ttl={} refresh={} ", 
                                     baseCfs.metadata.ksName, baseCfs.metadata.cfName,
                                     context.indexInfo.name, typeName,
-                                    parsedDoc.id(), operation.version(), operation.execute(indexShard), ttl, context.indexInfo.refresh);
+                                    parsedDoc.id(), operation.version(), created, ttl, context.indexInfo.refresh);
                             }
                          }
                     } catch (IOException e) {
