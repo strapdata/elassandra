@@ -41,6 +41,7 @@ import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.thrift.ThriftValidation;
 import org.apache.cassandra.transport.Event;
+import org.elassandra.index.ExtendedElasticSecondaryIndex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,7 +118,12 @@ public class CreateIndexStatement extends SchemaAlteringStatement
             // fair potential for foot-shooting, so I prefer leaving that to a follow up ticket once we have identified cases where
             // such indexing is actually useful.
             if (!cfm.isCompactTable() && cd.isStatic() && 
-                !(properties.isCustom && properties.getMap("options") != null && properties.getMap("options").containsKey("enforce") && properties.getMap("options").get("enforce").equals("true")))
+                !(properties.isCustom && 
+                        ( !properties.customClass.equals(ExtendedElasticSecondaryIndex.class.getName()) || 
+                          (properties.getMap("options") != null && properties.getMap("options").containsKey("enforce") && properties.getMap("options").get("enforce").equals("true"))
+                        )
+                 )
+               )
                 throw new InvalidRequestException("Secondary indexes are not allowed on static columns unless 'enforce' option is set to true");
             
             if (cd.kind == ColumnDefinition.Kind.PARTITION_KEY && cfm.getKeyValidatorAsClusteringComparator().size() == 1)
