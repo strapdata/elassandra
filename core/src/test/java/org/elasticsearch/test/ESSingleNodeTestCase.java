@@ -23,6 +23,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -36,7 +37,6 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
-import org.apache.commons.compress.utils.Charsets;
 import org.elassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;
@@ -85,6 +85,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     protected static Settings settings;
     
     static void initNode(Settings testSettings, Collection<Class<? extends Plugin>> classpathPlugins)  {
+        System.out.println("working.dir="+System.getProperty("user.dir"));
         System.out.println("cassandra.home="+System.getProperty("cassandra.home"));
         System.out.println("cassandra.config.loader="+System.getProperty("cassandra.config.loader"));
         System.out.println("cassandra.config="+System.getProperty("cassandra.config"));
@@ -115,6 +116,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
                 //.put(EsExecutors.PROCESSORS, 1) // limit the number of threads created
                 .put("http.enabled", true)
                 .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
+                
                 .put(testSettings)
                 .build();
         
@@ -126,16 +128,10 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         assertThat(DiscoveryNode.localNode(settings), is(false));
         
         NODE = ElassandraDaemon.instance.node();
-        
+
         ClusterAdminClient clusterAdminClient = client().admin().cluster();
         ClusterHealthResponse clusterHealthResponse = clusterAdminClient.prepareHealth().setWaitForGreenStatus().get();
         assertFalse(clusterHealthResponse.isTimedOut());
-        
-        Settings.Builder settingsBuilder = Settings.builder()
-                .put(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_SYNCHRONOUS_REFRESH, true)
-                .put(InternalCassandraClusterService.SETTING_CLUSTER_DEFAULT_DROP_ON_DELETE_INDEX, true);
-        ClusterUpdateSettingsResponse clusterUpdateSettingsResponse = clusterAdminClient.prepareUpdateSettings().setTransientSettings(settingsBuilder).get();
-        assertTrue(clusterUpdateSettingsResponse.isAcknowledged());
     }
     
     public ESSingleNodeTestCase() {
@@ -158,11 +154,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             if (resetNode) {
                 reset();
             }
-            MetaData metaData = client().admin().cluster().prepareState().get().getState().getMetaData();
-            assertThat("test leaves persistent cluster metadata behind: " + metaData.persistentSettings().getAsMap(),
-                    metaData.persistentSettings().getAsMap().size(), equalTo(0));
-            assertThat("test leaves transient cluster metadata behind: " + metaData.transientSettings().getAsMap(),
-                    metaData.transientSettings().getAsMap().size(), equalTo(2));
         }
     }
 
@@ -189,6 +180,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         cleanup(resetNodeAfterTest());
         super.tearDown();
         available.release();
+        logger.info("[{}#{}]: semaphore released={}", getTestClass().getSimpleName(), getTestName(), available.getQueueLength());
     }
 
     @BeforeClass
