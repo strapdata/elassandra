@@ -166,8 +166,8 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         
         String[] types = new String[] { "text", "int","bigint","double","float","boolean","blob","timestamp","inet","uuid" };
         Object[] values = new Object[] { "foo", 1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID() };
-        int randomCk = this.randomInt(types.length);
-        int randomVal= this.randomInt(types.length);
+        int randomCk = randomInt(types.length-1);
+        int randomVal= randomInt(types.length-1);
         for(int i=0; i < types.length; i++) {
             String type = types[i];
             System.out.println("insert pk type="+type);
