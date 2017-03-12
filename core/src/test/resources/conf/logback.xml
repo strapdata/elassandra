@@ -51,26 +51,25 @@
   <logger name="org.apache.cassandra" level="WARN" />
   <logger name="org.apache.cassandra.db.commitlog" level="WARN" />
   <logger name="org.apache.cassandra.db.compaction" level="WARN" />
-  <logger name="org.apache.cassandra.index" level="TRACE" />
+  <logger name="org.apache.cassandra.index" level="WARN" />
   <logger name="org.apache.cassandra.config.DatabaseDescriptor" level="WARN" />
   <logger name="org.apache.cassandra.service.CassandraDaemon" level="DEBUG" />
   <logger name="org.apache.cassandra.service.ElassandraDaemon" level="DEBUG" />
 
-
+  <logger name="org.elassandra.index" level="INFO" />
+  <!--
   <logger name="org.elassandra.cluster" level="TRACE" />
-  <logger name="org.elassandra.index" level="TRACE" />
+  
   <logger name="org.elassandra.index.shard" level="DEBUG" />
   <logger name="org.elassandra.shard" level="DEBUG" />
-  
-  <!--
   <logger name="org.elassandra.cluster.routing" level="DEBUG" />
-    -->
-    
+
   <logger name="org.elasticsearch" level="WARN" />
   <logger name="org.elasticsearch.http" level="WARN"/>
   <logger name="org.elasticsearch.transport" level="WARN"/>
-
-  <root level="WARN">
+    -->
+    
+  <root level="INFO">
     <appender-ref ref="FILE" />
     <!--<appender-ref ref="STDOUT" />-->
   </root>
