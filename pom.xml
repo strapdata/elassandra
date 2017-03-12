@@ -671,7 +671,7 @@
                     <!-- general test configuration, used for both unit and integ tests -->
                     <configuration>
                         <jvm>${jvm.executable}</jvm>
-                        <argLine>${tests.jvm.argline} -Des.max-open-files -Dcassandra.home=${project.basedir}/target/tests/ -Dcassandra.logdir=${project.basedir}/target/tests/ -Dlogback.configurationFile=${project.basedir}/src/test/resources/conf/logback.xml -Djava.library.path=${session.executionRootDirectory}/core/cassandra/lib/sigar-bin -Dcassandra.config=file://${project.basedir}/src/test/resources/conf/cassandra.yaml -Dcassandra.config.dir=${project.basedir}/src/test/resources/conf -Dcassandra-rackdc.properties=file://${project.basedir}/src/test/resources/conf/cassandra-rackdc.properties -Dcassandra.config.loader=org.elassandra.config.YamlTestConfigurationLoader -Dcassandra.storagedir=${project.basedir}/target/tests/</argLine>
+                        <argLine>${tests.jvm.argline} -Des.max-open-files -Dcassandra.home=${project.basedir}/target/tests/ -Dcassandra.logdir=${project.basedir}/target/tests/ -Dlogback.configurationFile=${project.basedir}/src/test/resources/conf/logback.xml -Djava.library.path=${session.executionRootDirectory}/core/cassandra/lib/sigar-bin -Dcassandra.config=file://${project.basedir}/src/test/resources/conf/cassandra.yaml -Dcassandra.config.dir=${project.basedir}/src/test/resources/conf -Dcassandra-rackdc.properties=file://${project.basedir}/src/test/resources/conf/cassandra-rackdc.properties -Dcassandra.config.loader=org.elassandra.config.YamlTestConfigurationLoader -Dcassandra.storagedir=${project.basedir}/target/tests/ -Des.synchronous_refresh=true -Des.drop_on_delete_index=true</argLine>
                         <heartbeat>10</heartbeat>
                         <jvmOutputAction>pipe,warn</jvmOutputAction>
                         <leaveTemporary>true</leaveTemporary>
@@ -711,7 +711,6 @@
                             <param>-Xdebug</param>
                             <param>-Xnoagent</param>
                             <param>-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4242</param>
-                            <param>-Djavax.net.debug=ssl,handshake</param>
                         </jvmArgs>
                         <shuffleOnSlave>${tests.shuffle}</shuffleOnSlave>
                         <sysouts>${tests.verbose}</sysouts>
