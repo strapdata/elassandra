@@ -10,7 +10,7 @@ notifications:
 before_install:
 - ulimit -u 65535
 - mvn -f javassist-maven/pom.xml install
-install: mvn package
+install: mvn package -DskipTests
 deploy:
   provider: releases
   overwrite: true
