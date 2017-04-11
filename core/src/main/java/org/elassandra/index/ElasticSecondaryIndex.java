@@ -364,7 +364,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
         // recusivelly add fields
         public void addField(Mapper mapper, Object value) throws IOException {
-            if (value == null) 
+            if (value == null && (!(mapper instanceof FieldMapper) || ((FieldMapper)mapper).fieldType().nullValue() == null))
                 return;
             
             if (value instanceof Collection) {
@@ -1764,7 +1764,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     
                     // add all mapped fields to the current context.
                     for(int i=0; i < values.length; i++) {
-                        if (values[i] != null && indexInfo.mappers[i] != null)
+                        if (indexInfo.mappers[i] != null)
                             try {
                                 context.addField(indexInfo.mappers[i], values[i]);
                             } catch (IOException e) {

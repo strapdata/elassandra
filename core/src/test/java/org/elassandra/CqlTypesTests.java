@@ -33,6 +33,8 @@ import org.apache.cassandra.service.StorageService;
 import org.elassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.geo.GeoPoint;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.test.ESSingleNodeTestCase;
@@ -256,5 +258,30 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,strings) VALUES ('%d',{'key%d':'b%d'})", i, i, i));
         
         assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(N));
+    }
+    
+    // #91 test
+    // see https://www.elastic.co/guide/en/elasticsearch/reference/2.4/null-value.html
+    // see https://www.datastax.com/dev/blog/cql3_collections (empty list = null)
+    // mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testNullValue" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    @Test
+    public void testNullValue() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("id").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("status_code").field("type", "string").field("index", "not_analyzed").field("null_value", "NULL").endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("my_type", mapping));
+        ensureGreen("test");
+        
+        assertThat(client().prepareIndex("test", "my_type", "1").setSource("{\"status_code\": \"OK\" }").get().isCreated(), equalTo(true));
+        assertThat(client().prepareIndex("test", "my_type", "1").setSource("{\"status_code\": [ \"NOK\", \"OK\" ] }").get().isCreated(), equalTo(true));
+        assertThat(client().prepareIndex("test", "my_type", "1").setSource("{\"status_code\": null }").get().isCreated(), equalTo(true));
+        assertThat(client().prepareIndex("test", "my_type", "2").setSource("{\"status_code\": [] }").get().isCreated(), equalTo(true));
+        assertThat(client().prepareIndex("test", "my_type", "3").setSource("{\"status_code\": \"NULL\" }").get().isCreated(), equalTo(true));
+        
+        assertThat(client().prepareSearch().setIndices("test").setTypes("my_type").setQuery(QueryBuilders.queryStringQuery("status_code:NULL")).get().getHits().getTotalHits(), equalTo(3L));
     }
 }
