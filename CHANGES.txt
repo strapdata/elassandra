@@ -1,3 +1,7 @@
+2.4.2-12 - 2017-04-11
+  * Fix #87 null_value support 
+  * Fix #91 update of a C* mas as a nested field.
+
 2.4.2-11 - 2017-03-10
   * Fix indexing in debug mode only #84
 
