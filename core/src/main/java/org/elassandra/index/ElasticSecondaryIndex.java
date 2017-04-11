@@ -17,6 +17,7 @@ package org.elassandra.index;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
@@ -148,6 +149,7 @@ import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.DocumentMapperParser;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.Mapper.BuilderContext;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
@@ -451,7 +453,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                                 for(String key2 : props.keySet()) {
                                                     builder.field(key2, props.get(key2));
                                                 }
-                                                builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type",valueType); }});
+                                                builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type", valueType); }});
                                                 builder.endObject();
                                                 hasProperties = true;
                                             } else {
@@ -460,15 +462,21 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                         }
                                         if (!hasProperties) {
                                             builder.startObject("properties");
-                                            builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type",valueType); }});
+                                            builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type", valueType); }});
                                             builder.endObject();
                                         }
                                         builder.endObject().endObject().endObject().endObject();
                                         String mappingUpdate = builder.string();
-                                        logger.info("updating mapping={}",mappingUpdate);
+                                        logger.info("updating mapping={}", mappingUpdate);
                                         
-                                        ElasticSecondaryIndex.this.clusterService.blockingMappingUpdate(indexInfo.indexService, docMapper.type(), mappingUpdate );
-                                        subMapper = objectMapper.getMapper(entry.getKey());
+                                        ElasticSecondaryIndex.this.clusterService.blockingMappingUpdate(indexInfo.indexService, docMapper.type(), mappingUpdate);
+                                        // build and add a new subMapper to the objectMapper until the new clusterState update involves a new ImmutableMappingInfo....
+                                        final Class<? extends FieldMapper.Builder<?,?>> subMapperBuilderClass = InternalCassandraClusterService.cqlToMapperBuilder.get(((MapType)ctype).getValuesType().asCQL3Type().toString());
+                                        final Constructor<? extends FieldMapper.Builder<?,?>> subMapperConstructor = subMapperBuilderClass.getConstructor(String.class);
+                                        final BuilderContext builderContext = new BuilderContext(indexInfo.indexService.settingsService().getSettings(), path());
+                                        final String subFieldName = objectMapper.name() + "." + entry.getKey();
+                                        subMapper = subMapperConstructor.newInstance(subFieldName).build(builderContext);
+                                        objectMapper.putMapper(subMapper);
                                         addField(subMapper, entry.getValue());
                                     } catch (Exception e) {
                                         logger.error("error while updating mapping",e);

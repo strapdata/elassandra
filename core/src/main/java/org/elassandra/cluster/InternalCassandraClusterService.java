@@ -261,7 +261,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     };
 
-    public static Map<String,Class> cqlToMapperBuilder = new java.util.HashMap<String, Class>() {
+    public static Map<String,Class<? extends FieldMapper.Builder<?,?>>> cqlToMapperBuilder = new java.util.HashMap<String, Class<? extends FieldMapper.Builder<?,?>>>() {
         {
             put("text", StringFieldMapper.Builder.class);
             put("ascii", StringFieldMapper.Builder.class);
@@ -442,8 +442,9 @@ public class InternalCassandraClusterService extends InternalClusterService {
      **/
     @Override
     public void createIndexKeyspace(final String ksname, final int replicationFactor) throws IOException {
+        Keyspace ks = null;
         try {
-            Keyspace ks = Keyspace.open(ksname);
+            ks = Keyspace.open(ksname);
             if (ks != null && !(ks.getReplicationStrategy() instanceof NetworkTopologyStrategy)) {
                 throw new IOException("Cannot create index, underlying keyspace requires the NetworkTopologyStrategy.");
             }
@@ -451,7 +452,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
 
         try {
-            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
+            if (ks == null)
+               process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
                     String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = {'class':'NetworkTopologyStrategy', '%s':'%d' };", 
                     ksname, DatabaseDescriptor.getLocalDataCenter(), replicationFactor));
         } catch (Throwable e) {
@@ -1173,9 +1175,12 @@ public class InternalCassandraClusterService extends InternalClusterService {
                             continue; // ignore field with index:no or enabled=false
                         }
                         ColumnDefinition cdef = (cfm == null) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
-                        if ((cdef != null) && !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY )) {
+                        String indexName = buildIndexName(cfName, column);
+                        if ((cdef != null) && 
+                           !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY ) &&
+                           !cfm.getIndexes().has(indexName)) {
                             query = String.format(Locale.ROOT, "CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s' %s",
-                                    buildIndexName(cfName, column), ksName, cfName, column, className, cdef.isStatic() ? "WITH options = { 'enforce':'true' }" : "");
+                                    indexName, ksName, cfName, column, className, cdef.isStatic() ? "WITH options = { 'enforce':'true' }" : "");
                             logger.debug(query);
                             QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
                         } 
@@ -2097,11 +2102,21 @@ public class InternalCassandraClusterService extends InternalClusterService {
         return false;
     }
     
+
     @Override
     public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException {
-        CFMetaData cfm = getCFMetaData(elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
-        cfm.comment(metaDataString);
-        MigrationManager.announceColumnFamilyUpdate(cfm, false);
+        // Issue #91, update C* schema asynchronously to avoid inter-locking with map column as nested object.
+        Runnable task = new Runnable() {
+            @Override 
+            public void run() { 
+                try { 
+                    QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'", elasticAdminKeyspaceName,  ELASTIC_ADMIN_METADATA_TABLE, metaDataString));
+                } catch (Exception ex) { 
+                    logger.error("Failed to persist Elasticsearch mapping in the Cassandra schema:", ex);
+                } 
+            } 
+        }; 
+        new Thread(task, "ServiceThread").start();
     }
 
     /**
