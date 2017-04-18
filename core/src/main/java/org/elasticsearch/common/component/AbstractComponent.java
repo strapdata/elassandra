@@ -53,6 +53,10 @@ public abstract class AbstractComponent {
         return settings.get("name", "");
     }
 
+    public Settings settings() {
+        return this.settings;
+    }
+    
     /**
      * Checks for a deprecated setting and logs the correct alternative
      */

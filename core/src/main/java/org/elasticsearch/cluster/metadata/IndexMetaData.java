@@ -19,8 +19,23 @@
 
 package org.elasticsearch.cluster.metadata;
 
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import static org.elasticsearch.cluster.node.DiscoveryNodeFilters.OpType.AND;
+import static org.elasticsearch.cluster.node.DiscoveryNodeFilters.OpType.OR;
+import static org.elasticsearch.common.settings.Settings.readSettingsFromStream;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+import static org.elasticsearch.common.settings.Settings.writeSettingsToStream;
+
+import java.io.IOException;
+import java.text.ParseException;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+
+import org.apache.cassandra.utils.FBUtilities;
+import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elassandra.index.MessageFormatPartitionFunction;
+import org.elassandra.index.PartitionFunction;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.Diff;
@@ -40,23 +55,19 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.loader.SettingsLoader;
-import org.elasticsearch.common.xcontent.*;
+import org.elasticsearch.common.xcontent.FromXContentBuilder;
+import org.elasticsearch.common.xcontent.ToXContent;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.warmer.IndexWarmersMetaData;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 
-import java.io.IOException;
-import java.text.ParseException;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-
-import static org.elasticsearch.cluster.node.DiscoveryNodeFilters.OpType.AND;
-import static org.elasticsearch.cluster.node.DiscoveryNodeFilters.OpType.OR;
-import static org.elasticsearch.common.settings.Settings.*;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
 /**
  *
@@ -172,8 +183,20 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public static final String SETTING_DATA_PATH = "index.data_path";
     public static final String SETTING_SHARED_FS_ALLOW_RECOVERY_ON_ANY_NODE = "index.shared_filesystem.recover_on_any_node";
     public static final String INDEX_UUID_NA_VALUE = "_na_";
-
-
+    // elassandra index-level specific settings
+    public static final String SETTING_KEYSPACE = "index.keyspace"; 
+    public static final String SETTING_SECONDARY_INDEX_CLASS = "index."+InternalCassandraClusterService.SECONDARY_INDEX_CLASS; 
+    public static final String SETTING_SEARCH_STRATEGY_CLASS = "index."+InternalCassandraClusterService.SEARCH_STRATEGY_CLASS; 
+    public static final String SETTING_PARTITION_FUNCTION = "index.partition_function"; 
+    public static final String SETTING_PARTITION_FUNCTION_CLASS = "index.partition_function_class"; 
+    public static final String SETTING_INCLUDE_NODE_ID = "index."+InternalCassandraClusterService.INCLUDE_NODE_ID; 
+    public static final String SETTING_INDEX_ON_COMPACTION = "index."+InternalCassandraClusterService.INDEX_ON_COMPACTION; 
+    public static final String SETTING_SYNCHRONOUS_REFRESH = "index."+InternalCassandraClusterService.SYNCHRONOUS_REFRESH; 
+    public static final String SETTING_DROP_ON_DELETE_INDEX = "index."+InternalCassandraClusterService.DROP_ON_DELETE_INDEX; 
+    public static final String SETTING_SNAPSHOT_WITH_SSTABLE = "index."+InternalCassandraClusterService.SNAPSHOT_WITH_SSTABLE; 
+    public static final String SETTING_TOKEN_RANGES_BITSET_CACHE = "index."+InternalCassandraClusterService.TOKEN_RANGES_BITSET_CACHE; 
+    public static final String SETTING_VERSION_LESS_ENGINE = "index."+InternalCassandraClusterService.VERSION_LESS_ENGINE; 
+    
     // hard-coded hash function as of 2.0
     // older indices will read which hash function to use in their index settings
     private static final HashFunction MURMUR3_HASH_FUNCTION = new Murmur3HashFunction();
@@ -205,7 +228,9 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     private final HashFunction routingHashFunction;
     private final boolean useTypeForRouting;
 
-    private IndexMetaData(String index, long version, State state, Settings settings, ImmutableOpenMap<String, MappingMetaData> mappings, ImmutableOpenMap<String, AliasMetaData> aliases, ImmutableOpenMap<String, Custom> customs) {
+    private IndexMetaData(String index, long version, State state, Settings settings, ImmutableOpenMap<String, MappingMetaData> mappings, 
+            ImmutableOpenMap<String, AliasMetaData> aliases, ImmutableOpenMap<String, Custom> customs) {
+        
         Integer maybeNumberOfShards = settings.getAsInt(SETTING_NUMBER_OF_SHARDS, null);
         if (maybeNumberOfShards == null) {
             throw new IllegalArgumentException("must specify numberOfShards for index [" + index + "]");
@@ -223,12 +248,14 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         if (numberOfReplicas < 0) {
             throw new IllegalArgumentException("must specify non-negative number of shards for index [" + index + "]");
         }
+        
         this.index = index;
         this.version = version;
         this.state = state;
         this.settings = settings;
         this.mappings = mappings;
         this.customs = customs;
+        
         this.numberOfShards = numberOfShards;
         this.numberOfReplicas = numberOfReplicas;
         this.totalNumberOfShards = numberOfShards * (numberOfReplicas + 1);
@@ -287,6 +314,10 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         return index;
     }
 
+    public String uuid() {
+        return getIndexUUID();
+    }
+    
     public String getIndexUUID() {
         return settings.get(SETTING_INDEX_UUID, INDEX_UUID_NA_VALUE);
     }
@@ -368,7 +399,33 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     public Settings getSettings() {
         return settings;
     }
-
+    
+    public String keyspace() {
+        return getSettings().get(IndexMetaData.SETTING_KEYSPACE,index);
+    }
+    
+    /**
+     * name = partition function name.
+     * pattern = MessageFormat (@see MessageFormat)
+     * colX = CQL column names.
+     * @return name pattern col1 col2...colN
+     */
+    public String[] partitionFunction() {
+        String dynamicEntry = getSettings().get(IndexMetaData.SETTING_PARTITION_FUNCTION);
+        if (dynamicEntry != null) {
+            String[] args = dynamicEntry.split(" ");
+            if (args.length > 0) {
+                return args;
+            }
+        }
+        return null;
+    }
+    
+    public PartitionFunction partitionFunctionClass() {
+        String partFuncClass = getSettings().get(IndexMetaData.SETTING_PARTITION_FUNCTION_CLASS, MessageFormatPartitionFunction.class.getName());
+        return FBUtilities.instanceOrConstruct(partFuncClass, "PartitionFunction class used to generate index name from document fields");
+    }
+    
     public ImmutableOpenMap<String, AliasMetaData> getAliases() {
         return this.aliases;
     }
@@ -385,7 +442,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
     /**
      * Sometimes, the default mapping exists and an actual mapping is not created yet (introduced),
      * in this case, we want to return the default mapping in case it has some default mapping definitions.
-     * <p>
+     * <p/>
      * Note, once the mapping type is introduced, the default mapping is applied on the actual typed MappingMetaData,
      * setting its routing, timestamp, and so on if needed.
      */
@@ -485,6 +542,11 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         return builder;
     }
 
+    @Override
+    public String toString() {
+        return this.index+'/'+keyspace();
+    }
+    
     private static class IndexMetaDataDiff implements Diff<IndexMetaData> {
 
         private final String index;
@@ -638,6 +700,10 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
             this.index = index;
             return this;
         }
+        
+        public String keyspace() {
+            return settings.get(IndexMetaData.SETTING_KEYSPACE,index);
+        }
 
         public Builder numberOfShards(int numberOfShards) {
             settings = settingsBuilder().put(settings).put(SETTING_NUMBER_OF_SHARDS, numberOfShards).build();
@@ -746,8 +812,9 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         }
 
         public IndexMetaData build() {
+            Settings.Builder settingsBuilder = settingsBuilder().put(settings);
             ImmutableOpenMap.Builder<String, AliasMetaData> tmpAliases = aliases;
-            Settings tmpSettings = settings;
+            Settings tmpSettings = settingsBuilder.build();
 
             // update default mapping on the MappingMetaData
             if (mappings.containsKey(MapperService.DEFAULT_MAPPING)) {
@@ -770,7 +837,20 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
 
             builder.startObject("settings");
             for (Map.Entry<String, String> entry : indexMetaData.getSettings().getAsMap().entrySet()) {
-                builder.field(entry.getKey(), entry.getValue());
+                switch (entry.getKey()) {
+                case SETTING_NUMBER_OF_SHARDS:
+                    if (!params.paramAsBoolean(InternalCassandraClusterService.PERSISTED_METADATA, false)) {
+                        builder.field(SETTING_NUMBER_OF_SHARDS, indexMetaData.getNumberOfShards());
+                    }
+                    break;
+                case SETTING_NUMBER_OF_REPLICAS:
+                    if (!params.paramAsBoolean(InternalCassandraClusterService.PERSISTED_METADATA, false)) {
+                        builder.field(SETTING_NUMBER_OF_REPLICAS, indexMetaData.getNumberOfReplicas());
+                    }
+                    break;
+                default:
+                    builder.field(entry.getKey(), entry.getValue());
+                }
             }
             builder.endObject();
 
@@ -896,6 +976,15 @@ public class IndexMetaData implements Diffable<IndexMetaData>, FromXContentBuild
         return settings.getAsBoolean(SETTING_SHADOW_REPLICAS, false);
     }
 
+    /**
+     * Returns <code>true</code> if the given settings indicate that the index associated
+     * with these settings uses a version less engine (i.e no more version number stored in lucene index). Otherwise <code>false</code>. The default
+     * setting for this is <code>true</code>.
+     */
+    public static boolean isIndexUsingVersionLessEngine(Settings settings) {
+        return settings.getAsBoolean(SETTING_VERSION_LESS_ENGINE, true);
+    }
+    
     /**
      * Adds human readable version and creation date settings.
      * This method is used to display the settings in a human readable format in REST API

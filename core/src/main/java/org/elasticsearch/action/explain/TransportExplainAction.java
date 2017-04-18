@@ -105,8 +105,17 @@ public class TransportExplainAction extends TransportSingleShardAction<ExplainRe
     protected ExplainResponse shardOperation(ExplainRequest request, ShardId shardId) {
         IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
         IndexShard indexShard = indexService.shardSafe(shardId.id());
-        Term uidTerm = new Term(UidFieldMapper.NAME, Uid.createUidAsBytes(request.type(), request.id()));
-        Engine.GetResult result = indexShard.get(new Engine.Get(false, uidTerm));
+        //Term uidTerm = new Term(UidFieldMapper.NAME, Uid.createUidAsBytes(request.type(), request.id()));
+        //Engine.GetResult result = indexShard.get(new Engine.Get(false, uidTerm));
+        
+        Engine.GetResult result;
+        try {
+            result = clusterService.fetchSourceInternal(
+                    clusterService.state().metaData().index(shardId.index().name()).keyspace(),
+                    shardId.getIndex(), request.type(), request.id());
+        } catch (IOException e) {
+            throw new ElasticsearchException("Could not explain", e);
+        }
         if (!result.exists()) {
             return new ExplainResponse(shardId.getIndex(), request.type(), request.id(), false);
         }

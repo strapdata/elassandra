@@ -19,16 +19,17 @@
 
 package org.elasticsearch.index.shard;
 
+import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elassandra.index.search.TokenRangesSearcherWrapper;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.common.Classes;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.multibindings.Multibinder;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.cache.query.index.IndexQueryCache;
+import org.elasticsearch.index.engine.EngineFactory;
 import org.elasticsearch.index.engine.IndexSearcherWrapper;
 import org.elasticsearch.index.engine.IndexSearcherWrappingService;
-import org.elasticsearch.index.engine.EngineFactory;
 import org.elasticsearch.index.engine.InternalEngineFactory;
+import org.elasticsearch.index.engine.VersionLessInternalEngineFactory;
 import org.elasticsearch.index.percolator.stats.ShardPercolateService;
 import org.elasticsearch.index.termvectors.ShardTermVectorsService;
 import org.elasticsearch.index.translog.TranslogService;
@@ -46,7 +47,8 @@ public class IndexShardModule extends AbstractModule {
 
     // pkg private so tests can mock
     Class<? extends EngineFactory> engineFactoryImpl = InternalEngineFactory.class;
-
+    Class<? extends IndexSearcherWrapper> indexSearchWrapper = TokenRangesSearcherWrapper.class;
+    
     public IndexShardModule(ShardId shardId, boolean primary, Settings settings) {
         this.settings = settings;
         this.shardId = shardId;
@@ -54,11 +56,22 @@ public class IndexShardModule extends AbstractModule {
         if (settings.get("index.translog.type") != null) {
             throw new IllegalStateException("a custom translog type is no longer supported. got [" + settings.get("index.translog.type") + "]");
         }
+        if (settings.get("index.search.wrapper") != null) {
+            try {
+                indexSearchWrapper = (Class<? extends IndexSearcherWrapper>) Class.forName(settings.get("index.search.wrapper"));
+            } catch (ClassNotFoundException e) {
+                throw new IllegalStateException("index.search.wrapper ["+ settings.get("index.search.wrapper") +"] class not found", e);
+            }
+        }
     }
 
     /** Return true if a shadow engine should be used */
     protected boolean useShadowEngine() {
         return primary == false && IndexMetaData.isIndexUsingShadowReplicas(settings);
+    }
+    
+    protected boolean useVersionLessEngine() {
+        return IndexMetaData.isIndexUsingVersionLessEngine(settings);
     }
 
     @Override
@@ -69,9 +82,20 @@ public class IndexShardModule extends AbstractModule {
         } else {
             bind(IndexShard.class).asEagerSingleton();
             bind(TranslogService.class).asEagerSingleton();
+
+            if (settings.getAsBoolean(IndexMetaData.SETTING_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(InternalCassandraClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE))) {
+                Multibinder wrapperMultibinder = Multibinder.newSetBinder(binder(), IndexSearcherWrapper.class);
+                wrapperMultibinder.addBinding().to(indexSearchWrapper);
+                bind(indexSearchWrapper).asEagerSingleton();
+            }
         }
 
-        bind(EngineFactory.class).to(engineFactoryImpl);
+        if (useVersionLessEngine()) {
+            bind(EngineFactory.class).to(VersionLessInternalEngineFactory.class);
+        } else {
+            bind(EngineFactory.class).to(engineFactoryImpl);
+        }
+        
         bind(StoreRecoveryService.class).asEagerSingleton();
         bind(ShardPercolateService.class).asEagerSingleton();
         bind(ShardTermVectorsService.class).asEagerSingleton();

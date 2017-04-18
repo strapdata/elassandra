@@ -19,6 +19,25 @@
 
 package org.elasticsearch.common.io.stream;
 
+import static org.elasticsearch.ElasticsearchException.readException;
+import static org.elasticsearch.ElasticsearchException.readStackTrace;
+
+import java.io.ByteArrayInputStream;
+import java.io.EOFException;
+import java.io.FileNotFoundException;
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.file.NoSuchFileException;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
@@ -36,18 +55,6 @@ import org.elasticsearch.common.text.Text;
 import org.elasticsearch.tasks.Task;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
-
-import java.io.*;
-import java.nio.file.NoSuchFileException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.ElasticsearchException.readException;
-import static org.elasticsearch.ElasticsearchException.readStackTrace;
 
 public abstract class StreamInput extends InputStream {
 
@@ -418,6 +425,10 @@ public abstract class StreamInput extends InputStream {
                 return readBytesRef();
             case 22:
                 return readGeoPoint();
+            case 64: // Token
+                byte[] buf = new byte[readVInt()];
+                readFully(buf);
+                return DatabaseDescriptor.getPartitioner().getTokenFactory().fromByteArray(ByteBuffer.wrap(buf));
             default:
                 throw new IOException("Can't read unknown type [" + type + "]");
         }

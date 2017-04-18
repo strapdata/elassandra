@@ -122,6 +122,10 @@ public class QueryPhase implements SearchPhase {
             List<ProfileShardResult> shardResults = Profiler.buildShardResults(searchContext.getProfilers().getProfilers());
             searchContext.queryResult().profileResults(shardResults);
         }
+        
+        if (searchContext.searchProcessor() != null) {
+            searchContext.searchProcessor().postProcess(searchContext);
+        }
     }
 
     private static boolean returnsDocsInOrder(Query query, Sort sort) {

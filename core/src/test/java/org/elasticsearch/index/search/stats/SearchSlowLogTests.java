@@ -20,6 +20,9 @@
 package org.elasticsearch.index.search.stats;
 
 import com.carrotsearch.hppc.ObjectObjectAssociativeContainer;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.common.HasContext;
@@ -38,6 +41,7 @@ import org.elasticsearch.test.TestSearchContext;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Set;
 
 import static org.hamcrest.Matchers.startsWith;
@@ -210,6 +214,17 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
                     @Override
                     public void copyHeadersFrom(HasHeaders from) {
 
+                    }
+
+                    @Override
+                    public Collection<Range<Token>> tokenRanges() {
+                        // TODO Auto-generated method stub
+                        return null;
+                    }
+
+                    @Override
+                    public Boolean tokenRangesBitsetCache() {
+                        return true;
                     }
                 };
             }

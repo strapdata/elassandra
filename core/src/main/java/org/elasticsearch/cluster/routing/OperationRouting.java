@@ -19,7 +19,15 @@
 
 package org.elasticsearch.cluster.routing;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.elasticsearch.Version;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
@@ -31,15 +39,11 @@ import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.math.MathUtils;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardNotFoundException;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 
 /**
  *
@@ -47,68 +51,104 @@ import java.util.Set;
 public class OperationRouting extends AbstractComponent {
 
 
-
+    private final ClusterService clusterService;
     private final AwarenessAllocationDecider awarenessAllocationDecider;
 
     @Inject
-    public OperationRouting(Settings settings, AwarenessAllocationDecider awarenessAllocationDecider) {
+    public OperationRouting(Settings settings, AwarenessAllocationDecider awarenessAllocationDecider, ClusterService clusterService) {
         super(settings);
+        this.clusterService = clusterService;
         this.awarenessAllocationDecider = awarenessAllocationDecider;
     }
 
+    public ShardIterator shard(String index) {
+        IndexService indexService = clusterService.indexService(index);
+        ShardRouting shardRouting = indexService.shardSafe(0).routingEntry();
+        return new PlainShardIterator(new ShardId(index, 0), Collections.singletonList(shardRouting));
+    }
+    
     public ShardIterator indexShards(ClusterState clusterState, String index, String type, String id, @Nullable String routing) {
-        return shards(clusterState, index, type, id, routing).shardsIt();
+        return shard(index);
+        //return shards(clusterState, index, type, id, routing).shardsIt();
+    }
+
+    public ShardIterator deleteShards(ClusterState clusterState, String index, String type, String id, @Nullable String routing) {
+        return shard(index);
+        //return shards(clusterState, index, type, id, routing).shardsIt();
     }
 
     public ShardIterator getShards(ClusterState clusterState, String index, String type, String id, @Nullable String routing, @Nullable String preference) {
-        return preferenceActiveShardIterator(shards(clusterState, index, type, id, routing), clusterState.nodes().localNodeId(), clusterState.nodes(), preference);
+        return shard(index);
+        //return preferenceActiveShardIterator(shards(clusterState, index, type, id, routing), clusterState.nodes().localNodeId(), clusterState.nodes(), preference);
+    }
+    
+    
+    public ShardIterator getShards(ClusterState clusterState, String index, int shardId, @Nullable String preference) {
+        return shard(index);
+        //return preferenceActiveShardIterator(shards(clusterState, index, shardId), clusterState.nodes().localNodeId(), clusterState.nodes(), preference);
     }
 
-    public ShardIterator getShards(ClusterState clusterState, String index, int shardId, @Nullable String preference) {
-        final IndexShardRoutingTable indexShard = clusterState.getRoutingTable().shardRoutingTable(index, shardId);
-        return preferenceActiveShardIterator(indexShard, clusterState.nodes().localNodeId(), clusterState.nodes(), preference);
+    public GroupShardsIterator broadcastDeleteShards(ClusterState clusterState, String index) throws RoutingValidationException, ConfigurationException, InstantiationException, IllegalAccessException {
+         IndexRoutingTable routingTable = new IndexRoutingTable.Builder(index, this.clusterService, clusterState).build();
+         if (routingTable == null) {
+             throw new ShardNotFoundException(new ShardId(index, 0));
+         }
+        return routingTable.groupByShardsIt();
     }
 
     public int searchShardsCount(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing) {
-        final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices, routing);
+        return searchShardsCount(clusterState, concreteIndices, routing, null, null);
+    }
+    
+    
+    public int searchShardsCount(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference) {
+        return searchShardsCount(clusterState, concreteIndices, routing, preference, null);
+    }
+    
+    
+    
+    public int searchShardsCount(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference, TransportAddress src) {
+        final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices, routing, preference, src);
         return shards.size();
     }
-
+    
+    public GroupShardsIterator searchShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing) {
+        return searchShards(clusterState, concreteIndices, routing, null, null);
+    }
+    
     public GroupShardsIterator searchShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference) {
-        final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices, routing);
+        return searchShards(clusterState, concreteIndices, routing, preference, null);
+    }
+    
+    
+    
+    public GroupShardsIterator searchShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference, TransportAddress src) {
+        final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices, routing, preference, src);
         final Set<ShardIterator> set = new HashSet<>(shards.size());
         for (IndexShardRoutingTable shard : shards) {
             ShardIterator iterator = preferenceActiveShardIterator(shard, clusterState.nodes().localNodeId(), clusterState.nodes(), preference);
-            if (iterator != null) {
+            // Modified here to check that iterator.size() > 0
+            if ((iterator != null) && (iterator.size() > 0)) {
                 set.add(iterator);
             }
         }
         return new GroupShardsIterator(new ArrayList<>(set));
     }
+    
 
     private static final Map<String, Set<String>> EMPTY_ROUTING = Collections.emptyMap();
 
-    private Set<IndexShardRoutingTable> computeTargetedShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing) {
+    public Set<IndexShardRoutingTable> computeTargetedShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference, TransportAddress src) {
         routing = routing == null ? EMPTY_ROUTING : routing; // just use an empty map
         final Set<IndexShardRoutingTable> set = new HashSet<>();
         // we use set here and not list since we might get duplicates
         for (String index : concreteIndices) {
-            final IndexRoutingTable indexRouting = indexRoutingTable(clusterState, index);
-            final Set<String> effectiveRouting = routing.get(index);
-            if (effectiveRouting != null) {
-                for (String r : effectiveRouting) {
-                    int shardId = generateShardId(clusterState, index, null, null, r);
-                    IndexShardRoutingTable indexShard = indexRouting.shard(shardId);
-                    if (indexShard == null) {
-                        throw new ShardNotFoundException(new ShardId(index, shardId));
-                    }
-                    // we might get duplicates, but that's ok, they will override one another
-                    set.add(indexShard);
-                }
-            } else {
-                for (IndexShardRoutingTable indexShard : indexRouting) {
-                    set.add(indexShard);
-                }
+            final IndexRoutingTable indexRouting = new IndexRoutingTable.Builder(index, this.clusterService, clusterState, preference, src).build();
+            if (indexRouting == null)
+                throw new IndexNotFoundException(index);
+            
+            for (IndexShardRoutingTable indexShard : indexRouting) {
+                set.add(indexShard);
             }
         }
         return set;
@@ -143,9 +183,12 @@ public class OperationRouting extends AbstractComponent {
                         break;
                     }
                 }
+                /* Always found as shard 0 on elassandra.
                 if (!found) {
                     return null;
                 }
+                */
+    
                 // no more preference
                 if (index == -1 || index == preference.length() - 1) {
                     String[] awarenessAttributes = awarenessAllocationDecider.awarenessAttributes();
@@ -180,8 +223,8 @@ public class OperationRouting extends AbstractComponent {
                     ensureNodeIdExists(nodes, nodeId);
                     return indexShard.onlyNodeActiveInitializingShardsIt(nodeId);
                 case ONLY_NODES:
-                    String nodeAttributes = preference.substring(Preference.ONLY_NODES.type().length() + 1);
-                    return indexShard.onlyNodeSelectorActiveInitializingShardsIt(nodeAttributes.split(","), nodes);
+                    String nodeAttribute = preference.substring(Preference.ONLY_NODES.type().length() + 1);
+                    return indexShard.onlyNodeSelectorActiveInitializingShardsIt(nodeAttribute, nodes);
                 default:
                     throw new IllegalArgumentException("unknown preference [" + preferenceType + "]");
             }
@@ -195,29 +238,35 @@ public class OperationRouting extends AbstractComponent {
         }
     }
 
-    protected IndexRoutingTable indexRoutingTable(ClusterState clusterState, String index) {
-        IndexRoutingTable indexRouting = clusterState.routingTable().index(index);
-        if (indexRouting == null) {
-            throw new IndexNotFoundException(index);
-        }
-        return indexRouting;
-    }
-
-    protected IndexShardRoutingTable shards(ClusterState clusterState, String index, String type, String id, String routing) {
-        int shardId = generateShardId(clusterState, index, type, id, routing);
-        return clusterState.getRoutingTable().shardRoutingTable(index, shardId);
-    }
-
-    public ShardId shardId(ClusterState clusterState, String index, String type, String id, @Nullable String routing) {
-        return new ShardId(index, generateShardId(clusterState, index, type, id, routing));
-    }
-
-    @SuppressForbidden(reason = "Math#abs is trappy")
-    private int generateShardId(ClusterState clusterState, String index, String type, String id, @Nullable String routing) {
+    public IndexMetaData indexMetaData(ClusterState clusterState, String index) {
         IndexMetaData indexMetaData = clusterState.metaData().index(index);
         if (indexMetaData == null) {
             throw new IndexNotFoundException(index);
         }
+        return indexMetaData;
+    }
+
+    
+
+    // either routing is set, or type/id are set
+
+    protected IndexShardRoutingTable shards(ClusterState clusterState, String index, String type, String id, String routing) throws RoutingValidationException, ConfigurationException, InstantiationException, IllegalAccessException {
+        return shards(clusterState, index, 0);
+    }
+
+    
+    protected IndexShardRoutingTable shards(ClusterState clusterState, String index, int shardId) throws RoutingValidationException, ConfigurationException, InstantiationException, IllegalAccessException {
+        IndexShardRoutingTable indexShard = new IndexRoutingTable.Builder(index, this.clusterService, clusterState).build().shard(shardId);
+        if (indexShard == null) {
+            throw new ShardNotFoundException(new ShardId(index, shardId));
+        }
+        return indexShard;
+    }
+    
+    
+    @SuppressForbidden(reason = "Math#abs is trappy")
+    public int shardId(ClusterState clusterState, String index, String type, String id, @Nullable String routing) {
+        final IndexMetaData indexMetaData = indexMetaData(clusterState, index);
         final Version createdVersion = indexMetaData.getCreationVersion();
         final HashFunction hashFunction = indexMetaData.getRoutingHashFunction();
         final boolean useType = indexMetaData.getRoutingUseType();
@@ -256,5 +305,5 @@ public class OperationRouting extends AbstractComponent {
             throw new IllegalArgumentException("No data node with id[" + nodeId + "] found");
         }
     }
-
+    
 }

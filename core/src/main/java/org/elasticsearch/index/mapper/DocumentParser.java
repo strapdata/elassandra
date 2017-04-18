@@ -186,7 +186,7 @@ class DocumentParser implements Closeable {
             update = mapping.mappingUpdate(rootDynamicUpdate);
         }
 
-        ParsedDocument doc = new ParsedDocument(context.uid(), context.version(), context.id(), context.type(), source.routing(), source.timestamp(), source.ttl(), context.docs(),
+        ParsedDocument doc = new ParsedDocument(context.uid(), context.version(), context.id(), context.type(), source.routing(), source.timestamp(), source.ttl(), source.token(), context.docs(),
             context.source(), update).parent(source.parent());
         // reset the context to free up memory
         context.reset(null, null, null);

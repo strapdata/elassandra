@@ -45,10 +45,10 @@ public class ShardPercolateService extends AbstractIndexShardComponent {
         super(shardId, indexSettingsService.getSettings());
     }
 
-    private final MeanMetric percolateMetric = new MeanMetric();
-    private final CounterMetric currentMetric = new CounterMetric();
+    public final MeanMetric percolateMetric = new MeanMetric();
+    public final CounterMetric currentMetric = new CounterMetric();
 
-    private final CounterMetric numberOfQueries = new CounterMetric();
+    public final CounterMetric numberOfQueries = new CounterMetric();
 
     public void prePercolate() {
         currentMetric.inc();

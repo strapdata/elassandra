@@ -19,8 +19,8 @@
 
 package org.elasticsearch.cluster;
 
-import com.google.common.collect.ImmutableMap;
 import org.elasticsearch.common.component.AbstractComponent;
+import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 
 /**
@@ -29,7 +29,8 @@ import org.elasticsearch.common.settings.Settings;
 public class EmptyClusterInfoService extends AbstractComponent implements ClusterInfoService {
     public final static EmptyClusterInfoService INSTANCE = new EmptyClusterInfoService();
 
-    private EmptyClusterInfoService() {
+    @Inject
+    public EmptyClusterInfoService() {
         super(Settings.EMPTY);
     }
 

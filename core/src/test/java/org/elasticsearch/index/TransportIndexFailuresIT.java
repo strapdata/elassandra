@@ -19,8 +19,15 @@
 
 package org.elasticsearch.index;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.ImmutableSet;
+import static org.elasticsearch.cluster.routing.ShardRoutingState.INITIALIZING;
+import static org.elasticsearch.cluster.routing.ShardRoutingState.RELOCATING;
+import static org.elasticsearch.cluster.routing.ShardRoutingState.STARTED;
+import static org.elasticsearch.cluster.routing.ShardRoutingState.UNASSIGNED;
+import static org.hamcrest.Matchers.equalTo;
+
+import java.util.Collection;
+import java.util.List;
+
 import org.elasticsearch.action.index.IndexAction;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.cluster.ClusterState;
@@ -31,18 +38,14 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.discovery.DiscoverySettings;
-import org.elasticsearch.discovery.zen.fd.FaultDetection;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.transport.TransportService;
 import org.junit.Test;
 
-import java.util.Collection;
-import java.util.List;
-
-import static org.elasticsearch.cluster.routing.ShardRoutingState.*;
-import static org.hamcrest.Matchers.equalTo;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableSet;
 
 /**
  * Test failure when index replication actions fail mid-flight
@@ -53,8 +56,8 @@ public class TransportIndexFailuresIT extends ESIntegTestCase {
 
     private static final Settings nodeSettings = Settings.settingsBuilder()
             .put("discovery.type", "zen") // <-- To override the local setting if set externally
-            .put(FaultDetection.SETTING_PING_TIMEOUT, "1s") // <-- for hitting simulated network failures quickly
-            .put(FaultDetection.SETTING_PING_RETRIES, "1") // <-- for hitting simulated network failures quickly
+            .put("discovery.zen.fd.ping_timeout", "1s") // <-- for hitting simulated network failures quickly
+            .put("discovery.zen.fd.ping_timeout", "1") // <-- for hitting simulated network failures quickly
             .put(DiscoverySettings.PUBLISH_TIMEOUT, "1s") // <-- for hitting simulated network failures quickly
             .put("discovery.zen.minimum_master_nodes", 1)
             .build();

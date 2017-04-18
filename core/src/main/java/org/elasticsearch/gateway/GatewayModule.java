@@ -48,12 +48,12 @@ public class GatewayModule extends AbstractModule {
     @Override
     protected void configure() {
         bind(MetaStateService.class).asEagerSingleton();
-        bind(DanglingIndicesState.class).asEagerSingleton();
+        //bind(DanglingIndicesState.class).asEagerSingleton();
         bind(GatewayService.class).asEagerSingleton();
         gatewayTypes.bindType(binder(), settings, GATEWAY_TYPE_KEY, "default");
-        bind(TransportNodesListGatewayMetaState.class).asEagerSingleton();
-        bind(GatewayMetaState.class).asEagerSingleton();
-        bind(TransportNodesListGatewayStartedShards.class).asEagerSingleton();
-        bind(LocalAllocateDangledIndices.class).asEagerSingleton();
+        //bind(TransportNodesListGatewayMetaState.class).asEagerSingleton();
+        //bind(GatewayMetaState.class).asEagerSingleton();
+        //bind(TransportNodesListGatewayStartedShards.class).asEagerSingleton();
+        //bind(LocalAllocateDangledIndices.class).asEagerSingleton();
     }
 }

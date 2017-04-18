@@ -23,6 +23,7 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.IndexOptions;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
@@ -34,6 +35,7 @@ import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.core.IntegerFieldMapper.CustomIntegerNumericField;
 import org.elasticsearch.index.mapper.core.StringFieldMapper.ValueAndBoost;
 
 import java.io.IOException;
@@ -130,7 +132,29 @@ public class TokenCountFieldMapper extends IntegerFieldMapper {
         super(simpleName, fieldType, defaultFieldType, ignoreMalformed, coerce, indexSettings, multiFields, copyTo);
         this.analyzer = analyzer;
     }
-
+    
+    public void innerCreateField(ParseContext context, Object object) throws IOException {
+        Integer value = (Integer)object;
+        float boost = fieldType().boost();
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            value = fieldType().nullValue();
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), Integer.toString(value), boost);
+        }
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomIntegerNumericField field = new CustomIntegerNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         ValueAndBoost valueAndBoost = StringFieldMapper.parseCreateFieldForString(context, null /* Out null value is an int so we convert*/, fieldType().boost());

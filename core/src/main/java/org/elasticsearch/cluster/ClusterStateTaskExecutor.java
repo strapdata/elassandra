@@ -50,15 +50,17 @@ public abstract class ClusterStateTaskExecutor<T> {
     public static class BatchResult<T> {
         final public ClusterState resultingState;
         final public Map<T, TaskResult> executionResults;
+        final public boolean doPresistMetaData;
 
         /**
          * Construct an execution result instance with a correspondence between the tasks and their execution result
          * @param resultingState the resulting cluster state
          * @param executionResults the correspondence between tasks and their outcome
          */
-        BatchResult(ClusterState resultingState, Map<T, TaskResult> executionResults) {
+        BatchResult(ClusterState resultingState, Map<T, TaskResult> executionResults, boolean doPresistMetaData) {
             this.resultingState = resultingState;
             this.executionResults = executionResults;
+            this.doPresistMetaData = doPresistMetaData;
         }
 
         public static <T> Builder<T> builder() {
@@ -67,7 +69,7 @@ public abstract class ClusterStateTaskExecutor<T> {
 
         public static class Builder<T> {
             private final Map<T, TaskResult> executionResults = new IdentityHashMap<>();
-
+            
             public Builder<T> success(T task) {
                 return result(task, TaskResult.success());
             }
@@ -95,8 +97,8 @@ public abstract class ClusterStateTaskExecutor<T> {
                 return this;
             }
 
-            public BatchResult<T> build(ClusterState resultingState) {
-                return new BatchResult<>(resultingState, executionResults);
+            public BatchResult<T> build(ClusterState resultingState, boolean doPresistMetaData) {
+                return new BatchResult<>(resultingState, executionResults, doPresistMetaData);
             }
         }
     }

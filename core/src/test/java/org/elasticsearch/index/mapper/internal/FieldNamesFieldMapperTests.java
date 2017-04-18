@@ -104,13 +104,14 @@ public class FieldNamesFieldMapperTests extends ESSingleNodeTestCase {
                 .endObject()
                 .bytes());
 
-        assertFieldNames(set("a", "b", "b.c", "_uid", "_type", "_version", "_source", "_all"), doc);
+        assertFieldNames(set("a", "b", "b.c", "_uid", "_type", "_version", "_all"), doc);
     }
 
     public void testExplicitEnabled() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_field_names").field("enabled", true).endObject()
-            .endObject().endObject().string();
+                .startObject("_field_names").field("enabled", true).endObject()
+                .startObject("_source").field("enabled", true).endObject()
+                .endObject().endObject().string();
         DocumentMapper docMapper = createIndex("test").mapperService().documentMapperParser().parse("type", new CompressedXContent(mapping));
         FieldNamesFieldMapper fieldNamesMapper = docMapper.metadataMapper(FieldNamesFieldMapper.class);
         assertTrue(fieldNamesMapper.fieldType().isEnabled());

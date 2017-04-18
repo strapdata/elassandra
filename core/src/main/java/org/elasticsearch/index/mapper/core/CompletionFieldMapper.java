@@ -564,6 +564,47 @@ public class CompletionFieldMapper extends FieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        Map<String, Object> map = (Map<String, Object>) value;
+        SortedMap<String, ContextConfig> contextConfig = null;
+        
+        if(contextConfig == null) {
+            contextConfig = Maps.newTreeMap();
+            for (ContextMapping mapping : fieldType().getContextMapping().values()) {
+                contextConfig.put(mapping.name(), mapping.defaultConfig());
+            }
+        }
+
+        final ContextMapping.Context ctx = new ContextMapping.Context(contextConfig, context.doc());
+        String surfaceForm = (String) map.get(Fields.CONTENT_FIELD_NAME_OUTPUT);
+        BytesRef payload = new BytesRef( (String) map.get(Fields.CONTENT_FIELD_NAME_PAYLOAD));
+        long weight = (Long) map.get(Fields.CONTENT_FIELD_NAME_WEIGHT);
+        List<String> inputs = (List<String>) map.get(Fields.CONTENT_FIELD_NAME_INPUT);
+        
+        payload = payload == null ? EMPTY : payload;
+        if (surfaceForm == null) { // no surface form use the input
+            for (String input : inputs) {
+                if (input.length() == 0) {
+                    continue;
+                }
+                BytesRef suggestPayload = fieldType().analyzingSuggestLookupProvider.buildPayload(new BytesRef(
+                    input), weight, payload);
+                context.doc().add(getCompletionField(ctx, input, suggestPayload));
+            }
+        } else {
+            BytesRef suggestPayload = fieldType().analyzingSuggestLookupProvider.buildPayload(new BytesRef(
+                surfaceForm), weight, payload);
+            for (String input : inputs) {
+                if (input.length() == 0) {
+                    continue;
+                }
+                context.doc().add(getCompletionField(ctx, input, suggestPayload));
+            }
+        }
+        super.createField(context,value);
+    }
+    
+    @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
     }
 

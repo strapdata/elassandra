@@ -19,12 +19,23 @@
 
 package org.elasticsearch.index.mapper;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.Objects;
+
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.queries.TermsQuery;
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.ConstantScoreQuery;
+import org.apache.lucene.search.FuzzyQuery;
+import org.apache.lucene.search.MultiTermQuery;
+import org.apache.lucene.search.PrefixQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.RegexpQuery;
+import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.TermRangeQuery;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.action.fieldstats.FieldStats;
 import org.elasticsearch.common.Nullable;
@@ -35,13 +46,10 @@ import org.elasticsearch.common.lucene.BytesRefs;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.fielddata.FieldDataType;
+import org.elasticsearch.index.mapper.Mapper.CqlCollection;
+import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.similarity.SimilarityProvider;
-
-import java.io.IOException;
-import java.lang.IllegalArgumentException;
-import java.util.List;
-import java.util.Objects;
 
 /**
  * This defines the core properties and functions to operate on a field.
@@ -165,6 +173,13 @@ public abstract class MappedFieldType extends FieldType {
     private Object nullValue;
     private String nullValueAsString; // for sending null value to _all field
 
+    private CqlCollection cqlCollection = CqlCollection.LIST;
+    private CqlStruct cqlStruct = CqlStruct.UDT;
+    private boolean cqlPartialUpdate = true;
+    private boolean cqlPartitionKey = false;
+    private boolean cqlStaticColumn = false;
+    private int cqlPrimaryKeyOrder = -1;
+    
     protected MappedFieldType(MappedFieldType ref) {
         super(ref);
         this.names = ref.names();
@@ -178,6 +193,13 @@ public abstract class MappedFieldType extends FieldType {
         this.fieldDataType = ref.fieldDataType();
         this.nullValue = ref.nullValue();
         this.nullValueAsString = ref.nullValueAsString();
+        
+        this.cqlCollection = ref.cqlCollection;
+        this.cqlStruct = ref.cqlStruct;
+        this.cqlPartialUpdate = ref.cqlPartialUpdate;
+        this.cqlPartitionKey = ref.cqlPartitionKey;
+        this.cqlStaticColumn = ref.cqlStaticColumn;
+        this.cqlPrimaryKeyOrder = ref.cqlPrimaryKeyOrder;
     }
 
     public MappedFieldType() {
@@ -218,13 +240,75 @@ public abstract class MappedFieldType extends FieldType {
             Objects.equals(normsLoading, fieldType.normsLoading) &&
             Objects.equals(fieldDataType, fieldType.fieldDataType) &&
             Objects.equals(nullValue, fieldType.nullValue) &&
+            Objects.equals(cqlCollection, fieldType.cqlCollection) &&
+            Objects.equals(cqlStruct, fieldType.cqlStruct) &&
+            Objects.equals(cqlPartialUpdate, fieldType.cqlPartialUpdate) &&
+            Objects.equals(cqlPartitionKey, fieldType.cqlPartitionKey) &&
+            Objects.equals(cqlStaticColumn, fieldType.cqlStaticColumn) &&
+            Objects.equals(cqlPrimaryKeyOrder, fieldType.cqlPrimaryKeyOrder) &&
             Objects.equals(nullValueAsString, fieldType.nullValueAsString);
     }
 
+    public CqlCollection cqlCollection() {
+        return this.cqlCollection;
+    }
+    
+    public void cqlCollection(CqlCollection cqlCollection) {
+        this.cqlCollection = cqlCollection;
+    }
+
+    public String cqlCollectionTag() {
+        if (this.cqlCollection.equals(CqlCollection.LIST)) return "list";
+        if (this.cqlCollection.equals(CqlCollection.SET)) return "set";
+        return "";
+    }
+    
+
+    public CqlStruct cqlStruct() {
+        return this.cqlStruct;
+    }
+
+    public void cqlStruct(CqlStruct cqlStruct) {
+        this.cqlStruct = cqlStruct;
+    }
+
+    public boolean cqlPartialUpdate() {
+        return this.cqlPartialUpdate;
+    }
+    
+    public void cqlPartialUpdate(boolean cqlPartialUpdate) {
+        this.cqlPartialUpdate = cqlPartialUpdate;
+    }
+    
+    public boolean cqlPartitionKey() {
+        return this.cqlPartitionKey;
+    }
+    
+    public void cqlPartitionKey(boolean cqlPartitionKey) {
+        this.cqlPartitionKey = cqlPartitionKey;
+    }
+    
+    public boolean cqlStaticColumn() {
+        return this.cqlStaticColumn;
+    }
+    
+    public void cqlStaticColumn(boolean cqlStaticColumn) {
+        this.cqlStaticColumn = cqlStaticColumn;
+    }
+    
+    public int cqlPrimaryKeyOrder() {
+        return this.cqlPrimaryKeyOrder;
+    }
+    
+    public void cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
+        this.cqlPrimaryKeyOrder = cqlPrimaryKeyOrder;
+    }
+    
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), names, boost, docValues, indexAnalyzer, searchAnalyzer, searchQuoteAnalyzer,
-            similarity == null ? null : similarity.name(), normsLoading, fieldDataType, nullValue, nullValueAsString);
+            similarity == null ? null : similarity.name(), normsLoading, fieldDataType, nullValue, nullValueAsString,
+                     cqlCollection, cqlStruct, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder);
     }
 
     // norelease: we need to override freeze() and add safety checks that all settings are actually set

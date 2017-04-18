@@ -79,7 +79,8 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
     public void testThatLongTypeNameIsNotRejectedOnPreElasticsearchVersionTwo() {
         String index = "text-index";
         String field = "field";
-        String type = new String(new char[256]).replace("\0", "a");
+        // cassandra table name ma = 48 caraters
+        String type = new String(new char[48]).replace("\0", "a");
 
         CreateIndexResponse response =
                 client()
@@ -167,7 +168,7 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
     @Test
     public void testSearchFilter() {
         IndexService indexService = createIndex("index1", client().admin().indices().prepareCreate("index1")
-            .addMapping("type1", "field1", "type=nested")
+            .addMapping("type1", "{\"type1\":{\"properties\":{ \"field1\":{\"type\":\"nested\", \"properties\":{ \"foo\":{\"type\":\"string\"}}}}}}")
             .addMapping("type2", new Object[0])
         );
 

@@ -5,7 +5,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.elasticsearch.plugin</groupId>
+    <groupId>com.strapdata.elasticsearch.plugin</groupId>
     <artifactId>plugins</artifactId>
     <version>2.4.2-SNAPSHOT</version>
     <packaging>pom</packaging>
@@ -14,7 +14,7 @@
     <description>A parent project for Elasticsearch plugins</description>
 
     <parent>
-        <groupId>org.elasticsearch.module</groupId>
+        <groupId>com.strapdata.elasticsearch.module</groupId>
         <artifactId>modules</artifactId>
         <version>2.4.2-SNAPSHOT</version>
         <relativePath>../modules/pom.xml</relativePath>
@@ -54,11 +54,15 @@
         <module>analysis-stempel</module>
         <module>analysis-phonetic</module>
         <module>analysis-icu</module>
+        <!-- 
         <module>cloud-gce</module>
         <module>cloud-azure</module>
         <module>cloud-aws</module>
+         -->
         <module>delete-by-query</module>
+        <!-- 
         <module>discovery-multicast</module>
+         -->
         <module>lang-javascript</module>
         <module>lang-python</module>
         <module>mapper-attachments</module>

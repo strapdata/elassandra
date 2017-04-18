@@ -19,15 +19,16 @@
 
 package org.elasticsearch.cluster;
 
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.cluster.metadata.MetaData;
-import org.elasticsearch.cluster.node.DiscoveryNodes;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
+
+import com.carrotsearch.hppc.cursors.ObjectCursor;
 
 /**
  * An event received by the local node, signaling that the cluster state has changed.
@@ -42,7 +43,11 @@ public class ClusterChangedEvent {
 
     private final DiscoveryNodes.Delta nodesDelta;
 
-    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState) {
+    // added to avoid to save a just recovered cluster state.
+    private final boolean peristMetaData;
+    
+    
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState, boolean peristMetaData) {
         Objects.requireNonNull(source, "source must not be null");
         Objects.requireNonNull(state, "state must not be null");
         Objects.requireNonNull(previousState, "previousState must not be null");
@@ -50,8 +55,17 @@ public class ClusterChangedEvent {
         this.state = state;
         this.previousState = previousState;
         this.nodesDelta = state.nodes().delta(previousState.nodes());
+        this.peristMetaData = peristMetaData;
     }
 
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState) {
+        this(source, state, previousState, true);
+    }
+    
+    public boolean peristMetaData() {
+        return peristMetaData;
+    }
+    
     /**
      * The source that caused this cluster event to be raised.
      */
@@ -101,6 +115,11 @@ public class ClusterChangedEvent {
      * Returns the indices created in this event
      */
     public List<String> indicesCreated() {
+        /*
+        if (previousState == null) {
+            return Arrays.asList(state.metaData().indices().keys().toArray(String.class));
+        }
+        */
         if (!metaDataChanged()) {
             return Collections.emptyList();
         }
@@ -128,6 +147,11 @@ public class ClusterChangedEvent {
         // See test DiscoveryWithServiceDisruptionsIT.testIndicesDeleted()
         // See discussion on https://github.com/elastic/elasticsearch/pull/9952 and
         // https://github.com/elastic/elasticsearch/issues/11665
+        /*
+        if (hasNewMaster() || previousState == null) {
+            return Collections.emptyList();
+        }
+        */
         if (metaDataChanged() == false || isNewCluster()) {
             return Collections.emptyList();
         }
@@ -216,6 +240,25 @@ public class ClusterChangedEvent {
         return nodesRemoved() || nodesAdded();
     }
 
+    /**
+     * Checks if this cluster state comes from a different master than the previous one.
+     * This is a workaround for the scenario where a node misses a cluster state  that has either
+     * no master block or state not recovered flag set. In this case we must make sure that
+     * if an index is missing from the cluster state is not deleted immediately but instead imported
+     * as dangling. See discussion on https://github.com/elastic/elasticsearch/pull/9952
+     */
+    private boolean hasNewMaster() {
+        String oldMaster = previousState().getNodes().masterNodeId();
+        String newMaster = state().getNodes().masterNodeId();
+        if (oldMaster == null && newMaster == null) {
+            return false;
+        }
+        if (oldMaster == null && newMaster != null) {
+            return true;
+        }
+        return oldMaster.equals(newMaster) == false;
+    }
+    
     // Determines whether or not the current cluster state represents an entirely
     // different cluster from the previous cluster state, which will happen when a
     // master node is elected that has never been part of the cluster before.
@@ -225,3 +268,4 @@ public class ClusterChangedEvent {
         return prevClusterUUID.equals(currClusterUUID) == false;
     }
 }
+

@@ -28,7 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** Checks that the JVM is ok and won't cause index corruption */
-final class JVMCheck {
+public final class JVMCheck {
     /** no instantiation */
     private JVMCheck() {}
     
@@ -111,7 +111,7 @@ final class JVMCheck {
     /**
      * Checks that the current JVM is "ok". This means it doesn't have severe bugs that cause data corruption.
      */
-    static void check() {
+    public static void check() {
         if (Boolean.parseBoolean(System.getProperty(JVM_BYPASS))) {
             Loggers.getLogger(JVMCheck.class).warn("bypassing jvm version check for version [{}], this can result in data corruption!", fullVersion());
         } else if ("Oracle Corporation".equals(Constants.JVM_VENDOR)) {

@@ -18,16 +18,39 @@
  */
 package org.elasticsearch.snapshots;
 
-import com.carrotsearch.hppc.IntHashSet;
-import com.carrotsearch.hppc.IntSet;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
+import static com.google.common.collect.Maps.newHashMap;
+import static com.google.common.collect.Sets.newHashSet;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_CREATION_DATE;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_INDEX_UUID;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_LEGACY_ROUTING_HASH_FUNCTION;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_LEGACY_ROUTING_USE_TYPE;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_VERSION_CREATED;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_VERSION_MINIMUM_COMPATIBLE;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_VERSION_UPGRADED;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
+
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.IndicesOptions;
-import org.elasticsearch.cluster.*;
+import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.RestoreInProgress;
 import org.elasticsearch.cluster.RestoreInProgress.ShardRestoreStatus;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.AliasMetaData;
@@ -71,39 +94,31 @@ import org.elasticsearch.transport.TransportRequestHandler;
 import org.elasticsearch.transport.TransportResponse;
 import org.elasticsearch.transport.TransportService;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CopyOnWriteArrayList;
-
-import static com.google.common.collect.Maps.newHashMap;
-import static com.google.common.collect.Sets.newHashSet;
-import static org.elasticsearch.cluster.metadata.IndexMetaData.*;
+import com.carrotsearch.hppc.IntHashSet;
+import com.carrotsearch.hppc.IntSet;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 
 /**
  * Service responsible for restoring snapshots
- * <p>
+ * <p/>
  * Restore operation is performed in several stages.
- * <p>
- * First {@link #restoreSnapshot(RestoreRequest, org.elasticsearch.action.ActionListener)}
+ * <p/>
+ * First {@link #restoreSnapshot(RestoreRequest, org.elasticsearch.action.ActionListener))}
  * method reads information about snapshot and metadata from repository. In update cluster state task it checks restore
  * preconditions, restores global state if needed, creates {@link RestoreInProgress} record with list of shards that needs
- * to be restored and adds this shard to the routing table using {@link org.elasticsearch.cluster.routing.RoutingTable.Builder#addAsRestore(IndexMetaData, RestoreSource)}
+ * to be restored and adds this shard to the routing table using {@link RoutingTable.Builder#addAsRestore(IndexMetaData, RestoreSource)}
  * method.
- * <p>
+ * <p/>
  * Individual shards are getting restored as part of normal recovery process in
  * {@link StoreRecoveryService#recover(IndexShard, boolean, StoreRecoveryService.RecoveryListener)}
  * method, which detects that shard should be restored from snapshot rather than recovered from gateway by looking
  * at the {@link org.elasticsearch.cluster.routing.ShardRouting#restoreSource()} property. If this property is not null
  * {@code recover} method uses {@link StoreRecoveryService#restore}
  * method to start shard restore process.
- * <p>
+ * <p/>
  * At the end of the successful restore process {@code IndexShardSnapshotAndRestoreService} calls {@link #indexShardRestoreCompleted(SnapshotId, ShardId)},
  * which updates {@link RestoreInProgress} in cluster state or removes it when all shards are completed. In case of
  * restore failure a normal recovery fail-over process kicks in.
@@ -211,7 +226,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
                     ClusterState.Builder builder = ClusterState.builder(currentState);
                     MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                    RoutingTable.Builder rtBuilder = RoutingTable.builder(currentState.routingTable());
+                    RoutingTable.Builder rtBuilder = RoutingTable.builder(RestoreService.this.clusterService, currentState);
                     final ImmutableMap<ShardId, RestoreInProgress.ShardRestoreStatus> shards;
                     Set<String> aliases = newHashSet();
                     if (!renamedIndices.isEmpty()) {
@@ -307,10 +322,9 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
                                 shards.size(), shards.size() - failedShards(shards));
                     }
 
-                    RoutingTable rt = rtBuilder.build();
-                    ClusterState updatedState = builder.metaData(mdBuilder).blocks(blocks).routingTable(rt).build();
+                    ClusterState updatedState = builder.metaData(mdBuilder).blocks(blocks).routingTable(rtBuilder).build();
                     RoutingAllocation.Result routingResult = allocationService.reroute(
-                            ClusterState.builder(updatedState).routingTable(rt).build(),
+                            ClusterState.builder(updatedState).routingTable(rtBuilder).build(),
                             "restored snapshot [" + snapshotId + "]");
                     return ClusterState.builder(updatedState).routingResult(routingResult).build();
                 }
@@ -771,7 +785,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
 
     /**
      * Adds restore completion listener
-     * <p>
+     * <p/>
      * This listener is called for each snapshot that finishes restore operation in the cluster. It's responsibility of
      * the listener to decide if it's called for the appropriate snapshot or not.
      *
@@ -783,7 +797,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateLis
 
     /**
      * Removes restore completion listener
-     * <p>
+     * <p/>
      * This listener is called for each snapshot that finishes restore operation in the cluster.
      *
      * @param listener restore completion listener

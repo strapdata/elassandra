@@ -314,7 +314,33 @@ public class StringFieldMapper extends FieldMapper implements AllFieldMapper.Inc
     public int getIgnoreAbove() {
         return ignoreAbove;
     }
+    
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        //ValueAndBoost valueAndBoost = new ValueAndBoost((String)object, fieldType().boost());
+        ValueAndBoost valueAndBoost = createFieldForString(context, fieldType().nullValueAsString(), fieldType().boost(), (String)object);
+        if (valueAndBoost.value() == null) {
+            return;
+        }
+        if (ignoreAbove > 0 && valueAndBoost.value().length() > ignoreAbove) {
+            return;
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), valueAndBoost.value(), valueAndBoost.boost());
+        }
 
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            Field field = new Field(fieldType().names().indexName(), valueAndBoost.value(), fieldType());
+            field.setBoost(valueAndBoost.boost());
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            Field field = new SortedSetDocValuesField(fieldType().names().indexName(), new BytesRef(valueAndBoost.value()));
+            context.doc().add(field);
+        }
+        super.createField(context, object);
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         ValueAndBoost valueAndBoost = parseCreateFieldForString(context, fieldType().nullValueAsString(), fieldType().boost());
@@ -375,6 +401,17 @@ public class StringFieldMapper extends FieldMapper implements AllFieldMapper.Inc
             return new ValueAndBoost(value, boost);
         }
         return new ValueAndBoost(parser.textOrNull(), defaultBoost);
+    }
+    
+    
+    public static ValueAndBoost createFieldForString(ParseContext context, String nullValue, float defaultBoost, String value) throws IOException {
+        if (context.externalValueSet()) {
+            return new ValueAndBoost(context.externalValue().toString(), defaultBoost);
+        }
+        if (value == null)
+            value = nullValue;
+        
+        return new ValueAndBoost(value, defaultBoost);
     }
 
     @Override

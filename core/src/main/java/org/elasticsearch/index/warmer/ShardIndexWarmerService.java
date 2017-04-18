@@ -30,8 +30,8 @@ import java.util.concurrent.TimeUnit;
 
 public class ShardIndexWarmerService extends AbstractIndexShardComponent {
 
-    private final CounterMetric current = new CounterMetric();
-    private final MeanMetric warmerMetric = new MeanMetric();
+    public final CounterMetric current = new CounterMetric();
+    public final MeanMetric warmerMetric = new MeanMetric();
 
     public ShardIndexWarmerService(ShardId shardId, Settings indexSettings) {
         super(shardId, indexSettings);

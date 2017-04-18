@@ -18,8 +18,14 @@
  */
 package org.elasticsearch.percolator;
 
-import com.carrotsearch.hppc.ObjectObjectAssociativeContainer;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
 
+import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.LeafReaderContext;
@@ -29,9 +35,12 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.Counter;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.percolate.PercolateShardRequest;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.HasContext;
 import org.elasticsearch.common.HasContextAndHeaders;
 import org.elasticsearch.common.HasHeaders;
@@ -53,6 +62,7 @@ import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.query.ParsedQuery;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.similarity.SimilarityService;
+import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.SearchHitField;
 import org.elasticsearch.search.SearchShardTarget;
@@ -73,19 +83,13 @@ import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.search.lookup.LeafSearchLookup;
 import org.elasticsearch.search.lookup.SearchLookup;
-import org.elasticsearch.search.profile.Profiler;
 import org.elasticsearch.search.profile.Profilers;
 import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.rescore.RescoreSearchContext;
 import org.elasticsearch.search.scan.ScanContext;
 import org.elasticsearch.search.suggest.SuggestionSearchContext;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
+import com.carrotsearch.hppc.ObjectObjectAssociativeContainer;
 
 /**
  */
@@ -110,7 +114,9 @@ public class PercolateContext extends SearchContext {
     private final long originNanoTime = System.nanoTime();
     private final long startTime;
     private String[] types;
-
+    
+    private boolean includeNode;
+    
     private Engine.Searcher docSearcher;
     private Engine.Searcher engineSearcher;
     private ContextIndexSearcher searcher;
@@ -127,9 +133,12 @@ public class PercolateContext extends SearchContext {
     private final Map<String, FetchSubPhaseContext> subPhaseContexts = new HashMap<>();
     private final Map<Class<?>, Collector> queryCollectors = new HashMap<>();
 
+    private ClusterState clusterState;
+    
     public PercolateContext(PercolateShardRequest request, SearchShardTarget searchShardTarget, IndexShard indexShard,
                             IndexService indexService, PageCacheRecycler pageCacheRecycler,
-                            BigArrays bigArrays, ScriptService scriptService, Query aliasFilter, ParseFieldMatcher parseFieldMatcher) {
+                            BigArrays bigArrays, ScriptService scriptService, Query aliasFilter, ParseFieldMatcher parseFieldMatcher,
+                            ClusterState clusterState) {
         super(parseFieldMatcher, request);
         this.indexShard = indexShard;
         this.indexService = indexService;
@@ -146,6 +155,7 @@ public class PercolateContext extends SearchContext {
         this.numberOfShards = request.getNumberOfShards();
         this.aliasFilter = aliasFilter;
         this.startTime = request.getStartTime();
+        this.clusterState = clusterState;
     }
 
     public IndexSearcher docSearcher() {
@@ -759,4 +769,31 @@ public class PercolateContext extends SearchContext {
     public Profilers getProfilers() {
         throw new UnsupportedOperationException();
     }
+    
+    @Override
+    public boolean includeNode() {
+        return includeNode;
+    }
+    
+    @Override
+    public void    includeNode(boolean includeNode) {
+        this.includeNode = includeNode;
+    }
+    
+    
+    @Override
+    public ClusterState getClusterState() {
+        return this.clusterState;
+    }
+
+    @Override
+    public ClusterService clusterService() {
+        return this.indexService.clusterService();
+    }
+
+    @Override
+    public SearchProcessor searchProcessor() {
+        return null;
+    }
+    
 }

@@ -53,12 +53,13 @@ public abstract class TestCluster implements Iterable<Client>, Closeable {
     protected final ESLogger logger = Loggers.getLogger(getClass());
     private final long seed;
 
-    protected Random random;
+    protected Random random = new Random();
 
     protected double transportClientRatio = 0.0;
 
     public TestCluster(long seed) {
         this.seed = seed;
+        this.random = new Random(seed);
     }
 
     public long seed() {

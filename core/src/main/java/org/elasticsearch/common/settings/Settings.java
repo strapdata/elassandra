@@ -19,12 +19,31 @@
 
 package org.elasticsearch.common.settings;
 
-import com.google.common.base.Charsets;
-import com.google.common.base.Predicate;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSortedMap;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Maps;
+import static org.elasticsearch.common.Strings.toCamelCase;
+import static org.elasticsearch.common.unit.ByteSizeValue.parseBytesSizeValue;
+import static org.elasticsearch.common.unit.SizeValue.parseSizeValue;
+import static org.elasticsearch.common.unit.TimeValue.parseTimeValue;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Strings;
@@ -36,24 +55,21 @@ import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.property.PropertyPlaceholder;
 import org.elasticsearch.common.settings.loader.SettingsLoader;
 import org.elasticsearch.common.settings.loader.SettingsLoaderFactory;
-import org.elasticsearch.common.unit.*;
+import org.elasticsearch.common.unit.ByteSizeUnit;
+import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.unit.MemorySizeValue;
+import org.elasticsearch.common.unit.RatioValue;
+import org.elasticsearch.common.unit.SizeValue;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static org.elasticsearch.common.Strings.toCamelCase;
-import static org.elasticsearch.common.unit.ByteSizeValue.parseBytesSizeValue;
-import static org.elasticsearch.common.unit.SizeValue.parseSizeValue;
-import static org.elasticsearch.common.unit.TimeValue.parseTimeValue;
+import com.google.common.base.Charsets;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Maps;
 
 /**
  * An immutable settings implementation.
@@ -166,14 +182,19 @@ public final class Settings implements ToXContent {
         int maxIndex = -1;
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             if (isArray) {
-                try {
-                    int index = Integer.parseInt(entry.getKey());
-                    if (index >= 0) {
-                        maxIndex = Math.max(maxIndex, index);
-                    } else {
+                // avoid cost of NumberFormatException
+                if (org.apache.commons.lang3.math.NumberUtils.isNumber(entry.getKey())) {
+                    try {
+                        int index = Integer.parseInt(entry.getKey());
+                        if (index >= 0) {
+                            maxIndex = Math.max(maxIndex, index);
+                        } else {
+                            isArray = false;
+                        }
+                    } catch (NumberFormatException ex) {
                         isArray = false;
                     }
-                } catch (NumberFormatException ex) {
+                } else {
                     isArray = false;
                 }
             }
@@ -526,6 +547,7 @@ public final class Settings implements ToXContent {
      *
      * @param settingPrefix The setting prefix to load the array by
      * @return The setting array values
+     * @throws org.elasticsearch.common.settings.SettingsException
      */
     public String[] getAsArray(String settingPrefix) throws SettingsException {
         return getAsArray(settingPrefix, Strings.EMPTY_ARRAY, true);
@@ -540,6 +562,7 @@ public final class Settings implements ToXContent {
      *
      * @param settingPrefix The setting prefix to load the array by
      * @return The setting array values
+     * @throws org.elasticsearch.common.settings.SettingsException
      */
     public String[] getAsArray(String settingPrefix, String[] defaultArray) throws SettingsException {
         return getAsArray(settingPrefix, defaultArray, true);
@@ -556,6 +579,7 @@ public final class Settings implements ToXContent {
      * @param defaultArray   The default array to use if no value is specified
      * @param commaDelimited Whether to try to parse a string as a comma-delimited value
      * @return The setting array values
+     * @throws org.elasticsearch.common.settings.SettingsException
      */
     public String[] getAsArray(String settingPrefix, String[] defaultArray, Boolean commaDelimited) throws SettingsException {
         List<String> result = new ArrayList<>();

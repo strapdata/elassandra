@@ -45,7 +45,7 @@ public final class Mapping implements ToXContent {
 
     // Set of fields that were included into the root object mapper before 2.0
     public static final Set<String> LEGACY_INCLUDE_IN_OBJECT = Collections.unmodifiableSet(new HashSet<>(
-            Arrays.asList("_all", "_id", "_parent", "_routing", "_timestamp", "_ttl")));
+            Arrays.asList("_all", "_id", "_parent", "_routing", "_timestamp", "_ttl", "_token", "_node")));
 
     /**
      * Transformations to be applied to the source before indexing and/or after loading.
@@ -105,6 +105,10 @@ public final class Mapping implements ToXContent {
     @SuppressWarnings("unchecked")
     public <T extends MetadataFieldMapper> T metadataMapper(Class<T> clazz) {
         return (T) metadataMappersMap.get(clazz);
+    }
+    
+    public MetadataFieldMapper[] metadataMappers() {
+        return this.metadataMappers;
     }
 
     /** @see DocumentMapper#merge(Mapping, boolean) */

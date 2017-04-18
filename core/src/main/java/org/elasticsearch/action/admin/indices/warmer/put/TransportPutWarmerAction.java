@@ -132,21 +132,21 @@ public class TransportPutWarmerAction extends TransportMasterNodeAction<PutWarme
                             IndexWarmersMetaData warmers = indexMetaData.custom(IndexWarmersMetaData.TYPE);
                             if (warmers == null) {
                                 logger.info("[{}] putting warmer [{}]", index, request.name());
-                                warmers = new IndexWarmersMetaData(new IndexWarmersMetaData.Entry(request.name(), request.searchRequest().types(), request.searchRequest().requestCache(), source));
+                                warmers = new IndexWarmersMetaData(new IndexWarmersMetaData.Entry(request.name(), request.searchRequest().types(), request.searchRequest().requestCache(), request.searchRequest().tokenRangesBitsetCache(), source));
                             } else {
                                 boolean found = false;
                                 List<IndexWarmersMetaData.Entry> entries = new ArrayList<>(warmers.entries().size() + 1);
                                 for (IndexWarmersMetaData.Entry entry : warmers.entries()) {
                                     if (entry.name().equals(request.name())) {
                                         found = true;
-                                        entries.add(new IndexWarmersMetaData.Entry(request.name(), request.searchRequest().types(), request.searchRequest().requestCache(), source));
+                                        entries.add(new IndexWarmersMetaData.Entry(request.name(), request.searchRequest().types(), request.searchRequest().requestCache(), request.searchRequest().tokenRangesBitsetCache(), source));
                                     } else {
                                         entries.add(entry);
                                     }
                                 }
                                 if (!found) {
                                     logger.info("[{}] put warmer [{}]", index, request.name());
-                                    entries.add(new IndexWarmersMetaData.Entry(request.name(), request.searchRequest().types(), request.searchRequest().requestCache(), source));
+                                    entries.add(new IndexWarmersMetaData.Entry(request.name(), request.searchRequest().types(), request.searchRequest().requestCache(), request.searchRequest().tokenRangesBitsetCache(), source));
                                 } else {
                                     logger.info("[{}] update warmer [{}]", index, request.name());
                                 }

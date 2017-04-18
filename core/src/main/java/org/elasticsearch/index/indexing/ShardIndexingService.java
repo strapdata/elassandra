@@ -39,13 +39,13 @@ import java.util.concurrent.TimeUnit;
  */
 public class ShardIndexingService extends AbstractIndexShardComponent {
 
-    private final IndexingSlowLog slowLog;
+    public final IndexingSlowLog slowLog;
 
-    private final StatsHolder totalStats = new StatsHolder();
+    public final StatsHolder totalStats = new StatsHolder();
 
     private final CopyOnWriteArrayList<IndexingOperationListener> listeners = new CopyOnWriteArrayList<>();
 
-    private volatile Map<String, StatsHolder> typesStats = ImmutableMap.of();
+    public volatile Map<String, StatsHolder> typesStats = ImmutableMap.of();
 
     public ShardIndexingService(ShardId shardId, Settings indexSettings) {
         super(shardId, indexSettings);
@@ -275,7 +275,7 @@ public class ShardIndexingService extends AbstractIndexShardComponent {
         slowLog.onRefreshSettings(settings);
     }
 
-    static class StatsHolder {
+    public static class StatsHolder {
         public final MeanMetric indexMetric = new MeanMetric();
         public final MeanMetric deleteMetric = new MeanMetric();
         public final CounterMetric indexCurrent = new CounterMetric();
@@ -283,7 +283,7 @@ public class ShardIndexingService extends AbstractIndexShardComponent {
         public final CounterMetric deleteCurrent = new CounterMetric();
         public final CounterMetric noopUpdates = new CounterMetric();
         public final CounterMetric throttleTimeMillisMetric = new CounterMetric();
-        volatile boolean isThrottled = false;
+        public volatile boolean isThrottled = false;
         volatile long startOfThrottleNS;
 
         public IndexingStats.Stats stats() {

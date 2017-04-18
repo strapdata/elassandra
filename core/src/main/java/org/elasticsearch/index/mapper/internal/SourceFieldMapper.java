@@ -19,6 +19,20 @@
 
 package org.elasticsearch.index.mapper.internal;
 
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeStringValue;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.index.IndexOptions;
@@ -44,22 +58,8 @@ import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
-import org.elasticsearch.index.mapper.MergeMappingException;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
-
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeStringValue;
 
 /**
  *
@@ -72,7 +72,7 @@ public class SourceFieldMapper extends MetadataFieldMapper {
 
     public static class Defaults {
         public static final String NAME = SourceFieldMapper.NAME;
-        public static final boolean ENABLED = true;
+        public static final boolean ENABLED = false;
         public static final long COMPRESS_THRESHOLD = -1;
         public static final String FORMAT = null; // default format is to use the one provided
 
@@ -203,10 +203,13 @@ public class SourceFieldMapper extends MetadataFieldMapper {
 
     static final class SourceFieldType extends MappedFieldType {
 
-        public SourceFieldType() {}
+        public SourceFieldType() {
+            this.cqlCollection(CqlCollection.SINGLETON);
+        }
 
         protected SourceFieldType(SourceFieldType ref) {
             super(ref);
+            this.cqlCollection(CqlCollection.SINGLETON);
         }
 
         @Override
@@ -227,7 +230,10 @@ public class SourceFieldMapper extends MetadataFieldMapper {
             BytesReference bValue;
             if (value instanceof BytesRef) {
                 bValue = new BytesArray((BytesRef) value);
-            } else {
+            } else  if (value instanceof ByteBuffer) {
+                ByteBuffer bb = (ByteBuffer)value;
+                bValue = new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
+            } else{
                 bValue = (BytesReference) value;
             }
             try {
@@ -302,6 +308,11 @@ public class SourceFieldMapper extends MetadataFieldMapper {
         return null;
     }
 
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        // Nothing to, _source should be disabled in elassandra.
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (!enabled) {

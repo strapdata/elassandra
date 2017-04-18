@@ -19,20 +19,6 @@
 
 package org.elasticsearch.cluster.routing;
 
-import com.carrotsearch.hppc.IntSet;
-import com.carrotsearch.hppc.cursors.IntCursor;
-import com.carrotsearch.hppc.cursors.IntObjectCursor;
-import com.google.common.collect.Sets;
-import com.google.common.collect.UnmodifiableIterator;
-import org.apache.lucene.util.CollectionUtil;
-import org.elasticsearch.cluster.AbstractDiffable;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.cluster.metadata.MetaData;
-import org.elasticsearch.common.collect.ImmutableOpenIntMap;
-import org.elasticsearch.common.io.stream.StreamInput;
-import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.index.shard.ShardId;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,6 +26,30 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+
+import org.apache.lucene.util.CollectionUtil;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
+import org.elasticsearch.cluster.AbstractDiffable;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.IndexMetaData.State;
+import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.collect.ImmutableOpenIntMap;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.transport.TransportAddress;
+import org.elasticsearch.index.shard.ShardId;
+
+import com.carrotsearch.hppc.IntSet;
+import com.carrotsearch.hppc.cursors.IntCursor;
+import com.carrotsearch.hppc.cursors.IntObjectCursor;
+import com.google.common.collect.Sets;
+import com.google.common.collect.UnmodifiableIterator;
+
 
 /**
  * The {@link IndexRoutingTable} represents routing information for a single
@@ -63,6 +73,11 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
     private final String index;
     private final ShardShuffler shuffler;
 
+    final public static  UnassignedInfo UNASSIGNED_INFO_NODE_LEFT = new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "cassandra node left");
+    final public static  UnassignedInfo UNASSIGNED_INFO_UNAVAILABLE = new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "shard or keyspace unavailable");
+    final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_CREATED = new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null);
+    final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_REOPEN = new UnassignedInfo(UnassignedInfo.Reason.INDEX_REOPENED, null);
+    
     // note, we assume that when the index routing is created, ShardRoutings are created for all possible number of
     // shards with state set to UNASSIGNED
     private final ImmutableOpenIntMap<IndexShardRoutingTable> shards;
@@ -92,6 +107,22 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
      */
     public String index() {
         return this.index;
+    }
+
+
+    /*
+     * Return the primary ShardRouting hosted on nodeId.
+     * (There is no more replica shards in elasticsearch, so you can't have more than one shardRouting per node for an index.
+     */
+    public ShardRouting primaryShardRouting(String nodeId) {
+        for (IntObjectCursor<IndexShardRoutingTable> cursor : shards) {
+            for (ShardRouting sr : cursor.value.shards) {
+                if (sr.currentNodeId() != null && sr.currentNodeId().equals(nodeId) && sr.primary()) {
+                    return sr;
+                }
+            }
+        }
+        return null;
     }
 
 
@@ -136,6 +167,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         ArrayList<String> failures = new ArrayList<>();
 
         // check the number of shards
+        /*
         if (indexMetaData.getNumberOfShards() != shards().size()) {
             Set<Integer> expected = Sets.newHashSet();
             for (int i = 0; i < indexMetaData.getNumberOfShards(); i++) {
@@ -159,6 +191,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
                 }
             }
         }
+        */
         return failures;
     }
 
@@ -358,11 +391,64 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
 
     public static class Builder {
 
-        private final String index;
-        private final ImmutableOpenIntMap.Builder<IndexShardRoutingTable> shards = ImmutableOpenIntMap.builder();
+        final String index;
+        final ImmutableOpenIntMap.Builder<IndexShardRoutingTable> shards = ImmutableOpenIntMap.builder();
 
         public Builder(String index) {
             this.index = index;
+        }
+        
+        /**
+         * Build the local per index routing table including all primary shards and some secondary shards to reflect unavailable nodes in the cluster state.
+         * (Do not use for per query routing, but when cluster state change)
+         * 
+         * One local primary ShardRouting (index 0) + X remote primary shard for alive nodes, each ShardRouting with an allocated set of token ranges (green status).
+         * If some range are missing, add one unassigned primary shard with orphan ranges to reflect partial unavailability with CL=1 (red status).
+         * If N node are dead, add N unassigned replica shards with empty ranges to reflect partial unavailability with no impact (orange status)  
+         * @param localPrimaryShardRouting
+         * @param clusterService
+         * @param targetState
+         */
+        public Builder(String index, ClusterService clusterService, ClusterState targetState) {
+            this.index = index;
+            IndexMetaData targetIndexMetaData = targetState.metaData().index(index);
+            if (targetIndexMetaData == null || targetIndexMetaData.getState() == State.CLOSE)
+                return;
+            try {
+                PrimaryFirstSearchStrategy.PrimaryFirstRouter router = clusterService.updateRouter(targetIndexMetaData, targetState);
+                AbstractSearchStrategy.Router.Route route = router.newRoute(null, null);
+                for(IndexShardRoutingTable isrt : route.getShardRouting()) {
+                    // TODO: keep only nodes matching at least one routing entry
+                     shards.put(isrt.getShardId().id(), isrt);
+                }
+            } catch (NullPointerException | java.lang.AssertionError e) {
+                // thrown by cassandra when the keyspace is not yet create locally. 
+                // We must wait for a gossip schema change to update the routing Table.
+                Loggers.getLogger(getClass()).warn("Keyspace {} not available", e, this.index);
+            }
+        }
+        
+        // build a dynamic IndexRoutingTable for each query (do not use for cluster state).
+        public Builder(String index, ClusterService clusterService, ClusterState targetState, @Nullable String preference, TransportAddress src) {
+            this.index = index;
+            IndexMetaData targetIndexMetaData = targetState.metaData().index(index);
+            if (targetIndexMetaData == null || targetIndexMetaData.getState() == State.CLOSE)
+                return;
+            try {
+                AbstractSearchStrategy.Router router = clusterService.getRouter(targetIndexMetaData, targetState);
+                AbstractSearchStrategy.Router.Route route = router.newRoute(preference, src);
+                for(IndexShardRoutingTable isrt : route.getShardRouting()) {
+                    // TODO: keep only nodes matching at least one routing entry
+                     shards.put(isrt.getShardId().id(), isrt);
+                }
+            
+            } catch (NullPointerException | java.lang.AssertionError e) {
+                // thrown by cassandra when the keyspace is not yet create locally. 
+                // We must wait for a gossip schema change to update the routing Table.
+                Loggers.getLogger(getClass()).warn("Keyspace {} not  available", e, this.index);
+            } catch (Exception e1) {
+                Loggers.getLogger(getClass()).warn("Failde to compute route for {}", e1, this.index);
+            }
         }
 
         /**
@@ -400,28 +486,28 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         /**
          * Initializes a new empty index, as as a result of opening a closed index.
          */
-        public Builder initializeAsFromCloseToOpen(IndexMetaData indexMetaData) {
+         public Builder initializeAsFromCloseToOpen(IndexMetaData indexMetaData) {
             return initializeEmpty(indexMetaData, new UnassignedInfo(UnassignedInfo.Reason.INDEX_REOPENED, null));
         }
 
         /**
          * Initializes a new empty index, to be restored from a snapshot
          */
-        public Builder initializeAsNewRestore(IndexMetaData indexMetaData, RestoreSource restoreSource, IntSet ignoreShards) {
+         public Builder initializeAsNewRestore(IndexMetaData indexMetaData, RestoreSource restoreSource, IntSet ignoreShards) {
             return initializeAsRestore(indexMetaData, restoreSource, ignoreShards, true, new UnassignedInfo(UnassignedInfo.Reason.NEW_INDEX_RESTORED, "restore_source[" + restoreSource.snapshotId().getRepository() + "/" + restoreSource.snapshotId().getSnapshot() + "]"));
         }
 
         /**
          * Initializes an existing index, to be restored from a snapshot
          */
-        public Builder initializeAsRestore(IndexMetaData indexMetaData, RestoreSource restoreSource) {
+         public Builder initializeAsRestore(IndexMetaData indexMetaData, RestoreSource restoreSource) {
             return initializeAsRestore(indexMetaData, restoreSource, null, false, new UnassignedInfo(UnassignedInfo.Reason.EXISTING_INDEX_RESTORED, "restore_source[" + restoreSource.snapshotId().getRepository() + "/" + restoreSource.snapshotId().getSnapshot() + "]"));
         }
 
         /**
          * Initializes an index, to be restored from snapshot
          */
-        private Builder initializeAsRestore(IndexMetaData indexMetaData, RestoreSource restoreSource, IntSet ignoreShards, boolean asNew, UnassignedInfo unassignedInfo) {
+         public Builder initializeAsRestore(IndexMetaData indexMetaData, RestoreSource restoreSource, IntSet ignoreShards, boolean asNew, UnassignedInfo unassignedInfo) {
             if (!shards.isEmpty()) {
                 throw new IllegalStateException("trying to initialize an index with fresh shards, but already has shards created");
             }
@@ -440,22 +526,22 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
             return this;
         }
 
-        /**
-         * Initializes a new empty index, with an option to control if its from an API or not.
-         */
-        private Builder initializeEmpty(IndexMetaData indexMetaData, UnassignedInfo unassignedInfo) {
-            if (!shards.isEmpty()) {
-                throw new IllegalStateException("trying to initialize an index with fresh shards, but already has shards created");
-            }
-            for (int shardId = 0; shardId < indexMetaData.getNumberOfShards(); shardId++) {
-                IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(new ShardId(indexMetaData.getIndex(), shardId));
-                for (int i = 0; i <= indexMetaData.getNumberOfReplicas(); i++) {
-                    indexShardRoutingBuilder.addShard(ShardRouting.newUnassigned(index, shardId, null, i == 0, unassignedInfo));
-                }
-                shards.put(shardId, indexShardRoutingBuilder.build());
-            }
-            return this;
-        }
+         /**
+          * Initializes a new empty index, with an option to control if its from an API or not.
+          */
+         private Builder initializeEmpty(IndexMetaData indexMetaData, UnassignedInfo unassignedInfo) {
+             if (!shards.isEmpty()) {
+                 throw new IllegalStateException("trying to initialize an index with fresh shards, but already has shards created");
+             }
+             for (int shardId = 0; shardId < indexMetaData.getNumberOfShards(); shardId++) {
+                 IndexShardRoutingTable.Builder indexShardRoutingBuilder = new IndexShardRoutingTable.Builder(new ShardId(indexMetaData.getIndex(), shardId));
+                 for (int i = 0; i <= indexMetaData.getNumberOfReplicas(); i++) {
+                     indexShardRoutingBuilder.addShard(ShardRouting.newUnassigned(index, shardId, null, i == 0, unassignedInfo));
+                 }
+                 shards.put(shardId, indexShardRoutingBuilder.build());
+             }
+             return this;
+         }
 
         public Builder addReplica() {
             for (IntCursor cursor : shards.keys()) {
@@ -553,7 +639,13 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         });
 
         for (IndexShardRoutingTable indexShard : ordered) {
-            sb.append("----shard_id [").append(indexShard.shardId().index().name()).append("][").append(indexShard.shardId().id()).append("]\n");
+            sb.append("----shard_id [")
+            .append(indexShard.shardId().index().name())
+            .append("][")
+            .append(indexShard.shardId().id())
+            .append("][")
+            .append(indexShard.getPrimaryShardRouting().tokenRanges())
+            .append("]\n");
             for (ShardRouting shard : indexShard) {
                 sb.append("--------").append(shard.shortSummary()).append("\n");
             }

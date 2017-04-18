@@ -103,14 +103,14 @@ class JNANatives {
             }
         }
     }
-    
+       
     static String rlimitToString(long value) {
         assert Constants.LINUX || Constants.MAC_OS_X;
         if (value == JNACLibrary.RLIM_INFINITY) {
             return "unlimited";
         } else {
             // TODO, on java 8 use Long.toUnsignedString, since thats what it is.
-            return Long.toString(value);
+            return Long.toUnsignedString(value);
         }
     }
 
@@ -126,7 +126,7 @@ class JNANatives {
             return false;
         }
     }
-
+ 
     static void tryVirtualLock() {
         JNAKernel32Library kernel = JNAKernel32Library.getInstance();
         Pointer process = null;
@@ -179,6 +179,8 @@ class JNANatives {
     }
 
     static void trySeccomp(Path tmpFile) {
+        logger.warn("Secomp disabled");
+        /*
         try {
             int ret = Seccomp.init(tmpFile);
             LOCAL_SECCOMP = true;
@@ -193,5 +195,6 @@ class JNANatives {
             }
             logger.warn("unable to install syscall filter: " + t.getMessage());
         }
+        */
     }
 }

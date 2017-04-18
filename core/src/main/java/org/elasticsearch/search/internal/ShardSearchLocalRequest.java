@@ -19,6 +19,14 @@
 
 package org.elasticsearch.search.internal;
 
+import static org.elasticsearch.search.Scroll.readScroll;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cluster.routing.ShardRouting;
@@ -31,10 +39,6 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.script.Template;
 import org.elasticsearch.search.Scroll;
-
-import java.io.IOException;
-
-import static org.elasticsearch.search.Scroll.readScroll;
 
 /**
  * Shard level search request that gets created and consumed on the local node.
@@ -73,14 +77,17 @@ public class ShardSearchLocalRequest extends ContextAndHeaderHolder implements S
     private long nowInMillis;
 
     private boolean profile;
+    
+    private Boolean tokenRangesBitsetCache;
+    private Collection<Range<Token>> tokenRanges = null;
 
     ShardSearchLocalRequest() {
     }
 
     ShardSearchLocalRequest(SearchRequest searchRequest, ShardRouting shardRouting, int numberOfShards,
                             String[] filteringAliases, long nowInMillis) {
-        this(shardRouting.shardId(), numberOfShards, searchRequest.searchType(),
-                searchRequest.source(), searchRequest.types(), searchRequest.requestCache());
+        this(shardRouting.shardId(), shardRouting, numberOfShards, searchRequest.searchType(),
+                searchRequest.source(), searchRequest.types(), searchRequest.requestCache(), searchRequest.tokenRangesBitsetCache());
         this.extraSource = searchRequest.extraSource();
         this.templateSource = searchRequest.templateSource();
         this.template = searchRequest.template();
@@ -88,6 +95,10 @@ public class ShardSearchLocalRequest extends ContextAndHeaderHolder implements S
         this.filteringAliases = filteringAliases;
         this.nowInMillis = nowInMillis;
         copyContextAndHeadersFrom(searchRequest);
+        
+        // Use the user provided token_range of the shardRouting one.
+        this.tokenRanges = (searchRequest.tokenRanges() != null) ? searchRequest.tokenRanges() : shardRouting.tokenRanges();
+        this.tokenRangesBitsetCache = searchRequest.tokenRangesBitsetCache();
     }
 
     public ShardSearchLocalRequest(String[] types, long nowInMillis) {
@@ -100,8 +111,8 @@ public class ShardSearchLocalRequest extends ContextAndHeaderHolder implements S
         this.filteringAliases = filteringAliases;
     }
 
-    public ShardSearchLocalRequest(ShardId shardId, int numberOfShards, SearchType searchType,
-                                   BytesReference source, String[] types, Boolean requestCache) {
+    public ShardSearchLocalRequest(ShardId shardId, ShardRouting shardRouting, int numberOfShards, SearchType searchType,
+                                   BytesReference source, String[] types, Boolean requestCache, Boolean tokenRangesBitsetCache) {
         this.index = shardId.getIndex();
         this.shardId = shardId.id();
         this.numberOfShards = numberOfShards;
@@ -109,6 +120,10 @@ public class ShardSearchLocalRequest extends ContextAndHeaderHolder implements S
         this.source = source;
         this.types = types;
         this.requestCache = requestCache;
+        
+        // Use the user provided token_range of the shardRouting one.
+        this.tokenRanges = shardRouting.tokenRanges();
+        this.tokenRangesBitsetCache = tokenRangesBitsetCache;
     }
 
     @Override
@@ -213,6 +228,15 @@ public class ShardSearchLocalRequest extends ContextAndHeaderHolder implements S
             template = Template.readTemplate(in);
         }
         requestCache = in.readOptionalBoolean();
+        tokenRangesBitsetCache = in.readOptionalBoolean();
+        
+        // read tokenRanges
+        Object[] tokens = (Object[]) in.readGenericValue();
+        this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+        for (int i = 0; i < tokens.length;) {
+            Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+            this.tokenRanges.add(range);
+        }
     }
 
     protected void innerWriteTo(StreamOutput out, boolean asKey) throws IOException {
@@ -243,6 +267,18 @@ public class ShardSearchLocalRequest extends ContextAndHeaderHolder implements S
             template.writeTo(out);
         }
         out.writeOptionalBoolean(requestCache);
+        out.writeOptionalBoolean(tokenRangesBitsetCache);
+        
+        // write tokenRanges
+        if (tokenRanges != null) {
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
+        }
     }
 
     @Override
@@ -252,5 +288,16 @@ public class ShardSearchLocalRequest extends ContextAndHeaderHolder implements S
         // copy it over, most requests are small, we might as well copy to make sure we are not sliced...
         // we could potentially keep it without copying, but then pay the price of extra unused bytes up to a page
         return out.bytes().copyBytesArray();
+    }
+    
+
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+        return this.tokenRanges;
+    }
+
+    @Override
+    public Boolean tokenRangesBitsetCache() {
+        return this.tokenRangesBitsetCache;
     }
 }

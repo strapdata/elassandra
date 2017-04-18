@@ -69,7 +69,7 @@ public class BytesStreamOutput extends StreamOutput implements BytesStream {
 
     @Override
     public void writeByte(byte b) throws IOException {
-        ensureCapacity(count + 1L);
+        ensureCapacity(count+1);
         bytes.set(count, b);
         count++;
     }
@@ -87,7 +87,7 @@ public class BytesStreamOutput extends StreamOutput implements BytesStream {
         }
 
         // get enough pages for new size
-        ensureCapacity(((long) count) + length);
+        ensureCapacity(count+length);
 
         // bulk copy
         bytes.set(count, b, offset, length);
@@ -113,13 +113,18 @@ public class BytesStreamOutput extends StreamOutput implements BytesStream {
     }
 
     @Override
-    public void seek(long position) {
-        ensureCapacity(position);
-        count = (int) position;
+    public void seek(long position) throws IOException {
+        if (position > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("position " + position + " > Integer.MAX_VALUE");
+        }
+
+        count = (int)position;
+        ensureCapacity(count);
     }
 
     public void skip(int length) {
-        seek(((long) count) + length);
+        count += length;
+        ensureCapacity(count);
     }
 
     @Override
@@ -151,10 +156,7 @@ public class BytesStreamOutput extends StreamOutput implements BytesStream {
         return bytes.ramBytesUsed();
     }
 
-    private void ensureCapacity(long offset) {
-        if (offset > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException(getClass().getSimpleName() + " cannot hold more than 2GB of data");
-        }
+    private void ensureCapacity(int offset) {
         bytes = bigarrays.grow(bytes, offset);
     }
 

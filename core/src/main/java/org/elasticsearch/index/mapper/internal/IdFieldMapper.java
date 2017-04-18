@@ -274,6 +274,18 @@ public class IdFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object _id) throws IOException {
+        String id = (String) _id;
+        context.id(id);
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            context.doc().add(new Field(fieldType().names().indexName(), context.id(), fieldType()));
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new BinaryDocValuesField(fieldType().names().indexName(), new BytesRef(context.id())));
+        }
+    }
+    
+    @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         XContentParser parser = context.parser();
         if (parser.currentName() != null && parser.currentName().equals(Defaults.NAME) && parser.currentToken().isValue()) {

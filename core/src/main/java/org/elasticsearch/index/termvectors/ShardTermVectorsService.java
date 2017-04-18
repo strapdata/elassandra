@@ -19,8 +19,25 @@
 
 package org.elasticsearch.index.termvectors;
 
+import static org.elasticsearch.index.mapper.SourceToParse.source;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.index.*;
+import org.apache.lucene.index.Fields;
+import org.apache.lucene.index.IndexOptions;
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.memory.MemoryIndex;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.termvectors.TermVectorsFilter;
@@ -29,6 +46,7 @@ import org.elasticsearch.action.termvectors.TermVectorsResponse;
 import org.elasticsearch.action.termvectors.dfs.DfsOnlyRequest;
 import org.elasticsearch.action.termvectors.dfs.DfsOnlyResponse;
 import org.elasticsearch.action.termvectors.dfs.TransportDfsOnlyAction;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
@@ -38,7 +56,12 @@ import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.get.GetResult;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.DocumentMapperForType;
+import org.elasticsearch.index.mapper.MappedFieldType;
+import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.ParsedDocument;
+import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.core.StringFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.index.settings.IndexSettingsService;
@@ -47,25 +70,22 @@ import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.search.dfs.AggregatedDfs;
 
-import java.io.IOException;
-import java.util.*;
-
-import static org.elasticsearch.index.mapper.SourceToParse.source;
-
 /**
  */
 
 public class ShardTermVectorsService extends AbstractIndexShardComponent {
 
     private IndexShard indexShard;
+    private ClusterService clusterService;
     private final MappingUpdatedAction mappingUpdatedAction;
     private final TransportDfsOnlyAction dfsAction;
 
     @Inject
-    public ShardTermVectorsService(ShardId shardId, IndexSettingsService indexSettingsService, MappingUpdatedAction mappingUpdatedAction, TransportDfsOnlyAction dfsAction) {
+    public ShardTermVectorsService(ClusterService clusterService, ShardId shardId, IndexSettingsService indexSettingsService, MappingUpdatedAction mappingUpdatedAction, TransportDfsOnlyAction dfsAction) {
         super(shardId, indexSettingsService.getSettings());
         this.mappingUpdatedAction = mappingUpdatedAction;
         this.dfsAction = dfsAction;
+        this.clusterService = clusterService;
     }
 
     // sadly, to overcome cyclic dep, we need to do this and inject it ourselves...
@@ -78,8 +98,16 @@ public class ShardTermVectorsService extends AbstractIndexShardComponent {
         final TermVectorsResponse termVectorsResponse = new TermVectorsResponse(concreteIndex, request.type(), request.id());
         final Term uidTerm = new Term(UidFieldMapper.NAME, Uid.createUidAsBytes(request.type(), request.id()));
 
-        Engine.GetResult get = indexShard.get(new Engine.Get(request.realtime(), uidTerm).version(request.version()).versionType(request.versionType()));
-
+        //Engine.GetResult get = indexShard.get(new Engine.Get(request.realtime(), uidTerm).version(request.version()).versionType(request.versionType()));
+        Engine.GetResult get;
+        try {
+            get = clusterService.fetchSourceInternal(
+                    clusterService.state().metaData().index(shardId.index().name()).keyspace(),
+                    concreteIndex, request.type(), request.id());
+        } catch (Throwable ex) {
+            throw new ElasticsearchException("failed to execute term vector request", ex);
+        }
+        
         Fields termVectorsByField = null;
         boolean docFromTranslog = get.source() != null;
         AggregatedDfs dfs = null;

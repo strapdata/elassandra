@@ -244,6 +244,14 @@ public class IndexFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        if (!enabledState.enabled) {
+            return;
+        }
+        context.doc().add(new Field(fieldType().names().indexName(), (String)value, fieldType()));
+    }
+    
+    @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (!enabledState.enabled) {
             return;

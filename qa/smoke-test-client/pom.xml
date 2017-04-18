@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <artifactId>elasticsearch-qa</artifactId>
-        <groupId>org.elasticsearch.qa</groupId>
+        <groupId>com.strapdata.elasticsearch.qa</groupId>
         <version>2.4.2-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -28,7 +28,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.elasticsearch</groupId>
+            <groupId>com.strapdata.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
             <scope>test</scope>
         </dependency>
@@ -74,7 +74,7 @@
                             <artifactItems>
                                 <!-- elasticsearch distribution -->
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.distribution.zip</groupId>
+                                    <groupId>com.strapdata.elasticsearch.distribution.zip</groupId>
                                     <artifactId>elasticsearch</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>

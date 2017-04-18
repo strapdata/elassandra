@@ -19,12 +19,18 @@
 
 package org.elasticsearch.search.internal;
 
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.ParseFieldMatcher;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.index.analysis.AnalysisService;
@@ -54,9 +60,6 @@ import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.rescore.RescoreSearchContext;
 import org.elasticsearch.search.scan.ScanContext;
 import org.elasticsearch.search.suggest.SuggestionSearchContext;
-
-import java.util.List;
-import java.util.Map;
 
 public abstract class FilteredSearchContext extends SearchContext {
 
@@ -232,6 +235,11 @@ public abstract class FilteredSearchContext extends SearchContext {
     public SearchContext fetchSourceContext(FetchSourceContext fetchSourceContext) {
         return in.fetchSourceContext(fetchSourceContext);
     }
+    
+    @Override
+    public ClusterState getClusterState() {
+        return in.getClusterState();
+    }
 
     @Override
     public ContextIndexSearcher searcher() {
@@ -251,6 +259,11 @@ public abstract class FilteredSearchContext extends SearchContext {
     @Override
     public AnalysisService analysisService() {
         return in.analysisService();
+    }
+    
+    @Override
+    public ClusterService clusterService() {
+        return in.clusterService();
     }
 
     @Override
@@ -527,9 +540,14 @@ public abstract class FilteredSearchContext extends SearchContext {
     public Map<Class<?>, Collector> queryCollectors() {
         return in.queryCollectors();
     }
-
+    
     @Override
     public Profilers getProfilers() {
         return in.getProfilers();
+    }
+    
+    @Override
+    public SearchProcessor searchProcessor() {
+        return in.searchProcessor();
     }
 }

@@ -324,7 +324,7 @@ public class GeoPointFieldMapperLegacy extends BaseGeoPointFieldMapper implement
     }
 
     @Override
-    protected void parse(ParseContext context, GeoPoint point, String geoHash) throws IOException {
+    public void parse(ParseContext context, GeoPoint point, String geoHash) throws IOException {
         boolean validPoint = false;
         if (coerce.value() == false && ignoreMalformed.value() == false) {
             if (point.lat() > 90.0 || point.lat() < -90.0) {

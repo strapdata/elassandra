@@ -19,10 +19,11 @@
 
 package org.elasticsearch.bootstrap;
 
+import java.nio.file.Path;
+
+import org.apache.cassandra.utils.CLibrary;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
-
-import java.nio.file.Path;
 
 /**
  * The Natives class is a wrapper class that checks if the classes necessary for calling native methods are available on
@@ -35,6 +36,7 @@ final class Natives {
     private static final ESLogger logger = Loggers.getLogger(Natives.class);
 
     // marker to determine if the JNA class files are available to the JVM
+    /*
     static final boolean JNA_AVAILABLE;
 
     static {
@@ -51,25 +53,30 @@ final class Natives {
         }
         JNA_AVAILABLE = v;
     }
-
+    */
+    
     static void tryMlockall() {
+        logger.info("JNA loaded by cassandra, jnaAvailable="+CLibrary.jnaAvailable()+" jnaMemoryLockable="+CLibrary.jnaMemoryLockable());
+        /*
+         * Done by cassandra.
         if (!JNA_AVAILABLE) {
             logger.warn("cannot mlockall because JNA is not available");
             return;
         }
-        JNANatives.tryMlockall();
+        CLibrary.tryMlockall();
+        */
     }
 
     static boolean definitelyRunningAsRoot() {
-        if (!JNA_AVAILABLE) {
+        if (!CLibrary.jnaAvailable()) {
             logger.warn("cannot check if running as root because JNA is not available");
             return false;
         }
         return JNANatives.definitelyRunningAsRoot();
     }
-
+ 
     static void tryVirtualLock() {
-        if (!JNA_AVAILABLE) {
+        if (!CLibrary.jnaAvailable()) {
             logger.warn("cannot mlockall because JNA is not available");
             return;
         }
@@ -77,7 +84,7 @@ final class Natives {
     }
 
     static void addConsoleCtrlHandler(ConsoleCtrlHandler handler) {
-        if (!JNA_AVAILABLE) {
+        if (!CLibrary.jnaAvailable()) {
             logger.warn("cannot register console handler because JNA is not available");
             return;
         }
@@ -85,14 +92,11 @@ final class Natives {
     }
 
     static boolean isMemoryLocked() {
-        if (!JNA_AVAILABLE) {
-            return false;
-        }
-        return JNANatives.LOCAL_MLOCKALL;
+        return CLibrary.jnaMemoryLockable();
     }
     
     static void trySeccomp(Path tmpFile) {
-        if (!JNA_AVAILABLE) {
+        if (!CLibrary.jnaAvailable()) {
             logger.warn("cannot install syscall filters because JNA is not available");
             return;
         }
@@ -100,7 +104,7 @@ final class Natives {
     }
     
     static boolean isSeccompInstalled() {
-        if (!JNA_AVAILABLE) {
+        if (!CLibrary.jnaAvailable()) {
             return false;
         }
         return JNANatives.LOCAL_SECCOMP;

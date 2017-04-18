@@ -150,58 +150,6 @@ public class ClusterServiceIT extends ESIntegTestCase {
     }
 
     @Test
-    public void testTimedOutUpdateTaskCleanedUp() throws Exception {
-        Settings settings = settingsBuilder()
-            .put("discovery.type", "local")
-            .build();
-        internalCluster().startNode(settings);
-        ensureGreen();
-        InternalClusterService clusterService = (InternalClusterService) internalCluster().getInstance(ClusterService.class);
-        final CountDownLatch block = new CountDownLatch(1);
-        clusterService.submitStateUpdateTask("block-task", new ClusterStateUpdateTask() {
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                try {
-                    block.await();
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-                return currentState;
-            }
-
-            @Override
-            public void onFailure(String source, Throwable t) {
-                throw new RuntimeException(t);
-            }
-        });
-
-        final CountDownLatch block2 = new CountDownLatch(1);
-        clusterService.submitStateUpdateTask("test", new ClusterStateUpdateTask() {
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                block2.countDown();
-                return currentState;
-            }
-
-            @Override
-            public TimeValue timeout() {
-                return TimeValue.timeValueSeconds(0);
-            }
-
-            @Override
-            public void onFailure(String source, Throwable t) {
-                block2.countDown();
-            }
-        });
-        block.countDown();
-        block2.await();
-        synchronized (clusterService.updateTasksPerExecutor) {
-            assertTrue("expected empty map but was " + clusterService.updateTasksPerExecutor,
-                clusterService.updateTasksPerExecutor.isEmpty());
-        }
-    }
-
-    @Test
     public void testAckedUpdateTask() throws Exception {
         Settings settings = settingsBuilder()
                 .put("discovery.type", "local")
@@ -838,7 +786,7 @@ public class ClusterServiceIT extends ESIntegTestCase {
                 @Override
                 public BatchResult<Object> execute(ClusterState currentState, List<Object> tasks) throws Exception {
                     ClusterState newClusterState = ClusterState.builder(currentState).build();
-                    return BatchResult.builder().successes(tasks).build(newClusterState);
+                    return BatchResult.builder().successes(tasks).build(newClusterState, true);
                 }
 
                 @Override
@@ -905,7 +853,7 @@ public class ClusterServiceIT extends ESIntegTestCase {
                     batches.incrementAndGet();
                     semaphore.acquire();
                 }
-                return BatchResult.<Task>builder().successes(tasks).build(maybeUpdatedClusterState);
+                return BatchResult.<Task>builder().successes(tasks).build(maybeUpdatedClusterState, true);
             }
 
             @Override

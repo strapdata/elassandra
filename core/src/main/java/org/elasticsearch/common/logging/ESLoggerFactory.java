@@ -19,8 +19,8 @@
 
 package org.elasticsearch.common.logging;
 
-import org.elasticsearch.common.logging.jdk.JdkESLoggerFactory;
 import org.elasticsearch.common.logging.log4j.Log4jESLoggerFactory;
+import org.elasticsearch.common.logging.logback.LogbackESLoggerFactory;
 import org.elasticsearch.common.logging.slf4j.Slf4jESLoggerFactory;
 
 /**
@@ -28,8 +28,10 @@ import org.elasticsearch.common.logging.slf4j.Slf4jESLoggerFactory;
  */
 public abstract class ESLoggerFactory {
 
-    private static volatile ESLoggerFactory defaultFactory = new JdkESLoggerFactory();
+    private static volatile ESLoggerFactory defaultFactory = new LogbackESLoggerFactory();
 
+    // Default factory is Logback.
+    /* 
     static {
         try {
             Class<?> loggerClazz = Class.forName("org.apache.log4j.Logger");
@@ -46,7 +48,8 @@ public abstract class ESLoggerFactory {
             }
         }
     }
-
+    */
+    
     /**
      * Changes the default factory.
      */

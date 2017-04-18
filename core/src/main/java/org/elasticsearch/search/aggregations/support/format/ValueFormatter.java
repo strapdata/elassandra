@@ -18,6 +18,14 @@
  */
 package org.elasticsearch.search.aggregations.support.format;
 
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.text.NumberFormat;
+import java.util.Locale;
+
 import org.apache.lucene.spatial.util.GeoHashUtils;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -28,12 +36,6 @@ import org.elasticsearch.index.mapper.core.DateFieldMapper;
 import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.joda.time.DateTimeZone;
 
-import java.io.IOException;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
-import java.text.NumberFormat;
-import java.util.Locale;
-
 /**
  * A strategy for formatting time represented as millis long value to string
  */
@@ -43,6 +45,7 @@ public interface ValueFormatter extends Streamable {
     public final static ValueFormatter IPv4 = new IPv4Formatter();
     public final static ValueFormatter GEOHASH = new GeoHash();
     public final static ValueFormatter BOOLEAN = new BooleanFormatter();
+    public final static ValueFormatter TOKEN = new TokenFormatter();
 
     /**
      * Uniquely identifies this formatter (used for efficient serialization)
@@ -296,4 +299,34 @@ public interface ValueFormatter extends Streamable {
         public void writeTo(StreamOutput out) throws IOException {
         }
     }
+    
+    
+    static class TokenFormatter implements ValueFormatter {
+
+        static final byte ID = 12;
+
+        @Override
+        public byte id() {
+            return ID;
+        }
+
+        @Override
+        public String format(long value) {
+            return BigInteger.valueOf(value).toString();
+        }
+
+        @Override
+        public String format(double value) {
+            return (new BigDecimal(value).toBigInteger()).toString();
+        }
+
+        @Override
+        public void readFrom(StreamInput in) throws IOException {
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+        }
+    }
+
 }

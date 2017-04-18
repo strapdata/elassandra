@@ -72,6 +72,7 @@ public class RoutingTypeMapperTests extends ESSingleNodeTestCase {
         assertEquals(IndexOptions.NONE, docMapper.routingFieldMapper().fieldType().indexOptions());
     }
 
+    /*
     public void testFieldTypeSettingsSerializationBackcompat() throws Exception {
         String enabledMapping = XContentFactory.jsonBuilder().startObject().startObject("type")
                 .startObject("_routing").field("store", "no").field("index", "no").endObject()
@@ -94,7 +95,8 @@ public class RoutingTypeMapperTests extends ESSingleNodeTestCase {
         assertThat(routingConfiguration, hasKey("index"));
         assertThat(routingConfiguration.get("index").toString(), is("no"));
     }
-
+    */
+    
     public void testPathBackcompat() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
             .startObject("_routing").field("path", "custom_routing").endObject()

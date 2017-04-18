@@ -19,19 +19,20 @@
 
 package org.elasticsearch.common.lucene;
 
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Multimap;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.Set;
 
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReader.CoreClosedListener;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardUtils;
 
-import java.io.IOException;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.Set;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Multimap;
 
 /**
  * A map between segment core cache keys and the shard that these segments
@@ -65,33 +66,37 @@ public final class ShardCoreKeyMap {
         }
         final Object coreKey = reader.getCoreCacheKey();
         final String index = shardId.getIndex();
-        synchronized (this) {
-            if (coreKeyToShard.put(coreKey, shardId) == null) {
-                final boolean added = indexToCoreKey.put(index, coreKey);
-                assert added;
-                CoreClosedListener listener = new CoreClosedListener() {
-                    @Override
-                    public void onClose(Object ownerCoreCacheKey) throws IOException {
-                        assert coreKey == ownerCoreCacheKey;
-                        synchronized (ShardCoreKeyMap.this) {
-                            coreKeyToShard.remove(ownerCoreCacheKey);
-                            indexToCoreKey.remove(index, coreKey);
+        //synchronized (this) {
+        if (coreKeyToShard.get(coreKey) == null) {
+            synchronized(coreKey) {
+                coreKeyToShard.computeIfAbsent(coreKey, K -> {
+                    final boolean added = indexToCoreKey.put(index, K);
+                    assert added;
+                    CoreClosedListener listener = new CoreClosedListener() {
+                        @Override
+                        public void onClose(Object ownerCoreCacheKey) throws IOException {
+                            assert K == ownerCoreCacheKey;
+                            synchronized (ShardCoreKeyMap.this) {
+                                coreKeyToShard.remove(ownerCoreCacheKey);
+                                indexToCoreKey.remove(index, K);
+                            }
+                        }
+                    };
+                    boolean addedListener = false;
+                    try {
+                        reader.addCoreClosedListener(listener);
+                        addedListener = true;
+                    } finally {
+                        if (false == addedListener) {
+                            try {
+                                listener.onClose(K);
+                            } catch (IOException e) {
+                                throw new RuntimeException("Blow up trying to recover from failure to add listener", e);
+                            }
                         }
                     }
-                };
-                boolean addedListener = false;
-                try {
-                    reader.addCoreClosedListener(listener);
-                    addedListener = true;
-                } finally {
-                    if (false == addedListener) {
-                        try {
-                            listener.onClose(coreKey);
-                        } catch (IOException e) {
-                            throw new RuntimeException("Blow up trying to recover from failure to add listener", e);
-                        }
-                    }
-                }
+                    return shardId;
+                });
             }
         }
     }

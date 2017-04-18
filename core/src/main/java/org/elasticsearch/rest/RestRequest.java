@@ -19,6 +19,18 @@
 
 package org.elasticsearch.rest;
 
+import static org.elasticsearch.common.unit.ByteSizeValue.parseBytesSizeValue;
+import static org.elasticsearch.common.unit.TimeValue.parseTimeValue;
+
+import java.net.SocketAddress;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Map;
+import java.util.StringTokenizer;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.ContextAndHeaderHolder;
 import org.elasticsearch.common.Nullable;
@@ -28,12 +40,6 @@ import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.rest.support.RestUtils;
-
-import java.net.SocketAddress;
-import java.util.Map;
-
-import static org.elasticsearch.common.unit.ByteSizeValue.parseBytesSizeValue;
-import static org.elasticsearch.common.unit.TimeValue.parseTimeValue;
 
 /**
  *
@@ -156,6 +162,22 @@ public abstract class RestRequest extends ContextAndHeaderHolder implements ToXC
             return Strings.EMPTY_ARRAY;
         }
         return params;
+    }
+
+    public Collection<Range<Token>> paramsAsTokenRanges(String key) {
+        String value = param(key);
+        if (value != null) {
+            Collection<Range<Token>> tokenRanges = new ArrayList<Range<Token>>();
+            Token.TokenFactory tokenFactory = DatabaseDescriptor.getPartitioner().getTokenFactory();
+            StringTokenizer stk = new StringTokenizer(value, "{[(,)]}");
+            while (stk.hasMoreTokens()) {
+                Token leftToken = tokenFactory.fromString(stk.nextToken());
+                Token rightToken = tokenFactory.fromString(stk.nextToken());
+                tokenRanges.add(new Range(leftToken, rightToken));
+            }
+            return tokenRanges;
+        }
+        return null;
     }
 
 }

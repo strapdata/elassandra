@@ -51,10 +51,12 @@ public class RepositoriesModule extends AbstractModule {
     @Override
     protected void configure() {
         bind(RepositoriesService.class).asEagerSingleton();
+        /*
         bind(SnapshotsService.class).asEagerSingleton();
         bind(SnapshotShardsService.class).asEagerSingleton();
         bind(TransportNodesSnapshotsStatus.class).asEagerSingleton();
         bind(RestoreService.class).asEagerSingleton();
+        */
         bind(RepositoryTypesRegistry.class).toInstance(repositoryTypes);
     }
 }

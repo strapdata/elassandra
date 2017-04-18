@@ -271,12 +271,30 @@ public class JarHell {
                         "class: " + clazz + System.lineSeparator() +
                         "exists multiple times in jar: " + jarpath + " !!!!!!!!!");
             } else {
-                if (clazz.startsWith("org.apache.log4j")) {
+                if (clazz.startsWith("org.apache.log4j") || clazz.startsWith("org.slf4j.impl")) {
                     return; // go figure, jar hell for what should be System.out.println...
                 }
                 if (clazz.equals("org.joda.time.base.BaseDateTime")) {
                     return; // apparently this is intentional... clean this up
                 }
+                if (clazz.startsWith("org.apache.lucene.util.LuceneTestCase")) {
+                    return; // for modified version of LuceneTestCase to ignore cassandra static variables leaks.
+                }
+                
+                // workaround for cassandra thrift
+                if (clazz.startsWith("org.apache.cassandra.thrift")) {
+                    return; // Because org.apache.commons.collections.FastHashMap in commons-collections and commons-beanutils
+                }
+                
+                // workaround for hadoop
+                if (clazz.startsWith("org.apache.commons")) {
+                    return; // Because org.apache.commons.collections.FastHashMap in commons-collections and commons-beanutils
+                }
+                if (clazz.startsWith("org.apache.jasper")) {
+                    return; // Because of Hadoop
+                }
+                
+               
                 throw new IllegalStateException("jar hell!" + System.lineSeparator() +
                         "class: " + clazz + System.lineSeparator() +
                         "jar1: " + previous + System.lineSeparator() +

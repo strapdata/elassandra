@@ -19,6 +19,20 @@
 
 package org.elasticsearch.index.mapper.core;
 
+import static org.elasticsearch.index.mapper.MapperBuilders.dateField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseDateTimeFormatter;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+
+import java.io.IOException;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
@@ -55,19 +69,6 @@ import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.core.LongFieldMapper.CustomLongNumericField;
 import org.elasticsearch.search.internal.SearchContext;
 import org.joda.time.DateTimeZone;
-
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.Callable;
-import java.util.concurrent.TimeUnit;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.dateField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseDateTimeFormatter;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
 
 public class DateFieldMapper extends NumberFieldMapper {
 
@@ -362,7 +363,7 @@ public class DateFieldMapper extends NumberFieldMapper {
             return dateTimeFormatter().parser().parseMillis(value.toString());
         }
 
-        protected long parseStringValue(String value) {
+        public long parseStringValue(String value) {
             return dateTimeFormatter().parser().parseMillis(value);
         }
 
@@ -376,6 +377,9 @@ public class DateFieldMapper extends NumberFieldMapper {
             }
             if (value instanceof BytesRef) {
                 return Numbers.bytesToLong((BytesRef) value);
+            }
+            if (value instanceof Date) {
+                return ((Date) value).getTime();
             }
             return parseStringValue(value.toString());
         }
@@ -485,6 +489,43 @@ public class DateFieldMapper extends NumberFieldMapper {
         return true;
     }
 
+    @Override
+    public void innerCreateField(ParseContext context, Object object) throws IOException {
+        String dateAsString = null;
+        Long value = null;
+        float boost = fieldType().boost();
+        if (object == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            dateAsString = fieldType().nullValueAsString();
+            if (dateAsString != null) {
+                value = fieldType().parseStringValue(dateAsString);
+            }
+        } else {
+            if (object instanceof Date) {
+                value = ((Date)object).getTime();
+            } else {
+                value = (Long)object;
+            }
+            dateAsString = fieldType().dateTimeFormatter.printer().print(value);
+        }
+        if (dateAsString != null) {
+            if (context.includeInAll(includeInAll, this)) {
+                context.allEntries().addText(fieldType().names().fullName(), dateAsString, boost);
+            }
+        }
+        
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomLongNumericField field = new CustomLongNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
+    }
+    
     @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         String dateAsString = null;

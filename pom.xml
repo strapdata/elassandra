@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.elasticsearch</groupId>
+    <groupId>com.strapdata.elasticsearch</groupId>
     <artifactId>parent</artifactId>
     <version>2.4.2-SNAPSHOT</version>
     <packaging>pom</packaging>
@@ -28,16 +28,16 @@
 
     <developers>
         <developer>
-            <name>Elastic</name>
-            <url>https://github.com/elastic/elasticsearch</url>
-            <organizationUrl>https://www.elastic.co</organizationUrl>
+            <name>strapdata</name>
+            <url>https://github.com/strapdata/elassandra</url>
+            <organizationUrl>https://www.elassandra.io</organizationUrl>
         </developer>
     </developers>
 
     <scm>
-        <connection>scm:git:git@github.com:elastic/elasticsearch.git</connection>
-        <developerConnection>scm:git:git@github.com:elastic/elasticsearch.git</developerConnection>
-        <url>http://github.com/elastic/elasticsearch</url>
+        <connection>scm:git:git@github.com:strapdata/elassandra.git</connection>
+        <developerConnection>scm:git:git@github.com:strapdata/elassandra.git</developerConnection>
+        <url>http://github.com/strapdata/elassandra</url>
     </scm>
 
     <properties>
@@ -45,8 +45,8 @@
         <!-- elasticsearch stack -->
         <elasticsearch.version>${project.version}</elasticsearch.version>
         <jvm.executable>${java.home}${file.separator}bin${file.separator}java</jvm.executable>
-        <maven.compiler.source>1.7</maven.compiler.source>
-        <maven.compiler.target>1.7</maven.compiler.target>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
 
         <!-- libraries -->
 
@@ -62,12 +62,15 @@
 
         <jackson.version>2.8.1</jackson.version>
         <snakeyaml.version>1.15</snakeyaml.version>
-        <slf4j.version>1.6.2</slf4j.version>
+        <slf4j.version>1.7.21</slf4j.version>
+        <logback.version>1.1.8</logback.version>
         <log4j.version>1.2.17</log4j.version>
         <jacoco.version>0.7.5.201505241946</jacoco.version>
         <elasticsearch.s3.repository>s3://download.elasticsearch.org/elasticsearch/staging/</elasticsearch.s3.repository>
 
         <!-- Build resources properties -->
+        <elassandra.license.header>${elasticsearch.tools.directory}/license-check/elassandra_license_header.txt</elassandra.license.header>
+        
         <elasticsearch.tools.directory>${project.build.directory}/dev-tools</elasticsearch.tools.directory>
         <elasticsearch.license.header>${elasticsearch.tools.directory}/license-check/elasticsearch_license_header.txt</elasticsearch.license.header>
         <elasticsearch.license.headerDefinition>${elasticsearch.tools.directory}/license-check/license_header_definition.xml</elasticsearch.license.headerDefinition>
@@ -87,8 +90,8 @@
         <tests.bwc.path>${project.basedir}/backwards</tests.bwc.path>
         <tests.locale>random</tests.locale>
         <tests.timezone>random</tests.timezone>
-        <es.logger.level>ERROR</es.logger.level>
-        <tests.heap.size>512m</tests.heap.size>
+        <es.logger.level>DEBUG</es.logger.level>
+        <tests.heap.size>1024m</tests.heap.size>
         <tests.heapdump.path>${project.build.directory}/heapdump/</tests.heapdump.path>
         <tests.topn>5</tests.topn>
         <execution.hint.file>.local-${elasticsearch.version}-execution-hints.log</execution.hint.file>
@@ -124,7 +127,7 @@
         <tests.cluster></tests.cluster>
         <tests.filter></tests.filter>
         <env.ES_TEST_LOCAL></env.ES_TEST_LOCAL>
-        <tests.security.manager>true</tests.security.manager>
+        <tests.security.manager>false</tests.security.manager>
         <tests.compatibility></tests.compatibility>
         <tests.ifNoTests>fail</tests.ifNoTests>
         <skip.unit.tests>${skipTests}</skip.unit.tests>
@@ -166,7 +169,7 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>org.elasticsearch</groupId>
+                <groupId>com.strapdata.elasticsearch</groupId>
                 <artifactId>dev-tools</artifactId>
                 <version>${elasticsearch.version}</version>
             </dependency>
@@ -221,20 +224,20 @@
             </dependency>
 
             <dependency>
-                <groupId>org.elasticsearch</groupId>
+                <groupId>com.strapdata.elasticsearch</groupId>
                 <artifactId>elasticsearch</artifactId>
                 <version>${elasticsearch.version}</version>
             </dependency>
 
             <dependency>
-                <groupId>org.elasticsearch</groupId>
+                <groupId>com.strapdata.elasticsearch</groupId>
                 <artifactId>elasticsearch</artifactId>
                 <version>${elasticsearch.version}</version>
                 <type>test-jar</type>
             </dependency>
 
             <dependency>
-                <groupId>org.elasticsearch</groupId>
+                <groupId>com.strapdata.elasticsearch</groupId>
                 <artifactId>elasticsearch</artifactId>
                 <version>${elasticsearch.version}</version>
                 <type>zip</type>
@@ -362,7 +365,7 @@
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
-                <version>18.0</version>
+                <version>19.0</version>
             </dependency>
 
             <dependency>
@@ -458,18 +461,23 @@
             </dependency>
 
             <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-log4j12</artifactId>
-                <version>${slf4j.version}</version>
-            </dependency>
-
-            <dependency>
                 <groupId>net.java.dev.jna</groupId>
                 <artifactId>jna</artifactId>
                 <version>4.1.0</version>
                 <optional>true</optional>
             </dependency>
 
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-core</artifactId>
+                <version>${logback.version}</version>
+            </dependency>
+            
         </dependencies>
     </dependencyManagement>
 
@@ -621,8 +629,9 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.3</version>
                     <configuration>
+                        <compilerVersion>1.8</compilerVersion>
                         <fork>true</fork>
-                        <maxmem>512m</maxmem>
+                        <maxmem>2048m</maxmem>
                         <!-- REMOVE WHEN UPGRADE:
                              see https://jira.codehaus.org/browse/MCOMPILER-209 it's a bug where
                              incremental compilation doesn't work unless it's set to false causeing
@@ -633,6 +642,7 @@
                         <compilerArgs>
                             <arg>-XDignore.symbol.file</arg>
                         </compilerArgs>
+                        <verbose>true</verbose>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -642,11 +652,23 @@
                     <!-- general test configuration, used for both unit and integ tests -->
                     <configuration>
                         <jvm>${jvm.executable}</jvm>
-                        <argLine>${tests.jvm.argline}</argLine>
+                        <argLine>${tests.jvm.argline} -Des.max-open-files -Dcassandra.home=${project.basedir}/target/tests/ -Dcassandra.logdir=${project.basedir}/target/tests/ -Dlogback.configurationFile=${project.basedir}/src/test/resources/conf/logback.xml -Djava.library.path=${session.executionRootDirectory}/core/cassandra/lib/sigar-bin -Dcassandra.config=file://${project.basedir}/src/test/resources/conf/cassandra.yaml -Dcassandra.config.dir=${project.basedir}/src/test/resources/conf -Dcassandra-rackdc.properties=file://${project.basedir}/src/test/resources/conf/cassandra-rackdc.properties -Dcassandra.config.loader=org.elassandra.config.YamlTestConfigurationLoader -Dcassandra.storagedir=${project.basedir}/target/tests/ -Des.synchronous_refresh=true -Des.drop_on_delete_index=true</argLine>
                         <heartbeat>10</heartbeat>
-                        <jvmOutputAction>warn</jvmOutputAction>
+                        <jvmOutputAction>pipe,warn</jvmOutputAction>
                         <leaveTemporary>true</leaveTemporary>
-                        <parallelism>${tests.jvms}</parallelism>
+                        <parallelism>1</parallelism>
+                        <threadCount>1</threadCount>
+                        
+                        <!-- remove cassandra-all.jar dependency for tests -->
+                        <classpathDependencyExcludes>
+                            <classpathDependencyExclude>org.slf4j:jcl-over-slf4j</classpathDependencyExclude>
+                        </classpathDependencyExcludes>
+
+                        
+                        <forkCount>0</forkCount>
+                        <useSystemClassLoader>true</useSystemClassLoader>
+                        <debugForkedProcess>true</debugForkedProcess>
+                        
                         <!-- System assertions (-esa) are disabled for now because of what looks like a
                              JDK bug triggered by Groovy on JDK7. We should look at re-enabling system
                              assertions when we upgrade to a new version of Groovy (currently 2.4.4) or
@@ -665,6 +687,9 @@
                             <param>-Des.logger.prefix=</param>
                             <param>-XX:+HeapDumpOnOutOfMemoryError</param>
                             <param>-XX:HeapDumpPath=${tests.heapdump.path}</param>
+                            <param>-Xdebug</param>
+                            <param>-Xnoagent</param>
+                            <param>-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4242</param>
                         </jvmArgs>
                         <shuffleOnSlave>${tests.shuffle}</shuffleOnSlave>
                         <sysouts>${tests.verbose}</sysouts>
@@ -778,6 +803,39 @@
                                 </includes>
                                 <excludes>
                                     <exclude>**/*$*.class</exclude>
+                                    <exclude>org/elasticsearch/tribe/**/*.class</exclude>
+                                    <exclude>org/elasticsearch/index/engine/InternalEngineTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/shard/IndexShardTests.class</exclude>
+                                    
+                                    <!-- require security manager -->
+                                    <exclude>org/elasticsearch/bootstrap/SecurityTests*.class</exclude>
+                                    <exclude>org/elasticsearch/bootstrap/ESPolicy*.class</exclude>
+                                    
+                                    <!--  
+                                    <exclude>org/elasticsearch/cluster/routing/ShardRoutingTests.class</exclude>
+                                    <exclude>org/elasticsearch/plugins/PluginManagerPermissionTests.class</exclude>
+                                    -->
+                                    <!-- exclude reindex integration tests -->
+                                    <exclude>org/elasticsearch/index/reindex/ReindexBasicTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/ReindexCancelTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/ReindexFailureTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/ReindexParentChildTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/ReindexVersioningTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/ReindexSameIndexTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/RethrottleTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/UpdateByQueryBasicTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/UpdateByQueryCancelTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/UpdateByQueryWhileModifyingTests*.class</exclude>
+                                    <exclude>org/elasticsearch/index/reindex/RethrottleTests*.class</exclude>
+                                    
+                                    <!-- deleteByQuery integration tests -->
+                                    <exclude>org/elasticsearch/plugin/deletebyquery/DeleteByQueryTests*.class</exclude>
+                                    
+                                    <!-- mapper-size integration tests -->
+                                    <exclude>org/elasticsearch/index/mapper/murmur3/Murmur3FieldMapperUpgradeTests*.class</exclude>
+                                    
+                                    <!-- murmur3 integration tests -->
+                                    <exclude>org/elasticsearch/index/mapper/size/SizeFieldMapperUpgradeTests*.class</exclude>
                                 </excludes>
                             </configuration>
                         </execution>
@@ -790,7 +848,7 @@
                             <configuration>
                                 <ifNoTests>warn</ifNoTests>
                                 <haltOnFailure>false</haltOnFailure>
-                                <skipTests>${skip.integ.tests}</skipTests>
+                                <skipTests>true</skipTests>
                                 <listeners>
                                     <report-ant-xml
                                         mavenExtensions="true"
@@ -876,20 +934,27 @@
                         </execution>
                     </executions>
                 </plugin>
+                
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>animal-sniffer-maven-plugin</artifactId>
-                    <version>1.14</version>
+                    <version>1.15</version>
                     <configuration>
                         <signature>
                             <groupId>org.codehaus.mojo.signature</groupId>
-                            <artifactId>java17</artifactId>
+                            <artifactId>java18</artifactId>
                             <version>1.0</version>
                         </signature>
+                        <jdk>
+                            <version>[1.8.0)</version>
+                        </jdk>
+                        <ignores>
+                            <ignore>org.apache.cassandra.cql3.functions.UDHelper</ignore>
+                        </ignores>
                     </configuration>
                     <executions>
                         <execution>
-                            <id>check-java17</id>
+                            <id>check-java18</id>
                             <phase>compile</phase>
                             <goals>
                                 <goal>check</goal>
@@ -897,6 +962,7 @@
                         </execution>
                     </executions>
                 </plugin>
+                
                 <plugin>
                     <groupId>de.thetaphi</groupId>
                     <artifactId>forbiddenapis</artifactId>
@@ -924,6 +990,9 @@
                                      </signaturesFiles>
                                      <signatures>${forbidden.signatures}</signatures>
                                      <suppressAnnotations><annotation>**.SuppressForbidden</annotation></suppressAnnotations>
+                                     <excludes>
+                                        <exclude>org/apache/cassandra/**/*</exclude>
+                                     </excludes>
                                  </configuration>
                              <phase>compile</phase>
                              <goals>
@@ -949,6 +1018,10 @@
                                  </signaturesFiles>
                                  <signatures>${forbidden.test.signatures}</signatures>
                                  <suppressAnnotations><annotation>**.SuppressForbidden</annotation></suppressAnnotations>
+                                 <excludes>
+                                        <exclude>org/apache/cassandra/**/*</exclude>
+                                        <exclude>org/apache/lucene/util/*</exclude>
+                                 </excludes>
                              </configuration>
                              <phase>test-compile</phase>
                              <goals>
@@ -1053,7 +1126,9 @@
                             <headerDefinition>${elasticsearch.license.headerDefinition}</headerDefinition>
                         </headerDefinitions>
                         <includes>
-                            <include>src/**/*.java</include>
+                            <include>src/main/java/org/elasticsearch/**/*.java</include>
+                            <include>src/main/java/org/apache/lucene/**/*.java</include>
+                            <include>src/main/java/org/joda/**/*.java</include>
                         </includes>
                     </configuration>
                     <executions>
@@ -1095,8 +1170,8 @@ org.eclipse.jdt.core.compiler.annotation.inheritNullAnnotations=enabled
 org.eclipse.jdt.core.compiler.annotation.missingNonNullByDefaultAnnotation=ignore
 org.eclipse.jdt.core.compiler.annotation.nullable=org.elasticsearch.common.Nullable
 org.eclipse.jdt.core.compiler.annotation.nullanalysis=enabled
-org.eclipse.jdt.core.compiler.codegen.targetPlatform=1.7
-org.eclipse.jdt.core.compiler.compliance=1.7
+org.eclipse.jdt.core.compiler.codegen.targetPlatform=1.8
+org.eclipse.jdt.core.compiler.compliance=1.8
 org.eclipse.jdt.core.compiler.problem.forbiddenReference=warning
 org.eclipse.jdt.core.compiler.problem.nonnullParameterAnnotationDropped=warning
 org.eclipse.jdt.core.compiler.problem.nullAnnotationInferenceConflict=warning
@@ -1104,7 +1179,7 @@ org.eclipse.jdt.core.compiler.problem.nullReference=warning
 org.eclipse.jdt.core.compiler.problem.nullSpecViolation=warning
 org.eclipse.jdt.core.compiler.problem.nullUncheckedConversion=warning
 org.eclipse.jdt.core.compiler.problem.potentialNullReference=warning
-org.eclipse.jdt.core.compiler.source=1.7
+org.eclipse.jdt.core.compiler.source=1.8
 org.eclipse.jdt.core.formatter.lineSplit=140
 org.eclipse.jdt.core.formatter.tabulation.char=space
 org.eclipse.jdt.core.formatter.tabulation.size=4
@@ -1196,8 +1271,8 @@ org.eclipse.jdt.ui.text.custom_code_templates=<?xml version\="1.0" encoding\="UT
                             <configuration>
                                 <target>
                                     <!-- if we are on java 1.7.* we set perm gen space since some tests need it otherwise we just inject a dummy value -->
-                                    <condition property="java.permGenSpace" value="-XX:MaxPermSize=128m" else="-Dsome.dummy.value=" >
-                                        <matches pattern="1\.7\..+$" string="${java.runtime.version}" />
+                                    <condition property="java.permGenSpace" value="-XX:MaxPermSize=128m" else="-Dsome.dummy.value=">
+                                        <matches pattern="1\.7\..+$" string="${java.runtime.version}"/>
                                     </condition>
                                 </target>
                                 <exportAntProperties>true</exportAntProperties>
@@ -1213,6 +1288,7 @@ org.eclipse.jdt.ui.text.custom_code_templates=<?xml version\="1.0" encoding\="UT
                                 <target unless="${validate.skip}">
                                     <pathconvert pathsep="${line.separator}" dirsep="/" property="validate.patternsFound" setonempty="false">
                                         <fileset dir="${basedir}">
+                                            <exclude name="**/cassandra/**/*"/>
                                             <include name="**/*.java"/>
                                             <include name="**/*.py"/>
                                             <include name="**/*.txt"/>

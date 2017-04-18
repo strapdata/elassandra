@@ -19,12 +19,26 @@
 
 package org.elasticsearch.indices;
 
-import com.google.common.base.Function;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Maps;
+import static com.google.common.collect.Maps.newHashMap;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
+import static org.elasticsearch.common.collect.MapBuilder.newMapBuilder;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+import static org.elasticsearch.common.util.CollectionUtils.arrayAsArrayList;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 import org.apache.lucene.store.LockObtainFailedException;
 import org.apache.lucene.util.CollectionUtil;
 import org.apache.lucene.util.IOUtils;
@@ -48,6 +62,7 @@ import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.env.ShardLock;
 import org.elasticsearch.gateway.MetaDataStateFormat;
@@ -85,25 +100,12 @@ import org.elasticsearch.indices.analysis.IndicesAnalysisService;
 import org.elasticsearch.indices.recovery.RecoverySettings;
 import org.elasticsearch.plugins.PluginsService;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static com.google.common.collect.Maps.newHashMap;
-import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
-import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
-import static org.elasticsearch.common.collect.MapBuilder.newMapBuilder;
-import static org.elasticsearch.common.settings.Settings.settingsBuilder;
-import static org.elasticsearch.common.util.CollectionUtils.arrayAsArrayList;
+import com.google.common.base.Function;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Maps;
 
 public class IndicesService extends AbstractLifecycleComponent<IndicesService> implements Iterable<IndexService> {
 
@@ -120,7 +122,7 @@ public class IndicesService extends AbstractLifecycleComponent<IndicesService> i
     private final TimeValue shardsClosedTimeout;
 
     private volatile Map<String, IndexServiceInjectorPair> indices = ImmutableMap.of();
-
+    
     static class IndexServiceInjectorPair {
         private final IndexService indexService;
         private final Injector injector;
@@ -138,7 +140,7 @@ public class IndicesService extends AbstractLifecycleComponent<IndicesService> i
             return injector;
         }
     }
-
+    
     private final Map<Index, List<PendingDelete>> pendingDeletes = new HashMap<>();
 
     private final OldShardsStats oldShardsStats = new OldShardsStats();
@@ -323,11 +325,12 @@ public class IndicesService extends AbstractLifecycleComponent<IndicesService> i
 
         indicesLifecycle.beforeIndexCreated(index, settings);
 
-        logger.debug("creating Index [{}], shards [{}]/[{}{}]",
+        logger.debug("creating Index [{}], shards [{}]/[{}{}], keyspace [{}]",
                 sIndexName,
                 settings.get(SETTING_NUMBER_OF_SHARDS),
                 settings.get(SETTING_NUMBER_OF_REPLICAS),
-                IndexMetaData.isIndexUsingShadowReplicas(settings) ? "s" : "");
+                IndexMetaData.isIndexUsingShadowReplicas(settings) ? "s" : "",
+                settings.get(IndexMetaData.SETTING_KEYSPACE));
 
         Settings indexSettings = settingsBuilder()
                 .put(this.settings)
@@ -350,7 +353,7 @@ public class IndicesService extends AbstractLifecycleComponent<IndicesService> i
         modules.add(new MapperServiceModule());
         modules.add(new IndexAliasesServiceModule());
         modules.add(new IndexModule(indexSettings));
-
+        
         pluginsService.processModules(modules);
 
         Injector indexInjector;
@@ -424,6 +427,9 @@ public class IndicesService extends AbstractLifecycleComponent<IndicesService> i
             logger.debug("[{}] closing index query parser service (reason [{}])", index, reason);
             indexInjector.getInstance(IndexQueryParserService.class).close();
 
+            logger.debug("[{}] remove gossip shard state (reason [{}])", index, reason);
+            ((DiscoveryService)indexInjector.getInstance(DiscoveryService.class)).removeIndexShardState(index);
+            
             logger.debug("[{}] closing index service (reason [{}])", index, reason);
             indexInjector.getInstance(IndexStore.class).close();
 
@@ -640,19 +646,13 @@ public class IndicesService extends AbstractLifecycleComponent<IndicesService> i
     private boolean canDeleteShardContent(ShardId shardId, Settings indexSettings) {
         final IndexServiceInjectorPair indexServiceInjectorPair = this.indices.get(shardId.getIndex());
         if (IndexMetaData.isOnSharedFilesystem(indexSettings) == false) {
-             if (nodeEnv.hasNodeFile()) {
-                boolean isAllocated = indexServiceInjectorPair != null && indexServiceInjectorPair
-                    .getIndexService().hasShard(shardId.getId());
-                if (isAllocated) {
-                    return false; // we are allocated - can't delete the shard
-                }
+            if (indexServiceInjectorPair != null && nodeEnv.hasNodeFile()) {
+                final IndexService indexService = indexServiceInjectorPair.getIndexService();
+                return indexService.hasShard(shardId.id()) == false;
+            } else if (nodeEnv.hasNodeFile()) {
                 if (NodeEnvironment.hasCustomDataPath(indexSettings)) {
-                    // lets see if it's on a custom path (return false if the shared doesn't exist)
-                    // we don't need to delete anything that is not there
                     return Files.exists(nodeEnv.resolveCustomLocation(indexSettings, shardId));
                 } else {
-                    // lets see if it's path is available (return false if the shared doesn't exist)
-                    // we don't need to delete anything that is not there
                     return FileSystemUtils.exists(nodeEnv.availableShardPaths(shardId));
                 }
             }

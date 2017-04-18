@@ -72,10 +72,12 @@ public class GetWarmersResponse extends ActionResponse {
                 BytesReference source = in.readBytesReference();
                 Boolean queryCache = null;
                 queryCache = in.readOptionalBoolean();
+                Boolean tokenRangesBitsetCache = in.readOptionalBoolean();
                 warmerEntryBuilder.add(new IndexWarmersMetaData.Entry(
                                 name,
                                 types,
                                 queryCache,
+                                tokenRangesBitsetCache,
                                 source)
                 );
             }

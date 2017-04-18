@@ -19,10 +19,26 @@
 
 package org.elasticsearch.discovery.local;
 
+import static com.google.common.collect.Sets.newHashSet;
+
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterState.Builder;
 import org.elasticsearch.cluster.ClusterStateNonMasterUpdateTask;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.Diff;
@@ -30,7 +46,7 @@ import org.elasticsearch.cluster.IncompatibleClusterStateVersionException;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.routing.RoutingService;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -40,23 +56,11 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
-import org.elasticsearch.discovery.AckClusterStatePublishResponseHandler;
 import org.elasticsearch.discovery.BlockingClusterStatePublishResponseHandler;
 import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.discovery.InitialStateDiscoveryListener;
 import org.elasticsearch.node.service.NodeService;
-
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static com.google.common.collect.Sets.newHashSet;
-import static org.elasticsearch.cluster.ClusterState.Builder;
 
 /**
  *
@@ -66,7 +70,7 @@ public class LocalDiscovery extends AbstractLifecycleComponent<Discovery> implem
     private static final LocalDiscovery[] NO_MEMBERS = new LocalDiscovery[0];
 
     private final ClusterService clusterService;
-    private RoutingService routingService;
+    //private RoutingService routingService;
     private final ClusterName clusterName;
 
     private final DiscoverySettings discoverySettings;
@@ -95,10 +99,6 @@ public class LocalDiscovery extends AbstractLifecycleComponent<Discovery> implem
         // nothing to do here
     }
 
-    @Override
-    public void setRoutingService(RoutingService routingService) {
-        this.routingService = routingService;
-    }
 
     @Override
     protected void doStart() {
@@ -187,7 +187,7 @@ public class LocalDiscovery extends AbstractLifecycleComponent<Discovery> implem
                         // we reroute not in the same cluster state update since in certain areas we rely on
                         // the node to be in the cluster state (sampled from ClusterService#state) to be there, also
                         // shard transitions need to better be handled in such cases
-                        master.routingService.reroute("post_node_add");
+                       //master.routingService.reroute("post_node_add");
                     }
                 });
             }
@@ -239,9 +239,9 @@ public class LocalDiscovery extends AbstractLifecycleComponent<Discovery> implem
                         }
                         // reroute here, so we eagerly remove dead nodes from the routing
                         ClusterState updatedState = ClusterState.builder(currentState).nodes(newNodes).build();
-                        RoutingAllocation.Result routingResult = master.routingService.getAllocationService().reroute(
-                                ClusterState.builder(updatedState).build(), "elected as master");
-                        return ClusterState.builder(updatedState).routingResult(routingResult).build();
+                        //RoutingAllocation.Result routingResult = master.routingService.getAllocationService().reroute(
+                        //        ClusterState.builder(updatedState).build(), "elected as master");
+                        return updatedState;
                     }
 
                     @Override
@@ -262,38 +262,14 @@ public class LocalDiscovery extends AbstractLifecycleComponent<Discovery> implem
         return clusterService.localNode();
     }
 
-    @Override
-    public void addListener(InitialStateDiscoveryListener listener) {
-        this.initialStateListeners.add(listener);
-    }
-
-    @Override
-    public void removeListener(InitialStateDiscoveryListener listener) {
-        this.initialStateListeners.remove(listener);
-    }
+    
 
     @Override
     public String nodeDescription() {
         return clusterName.value() + "/" + localNode().id();
     }
 
-    @Override
-    public void publish(ClusterChangedEvent clusterChangedEvent, final Discovery.AckListener ackListener) {
-        if (!master) {
-            throw new IllegalStateException("Shouldn't publish state when not master");
-        }
-        LocalDiscovery[] members = members();
-        if (members.length > 0) {
-            Set<DiscoveryNode> nodesToPublishTo = new HashSet<>(members.length);
-            for (LocalDiscovery localDiscovery : members) {
-                if (localDiscovery.master) {
-                    continue;
-                }
-                nodesToPublishTo.add(localDiscovery.localNode());
-            }
-            publish(members, clusterChangedEvent, new AckClusterStatePublishResponseHandler(nodesToPublishTo, ackListener));
-        }
-    }
+    
 
     private LocalDiscovery[] members() {
         ClusterGroup clusterGroup = clusterGroups.get(clusterName);
@@ -437,5 +413,48 @@ public class LocalDiscovery extends AbstractLifecycleComponent<Discovery> implem
         Queue<LocalDiscovery> members() {
             return members;
         }
+    }
+
+    @Override
+    public void publishX1(ClusterState clusterState) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void publishX2(ClusterState clusterState) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public DiscoveryNodes nodes() {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public Map<UUID, ShardRoutingState> getShardRoutingStates(String index) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public void putShardRoutingState(String index, ShardRoutingState shardRoutingState)
+            throws JsonGenerationException, JsonMappingException, IOException {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public boolean awaitMetaDataVersion(long version, TimeValue ackTimeout) throws Exception {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public void connectToNodes() {
+        // TODO Auto-generated method stub
+        
     }
 }

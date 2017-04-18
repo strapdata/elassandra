@@ -30,7 +30,7 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.discovery.zen.ping.unicast.UnicastZenPing;
+
 import org.elasticsearch.indices.recovery.RecoverySettings;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.junit.annotations.TestLogging;
@@ -260,7 +260,7 @@ public abstract class ESBackcompatTestCase extends ESIntegTestCase {
         Settings.Builder builder = Settings.builder().put(requiredSettings());
         builder.put(TransportModule.TRANSPORT_TYPE_KEY, "netty"); // run same transport  / disco as external
         builder.put("node.mode", "network");
-        builder.put(UnicastZenPing.DISCOVERY_ZEN_PING_UNICAST_HOSTS, backwardsCluster().unicastHosts());
+       // builder.put(UnicastZenPing.DISCOVERY_ZEN_PING_UNICAST_HOSTS, backwardsCluster().unicastHosts());
         return builder.build();
     }
 

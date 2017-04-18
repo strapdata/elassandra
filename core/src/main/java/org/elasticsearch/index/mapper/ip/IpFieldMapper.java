@@ -19,7 +19,17 @@
 
 package org.elasticsearch.index.mapper.ip;
 
-import com.google.common.net.InetAddresses;
+import static org.elasticsearch.index.mapper.MapperBuilders.ipField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.apache.lucene.analysis.NumericTokenStream;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
@@ -32,8 +42,10 @@ import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -51,15 +63,7 @@ import org.elasticsearch.index.mapper.core.LongFieldMapper.CustomLongNumericFiel
 import org.elasticsearch.index.mapper.core.NumberFieldMapper;
 import org.elasticsearch.index.query.QueryParseContext;
 
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.ipField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseNumberField;
+import com.google.common.net.InetAddresses;
 
 /**
  *
@@ -244,6 +248,9 @@ public class IpFieldMapper extends NumberFieldMapper {
             if (value == null) {
                 return null;
             }
+            if (value instanceof InetAddress) {
+                return ipToLong( NetworkAddress.format((InetAddress)value));
+            }
             if (value instanceof Number) {
                 return ((Number) value).longValue();
             }
@@ -329,6 +336,43 @@ public class IpFieldMapper extends NumberFieldMapper {
             return ipToLong(((BytesRef) value).utf8ToString());
         }
         return ipToLong(value.toString());
+    }
+    
+    @SuppressForbidden(reason = "toUpperCase() for consistency level")
+    @Override
+    protected void innerCreateField(ParseContext context, Object object) throws IOException {
+        InetAddress addr = null;
+        
+        if (object instanceof String) {
+            //TODO: find why we got String object here ?
+            addr = com.google.common.net.InetAddresses.forString((String)object);
+        } else {
+            addr =  (InetAddress) object;
+        }
+        
+        if (addr == null) {
+            String ipAsString = fieldType().nullValueAsString();
+            if (ipAsString == null) {
+                return;
+            }
+            if (com.google.common.net.InetAddresses.isInetAddress(ipAsString)) {
+                addr = com.google.common.net.InetAddresses.forString(ipAsString);
+            }
+        }
+        // TODO Auto-generated method stub
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), NetworkAddress.format(addr), fieldType().boost());
+        }
+
+        final long value = com.google.common.net.InetAddresses.coerceToInteger(addr);
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomLongNumericField field = new CustomLongNumericField(value, fieldType());
+            field.setBoost(fieldType().boost());
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
     }
 
     @Override

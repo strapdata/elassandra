@@ -19,7 +19,14 @@
 
 package org.elasticsearch.action.support.broadcast.node;
 
-import com.google.common.collect.Maps;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReferenceArray;
+
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.IndicesRequest;
@@ -52,18 +59,11 @@ import org.elasticsearch.transport.BaseTransportResponseHandler;
 import org.elasticsearch.transport.NodeShouldNotConnectException;
 import org.elasticsearch.transport.TransportChannel;
 import org.elasticsearch.transport.TransportException;
-import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.transport.TransportRequestHandler;
 import org.elasticsearch.transport.TransportResponse;
 import org.elasticsearch.transport.TransportService;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReferenceArray;
+import com.google.common.collect.Maps;
 
 /**
  * Abstraction for transporting aggregated shard-level operations in a single request (NodeRequest) per-node
@@ -126,6 +126,7 @@ public abstract class TransportBroadcastByNodeAction<Request extends BroadcastRe
         }, executor, false, canTripCircuitBreaker, new BroadcastByNodeTransportRequestHandler());
     }
 
+
     private final Response newResponse(
             Request request,
             AtomicReferenceArray responses,
@@ -165,6 +166,7 @@ public abstract class TransportBroadcastByNodeAction<Request extends BroadcastRe
      *
      * @param in input stream
      * @return a deserialized shard-level result
+     * @throws IOException
      */
     protected abstract ShardOperationResult readShardResult(StreamInput in) throws IOException;
 
@@ -187,6 +189,7 @@ public abstract class TransportBroadcastByNodeAction<Request extends BroadcastRe
      *
      * @param in input stream
      * @return a de-serialized request
+     * @throws IOException
      */
     protected abstract Request readRequestFrom(StreamInput in) throws IOException;
 

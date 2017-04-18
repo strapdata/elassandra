@@ -212,6 +212,27 @@ public class TTLFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        Long ttl = (Long)object;
+        if (enabledState.enabled && !context.sourceToParse().flyweight()) {
+            if (ttl <= 0 && defaultTTL > 0) { // no ttl provided so we use the default value
+                ttl = defaultTTL;
+            }
+            if (ttl > 0) { // a ttl has been provided either externally or in the _source
+                long timestamp = context.sourceToParse().timestamp();
+                long expire = new Date(timestamp + ttl).getTime();
+                long now = System.currentTimeMillis();
+                // there is not point indexing already expired doc
+                if (context.sourceToParse().origin() == SourceToParse.Origin.PRIMARY && now >= expire) {
+                    throw new AlreadyExpiredException(context.index(), context.type(), context.id(), timestamp, ttl, now);
+                }
+                // the expiration timestamp (timestamp + ttl) is set as field
+                context.doc().add(new LongFieldMapper.CustomLongNumericField(expire, fieldType()));
+            }
+        }
+    }
+    
+    @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException, AlreadyExpiredException {
         if (enabledState.enabled && !context.sourceToParse().flyweight()) {
             long ttl = context.sourceToParse().ttl();

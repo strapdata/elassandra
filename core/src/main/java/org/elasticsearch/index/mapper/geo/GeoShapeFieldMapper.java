@@ -466,6 +466,10 @@ public class GeoShapeFieldMapper extends FieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+    }
+    
+    @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
     }
 

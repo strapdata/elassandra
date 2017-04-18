@@ -43,7 +43,7 @@ abstract public class ClusterStateUpdateTask extends ClusterStateTaskExecutor<Cl
     @Override
     final public BatchResult<ClusterStateUpdateTask> execute(ClusterState currentState, List<ClusterStateUpdateTask> tasks) throws Exception {
         ClusterState result = execute(currentState);
-        return BatchResult.<ClusterStateUpdateTask>builder().successes(tasks).build(result);
+        return BatchResult.<ClusterStateUpdateTask>builder().successes(tasks).build(result, this.doPresistMetaData());
     }
 
     /**
@@ -79,5 +79,10 @@ abstract public class ClusterStateUpdateTask extends ClusterStateTaskExecutor<Cl
     @Override
     public Priority priority() {
         return priority;
+    }
+    
+    @Override
+    public boolean doPresistMetaData() {
+        return false;
     }
 }

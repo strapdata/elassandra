@@ -29,18 +29,18 @@ import static org.hamcrest.CoreMatchers.is;
 public class JavaVersionTests extends ESTestCase {
     @Test
     public void testParse() {
-        JavaVersion javaVersion = JavaVersion.parse("1.7.0");
+        JavaVersion javaVersion = JavaVersion.parse("1.8.0");
         List<Integer> version = javaVersion.getVersion();
         assertThat(3, is(version.size()));
         assertThat(1, is(version.get(0)));
-        assertThat(7, is(version.get(1)));
+        assertThat(8, is(version.get(1)));
         assertThat(0, is(version.get(2)));
     }
 
     @Test
     public void testToString() {
-        JavaVersion javaVersion = JavaVersion.parse("1.7.0");
-        assertThat("1.7.0", is(javaVersion.toString()));
+        JavaVersion javaVersion = JavaVersion.parse("1.8.0");
+        assertThat("1.8.0", is(javaVersion.toString()));
     }
 
     @Test
@@ -63,7 +63,7 @@ public class JavaVersionTests extends ESTestCase {
 
     @Test
     public void testValidVersions() {
-        String[] versions = new String[]{"1.7", "1.7.0", "0.1.7", "1.7.0.80"};
+        String[] versions = new String[]{"1.8", "1.8.0"};
         for (String version : versions) {
             assertTrue(JavaVersion.isValid(version));
         }

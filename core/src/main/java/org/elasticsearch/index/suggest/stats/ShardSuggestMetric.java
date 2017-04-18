@@ -25,8 +25,8 @@ import org.elasticsearch.common.metrics.MeanMetric;
 import java.util.concurrent.TimeUnit;
 
 public final class ShardSuggestMetric {
-    private final MeanMetric suggestMetric = new MeanMetric();
-    private final CounterMetric currentMetric = new CounterMetric();
+    public final MeanMetric suggestMetric = new MeanMetric();
+    public final CounterMetric currentMetric = new CounterMetric();
 
     /**
      * Called before suggest

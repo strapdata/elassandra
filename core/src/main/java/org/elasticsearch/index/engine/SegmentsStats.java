@@ -42,6 +42,7 @@ public class SegmentsStats implements Streamable, ToXContent {
     private long indexWriterMaxMemoryInBytes;
     private long versionMapMemoryInBytes;
     private long bitsetMemoryInBytes;
+    private long tokenRangesBitsetMemoryInBytes;
 
     public SegmentsStats() {}
 
@@ -85,6 +86,10 @@ public class SegmentsStats implements Streamable, ToXContent {
     public void addBitsetMemoryInBytes(long bitsetMemoryInBytes) {
         this.bitsetMemoryInBytes += bitsetMemoryInBytes;
     }
+    
+    public void addTokenRangesBitsetMemoryInBytes(long bitsetMemoryInBytes) {
+        this.tokenRangesBitsetMemoryInBytes += bitsetMemoryInBytes;
+    }
 
     public void add(SegmentsStats mergeStats) {
         if (mergeStats == null) {
@@ -100,6 +105,7 @@ public class SegmentsStats implements Streamable, ToXContent {
         addIndexWriterMaxMemoryInBytes(mergeStats.indexWriterMaxMemoryInBytes);
         addVersionMapMemoryInBytes(mergeStats.versionMapMemoryInBytes);
         addBitsetMemoryInBytes(mergeStats.bitsetMemoryInBytes);
+        addTokenRangesBitsetMemoryInBytes(mergeStats.tokenRangesBitsetMemoryInBytes);
     }
 
     /**
@@ -219,6 +225,10 @@ public class SegmentsStats implements Streamable, ToXContent {
         return new ByteSizeValue(bitsetMemoryInBytes);
     }
 
+    public ByteSizeValue getTokenRangeBitsetMemory() {
+        return new ByteSizeValue(tokenRangesBitsetMemoryInBytes);
+    }
+    
     public static SegmentsStats readSegmentsStats(StreamInput in) throws IOException {
         SegmentsStats stats = new SegmentsStats();
         stats.readFrom(in);
@@ -239,6 +249,7 @@ public class SegmentsStats implements Streamable, ToXContent {
         builder.byteSizeField(Fields.INDEX_WRITER_MAX_MEMORY_IN_BYTES, Fields.INDEX_WRITER_MAX_MEMORY, indexWriterMaxMemoryInBytes);
         builder.byteSizeField(Fields.VERSION_MAP_MEMORY_IN_BYTES, Fields.VERSION_MAP_MEMORY, versionMapMemoryInBytes);
         builder.byteSizeField(Fields.FIXED_BIT_SET_MEMORY_IN_BYTES, Fields.FIXED_BIT_SET, bitsetMemoryInBytes);
+        builder.byteSizeField(Fields.TOKEN_RANGES_BIT_SET_MEMORY_IN_BYTES, Fields.TOKEN_RANGES_BIT_SET, tokenRangesBitsetMemoryInBytes);
         builder.endObject();
         return builder;
     }
@@ -266,6 +277,8 @@ public class SegmentsStats implements Streamable, ToXContent {
         static final XContentBuilderString VERSION_MAP_MEMORY_IN_BYTES = new XContentBuilderString("version_map_memory_in_bytes");
         static final XContentBuilderString FIXED_BIT_SET = new XContentBuilderString("fixed_bit_set");
         static final XContentBuilderString FIXED_BIT_SET_MEMORY_IN_BYTES = new XContentBuilderString("fixed_bit_set_memory_in_bytes");
+        static final XContentBuilderString TOKEN_RANGES_BIT_SET = new XContentBuilderString("token_ranges_bit_set");
+        static final XContentBuilderString TOKEN_RANGES_BIT_SET_MEMORY_IN_BYTES = new XContentBuilderString("token_ranges_bit_set_memory_in_bytes");
     }
 
     @Override
@@ -281,6 +294,7 @@ public class SegmentsStats implements Streamable, ToXContent {
         versionMapMemoryInBytes = in.readLong();
         indexWriterMaxMemoryInBytes = in.readLong();
         bitsetMemoryInBytes = in.readLong();
+        tokenRangesBitsetMemoryInBytes = in.readLong();
     }
 
     @Override
@@ -296,5 +310,6 @@ public class SegmentsStats implements Streamable, ToXContent {
         out.writeLong(versionMapMemoryInBytes);
         out.writeLong(indexWriterMaxMemoryInBytes);
         out.writeLong(bitsetMemoryInBytes);
+        out.writeLong(tokenRangesBitsetMemoryInBytes);
     }
 }

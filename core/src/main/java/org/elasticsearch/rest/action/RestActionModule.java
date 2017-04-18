@@ -19,6 +19,9 @@
 
 package org.elasticsearch.rest.action;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.multibindings.Multibinder;
 import org.elasticsearch.rest.BaseRestHandler;
@@ -28,19 +31,9 @@ import org.elasticsearch.rest.action.admin.cluster.node.info.RestNodesInfoAction
 import org.elasticsearch.rest.action.admin.cluster.node.stats.RestNodesStatsAction;
 import org.elasticsearch.rest.action.admin.cluster.node.tasks.RestCancelTasksAction;
 import org.elasticsearch.rest.action.admin.cluster.node.tasks.RestListTasksAction;
-import org.elasticsearch.rest.action.admin.cluster.repositories.delete.RestDeleteRepositoryAction;
-import org.elasticsearch.rest.action.admin.cluster.repositories.get.RestGetRepositoriesAction;
-import org.elasticsearch.rest.action.admin.cluster.repositories.put.RestPutRepositoryAction;
-import org.elasticsearch.rest.action.admin.cluster.repositories.verify.RestVerifyRepositoryAction;
-import org.elasticsearch.rest.action.admin.cluster.reroute.RestClusterRerouteAction;
 import org.elasticsearch.rest.action.admin.cluster.settings.RestClusterGetSettingsAction;
 import org.elasticsearch.rest.action.admin.cluster.settings.RestClusterUpdateSettingsAction;
 import org.elasticsearch.rest.action.admin.cluster.shards.RestClusterSearchShardsAction;
-import org.elasticsearch.rest.action.admin.cluster.snapshots.create.RestCreateSnapshotAction;
-import org.elasticsearch.rest.action.admin.cluster.snapshots.delete.RestDeleteSnapshotAction;
-import org.elasticsearch.rest.action.admin.cluster.snapshots.get.RestGetSnapshotsAction;
-import org.elasticsearch.rest.action.admin.cluster.snapshots.restore.RestRestoreSnapshotAction;
-import org.elasticsearch.rest.action.admin.cluster.snapshots.status.RestSnapshotsStatusAction;
 import org.elasticsearch.rest.action.admin.cluster.state.RestClusterStateAction;
 import org.elasticsearch.rest.action.admin.cluster.stats.RestClusterStatsAction;
 import org.elasticsearch.rest.action.admin.cluster.tasks.RestPendingClusterTasksAction;
@@ -65,6 +58,7 @@ import org.elasticsearch.rest.action.admin.indices.mapping.get.RestGetFieldMappi
 import org.elasticsearch.rest.action.admin.indices.mapping.get.RestGetMappingAction;
 import org.elasticsearch.rest.action.admin.indices.mapping.put.RestPutMappingAction;
 import org.elasticsearch.rest.action.admin.indices.open.RestOpenIndexAction;
+import org.elasticsearch.rest.action.admin.indices.rebuild.RestRebuildAction;
 import org.elasticsearch.rest.action.admin.indices.recovery.RestRecoveryAction;
 import org.elasticsearch.rest.action.admin.indices.refresh.RestRefreshAction;
 import org.elasticsearch.rest.action.admin.indices.segments.RestIndicesSegmentsAction;
@@ -97,7 +91,6 @@ import org.elasticsearch.rest.action.cat.RestPluginsAction;
 import org.elasticsearch.rest.action.cat.RestRepositoriesAction;
 import org.elasticsearch.rest.action.cat.RestSegmentsAction;
 import org.elasticsearch.rest.action.cat.RestShardsAction;
-import org.elasticsearch.rest.action.cat.RestSnapshotAction;
 import org.elasticsearch.rest.action.cat.RestThreadPoolAction;
 import org.elasticsearch.rest.action.delete.RestDeleteAction;
 import org.elasticsearch.rest.action.explain.RestExplainAction;
@@ -125,9 +118,6 @@ import org.elasticsearch.rest.action.termvectors.RestMultiTermVectorsAction;
 import org.elasticsearch.rest.action.termvectors.RestTermVectorsAction;
 import org.elasticsearch.rest.action.update.RestUpdateAction;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  *
  */
@@ -154,18 +144,20 @@ public class RestActionModule extends AbstractModule {
         bind(RestClusterHealthAction.class).asEagerSingleton();
         bind(RestClusterUpdateSettingsAction.class).asEagerSingleton();
         bind(RestClusterGetSettingsAction.class).asEagerSingleton();
-        bind(RestClusterRerouteAction.class).asEagerSingleton();
+//        bind(RestClusterRerouteAction.class).asEagerSingleton();
         bind(RestClusterSearchShardsAction.class).asEagerSingleton();
         bind(RestPendingClusterTasksAction.class).asEagerSingleton();
+        /*
         bind(RestPutRepositoryAction.class).asEagerSingleton();
         bind(RestGetRepositoriesAction.class).asEagerSingleton();
         bind(RestDeleteRepositoryAction.class).asEagerSingleton();
         bind(RestVerifyRepositoryAction.class).asEagerSingleton();
-        bind(RestGetSnapshotsAction.class).asEagerSingleton();
-        bind(RestCreateSnapshotAction.class).asEagerSingleton();
-        bind(RestRestoreSnapshotAction.class).asEagerSingleton();
-        bind(RestDeleteSnapshotAction.class).asEagerSingleton();
-        bind(RestSnapshotsStatusAction.class).asEagerSingleton();
+        */
+        //bind(RestGetSnapshotsAction.class).asEagerSingleton();
+        //bind(RestCreateSnapshotAction.class).asEagerSingleton();
+        //bind(RestRestoreSnapshotAction.class).asEagerSingleton();
+        //bind(RestDeleteSnapshotAction.class).asEagerSingleton();
+        //bind(RestSnapshotsStatusAction.class).asEagerSingleton();
 
         bind(RestIndicesExistsAction.class).asEagerSingleton();
         bind(RestTypesExistsAction.class).asEagerSingleton();
@@ -201,6 +193,7 @@ public class RestActionModule extends AbstractModule {
         bind(RestGetMappingAction.class).asEagerSingleton();
         bind(RestGetFieldMappingAction.class).asEagerSingleton();
 
+        bind(RestRebuildAction.class).asEagerSingleton();
         bind(RestRefreshAction.class).asEagerSingleton();
         bind(RestFlushAction.class).asEagerSingleton();
         bind(RestSyncedFlushAction.class).asEagerSingleton();
@@ -251,7 +244,7 @@ public class RestActionModule extends AbstractModule {
         // Tasks API
         bind(RestListTasksAction.class).asEagerSingleton();
         bind(RestCancelTasksAction.class).asEagerSingleton();
-
+        
         // cat API
         Multibinder<AbstractCatAction> catActionMultibinder = Multibinder.newSetBinder(binder(), AbstractCatAction.class);
         catActionMultibinder.addBinding().to(RestAllocationAction.class).asEagerSingleton();
@@ -272,7 +265,7 @@ public class RestActionModule extends AbstractModule {
         catActionMultibinder.addBinding().to(RestFielddataAction.class).asEagerSingleton();
         catActionMultibinder.addBinding().to(RestNodeAttrsAction.class).asEagerSingleton();
         catActionMultibinder.addBinding().to(RestRepositoriesAction.class).asEagerSingleton();
-        catActionMultibinder.addBinding().to(RestSnapshotAction.class).asEagerSingleton();
+        //catActionMultibinder.addBinding().to(RestSnapshotAction.class).asEagerSingleton();
         // no abstract cat action
         bind(RestCatAction.class).asEagerSingleton();
     }

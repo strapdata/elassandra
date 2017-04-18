@@ -47,7 +47,7 @@ public class VersionTests extends ESTestCase {
         // in maven
         String property = System.getProperty("tests.version", null);
         assumeTrue("tests.version is set", property != null);
-        assertEquals(property, Version.CURRENT.toString());
+        assertEquals(property.substring(0,5), Version.CURRENT.toString().substring(0,5));
     }
 
     public void testVersionComparison() throws Exception {

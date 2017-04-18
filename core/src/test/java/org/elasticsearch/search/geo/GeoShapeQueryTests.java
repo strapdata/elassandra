@@ -154,7 +154,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
                 .endObject().endObject()
                 .endObject().endObject().string();
         client().admin().indices().prepareCreate("test").addMapping("type1", mapping).execute().actionGet();
-        createIndex("shapes");
+        client().admin().indices().prepareCreate("shapes").addMapping("shape_type", "_source", "enabled=true").execute().actionGet();
         ensureGreen();
 
         ShapeBuilder shape = ShapeBuilder.newEnvelope().topLeft(-45, 45).bottomRight(45, -45);
@@ -206,9 +206,51 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
         String after = jsonBuilder().startObject().field("area", builder).endObject().string();
         assertThat(before, equalTo(after));
     }
+/*
+curl -XPUT "$NODE:9200/shapes2/" -d'{ "mappings" : { "type" : { "_source": { "enabled":true } } } }'
+curl -XPUT "$NODE:9200/shapes2/type/1" -d'{ 
+    "location" : {"type":"polygon", "coordinates":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]}, 
+    "a": { "location" : {"type":"polygon", "coordinates":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]} ,  
+        "b" : { "location" : {"type":"polygon", "coordinates":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]},   
+            "c" : { "location" : {"type":"polygon", "coordinates":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]} } 
+         }
+     }
+}'
 
+
+curl -XPUT "$NODE:9200/shapes/"
+curl -XPUT "$NODE:9200/shapes/type/1" -d'{ 
+    "location" : {"type":"polygon", "coordinates":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]}, 
+    "1": { "location" : {"type":"polygon", "coordinates":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]} ,  
+        "2" : { "location" : {"type":"polygon", "coordinates":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]},   
+            "3" : { "location" : {"type":"polygon", "coordinates":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]} } 
+         }
+     }
+}'
+
+curl -XPUT "$NODE:9200/test/" -d'{ "mappings":{ "type":{"properties":{"location":{"type":"geo_shape"}}}}}'
+curl -XPUT "$NODE:9200/test/type/1" -d'{ "location" : {"type":"polygon", "coordinates":[[[-20,-20],[20,-20],[20,20],[-20,20],[-20,-20]]]} }'
+curl -XGET "$NODE:9200/test/_search" -d'{ 
+    "query":{"match_all":{}},
+    "post_filter":{
+        "geo_shape":{
+            "location":{"indexed_shape":{"id":"1","type":"type","index":"shapes","path":"location"},"relation":"intersects"}
+            }
+        }
+}'
+
+curl -XGET "$NODE:9200/test/_search?pretty" -d'{ 
+    "query":{"match_all":{}},
+    "post_filter":{
+        "geo_shape":{
+            "location":{"indexed_shape":{"id":"1","type":"type","index":"shapes2","path":"location"},"relation":"intersects"}
+            }
+        }
+}'
+ */
     public void testShapeFetchingPath() throws Exception {
-        createIndex("shapes");
+        client().admin().indices().prepareCreate("shapes").addMapping("type", "_source", "enabled=true").execute().actionGet();
+
         client().admin().indices().prepareCreate("test").addMapping("type", "location", "type=geo_shape").execute().actionGet();
 
         String location = "\"location\" : {\"type\":\"polygon\", \"coordinates\":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]}";
@@ -286,7 +328,28 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
         assertSearchResponse(result);
         assertHitCount(result, 1);
     }
+/*
+ 
+curl -XPUT "$NODE:9200/test" -d'{"mappings" : {
+          "type" : {
+            "properties" : {
+              "location" : {
+                "tree" : "quadtree",
+                "type" : "geo_shape"
+              }
+            },
+            "_source": {
+                "enabled": false
+              }
+          }
+        }
+}'
 
+curl -XPUT "$NODE:9200/test/type/1" -d'{
+ "location":[{"type":"geometrycollection","geometries":[{"type":"linestring","coordinates":[[145.02679295390183,-57.712599860735416],[142.3440620925176,-59.73546527078979],[144.23328242799516,-59.44316761674551],[142.06877684049223,-60.30577286271477],[141.99535336629168,-58.46303380714702]]},{"type":"multilinestring","coordinates":[[[144.36580200972492,-58.030239036136145],[144.69851742490562,-57.84135573024714],[140.7694586511613,-57.77517078865563],[143.88577272773648,-60.02394415618774],[144.20351239252074,-58.5871354093785]],[[140.89488937533162,-58.97329284496266],[141.87643375675754,-58.87082938290032],[143.1405263900838,-59.82065056815453],[143.2082953541793,-60.55983309147369],[141.8399858851942,-58.07003611112626],[141.56791212512013,-58.24349218137289],[143.5428586651673,-60.0106996844064]],[[144.27355687015407,-58.47412930443875],[144.62298495726444,-57.94215993113896],[141.486861263964,-59.26514919743441],[143.81875853615492,-59.033363576933056]],[[140.76706407632227,-60.479412758239135],[141.6657178205829,-58.67731821319659],[143.99735633304277,-58.62582548757713],[145.6982319711383,-59.52534060958157]],[[141.3353271823162,-60.443454029436026],[143.9143574523239,-57.8623520704006],[144.57826198137698,-59.79758922222256],[140.94031452840662,-57.962646464477345],[140.9461499423373,-57.76342726358246],[145.15092219920578,-58.12452730821416],[144.23337245960792,-57.927083089560305],[142.29599886895173,-57.540459398102975],[145.06442720669915,-58.22919912009535],[143.06934838384367,-59.97318170602256]]]}]}]
+}'
+
+ */
     public void testShapeFilterWithRandomGeoCollection() throws Exception {
         // Create a random geometry collection.
         GeometryCollectionBuilder gcb = RandomShapeGenerator.createGeometryCollection(getRandom());
@@ -336,7 +399,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
     }
 
     public void testShapeFilterWithDefinedGeoCollection() throws Exception {
-        createIndex("shapes");
+        client().admin().indices().prepareCreate("shapes").addMapping("type", "_source", "enabled=true").execute().actionGet();
         client().admin().indices().prepareCreate("test").addMapping("type", "location", "type=geo_shape,tree=quadtree")
                 .execute().actionGet();
 

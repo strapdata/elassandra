@@ -28,11 +28,12 @@ import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
 import org.elasticsearch.action.bulk.BulkShardRequest;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
+import org.elasticsearch.action.support.replication.ReplicationRequest;
 import org.elasticsearch.action.support.replication.TransportReplicationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
@@ -67,21 +68,23 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
 
     private final AutoCreateIndex autoCreateIndex;
     private final boolean allowIdGeneration;
+    private final boolean uniqueProvidedId;
     private final TransportCreateIndexAction createIndexAction;
 
     private final ClusterService clusterService;
 
     @Inject
     public TransportIndexAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                IndicesService indicesService, ThreadPool threadPool,
                                 TransportCreateIndexAction createIndexAction, MappingUpdatedAction mappingUpdatedAction,
                                 ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                 AutoCreateIndex autoCreateIndex) {
-        super(settings, IndexAction.NAME, transportService, clusterService, indicesService, threadPool, shardStateAction, mappingUpdatedAction,
+        super(settings, IndexAction.NAME, transportService, clusterService, indicesService, threadPool, mappingUpdatedAction,
                 actionFilters, indexNameExpressionResolver, IndexRequest.class, IndexRequest.class, ThreadPool.Names.INDEX);
         this.createIndexAction = createIndexAction;
         this.autoCreateIndex = autoCreateIndex;
         this.allowIdGeneration = settings.getAsBoolean("action.allow_id_generation", true);
+        this.uniqueProvidedId = settings.getAsBoolean("action.unique_provided_id", true);
         this.clusterService = clusterService;
     }
 
@@ -126,12 +129,33 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
             mappingMd = metaData.index(concreteIndex).mappingOrDefault(request.type());
         }
         request.process(metaData, mappingMd, allowIdGeneration, concreteIndex);
-        ShardId shardId = clusterService.operationRouting().shardId(clusterService.state(), concreteIndex, request.type(), request.id(), request.routing());
-        request.setShardId(shardId);
+        //ShardId shardId = clusterService.operationRouting().shardId(clusterService.state(), concreteIndex, request.type(), request.id(), request.routing());
+        //request.setShardId(shardId);
     }
 
-    private void innerExecute(Task task, final IndexRequest request, final ActionListener<IndexResponse> listener) {
-        super.doExecute(task, request, listener);
+    protected void innerExecute(Task task, final IndexRequest request, final ActionListener<IndexResponse> listener) {
+        try {
+            final ClusterState state = clusterService.state();
+            ClusterBlockException blockException = state.blocks().globalBlockedException(globalBlockLevel());
+            if (blockException != null)
+                throw blockException;
+           
+            final String concreteIndex = resolveIndex() ? indexNameExpressionResolver.concreteSingleIndex(state, request) : request.index();
+            blockException = state.blocks().indexBlockedException(indexBlockLevel(), concreteIndex);
+            if (blockException != null)
+                throw blockException;
+            
+            // request does not have a shardId yet, we need to pass the concrete index to resolve shardId
+            resolveRequest(state.metaData(), concreteIndex, request);
+            
+            clusterService.insertDocument(indicesService, request, state.metaData().index(concreteIndex));
+            request.versionType(request.versionType().versionTypeForReplicationAndRecovery());
+            IndexResponse response = new IndexResponse(concreteIndex, request.type(), request.id(), new Long(1), true);
+            response.setShardInfo(clusterService.shardInfo(concreteIndex, request.consistencyLevel().toCassandraConsistencyLevel()));
+            listener.onResponse(response);
+        } catch (Exception e) {
+            listener.onFailure(e);
+        }
     }
 
     @Override

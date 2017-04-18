@@ -50,9 +50,17 @@ public abstract class AckedClusterStateUpdateTask<Response> extends ClusterState
      * @return true if the node is expected to send ack back, false otherwise
      */
     public boolean mustAck(DiscoveryNode discoveryNode) {
-        return true;
+        return false;
     }
 
+    /**
+     * Called to determine if we need to wait that the new cluster state is applied on all alive nodes.
+     * @return
+     */
+    public boolean mustApplyMetaData() {
+        return false;
+    }
+    
     /**
      * Called once all the nodes have acknowledged the cluster state update request. Must be
      * very lightweight execution, since it gets executed on the cluster service thread.
@@ -60,7 +68,10 @@ public abstract class AckedClusterStateUpdateTask<Response> extends ClusterState
      * @param t optional error that might have been thrown
      */
     public void onAllNodesAcked(@Nullable Throwable t) {
-        listener.onResponse(newResponse(true));
+        if (t == null)
+            listener.onResponse(newResponse(true));
+        else
+            listener.onFailure(t);
     }
 
     protected abstract Response newResponse(boolean acknowledged);

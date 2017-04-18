@@ -4,12 +4,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.elasticsearch.distribution</groupId>
+        <groupId>com.strapdata.elasticsearch.distribution</groupId>
         <artifactId>distributions</artifactId>
         <version>2.4.2-SNAPSHOT</version>
     </parent>
 
-    <groupId>org.elasticsearch.distribution.zip</groupId>
+    <groupId>com.strapdata.elasticsearch.distribution.zip</groupId>
     <artifactId>elasticsearch</artifactId>
     <name>Distribution: ZIP</name>
     <!--

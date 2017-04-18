@@ -19,17 +19,37 @@
 
 package org.elasticsearch.index;
 
-import com.google.common.base.Function;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterators;
+import static com.google.common.collect.Maps.newHashMap;
+import static org.elasticsearch.common.collect.MapBuilder.newMapBuilder;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.IOUtils;
+import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elassandra.index.search.TokenRangesBitsetFilterCache;
+import org.elassandra.search.SearchProcessorFactory;
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.inject.*;
+import org.elasticsearch.common.inject.ConfigurationException;
+import org.elasticsearch.common.inject.CreationException;
+import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.inject.Injector;
+import org.elasticsearch.common.inject.Injectors;
+import org.elasticsearch.common.inject.Module;
+import org.elasticsearch.common.inject.ModulesBuilder;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.env.ShardLock;
@@ -45,7 +65,12 @@ import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.settings.IndexSettingsService;
-import org.elasticsearch.index.shard.*;
+import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.IndexShardModule;
+import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.index.shard.ShardNotFoundException;
+import org.elasticsearch.index.shard.ShardPath;
+import org.elasticsearch.index.shard.StoreRecoveryService;
 import org.elasticsearch.index.similarity.SimilarityService;
 import org.elasticsearch.index.store.IndexStore;
 import org.elasticsearch.index.store.Store;
@@ -57,18 +82,9 @@ import org.elasticsearch.indices.InternalIndicesLifecycle;
 import org.elasticsearch.indices.cache.query.IndicesQueryCache;
 import org.elasticsearch.plugins.PluginsService;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static com.google.common.collect.Maps.newHashMap;
-import static org.elasticsearch.common.collect.MapBuilder.newMapBuilder;
+import com.google.common.base.Function;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterators;
 
 /**
  *
@@ -84,6 +100,8 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
     private final AnalysisService analysisService;
 
     private final MapperService mapperService;
+
+    private final ClusterService clusterService;
 
     private final IndexQueryParserService queryParserService;
 
@@ -104,6 +122,8 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
 
     private volatile ImmutableMap<Integer, IndexShardInjectorPair> shards = ImmutableMap.of();
 
+    private SearchProcessorFactory searchProcessorFactory;
+    
     private static class IndexShardInjectorPair {
         private final IndexShard indexShard;
         private final Injector injector;
@@ -130,7 +150,8 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
                         AnalysisService analysisService, MapperService mapperService, IndexQueryParserService queryParserService,
                         SimilarityService similarityService, IndexAliasesService aliasesService, IndexCache indexCache,
                         IndexSettingsService settingsService,
-                        IndexFieldDataService indexFieldData, BitsetFilterCache bitSetFilterCache, IndicesService indicesServices) {
+                        IndexFieldDataService indexFieldData, BitsetFilterCache bitSetFilterCache, 
+                        IndicesService indicesServices) {
 
         super(index, settingsService.getSettings());
         this.injector = injector;
@@ -143,14 +164,25 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
         this.indexFieldData = indexFieldData;
         this.settingsService = settingsService;
         this.bitsetFilterCache = bitSetFilterCache;
-
+        
+        this.clusterService = injector.getInstance(ClusterService.class);
         this.pluginsService = injector.getInstance(PluginsService.class);
+        try {
+            this.searchProcessorFactory = injector.getInstance(SearchProcessorFactory.class);
+            logger.debug("SearchProcessorFactory={}", searchProcessorFactory.getClass().getName());
+        } catch(ConfigurationException e) {
+            logger.debug("No SearchProcessorFactory " );
+        }
+
         this.indicesServices = indicesServices;
         this.indicesLifecycle = (InternalIndicesLifecycle) injector.getInstance(IndicesLifecycle.class);
 
         // inject workarounds for cyclic dep
         indexFieldData.setListener(new FieldDataCacheListener(this));
         bitSetFilterCache.setListener(new BitsetCacheListener(this));
+
+        this.indexCache.tokenRangeBitsetFilterCache().setListener(new TokenRangeBitsetCacheListener(this));
+        
         this.nodeEnv = nodeEnv;
     }
 
@@ -162,6 +194,14 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
         return this.indicesLifecycle;
     }
 
+    public SearchProcessorFactory searchProcessorFactory() {
+        return this.searchProcessorFactory;
+    }
+    
+    public boolean isTokenRangesBitsetCacheEnabled() {
+        return this.settingsService.indexSettings().getAsBoolean(IndexMetaData.SETTING_TOKEN_RANGES_BITSET_CACHE, this.clusterService.settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(InternalCassandraClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE)));
+    }
+    
     @Override
     public Iterator<IndexShard> iterator() {
         return Iterators.transform(shards.values().iterator(), new Function<IndexShardInjectorPair, IndexShard>() {
@@ -222,11 +262,15 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
     public BitsetFilterCache bitsetFilterCache() {
         return bitsetFilterCache;
     }
-
+    
     public AnalysisService analysisService() {
         return this.analysisService;
     }
 
+    public ClusterService clusterService() {
+        return this.clusterService;
+    }
+    
     public MapperService mapperService() {
         return mapperService;
     }
@@ -288,17 +332,21 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
     }
 
     public synchronized IndexShard createShard(ShardRouting routing) {
+        return createShard(0, routing);
+    }
+    
+    public synchronized IndexShard createShard(int sShardId, ShardRouting routing) {
         final boolean primary = routing.primary();
         final Settings indexSettings = indexSettings();
-        final ShardId shardId = routing.shardId();
         /*
          * TODO: we execute this in parallel but it's a synced method. Yet, we might
          * be able to serialize the execution via the cluster state in the future. for now we just
          * keep it synced.
          */
         if (closed.get()) {
-            throw new IllegalStateException("Can't create shard " + shardId + ", closed");
+            throw new IllegalStateException("Can't create shard [" + index.name() + "][" + sShardId + "], closed");
         }
+        final ShardId shardId = new ShardId(index, sShardId);
         ShardLock lock = null;
         boolean success = false;
         Injector shardInjector = null;
@@ -381,7 +429,6 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
             indicesLifecycle.indexShardStateChanged(indexShard, null, "shard created");
             indicesLifecycle.afterIndexShardCreated(indexShard);
 
-            indexShard.updateRoutingEntry(routing, true);
             shards = newMapBuilder(shards).put(shardId.id(), new IndexShardInjectorPair(indexShard, shardInjector)).immutableMap();
             success = true;
             return indexShard;
@@ -542,6 +589,10 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
         return settingsService.getSettings();
     }
 
+    public String keyspace() {
+        return settingsService().getSettings().get(IndexMetaData.SETTING_KEYSPACE, this.index.name());
+    }
+    
     private static final class BitsetCacheListener implements BitsetFilterCache.Listener {
         final IndexService indexService;
 
@@ -572,6 +623,35 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
         }
     }
 
+    private static final class TokenRangeBitsetCacheListener implements TokenRangesBitsetFilterCache.Listener {
+        final IndexService indexService;
+
+        private TokenRangeBitsetCacheListener(IndexService indexService) {
+            this.indexService = indexService;
+        }
+
+        @Override
+        public void onCache(ShardId shardId, Accountable accountable) {
+            if (shardId != null) {
+                final IndexShard shard = indexService.shard(shardId.id());
+                if (shard != null) {
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
+                    shard.tokenRangeBitsetFilterCache().onCached(ramBytesUsed);
+                }
+            }
+        }
+
+        @Override
+        public void onRemoval(ShardId shardId, Accountable accountable) {
+            if (shardId != null) {
+                final IndexShard shard = indexService.shard(shardId.id());
+                if (shard != null) {
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
+                    shard.tokenRangeBitsetFilterCache().onRemoval(ramBytesUsed);
+                }
+            }
+        }
+    }
     private final class FieldDataCacheListener implements IndexFieldDataCache.Listener {
         final IndexService indexService;
 

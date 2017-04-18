@@ -32,7 +32,6 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.text.Text;
-import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentBuilderString;
@@ -196,10 +195,6 @@ public class InternalSearchHit implements SearchHit {
      */
     @Override
     public BytesReference sourceRef() {
-        if (this.source == null) {
-            return null;
-        }
-
         try {
             this.source = CompressorFactory.uncompressIfNeeded(this.source);
             return this.source;
@@ -474,7 +469,7 @@ public class InternalSearchHit implements SearchHit {
             builder.field(Fields._SCORE, score);
         }
         for (SearchHitField field : metaFields) {
-            builder.field(field.name(), field.value());
+            builder.field(field.name(), (Object)field.value());
         }
         if (source != null) {
             XContentHelper.writeRawField("_source", source, builder, params);

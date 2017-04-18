@@ -19,17 +19,28 @@
 
 package org.elasticsearch.cluster.metadata;
 
-import com.google.common.collect.Sets;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsClusterStateUpdateRequest;
 import org.elasticsearch.action.admin.indices.upgrade.post.UpgradeSettingsClusterStateUpdateRequest;
 import org.elasticsearch.action.support.IndicesOptions;
-import org.elasticsearch.cluster.*;
+import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
+import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.routing.RoutingTable;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.cluster.settings.DynamicSettings;
 import org.elasticsearch.common.Booleans;
@@ -41,9 +52,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.settings.IndexDynamicSettings;
 
-import java.util.*;
-
-import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+import com.google.common.collect.Sets;
 
 /**
  * Service responsible for submitting update index settings requests
@@ -55,19 +64,16 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
 
     private final ClusterService clusterService;
 
-    private final AllocationService allocationService;
-
     private final DynamicSettings dynamicSettings;
 
     private final IndexNameExpressionResolver indexNameExpressionResolver;
 
     @Inject
-    public MetaDataUpdateSettingsService(Settings settings, ClusterService clusterService, AllocationService allocationService, @IndexDynamicSettings DynamicSettings dynamicSettings, IndexNameExpressionResolver indexNameExpressionResolver) {
+    public MetaDataUpdateSettingsService(Settings settings, ClusterService clusterService, @IndexDynamicSettings DynamicSettings dynamicSettings, IndexNameExpressionResolver indexNameExpressionResolver) {
         super(settings);
         this.clusterService = clusterService;
         this.indexNameExpressionResolver = indexNameExpressionResolver;
         this.clusterService.add(this);
-        this.allocationService = allocationService;
         this.dynamicSettings = dynamicSettings;
     }
 
@@ -219,9 +225,14 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
             }
 
             @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
+            @Override
             public ClusterState execute(ClusterState currentState) {
                 String[] actualIndices = indexNameExpressionResolver.concreteIndices(currentState, IndicesOptions.strictExpand(), request.indices());
-                RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+                RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, currentState);
                 MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
 
                 // allow to change any settings to a close index, and only allow dynamic settings to be changed
@@ -315,8 +326,8 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(metaDataBuilder).routingTable(routingTableBuilder).blocks(blocks).build();
 
                 // now, reroute in case things change that require it (like number of replicas)
-                RoutingAllocation.Result routingResult = allocationService.reroute(updatedState, "settings update");
-                updatedState = ClusterState.builder(updatedState).routingResult(routingResult).build();
+                //RoutingAllocation.Result routingResult = allocationService.reroute(updatedState);
+                //updatedState = ClusterState.builder(updatedState).incrementVersion().routingResult(routingResult).build();
 
                 return updatedState;
             }

@@ -19,16 +19,17 @@
 
 package org.elasticsearch.index.cache;
 
+import java.io.Closeable;
+import java.io.IOException;
+
 import org.apache.lucene.util.IOUtils;
+import org.elassandra.index.search.TokenRangesBitsetFilterCache;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.index.AbstractIndexComponent;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.cache.bitset.BitsetFilterCache;
 import org.elasticsearch.index.cache.query.QueryCache;
 import org.elasticsearch.index.settings.IndexSettingsService;
-
-import java.io.Closeable;
-import java.io.IOException;
 
 /**
  *
@@ -37,6 +38,7 @@ public class IndexCache extends AbstractIndexComponent implements Closeable {
 
     private final QueryCache queryCache;
     private final BitsetFilterCache bitsetFilterCache;
+    private TokenRangesBitsetFilterCache tokenRangeBitsetFilterCache;
 
     @Inject
     public IndexCache(Index index, IndexSettingsService indexSettingsService, QueryCache queryCache, BitsetFilterCache bitsetFilterCache) {
@@ -55,15 +57,26 @@ public class IndexCache extends AbstractIndexComponent implements Closeable {
     public BitsetFilterCache bitsetFilterCache() {
         return bitsetFilterCache;
     }
+    
+    public TokenRangesBitsetFilterCache tokenRangeBitsetFilterCache() {
+        return tokenRangeBitsetFilterCache;
+    }
+    
+    @Inject(optional=true)
+    public void tokenRangeBitsetFilterCache(TokenRangesBitsetFilterCache tokenRangeBitsetFilterCache) {
+        this.tokenRangeBitsetFilterCache = tokenRangeBitsetFilterCache;
+    }
 
     @Override
     public void close() throws IOException {
-        IOUtils.close(queryCache, bitsetFilterCache);
+        IOUtils.close(queryCache, bitsetFilterCache, tokenRangeBitsetFilterCache);
     }
 
     public void clear(String reason) {
         queryCache.clear(reason);
         bitsetFilterCache.clear(reason);
+        if (tokenRangeBitsetFilterCache != null)
+            tokenRangeBitsetFilterCache.clear(reason);
     }
 
 }

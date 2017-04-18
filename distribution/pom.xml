@@ -4,12 +4,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.elasticsearch</groupId>
+        <groupId>com.strapdata.elasticsearch</groupId>
         <artifactId>parent</artifactId>
         <version>2.4.2-SNAPSHOT</version>
     </parent>
 
-    <groupId>org.elasticsearch.distribution</groupId>
+    <groupId>com.strapdata.elasticsearch.distribution</groupId>
     <artifactId>distributions</artifactId>
     <packaging>pom</packaging>
     <name>Distribution: Parent POM</name>
@@ -48,7 +48,7 @@
         <packaging.gpg.shortening.ant.script>${project.basedir}/../correct-sign-path.xml</packaging.gpg.shortening.ant.script>
         <!-- By default we sign RPMs and DEBs using a dummy gpg directory that we check into
              source control. Releases will override this with the real information. -->
-        <gpg.key>16E55242</gpg.key>
+        <gpg.key>C58CE2B6</gpg.key>
         <!-- We're not using project.parent.basedir here by intention because it causes trouble
         (i.e. the property does not get resolved; verified with
         mvn help:effective-pom -pl distribution/rpm -Prpm). -->
@@ -90,7 +90,7 @@
         </dependency>
 
         <dependency>
-            <groupId>org.elasticsearch</groupId>
+            <groupId>com.strapdata.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
             <scope>test</scope>
             <type>test-jar</type>
@@ -104,7 +104,7 @@
 
         <!-- Embedded components in any distribution -->
         <dependency>
-            <groupId>org.elasticsearch</groupId>
+            <groupId>com.strapdata.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
         </dependency>
 
@@ -195,7 +195,7 @@
                         <configuration>
                             <artifactItems>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.module</groupId>
+                                    <groupId>com.strapdata.elasticsearch.module</groupId>
                                     <artifactId>lang-expression</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
@@ -203,7 +203,7 @@
                                     <outputDirectory>${project.build.directory}/modules/lang-expression</outputDirectory>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.module</groupId>
+                                    <groupId>com.strapdata.elasticsearch.module</groupId>
                                     <artifactId>lang-groovy</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
@@ -211,7 +211,7 @@
                                     <outputDirectory>${project.build.directory}/modules/lang-groovy</outputDirectory>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.module</groupId>
+                                    <groupId>com.strapdata.elasticsearch.module</groupId>
                                     <artifactId>reindex</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
@@ -306,7 +306,9 @@
         <module>integ-test-zip</module>
         <module>tar</module>
         <module>zip</module>
+        <!--
         <module>deb</module>
+        -->
     </modules>
 
     <profiles>

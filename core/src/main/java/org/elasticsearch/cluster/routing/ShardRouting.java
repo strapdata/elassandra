@@ -19,6 +19,14 @@
 
 package org.elasticsearch.cluster.routing;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -27,9 +35,7 @@ import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.shard.ShardId;
 
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
+import com.google.common.collect.ImmutableList;
 
 /**
  * {@link ShardRouting} immutably encapsulates information about shard
@@ -42,6 +48,12 @@ public final class ShardRouting implements Streamable, ToXContent {
      */
     public static final long UNAVAILABLE_EXPECTED_SHARD_SIZE = -1;
 
+    /**
+     * Dummy allocation ID to avoid unless random generation (this involve a lock on java.security.SecureRandom.nextBytes).
+     */
+    static AllocationId DUMMY_ALLOCATION_ID = AllocationId.newInitializing();
+    
+    
     private String index;
     private int shardId;
     private String currentNodeId;
@@ -57,6 +69,9 @@ public final class ShardRouting implements Streamable, ToXContent {
     private boolean frozen = false;
     private long expectedShardSize = UNAVAILABLE_EXPECTED_SHARD_SIZE;
 
+    protected transient Collection<Range<Token>> tokenRanges;
+    
+    
     private ShardRouting() {
         this.asList = Collections.singletonList(this);
     }
@@ -66,7 +81,23 @@ public final class ShardRouting implements Streamable, ToXContent {
     }
 
     public ShardRouting(ShardRouting copy, long version) {
-        this(copy.index(), copy.id(), copy.currentNodeId(), copy.relocatingNodeId(), copy.restoreSource(), copy.primary(), copy.state(), version, copy.unassignedInfo(), copy.allocationId(), true, copy.getExpectedShardSize());
+        this(copy.index(), copy.id(), copy.currentNodeId(), copy.relocatingNodeId(), copy.restoreSource(), copy.primary(), copy.state(), version, copy.unassignedInfo(), copy.allocationId(), true, copy.getExpectedShardSize(), copy.tokenRanges());
+    }
+
+    public ShardRouting(String index, int shardId, String currentNodeId, boolean primary, ShardRoutingState state) {
+       this(index, shardId,currentNodeId, null, null, primary, state, 0, null, DUMMY_ALLOCATION_ID, true, UNAVAILABLE_EXPECTED_SHARD_SIZE, null);
+   }
+    
+    
+    public ShardRouting(String index, int shardId, String currentNodeId,
+             boolean primary, ShardRoutingState state, long version, UnassignedInfo unassignedInfo, Collection<Range<Token>> tokenRanges) {
+        this(index, shardId,currentNodeId, null, null, primary, state, version, unassignedInfo, DUMMY_ALLOCATION_ID, true, UNAVAILABLE_EXPECTED_SHARD_SIZE, tokenRanges);
+    }
+    
+    public ShardRouting(String index, int shardId, String currentNodeId,
+            String relocatingNodeId, RestoreSource restoreSource, boolean primary, ShardRoutingState state, long version,
+            UnassignedInfo unassignedInfo, AllocationId allocationId, boolean internal, long expectedShardSize) {
+        this(index, shardId,currentNodeId, relocatingNodeId, restoreSource, primary, state, version, unassignedInfo, allocationId, internal, expectedShardSize, ImmutableList.<Range<Token>> of());
     }
 
     /**
@@ -75,7 +106,8 @@ public final class ShardRouting implements Streamable, ToXContent {
      */
     ShardRouting(String index, int shardId, String currentNodeId,
                  String relocatingNodeId, RestoreSource restoreSource, boolean primary, ShardRoutingState state, long version,
-                 UnassignedInfo unassignedInfo, AllocationId allocationId, boolean internal, long expectedShardSize) {
+                 UnassignedInfo unassignedInfo, AllocationId allocationId, boolean internal, long expectedShardSize,
+                 Collection<Range<Token>> tokenRanges) {
         this.index = index;
         this.shardId = shardId;
         this.currentNodeId = currentNodeId;
@@ -97,7 +129,15 @@ public final class ShardRouting implements Streamable, ToXContent {
             assert relocatingNodeId == null;
             assert allocationId == null;
         }
+        this.tokenRanges = tokenRanges;
+    }
 
+    public Collection<Range<Token>> tokenRanges() {
+        return tokenRanges;
+    }
+
+    public void tokenRanges(Collection<Range<Token>> tokenRanges) {
+        this.tokenRanges = tokenRanges;
     }
 
     /**
@@ -332,6 +372,14 @@ public final class ShardRouting implements Streamable, ToXContent {
         } else {
             expectedShardSize = UNAVAILABLE_EXPECTED_SHARD_SIZE;
         }
+        
+        // read tokenRanges
+        Object[] tokens = (Object[]) in.readGenericValue();
+        this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+        for (int i = 0; i < tokens.length;) {
+            Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+            this.tokenRanges.add(range);
+        }
         freeze();
     }
 
@@ -386,7 +434,16 @@ public final class ShardRouting implements Streamable, ToXContent {
         if (relocating() || initializing()) {
             out.writeLong(expectedShardSize);
         }
-
+        if (tokenRanges != null) {
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
+        }
+        
     }
 
     @Override
@@ -398,7 +455,7 @@ public final class ShardRouting implements Streamable, ToXContent {
 
     public void updateUnassignedInfo(UnassignedInfo unassignedInfo) {
         ensureNotFrozen();
-        assert this.unassignedInfo != null : "can only update unassign info if they are already set";
+        ////assert this.unassignedInfo != null : "can only update unassign info if they are already set";
         this.unassignedInfo = unassignedInfo;
     }
 
@@ -625,6 +682,9 @@ public final class ShardRouting implements Streamable, ToXContent {
         if (restoreSource != null ? !restoreSource.equals(other.restoreSource) : other.restoreSource != null) {
             return false;
         }
+        if (tokenRanges != null ? !tokenRanges.equals(other.tokenRanges) : other.tokenRanges != null) {
+            return false;
+        }
         return true;
     }
 
@@ -665,6 +725,7 @@ public final class ShardRouting implements Streamable, ToXContent {
         result = 31 * result + (restoreSource != null ? restoreSource.hashCode() : 0);
         result = 31 * result + (allocationId != null ? allocationId.hashCode() : 0);
         result = 31 * result + (unassignedInfo != null ? unassignedInfo.hashCode() : 0);
+        result = 31 * result + (tokenRanges != null ? tokenRanges.hashCode() : 0);
         return hashCode = result;
     }
 
@@ -715,6 +776,9 @@ public final class ShardRouting implements Streamable, ToXContent {
             .field("shard", shardId().id())
             .field("index", shardId().index().name())
             .field("version", version);
+        if (tokenRanges != null && tokenRanges.size() > 0) {
+            builder.field("token_ranges", tokenRanges);
+        }
         if (expectedShardSize != UNAVAILABLE_EXPECTED_SHARD_SIZE) {
             builder.field("expected_shard_size_in_bytes", expectedShardSize);
         }

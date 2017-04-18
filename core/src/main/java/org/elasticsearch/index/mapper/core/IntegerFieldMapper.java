@@ -228,6 +228,29 @@ public class IntegerFieldMapper extends NumberFieldMapper {
     }
 
     @Override
+    public void innerCreateField(ParseContext context, Object object) throws IOException {
+        Integer value = (Integer)object;
+        float boost = fieldType().boost();
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            value = fieldType().nullValue();
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), Integer.toString(value), boost);
+        }
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomIntegerNumericField field = new CustomIntegerNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
+    }
+    
+    @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         int value;
         float boost = fieldType().boost();

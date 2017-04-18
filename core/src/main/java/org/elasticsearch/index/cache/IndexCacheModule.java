@@ -19,6 +19,9 @@
 
 package org.elasticsearch.index.cache;
 
+import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elassandra.index.search.TokenRangesBitsetFilterCache;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.ExtensionPoint;
@@ -34,7 +37,6 @@ public class IndexCacheModule extends AbstractModule {
     public static final String QUERY_CACHE_TYPE = "index.queries.cache.type";
     // for test purposes only
     public static final String QUERY_CACHE_EVERYTHING = "index.queries.cache.everything";
-    public static final String QUERY_CACHE_TERM_QUERIES = "index.queries.cache.term_queries";
 
     private final Settings indexSettings;
     private final ExtensionPoint.SelectedType<QueryCache> queryCaches;
@@ -55,6 +57,8 @@ public class IndexCacheModule extends AbstractModule {
     protected void configure() {
         queryCaches.bindType(binder(), indexSettings, QUERY_CACHE_TYPE, INDEX_QUERY_CACHE);
         bind(BitsetFilterCache.class).asEagerSingleton();
+        if (indexSettings.getAsBoolean(IndexMetaData.SETTING_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(InternalCassandraClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE)))
+            bind(TokenRangesBitsetFilterCache.class).asEagerSingleton();
         bind(IndexCache.class).asEagerSingleton();
     }
 }

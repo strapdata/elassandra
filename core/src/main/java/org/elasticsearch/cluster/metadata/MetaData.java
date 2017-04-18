@@ -19,20 +19,30 @@
 
 package org.elasticsearch.cluster.metadata;
 
-import com.carrotsearch.hppc.ObjectHashSet;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
-import com.google.common.base.MoreObjects;
-import com.google.common.base.Predicate;
-import com.google.common.collect.Collections2;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.UnmodifiableIterator;
+import static org.elasticsearch.common.settings.Settings.readSettingsFromStream;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+import static org.elasticsearch.common.settings.Settings.writeSettingsToStream;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.lucene.util.CollectionUtil;
 import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.Diffable;
 import org.elasticsearch.cluster.DiffableUtils;
 import org.elasticsearch.cluster.DiffableUtils.KeyedReader;
-import org.elasticsearch.cluster.InternalClusterInfoService;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.allocation.decider.DiskThresholdDecider;
@@ -48,7 +58,12 @@ import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.loader.SettingsLoader;
-import org.elasticsearch.common.xcontent.*;
+import org.elasticsearch.common.xcontent.FromXContentBuilder;
+import org.elasticsearch.common.xcontent.ToXContent;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.indices.recovery.RecoverySettings;
@@ -57,10 +72,14 @@ import org.elasticsearch.indices.ttl.IndicesTTLService;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.warmer.IndexWarmersMetaData;
 
-import java.io.IOException;
-import java.util.*;
-
-import static org.elasticsearch.common.settings.Settings.*;
+import com.carrotsearch.hppc.ObjectHashSet;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Collections2;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.UnmodifiableIterator;
 
 public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, FromXContentBuilder<MetaData>, ToXContent {
 
@@ -165,10 +184,6 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, Fr
         this.templates = templates;
         int totalNumberOfShards = 0;
         int numberOfShards = 0;
-        for (ObjectCursor<IndexMetaData> cursor : indices.values()) {
-            totalNumberOfShards += cursor.value.getTotalNumberOfShards();
-            numberOfShards += cursor.value.getNumberOfShards();
-        }
         this.totalNumberOfShards = totalNumberOfShards;
         this.numberOfShards = numberOfShards;
 
@@ -186,6 +201,10 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, Fr
         return this.clusterUUID;
     }
 
+    public String uuid() {
+        return clusterUUID();
+    }
+    
     /**
      * Returns the merged transient and persistent settings.
      */
@@ -741,8 +760,8 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, Fr
                                     RecoverySettings.INDICES_RECOVERY_INTERNAL_ACTION_TIMEOUT,
                                     RecoverySettings.INDICES_RECOVERY_INTERNAL_LONG_ACTION_TIMEOUT,
                                     DiskThresholdDecider.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL,
-                                    InternalClusterInfoService.INTERNAL_CLUSTER_INFO_UPDATE_INTERVAL,
-                                    InternalClusterInfoService.INTERNAL_CLUSTER_INFO_TIMEOUT,
+                                    //InternalClusterInfoService.INTERNAL_CLUSTER_INFO_UPDATE_INTERVAL,
+                                    //InternalClusterInfoService.INTERNAL_CLUSTER_INFO_TIMEOUT,
                                     DiscoverySettings.PUBLISH_TIMEOUT,
                                     InternalClusterService.SETTING_CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD);
 
@@ -881,7 +900,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, Fr
         private final ImmutableOpenMap.Builder<String, Custom> customs;
 
         public Builder() {
-            clusterUUID = "_na_";
+            clusterUUID = SystemKeyspace.getLocalHostId().toString();
             indices = ImmutableOpenMap.builder();
             templates = ImmutableOpenMap.builder();
             customs = ImmutableOpenMap.builder();
@@ -1031,10 +1050,18 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, Fr
             return this;
         }
 
+        public Builder incrementVersion() {
+            this.version = version + 1;
+            this.clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            return this;
+        }
+        
         public Builder generateClusterUuidIfNeeded() {
+            /*
             if (clusterUUID.equals("_na_")) {
                 clusterUUID = Strings.randomBase64UUID();
             }
+            */
             return this;
         }
 
@@ -1095,9 +1122,13 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, Fr
         }
 
         public static String toXContent(MetaData metaData) throws IOException {
+            return toXContent(metaData, ToXContent.EMPTY_PARAMS);
+        }
+        
+        public static String toXContent(MetaData metaData, ToXContent.Params params) throws IOException {
             XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
             builder.startObject();
-            toXContent(metaData, builder, ToXContent.EMPTY_PARAMS);
+            toXContent(metaData, builder, params);
             builder.endObject();
             return builder.string();
         }

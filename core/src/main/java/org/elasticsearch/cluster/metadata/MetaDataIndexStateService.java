@@ -88,6 +88,11 @@ public class MetaDataIndexStateService extends AbstractComponent {
             }
 
             @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
+            @Override
             public ClusterState execute(ClusterState currentState) {
                 Set<String> indicesToClose = new HashSet<>();
                 for (String index : request.indices()) {
@@ -98,13 +103,14 @@ public class MetaDataIndexStateService extends AbstractComponent {
 
                     if (indexMetaData.getState() != IndexMetaData.State.CLOSE) {
                         IndexRoutingTable indexRoutingTable = currentState.routingTable().index(index);
-                        for (IndexShardRoutingTable shard : indexRoutingTable) {
-                            for (ShardRouting shardRouting : shard) {
-                                if (shardRouting.primary() == true && shardRouting.allocatedPostIndexCreate() == false) {
-                                    throw new IndexPrimaryShardNotAllocatedException(new Index(index));
+                        if (indexRoutingTable != null)
+                            for (IndexShardRoutingTable shard : indexRoutingTable) {
+                                for (ShardRouting shardRouting : shard) {
+                                    if (shardRouting.primary() == true && shardRouting.allocatedPostIndexCreate() == false) {
+                                        throw new IndexPrimaryShardNotAllocatedException(new Index(index));
+                                    }
                                 }
                             }
-                        }
                         indicesToClose.add(index);
                     }
                 }
@@ -147,6 +153,8 @@ public class MetaDataIndexStateService extends AbstractComponent {
 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocksBuilder).build();
 
+                RoutingTable routingTable = RoutingTable.build(MetaDataIndexStateService.this.clusterService, updatedState);
+                /*
                 RoutingTable.Builder rtBuilder = RoutingTable.builder(currentState.routingTable());
                 for (String index : indicesToClose) {
                     rtBuilder.remove(index);
@@ -155,8 +163,9 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 RoutingAllocation.Result routingResult = allocationService.reroute(
                         ClusterState.builder(updatedState).routingTable(rtBuilder.build()).build(),
                         "indices closed [" + indicesAsString + "]");
+                */
                 //no explicit wait for other nodes needed as we use AckedClusterStateUpdateTask
-                return ClusterState.builder(updatedState).routingResult(routingResult).build();
+                return ClusterState.builder(updatedState).incrementVersion().routingTable(routingTable).build();
             }
         });
     }
@@ -173,6 +182,12 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 return new ClusterStateUpdateResponse(acknowledged);
             }
 
+
+            @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
             @Override
             public ClusterState execute(ClusterState currentState) {
                 List<String> indicesToOpen = new ArrayList<>();
@@ -205,7 +220,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 }
 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocksBuilder).build();
-
+                /*
                 RoutingTable.Builder rtBuilder = RoutingTable.builder(updatedState.routingTable());
                 for (String index : indicesToOpen) {
                     rtBuilder.addAsFromCloseToOpen(updatedState.metaData().index(index));
@@ -214,8 +229,9 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 RoutingAllocation.Result routingResult = allocationService.reroute(
                         ClusterState.builder(updatedState).routingTable(rtBuilder.build()).build(),
                         "indices opened [" + indicesAsString + "]");
+                */
                 //no explicit wait for other nodes needed as we use AckedClusterStateUpdateTask
-                return ClusterState.builder(updatedState).routingResult(routingResult).build();
+                return ClusterState.builder(updatedState).incrementVersion().build();
             }
         });
     }

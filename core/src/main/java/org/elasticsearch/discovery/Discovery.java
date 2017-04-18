@@ -19,11 +19,23 @@
 
 package org.elasticsearch.discovery;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.routing.RoutingService;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.LifecycleComponent;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.node.service.NodeService;
 
 /**
@@ -35,10 +47,11 @@ public interface Discovery extends LifecycleComponent<Discovery> {
 
     DiscoveryNode localNode();
 
+    /*
     void addListener(InitialStateDiscoveryListener listener);
-
     void removeListener(InitialStateDiscoveryListener listener);
-
+    */
+    
     String nodeDescription();
 
     /**
@@ -50,7 +63,7 @@ public interface Discovery extends LifecycleComponent<Discovery> {
      * Another hack to solve dep injection problem..., note, this will be called before
      * any start is called.
      */
-    void setRoutingService(RoutingService routingService);
+    //void setRoutingService(RoutingService routingService);
 
     /**
      * Publish all the changes to the cluster from the master (can be called just by the master). The publish
@@ -59,16 +72,45 @@ public interface Discovery extends LifecycleComponent<Discovery> {
      * The {@link AckListener} allows to keep track of the ack received from nodes, and verify whether
      * they updated their own cluster state or not.
      */
-    void publish(ClusterChangedEvent clusterChangedEvent, AckListener ackListener);
+    //void publish(ClusterChangedEvent clusterChangedEvent, AckListener ackListener);
 
+    void publishX1(ClusterState clusterState);
+    void publishX2(ClusterState clusterState);
+    void connectToNodes();
+    
+    /*
     public static interface AckListener {
         void onNodeAck(DiscoveryNode node, @Nullable Throwable t);
-
         void onTimeout();
     }
-
+    */
+    
     /**
      * Triggers the first join cycle
      */
     void startInitialJoin();
+    
+    public DiscoveryNodes nodes();
+    
+    public Map<UUID, ShardRoutingState> getShardRoutingStates(String index);
+    
+    /**
+     * Set index shard state in the gossip endpoint map (must be synchronized).
+     * @param index
+     * @param shardRoutingState (remove index shard state if null)
+     * @throws JsonGenerationException
+     * @throws JsonMappingException
+     * @throws IOException
+     */
+    void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException;
+    
+
+    /**
+     * Block until clusterState.metadata.version < expected version for all alive nodes.
+     * @param version
+     * @param ackTimeout
+     * @throws Exception
+     */
+    boolean awaitMetaDataVersion(final long version, final TimeValue ackTimeout) throws Exception;
+    
 }
