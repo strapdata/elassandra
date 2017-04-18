@@ -32,8 +32,7 @@ import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.logging.support.LoggerMessageFormat;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.discovery.DiscoveryModule;
-import org.elasticsearch.discovery.zen.ping.unicast.UnicastZenPing;
+
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.transport.TransportModule;
@@ -57,7 +56,7 @@ final class ExternalNode implements Closeable {
 
     public static final Settings REQUIRED_SETTINGS = Settings.builder()
             .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
-            .put(DiscoveryModule.DISCOVERY_TYPE_KEY, "zen")
+            //.put(DiscoveryModule.DISCOVERY_TYPE_KEY, "zen")
             .put("node.mode", "network").build(); // we need network mode for this
 
     private final String version;
@@ -120,7 +119,7 @@ final class ExternalNode implements Closeable {
             case "node.local":
             case "path.shared_data":
             case TransportModule.TRANSPORT_TYPE_KEY:
-            case DiscoveryModule.DISCOVERY_TYPE_KEY:
+            //case DiscoveryModule.DISCOVERY_TYPE_KEY:
             case TransportModule.TRANSPORT_SERVICE_TYPE_KEY:
             case InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING:
                 logger.warn("Suppressing setting for external node [{}={}]", entry.getKey(), entry.getValue());
@@ -144,9 +143,11 @@ final class ExternalNode implements Closeable {
                                 new Object[] { tcpPortSetting }));
             }
         }
+        /*
         if (externalNodeSettings.get(UnicastZenPing.DISCOVERY_ZEN_PING_UNICAST_HOSTS) == null) {
             throw new IllegalArgumentException("Without unicast hosts the external cluster isn't likely to work!");
         }
+        */
 
 
 

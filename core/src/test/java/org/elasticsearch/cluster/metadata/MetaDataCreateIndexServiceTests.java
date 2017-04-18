@@ -61,7 +61,6 @@ public class MetaDataCreateIndexServiceTests extends ESTestCase {
             Settings.EMPTY,
             null,
             null,
-            null,
             Version.CURRENT,
             null,
             new HashSet<IndexTemplateFilter>(),

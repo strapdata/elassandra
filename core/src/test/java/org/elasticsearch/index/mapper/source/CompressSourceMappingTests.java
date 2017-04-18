@@ -43,7 +43,7 @@ public class CompressSourceMappingTests extends ESSingleNodeTestCase {
     @Test
     public void testCompressDisabled() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-                .startObject("_source").field("compress", false).endObject()
+                .startObject("_source").field("enabled",true).field("compress", false).endObject()
                 .endObject().endObject().string();
 
         DocumentMapper documentMapper = createIndex("test", settings).mapperService().documentMapperParser().parse("type", new CompressedXContent(mapping));
@@ -59,7 +59,7 @@ public class CompressSourceMappingTests extends ESSingleNodeTestCase {
     @Test
     public void testCompressEnabled() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-                .startObject("_source").field("compress", true).endObject()
+                .startObject("_source").field("enabled",true).field("compress", true).endObject()
                 .endObject().endObject().string();
 
         DocumentMapper documentMapper = createIndex("test", settings).mapperService().documentMapperParser().parse("type", new CompressedXContent(mapping));
@@ -76,7 +76,7 @@ public class CompressSourceMappingTests extends ESSingleNodeTestCase {
     @Test
     public void testCompressThreshold() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-                .startObject("_source").field("compress_threshold", "200b").endObject()
+                .startObject("_source").field("enabled",true).field("compress_threshold", "200b").endObject()
                 .endObject().endObject().string();
 
         DocumentMapper documentMapper = createIndex("test", settings).mapperService().documentMapperParser().parse("type", new CompressedXContent(mapping));

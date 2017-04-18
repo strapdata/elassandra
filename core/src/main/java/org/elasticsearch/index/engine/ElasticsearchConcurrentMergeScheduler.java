@@ -49,14 +49,14 @@ class ElasticsearchConcurrentMergeScheduler extends ConcurrentMergeScheduler {
     private final Settings indexSettings;
     private final ShardId shardId;
 
-    private final MeanMetric totalMerges = new MeanMetric();
-    private final CounterMetric totalMergesNumDocs = new CounterMetric();
-    private final CounterMetric totalMergesSizeInBytes = new CounterMetric();
-    private final CounterMetric currentMerges = new CounterMetric();
-    private final CounterMetric currentMergesNumDocs = new CounterMetric();
-    private final CounterMetric currentMergesSizeInBytes = new CounterMetric();
-    private final CounterMetric totalMergeStoppedTime = new CounterMetric();
-    private final CounterMetric totalMergeThrottledTime = new CounterMetric();
+    protected final MeanMetric totalMerges = new MeanMetric();
+    protected final CounterMetric totalMergesNumDocs = new CounterMetric();
+    protected final CounterMetric totalMergesSizeInBytes = new CounterMetric();
+    protected final CounterMetric currentMerges = new CounterMetric();
+    protected final CounterMetric currentMergesNumDocs = new CounterMetric();
+    protected final CounterMetric currentMergesSizeInBytes = new CounterMetric();
+    protected final CounterMetric totalMergeStoppedTime = new CounterMetric();
+    protected final CounterMetric totalMergeThrottledTime = new CounterMetric();
 
     private final Set<OnGoingMerge> onGoingMerges = ConcurrentCollections.newConcurrentSet();
     private final Set<OnGoingMerge> readOnlyOnGoingMerges = Collections.unmodifiableSet(onGoingMerges);
@@ -187,4 +187,7 @@ class ElasticsearchConcurrentMergeScheduler extends ConcurrentMergeScheduler {
         }
     }
 
+    public double getIORateLimitMBPerSec() {
+        return config.isAutoThrottle() ? super.getIORateLimitMBPerSec() : Double.POSITIVE_INFINITY;
+    }
 }

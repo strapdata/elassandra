@@ -20,7 +20,10 @@ package org.elasticsearch.index.fieldvisitor;
 
 import org.apache.lucene.index.FieldInfo;
 
+import com.google.common.collect.ImmutableSet;
+
 import java.io.IOException;
+import java.util.Set;
 
 /**
  */
@@ -33,5 +36,10 @@ public class AllFieldsVisitor extends FieldsVisitor {
     @Override
     public Status needsField(FieldInfo fieldInfo) throws IOException {
         return Status.YES;
+    }
+    
+    @Override
+    public Set<String> requestedFields() {
+        return null;
     }
 }

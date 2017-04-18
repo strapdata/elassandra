@@ -274,6 +274,11 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        parseCreateField( context, null);
+    }
+    
+    @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (fieldType().isEnabled() == false) {
             return;

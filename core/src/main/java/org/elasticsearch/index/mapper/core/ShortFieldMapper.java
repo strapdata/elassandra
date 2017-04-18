@@ -224,6 +224,26 @@ public class ShortFieldMapper extends NumberFieldMapper {
     }
 
     @Override
+    protected void innerCreateField(ParseContext context, Object object) throws IOException {
+        Short value = (Short)object;
+        float boost = fieldType().boost();
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            value = fieldType().nullValue();
+        }
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomShortNumericField field = new CustomShortNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
+    }
+    
+    @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         short value;
         float boost = fieldType().boost();

@@ -19,14 +19,19 @@
 
 package org.elasticsearch.action.percolate;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.action.support.broadcast.BroadcastShardRequest;
+import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.index.shard.ShardId;
-
-import java.io.IOException;
 
 /**
  */
@@ -39,17 +44,22 @@ public class PercolateShardRequest extends BroadcastShardRequest {
     private int numberOfShards;
     private long startTime;
 
+    private Collection<Range<Token>> tokenRanges;
+    
     public PercolateShardRequest() {
     }
 
-    PercolateShardRequest(ShardId shardId, int numberOfShards, PercolateRequest request) {
-        super(shardId, request);
+    PercolateShardRequest(ShardRouting shard, int numberOfShards, PercolateRequest request) {
+        super(new ShardId(shard.index(), shard.id()), request);
         this.documentType = request.documentType();
         this.source = request.source();
         this.docSource = request.docSource();
         this.onlyCount = request.onlyCount();
         this.numberOfShards = numberOfShards;
         this.startTime = request.startTime;
+        
+        // Use the user provided token_range of the shardRouting one.
+        this.tokenRanges = (request.tokenRanges() != null) ? request.tokenRanges() : shard.tokenRanges();
     }
 
     PercolateShardRequest(ShardId shardId, OriginalIndices originalIndices) {
@@ -63,8 +73,18 @@ public class PercolateShardRequest extends BroadcastShardRequest {
         this.docSource = request.docSource();
         this.onlyCount = request.onlyCount();
         this.startTime = request.startTime;
+        this.tokenRanges = request.tokenRanges();
     }
 
+    public Collection<Range<Token>> tokenRanges() {
+        return tokenRanges;
+    }
+
+    public PercolateShardRequest tokenRanges(Collection<Range<Token>> tokenRanges) {
+        this.tokenRanges = tokenRanges;
+        return this;
+    }
+    
     public String documentType() {
         return documentType;
     }
@@ -122,6 +142,14 @@ public class PercolateShardRequest extends BroadcastShardRequest {
         onlyCount = in.readBoolean();
         numberOfShards = in.readVInt();
         startTime = in.readLong(); // no vlong, this can be negative!
+        
+        // read tokenRanges
+        Object[] tokens = (Object[]) in.readGenericValue();
+        this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+        for (int i = 0; i < tokens.length;) {
+            Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+            this.tokenRanges.add(range);
+        }
     }
 
     @Override
@@ -133,6 +161,17 @@ public class PercolateShardRequest extends BroadcastShardRequest {
         out.writeBoolean(onlyCount);
         out.writeVInt(numberOfShards);
         out.writeLong(startTime);
+        
+        // write tokenRanges
+        if (tokenRanges != null) {
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
+        }
     }
 
 }

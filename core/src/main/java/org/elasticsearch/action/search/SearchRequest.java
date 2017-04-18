@@ -19,6 +19,15 @@
 
 package org.elasticsearch.action.search;
 
+import static org.elasticsearch.search.Scroll.readScroll;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Map;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.ElasticsearchGenerationException;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -42,19 +51,14 @@ import org.elasticsearch.script.mustache.MustacheScriptEngineService;
 import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
-import java.io.IOException;
-import java.util.Map;
-
-import static org.elasticsearch.search.Scroll.readScroll;
-
 /**
  * A request to execute search against one or more indices (or all). Best created using
  * {@link org.elasticsearch.client.Requests#searchRequest(String...)}.
- * <p>
- * Note, the search {@link #source(org.elasticsearch.search.builder.SearchSourceBuilder)}
+ * <p/>
+ * <p>Note, the search {@link #source(org.elasticsearch.search.builder.SearchSourceBuilder)}
  * is required. The search source is the different search options, including aggregations and such.
- * <p>
- * There is an option to specify an addition search source using the {@link #extraSource(org.elasticsearch.search.builder.SearchSourceBuilder)}.
+ * <p/>
+ * <p>There is an option to specify an addition search source using the {@link #extraSource(org.elasticsearch.search.builder.SearchSourceBuilder)}.
  *
  * @see org.elasticsearch.client.Requests#searchRequest(String...)
  * @see org.elasticsearch.client.Client#search(SearchRequest)
@@ -78,7 +82,10 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
 
     private BytesReference extraSource;
     private Boolean requestCache;
-
+    
+    private Boolean tokenRangesBitsetCache;
+    private Collection<Range<Token>> tokenRanges;
+    
     private Scroll scroll;
 
     private String[] types = Strings.EMPTY_ARRAY;
@@ -108,6 +115,8 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
         this.scroll = searchRequest.scroll;
         this.types = searchRequest.types;
         this.indicesOptions = searchRequest.indicesOptions;
+        this.tokenRangesBitsetCache = searchRequest.tokenRangesBitsetCache;
+        this.tokenRanges = searchRequest.tokenRanges;
     }
 
     /**
@@ -405,17 +414,27 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     /**
      * The name of the stored template
      * 
-     * @deprecated use {@link #template(Template)} instead.
+     * @deprecated use {@link #template(Template))} instead.
      */
     @Deprecated
     public void templateName(String templateName) {
         updateOrCreateScript(templateName, null, null, null);
     }
 
+
+    public Collection<Range<Token>> tokenRanges() {
+        return tokenRanges;
+    }
+
+    public SearchRequest tokenRanges(Collection<Range<Token>> tokenRanges) {
+        this.tokenRanges = tokenRanges;
+        return this;
+    }
+
     /**
      * The type of the stored template
      * 
-     * @deprecated use {@link #template(Template)} instead.
+     * @deprecated use {@link #template(Template))} instead.
      */
     @Deprecated
     public void templateType(ScriptService.ScriptType templateType) {
@@ -425,7 +444,7 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     /**
      * Template parameters used for rendering
      * 
-     * @deprecated use {@link #template(Template)} instead.
+     * @deprecated use {@link #template(Template))} instead.
      */
     @Deprecated
     public void templateParams(Map<String, Object> params) {
@@ -537,9 +556,21 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
         this.requestCache = requestCache;
         return this;
     }
-
+    
     public Boolean requestCache() {
         return this.requestCache;
+    }
+
+    /**
+     * Sets if this request should use the request the token bitset cache or not, assuming the index is configured to use token bitset cache.
+     */
+    public SearchRequest tokenRangesBitsetCache(Boolean tokenRangesBitsetCache) {
+        this.tokenRangesBitsetCache = tokenRangesBitsetCache;
+        return this;
+    }
+
+    public Boolean tokenRangesBitsetCache() {
+        return this.tokenRangesBitsetCache;
     }
 
     @Override
@@ -570,6 +601,16 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
             template = Template.readTemplate(in);
         }
         requestCache = in.readOptionalBoolean();
+        tokenRangesBitsetCache = in.readOptionalBoolean();
+        
+        if (in.available() > 0 && in.readBoolean()) {
+            Object[] tokens = (Object[]) in.readGenericValue();
+            this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+            for (int i = 0; i < tokens.length;) {
+                Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+                this.tokenRanges.add(range);
+            }
+        }
     }
 
     @Override
@@ -604,5 +645,17 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
         }
 
         out.writeOptionalBoolean(requestCache);
+        out.writeOptionalBoolean(tokenRangesBitsetCache);
+        
+        out.writeBoolean(tokenRanges != null);
+        if (tokenRanges != null) {
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
+        }
     }
 }

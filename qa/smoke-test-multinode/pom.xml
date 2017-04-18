@@ -6,7 +6,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>org.elasticsearch.qa</groupId>
+    <groupId>com.strapdata.elasticsearch.qa</groupId>
     <artifactId>elasticsearch-qa</artifactId>
     <version>2.4.5-SNAPSHOT</version>
   </parent>
@@ -28,7 +28,7 @@
   </properties>
   <dependencies>
     <dependency>
-      <groupId>org.elasticsearch</groupId>
+      <groupId>com.strapdata.elasticsearch</groupId>
       <artifactId>elasticsearch</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
@@ -36,7 +36,7 @@
 
     <!-- Provided dependencies by elasticsearch itself  -->
     <dependency>
-      <groupId>org.elasticsearch</groupId>
+      <groupId>com.strapdata.elasticsearch</groupId>
       <artifactId>elasticsearch</artifactId>
       <scope>provided</scope>
     </dependency>
@@ -210,7 +210,7 @@
                <artifactItems>
                  <!-- elasticsearch distribution -->
                  <artifactItem>
-                   <groupId>org.elasticsearch.distribution.zip</groupId>
+                   <groupId>com.strapdata.elasticsearch.distribution.zip</groupId>
                    <artifactId>elasticsearch</artifactId>
                    <version>${elasticsearch.version}</version>
                    <type>zip</type>

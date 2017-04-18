@@ -30,6 +30,7 @@ import org.elasticsearch.action.RoutingMissingException;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
+import org.elasticsearch.action.bulk.TransportBulkAction.ConcreteIndices;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.TransportDeleteAction;
 import org.elasticsearch.action.index.IndexRequest;
@@ -70,11 +71,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class TransportBulkAction extends HandledTransportAction<BulkRequest, BulkResponse> {
 
-    private final AutoCreateIndex autoCreateIndex;
-    private final boolean allowIdGeneration;
-    private final ClusterService clusterService;
-    private final TransportShardBulkAction shardBulkAction;
-    private final TransportCreateIndexAction createIndexAction;
+    protected final AutoCreateIndex autoCreateIndex;
+    protected final boolean allowIdGeneration;
+    protected final ClusterService clusterService;
+    protected final TransportShardBulkAction shardBulkAction;
+    protected final TransportCreateIndexAction createIndexAction;
 
     @Inject
     public TransportBulkAction(Settings settings, ThreadPool threadPool, TransportService transportService, ClusterService clusterService,
@@ -193,12 +194,12 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         executeBulk(bulkRequest, startTime, listener, new AtomicArray<BulkItemResponse>(bulkRequest.requests.size()));
     }
 
-    private long buildTookInMillis(long startTime) {
+    protected long buildTookInMillis(long startTime) {
         // protect ourselves against time going backwards
         return Math.max(1, System.currentTimeMillis() - startTime);
     }
 
-    private void executeBulk(final BulkRequest bulkRequest, final long startTime, final ActionListener<BulkResponse> listener, final AtomicArray<BulkItemResponse> responses ) {
+    protected void executeBulk(final BulkRequest bulkRequest, final long startTime, final ActionListener<BulkResponse> listener, final AtomicArray<BulkItemResponse> responses ) {
         final ClusterState clusterState = clusterService.state();
         // TODO use timeout to wait here if its blocked...
         clusterState.blocks().globalBlockedRaiseException(ClusterBlockLevel.WRITE);
@@ -350,8 +351,9 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             });
         }
     }
-
-    private boolean addFailureIfIndexIsUnavailable(DocumentRequest request, BulkRequest bulkRequest, AtomicArray<BulkItemResponse> responses, int idx,
+    
+    
+    protected boolean addFailureIfIndexIsUnavailable(DocumentRequest request, BulkRequest bulkRequest, AtomicArray<BulkItemResponse> responses, int idx,
                                               final ConcreteIndices concreteIndices,
                                               final MetaData metaData) {
         String concreteIndex = concreteIndices.getConcreteIndex(request.index());
@@ -392,7 +394,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
     }
 
 
-    private static class ConcreteIndices  {
+    protected static class ConcreteIndices  {
         private final ClusterState state;
         private final IndexNameExpressionResolver indexNameExpressionResolver;
         private final Map<String, String> indices = new HashMap<>();

@@ -19,10 +19,17 @@
 
 package org.elasticsearch.index.mapper;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
+import static org.elasticsearch.index.mapper.MapperBuilders.doc;
 
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.SyntaxException;
 import org.elasticsearch.Version;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.ParseFieldMatcher;
 import org.elasticsearch.common.Strings;
@@ -42,14 +49,12 @@ import org.elasticsearch.indices.mapper.MapperRegistry;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptService;
 
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.doc;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 
 public class DocumentMapperParser {
 
+    final Settings indexSettings;
     final MapperService mapperService;
     final AnalysisService analysisService;
     private static final ESLogger logger = Loggers.getLogger(DocumentMapperParser.class);
@@ -67,6 +72,7 @@ public class DocumentMapperParser {
 
     public DocumentMapperParser(Settings indexSettings, MapperService mapperService, AnalysisService analysisService,
                                 SimilarityLookupService similarityLookupService, ScriptService scriptService, MapperRegistry mapperRegistry) {
+        this.indexSettings = indexSettings;
         this.parseFieldMatcher = new ParseFieldMatcher(indexSettings);
         this.scriptService = scriptService;
         this.mapperService = mapperService;
@@ -137,6 +143,8 @@ public class DocumentMapperParser {
                 } else {
                     throw new MapperParsingException("Transform must be an object or an array but was:  " + fieldNode);
                 }
+                iterator.remove();
+            } else if (MapperService.DISCOVER.equals(fieldName)) {
                 iterator.remove();
             } else {
                 MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
@@ -213,6 +221,12 @@ public class DocumentMapperParser {
             mapping = new Tuple<>(rootName, (Map<String, Object>) root.get(rootName));
         } else {
             mapping = new Tuple<>(type, root);
+        }
+        
+        try {
+            this.mapperService.discoverTableMapping(mapping.v1(), mapping.v2());
+        } catch (SyntaxException | ConfigurationException | IOException e) {
+            logger.error("Failed to expand mapping", e);
         }
         return mapping;
     }

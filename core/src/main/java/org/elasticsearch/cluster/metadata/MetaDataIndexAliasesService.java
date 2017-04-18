@@ -68,6 +68,11 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
             }
 
             @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
+            @Override
             public ClusterState execute(final ClusterState currentState) {
                 List<String> indicesToClose = new ArrayList<>();
                 Map<String, IndexService> indices = Maps.newHashMap();
@@ -139,7 +144,7 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
                     }
 
                     if (changed) {
-                        ClusterState updatedState = ClusterState.builder(currentState).metaData(builder).build();
+                        ClusterState updatedState = ClusterState.builder(currentState).incrementVersion().metaData(builder).build();
                         // even though changes happened, they resulted in 0 actual changes to metadata
                         // i.e. remove and add the same alias to the same index
                         if (!updatedState.metaData().equalsAliases(currentState.metaData())) {

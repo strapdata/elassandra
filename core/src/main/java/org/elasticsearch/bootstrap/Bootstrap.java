@@ -19,6 +19,14 @@
 
 package org.elasticsearch.bootstrap;
 
+import static org.elasticsearch.common.settings.Settings.Builder.EMPTY_SETTINGS;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.file.Path;
+import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.StringHelper;
 import org.elasticsearch.Version;
@@ -41,18 +49,10 @@ import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeBuilder;
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.file.Path;
-import java.util.Locale;
-import java.util.concurrent.CountDownLatch;
-
-import static org.elasticsearch.common.settings.Settings.Builder.EMPTY_SETTINGS;
-
 /**
  * Internal startup code.
  */
-final class Bootstrap {
+public final class Bootstrap {
 
     private static volatile Bootstrap INSTANCE;
 
@@ -81,11 +81,11 @@ final class Bootstrap {
             }
         });
     }
-
+    
     /** initialize native resources */
     public static void initializeNatives(Path tmpFile, boolean mlockAll, boolean seccomp, boolean ctrlHandler) {
         final ESLogger logger = Loggers.getLogger(Bootstrap.class);
-
+        
         // check if the user is running as root, and bail
         if (Natives.definitelyRunningAsRoot()) {
             if (Boolean.parseBoolean(System.getProperty("es.insecure.allow.root"))) {
@@ -94,12 +94,12 @@ final class Bootstrap {
                 throw new RuntimeException("don't run elasticsearch as root.");
             }
         }
-
+        
         // enable secure computing mode
         if (seccomp) {
             Natives.trySeccomp(tmpFile);
         }
-
+        
         // mlockall if requested
         if (mlockAll) {
             if (Constants.WINDOWS) {
@@ -135,7 +135,7 @@ final class Bootstrap {
         StringHelper.randomId();
     }
 
-    static void initializeProbes() {
+    public static void initializeProbes() {
         // Force probes to be loaded
         ProcessProbe.getInstance();
         OsProbe.getInstance();
@@ -158,7 +158,7 @@ final class Bootstrap {
         }
 
         initializeNatives(environment.tmpFile(),
-                          memoryLock != null ? memoryLock : mlockall != null ? mlockall : false,
+                memoryLock != null ? memoryLock : mlockall != null ? mlockall : false,
                           settings.getAsBoolean("bootstrap.seccomp", true),
                           settings.getAsBoolean("bootstrap.ctrlhandler", true));
 
@@ -193,8 +193,8 @@ final class Bootstrap {
         NodeBuilder nodeBuilder = NodeBuilder.nodeBuilder().settings(nodeSettings);
         node = nodeBuilder.build();
     }
-
-    /**
+ 
+    /** 
      * option for elasticsearch.yml etc to turn off our security manager completely,
      * for example if you want to have your own configuration or just disable.
      */
@@ -207,7 +207,7 @@ final class Bootstrap {
     // TODO: remove this hack when insecure defaults are removed from java
     static final String SECURITY_FILTER_BAD_DEFAULTS_SETTING = "security.manager.filter_bad_defaults";
 
-    private void setupSecurity(Settings settings, Environment environment) throws Exception {
+    public void setupSecurity(Settings settings, Environment environment) throws Exception {
         if (settings.getAsBoolean(SECURITY_SETTING, true)) {
             Security.configure(environment, settings.getAsBoolean(SECURITY_FILTER_BAD_DEFAULTS_SETTING, true));
         }

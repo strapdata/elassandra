@@ -228,6 +228,39 @@ public class FloatFieldMapper extends NumberFieldMapper {
     }
 
     @Override
+    public void innerCreateField(ParseContext context, Object object) throws IOException {
+        Float value = (Float)object;
+        float boost = fieldType().boost();
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            value = fieldType().nullValue();
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), Float.toString(value), boost);
+        }
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomFloatNumericField field = new CustomFloatNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            if (useSortedNumericDocValues) {
+                addDocValue(context, floatToSortableInt(value));
+            } else {
+                CustomFloatNumericDocValuesField field = (CustomFloatNumericDocValuesField) context.doc().getByKey(fieldType().names().indexName());
+                if (field != null) {
+                    field.add(value);
+                } else {
+                    field = new CustomFloatNumericDocValuesField(fieldType().names().indexName(), value);
+                    context.doc().addWithKey(fieldType().names().indexName(), field);
+                }
+            }
+        }
+    }
+    
+    @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         float value;
         float boost = fieldType().boost();

@@ -19,8 +19,16 @@
 
 package org.elasticsearch.index.shard;
 
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
+import static org.elasticsearch.common.unit.TimeValue.timeValueMillis;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.store.Directory;
 import org.elasticsearch.ExceptionsHelper;
@@ -42,16 +50,6 @@ import org.elasticsearch.indices.recovery.RecoveryState;
 import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.snapshots.RestoreService;
 import org.elasticsearch.threadpool.ThreadPool;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.elasticsearch.common.unit.TimeValue.timeValueMillis;
 
 public class StoreRecoveryService extends AbstractIndexShardComponent implements Closeable {
 
@@ -115,10 +113,11 @@ public class StoreRecoveryService extends AbstractIndexShardComponent implements
             return;
         }
 
+        /*
         threadPool.generic().execute(new Runnable() {
             @Override
             public void run() {
-
+        */
                 try {
                     final RecoveryState recoveryState = indexShard.recoveryState();
                     if (indexShard.routingEntry().restoreSource() != null) {
@@ -178,8 +177,8 @@ public class StoreRecoveryService extends AbstractIndexShardComponent implements
                     }
                     listener.onRecoveryFailed(new IndexShardRecoveryException(shardId, "failed recovery", e));
                 }
-            }
-        });
+         /*   }  
+        });  */
     }
 
     /**
@@ -204,11 +203,16 @@ public class StoreRecoveryService extends AbstractIndexShardComponent implements
                     } catch (Throwable e1) {
                         files += " (failure=" + ExceptionsHelper.detailedMessage(e1) + ")";
                     }
+                    /*
                     if (indexShouldExists) {
                         throw new IndexShardRecoveryException(shardId(), "shard allocated for local recovery (post api), should exist, but doesn't, current files: " + files, e);
                     }
+                    */
+                    indexShouldExists = false;
                 }
                 if (si != null) {
+                    version = si.getVersion();
+                    /*
                     if (indexShouldExists) {
                         version = si.getVersion();
                     } else {
@@ -219,6 +223,7 @@ public class StoreRecoveryService extends AbstractIndexShardComponent implements
                         writer.close();
                         recoveryState.getTranslog().totalOperations(0);
                     }
+                    */
                 }
             } catch (Throwable e) {
                 throw new IndexShardRecoveryException(shardId(), "failed to fetch index version after copying it over", e);
@@ -237,6 +242,10 @@ public class StoreRecoveryService extends AbstractIndexShardComponent implements
                 }
             } catch (IOException e) {
                 logger.debug("failed to list file details", e);
+            }
+            if (indexShouldExists == false) {
+                recoveryState.getTranslog().totalOperations(0);
+                recoveryState.getTranslog().totalOperationsOnStart(0);
             }
             typesToUpdate = indexShard.performTranslogRecovery(indexShouldExists);
 

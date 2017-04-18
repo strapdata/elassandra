@@ -42,7 +42,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
 
     public void testNoFormat() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-                .startObject("_source").endObject()
+                .startObject("_source").field("enabled",true).endObject()
                 .endObject().endObject().string();
 
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
@@ -63,7 +63,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
 
     public void testJsonFormat() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-                .startObject("_source").field("format", "json").endObject()
+                .startObject("_source").field("enabled",true).field("format", "json").endObject()
                 .endObject().endObject().string();
 
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
@@ -84,7 +84,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
 
     public void testJsonFormatCompressedBackcompat() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-                .startObject("_source").field("format", "json").field("compress", true).endObject()
+                .startObject("_source").field("enabled",true).field("format", "json").field("compress", true).endObject()
                 .endObject().endObject().string();
 
         Settings backcompatSettings = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.V_1_4_2.id).build();
@@ -110,7 +110,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
 
     public void testIncludes() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").field("includes", new String[]{"path1*"}).endObject()
+            .startObject("_source").field("enabled",true).field("includes", new String[]{"path1*"}).endObject()
             .endObject().endObject().string();
 
         DocumentMapper documentMapper = createIndex("test").mapperService().documentMapperParser().parse("type", new CompressedXContent(mapping));
@@ -131,7 +131,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
 
     public void testExcludes() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").field("excludes", new String[]{"path1*"}).endObject()
+            .startObject("_source").field("enabled",true).field("excludes", new String[]{"path1*"}).endObject()
             .endObject().endObject().string();
 
         DocumentMapper documentMapper = createIndex("test").mapperService().documentMapperParser().parse("type", new CompressedXContent(mapping));
@@ -152,7 +152,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
 
     public void testDefaultMappingAndNoMapping() throws Exception {
         String defaultMapping = XContentFactory.jsonBuilder().startObject().startObject(MapperService.DEFAULT_MAPPING)
-                .startObject("_source").field("enabled", false).endObject()
+                .startObject("_source").field("enabled",true).field("enabled", false).endObject()
                 .endObject().endObject().string();
 
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
@@ -180,7 +180,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
 
     public void testDefaultMappingAndWithMappingOverride() throws Exception {
         String defaultMapping = XContentFactory.jsonBuilder().startObject().startObject(MapperService.DEFAULT_MAPPING)
-                .startObject("_source").field("enabled", false).endObject()
+                .startObject("_source").field("enabled",true).field("enabled", false).endObject()
                 .endObject().endObject().string();
 
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("my_type")
@@ -240,18 +240,19 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
         }
     }
 
+    // In elassandra, _source is disabled by default.
     public void testEnabledNotUpdateable() throws Exception {
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
         // using default of true
         String mapping1 = XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject().string();
         String mapping2 = XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").field("enabled", false).endObject()
+            .startObject("_source").field("enabled", true).endObject()
             .endObject().endObject().string();
         assertConflicts(mapping1, mapping2, parser, "Cannot update enabled setting for [_source]");
 
         // not changing is ok
         String mapping3 = XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").field("enabled", true).endObject()
+            .startObject("_source").field("enabled", false).endObject()
             .endObject().endObject().string();
         assertConflicts(mapping1, mapping3, parser);
     }
@@ -260,7 +261,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
         String defaultMapping = XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject().string();
         String mapping1 = XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("includes", "foo.*").endObject()
+            .startObject("_source").field("enabled",true).array("includes", "foo.*").endObject()
             .endObject().endObject().string();
         assertConflicts(defaultMapping, mapping1, parser, "Cannot update includes setting for [_source]");
         assertConflicts(mapping1, defaultMapping, parser, "Cannot update includes setting for [_source]");
@@ -278,7 +279,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
         String defaultMapping = XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject().string();
         String mapping1 = XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("excludes", "foo.*").endObject()
+            .startObject("_source").field("enabled",true).array("excludes", "foo.*").endObject()
             .endObject().endObject().string();
         assertConflicts(defaultMapping, mapping1, parser, "Cannot update excludes setting for [_source]");
         assertConflicts(mapping1, defaultMapping, parser, "Cannot update excludes setting for [_source]");
@@ -294,7 +295,7 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
 
     public void testComplete() throws Exception {
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
-        String mapping = XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject().string();
+        String mapping = XContentFactory.jsonBuilder().startObject().startObject("type").startObject("_source").field("enabled", true).endObject().endObject().endObject().string();
         assertTrue(parser.parse("type", new CompressedXContent(mapping)).sourceMapper().isComplete());
 
         mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
@@ -303,12 +304,12 @@ public class DefaultSourceMappingTests extends ESSingleNodeTestCase {
         assertFalse(parser.parse("type", new CompressedXContent(mapping)).sourceMapper().isComplete());
 
         mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("includes", "foo.*").endObject()
+            .startObject("_source").field("enabled",true).array("includes", "foo.*").endObject()
             .endObject().endObject().string();
         assertFalse(parser.parse("type", new CompressedXContent(mapping)).sourceMapper().isComplete());
 
         mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("excludes", "foo.*").endObject()
+            .startObject("_source").field("enabled",true).array("excludes", "foo.*").endObject()
             .endObject().endObject().string();
         assertFalse(parser.parse("type", new CompressedXContent(mapping)).sourceMapper().isComplete());
     }

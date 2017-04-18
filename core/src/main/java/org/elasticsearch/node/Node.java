@@ -19,6 +19,26 @@
 
 package org.elasticsearch.node;
 
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.concurrent.TimeUnit;
+
+import org.elassandra.discovery.CassandraDiscoveryModule;
+import org.elassandra.gateway.CassandraGatewayModule;
+import org.elassandra.gateway.CassandraGatewayService;
+import org.elassandra.indices.CassandraIndicesClusterStateService;
 import org.elasticsearch.Build;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionModule;
@@ -28,9 +48,8 @@ import org.elasticsearch.client.node.NodeClientModule;
 import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-import org.elasticsearch.cluster.routing.RoutingService;
 import org.elasticsearch.common.StopWatch;
+import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.component.Lifecycle;
 import org.elasticsearch.common.component.LifecycleComponent;
 import org.elasticsearch.common.inject.Injector;
@@ -47,16 +66,11 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.common.transport.BoundTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.discovery.Discovery;
-import org.elasticsearch.discovery.DiscoveryModule;
 import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.EnvironmentModule;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.env.NodeEnvironmentModule;
-import org.elasticsearch.gateway.GatewayAllocator;
-import org.elasticsearch.gateway.GatewayModule;
-import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.http.HttpServer;
 import org.elasticsearch.http.HttpServerModule;
 import org.elasticsearch.http.HttpServerTransport;
@@ -65,11 +79,9 @@ import org.elasticsearch.indices.IndicesModule;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.breaker.CircuitBreakerModule;
 import org.elasticsearch.indices.cache.query.IndicesQueryCache;
-import org.elasticsearch.indices.cluster.IndicesClusterStateService;
 import org.elasticsearch.indices.fielddata.cache.IndicesFieldDataCache;
 import org.elasticsearch.indices.memory.IndexingMemoryController;
 import org.elasticsearch.indices.store.IndicesStore;
-import org.elasticsearch.indices.ttl.IndicesTTLService;
 import org.elasticsearch.monitor.MonitorModule;
 import org.elasticsearch.monitor.MonitorService;
 import org.elasticsearch.monitor.jvm.JvmInfo;
@@ -87,8 +99,6 @@ import org.elasticsearch.script.ScriptModule;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.SearchModule;
 import org.elasticsearch.search.SearchService;
-import org.elasticsearch.snapshots.SnapshotShardsService;
-import org.elasticsearch.snapshots.SnapshotsService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.threadpool.ThreadPoolModule;
 import org.elasticsearch.transport.TransportModule;
@@ -98,25 +108,10 @@ import org.elasticsearch.tribe.TribeService;
 import org.elasticsearch.watcher.ResourceWatcherModule;
 import org.elasticsearch.watcher.ResourceWatcherService;
 
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.concurrent.TimeUnit;
-
-import static org.elasticsearch.common.settings.Settings.settingsBuilder;
-
 /**
  * A node represent a node within a cluster (<tt>cluster.name</tt>). The {@link #client()} can be used
  * in order to use a {@link Client} to perform actions/operations against the cluster.
+ * <p/>
  * <p>In order to create a node, the {@link NodeBuilder} can be used. When done with it, make sure to
  * call {@link #close()} on it.
  */
@@ -128,9 +123,13 @@ public class Node implements Releasable {
     private final Injector injector;
     private final Settings settings;
     private final Environment environment;
+    private final NodeEnvironment nodeEnvironment;
     private final PluginsService pluginsService;
     private final Client client;
-
+    
+    private ClusterService clusterService = null;
+    private CassandraGatewayService gatewayService = null;
+    
     /**
      * Constructs a node with the given settings.
      *
@@ -140,9 +139,13 @@ public class Node implements Releasable {
         this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), Version.CURRENT, Collections.<Class<? extends Plugin>>emptyList());
     }
 
+    public Node(Settings preparedSettings, Collection<Class<? extends Plugin>> classpathPlugins) {
+        this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), Version.CURRENT, classpathPlugins);
+    }
+    
     protected Node(Environment tmpEnv, Version version, Collection<Class<? extends Plugin>> classpathPlugins) {
         Settings tmpSettings = settingsBuilder().put(tmpEnv.settings())
-                .put(Client.CLIENT_TYPE_SETTING, CLIENT_TYPE).build();
+            .put(Client.CLIENT_TYPE_SETTING, CLIENT_TYPE).build();
         tmpSettings = TribeService.processSettings(tmpSettings);
 
         ESLogger logger = Loggers.getLogger(Node.class, tmpSettings.get("name"));
@@ -152,7 +155,7 @@ public class Node implements Releasable {
 
         if (logger.isDebugEnabled()) {
             logger.debug("using config [{}], data [{}], logs [{}], plugins [{}]",
-                    tmpEnv.configFile(), Arrays.toString(tmpEnv.dataFiles()), tmpEnv.logsFile(), tmpEnv.pluginsFile());
+                tmpEnv.configFile(), Arrays.toString(tmpEnv.dataFiles()), tmpEnv.logsFile(), tmpEnv.pluginsFile());
         }
 
         this.pluginsService = new PluginsService(tmpSettings, tmpEnv.modulesFile(), tmpEnv.pluginsFile(), classpathPlugins);
@@ -160,7 +163,6 @@ public class Node implements Releasable {
         // create the environment based on the finalized (processed) view of the settings
         this.environment = new Environment(this.settings());
 
-        final NodeEnvironment nodeEnvironment;
         try {
             nodeEnvironment = new NodeEnvironment(this.settings, this.environment);
         } catch (IOException ex) {
@@ -188,7 +190,7 @@ public class Node implements Releasable {
             modules.add(new NodeEnvironmentModule(nodeEnvironment));
             modules.add(new ClusterNameModule(this.settings));
             modules.add(new ThreadPoolModule(threadPool));
-            modules.add(new DiscoveryModule(this.settings));
+            modules.add(new CassandraDiscoveryModule(this.settings));
             modules.add(new ClusterModule(this.settings));
             modules.add(new RestModule(this.settings));
             modules.add(new TransportModule(settings, namedWriteableRegistry));
@@ -199,12 +201,12 @@ public class Node implements Releasable {
             modules.add(new SearchModule());
             modules.add(new ActionModule(false));
             modules.add(new MonitorModule(settings));
-            modules.add(new GatewayModule(settings));
+            modules.add(new CassandraGatewayModule(settings));
             modules.add(new NodeClientModule());
             modules.add(new ShapeModule());
             modules.add(new PercolatorModule());
             modules.add(new ResourceWatcherModule());
-            modules.add(new RepositoriesModule());
+            //modules.add(new RepositoriesModule());
             modules.add(new TribeModule());
 
 
@@ -224,6 +226,10 @@ public class Node implements Releasable {
 
         logger.info("initialized");
     }
+    
+    public NodeEnvironment nodeEnvironment() {
+        return this.nodeEnvironment;
+    }
 
     /**
      * The settings that were used to create the node.
@@ -239,39 +245,72 @@ public class Node implements Releasable {
         return client;
     }
 
+    public synchronized ClusterService clusterService() {
+         if (this.clusterService == null)
+              this.clusterService = injector.getInstance(ClusterService.class);
+         return this.clusterService;
+    }
+    
+    public synchronized CassandraGatewayService gatewayService() {
+         if (this.gatewayService == null)
+              this.gatewayService = injector.getInstance(CassandraGatewayService.class);
+         return this.gatewayService;
+    }
+    
     /**
-     * Start the node. If the node is already started, this method is no-op.
+     * Start Elasticsearch for write-only operations.
+     * @return
      */
-    public Node start() {
+    public Node activate() {
         if (!lifecycle.moveToStarted()) {
             return this;
         }
+        ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
+        logger.info("activating ...");
 
+        // hack around dependency injection problem (for now...)
+        //injector.getInstance(Discovery.class).setAllocationService(injector.getInstance(AllocationService.class));
+        injector.getInstance(TransportService.class).start();
+
+        clusterService().start();
+
+        IndicesService indiceService = injector.getInstance(IndicesService.class);
+        indiceService.start();
+        injector.getInstance(IndexingMemoryController.class).start();
+        injector.getInstance(CassandraIndicesClusterStateService.class).start();
+
+        // gateway should start after disco, so it can try and recovery from gateway on "start"
+        gatewayService().start(); // block until recovery done from cassandra schema.
+
+        logger.info("activated ...");
+        return this;
+    }
+    
+    /**
+     * finish ElasticSearch start when we have joined the ring.
+     */
+    @SuppressForbidden(reason = "System#out")
+    public Node start() {
         ESLogger logger = Loggers.getLogger(Node.class, settings.get("name"));
         logger.info("starting ...");
-        // hack around dependency injection problem (for now...)
-        injector.getInstance(Discovery.class).setRoutingService(injector.getInstance(RoutingService.class));
+
         for (Class<? extends LifecycleComponent> plugin : pluginsService.nodeServices()) {
             injector.getInstance(plugin).start();
         }
 
-        injector.getInstance(MappingUpdatedAction.class).setClient(client);
-        injector.getInstance(IndicesService.class).start();
-        injector.getInstance(IndexingMemoryController.class).start();
-        injector.getInstance(IndicesClusterStateService.class).start();
-        injector.getInstance(IndicesTTLService.class).start();
-        injector.getInstance(SnapshotsService.class).start();
-        injector.getInstance(SnapshotShardsService.class).start();
-        injector.getInstance(RoutingService.class).start();
+        injector.getInstance(DiscoveryService.class).start(); // should not start before cassandra boostraps is finished.
+        //injector.getInstance(IndicesTTLService.class).start();
+        //injector.getInstance(SnapshotsService.class).start();
+        //injector.getInstance(SnapshotShardsService.class).start();
         injector.getInstance(SearchService.class).start();
         injector.getInstance(MonitorService.class).start();
         injector.getInstance(RestController.class).start();
 
         // TODO hack around circular dependencies problems
-        injector.getInstance(GatewayAllocator.class).setReallocation(injector.getInstance(ClusterService.class), injector.getInstance(RoutingService.class));
+        //injector.getInstance(GatewayAllocator.class).setReallocation(injector.getInstance(ClusterService.class), injector.getInstance(RoutingService.class));
 
         injector.getInstance(ResourceWatcherService.class).start();
-        injector.getInstance(GatewayService.class).start();
+       // injector.getInstance(GatewayService.class).start();
 
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
         TransportService transportService = injector.getInstance(TransportService.class);
@@ -279,12 +318,10 @@ public class Node implements Releasable {
         injector.getInstance(ClusterService.class).start();
 
         // start after cluster service so the local disco is known
-        DiscoveryService discoService = injector.getInstance(DiscoveryService.class).start();
-
+        //DiscoveryService discoService = injector.getInstance(DiscoveryService.class).start();
 
         transportService.acceptIncomingRequests();
-        discoService.joinClusterAndWaitForInitialState();
-
+        
         if (settings.getAsBoolean("http.enabled", true)) {
             injector.getInstance(HttpServer.class).start();
         }
@@ -297,8 +334,20 @@ public class Node implements Releasable {
             TransportService transport = injector.getInstance(TransportService.class);
             writePortsFile("transport", transport.boundAddress());
         }
-        logger.info("started");
 
+        // create elastic_admin if not exists after joining the ring and before allowing metadata update.
+        clusterService().createOrUpdateElasticAdminKeyspace();
+        
+        // publish X1+X2 gossip states
+        clusterService().publishGossipStates();
+        
+        // Cassandra started => release metadata update blocks.
+        gatewayService().enableMetaDataPersictency();
+        
+        logger.info("Elasticsearch started state={}", clusterService.state().toString());
+        
+        // Added for esrally when started in foreground.
+        System.out.println("Elassandra started"); 
         return this;
     }
 
@@ -315,18 +364,18 @@ public class Node implements Releasable {
             injector.getInstance(HttpServer.class).stop();
         }
 
-        injector.getInstance(SnapshotsService.class).stop();
-        injector.getInstance(SnapshotShardsService.class).stop();
+        //injector.getInstance(SnapshotsService.class).stop();
+        //injector.getInstance(SnapshotShardsService.class).stop();
         // stop any changes happening as a result of cluster state changes
-        injector.getInstance(IndicesClusterStateService.class).stop();
+        injector.getInstance(CassandraIndicesClusterStateService.class).stop();
         // we close indices first, so operations won't be allowed on it
         injector.getInstance(IndexingMemoryController.class).stop();
-        injector.getInstance(IndicesTTLService.class).stop();
-        injector.getInstance(RoutingService.class).stop();
+        //injector.getInstance(IndicesTTLService.class).stop();
+        //injector.getInstance(RoutingService.class).stop();
         injector.getInstance(ClusterService.class).stop();
         injector.getInstance(DiscoveryService.class).stop();
         injector.getInstance(MonitorService.class).stop();
-        injector.getInstance(GatewayService.class).stop();
+        injector.getInstance(CassandraGatewayService.class).stop();
         injector.getInstance(SearchService.class).stop();
         injector.getInstance(RestController.class).stop();
         injector.getInstance(TransportService.class).stop();
@@ -364,23 +413,23 @@ public class Node implements Releasable {
         if (settings.getAsBoolean("http.enabled", true)) {
             injector.getInstance(HttpServer.class).close();
         }
-        stopWatch.stop().start("snapshot_service");
-        injector.getInstance(SnapshotsService.class).close();
-        injector.getInstance(SnapshotShardsService.class).close();
+        //stopWatch.stop().start("snapshot_service");
+        //injector.getInstance(SnapshotsService.class).close();
+        //injector.getInstance(SnapshotShardsService.class).close();
         stopWatch.stop().start("client");
         Releasables.close(injector.getInstance(Client.class));
         stopWatch.stop().start("indices_cluster");
-        injector.getInstance(IndicesClusterStateService.class).close();
+        injector.getInstance(CassandraIndicesClusterStateService.class).close();
         stopWatch.stop().start("indices");
         injector.getInstance(IndexingMemoryController.class).close();
-        injector.getInstance(IndicesTTLService.class).close();
+        //injector.getInstance(IndicesTTLService.class).close();
         injector.getInstance(IndicesService.class).close();
         // close filter/fielddata caches after indices
         injector.getInstance(IndicesQueryCache.class).close();
         injector.getInstance(IndicesFieldDataCache.class).close();
         injector.getInstance(IndicesStore.class).close();
-        stopWatch.stop().start("routing");
-        injector.getInstance(RoutingService.class).close();
+        //stopWatch.stop().start("routing");
+        //injector.getInstance(RoutingService.class).close();
         stopWatch.stop().start("cluster");
         injector.getInstance(ClusterService.class).close();
         stopWatch.stop().start("discovery");
@@ -388,7 +437,7 @@ public class Node implements Releasable {
         stopWatch.stop().start("monitor");
         injector.getInstance(MonitorService.class).close();
         stopWatch.stop().start("gateway");
-        injector.getInstance(GatewayService.class).close();
+        injector.getInstance(CassandraGatewayService.class).close();
         stopWatch.stop().start("search");
         injector.getInstance(SearchService.class).close();
         stopWatch.stop().start("rest");
@@ -406,7 +455,7 @@ public class Node implements Releasable {
         stopWatch.stop().start("script");
         try {
             injector.getInstance(ScriptService.class).close();
-        } catch (IOException e) {
+        } catch(IOException e) {
             logger.warn("ScriptService close failed", e);
         }
 
@@ -432,7 +481,8 @@ public class Node implements Releasable {
 
         injector.getInstance(NodeEnvironment.class).close();
         injector.getInstance(PageCacheRecycler.class).close();
-
+        this.nodeEnvironment.close();
+        
         logger.info("closed");
     }
 

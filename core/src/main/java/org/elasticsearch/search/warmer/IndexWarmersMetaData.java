@@ -69,12 +69,14 @@ public class IndexWarmersMetaData extends AbstractDiffable<IndexMetaData.Custom>
         private final String[] types;
         private final BytesReference source;
         private final Boolean requestCache;
+        private final Boolean tokenRangesBitsetCache;
 
-        public Entry(String name, String[] types, Boolean requestCache, BytesReference source) {
+        public Entry(String name, String[] types, Boolean requestCache, Boolean tokenRangesBitsetCache, BytesReference source) {
             this.name = name;
             this.types = types == null ? Strings.EMPTY_ARRAY : types;
             this.source = source;
             this.requestCache = requestCache;
+            this.tokenRangesBitsetCache = tokenRangesBitsetCache;
         }
 
         public String name() {
@@ -95,6 +97,11 @@ public class IndexWarmersMetaData extends AbstractDiffable<IndexMetaData.Custom>
             return this.requestCache;
         }
 
+        @Nullable
+        public Boolean tokenRangesBitsetCache() {
+            return this.tokenRangesBitsetCache;
+        }
+        
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
@@ -147,7 +154,8 @@ public class IndexWarmersMetaData extends AbstractDiffable<IndexMetaData.Custom>
             }
             Boolean queryCache;
             queryCache = in.readOptionalBoolean();
-            entries[i] = new Entry(name, types, queryCache, source);
+            Boolean tokenRangesBitsetCache = in.readOptionalBoolean();
+            entries[i] = new Entry(name, types, queryCache, tokenRangesBitsetCache, source);
         }
         return new IndexWarmersMetaData(entries);
     }
@@ -196,6 +204,7 @@ public class IndexWarmersMetaData extends AbstractDiffable<IndexMetaData.Custom>
                 List<String> types = new ArrayList<>(2);
                 BytesReference source = null;
                 Boolean queryCache = null;
+                Boolean tokenRangesBitsetCache = null;
                 while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
                     if (token == XContentParser.Token.FIELD_NAME) {
                         currentFieldName = parser.currentName();
@@ -218,9 +227,13 @@ public class IndexWarmersMetaData extends AbstractDiffable<IndexMetaData.Custom>
                         if ("requestCache".equals(currentFieldName) || "request_cache".equals(currentFieldName)) {
                             queryCache = parser.booleanValue();
                         }
+                    } else if (token.isValue()) {
+                        if ("tokenRangesBitsetCache".equals(currentFieldName) || "token_ranges_bitset_cache".equals(currentFieldName)) {
+                            queryCache = parser.booleanValue();
+                        }
                     }
                 }
-                entries.add(new Entry(name, types.size() == 0 ? Strings.EMPTY_ARRAY : types.toArray(new String[types.size()]), queryCache, source));
+                entries.add(new Entry(name, types.size() == 0 ? Strings.EMPTY_ARRAY : types.toArray(new String[types.size()]), queryCache, tokenRangesBitsetCache, source));
             }
         }
         return new IndexWarmersMetaData(entries.toArray(new Entry[entries.size()]));

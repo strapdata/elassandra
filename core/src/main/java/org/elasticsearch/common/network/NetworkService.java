@@ -19,12 +19,6 @@
 
 package org.elasticsearch.common.network;
 
-import org.elasticsearch.common.component.AbstractComponent;
-import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.unit.ByteSizeValue;
-import org.elasticsearch.common.unit.TimeValue;
-
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -33,6 +27,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+
+import org.elasticsearch.common.component.AbstractComponent;
+import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.unit.TimeValue;
 
 /**
  *
@@ -164,6 +164,7 @@ public class NetworkService extends AbstractComponent {
         if (publishHosts == null) {
             publishHosts = new String[] { DEFAULT_NETWORK_HOST };
         }
+        
         InetAddress addresses[] = resolveInetAddresses(publishHosts);
         // TODO: allow publishing multiple addresses
         // for now... the hack begins
@@ -263,6 +264,12 @@ public class NetworkService extends AbstractComponent {
                     }
             }
         }
+
+        // if host is a string representation of InetAddress, nothing to resolve...
+        try {
+            return new InetAddress[] { com.google.common.net.InetAddresses.forString(host) };
+        } catch (IllegalArgumentException e) {
+        } 
         return InetAddress.getAllByName(host);
     }
 }

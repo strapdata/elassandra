@@ -19,13 +19,13 @@
 
 package org.elasticsearch.bwcompat;
 
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+
 import org.apache.lucene.util.LuceneTestCase;
 import org.elasticsearch.action.admin.indices.get.GetIndexResponse;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESIntegTestCase;
-
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 
 /**
  * These tests are against static indexes, built from versions of ES that cannot be upgraded without

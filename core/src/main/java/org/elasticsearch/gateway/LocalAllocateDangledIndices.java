@@ -19,6 +19,10 @@
 
 package org.elasticsearch.gateway;
 
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
+
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
@@ -37,11 +41,13 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.discovery.MasterNotDiscoveredException;
 import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.transport.*;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
+import org.elasticsearch.transport.TransportChannel;
+import org.elasticsearch.transport.TransportException;
+import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.transport.TransportRequestHandler;
+import org.elasticsearch.transport.TransportResponse;
+import org.elasticsearch.transport.TransportResponseHandler;
+import org.elasticsearch.transport.TransportService;
 
 /**
  */
@@ -120,7 +126,7 @@ public class LocalAllocateDangledIndices extends AbstractComponent {
                     }
                     MetaData.Builder metaData = MetaData.builder(currentState.metaData());
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(LocalAllocateDangledIndices.this.clusterService, currentState);
 
                     boolean importNeeded = false;
                     StringBuilder sb = new StringBuilder();
@@ -161,8 +167,7 @@ public class LocalAllocateDangledIndices extends AbstractComponent {
                     ClusterState updatedState = ClusterState.builder(currentState).metaData(metaData).blocks(blocks).routingTable(routingTableBuilder).build();
 
                     // now, reroute
-                    RoutingAllocation.Result routingResult = allocationService.reroute(
-                            ClusterState.builder(updatedState).routingTable(routingTableBuilder).build(), "dangling indices allocated");
+                    RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(routingTableBuilder).build(), "dangling indices allocated");
 
                     return ClusterState.builder(updatedState).routingResult(routingResult).build();
                 }
@@ -189,7 +194,7 @@ public class LocalAllocateDangledIndices extends AbstractComponent {
         }
     }
 
-    public static class AllocateDangledRequest extends TransportRequest {
+    static class AllocateDangledRequest extends TransportRequest {
 
         DiscoveryNode fromNode;
         IndexMetaData[] indices;

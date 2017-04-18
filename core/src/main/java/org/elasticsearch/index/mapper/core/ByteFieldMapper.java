@@ -220,6 +220,29 @@ public class ByteFieldMapper extends NumberFieldMapper {
     }
 
     @Override
+    public void innerCreateField(ParseContext context, Object object) throws IOException {
+        Byte value = (Byte)object;
+        float boost = fieldType().boost();
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            value = fieldType().nullValue();
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), Byte.toString(value), boost);
+        }
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomByteNumericField field = new CustomByteNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
+    }
+    
+    @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         byte value;
         float boost = fieldType().boost();

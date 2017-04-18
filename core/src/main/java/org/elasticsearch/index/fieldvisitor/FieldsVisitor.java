@@ -18,12 +18,25 @@
  */
 package org.elasticsearch.index.fieldvisitor;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
+import static com.google.common.collect.Maps.newHashMap;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.Set;
+import java.util.TreeSet;
 
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.StoredFieldVisitor;
 import org.apache.lucene.util.BytesRef;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.index.mapper.DocumentMapper;
@@ -37,38 +50,33 @@ import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
 import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
 import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
+import org.elasticsearch.search.internal.SearchContext;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import static com.google.common.collect.Maps.newHashMap;
-
-import org.apache.lucene.index.StoredFieldVisitor;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 
 /**
- * Base {@link StoredFieldVisitor} that retrieves all non-redundant metadata.
+ * Base {@link StoredFieldsVisitor} that retrieves all non-redundant metadata.
  */
 public class FieldsVisitor extends StoredFieldVisitor {
 
     private static final Set<String> BASE_REQUIRED_FIELDS = ImmutableSet.of(
-            UidFieldMapper.NAME,
-            TimestampFieldMapper.NAME,
-            TTLFieldMapper.NAME,
-            RoutingFieldMapper.NAME,
-            ParentFieldMapper.NAME
+            UidFieldMapper.NAME,        // row primary key
+            TimestampFieldMapper.NAME,  // row witetime
+            TTLFieldMapper.NAME,        // row TTL
+            RoutingFieldMapper.NAME,    // a JSON string representation of the partition key
+            ParentFieldMapper.NAME      // part of the primary key
    );
 
     private final boolean loadSource;
     private final Set<String> requiredFields;
+    private Collection<String> filtredFields = null;
     protected BytesReference source;
     protected Uid uid;
     protected Map<String, List<Object>> fieldsValues;
-
+    
+    protected NavigableSet<String> requiredColumns = null;
+             
     public FieldsVisitor(boolean loadSource) {
         this.loadSource = loadSource;
         requiredFields = new HashSet<>();
@@ -85,6 +93,43 @@ public class FieldsVisitor extends StoredFieldVisitor {
         return requiredFields.isEmpty()
                 ? Status.STOP
                 : Status.NO;
+    }
+
+    public Set<String> requestedFields() {
+        return ImmutableSet.of();
+    }
+    
+    // cache the cassandra required columns and return the static+partition columns
+    public NavigableSet<String> requiredColumns(ClusterService clusterService, SearchContext searchContext) throws JsonParseException, JsonMappingException, IOException {
+        if (this.requiredColumns == null) {
+            List<String> requiredColumns =  new ArrayList<String>();
+            if (requestedFields() != null) {
+                for(String fieldExp : requestedFields()) {
+                    for(String field : searchContext.mapperService().simpleMatchToIndexNames(fieldExp)) {
+                        int i = field.indexOf('.');
+                        String columnName = (i > 0) ? field.substring(0, i) : field;
+                        // TODO: eliminate non-existant columns or (non-static or non-partition-key) for static docs.
+                        if (this.filtredFields == null || this.filtredFields.contains(columnName))
+                            requiredColumns.add(columnName);
+                    }
+                }
+            }
+            if (loadSource()) {
+                for(String columnName : searchContext.mapperService().documentMapper(uid.type()).getColumnDefinitions().keySet()) 
+                    if (this.filtredFields == null || this.filtredFields.contains(columnName))
+                        requiredColumns.add( columnName );
+            }
+            this.requiredColumns = new TreeSet<String>(requiredColumns);
+        }
+        return this.requiredColumns;
+    }
+    
+    public void filtredColumns(Collection<String> fields) {
+        this.filtredFields = fields;
+    }
+    
+    public boolean loadSource() {
+        return this.loadSource;
     }
 
     public void postProcess(MapperService mapperService) {
@@ -175,11 +220,25 @@ public class FieldsVisitor extends StoredFieldVisitor {
     public BytesReference source() {
         return source;
     }
+    
+    public FieldsVisitor source(byte[] _source) {
+        source = new BytesArray(_source);
+        return this;
+    }
+    
+    public FieldsVisitor source(BytesReference _source) {
+        source = _source;
+        return this;
+    }
 
     public Uid uid() {
         return uid;
     }
 
+    public void uid(Uid uid) {
+        this.uid = uid;
+    }
+    
     public String routing() {
         if (fieldsValues == null) {
             return null;
@@ -209,7 +268,7 @@ public class FieldsVisitor extends StoredFieldVisitor {
         }
     }
 
-    void addValue(String name, Object value) {
+    public void addValue(String name, Object value) {
         if (fieldsValues == null) {
             fieldsValues = newHashMap();
         }
@@ -220,5 +279,12 @@ public class FieldsVisitor extends StoredFieldVisitor {
             fieldsValues.put(name, values);
         }
         values.add(value);
+    }
+    
+    public void setValues(String name, List<Object> values) {
+        if (fieldsValues == null) {
+            fieldsValues = newHashMap();
+        }
+        this.fieldsValues.put(name, values);
     }
 }

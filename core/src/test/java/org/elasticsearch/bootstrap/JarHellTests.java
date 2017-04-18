@@ -182,12 +182,12 @@ public class JarHellTests extends ESTestCase {
     public void testRequiredJDKVersionIsOK() throws Exception {
         Path dir = createTempDir();
         String previousJavaVersion = System.getProperty("java.specification.version");
-        System.setProperty("java.specification.version", "1.7");
+        System.setProperty("java.specification.version", "1.8");
 
         Manifest manifest = new Manifest();
         Attributes attributes = manifest.getMainAttributes();
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0.0");
-        attributes.put(new Attributes.Name("X-Compile-Target-JDK"), "1.7");
+        attributes.put(new Attributes.Name("X-Compile-Target-JDK"), "1.8");
         URL[] jars = {makeJar(dir, "foo.jar", manifest, "Foo.class")};
         try {
             JarHell.checkJarHell(jars);
@@ -204,7 +204,7 @@ public class JarHellTests extends ESTestCase {
         Manifest manifest = new Manifest();
         Attributes attributes = manifest.getMainAttributes();
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0.0");
-        attributes.put(new Attributes.Name("X-Compile-Target-JDK"), "1.7");
+        attributes.put(new Attributes.Name("X-Compile-Target-JDK"), "1.8");
         URL[] jars = {makeJar(dir, "foo.jar", manifest, "Foo.class")};
         try {
             JarHell.checkJarHell(jars);
@@ -256,7 +256,7 @@ public class JarHellTests extends ESTestCase {
     }
 
     public void testValidVersions() {
-        String[] versions = new String[]{"1.7", "1.7.0", "0.1.7", "1.7.0.80"};
+        String[] versions = new String[]{"1.8", "1.8.0", "0.1.8", "1.8.0.80"};
         for (String version : versions) {
             try {
                 JarHell.checkVersionFormat(version);
@@ -267,7 +267,7 @@ public class JarHellTests extends ESTestCase {
     }
 
     public void testInvalidVersions() {
-        String[] versions = new String[]{"", "1.7.0_80", "1.7."};
+        String[] versions = new String[]{"", "1.8.0_102", "1.8."};
         for (String version : versions) {
             try {
                 JarHell.checkVersionFormat(version);

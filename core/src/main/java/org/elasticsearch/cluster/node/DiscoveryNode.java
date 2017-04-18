@@ -19,24 +19,29 @@
 
 package org.elasticsearch.cluster.node;
 
-import com.google.common.collect.ImmutableMap;
+import static org.elasticsearch.common.transport.TransportAddressSerializers.addressToStream;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.io.stream.*;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.transport.TransportAddressSerializers;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
-import static org.elasticsearch.common.transport.TransportAddressSerializers.addressToStream;
+import com.google.common.collect.ImmutableMap;
 
 /**
  * A discovery node represents a node that is part of the cluster.
@@ -99,12 +104,14 @@ public class DiscoveryNode implements Streamable, ToXContent {
 
     private String nodeName = "";
     private String nodeId;
+    private transient UUID nodeUuid;
     private String hostName;
     private String hostAddress;
     private TransportAddress address;
     private ImmutableMap<String, String> attributes;
     private Version version = Version.CURRENT;
-
+    private DiscoveryNodeStatus status = DiscoveryNodeStatus.UNKNOWN;
+    
     DiscoveryNode() {
     }
 
@@ -171,11 +178,67 @@ public class DiscoveryNode implements Streamable, ToXContent {
         }
         this.attributes = builder.build();
         this.nodeId = nodeId.intern();
+        try {
+            this.nodeUuid = UUID.fromString(nodeId);
+        } catch (Exception e) {
+            this.nodeUuid = UUID.randomUUID();
+        }
         this.hostName = hostName.intern();
         this.hostAddress = hostAddress.intern();
         this.address = address;
         this.version = version;
     }
+    
+    
+    public static enum DiscoveryNodeStatus {
+        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2), OFFSEARCH((byte) 3);
+
+        private final byte status;
+
+        DiscoveryNodeStatus(byte status) {
+            this.status = status;
+        }
+
+        public byte status() {
+            return this.status;
+        }
+
+        @Override
+        public String toString() {
+            switch (this) {
+            case UNKNOWN:
+                return "UNKNOWN";
+            case ALIVE:
+                return "ALIVE";
+            case DEAD:
+                return "DEAD";
+            case OFFSEARCH:
+                return "OFFSEARCH";
+            default:
+                throw new IllegalArgumentException();
+            }
+        }
+    }
+
+    public void status(DiscoveryNodeStatus status) {
+        this.status = status;
+    }
+    
+    /**
+     * The name of the node.
+     */
+    public DiscoveryNodeStatus status() {
+        return this.status;
+    }
+
+    /**
+     * The name of the node.
+     */
+    public DiscoveryNodeStatus getStatus() {
+        return status();
+    }
+    
+    
 
     /**
      * Should this node form a connection to the provided node.
@@ -200,6 +263,16 @@ public class DiscoveryNode implements Streamable, ToXContent {
     public TransportAddress getAddress() {
         return address();
     }
+    
+    /**
+     * The inet listen address of the node.
+     */
+    public InetAddress getInetAddress() {
+        if (address() instanceof InetSocketTransportAddress)
+            return ((InetSocketTransportAddress) address()).address().getAddress();
+        return null;
+    }
+
 
     /**
      * The unique id of the node.
@@ -215,6 +288,10 @@ public class DiscoveryNode implements Streamable, ToXContent {
         return id();
     }
 
+    public UUID uuid() {
+        return this.nodeUuid;
+    }
+    
     /**
      * The name of the node.
      */
@@ -392,6 +469,7 @@ public class DiscoveryNode implements Streamable, ToXContent {
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject(id(), XContentBuilder.FieldCaseConversion.NONE);
         builder.field("name", name());
+        builder.field("status", getStatus().toString());
         builder.field("transport_address", address().toString());
 
         builder.startObject("attributes");
@@ -403,4 +481,7 @@ public class DiscoveryNode implements Streamable, ToXContent {
         builder.endObject();
         return builder;
     }
+    
+    
+
 }

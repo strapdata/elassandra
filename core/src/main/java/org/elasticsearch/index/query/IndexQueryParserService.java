@@ -20,7 +20,6 @@
 package org.elasticsearch.index.query;
 
 import com.google.common.collect.ImmutableMap;
-
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.elasticsearch.Version;
@@ -233,7 +232,6 @@ public class IndexQueryParserService extends AbstractIndexComponent {
     @Nullable
     public ParsedQuery parseInnerFilter(XContentParser parser) throws IOException {
         QueryParseContext context = cache.get();
-        XContentParser originalParser = context.parser();
         context.reset(parser);
         try {
             Query filter = context.parseInnerFilter();
@@ -242,19 +240,18 @@ public class IndexQueryParserService extends AbstractIndexComponent {
             }
             return new ParsedQuery(filter, context.copyNamedQueries());
         } finally {
-            context.reset(originalParser);
+            context.reset(null);
         }
     }
 
     @Nullable
     public Query parseInnerQuery(XContentParser parser) throws IOException {
         QueryParseContext context = cache.get();
-        XContentParser originalParser = context.parser();
         context.reset(parser);
         try {
             return context.parseInnerQuery();
         } finally {
-            context.reset(originalParser);
+            context.reset(null);
         }
     }
 
@@ -317,7 +314,6 @@ public class IndexQueryParserService extends AbstractIndexComponent {
     }
 
     private ParsedQuery innerParse(QueryParseContext parseContext, XContentParser parser) throws IOException, QueryParsingException {
-        XContentParser originalParser = parseContext.parser();
         parseContext.reset(parser);
         try {
             parseContext.parseFieldMatcher(parseFieldMatcher);
@@ -327,7 +323,7 @@ public class IndexQueryParserService extends AbstractIndexComponent {
             }
             return new ParsedQuery(query, parseContext.copyNamedQueries());
         } finally {
-            parseContext.reset(originalParser);
+            parseContext.reset(null);
         }
     }
 

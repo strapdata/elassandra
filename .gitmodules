@@ -1,0 +1,3 @@
+[submodule "core/cassandra"]
+	path = core/cassandra
+	url = https://github.com/strapdata/cassandra

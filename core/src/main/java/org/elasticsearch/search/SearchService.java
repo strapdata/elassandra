@@ -19,15 +19,25 @@
 
 package org.elasticsearch.search;
 
-import com.carrotsearch.hppc.ObjectHashSet;
-import com.carrotsearch.hppc.ObjectSet;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.google.common.collect.ImmutableMap;
+import static org.elasticsearch.common.Strings.hasLength;
+import static org.elasticsearch.common.unit.TimeValue.timeValueMillis;
+import static org.elasticsearch.common.unit.TimeValue.timeValueMinutes;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.search.TopDocs;
+import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elassandra.index.search.TokenRangesSearcherWrapper;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.ExceptionsHelper;
@@ -92,9 +102,9 @@ import org.elasticsearch.search.internal.InternalScrollSearchRequest;
 import org.elasticsearch.search.internal.ScrollContext;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.internal.SearchContext.Lifetime;
-import org.elasticsearch.search.profile.Profilers;
 import org.elasticsearch.search.internal.ShardSearchLocalRequest;
 import org.elasticsearch.search.internal.ShardSearchRequest;
+import org.elasticsearch.search.profile.Profilers;
 import org.elasticsearch.search.query.QueryPhase;
 import org.elasticsearch.search.query.QuerySearchRequest;
 import org.elasticsearch.search.query.QuerySearchResult;
@@ -105,18 +115,10 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.threadpool.ThreadPool.Cancellable;
 import org.elasticsearch.threadpool.ThreadPool.Names;
 
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.elasticsearch.common.Strings.hasLength;
-import static org.elasticsearch.common.unit.TimeValue.timeValueMillis;
-import static org.elasticsearch.common.unit.TimeValue.timeValueMinutes;
+import com.carrotsearch.hppc.ObjectHashSet;
+import com.carrotsearch.hppc.ObjectSet;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.collect.ImmutableMap;
 
 public class SearchService extends AbstractLifecycleComponent<SearchService> {
 
@@ -649,10 +651,14 @@ public class SearchService extends AbstractLifecycleComponent<SearchService> {
 
     final SearchContext createContext(ShardSearchRequest request, @Nullable Engine.Searcher searcher) {
         IndexService indexService = indicesService.indexServiceSafe(request.index());
-        IndexShard indexShard = indexService.shardSafe(request.shardId());
-
+        //IndexShard indexShard = indexService.shardSafe(request.shardId());
+        IndexShard indexShard = indexService.shardSafe(0); // always search on shardId 0
+        
         SearchShardTarget shardTarget = new SearchShardTarget(clusterService.localNode().id(), request.index(), request.shardId());
-
+        
+        if (indexService.isTokenRangesBitsetCacheEnabled())
+             TokenRangesSearcherWrapper.current(request);
+        
         Engine.Searcher engineSearcher = searcher == null ? indexShard.acquireSearcher("search") : searcher;
 
         DefaultSearchContext context = new DefaultSearchContext(idGenerator.incrementAndGet(), request, shardTarget, engineSearcher, indexService, indexShard, scriptService, pageCacheRecycler, bigArrays, threadPool.estimatedTimeInMillisCounter(), parseFieldMatcher, defaultSearchTimeout);
@@ -752,6 +758,7 @@ public class SearchService extends AbstractLifecycleComponent<SearchService> {
             assert context == SearchContext.current();
             context.clearReleasables(Lifetime.PHASE);
             SearchContext.removeCurrent();
+            TokenRangesSearcherWrapper.removeCurrent();
         } finally {
             context.decRef();
         }
@@ -1168,8 +1175,8 @@ public class SearchService extends AbstractLifecycleComponent<SearchService> {
                         SearchContext context = null;
                         try {
                             long now = System.nanoTime();
-                            ShardSearchRequest request = new ShardSearchLocalRequest(indexShard.shardId(), indexMetaData.getNumberOfShards(),
-                                    SearchType.QUERY_THEN_FETCH, entry.source(), entry.types(), entry.requestCache());
+                            ShardSearchRequest request = new ShardSearchLocalRequest(indexShard.shardId(), indexShard.routingEntry(), indexMetaData.getNumberOfShards(),
+                                    SearchType.QUERY_THEN_FETCH, entry.source(), entry.types(), entry.requestCache(), entry.tokenRangesBitsetCache());
                             context = createContext(request, warmerContext.searcher());
                             context.incRef();
                             // if we use sort, we need to do query to sort on it and load relevant field data

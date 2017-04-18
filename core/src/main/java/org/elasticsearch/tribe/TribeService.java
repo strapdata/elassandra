@@ -296,6 +296,7 @@ public class TribeService extends AbstractLifecycleComponent<TribeService> {
             ClusterState accumulator = ClusterState.builder(currentState).build();
             BatchResult.Builder<ClusterChangedEvent> builder = BatchResult.builder();
 
+            boolean doPersistMetaData = false;
             try {
                 // we only need to apply the latest cluster state update
                 accumulator = applyUpdate(accumulator, tasks.get(tasks.size() - 1));
@@ -304,7 +305,7 @@ public class TribeService extends AbstractLifecycleComponent<TribeService> {
                 builder.failures(tasks, t);
             }
 
-            return builder.build(accumulator);
+            return builder.build(accumulator, doPersistMetaData);
         }
 
         private ClusterState applyUpdate(ClusterState currentState, ClusterChangedEvent task) {
@@ -338,7 +339,7 @@ public class TribeService extends AbstractLifecycleComponent<TribeService> {
             // -- merge metadata
             ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
             MetaData.Builder metaData = MetaData.builder(currentState.metaData());
-            RoutingTable.Builder routingTable = RoutingTable.builder(currentState.routingTable());
+            RoutingTable.Builder routingTable = RoutingTable.builder(clusterService, currentState);
             // go over existing indices, and see if they need to be removed
             for (IndexMetaData index : currentState.metaData()) {
                 String markedTribeName = index.getSettings().get(TRIBE_NAME);

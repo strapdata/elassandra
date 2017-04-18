@@ -93,11 +93,11 @@ public class CodecTests extends ESSingleNodeTestCase {
         dir.close();
     }
 
-    private static CodecService createCodecService() {
+    private CodecService createCodecService() {
         return createCodecService(Settings.Builder.EMPTY_SETTINGS);
     }
 
-    private static CodecService createCodecService(Settings settings) {
+    private CodecService createCodecService(Settings settings) {
         IndexService indexService = createIndex("test", settings);
         return indexService.injector().getInstance(CodecService.class);
     }

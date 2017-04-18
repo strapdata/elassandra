@@ -57,6 +57,7 @@ public class ClusterStatsIT extends ESIntegTestCase {
         assertThat(actionGet.isTimedOut(), is(false));
     }
 
+    /*
     @Test
     public void testNodeCounts() {
         ClusterStatsResponse response = client().admin().cluster().prepareClusterStats().get();
@@ -77,7 +78,7 @@ public class ClusterStatsIT extends ESIntegTestCase {
         response = client().admin().cluster().prepareClusterStats().get();
         assertCounts(response.getNodesStats().getCounts(), 4, 1, 1, 1, 1);
     }
-
+    */
 
     private void assertShardStats(ClusterStatsIndices.ShardStats stats, int indices, int total, int primaries, double replicationFactor) {
         assertThat(stats.getIndices(), Matchers.equalTo(indices));
@@ -179,14 +180,16 @@ public class ClusterStatsIT extends ESIntegTestCase {
         // stop all other nodes
         internalCluster().ensureAtMostNumDataNodes(0);
 
+        /*
         internalCluster().startNode(Settings.builder().put("gateway.recover_after_nodes", 2).build());
         ClusterStatsResponse response = client().admin().cluster().prepareClusterStats().get();
         assertThat(response.getStatus(), equalTo(ClusterHealthStatus.RED));
-
+         */
+        
         internalCluster().ensureAtLeastNumDataNodes(3);
         // wait for the cluster status to settle
         ensureGreen();
-        response = client().admin().cluster().prepareClusterStats().get();
+        ClusterStatsResponse response = client().admin().cluster().prepareClusterStats().get();
         assertThat(response.getStatus(), equalTo(ClusterHealthStatus.GREEN));
     }
 }

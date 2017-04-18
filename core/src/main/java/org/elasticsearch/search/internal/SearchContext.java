@@ -18,16 +18,22 @@
  */
 package org.elasticsearch.search.internal;
 
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.MultimapBuilder;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.DelegatingHasContextAndHeaders;
 import org.elasticsearch.common.HasContextAndHeaders;
 import org.elasticsearch.common.Nullable;
@@ -65,12 +71,9 @@ import org.elasticsearch.search.rescore.RescoreSearchContext;
 import org.elasticsearch.search.scan.ScanContext;
 import org.elasticsearch.search.suggest.SuggestionSearchContext;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.MultimapBuilder;
 
 /**
  * This class encapsulates the state needed to execute a search. It holds a reference to the
@@ -107,6 +110,7 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
     private InnerHitsContext innerHitsContext;
 
     protected final ParseFieldMatcher parseFieldMatcher;
+    protected SearchProcessor processor = null;
 
     protected SearchContext(ParseFieldMatcher parseFieldMatcher, HasContextAndHeaders contextHeaders) {
         super(contextHeaders);
@@ -132,8 +136,18 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
      * Should be called before executing the main query and after all other parameters have been set.
      */
     public abstract void preProcess();
+    
+    public void processors(SearchProcessor processors) {
+        this.processor = processors;
+    }
+    
+    public SearchProcessor processor() {
+        return processor;
+    }
 
     public abstract Query searchFilter(String[] types);
+
+    public abstract SearchProcessor searchProcessor();
 
     public abstract long id();
 
@@ -224,6 +238,8 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
     public abstract MapperService mapperService();
 
     public abstract AnalysisService analysisService();
+
+    public abstract ClusterService clusterService();
 
     public abstract IndexQueryParserService queryParserService();
 
@@ -330,6 +346,11 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
      */
     public abstract Profilers getProfilers();
 
+    public abstract boolean includeNode();
+    public abstract void    includeNode(boolean includeNode);
+
+    public abstract ClusterState getClusterState();
+
     /**
      * Schedule the release of a resource. The time when {@link Releasable#close()} will be called on this object
      * is function of the provided {@link Lifetime}.
@@ -387,8 +408,8 @@ public abstract class SearchContext extends DelegatingHasContextAndHeaders imple
          */
         CONTEXT
     }
-
-    // copied from AbstractRefCounted since this class subclasses already DelegatingHasContextAndHeaders
+    
+ // copied from AbstractRefCounted since this class subclasses already DelegatingHasContextAndHeaders
     // 5.x doesn't have this problem
     private final AtomicInteger refCount = new AtomicInteger(1);
 

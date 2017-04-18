@@ -45,7 +45,7 @@ public class IndicesLifecycleListenerSingleNodeTests extends ESSingleNodeTestCas
         assertAcked(client().admin().indices().prepareCreate("test")
                 .setSettings(SETTING_NUMBER_OF_SHARDS, 1, SETTING_NUMBER_OF_REPLICAS, 0));
         ensureGreen();
-        getInstanceFromNode(IndicesLifecycle.class).addListener(new IndicesLifecycle.Listener() {
+        IndicesLifecycle.Listener listener = new IndicesLifecycle.Listener() {
             @Override
             public void afterIndexClosed(Index index, Settings indexSettings) {
                 assertEquals(counter.get(), 5);
@@ -81,9 +81,18 @@ public class IndicesLifecycleListenerSingleNodeTests extends ESSingleNodeTestCas
                 assertEquals(counter.get(), 4);
                 counter.incrementAndGet();
             }
-        });
-        assertAcked(client().admin().indices().prepareDelete("test").get());
-        assertEquals(7, counter.get());
+        };
+        
+        // because ESSingleNodeTestCase is remanent, clear listeners properly.
+        IndicesLifecycle lifecycle = getInstanceFromNode(IndicesLifecycle.class);
+        lifecycle.addListener(listener);
+        
+        try {
+            assertAcked(client().admin().indices().prepareDelete("test").get());
+            assertEquals(7, counter.get());
+        } finally {
+            lifecycle.removeListener(listener);
+        }
     }
     
 }

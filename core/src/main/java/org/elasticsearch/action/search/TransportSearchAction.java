@@ -71,7 +71,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                 ClusterState clusterState = clusterService.state();
                 String[] concreteIndices = indexNameExpressionResolver.concreteIndices(clusterState, searchRequest);
                 Map<String, Set<String>> routingMap = indexNameExpressionResolver.resolveSearchRouting(clusterState, searchRequest.routing(), searchRequest.indices());
-                int shardCount = clusterService.operationRouting().searchShardsCount(clusterState, concreteIndices, routingMap);
+                int shardCount = clusterService.operationRouting().searchShardsCount(clusterState, concreteIndices, routingMap, searchRequest.preference(), searchRequest.remoteAddress());
                 if (shardCount == 1) {
                     // if we only have one group, then we always want Q_A_F, no need for DFS, and no need to do THEN since we hit one shard
                     searchRequest.searchType(QUERY_AND_FETCH);

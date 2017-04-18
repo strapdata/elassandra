@@ -122,6 +122,7 @@ public class GetIndexResponse extends ActionResponse {
                         in.readString(),
                         in.readStringArray(),
                         in.readOptionalBoolean(),
+                        in.readOptionalBoolean(),
                         in.readBytesReference())
                 );
             }
@@ -173,6 +174,7 @@ public class GetIndexResponse extends ActionResponse {
                 out.writeString(warmerEntry.name());
                 out.writeStringArray(warmerEntry.types());
                 out.writeOptionalBoolean(warmerEntry.requestCache());
+                out.writeOptionalBoolean(warmerEntry.tokenRangesBitsetCache());
                 out.writeBytesReference(warmerEntry.source());
             }
         }

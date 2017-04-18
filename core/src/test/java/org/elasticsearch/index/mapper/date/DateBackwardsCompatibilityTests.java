@@ -140,6 +140,12 @@ public class DateBackwardsCompatibilityTests extends ESSingleNodeTestCase {
         assertHitCount(client().prepareSearch(index).setQuery(regularTimeQuery).get(), 1);
     }
 
+    /**
+  curl -XPUT "$NODE:9200/testindex" -d'{ "mappings":{"testtype":{"properties":{ "date_field":{"type":"date","format":"yyyyMMddHHSSS"}}}}}'
+  curl -XPOST "$NODE:9200/testindex/testtype" -d'{ "date_field":2015062301000 }'
+  curl -XPOST "$NODE:9200/testindex/testtype" -d'{ "date_field":"2015062301000" }'
+  curl -XGET "$NODE:9200/testindex/_search?pretty" -d'{ "query":{"range":{"date_field":{"gte":"2015-06-23","lt":"2015-06-24","format":"dateOptionalTime"}}}}'
+     */
     public void testThatPost2xIndicesNumbersAreTreatedAsStrings() throws Exception {
         // looks like a unix time stamp but is meant as 2016-06-23T01:00:00.000 - see the specified date format
         long date = 2015062301000l;

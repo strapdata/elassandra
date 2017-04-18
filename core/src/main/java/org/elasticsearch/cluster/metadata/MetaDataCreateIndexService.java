@@ -19,15 +19,31 @@
 
 package org.elasticsearch.cluster.metadata;
 
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
-import com.google.common.base.Charsets;
-import com.google.common.collect.Maps;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_CREATION_DATE;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_INDEX_UUID;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_VERSION_CREATED;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.cassandra.config.Schema;
 import org.apache.lucene.util.CollectionUtil;
+import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.admin.indices.alias.Alias;
 import org.elasticsearch.action.admin.indices.create.CreateIndexClusterStateUpdateRequest;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
@@ -35,27 +51,21 @@ import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlock;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlocks;
-import org.elasticsearch.cluster.metadata.IndexMetaData.*;
+import org.elasticsearch.cluster.metadata.IndexMetaData.Custom;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.routing.RoutingTable;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
-import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.ValidationException;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.io.PathUtils;
-import org.elasticsearch.common.io.Streams;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.env.Environment;
-import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.mapper.DocumentMapper;
@@ -66,28 +76,13 @@ import org.elasticsearch.indices.IndexAlreadyExistsException;
 import org.elasticsearch.indices.IndexCreationException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.InvalidIndexNameException;
-import org.elasticsearch.script.ScriptService;
-import org.elasticsearch.threadpool.ThreadPool;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-
-import static org.elasticsearch.cluster.metadata.IndexMetaData.*;
-import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
 
 /**
  * Service responsible for submitting create index requests
@@ -99,7 +94,6 @@ public class MetaDataCreateIndexService extends AbstractComponent {
 
     private final ClusterService clusterService;
     private final IndicesService indicesService;
-    private final AllocationService allocationService;
     private final Version version;
     private final AliasValidator aliasValidator;
     private final IndexTemplateFilter indexTemplateFilter;
@@ -107,13 +101,12 @@ public class MetaDataCreateIndexService extends AbstractComponent {
 
     @Inject
     public MetaDataCreateIndexService(Settings settings, ClusterService clusterService,
-                                      IndicesService indicesService, AllocationService allocationService,
+                                      IndicesService indicesService,
                                       Version version, AliasValidator aliasValidator,
                                       Set<IndexTemplateFilter> indexTemplateFilters, Environment env) {
         super(settings);
         this.clusterService = clusterService;
         this.indicesService = indicesService;
-        this.allocationService = allocationService;
         this.version = version;
         this.aliasValidator = aliasValidator;
         this.env = env;
@@ -177,11 +170,17 @@ public class MetaDataCreateIndexService extends AbstractComponent {
 
         clusterService.submitStateUpdateTask("create-index [" + request.index() + "], cause [" + request.cause() + "]",
                 new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(Priority.URGENT, request, listener) {
-                    @Override
-                    protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
-                        return new ClusterStateUpdateResponse(acknowledged);
-                    }
+            
+            @Override
+            protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
+                return new ClusterStateUpdateResponse(acknowledged);
+            }
 
+            @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
             @Override
             public ClusterState execute(ClusterState currentState) throws Exception {
                 boolean indexCreated = false;
@@ -267,6 +266,33 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     }
                     // now, put the request settings, so they override templates
                     indexSettingsBuilder.put(request.settings());
+                    indexSettingsBuilder.put(SETTING_NUMBER_OF_SHARDS, MetaDataCreateIndexService.this.clusterService.state().nodes().size());
+                    
+                    String keyspace = indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE);
+                    if (keyspace == null) {
+                        keyspace = InternalCassandraClusterService.indexToKsName(request.index());
+                        if (!keyspace.equals(request.index())) {
+                            logger.warn("index [{}] automatically mapped to keyspace [{}]", request.index(), keyspace);
+                            indexSettingsBuilder.put(IndexMetaData.SETTING_KEYSPACE, keyspace);
+                        }
+                    } else {
+                        if (!keyspace.equals(InternalCassandraClusterService.indexToKsName(keyspace))) {
+                            throw new InvalidIndexNameException(null, keyspace, "Invalid cassandra keyspace name");
+                        }
+                    }
+                    
+                    if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
+                        indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
+                    } else {
+                        int number_of_replicas = Math.min( request.settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0)) , MetaDataCreateIndexService.this.clusterService.state().nodes().size()-1);
+                        indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, number_of_replicas);
+                    }
+                    
+                    if (indexSettingsBuilder.get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS) != null) {
+                        // check that we can instanciate the search strategy
+                        AbstractSearchStrategy.getSearchStrategyClass(indexSettingsBuilder.get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS)).newInstance();
+                    }
+                    /*
                     int defaultNumberOfShards;
                     int defaultNumberOfReplicas;
                     if (request.index().equals(ScriptService.SCRIPT_INDEX)) {
@@ -290,7 +316,8 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     if (settings.get(SETTING_AUTO_EXPAND_REPLICAS) != null && indexSettingsBuilder.get(SETTING_AUTO_EXPAND_REPLICAS) == null) {
                         indexSettingsBuilder.put(SETTING_AUTO_EXPAND_REPLICAS, settings.get(SETTING_AUTO_EXPAND_REPLICAS));
                     }
-
+                    */
+                    
                     if (indexSettingsBuilder.get(SETTING_VERSION_CREATED) == null) {
                         DiscoveryNodes nodes = currentState.nodes();
                         final Version createdVersion = Version.smallest(version, nodes.smallestNonClientNodeVersion());
@@ -316,7 +343,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     try {
                         mapperService.merge(mappings, request.updateAllTypes());
                     } catch (MapperParsingException mpe) {
-                        removalReason = "failed on parsing default mapping/mappings on index creation";
+                        //removalReason = "failed on parsing default mapping/mappings on index creation";
                         throw mpe;
                     }
 
@@ -362,8 +389,26 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     final IndexMetaData indexMetaData;
                     try {
                         indexMetaData = indexMetaDataBuilder.build();
+
+                        if (!currentState.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK)) {
+                            // don't create a keyspace while cassandra is not fully started.
+                            String keyspaceName = indexMetaData.keyspace();
+                            logger.debug("creating if not exists keyspace {} with RF={}", keyspaceName, indexMetaData.getNumberOfReplicas()+1);
+                            clusterService.createIndexKeyspace(keyspaceName, indexMetaData.getNumberOfReplicas()+1);
+                            
+                            // create a cassandra table per type.
+                            for (ObjectObjectCursor<String,MappingMetaData> cursor : indexMetaData.getMappings()) {
+                                MappingMetaData mappingMd = cursor.value;
+                                if (!mappingMd.type().equals(MapperService.DEFAULT_MAPPING)) {
+                                    clusterService.updateTableSchema(indicesService.indexService(indexMetaData.getIndex()), mappingMd);
+                                }
+                            }
+                        } else {
+                            throw new ClusterBlockException(ImmutableSet.of(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK));
+                        }
+                        
                     } catch (Exception e) {
-                        removalReason = "failed to build index metadata";
+                        removalReason = "failed to build index metadata:"+e.toString();
                         throw e;
                     }
 
@@ -387,18 +432,19 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     }
                     blocks.updateBlocks(indexMetaData);
 
-                    ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).metaData(newMetaData).build();
+                    ClusterState updatedState = ClusterState.builder(currentState).incrementVersion().blocks(blocks).metaData(newMetaData).build();
 
+                    /*
                     if (request.state() == State.OPEN) {
-                        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(updatedState.routingTable())
-                                .addAsNew(updatedState.metaData().index(request.index()));
-                        RoutingAllocation.Result routingResult = allocationService.reroute(
-                                ClusterState.builder(updatedState).routingTable(routingTableBuilder.build()).build(),
-                                "index [" + request.index() + "] created");
-                        updatedState = ClusterState.builder(updatedState).routingResult(routingResult).build();
+                        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, updatedState).addAsNew(updatedState.metaData().index(request.index()));
+                        updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder).build();
                     }
+                    */
                     removalReason = "cleaning up after validating index on master";
                     return updatedState;
+                } catch(Throwable e) {
+                    removalReason = "error:" + e.toString();
+                    throw e;
                 } finally {
                     if (indexCreated) {
                         // Index was already partially created - need to clean up

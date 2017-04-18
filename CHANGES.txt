@@ -1,0 +1,232 @@
+2.4.2-13 - 2017-04-15
+  * [breaking change] change _token DocValues type from SORTED_NUMERIC to NUMERIC (remove your indices before upgrade and reindex)
+  * [breaking change] change _token default Lucene numeric precision (remove your indices before upgrade and reindex)
+  * Add a new token_numeric_precision option to optimize search request.
+  * Improve indexing on concurrent partition update.
+  * Add a new index_on_compaction option to avoid lucene tombestones when compacting SSTables.
+  * Add token bitset caching to improve search performances.
+  * Add support for pluggable CQL generic functions CASSANDRA-13267
+  * Fix cluster state blocks updates in a multi-node cluster.
+  * Add rebuild+cleanup command to rebuild and clean index from cassandra on all nodes.
+
+2.4.2-12 - 2017-04-11
+  * Fix #87 null_value support 
+  * Fix #91 update of a C* mas as a nested field.
+
+2.4.2-11 - 2017-03-10
+  * Fix indexing in debug mode only #84
+
+2.4.2-10 - 2017-03-02
+  * Add support for blob and inet CQL types in primary key (in elasticsearch _id).
+  * Fix partitioned index #83 and provides customizable partition function implementations.
+  * Include optimized Cassandra serializers CASSANDRA-13271
+
+2.4.2-9 - 2017-02-26
+  * Significant write performance improvement.
+  * New optimized version less internal engine (don't store any more version number in lucene files).
+  * Fix erroneous deletion when compacting SSTables.
+  * Fix a routing table issue in a multi-node single-rack cluster.
+
+2.4.2-8 - 2017-02-15
+  * Fix support for uuid and timeuuid Cassandra Types #74
+
+2.4.2-7 - 2017-02-09
+  * Enable support for multi-threading rebuild_index on Cassandra 3.
+  * Add new _meta fields in order to index static columns.
+  * Fix a minor bug on type checking.
+
+2.4.2-6 - 2017-01-25
+  * Fix ES Auto-Discovery fails when Cassandra table has at least one UDT field (#77)
+  * Allows a text columns containing a geohash to be mapped to a geo_point.
+  
+2.4.2-5 - 2017-01-18
+  * Add support for uuid and timeuuid Cassandra Types #74
+
+2.4.2-4 - 2017-01-16
+  * Upgrade to Cassandra 3.0.10
+  * Support CQL TRUNCATE
+
+2.4.2-3 - 2017-01-04
+  * Fix search and indexing issue when cassandra replcation factor > 1 
+
+2.4.2-2 - 2016-12-25
+  * Fix useless compactions when creating an index.
+  * Support for ES Object fields w/ enabled settings 
+  * UDT by name support #64
+  
+2.4.2-1 - 2016-12-23
+  * Based on Elasticsearch 2.4.2 + Cassandra 2.2.7
+  * Add support for Elasticsearch unit tests (2790 unit tests OK).
+  * Manage indexes and documents types containing dash or dot caracters (works with Kibana without any modification).
+  * New index settings *drop_on_delete_index* to delete Cassandra keyspace/table when deleting an Elasticsearch index.
+  * New index settings *synchrnous_refresh* to refresh Elasticsearch index on each document update.
+  * Improve search performance by removing some lock contention.
+  * [WARNING]: RPM & Debian packages not ready to use (please install tarballs).
+
+2.1.1-18.1 - 2016-11-02
+  * Fix #59 delete-by-query plugin does not work 
+  * Fix #57 Static members cause java.lang.ArrayIndexOutOfBoundsException
+
+2.1.1-18 - 2016-10-24
+  * Add support for multi-threaded nodetool rebuild_index to improve re-indexing performances.
+  * Add a new random search strategy to distribute search request to a minimum of nodes.
+  * Add support for multi-fields and geo_shape.
+  * Add support for ES index update when deleting by partition key (but deleting with a range of clustering keys not yet implemented).
+  * Fix issue #50 Elastic Index ignores documents created using Cassandra UPDATE
+  * Fix issue when using distinct RPC and INTERNAL ip addresses for Cassandra.
+  * Don't close stdout when running in foreground.
+  * Creates Elasticsearch indices only for keyspaces using the NetworkReplicationStrategy.
+
+2.1.1-17.1 - 2016-09-04
+  * Temporary revert CASSANDRA-11427 because of CASSANDRA-12351 (CASSANDRA-12143).
+  * [breaking change] Replace DatacenterReplicationStrategy by NetworkReplicationStrategy to avoid boostraping issues (Replace all DatacenterReplicationStrategy by 
+    NetworkReplicationStrategy before upgrading). 
+  * Add support for completion type.
+  * Add support for percolator.
+  * Add support for Spark/Hadoop with the elasticsearch-hadoop spark connector.
+  * Add a new metafield _node when indexing document and a token_range aggregation allowing to check cassandra consistency of an index.
+  * Fix a lat_lon order issue.
+  
+2.1.1-16 - 2016-08-12
+  * Upgrade to cassandra 2.2.7
+  * Provide a JSON-REST access to cassandra rows (get/index/delete without indexing in elasticsearch).
+  * Fix a bug when using cassandra index (issue #41)
+  * Implement the delete document in elaticsearch indices (issue #36), and nodetool cleanup effectively remove documents.
+  * [breaking change] Change the DatacenterReplicationStrategy options to be compatible with the standard apache cassandra 2.2.7.
+  * Add documentation about backup and restore.
+  
+2.1.1-15 - 2016-07-10
+  * Add a per-index logging level.
+  * Fix a parent-child mapping issue.
+  * Update documentation (integration part and numerous typos #32)
+
+2.1.1-14 - 2016-07-01
+  * Fix an erroneous number_of_replica in a multidatacenter configuration.
+  * Fix a bug when partially updating a row indexed in an index different from the keyspace name.
+  * Fix a bug on CQL schema update.
+
+2.1.1-13 - 2016-06-29
+  * Limit CQL schema update from the coordinator node only.
+  * Fix a bug in routing table with vnode and one or more unavailable nodes.
+  
+2.1.1-12 - 2016-06-21
+  * Add a configurable cross-datacenters replication.
+  * Add support for index partitioning (see index.partition_function)
+  * Optimize search operation with _routing (send the search request to a node hosting the corresponding token, issue #23)
+  * Avoid useless reads of metadata with consistency quorum for better performances.
+  * Remove translog for better performances (durability ensured by cassandra commitlogs)
+  * Disable the TTService (see cassandra TTL and index partitioning)
+  * Add caching of CQL query on fetch phase.
+  * Add a native CQL function toJsonArray() to cassandra.
+  * Change Elasticserach JNA to rely on cassandra JNA class.
+  * Map the cassandra TTL and WRITETIME to _ttl and _timestamp meta attributes.
+  * Improve parent-child relationship management with a new mapping parmeter pk_columns.
+  * Fix bug when SERIAL consistency not met on elassandra restart.
+  * Fix a bug when searching with no type filter.
+  * Fix index open/close operation
+  * Fix a bug during shard initialization and a bug when a keyspace is unavailable.
+  * [breaking change] Rename the mapping attribute "columns_regexp" by "discover".
+  * [breaking change] Rename the index setting "keyspace_name" by "keyspace".
+  * [breaking change] Rename the field mapping parameter "cql_partial_update" by "cql_mandatory".
+  * [breaking change] Rename the ThreadLocalOptimizedElasticSecondary class by ExtendedElasticSecondaryIndex.
+
+2.1.1-11 - 2016-05-20
+  * Improve secondary index implementation.
+  * Add a cluster setting cluster.default_secondary_index_class.
+  * Change the default memtable_allocation_type: offheap_objects in conf/cassandra.yml 
+  * Change the default bootstrap.mlockall: true in conf/elasticsearch.yml
+  * Include the cassandra driver to support cassandra user defined functions.
+  * Merge the JNA management of cassandra and elasticsearch (and disable seccomp).
+  * Correctly delete cassandra secondary indices when removing an elasticsearch index.
+  * Fix potential duplicate result when searching without any _type filter.
+
+2.1.1-10 - 2016-05-11
+  * Fix a bug when setting number_of_replicas on a create index request.
+
+2.1.1-9 - 2016-05-10
+  * Upgrade to cassandra 2.2.5
+  * Change the default elasticsearch data directory to ${cassandra_storagedir}/data/elasticsearch.data.
+  * Provides various cassandra secondary index implementations with better performances by removing json generation and parsing.
+  * Change the default to index=not_analyzed for text columns.
+  * Improve cluster metadata management (fix a bug when deleting an index).
+  * Fix a mapping bug when indexing a cassandra map as a nested document.
+  * Fix issue #16 with geo_point.
+  * Fix issue #17 with float fields.
+
+2.1.1-8 - 2016-04-18
+  * Add mapping attributes cql_partition_key:boolean and cql_primary_key_order:integer to build cassandra table with composite primary key.
+  * Add support for static column with the mapping attribute cql_static_column:boolean. This give the ability to index static columns in Elasticsearch.
+  * Fix various mapping issues.
+
+2.1.1-7 - 2016-04-02
+  * Fix a ClassCastException when indexing a document with single partition key other than a string.
+  * Add support for mapping update of nested object (update cassandra UDT).
+  
+2.1.1-6 - 2016-03-20
+  * Fix an indexing bug (regression from 2.1.1-5)
+  * Disable cassandra timestamp update when Elasticsearch _timestamp is disabled (improve insert performance, regression from 2.1.1-4)
+  * Fix a bug on flush and refresh operations causing a performance issue with kibana.
+  
+2.1.1-5 - 2016-03-15
+  * Add missing classes from org.elasticsearch.common.logging.
+  * Add index setting number_of_replica in cluster state.
+  * Change elastic_admin keyspace replication strategy to 'DatacenterReplicationStrategy' (RF=Datacenter number of nodes to improve resilancy).
+  * Manage token_range in SearchRequest has an optional field to remain compatible with the Elasticsearch binary protocol.
+  * Set Elasticsearch version to 2.1.1 to remain compatible with some plugins.
+  
+2.1.1-4 - 2016-02-21
+  * Throw a DocumentAlreadyExsistsException when op_type=create failed.
+  * Fix a bug on cassandra timestamp when indexing or deleting documents.
+
+2.1.1-3 - 2016-02-21
+  * Add a start script for Linux Debian provided by Chris Feldmeier.
+  * Add sigar binaries in the tarball package.
+  * Fix the build_hash in the cluster information.
+
+2.1.1-2 - 2016-02-16
+  * Elassandra now build as a standalone project.
+  * Add a modified bin/cassandra.in.sh without empty element in CLASSPATH (cause a JarHell error)
+
+2.1.1-1 - 2016-02-03
+  * Add support for parent-child relation-ship
+  * Bug fix when indexing inet type (Internet Address).
+
+2.1.1 - 2016-01-22
+  * Based on Elasticsearch 2.1.1 and Apache Cassandra 2.2.4
+  * Manage the _token field as an internal metadata field. This is the murmur3 hash of the partition key for cassandra row (an Elasticsearch document).
+  * Index settings number_of_shards and number_of_replicas now dynamically reflects the number of nodes in the ES cluster (in the cassandra datacenter) and the replication factor for each index (= keyspace).
+
+0.5 - 2015-12-21
+  * Based on cassandra 2.2.4
+  * Improve mapping and cassandra secondary index management :
+    * to map a keyspace to many Elasticserach indices allowing mapping update with zero-downtime.
+    * to create cassandra secondary indices when all shards are started, thus indexing existing data on all nodes.
+    
+0.4.2 - 2015-11-23
+  * Improve automatic mapping from an existing CQL3 table.
+
+0.4.1 - 2015-11-17
+  * Bug fix when indexing inet type (Internet Address).
+
+0.4 - 2015-11-11 (Based on cassandra-2.1.8 + elasticsearch 1.5.1)
+  * Fix various bugs
+  * New tarball package.
+
+0.3.2 - 2015-11-05 (Based on cassandra-2.1.8 + elasticsearch 1.5.1)
+* Bug fixes
+ * Fix multiget on a multiple nodes cluster (Allow to save kibana configuration on multi-node cluster).
+ * Fix a bug in cluster state management when restarting. 
+ * Fix CASSANDRA-9912
+* New features
+ * Add support for compound cassandra keys. 
+ * Add support for partial CQL update of cassandra collection types.
+ * Enhance Elasticsearch put mapping to automatically build mapping from an existing CQL3 table.
+ * Replace the single_value mapping attribute by cql_collection, cql_struct and cql_partial_update. This allow to map nested document to a User Defined Types or to a cassandra map<text,?>.
+ 
+ 0.2 - 2015-10-07
+* Add support for partial document update
+* Add support for Kibana
+* Fix User Defined Type creation
+* Change cassandra StorageService hooks to start Elasticsearch (Fix commitlogs recover)
+
+0.1 - Initial release

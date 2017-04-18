@@ -14,28 +14,55 @@
     </dependencySets>
     <fileSets>
         <fileSet>
+            <directory>../../core/cassandra/lib</directory>
+            <outputDirectory>lib</outputDirectory>
+            <fileMode>0644</fileMode>
+            <includes>
+                <include>cassandra-driver-core-3.0.1-shaded.jar</include>
+            </includes>
+        </fileSet>
+        
+        <fileSet>
             <directory>${project.build.directory}/modules</directory>
             <outputDirectory>modules</outputDirectory>
         </fileSet>
+        
+        <!-- conf directory -->
         <fileSet>
             <directory>../src/main/resources/config</directory>
-            <outputDirectory>config</outputDirectory>
+            <outputDirectory>conf</outputDirectory>
+            <fileMode>0755</fileMode>
+            <directoryMode>0755</directoryMode>
             <includes>
-                <include>*</include>
+                <include>elasticsearch.yml</include>
             </includes>
         </fileSet>
         <fileSet>
-            <filtered>true</filtered>
-            <directory>../src/main/resources/bin</directory>
-            <outputDirectory>bin</outputDirectory>
-            <lineEnding>dos</lineEnding>
+            <directory>../src/main/resources/conf</directory>
+            <outputDirectory>conf</outputDirectory>
+            <fileMode>0755</fileMode>
+            <directoryMode>0755</directoryMode>
             <includes>
-                <include>elasticsearch.in.bat</include>
-                <include>elasticsearch.bat</include>
-                <include>plugin.bat</include>
-                <include>service.bat</include>
+                <include>cassandra.yaml</include>
+                <include>cassandra-rackdc.properties</include>
+                <include>logback.xml</include>
             </includes>
         </fileSet>
+        <fileSet>
+            <directory>../../core/cassandra/conf</directory>
+            <outputDirectory>/conf</outputDirectory>
+            <fileMode>0755</fileMode>
+            <directoryMode>0755</directoryMode>
+            <lineEnding>unix</lineEnding>
+            <excludes>
+                <exclude>cassandra.yaml</exclude>
+                <exclude>cassandra-rackdc.properties</exclude>
+                <exclude>logback.xml</exclude>
+            </excludes>
+            
+        </fileSet>
+        
+        <!--
         <fileSet>
             <filtered>false</filtered>
             <directory>../src/main/resources/bin</directory>
@@ -44,31 +71,129 @@
                 <include>*.exe</include>
             </includes>
         </fileSet>
+        -->
+        
+        <!-- bin directory -->
         <fileSet>
             <filtered>true</filtered>
             <directory>../src/main/resources/bin</directory>
             <outputDirectory>bin</outputDirectory>
             <fileMode>0755</fileMode>
-            <directoryMode>0755</directoryMode>
             <lineEnding>unix</lineEnding>
             <includes>
-                <include>elasticsearch.in.sh</include>
-                <include>elasticsearch</include>
                 <include>plugin</include>
+                <include>cassandra</include>
+                <include>cassandra.in.sh</include>
+                <include>aliases.sh</include>
             </includes>
         </fileSet>
+        <fileSet>
+            <filtered>true</filtered>
+            <directory>../../core/cassandra/bin</directory>
+            <outputDirectory>/bin</outputDirectory>
+            <fileMode>0755</fileMode>
+            <lineEnding>dos</lineEnding>
+            <includes>
+                <include>cassandra.in.bat</include>
+                <include>nodetool.bat</include>
+                <include>plugin.bat</include>
+                <include>cqlsh.bat</include>
+                <include>debug-cqlsh.bat</include>
+                <include>sstablekeys.bat</include>
+                <include>sstableloader.bat</include>
+                <include>sstablescrub.bat</include>
+                <include>sstableverify.bat</include>
+                <include>stop-server.bat</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <filtered>true</filtered>
+            <directory>../../core/cassandra/bin</directory>
+            <outputDirectory>/bin</outputDirectory>
+            <fileMode>0755</fileMode>
+            <lineEnding>unix</lineEnding>
+            <includes>
+                <include>nodetool</include>
+                <include>cqlsh</include>
+                <include>cqlsh.py</include>
+                <include>debug-cqlsh</include>
+                <include>sstablekeys</include>
+                <include>sstableloader</include>
+                <include>sstablescrub</include>
+                <include>sstableverify</include>
+                <include>stop-server</include>
+            </includes>
+        </fileSet>
+        
+        
+        <fileSet>
+            <directory>../../core/cassandra/pylib</directory>
+            <outputDirectory>pylib</outputDirectory>
+            <fileMode>0755</fileMode>
+            <includes>
+                <include>**/*</include>
+            </includes>
+        </fileSet>
+        
+        <fileSet>
+            <directory>../../core/cassandra/tools</directory>
+            <outputDirectory>tools</outputDirectory>
+            <fileMode>0755</fileMode>
+            <includes>
+                <include>**/*</include>
+            </includes>
+        </fileSet>
+        
+        <fileSet>
+            <directory>../../core/cassandra/lib</directory>
+            <outputDirectory>/lib</outputDirectory>
+            <fileMode>0755</fileMode>
+            <includes>
+                <include>jsr223/*/**</include>
+                <include>licenses/*</include>
+                <include>sigar-bin/*</include>
+                <include>cassandra-driver-core-2.2.0-rc2-SNAPSHOT-20150617-shaded.jar</include>
+            </includes>
+        </fileSet>
+        
+        
+        <fileSet>
+            <directory>.</directory>
+            <outputDirectory>/data</outputDirectory>
+            <excludes><exclude>*/**</exclude></excludes>
+        </fileSet>
+        <fileSet>
+            <directory>.</directory>
+            <outputDirectory>/work</outputDirectory>
+            <excludes><exclude>*/**</exclude></excludes>
+        </fileSet>
+        <fileSet>
+            <directory>.</directory>
+            <outputDirectory>/plugins</outputDirectory>
+            <excludes><exclude>*/**</exclude></excludes>
+        </fileSet>
+        <fileSet>
+            <directory>.</directory>
+            <outputDirectory>/logs</outputDirectory>
+            <excludes><exclude>*/**</exclude></excludes>
+        </fileSet>
+        
     </fileSets>
     <files>
         <file>
-            <source>../src/main/resources/README.textile</source>
+            <source>../../CHANGES.txt</source>
             <outputDirectory></outputDirectory>
         </file>
         <file>
-            <source>../src/main/resources/LICENSE.txt</source>
+            <source>../../README.md</source>
             <outputDirectory></outputDirectory>
         </file>
         <file>
-            <source>../src/main/resources/NOTICE.txt</source>
+            <source>../../LICENSE.txt</source>
+            <outputDirectory></outputDirectory>
+        </file>
+        <file>
+            <source>../../NOTICE.txt</source>
             <outputDirectory></outputDirectory>
         </file>
     </files>

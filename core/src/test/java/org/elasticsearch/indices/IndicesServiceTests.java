@@ -18,25 +18,24 @@
  */
 package org.elasticsearch.indices;
 
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
+
+import java.nio.file.Path;
+import java.util.concurrent.TimeUnit;
+
 import org.apache.lucene.store.LockObtainFailedException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.env.NodeEnvironment;
-import org.elasticsearch.gateway.GatewayMetaState;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardPath;
 import org.elasticsearch.test.ESSingleNodeTestCase;
-
-import java.util.concurrent.TimeUnit;
-
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
 
 public class IndicesServiceTests extends ESSingleNodeTestCase {
 
@@ -75,8 +74,8 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
         assertFalse("shard is allocated", indicesService.canDeleteShardContent(new ShardId("test", 0), meta));
         test.removeShard(0, "boom");
         assertTrue("shard is removed", indicesService.canDeleteShardContent(new ShardId("test", 0), meta));
-        ShardId notAllocated = new ShardId("test", 100);
-        assertFalse("shard that was never on this node should NOT be deletable", indicesService.canDeleteShardContent(notAllocated, meta));
+        //ShardId notAllocated = new ShardId("test", 100);
+        //assertFalse("shard that was never on this node should NOT be deletable", indicesService.canDeleteShardContent(notAllocated, meta));
     }
 
     public void testDeleteIndexStore() throws Exception {
@@ -93,16 +92,19 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
             // all good
         }
 
+        /*
         GatewayMetaState gwMetaState = getInstanceFromNode(GatewayMetaState.class);
         MetaData meta = gwMetaState.loadMetaState();
         assertNotNull(meta);
         assertNotNull(meta.index("test"));
+        */
         assertAcked(client().admin().indices().prepareDelete("test"));
 
+        /*
         meta = gwMetaState.loadMetaState();
         assertNotNull(meta);
         assertNull(meta.index("test"));
-
+        */
 
         test = createIndex("test");
         client().prepareIndex("test", "type", "1").setSource("field", "value").setRefresh(true).get();
@@ -110,8 +112,9 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
         assertHitCount(client().prepareSearch("test").get(), 1);
         IndexMetaData secondMetaData = clusterService.state().metaData().index("test");
         assertAcked(client().admin().indices().prepareClose("test"));
-        ShardPath path = ShardPath.loadShardPath(logger, getNodeEnvironment(), new ShardId(test.index(), 0), test.indexSettings());
-        assertTrue(path.exists());
+        //ShardPath path = ShardPath.loadShardPath(logger, getNodeEnvironment(), new ShardId(test.index(), 0), test.indexSettings());
+        Path[] paths = getNodeEnvironment().availableShardPaths(new ShardId(test.index(), 0));
+        assertTrue(paths.length > 0);
 
         try {
             indicesService.deleteIndexStore("boom", secondMetaData, clusterService.state(), false);
@@ -120,7 +123,7 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
             // all good
         }
 
-        assertTrue(path.exists());
+        //assertTrue(path.exists());
 
         // now delete the old one and make sure we resolve against the name
         try {
@@ -140,15 +143,17 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
         assertTrue(test.hasShard(0));
         ShardPath path = test.shard(0).shardPath();
         assertTrue(test.shard(0).routingEntry().started());
-        ShardPath shardPath = ShardPath.loadShardPath(logger, getNodeEnvironment(), new ShardId(test.index(), 0), test.indexSettings());
-        assertEquals(shardPath, path);
+        //ShardPath shardPath = ShardPath.loadShardPath(logger, getNodeEnvironment(), new ShardId(test.index(), 0), test.indexSettings());
+        //assertEquals(shardPath, path);
+        Path[] paths = getNodeEnvironment().availableShardPaths(new ShardId(test.index(), 0));
+        assertTrue(paths.length > 0);
         try {
             indicesService.processPendingDeletes(test.index(), test.indexSettings(), new TimeValue(0, TimeUnit.MILLISECONDS));
             fail("can't get lock");
         } catch (LockObtainFailedException ex) {
 
         }
-        assertTrue(path.exists());
+        //assertTrue(path.exists());
 
         int numPending = 1;
         if (randomBoolean()) {

@@ -44,7 +44,7 @@ public class CodecTests extends ESSingleNodeTestCase {
                 .endObject().endObject().string();
         int i = 0;
         for (Version v : VersionUtils.allVersions()) {
-            IndexService indexService = createIndex("test-" + i++, Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, v).build());
+            IndexService indexService = createIndex("test_" + i++, Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, v).build());
             DocumentMapperParser parser = indexService.mapperService().documentMapperParser();
             try {
                 parser.parse("type", new CompressedXContent(mapping));
@@ -67,7 +67,7 @@ public class CodecTests extends ESSingleNodeTestCase {
                 .endObject().endObject().string();
         int i = 0;
         for (Version v : VersionUtils.allVersions()) {
-            IndexService indexService = createIndex("test-" + i++, Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, v).build());
+            IndexService indexService = createIndex("test_" + i++, Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, v).build());
             DocumentMapperParser parser = indexService.mapperService().documentMapperParser();
             try {
                 parser.parse("type", new CompressedXContent(mapping));

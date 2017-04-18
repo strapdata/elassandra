@@ -18,6 +18,13 @@
  */
 package org.elasticsearch.search.internal;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
@@ -25,7 +32,6 @@ import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.index.query.ParsedQuery;
 import org.elasticsearch.search.aggregations.SearchContextAggregations;
 import org.elasticsearch.search.fetch.FetchSearchResult;
-import org.elasticsearch.search.fetch.innerhits.InnerHitsContext;
 import org.elasticsearch.search.fetch.script.ScriptFieldsContext;
 import org.elasticsearch.search.fetch.source.FetchSourceContext;
 import org.elasticsearch.search.highlight.SearchContextHighlight;
@@ -33,10 +39,6 @@ import org.elasticsearch.search.lookup.SearchLookup;
 import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.rescore.RescoreSearchContext;
 import org.elasticsearch.search.suggest.SuggestionSearchContext;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 /**
  */
@@ -66,6 +68,8 @@ public class SubSearchContext extends FilteredSearchContext {
     private boolean trackScores;
     private boolean version;
 
+    private boolean includeNode;
+    
     public SubSearchContext(SearchContext context) {
         super(context);
         this.fetchSearchResult = new FetchSearchResult();
@@ -322,6 +326,16 @@ public class SubSearchContext extends FilteredSearchContext {
     @Override
     public Counter timeEstimateCounter() {
         throw new UnsupportedOperationException("Not supported");
+    }
+
+    @Override
+    public boolean includeNode() {
+        return includeNode;
+    }
+    
+    @Override
+    public void    includeNode(boolean includeNode) {
+        this.includeNode = includeNode;
     }
 
 }

@@ -18,9 +18,13 @@
  */
 package org.elasticsearch.cluster.metadata;
 
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
 import org.elasticsearch.Version;
 import org.elasticsearch.action.admin.indices.alias.Alias;
 import org.elasticsearch.action.support.master.MasterNodeRequest;
@@ -44,12 +48,9 @@ import org.elasticsearch.indices.IndexTemplateMissingException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.InvalidIndexTemplateException;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 /**
  * Service responsible for submitting index templates updates
@@ -82,6 +83,11 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
                 listener.onFailure(t);
             }
 
+            @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
             @Override
             public ClusterState execute(ClusterState currentState) {
                 Set<String> templateNames = Sets.newHashSet();
@@ -144,6 +150,11 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
             }
 
             @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
+            @Override
             public void onFailure(String source, Throwable t) {
                 listener.onFailure(t);
             }
@@ -168,7 +179,7 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
 
                 MetaData.Builder builder = MetaData.builder(currentState.metaData()).put(template);
 
-                return ClusterState.builder(currentState).metaData(builder).build();
+                return ClusterState.builder(currentState).metaData(builder).incrementVersion().build();
             }
 
             @Override

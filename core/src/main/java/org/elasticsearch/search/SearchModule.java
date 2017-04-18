@@ -19,9 +19,13 @@
 
 package org.elasticsearch.search;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import org.elassandra.shard.aggregations.bucket.token.InternalTokenRange;
+import org.elassandra.shard.aggregations.bucket.token.TokenRangeParser;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.multibindings.Multibinder;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.query.functionscore.ScoreFunctionParser;
 import org.elasticsearch.index.query.functionscore.ScoreFunctionParserMapper;
 import org.elasticsearch.index.search.morelikethis.MoreLikeThisFetchService;
@@ -66,7 +70,6 @@ import org.elasticsearch.search.aggregations.bucket.significant.SignificantTerms
 import org.elasticsearch.search.aggregations.bucket.significant.UnmappedSignificantTerms;
 import org.elasticsearch.search.aggregations.bucket.significant.heuristics.SignificanceHeuristicParser;
 import org.elasticsearch.search.aggregations.bucket.significant.heuristics.SignificanceHeuristicParserMapper;
-import org.elasticsearch.search.aggregations.bucket.significant.heuristics.SignificanceHeuristicStreams;
 import org.elasticsearch.search.aggregations.bucket.terms.DoubleTerms;
 import org.elasticsearch.search.aggregations.bucket.terms.LongTerms;
 import org.elasticsearch.search.aggregations.bucket.terms.StringTerms;
@@ -132,7 +135,6 @@ import org.elasticsearch.search.aggregations.pipeline.movavg.MovAvgParser;
 import org.elasticsearch.search.aggregations.pipeline.movavg.MovAvgPipelineAggregator;
 import org.elasticsearch.search.aggregations.pipeline.movavg.models.MovAvgModel;
 import org.elasticsearch.search.aggregations.pipeline.movavg.models.MovAvgModelParserMapper;
-import org.elasticsearch.search.aggregations.pipeline.movavg.models.MovAvgModelStreams;
 import org.elasticsearch.search.aggregations.pipeline.serialdiff.SerialDiffParser;
 import org.elasticsearch.search.aggregations.pipeline.serialdiff.SerialDiffPipelineAggregator;
 import org.elasticsearch.search.controller.SearchPhaseController;
@@ -152,8 +154,6 @@ import org.elasticsearch.search.highlight.Highlighters;
 import org.elasticsearch.search.query.QueryPhase;
 import org.elasticsearch.search.suggest.Suggester;
 import org.elasticsearch.search.suggest.Suggesters;
-
-import java.util.*;
 
 /**
  *
@@ -272,6 +272,7 @@ public class SearchModule extends AbstractModule {
         multibinderAggParser.addBinding().to(RangeParser.class);
         multibinderAggParser.addBinding().to(DateRangeParser.class);
         multibinderAggParser.addBinding().to(IpRangeParser.class);
+        multibinderAggParser.addBinding().to(TokenRangeParser.class);
         multibinderAggParser.addBinding().to(HistogramParser.class);
         multibinderAggParser.addBinding().to(DateHistogramParser.class);
         multibinderAggParser.addBinding().to(GeoDistanceParser.class);
@@ -371,6 +372,7 @@ public class SearchModule extends AbstractModule {
         UnmappedTerms.registerStreams();
         InternalRange.registerStream();
         InternalDateRange.registerStream();
+        InternalTokenRange.registerStream();
         InternalIPv4Range.registerStream();
         InternalHistogram.registerStream();
         InternalGeoDistance.registerStream();

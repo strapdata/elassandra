@@ -29,6 +29,7 @@ import org.apache.lucene.store.AlreadyClosedException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchType;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
@@ -138,8 +139,8 @@ public class SearchServiceTests extends ESSingleNodeTestCase {
             for (int i = 0; i < rounds; i++) {
                 try {
                     QuerySearchResultProvider querySearchResultProvider = service.executeQueryPhase(
-                        new ShardSearchLocalRequest(indexShard.shardId(), 1, SearchType.DEFAULT,
-                            new BytesArray(""), new String[0], false));
+                        new ShardSearchLocalRequest(indexShard.shardId(), indexShard.routingEntry(), 1, SearchType.DEFAULT,
+                            new BytesArray(""), new String[0], false, false));
                     contextId.set(querySearchResultProvider.id());
                     IntArrayList intCursors = new IntArrayList(1);
                     intCursors.add(0);

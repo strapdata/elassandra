@@ -19,6 +19,14 @@
 
 package org.elasticsearch.action.support.replication;
 
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
@@ -32,7 +40,6 @@ import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -40,7 +47,10 @@ import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.routing.*;
+import org.elasticsearch.cluster.routing.IndexRoutingTable;
+import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
+import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -61,15 +71,16 @@ import org.elasticsearch.node.NodeClosedException;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.transport.*;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
+import org.elasticsearch.transport.BaseTransportResponseHandler;
+import org.elasticsearch.transport.ConnectTransportException;
+import org.elasticsearch.transport.EmptyTransportResponseHandler;
+import org.elasticsearch.transport.TransportChannel;
+import org.elasticsearch.transport.TransportChannelResponseHandler;
+import org.elasticsearch.transport.TransportException;
+import org.elasticsearch.transport.TransportRequestHandler;
+import org.elasticsearch.transport.TransportRequestOptions;
+import org.elasticsearch.transport.TransportResponse;
+import org.elasticsearch.transport.TransportService;
 
 /**
  * Base class for requests that should be executed on a primary copy followed by replica copies.
@@ -84,7 +95,7 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
     protected final TransportService transportService;
     protected final ClusterService clusterService;
     protected final IndicesService indicesService;
-    protected final ShardStateAction shardStateAction;
+    //protected final ShardStateAction shardStateAction;
     protected final WriteConsistencyLevel defaultWriteConsistencyLevel;
     protected final TransportRequestOptions transportOptions;
     protected final MappingUpdatedAction mappingUpdatedAction;
@@ -96,7 +107,7 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
 
     protected TransportReplicationAction(Settings settings, String actionName, TransportService transportService,
                                          ClusterService clusterService, IndicesService indicesService,
-                                         ThreadPool threadPool, ShardStateAction shardStateAction,
+                                         ThreadPool threadPool,
                                          MappingUpdatedAction mappingUpdatedAction, ActionFilters actionFilters,
                                          IndexNameExpressionResolver indexNameExpressionResolver, Class<Request> request,
                                          Class<ReplicaRequest> replicaRequest, String executor) {
@@ -104,7 +115,7 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
         this.transportService = transportService;
         this.clusterService = clusterService;
         this.indicesService = indicesService;
-        this.shardStateAction = shardStateAction;
+        //this.shardStateAction = shardStateAction;
         this.mappingUpdatedAction = mappingUpdatedAction;
 
         this.transportPrimaryAction = actionName + "[p]";
@@ -114,7 +125,7 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
         transportService.registerRequestHandler(actionName, request, ThreadPool.Names.SAME, new OperationTransportHandler());
         transportService.registerRequestHandler(transportPrimaryAction, request, executor, new PrimaryOperationTransportHandler());
         // we must never reject on because of thread pool capacity on replicas
-        transportService.registerRequestHandler(transportReplicaAction, replicaRequest, executor, true, true, new ReplicaOperationTransportHandler());
+        //transportService.registerRequestHandler(transportReplicaAction, replicaRequest, executor, true, true, new ReplicaOperationTransportHandler());
 
         this.transportOptions = transportOptions();
 
@@ -151,7 +162,9 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
     /**
      * Replica operation on nodes with replica copies
      */
-    protected abstract void shardOperationOnReplica(ReplicaRequest shardRequest);
+    protected void shardOperationOnReplica(ReplicaRequest shardRequest) {
+         // nothing to replicate with elassandra
+    }
 
     /**
      * True if write consistency should be checked for an implementation
@@ -465,7 +478,7 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
             }
             // request does not have a shardId yet, we need to pass the concrete index to resolve shardId
             resolveRequest(state.metaData(), concreteIndex, request);
-            assert request.shardId() != null : "request shardId must be set in resolveRequest";
+            //assert request.shardId() != null : "request shardId must be set in resolveRequest";
 
             IndexShardRoutingTable indexShard = state.getRoutingTable().shardRoutingTable(request.shardId().getIndex(), request.shardId().id());
             final ShardRouting primary = indexShard.primaryShard();
@@ -488,6 +501,7 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
                 }
                 performAction(node, transportPrimaryAction, true);
             } else {
+                /*
                 if (state.version() < request.routedBasedOnClusterVersion()) {
                     logger.trace("failed to find primary [{}] for request [{}] despite sender thinking it would be here. Local cluster state version [{}]] is older than on sending node (version [{}]), scheduling a retry...", request.shardId(), request, state.version(), request.routedBasedOnClusterVersion());
                     retryBecauseUnavailable(request.shardId(), "failed to find primary as current cluster state with version [" + state.version() + "] is stale (expected at least [" + request.routedBasedOnClusterVersion() + "]");
@@ -497,9 +511,8 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
                     // this prevents redirect loops between two nodes when a primary was relocated and the relocation target is not aware that it is the active primary shard already.
                     request.routedBasedOnClusterVersion(state.version());
                 }
-                if (logger.isTraceEnabled()) {
-                    logger.trace("send action [{}] on primary [{}] for request [{}] with cluster state version [{}] to [{}]", actionName, request.shardId(), request, state.version(), primary.currentNodeId());
-                }
+                */
+                request.routedBasedOnClusterVersion(state.version());
                 setPhase(task, "rerouted");
                 performAction(node, actionName, false);
             }
@@ -515,6 +528,7 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
         }
 
         private void performAction(final DiscoveryNode node, final String action, final boolean isPrimaryAction) {
+            request.setShardId(new ShardId(request.shardId().getIndex(), 0));
             transportService.sendRequest(node, action, request, transportOptions, new BaseTransportResponseHandler<Response>() {
 
                 @Override
@@ -658,8 +672,7 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
                 if (logger.isTraceEnabled()) {
                     logger.trace("action [{}] completed on shard [{}] for request [{}] with cluster state version [{}]", transportPrimaryAction, shardId, request, state.version());
                 }
-                replicationPhase = new ReplicationPhase(task, primaryResponse.v2(), primaryResponse.v1(), shardId, channel,
-                    indexShardReference);
+                replicationPhase = new ReplicationPhase(task, primaryResponse.v2(), primaryResponse.v1(), shardId, channel, indexShardReference);
             } catch (Throwable e) {
                 request.setCanHaveDuplicates();
                 if (ExceptionsHelper.status(e) == RestStatus.CONFLICT) {
@@ -915,6 +928,7 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
         void performOnReplica(final ShardRouting shard) {
             // if we don't have that node, it means that it might have failed and will be created again, in
             // this case, we don't have to do the operation, and just let it failover
+            /*
             final String nodeId = shard.currentNodeId();
             if (!nodes.nodeExists(nodeId)) {
                 logger.trace("failed to send action [{}] on replica [{}] for request [{}] due to unknown node [{}]", transportReplicaAction, shard.shardId(), replicaRequest, nodeId);
@@ -939,11 +953,12 @@ public abstract class TransportReplicationAction<Request extends ReplicationRequ
                         if (mustFailReplica(exp)) {
                             assert ignoreReplicaException(exp) == false;
                             logger.warn("{} failed to perform {} on node {}", exp, shardId, transportReplicaAction, node);
-                            shardStateAction.shardFailed(shard, indexUUID, "failed to perform " + actionName + " on replica on node " + node, exp);
+                            //shardStateAction.shardFailed(shard, indexUUID, "failed to perform " + actionName + " on replica on node " + node, exp);
                         }
                     }
                 }
             );
+            */
         }
 
 

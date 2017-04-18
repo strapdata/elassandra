@@ -18,11 +18,14 @@
  */
 package org.elasticsearch.search.fetch.version;
 
-import com.google.common.collect.ImmutableMap;
+import java.io.IOException;
+import java.util.Map;
+
 import org.apache.lucene.index.Term;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.lucene.uid.Versions;
+import org.elasticsearch.index.engine.VersionLessInternalEngine;
 import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.search.SearchParseElement;
@@ -30,8 +33,7 @@ import org.elasticsearch.search.fetch.FetchSubPhase;
 import org.elasticsearch.search.internal.InternalSearchHit;
 import org.elasticsearch.search.internal.SearchContext;
 
-import java.io.IOException;
-import java.util.Map;
+import com.google.common.collect.ImmutableMap;
 
 /**
  *
@@ -63,16 +65,20 @@ public class VersionFetchSubPhase implements FetchSubPhase {
         // it is going to mean we work on the high level multi reader and not the lower level reader as is
         // the case below...
         long version;
-        try {
-            BytesRef uid = Uid.createUidAsBytes(hitContext.hit().type(), hitContext.hit().id());
-            version = Versions.loadVersion(
-                    hitContext.readerContext().reader(),
-                    new Term(UidFieldMapper.NAME, uid)
-            );
-        } catch (IOException e) {
-            throw new ElasticsearchException("Could not query index for _version", e);
+        if (context.indexShard().engine() instanceof VersionLessInternalEngine) {
+            version = 1;
+        } else {
+            try {
+                BytesRef uid = Uid.createUidAsBytes(hitContext.hit().type(), hitContext.hit().id());
+                version = Versions.loadVersion(
+                        hitContext.readerContext().reader(),
+                        new Term(UidFieldMapper.NAME, uid)
+                );
+            } catch (IOException e) {
+                throw new ElasticsearchException("Could not query index for _version", e);
+            }
         }
-
+        
         if (version < 0) {
             version = -1;
         }

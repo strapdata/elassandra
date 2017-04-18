@@ -69,6 +69,20 @@ public abstract class MetadataFieldMapper extends FieldMapper {
      * Called after {@link FieldMapper#parse(ParseContext)} on the {@link RootObjectMapper}.
      */
     public abstract void postParse(ParseContext context) throws IOException;
+    
+    
+    /**
+     * Called before {@link FieldMapper#createField(ParseContext, value)} on the {@link RootObjectMapper}.
+     */
+    public void preCreate(ParseContext context) throws IOException {
+    }
+    
+    
+    /**
+     * Called after {@link FieldMapper#parse(ParseContext)} on the {@link RootObjectMapper}.
+     */
+    public void postCreate(ParseContext context) throws IOException {
+    }
 
     @Override
     public MetadataFieldMapper merge(Mapper mergeWith, boolean updateAllTypes) {

@@ -25,7 +25,6 @@ import org.elasticsearch.action.support.replication.ReplicationRequest;
 import org.elasticsearch.action.support.replication.TransportReplicationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MetaData;
@@ -33,7 +32,6 @@ import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.shard.IndexShard;
-import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -47,10 +45,10 @@ public class TransportShardRefreshAction extends TransportReplicationAction<Repl
 
     @Inject
     public TransportShardRefreshAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                       IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                       IndicesService indicesService, ThreadPool threadPool,
                                        MappingUpdatedAction mappingUpdatedAction, ActionFilters actionFilters,
                                        IndexNameExpressionResolver indexNameExpressionResolver) {
-        super(settings, NAME, transportService, clusterService, indicesService, threadPool, shardStateAction, mappingUpdatedAction,
+        super(settings, NAME, transportService, clusterService, indicesService, threadPool, mappingUpdatedAction,
                 actionFilters, indexNameExpressionResolver, ReplicationRequest.class, ReplicationRequest.class, ThreadPool.Names.REFRESH);
     }
 

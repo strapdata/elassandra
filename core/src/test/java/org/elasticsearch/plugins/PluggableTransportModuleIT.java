@@ -23,7 +23,6 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.discovery.DiscoveryModule;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.transport.AssertingLocalTransport;
@@ -52,7 +51,7 @@ public class PluggableTransportModuleIT extends ESIntegTestCase {
     protected Settings nodeSettings(int nodeOrdinal) {
         return settingsBuilder()
                 .put(super.nodeSettings(nodeOrdinal))
-                .put(DiscoveryModule.DISCOVERY_TYPE_KEY, "local")
+                //.put(DiscoveryModule.DISCOVERY_TYPE_KEY, "local")
                 .build();
     }
 

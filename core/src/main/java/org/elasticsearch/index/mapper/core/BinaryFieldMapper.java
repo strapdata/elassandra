@@ -19,7 +19,15 @@
 
 package org.elasticsearch.index.mapper.core;
 
-import com.carrotsearch.hppc.ObjectArrayList;
+import static org.elasticsearch.index.mapper.MapperBuilders.binaryField;
+import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
@@ -33,7 +41,6 @@ import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressorFactory;
-import org.elasticsearch.common.compress.NotXContentException;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -43,14 +50,7 @@ import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.ParseContext;
 
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.elasticsearch.index.mapper.MapperBuilders.binaryField;
-import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
+import com.carrotsearch.hppc.ObjectArrayList;
 
 /**
  *
@@ -167,6 +167,9 @@ public class BinaryFieldMapper extends FieldMapper {
                 bytes = (BytesReference) value;
             } else if (value instanceof byte[]) {
                 bytes = new BytesArray((byte[]) value);
+            } else if (value instanceof ByteBuffer) {
+                ByteBuffer bb = (ByteBuffer)value;
+                bytes = new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
             } else {
                 try {
                     bytes = new BytesArray(Base64.decode(value.toString()));
@@ -176,12 +179,7 @@ public class BinaryFieldMapper extends FieldMapper {
             }
             try {
                 if (tryUncompressing) { // backcompat behavior
-                    try {
-                        return CompressorFactory.uncompressIfNeeded(bytes);
-                    } catch (NotXContentException e) {
-                        // OK: we are an arbitrary binary field, not xcontent
-                        return bytes;
-                    }
+                    return CompressorFactory.uncompressIfNeeded(bytes);
                 } else {
                     return bytes;
                 }
@@ -201,6 +199,32 @@ public class BinaryFieldMapper extends FieldMapper {
         super(simpleName, fieldType, defaultFieldType, indexSettings, multiFields, copyTo);
     }
 
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        if (!fieldType().stored() && !fieldType().hasDocValues()) {
+            return;
+        }
+        byte[] value = (byte[])object;
+        if (value == null) {
+            return;
+        }
+        
+        if (fieldType().stored()) {
+            context.doc().add(new Field(fieldType().names().indexName(), value, fieldType()));
+        }
+
+        if (fieldType().hasDocValues()) {
+            CustomBinaryDocValuesField field = (CustomBinaryDocValuesField) context.doc().getByKey(fieldType().names().indexName());
+            if (field == null) {
+                field = new CustomBinaryDocValuesField(fieldType().names().indexName(), value);
+                context.doc().addWithKey(fieldType().names().indexName(), field);
+            } else {
+                field.add(value);
+            }
+        }
+        super.createField(context,value);
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (!fieldType().stored() && !fieldType().hasDocValues()) {

@@ -19,6 +19,11 @@
 
 package org.elasticsearch.action.search;
 
+import java.util.Collection;
+import java.util.Map;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionRequestBuilder;
 import org.elasticsearch.action.support.IndicesOptions;
@@ -41,8 +46,6 @@ import org.elasticsearch.search.rescore.RescoreBuilder;
 import org.elasticsearch.search.sort.SortBuilder;
 import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.search.suggest.SuggestBuilder;
-
-import java.util.Map;
 
 /**
  * A search action request builder.
@@ -130,6 +133,11 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
         return this;
     }
 
+    public SearchRequestBuilder setTokenRanges(Collection<Range<Token>> tokenRanges) {
+        request.tokenRanges(tokenRanges);
+        return this;
+    }
+    
     /**
      * An optional document count, upon collecting which the search
      * query will early terminate

@@ -4,12 +4,11 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.elasticsearch</groupId>
+        <groupId>com.strapdata.elasticsearch</groupId>
         <artifactId>parent</artifactId>
         <version>2.4.5-SNAPSHOT</version>
     </parent>
 
-    <groupId>org.elasticsearch</groupId>
     <artifactId>elasticsearch</artifactId>
 
     <name>Elasticsearch: Core</name>
@@ -163,6 +162,7 @@
             <artifactId>commons-cli</artifactId>
         </dependency>
 
+
         <dependency>
             <groupId>log4j</groupId>
             <artifactId>log4j</artifactId>
@@ -195,7 +195,12 @@
         <dependency>
             <groupId>com.twitter</groupId>
             <artifactId>jsr166e</artifactId>
-            <version>1.1.0</version>
+        </dependency>
+        
+        <dependency>
+         <groupId>com.strapdata.cassandra</groupId>
+          <artifactId>cassandra-all</artifactId>
+          <version>3.0.10-SNAPSHOT</version>
         </dependency>
 
     </dependencies>
@@ -212,6 +217,13 @@
             </resource>
             <resource>
                 <directory>${project.basedir}/src/main/resources</directory>
+                <includes>
+                    <include>**/*.*</include>
+                    <include>META-INF/*</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>${project.basedir}/cassandra/src/resources</directory>
                 <includes>
                     <include>**/*.*</include>
                 </includes>
@@ -263,6 +275,7 @@
                                 <exclude>org/elasticsearch/test/rest/test/**/*</exclude>
                                 <!-- unit tests for test framework classes-->
                                 <exclude>org/elasticsearch/test/test/**/*</exclude>
+                                <exclude>org/apache/cassandra/**/*</exclude>
                             </excludes>
                         </configuration>
                     </execution>

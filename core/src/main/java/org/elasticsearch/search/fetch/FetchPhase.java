@@ -19,7 +19,28 @@
 
 package org.elasticsearch.search.fetch;
 
-import com.google.common.collect.ImmutableMap;
+import static org.elasticsearch.common.xcontent.XContentFactory.contentBuilder;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.Set;
+
+import org.apache.cassandra.cql3.QueryOptions;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.cql3.statements.ParsedStatement;
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.service.QueryState;
+import org.apache.cassandra.transport.messages.ResultMessage;
+import org.apache.cassandra.utils.Pair;
+import org.apache.log4j.Logger;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.ReaderUtil;
 import org.apache.lucene.search.DocIdSetIterator;
@@ -27,13 +48,17 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.BitSet;
+import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elassandra.index.mapper.internal.NodeFieldMapper;
 import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterService.DocPrimaryKey;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.common.regex.Regex;
-import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentType;
@@ -41,8 +66,10 @@ import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.index.fieldvisitor.AllFieldsVisitor;
 import org.elasticsearch.index.fieldvisitor.CustomFieldsVisitor;
 import org.elasticsearch.index.fieldvisitor.FieldsVisitor;
+import org.elasticsearch.index.fieldvisitor.JustUidFieldsVisitor;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MappedFieldType;
+import org.elasticsearch.index.mapper.internal.IdFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.search.SearchHit;
@@ -57,16 +84,7 @@ import org.elasticsearch.search.internal.InternalSearchHits;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.lookup.SourceLookup;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import static org.elasticsearch.common.xcontent.XContentFactory.contentBuilder;
+import com.google.common.collect.ImmutableMap;
 
 /**
  *
@@ -74,12 +92,14 @@ import static org.elasticsearch.common.xcontent.XContentFactory.contentBuilder;
 public class FetchPhase implements SearchPhase {
 
     private final FetchSubPhase[] fetchSubPhases;
-
+    private final ClusterService clusterService;
+    
     @Inject
-    public FetchPhase(Set<FetchSubPhase> fetchSubPhases, InnerHitsFetchSubPhase innerHitsFetchSubPhase) {
+    public FetchPhase(Set<FetchSubPhase> fetchSubPhases, InnerHitsFetchSubPhase innerHitsFetchSubPhase, ClusterService clusterService) {
         innerHitsFetchSubPhase.setFetchPhase(this);
         this.fetchSubPhases = fetchSubPhases.toArray(new FetchSubPhase[fetchSubPhases.size() + 1]);
         this.fetchSubPhases[fetchSubPhases.size()] = innerHitsFetchSubPhase;
+        this.clusterService = clusterService;
     }
 
     @Override
@@ -138,16 +158,11 @@ public class FetchPhase implements SearchPhase {
                     if (context.getObjectMapper(fieldName) != null) {
                         throw new IllegalArgumentException("field [" + fieldName + "] isn't a leaf field");
                     }
-                } else if (fieldType.stored()) {
+                } else {
                     if (fieldNames == null) {
                         fieldNames = new HashSet<>();
                     }
                     fieldNames.add(fieldType.names().indexName());
-                } else {
-                    if (extractFieldNames == null) {
-                        extractFieldNames = new ArrayList<>();
-                    }
-                    extractFieldNames.add(fieldName);
                 }
             }
             if (loadAllStored) {
@@ -413,6 +428,74 @@ public class FetchPhase implements SearchPhase {
             readerContext.reader().document(docId, fieldVisitor);
         } catch (IOException e) {
             throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + docId + "]", e);
+        }
+        
+        // load field from cassandra
+        if (!(fieldVisitor instanceof JustUidFieldsVisitor) ) {
+            try {
+                DocPrimaryKey docPk = clusterService.parseElasticId(searchContext.request().index(), fieldVisitor.uid().type(), fieldVisitor.uid().id());
+                String typeKey = fieldVisitor.uid().type();
+                if (docPk.isStaticDocument) 
+                    typeKey += "_static";
+                
+                NavigableSet<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
+                Pair<String, Set<String>> statementKey = Pair.<String, Set<String>>create(typeKey,requiredColumns);
+                ParsedStatement.Prepared cqlStatement = searchContext.indexShard().getCqlPreparedStatement( statementKey );
+                if (cqlStatement == null) {
+                    if (requiredColumns.size() > 0) {
+                        IndexMetaData indexMetaData = clusterService.state().metaData().index(searchContext.request().index());
+                        if (requiredColumns.contains(NodeFieldMapper.NAME)) {
+                            searchContext.includeNode(indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE_ID, clusterService.settings().getAsBoolean(InternalCassandraClusterService.SETTING_CLUSTER_INCLUDE_NODE_ID, false)));
+                            requiredColumns.remove(NodeFieldMapper.NAME);
+                        }
+                        DocumentMapper docMapper = searchContext.mapperService().documentMapper(fieldVisitor.uid().type());
+                        if (fieldVisitor.loadSource() && docMapper.sourceMapper().enabled()) {
+                            requiredColumns.add(SourceFieldMapper.NAME);
+                        }
+                        if (requiredColumns.size() > 0) {
+                            String query = clusterService.buildFetchQuery(
+                                    indexMetaData.keyspace(), searchContext.request().index(), fieldVisitor.uid().type(),
+                                    requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument, docMapper.getColumnDefinitions());
+                            cqlStatement = QueryProcessor.prepareInternal(query);
+                            searchContext.indexShard().putCqlPreparedStatement(statementKey, cqlStatement);
+                        }
+                    }
+                }
+                
+                if (cqlStatement != null) {
+                    ResultMessage result = cqlStatement.statement.executeInternal(new QueryState(ClientState.forInternalCalls()), QueryOptions.forInternalCalls(ConsistencyLevel.ONE, docPk.serialize(cqlStatement)));
+                    if (result instanceof ResultMessage.Rows) {
+                        UntypedResultSet rs = UntypedResultSet.create(((ResultMessage.Rows)result).result);
+                        if (!rs.isEmpty()) {
+                            Map<String, Object> mapObject = clusterService.rowAsMap(searchContext.request().index(), fieldVisitor.uid().type(), rs.one());
+                            if (searchContext.includeNode()) {
+                                mapObject.put(NodeFieldMapper.NAME, clusterService.state().nodes().localNodeId());
+                            }
+                            if (fieldVisitor.requestedFields() != null && fieldVisitor.requestedFields().size() > 0) {
+                                Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
+                                clusterService.flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);
+                                for (String field :  fieldVisitor.requestedFields()) {
+                                    if (flatMap.get(field) != null && field != IdFieldMapper.NAME) 
+                                        fieldVisitor.setValues(field, flatMap.get(field));
+                                }
+                            }
+                            if (fieldVisitor.loadSource()) {
+                                fieldVisitor.source( clusterService.source(searchContext.mapperService().documentMapper(fieldVisitor.uid().type()), mapObject, searchContext.request().index(), fieldVisitor.uid()) );
+                            }
+                        }
+                    }
+                } else {
+                    // when only requesting for field _node
+                    if (searchContext.includeNode()) {
+                        List<Object> values = new ArrayList<Object>(1);
+                        values.add(clusterService.state().nodes().localNodeId());
+                        fieldVisitor.setValues(NodeFieldMapper.NAME, values);
+                    }
+                }
+            } catch (Exception e) {
+                Logger.getLogger(FetchPhase.class).error("Fetch failed id=" + fieldVisitor.uid().id(), e);
+                throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + fieldVisitor.uid().id() + "] from cassandra", e);
+            }
         }
     }
 }

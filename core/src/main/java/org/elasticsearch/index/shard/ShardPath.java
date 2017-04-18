@@ -36,6 +36,7 @@ import java.util.Map;
 public final class ShardPath {
     public static final String INDEX_FOLDER_NAME = "index";
     public static final String TRANSLOG_FOLDER_NAME = "translog";
+    public static final String SNAPSHOT_FOLDER_NAME = "snapshots";
 
     private final Path path;
     private final String indexUUID;
@@ -60,6 +61,12 @@ public final class ShardPath {
 
     public Path resolveTranslog() {
         return path.resolve(TRANSLOG_FOLDER_NAME);
+    }
+    
+    // default index path    = data/elasticsearch.data/<cluster_name>/nodes/0/indices/<index_name>/0
+    // default snapshot path = data/elasticsearch.data/<cluster_name>/nodes/0/snapshots/<index_name>
+    public Path resolveSnapshot() {
+        return path.getParent().getParent().resolveSibling(SNAPSHOT_FOLDER_NAME);
     }
 
     public Path resolveIndex() {

@@ -20,11 +20,7 @@
 package org.elasticsearch.gateway;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
-import org.elasticsearch.cluster.ClusterChangedEvent;
-import org.elasticsearch.cluster.ClusterService;
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateListener;
-import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.*;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
@@ -38,7 +34,6 @@ import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -106,7 +101,32 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
 
     @Override
     protected void doStart() {
-        clusterService.addLast(this);
+        //clusterService.addLast(this);
+        checkStateMeetsSettingsAndMaybeRecover(clusterService.state());
+        
+        // check we didn't miss any cluster state that came in until now / during the addition
+        /*
+        clusterService.submitStateUpdateTask("gateway_initial_state_recovery", new ClusterStateUpdateTask() {
+
+            @Override
+            public ClusterState execute(ClusterState currentState) throws Exception {
+                checkStateMeetsSettingsAndMaybeRecover(currentState);
+                return currentState;
+            }
+
+            @Override
+            public boolean runOnlyOnMaster() {
+                // It's OK to run on non masters as checkStateMeetsSettingsAndMaybeRecover checks for this
+                // we return false to avoid unneeded failure logs
+                return false;
+            }
+
+            @Override
+            public void onFailure(String source, Throwable t) {
+                logger.warn("unexpected failure while checking if state can be recovered. another attempt will be made with the next cluster state change", t);
+            }
+        });
+        */
     }
 
     @Override
@@ -123,9 +143,10 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
         if (lifecycle.stoppedOrClosed()) {
             return;
         }
+        checkStateMeetsSettingsAndMaybeRecover(event.state());
+    }
 
-        final ClusterState state = event.state();
-
+    protected void checkStateMeetsSettingsAndMaybeRecover(ClusterState state) {
         if (state.nodes().localNodeMaster() == false) {
             // not our job to recover
             return;
@@ -188,17 +209,9 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
             }
         } else {
             if (recovered.compareAndSet(false, true)) {
-                threadPool.generic().execute(new AbstractRunnable() {
+                threadPool.generic().execute(new Runnable() {
                     @Override
-                    public void onFailure(Throwable t) {
-                        logger.warn("Recovery failed", t);
-                        // we reset `recovered` in the listener don't reset it here otherwise there might be a race
-                        // that resets it to false while a new recover is already running?
-                        recoveryListener.onFailure("state recovery failed: " + t.getMessage());
-                    }
-
-                    @Override
-                    protected void doRun() throws Exception {
+                    public void run() {
                         gateway.performStateRecovery(recoveryListener);
                     }
                 });
@@ -242,7 +255,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
                             .build();
 
                     // initialize all index routing tables as empty
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(updatedState.routingTable());
+                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(GatewayService.this.clusterService, updatedState);
                     for (ObjectCursor<IndexMetaData> cursor : updatedState.metaData().indices().values()) {
                         routingTableBuilder.addAsRecovery(cursor.value);
                     }
@@ -250,9 +263,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
                     routingTableBuilder.version(0);
 
                     // now, reroute
-                    RoutingAllocation.Result routingResult = allocationService.reroute(
-                            ClusterState.builder(updatedState).routingTable(routingTableBuilder.build()).build(),
-                            "state recovered");
+                    RoutingAllocation.Result routingResult = allocationService.reroute(ClusterState.builder(updatedState).routingTable(routingTableBuilder).build(), "successfull gateway recovery");
 
                     return ClusterState.builder(updatedState).routingResult(routingResult).build();
                 }

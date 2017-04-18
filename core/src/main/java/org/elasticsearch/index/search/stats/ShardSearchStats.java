@@ -35,10 +35,10 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ShardSearchStats {
 
-    private final SearchSlowLog slowLogSearchService;
-    private final StatsHolder totalStats = new StatsHolder();
-    private final CounterMetric openContexts = new CounterMetric();
-    private volatile Map<String, StatsHolder> groupsStats = ImmutableMap.of();
+    public final SearchSlowLog slowLogSearchService;
+    public final StatsHolder totalStats = new StatsHolder();
+    public final CounterMetric openContexts = new CounterMetric();
+    public volatile Map<String, StatsHolder> groupsStats = ImmutableMap.of();
 
     public ShardSearchStats(Settings indexSettings) {
         this.slowLogSearchService = new SearchSlowLog(indexSettings);
@@ -147,7 +147,7 @@ public final class ShardSearchStats {
         }
     }
 
-    private StatsHolder groupStats(String group) {
+    public StatsHolder groupStats(String group) {
         StatsHolder stats = groupsStats.get(group);
         if (stats == null) {
             synchronized (this) {
@@ -182,7 +182,7 @@ public final class ShardSearchStats {
         slowLogSearchService.onRefreshSettings(settings);
     }
 
-    final static class StatsHolder {
+    public static class StatsHolder {
         public final MeanMetric queryMetric = new MeanMetric();
         public final MeanMetric fetchMetric = new MeanMetric();
         public final MeanMetric scrollMetric = new MeanMetric();
@@ -207,5 +207,7 @@ public final class ShardSearchStats {
             fetchMetric.clear();
             scrollMetric.clear();
         }
+        
+        
     }
 }

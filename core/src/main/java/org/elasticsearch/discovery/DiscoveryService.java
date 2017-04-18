@@ -19,19 +19,26 @@
 
 package org.elasticsearch.discovery;
 
-import org.elasticsearch.ElasticsearchTimeoutException;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
+
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
-
-import java.util.Random;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 /**
  *
@@ -41,29 +48,8 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
     public static final String SETTING_INITIAL_STATE_TIMEOUT = "discovery.initial_state_timeout";
     public static final String SETTING_DISCOVERY_SEED = "discovery.id.seed";
 
-
-    private static class InitialStateListener implements InitialStateDiscoveryListener {
-
-        private final CountDownLatch latch = new CountDownLatch(1);
-        private volatile boolean initialStateReceived;
-
-        @Override
-        public void initialStateProcessed() {
-            initialStateReceived = true;
-            latch.countDown();
-        }
-
-        public boolean waitForInitialState(TimeValue timeValue) throws InterruptedException {
-            if (timeValue.millis() > 0) {
-                latch.await(timeValue.millis(), TimeUnit.MILLISECONDS);
-            }
-            return initialStateReceived;
-        }
-    }
-
     private final TimeValue initialStateTimeout;
     private final Discovery discovery;
-    private InitialStateListener initialStateListener;
     private final DiscoverySettings discoverySettings;
 
     @Inject
@@ -80,29 +66,14 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
 
     @Override
     protected void doStart() {
-        initialStateListener = new InitialStateListener();
-        discovery.addListener(initialStateListener);
+        //initialStateListener = new InitialStateListener();
+        //discovery.addListener(initialStateListener);
         discovery.start();
         logger.info(discovery.nodeDescription());
     }
-
-    public void joinClusterAndWaitForInitialState() {
-        try {
-            discovery.startInitialJoin();
-            if (!initialStateListener.waitForInitialState(initialStateTimeout)) {
-                logger.warn("waited for {} and no initial state was set by the discovery", initialStateTimeout);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new ElasticsearchTimeoutException("Interrupted while waiting for initial discovery state");
-        }
-    }
-
+    
     @Override
     protected void doStop() {
-        if (initialStateListener != null) {
-            discovery.removeListener(initialStateListener);
-        }
         discovery.stop();
     }
 
@@ -118,25 +89,58 @@ public class DiscoveryService extends AbstractLifecycleComponent<DiscoveryServic
     public String nodeDescription() {
         return discovery.nodeDescription();
     }
-
-    /**
-     * Publish all the changes to the cluster from the master (can be called just by the master). The publish
-     * process should not publish this state to the master as well! (the master is sending it...).
-     * <p>
-     * The {@link org.elasticsearch.discovery.Discovery.AckListener} allows to acknowledge the publish
-     * event based on the response gotten from all nodes
-     */
-    public void publish(ClusterChangedEvent clusterChangedEvent, Discovery.AckListener ackListener) {
-        if (lifecycle.started()) {
-            discovery.publish(clusterChangedEvent, ackListener);
-        }
-    }
-
+    
     public static String generateNodeId(Settings settings) {
         String seed = settings.get(DiscoveryService.SETTING_DISCOVERY_SEED);
         if (seed != null) {
             return Strings.randomBase64UUID(new Random(Long.parseLong(seed)));
         }
         return Strings.randomBase64UUID();
+    }
+    
+    
+    /**
+     * Set index shard state in the gossip endpoint map (must be synchronized).
+     * @param index
+     * @param shardRoutingState
+     * @throws JsonGenerationException
+     * @throws JsonMappingException
+     * @throws IOException
+     */
+    public void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
+        this.discovery.putShardRoutingState(index, shardRoutingState);
+    }
+
+    
+    public Map<UUID, ShardRoutingState> getShardRoutingStates(String index) {
+         return this.discovery.getShardRoutingStates(index);
+    }
+    
+    public void removeIndexShardState(final String index) throws JsonGenerationException, JsonMappingException, IOException {
+        this.discovery.putShardRoutingState(index, null);
+    }
+    
+    /**
+     * Publish cluster metadata uuid and version in gossip state.
+     * @param clusterState
+     */
+    public void publishX2(final ClusterState clusterState) {
+        this.discovery.publishX2(clusterState);
+    }
+    
+    /**
+     * Publish local routingShard state in gossip state.
+     * @param clusterState
+     */
+    public void publishX1(final ClusterState clusterState) {
+        this.discovery.publishX1(clusterState);
+    }
+
+    public boolean awaitMetaDataVersion(long version, TimeValue ackTimeout) throws Exception  {
+        return this.discovery.awaitMetaDataVersion(version, ackTimeout);
+    }
+    
+    public void connectToNodes() {
+        this.discovery.connectToNodes();
     }
 }

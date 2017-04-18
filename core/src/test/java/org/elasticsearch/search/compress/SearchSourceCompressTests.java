@@ -64,7 +64,7 @@ public class SearchSourceCompressTests  extends ESSingleNodeTestCase {
         client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setWaitForGreenStatus().execute().actionGet();
 
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type1")
-                .startObject("_source").field("compress", compress).endObject()
+                .startObject("_source").field("enabled", true).field("compress", compress).endObject()
                 .endObject().endObject().string();
 
         client().admin().indices().preparePutMapping().setType("type1").setSource(mapping).execute().actionGet();

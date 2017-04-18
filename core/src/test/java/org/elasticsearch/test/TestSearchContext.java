@@ -20,12 +20,16 @@ package org.elasticsearch.test;
 
 import com.carrotsearch.hppc.ObjectObjectAssociativeContainer;
 
+import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.HasContext;
 import org.elasticsearch.common.HasContextAndHeaders;
 import org.elasticsearch.common.HasHeaders;
@@ -79,6 +83,7 @@ public class TestSearchContext extends SearchContext {
     final PageCacheRecycler pageCacheRecycler;
     final BigArrays bigArrays;
     final IndexService indexService;
+    final ClusterService clusterService;
     final IndexFieldDataService indexFieldDataService;
     final BitsetFilterCache fixedBitSetFilterCache;
     final ThreadPool threadPool;
@@ -101,6 +106,10 @@ public class TestSearchContext extends SearchContext {
     private final Map<String, FetchSubPhaseContext> subPhaseContexts = new HashMap<>();
 
     public TestSearchContext(ThreadPool threadPool,PageCacheRecycler pageCacheRecycler, BigArrays bigArrays, IndexService indexService) {
+        this(threadPool, pageCacheRecycler, bigArrays, indexService, null);
+    }
+    
+    public TestSearchContext(ThreadPool threadPool,PageCacheRecycler pageCacheRecycler, BigArrays bigArrays, IndexService indexService, ClusterService clusterService) {
         super(ParseFieldMatcher.STRICT, null);
         this.pageCacheRecycler = pageCacheRecycler;
         this.bigArrays = bigArrays.withCircuitBreaking();
@@ -109,6 +118,7 @@ public class TestSearchContext extends SearchContext {
         this.fixedBitSetFilterCache = indexService.bitsetFilterCache();
         this.threadPool = threadPool;
         this.indexShard = indexService.shard(0);
+        this.clusterService = clusterService;
     }
 
     public TestSearchContext() {
@@ -120,6 +130,7 @@ public class TestSearchContext extends SearchContext {
         this.threadPool = null;
         this.fixedBitSetFilterCache = null;
         this.indexShard = null;
+        this.clusterService = null;
     }
 
     public void setTypes(String... types) {
@@ -674,5 +685,33 @@ public class TestSearchContext extends SearchContext {
     @Override
     public Profilers getProfilers() {
         return null; // no profiling
+    }
+
+    @Override
+    public ClusterService clusterService() {
+        return clusterService;
+    }
+
+    @Override
+    public boolean includeNode() {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public void includeNode(boolean includeNode) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public ClusterState getClusterState() {
+        return clusterService.state();
+    }
+
+    @Override
+    public SearchProcessor searchProcessor() {
+        // TODO Auto-generated method stub
+        return null;
     }
 }

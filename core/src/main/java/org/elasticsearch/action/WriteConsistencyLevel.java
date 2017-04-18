@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action;
 
+import org.apache.cassandra.db.ConsistencyLevel;
+
 
 /**
  * Write Consistency Level control how many replicas should be active for a write operation to occur (a write operation
@@ -66,5 +68,17 @@ public enum WriteConsistencyLevel {
             return ALL;
         }
         throw new IllegalArgumentException("No write consistency match [" + value + "]");
+    }
+    
+    public ConsistencyLevel toCassandraConsistencyLevel() {
+        switch (id) {
+        case 1:
+            return ConsistencyLevel.LOCAL_ONE;
+        case 2:
+            return ConsistencyLevel.LOCAL_QUORUM;
+        case 3:
+            return ConsistencyLevel.ALL;
+        }
+        return ConsistencyLevel.LOCAL_ONE;
     }
 }

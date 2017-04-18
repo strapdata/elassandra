@@ -141,7 +141,7 @@ public class BroadcastReplicationTests extends ESTestCase {
     @Test
     public void testResultCombine() throws InterruptedException, ExecutionException, IOException {
         final String index = "test";
-        int numShards = randomInt(3);
+        int numShards = randomInt(2)+1;
         clusterService.setState(stateWithAssignedPrimariesAndOneReplica(index, numShards));
         logger.debug("--> using initial state:\n{}", clusterService.state().prettyPrint());
         Future<BroadcastResponse> response = (broadcastReplicationAction.execute(new BroadcastRequest().indices(index)));

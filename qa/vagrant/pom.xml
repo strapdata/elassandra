@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.elasticsearch.qa</groupId>
+        <groupId>com.strapdata.elasticsearch.qa</groupId>
         <artifactId>elasticsearch-qa</artifactId>
         <version>2.4.5-SNAPSHOT</version>
     </parent>
@@ -80,19 +80,19 @@
                             <outputDirectory>${project.build.directory}/testroot</outputDirectory>
                             <artifactItems>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.distribution.zip</groupId>
+                                    <groupId>com.strapdata.elasticsearch.distribution.zip</groupId>
                                     <artifactId>elasticsearch</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.distribution.tar</groupId>
+                                    <groupId>com.strapdata.elasticsearch.distribution.tar</groupId>
                                     <artifactId>elasticsearch</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>tar.gz</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.distribution.deb</groupId>
+                                    <groupId>com.strapdata.elasticsearch.distribution.deb</groupId>
                                     <artifactId>elasticsearch</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>deb</type>
@@ -100,109 +100,109 @@
                                 <artifactItem>
                                     <!-- We also use an old version of elasticsearch for
                                          testing upgrades -->
-                                    <groupId>org.elasticsearch.distribution.deb</groupId>
+                                    <groupId>com.strapdata.elasticsearch.distribution.deb</groupId>
                                     <artifactId>elasticsearch</artifactId>
                                     <version>${upgrade.from.version}</version>
                                     <type>deb</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>jvm-example</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>analysis-icu</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>analysis-kuromoji</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>analysis-phonetic</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>analysis-smartcn</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>analysis-stempel</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>cloud-aws</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>cloud-azure</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>cloud-gce</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>delete-by-query</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>discovery-multicast</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>lang-javascript</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>lang-python</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>mapper-attachments</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>mapper-size</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>mapper-murmur3</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.plugin</groupId>
+                                    <groupId>com.strapdata.elasticsearch.plugin</groupId>
                                     <artifactId>site-example</artifactId>
                                     <version>${elasticsearch.version}</version>
                                     <type>zip</type>
@@ -304,7 +304,7 @@
                                     <outputDirectory>${project.build.directory}/testroot</outputDirectory>
                                     <artifactItems>
                                         <artifactItem>
-                                            <groupId>org.elasticsearch.distribution.rpm</groupId>
+                                            <groupId>com.strapdata.elasticsearch.distribution.rpm</groupId>
                                             <artifactId>elasticsearch</artifactId>
                                             <version>${elasticsearch.version}</version>
                                             <type>rpm</type>
@@ -312,7 +312,7 @@
                                         <artifactItem>
                                             <!-- We also use an old version of elasticsearch for
                                                  testing upgrades -->
-                                            <groupId>org.elasticsearch.distribution.rpm</groupId>
+                                            <groupId>com.strapdata.elasticsearch.distribution.rpm</groupId>
                                             <artifactId>elasticsearch</artifactId>
                                             <version>${upgrade.from.version}</version>
                                             <type>rpm</type>
@@ -352,7 +352,7 @@
                                     <outputDirectory>${project.build.directory}/testroot</outputDirectory>
                                     <artifactItems>
                                         <artifactItem>
-                                            <groupId>org.elasticsearch.distribution.rpm</groupId>
+                                            <groupId>com.strapdata.elasticsearch.distribution.rpm</groupId>
                                             <artifactId>elasticsearch</artifactId>
                                             <version>${elasticsearch.version}</version>
                                             <type>rpm</type>
@@ -360,7 +360,7 @@
                                         <artifactItem>
                                             <!-- We also use an old version of elasticsearch for
                                                  testing upgrades -->
-                                            <groupId>org.elasticsearch.distribution.rpm</groupId>
+                                            <groupId>com.strapdata.elasticsearch.distribution.rpm</groupId>
                                             <artifactId>elasticsearch</artifactId>
                                             <version>${upgrade.from.version}</version>
                                             <type>rpm</type>

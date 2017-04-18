@@ -149,6 +149,8 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
 
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
+        /*
+         * No more relocated shard to remove with elassandra.
         if (!event.routingTableChanged()) {
             return;
         }
@@ -168,6 +170,7 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
                 }
             }
         }
+        */
     }
 
     boolean shardCanBeDeleted(ClusterState state, IndexShardRoutingTable indexShardRoutingTable) {
@@ -226,8 +229,7 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
             }
         }
 
-        ShardActiveResponseHandler responseHandler = new ShardActiveResponseHandler(indexShardRoutingTable.shardId(), state.getVersion(),
-            requests.size());
+        ShardActiveResponseHandler responseHandler = new ShardActiveResponseHandler(indexShardRoutingTable.shardId(), state, requests.size());
         for (Tuple<DiscoveryNode, ShardActiveRequest> request : requests) {
             logger.trace("{} sending shard active check to {}", request.v2().shardId, request.v1());
             transportService.sendRequest(request.v1(), ACTION_SHARD_EXISTS, request.v2(), responseHandler);
@@ -238,14 +240,14 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
 
         private final ShardId shardId;
         private final int expectedActiveCopies;
-        private final long clusterStateVersion;
+        private final ClusterState clusterState;
         private final AtomicInteger awaitingResponses;
         private final AtomicInteger activeCopies;
 
-        public ShardActiveResponseHandler(ShardId shardId, long clusterStateVersion, int expectedActiveCopies) {
+        public ShardActiveResponseHandler(ShardId shardId, ClusterState clusterState, int expectedActiveCopies) {
             this.shardId = shardId;
             this.expectedActiveCopies = expectedActiveCopies;
-            this.clusterStateVersion = clusterStateVersion;
+            this.clusterState = clusterState;
             this.awaitingResponses = new AtomicInteger(expectedActiveCopies);
             this.activeCopies = new AtomicInteger();
         }
@@ -287,16 +289,16 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
             }
 
             ClusterState latestClusterState = clusterService.state();
-            if (clusterStateVersion != latestClusterState.getVersion()) {
-                logger.trace("not deleting shard {}, the latest cluster state version[{}] is not equal to cluster state before shard active api call [{}]", shardId, latestClusterState.getVersion(), clusterStateVersion);
+            if (clusterState.getVersion() != latestClusterState.getVersion()) {
+                logger.trace("not deleting shard {}, the latest cluster state version[{}] is not equal to cluster state before shard active api call [{}]", shardId, latestClusterState.getVersion(), clusterState.getVersion());
                 return;
             }
 
             clusterService.submitStateUpdateTask("indices_store ([" + shardId + "] active fully on other nodes)", new ClusterStateNonMasterUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) throws Exception {
-                    if (clusterStateVersion != currentState.getVersion()) {
-                        logger.trace("not deleting shard {}, the update task state version[{}] is not equal to cluster state before shard active api call [{}]", shardId, currentState.getVersion(), clusterStateVersion);
+                    if (clusterState.getVersion() != currentState.getVersion()) {
+                        logger.trace("not deleting shard {}, the update task state version[{}] is not equal to cluster state before shard active api call [{}]", shardId, currentState.getVersion(), clusterState.getVersion());
                         return currentState;
                     }
                     try {

@@ -27,7 +27,6 @@ import org.elasticsearch.action.index.TransportIndexAction;
 import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.IndexNotFoundException;
@@ -54,7 +53,6 @@ public class DynamicMappingDisabledTests extends ESSingleNodeTestCase {
     private LocalTransport transport;
     private TransportService transportService;
     private IndicesService indicesService;
-    private ShardStateAction shardStateAction;
     private ActionFilters actionFilters;
     private IndexNameExpressionResolver indexNameExpressionResolver;
     private AutoCreateIndex autoCreateIndex;
@@ -76,7 +74,6 @@ public class DynamicMappingDisabledTests extends ESSingleNodeTestCase {
             new NoneCircuitBreakerService());
         transportService = new TransportService(transport, THREAD_POOL);
         indicesService = getInstanceFromNode(IndicesService.class);
-        shardStateAction = new ShardStateAction(settings, clusterService, transportService, null, null);
         actionFilters = new ActionFilters(Collections.<ActionFilter>emptySet());
         indexNameExpressionResolver = new IndexNameExpressionResolver(settings);
         autoCreateIndex = new AutoCreateIndex(settings, indexNameExpressionResolver);
@@ -91,7 +88,7 @@ public class DynamicMappingDisabledTests extends ESSingleNodeTestCase {
 
     public void testDynamicDisabled() {
         TransportIndexAction action = new TransportIndexAction(settings, transportService, clusterService,
-            indicesService, THREAD_POOL, shardStateAction, null, null, actionFilters, indexNameExpressionResolver,
+            indicesService, THREAD_POOL, null, null, actionFilters, indexNameExpressionResolver,
             autoCreateIndex);
 
         IndexRequest request = new IndexRequest("index", "type", "1");

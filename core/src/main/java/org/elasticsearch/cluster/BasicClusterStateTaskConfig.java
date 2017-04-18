@@ -37,7 +37,7 @@ public class BasicClusterStateTaskConfig implements ClusterStateTaskConfig {
         return priority;
     }
 
-    private BasicClusterStateTaskConfig(TimeValue timeout, Priority priority) {
+    public BasicClusterStateTaskConfig(TimeValue timeout, Priority priority) {
         this.timeout = timeout;
         this.priority = priority;
     }
@@ -67,4 +67,10 @@ public class BasicClusterStateTaskConfig implements ClusterStateTaskConfig {
     public static ClusterStateTaskConfig create(Priority priority, TimeValue timeout) {
         return new BasicClusterStateTaskConfig(timeout, priority);
     }
+
+    @Override
+    public boolean doPresistMetaData() {
+        return false;
+    }
+
 }

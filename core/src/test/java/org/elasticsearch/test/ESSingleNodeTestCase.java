@@ -18,94 +18,178 @@
  */
 package org.elasticsearch.test;
 
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+
+import java.io.File;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.concurrent.Semaphore;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.service.ElassandraDaemon;
+import org.elassandra.cluster.InternalCassandraClusterService;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.elasticsearch.cluster.health.ClusterHealthStatus;
+import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.client.ClusterAdminClient;
 import org.elasticsearch.client.Requests;
 import org.elasticsearch.cluster.ClusterName;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.health.ClusterHealthStatus;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.Priority;
-import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.BigArrays;
-import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.Node;
-import org.elasticsearch.node.NodeBuilder;
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
+import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
-
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.*;
 
 /**
  * A test that keep a singleton node started for all tests that can be used to get
  * references to Guice injectors in unit tests.
+ * 
+ * Cassandra use many static initializer, so NODE is statically initialized once 
+ * for all tests and multinode cluster test is not possible.
  */
 public abstract class ESSingleNodeTestCase extends ESTestCase {
 
-    private static Node NODE = null;
+     
+    private static final Semaphore available = new Semaphore(1);
+    
+    protected static Node NODE;
+    protected static Settings settings;
+    
+    static void initNode(Settings testSettings, Collection<Class<? extends Plugin>> classpathPlugins)  {
+        System.out.println("working.dir="+System.getProperty("user.dir"));
+        System.out.println("cassandra.home="+System.getProperty("cassandra.home"));
+        System.out.println("cassandra.config.loader="+System.getProperty("cassandra.config.loader"));
+        System.out.println("cassandra.config="+System.getProperty("cassandra.config"));
+        System.out.println("cassandra.config.dir="+System.getProperty("cassandra.config.dir"));
+        System.out.println("cassandra-rackdc.properties="+System.getProperty("cassandra-rackdc.properties"));
+        System.out.println("cassandra.storagedir="+System.getProperty("cassandra.storagedir"));
+        System.out.println("logback.configurationFile="+System.getProperty("logback.configurationFile"));
 
-    private static void reset() {
-        assert NODE != null;
-        stopNode();
-        startNode();
-    }
+        System.out.println("settings="+testSettings.getAsMap());
+        System.out.println("plugins="+classpathPlugins);
+        DatabaseDescriptor.createAllDirectories();
 
-    private static void startNode() {
-        assert NODE == null;
-        NODE = newNode();
-        // we must wait for the node to actually be up and running. otherwise the node might have started, elected itself master but might not yet have removed the
-        // SERVICE_UNAVAILABLE/1/state not recovered / initialized block
-        ClusterHealthResponse clusterHealthResponse = client().admin().cluster().prepareHealth().setWaitForGreenStatus().get();
+        settings = Settings.builder()
+                .put(ClusterName.SETTING, DatabaseDescriptor.getClusterName())
+                
+                .put("path.home", System.getProperty("cassandra.home"))
+                .put("path.conf", System.getProperty("cassandra.config.dir"))
+                .put("path.data", DatabaseDescriptor.getAllDataFileLocations()[0])
+                
+                // TODO: use a consistent data path for custom paths
+                // This needs to tie into the ESIntegTestCase#indexSettings() method
+                .put("path.shared_data", DatabaseDescriptor.getAllDataFileLocations()[0])
+                .put("node.name", nodeName())
+                .put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1)
+                .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 0)
+                .put("script.inline", "on")
+                .put("script.indexed", "on")
+                //.put(EsExecutors.PROCESSORS, 1) // limit the number of threads created
+                .put("http.enabled", true)
+                .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
+                
+                .put(testSettings)
+                .build();
+        
+        ElassandraDaemon.instance.activate(false,  settings, new Environment(settings), classpathPlugins);
+        try {
+            Thread.sleep(1000*15);
+        } catch (InterruptedException e) {
+        }
+        assertThat(DiscoveryNode.localNode(settings), is(false));
+        
+        NODE = ElassandraDaemon.instance.node();
+
+        ClusterAdminClient clusterAdminClient = client().admin().cluster();
+        ClusterHealthResponse clusterHealthResponse = clusterAdminClient.prepareHealth().setWaitForGreenStatus().get();
         assertFalse(clusterHealthResponse.isTimedOut());
     }
-
-    private static void stopNode() {
-        Node node = NODE;
-        NODE = null;
-        Releasables.close(node);
+    
+    public ESSingleNodeTestCase() {
+        super();
     }
-
+    
+    // override this to initialize the single node cluster.
+    protected Settings nodeSettings(int nodeOrdinal) {
+        return Settings.EMPTY;
+    }
+    
+    static void reset() {
+        
+    }
+    
     static void cleanup(boolean resetNode) {
-        assertAcked(client().admin().indices().prepareDelete("*").get());
-        if (resetNode) {
-            reset();
+        if (NODE != null) {
+            assertAcked(client().admin().indices().prepareDelete("*").get());
+            
+            if (resetNode) {
+                reset();
+            }
         }
-        MetaData metaData = client().admin().cluster().prepareState().get().getState().getMetaData();
-        assertThat("test leaves persistent cluster metadata behind: " + metaData.persistentSettings().getAsMap(),
-                metaData.persistentSettings().getAsMap().size(), equalTo(0));
-        assertThat("test leaves transient cluster metadata behind: " + metaData.transientSettings().getAsMap(),
-                metaData.transientSettings().getAsMap().size(), equalTo(0));
     }
 
+    @Before
+    public void nodeSetup() throws Exception {
+        try {
+            available.acquire();
+            if (NODE == null) {
+                initNode(nodeSettings(1), nodePlugins());
+                // register NodeEnvironment to remove node.lock
+                closeAfterTest(NODE.nodeEnvironment());
+            }
+        } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+        
+        logger.info("[{}#{}]: setup test {}", getTestClass().getSimpleName(), getTestName());
+    }
+    
     @After
-    public void tearDown() throws Exception {
-        logger.info("[{}#{}]: cleaning up after test", getTestClass().getSimpleName(), getTestName());
-        super.tearDown();
+    public void nodeTearDown() throws Exception {
+        logger.info("[{}#{}]: cleaning up after test {}", getTestClass().getSimpleName(), getTestName());
         cleanup(resetNodeAfterTest());
+        super.tearDown();
+        available.release();
+        logger.info("[{}#{}]: semaphore released={}", getTestClass().getSimpleName(), getTestName(), available.getQueueLength());
     }
 
     @BeforeClass
-    public static void setUpClass() throws Exception {
-        stopNode();
-        startNode();
+    public static synchronized void setUpClass() throws Exception {
+        
     }
 
     @AfterClass
     public static void tearDownClass() {
-        stopNode();
     }
 
     /**
@@ -114,30 +198,29 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
      * <code>false</code>.
      */
     protected boolean resetNodeAfterTest() {
-        return false;
+        return true;
     }
 
-    private static Node newNode() {
-        Node build = NodeBuilder.nodeBuilder().local(true).data(true).settings(Settings.builder()
-                .put(ClusterName.SETTING, InternalTestCluster.clusterName("single-node-cluster", randomLong()))
-                .put("path.home", createTempDir())
-                // TODO: use a consistent data path for custom paths
-                // This needs to tie into the ESIntegTestCase#indexSettings() method
-                .put("path.shared_data", createTempDir().getParent())
-                .put("node.name", nodeName())
-                .put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 0)
-                .put("script.inline", "on")
-                .put("script.indexed", "on")
-                .put(EsExecutors.PROCESSORS, 1) // limit the number of threads created
-                .put("http.enabled", false)
-                .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true) // make sure we get what we set :)
-        ).build();
-        build.start();
-        assertThat(DiscoveryNode.localNode(build.settings()), is(true));
-        return build;
+    /**
+     * Returns a collection of plugins that should be loaded on each node.
+     */
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        return Collections.emptyList();
     }
 
+    /**
+     * Returns a collection of plugins that should be loaded when creating a transport client.
+     */
+    protected Collection<Class<? extends Plugin>> transportClientPlugins() {
+        return Collections.emptyList();
+    }
+
+    /** Helper method to create list of plugins without specifying generic types. */
+    protected static Collection<Class<? extends Plugin>> pluginList(Class<? extends Plugin>... plugins) {
+        return Arrays.asList(plugins);
+    }
+    
+    
     /**
      * Returns a client to the single-node cluster.
      */
@@ -145,6 +228,26 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         return NODE.client();
     }
 
+    public ClusterService clusterService() {
+        return ElassandraDaemon.instance.node().clusterService();
+    }
+    
+    public UntypedResultSet process(ConsistencyLevel cl, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return clusterService().process(cl, ClientState.forInternalCalls(), query);
+    }
+    
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return clusterService().process(cl, clientState, query);
+    }
+    
+    public UntypedResultSet process(ConsistencyLevel cl, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return clusterService().process(cl, ClientState.forInternalCalls(), query, values);
+    }
+    
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return clusterService().process(cl, clientState, query, values);
+    }
+    
     /**
      * Returns the single test nodes name.
      */
@@ -225,7 +328,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         BigArrays bigArrays = indexService.injector().getInstance(BigArrays.class);
         ThreadPool threadPool = indexService.injector().getInstance(ThreadPool.class);
         PageCacheRecycler pageCacheRecycler = indexService.injector().getInstance(PageCacheRecycler.class);
-        return new TestSearchContext(threadPool, pageCacheRecycler, bigArrays, indexService);
+        return new TestSearchContext(threadPool, pageCacheRecycler, bigArrays, indexService, null);
     }
 
     /**
@@ -256,6 +359,5 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         logger.debug("indices {} are green", indices.length == 0 ? "[_all]" : indices);
         return actionGet.getStatus();
     }
-
 
 }

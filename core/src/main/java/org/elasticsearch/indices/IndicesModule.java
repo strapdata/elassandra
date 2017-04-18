@@ -19,7 +19,13 @@
 
 package org.elasticsearch.indices;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.apache.lucene.analysis.hunspell.Dictionary;
+import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.TokenFieldMapper;
+import org.elassandra.indices.CassandraIndicesClusterStateService;
 import org.elasticsearch.action.update.UpdateHelper;
 import org.elasticsearch.cluster.metadata.MetaDataIndexUpgradeService;
 import org.elasticsearch.common.geo.ShapesAvailability;
@@ -27,35 +33,100 @@ import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.util.ExtensionPoint;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
-import org.elasticsearch.index.mapper.core.*;
+import org.elasticsearch.index.mapper.core.BinaryFieldMapper;
+import org.elasticsearch.index.mapper.core.BooleanFieldMapper;
+import org.elasticsearch.index.mapper.core.ByteFieldMapper;
+import org.elasticsearch.index.mapper.core.CompletionFieldMapper;
+import org.elasticsearch.index.mapper.core.DateFieldMapper;
+import org.elasticsearch.index.mapper.core.DoubleFieldMapper;
+import org.elasticsearch.index.mapper.core.FloatFieldMapper;
+import org.elasticsearch.index.mapper.core.IntegerFieldMapper;
+import org.elasticsearch.index.mapper.core.LongFieldMapper;
+import org.elasticsearch.index.mapper.core.ShortFieldMapper;
+import org.elasticsearch.index.mapper.core.StringFieldMapper;
+import org.elasticsearch.index.mapper.core.TokenCountFieldMapper;
+import org.elasticsearch.index.mapper.core.TypeParsers;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.geo.GeoShapeFieldMapper;
-import org.elasticsearch.index.mapper.internal.*;
+import org.elasticsearch.index.mapper.internal.AllFieldMapper;
+import org.elasticsearch.index.mapper.internal.FieldNamesFieldMapper;
+import org.elasticsearch.index.mapper.internal.IdFieldMapper;
+import org.elasticsearch.index.mapper.internal.IndexFieldMapper;
+import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
+import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
+import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
+import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
+import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
+import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
+import org.elasticsearch.index.mapper.internal.UidFieldMapper;
+import org.elasticsearch.index.mapper.internal.VersionFieldMapper;
 import org.elasticsearch.index.mapper.ip.IpFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
-import org.elasticsearch.index.query.*;
-import org.elasticsearch.index.query.functionscore.FunctionScoreQueryParser;
+import org.elasticsearch.index.query.AndQueryParser;
+import org.elasticsearch.index.query.BoolQueryParser;
+import org.elasticsearch.index.query.BoostingQueryParser;
+import org.elasticsearch.index.query.CommonTermsQueryParser;
+import org.elasticsearch.index.query.ConstantScoreQueryParser;
+import org.elasticsearch.index.query.DisMaxQueryParser;
+import org.elasticsearch.index.query.ExistsQueryParser;
+import org.elasticsearch.index.query.FQueryFilterParser;
+import org.elasticsearch.index.query.FieldMaskingSpanQueryParser;
+import org.elasticsearch.index.query.FilteredQueryParser;
+import org.elasticsearch.index.query.FuzzyQueryParser;
+import org.elasticsearch.index.query.GeoBoundingBoxQueryParser;
+import org.elasticsearch.index.query.GeoDistanceQueryParser;
+import org.elasticsearch.index.query.GeoDistanceRangeQueryParser;
+import org.elasticsearch.index.query.GeoPolygonQueryParser;
+import org.elasticsearch.index.query.GeoShapeQueryParser;
+import org.elasticsearch.index.query.GeohashCellQuery;
+import org.elasticsearch.index.query.HasChildQueryParser;
+import org.elasticsearch.index.query.HasParentQueryParser;
+import org.elasticsearch.index.query.IdsQueryParser;
+import org.elasticsearch.index.query.IndicesQueryParser;
+import org.elasticsearch.index.query.LimitQueryParser;
+import org.elasticsearch.index.query.MatchAllQueryParser;
+import org.elasticsearch.index.query.MatchQueryParser;
+import org.elasticsearch.index.query.MissingQueryParser;
 import org.elasticsearch.index.query.MoreLikeThisQueryParser;
+import org.elasticsearch.index.query.MultiMatchQueryParser;
+import org.elasticsearch.index.query.NestedQueryParser;
+import org.elasticsearch.index.query.NotQueryParser;
+import org.elasticsearch.index.query.OrQueryParser;
+import org.elasticsearch.index.query.PrefixQueryParser;
+import org.elasticsearch.index.query.QueryFilterParser;
+import org.elasticsearch.index.query.QueryParser;
+import org.elasticsearch.index.query.QueryStringQueryParser;
+import org.elasticsearch.index.query.RangeQueryParser;
+import org.elasticsearch.index.query.RegexpQueryParser;
+import org.elasticsearch.index.query.ScriptQueryParser;
+import org.elasticsearch.index.query.SimpleQueryStringParser;
+import org.elasticsearch.index.query.SpanContainingQueryParser;
+import org.elasticsearch.index.query.SpanFirstQueryParser;
+import org.elasticsearch.index.query.SpanMultiTermQueryParser;
+import org.elasticsearch.index.query.SpanNearQueryParser;
+import org.elasticsearch.index.query.SpanNotQueryParser;
+import org.elasticsearch.index.query.SpanOrQueryParser;
+import org.elasticsearch.index.query.SpanTermQueryParser;
+import org.elasticsearch.index.query.SpanWithinQueryParser;
+import org.elasticsearch.index.query.TemplateQueryParser;
+import org.elasticsearch.index.query.TermQueryParser;
+import org.elasticsearch.index.query.TermsQueryParser;
+import org.elasticsearch.index.query.TypeQueryParser;
+import org.elasticsearch.index.query.WildcardQueryParser;
+import org.elasticsearch.index.query.WrapperQueryParser;
+import org.elasticsearch.index.query.functionscore.FunctionScoreQueryParser;
 import org.elasticsearch.indices.analysis.HunspellService;
 import org.elasticsearch.indices.analysis.IndicesAnalysisService;
 import org.elasticsearch.indices.cache.query.IndicesQueryCache;
 import org.elasticsearch.indices.cache.request.IndicesRequestCache;
-import org.elasticsearch.indices.cluster.IndicesClusterStateService;
 import org.elasticsearch.indices.fielddata.cache.IndicesFieldDataCache;
 import org.elasticsearch.indices.fielddata.cache.IndicesFieldDataCacheListener;
 import org.elasticsearch.indices.flush.SyncedFlushService;
 import org.elasticsearch.indices.mapper.MapperRegistry;
 import org.elasticsearch.indices.memory.IndexingMemoryController;
 import org.elasticsearch.indices.query.IndicesQueriesRegistry;
-import org.elasticsearch.indices.recovery.RecoverySettings;
-import org.elasticsearch.indices.recovery.RecoverySource;
-import org.elasticsearch.indices.recovery.RecoveryTarget;
 import org.elasticsearch.indices.store.IndicesStore;
 import org.elasticsearch.indices.store.TransportNodesListShardStoreMetaData;
-import org.elasticsearch.indices.ttl.IndicesTTLService;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Configures classes and services that are shared by indices on each node.
@@ -176,6 +247,11 @@ public class IndicesModule extends AbstractModule {
         registerMetadataMapper(TTLFieldMapper.NAME, new TTLFieldMapper.TypeParser());
         registerMetadataMapper(VersionFieldMapper.NAME, new VersionFieldMapper.TypeParser());
         registerMetadataMapper(ParentFieldMapper.NAME, new ParentFieldMapper.TypeParser());
+        
+        // elassandra metadata fields mapper.
+        registerMetadataMapper(TokenFieldMapper.NAME, new TokenFieldMapper.TypeParser());
+        registerMetadataMapper(NodeFieldMapper.NAME, new NodeFieldMapper.TypeParser());
+        
         // _field_names is not registered here, see #getMapperRegistry: we need to register it
         // last so that it can see all other mappers, including those coming from plugins
     }
@@ -216,18 +292,19 @@ public class IndicesModule extends AbstractModule {
 
         bind(IndicesLifecycle.class).to(InternalIndicesLifecycle.class).asEagerSingleton();
         bind(IndicesService.class).asEagerSingleton();
-        bind(RecoverySettings.class).asEagerSingleton();
-        bind(RecoveryTarget.class).asEagerSingleton();
-        bind(RecoverySource.class).asEagerSingleton();
+        //bind(RecoverySettings.class).asEagerSingleton();
+        //bind(RecoveryTarget.class).asEagerSingleton();
+        //bind(RecoverySource.class).asEagerSingleton();
         bind(IndicesStore.class).asEagerSingleton();
-        bind(IndicesClusterStateService.class).asEagerSingleton();
+        //bind(IndicesClusterStateService.class).asEagerSingleton();
+        bind(CassandraIndicesClusterStateService.class).asEagerSingleton();
         bind(IndexingMemoryController.class).asEagerSingleton();
         bind(SyncedFlushService.class).asEagerSingleton();
         bind(IndicesQueryCache.class).asEagerSingleton();
         bind(IndicesRequestCache.class).asEagerSingleton();
         bind(IndicesFieldDataCache.class).asEagerSingleton();
-        bind(TransportNodesListShardStoreMetaData.class).asEagerSingleton();
-        bind(IndicesTTLService.class).asEagerSingleton();
+        //bind(TransportNodesListShardStoreMetaData.class).asEagerSingleton();
+        //bind(IndicesTTLService.class).asEagerSingleton();
         bind(IndicesWarmer.class).asEagerSingleton();
         bind(UpdateHelper.class).asEagerSingleton();
         bind(MetaDataIndexUpgradeService.class).asEagerSingleton();

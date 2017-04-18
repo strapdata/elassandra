@@ -19,6 +19,11 @@
 
 package org.elasticsearch.search.internal;
 
+import java.io.IOException;
+import java.util.Collection;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.IndicesRequest;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.action.search.SearchRequest;
@@ -31,8 +36,6 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.script.Template;
 import org.elasticsearch.search.Scroll;
 import org.elasticsearch.transport.TransportRequest;
-
-import java.io.IOException;
 
 /**
  * Shard level search request that represents an actual search sent from the coordinating node to the nodes holding
@@ -169,5 +172,15 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
     @Override
     public boolean isProfile() {
         return shardSearchLocalRequest.isProfile();
+    }
+    
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+         return shardSearchLocalRequest.tokenRanges();
+    }
+
+    @Override
+    public Boolean tokenRangesBitsetCache() {
+        return shardSearchLocalRequest.tokenRangesBitsetCache();
     }
 }

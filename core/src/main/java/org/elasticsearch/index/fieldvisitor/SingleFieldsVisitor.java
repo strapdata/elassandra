@@ -25,8 +25,11 @@ import org.elasticsearch.index.mapper.internal.IdFieldMapper;
 import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 
+import com.google.common.collect.ImmutableSet;
+
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 /**
  */
@@ -50,6 +53,11 @@ public class SingleFieldsVisitor extends FieldsVisitor {
             }
         }
         return Status.NO;
+    }
+    
+    @Override
+    public Set<String> requestedFields() {
+        return ImmutableSet.of(field);
     }
 
     public void reset(String field) {

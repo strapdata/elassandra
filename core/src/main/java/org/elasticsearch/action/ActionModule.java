@@ -19,7 +19,12 @@
 
 package org.elasticsearch.action;
 
-import com.google.common.collect.Maps;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import org.elassandra.action.admin.indices.rebuild.RebuildAction;
+import org.elassandra.action.admin.indices.rebuild.TransportRebuildAction;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthAction;
 import org.elasticsearch.action.admin.cluster.health.TransportClusterHealthAction;
 import org.elasticsearch.action.admin.cluster.node.hotthreads.NodesHotThreadsAction;
@@ -33,36 +38,18 @@ import org.elasticsearch.action.admin.cluster.node.tasks.cancel.CancelTasksActio
 import org.elasticsearch.action.admin.cluster.node.tasks.cancel.TransportCancelTasksAction;
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksAction;
 import org.elasticsearch.action.admin.cluster.node.tasks.list.TransportListTasksAction;
-import org.elasticsearch.action.admin.cluster.repositories.delete.DeleteRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.delete.TransportDeleteRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.get.GetRepositoriesAction;
-import org.elasticsearch.action.admin.cluster.repositories.get.TransportGetRepositoriesAction;
-import org.elasticsearch.action.admin.cluster.repositories.put.PutRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.put.TransportPutRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.verify.TransportVerifyRepositoryAction;
-import org.elasticsearch.action.admin.cluster.repositories.verify.VerifyRepositoryAction;
-import org.elasticsearch.action.admin.cluster.reroute.ClusterRerouteAction;
-import org.elasticsearch.action.admin.cluster.reroute.TransportClusterRerouteAction;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsAction;
 import org.elasticsearch.action.admin.cluster.settings.TransportClusterUpdateSettingsAction;
 import org.elasticsearch.action.admin.cluster.shards.ClusterSearchShardsAction;
 import org.elasticsearch.action.admin.cluster.shards.TransportClusterSearchShardsAction;
-import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.create.TransportCreateSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.delete.DeleteSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.delete.TransportDeleteSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.get.GetSnapshotsAction;
-import org.elasticsearch.action.admin.cluster.snapshots.get.TransportGetSnapshotsAction;
-import org.elasticsearch.action.admin.cluster.snapshots.restore.RestoreSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.restore.TransportRestoreSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.status.SnapshotsStatusAction;
-import org.elasticsearch.action.admin.cluster.snapshots.status.TransportSnapshotsStatusAction;
 import org.elasticsearch.action.admin.cluster.state.ClusterStateAction;
 import org.elasticsearch.action.admin.cluster.state.TransportClusterStateAction;
 import org.elasticsearch.action.admin.cluster.stats.ClusterStatsAction;
 import org.elasticsearch.action.admin.cluster.stats.TransportClusterStatsAction;
 import org.elasticsearch.action.admin.cluster.tasks.PendingClusterTasksAction;
 import org.elasticsearch.action.admin.cluster.tasks.TransportPendingClusterTasksAction;
+import org.elasticsearch.action.admin.cluster.validate.template.RenderSearchTemplateAction;
+import org.elasticsearch.action.admin.cluster.validate.template.TransportRenderSearchTemplateAction;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesAction;
 import org.elasticsearch.action.admin.indices.alias.TransportIndicesAliasesAction;
 import org.elasticsearch.action.admin.indices.alias.exists.AliasesExistAction;
@@ -84,7 +71,9 @@ import org.elasticsearch.action.admin.indices.exists.indices.TransportIndicesExi
 import org.elasticsearch.action.admin.indices.exists.types.TransportTypesExistsAction;
 import org.elasticsearch.action.admin.indices.exists.types.TypesExistsAction;
 import org.elasticsearch.action.admin.indices.flush.FlushAction;
+import org.elasticsearch.action.admin.indices.flush.SyncedFlushAction;
 import org.elasticsearch.action.admin.indices.flush.TransportFlushAction;
+import org.elasticsearch.action.admin.indices.flush.TransportSyncedFlushAction;
 import org.elasticsearch.action.admin.indices.forcemerge.ForceMergeAction;
 import org.elasticsearch.action.admin.indices.forcemerge.TransportForceMergeAction;
 import org.elasticsearch.action.admin.indices.get.GetIndexAction;
@@ -112,8 +101,6 @@ import org.elasticsearch.action.admin.indices.shards.IndicesShardStoresAction;
 import org.elasticsearch.action.admin.indices.shards.TransportIndicesShardStoresAction;
 import org.elasticsearch.action.admin.indices.stats.IndicesStatsAction;
 import org.elasticsearch.action.admin.indices.stats.TransportIndicesStatsAction;
-import org.elasticsearch.action.admin.indices.flush.SyncedFlushAction;
-import org.elasticsearch.action.admin.indices.flush.TransportSyncedFlushAction;
 import org.elasticsearch.action.admin.indices.template.delete.DeleteIndexTemplateAction;
 import org.elasticsearch.action.admin.indices.template.delete.TransportDeleteIndexTemplateAction;
 import org.elasticsearch.action.admin.indices.template.get.GetIndexTemplatesAction;
@@ -128,8 +115,6 @@ import org.elasticsearch.action.admin.indices.upgrade.post.UpgradeAction;
 import org.elasticsearch.action.admin.indices.upgrade.post.UpgradeSettingsAction;
 import org.elasticsearch.action.admin.indices.validate.query.TransportValidateQueryAction;
 import org.elasticsearch.action.admin.indices.validate.query.ValidateQueryAction;
-import org.elasticsearch.action.admin.cluster.validate.template.RenderSearchTemplateAction;
-import org.elasticsearch.action.admin.cluster.validate.template.TransportRenderSearchTemplateAction;
 import org.elasticsearch.action.admin.indices.warmer.delete.DeleteWarmerAction;
 import org.elasticsearch.action.admin.indices.warmer.delete.TransportDeleteWarmerAction;
 import org.elasticsearch.action.admin.indices.warmer.get.GetWarmersAction;
@@ -192,9 +177,7 @@ import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.multibindings.MapBinder;
 import org.elasticsearch.common.inject.multibindings.Multibinder;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import com.google.common.collect.Maps;
 
 /**
  *
@@ -262,19 +245,24 @@ public class ActionModule extends AbstractModule {
         registerAction(ClusterStateAction.INSTANCE, TransportClusterStateAction.class);
         registerAction(ClusterHealthAction.INSTANCE, TransportClusterHealthAction.class);
         registerAction(ClusterUpdateSettingsAction.INSTANCE, TransportClusterUpdateSettingsAction.class);
-        registerAction(ClusterRerouteAction.INSTANCE, TransportClusterRerouteAction.class);
+//        registerAction(ClusterRerouteAction.INSTANCE, TransportClusterRerouteAction.class);
         registerAction(ClusterSearchShardsAction.INSTANCE, TransportClusterSearchShardsAction.class);
         registerAction(PendingClusterTasksAction.INSTANCE, TransportPendingClusterTasksAction.class);
+        /*
         registerAction(PutRepositoryAction.INSTANCE, TransportPutRepositoryAction.class);
         registerAction(GetRepositoriesAction.INSTANCE, TransportGetRepositoriesAction.class);
         registerAction(DeleteRepositoryAction.INSTANCE, TransportDeleteRepositoryAction.class);
         registerAction(VerifyRepositoryAction.INSTANCE, TransportVerifyRepositoryAction.class);
-        registerAction(GetSnapshotsAction.INSTANCE, TransportGetSnapshotsAction.class);
-        registerAction(DeleteSnapshotAction.INSTANCE, TransportDeleteSnapshotAction.class);
-        registerAction(CreateSnapshotAction.INSTANCE, TransportCreateSnapshotAction.class);
-        registerAction(RestoreSnapshotAction.INSTANCE, TransportRestoreSnapshotAction.class);
-        registerAction(SnapshotsStatusAction.INSTANCE, TransportSnapshotsStatusAction.class);
+        */
+        //registerAction(GetSnapshotsAction.INSTANCE, TransportGetSnapshotsAction.class);
+        //registerAction(DeleteSnapshotAction.INSTANCE, TransportDeleteSnapshotAction.class);
+        //registerAction(CreateSnapshotAction.INSTANCE, TransportCreateSnapshotAction.class);
+        //registerAction(RestoreSnapshotAction.INSTANCE, TransportRestoreSnapshotAction.class);
+        //registerAction(SnapshotsStatusAction.INSTANCE, TransportSnapshotsStatusAction.class);
 
+        // cassandra index rebuild
+        registerAction(RebuildAction.INSTANCE, TransportRebuildAction.class);
+        
         registerAction(IndicesStatsAction.INSTANCE, TransportIndicesStatsAction.class);
         registerAction(IndicesSegmentsAction.INSTANCE, TransportIndicesSegmentsAction.class);
         registerAction(IndicesShardStoresAction.INSTANCE, TransportIndicesShardStoresAction.class);
@@ -322,8 +310,7 @@ public class ActionModule extends AbstractModule {
         registerAction(UpdateAction.INSTANCE, TransportUpdateAction.class);
         registerAction(MultiGetAction.INSTANCE, TransportMultiGetAction.class,
                 TransportShardMultiGetAction.class);
-        registerAction(BulkAction.INSTANCE, TransportBulkAction.class,
-                TransportShardBulkAction.class);
+        registerAction(BulkAction.INSTANCE, TransportBulkAction.class, TransportShardBulkAction.class);
         registerAction(SearchAction.INSTANCE, TransportSearchAction.class);
         registerAction(SearchScrollAction.INSTANCE, TransportSearchScrollAction.class);
         registerAction(MultiSearchAction.INSTANCE, TransportMultiSearchAction.class);

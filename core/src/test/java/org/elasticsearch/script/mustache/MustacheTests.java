@@ -149,7 +149,7 @@ public class MustacheTests extends ESTestCase {
 
     public void testEscaping() {
         // json string escaping enabled:
-        Map<String, String> params = randomBoolean() ? Collections.EMPTY_MAP: Collections.<String, Object>singletonMap(CONTENT_TYPE_PARAM, JSON_CONTENT_TYPE);
+        Map<String, Object> params = randomBoolean() ? Collections.EMPTY_MAP: Collections.<String, Object>singletonMap(CONTENT_TYPE_PARAM, JSON_CONTENT_TYPE);
         Mustache mustache = (Mustache) engine.compile("{ \"field1\": \"{{value}}\"}", Collections.EMPTY_MAP);
         CompiledScript compiledScript = new CompiledScript(INLINE, "name", "mustache", mustache);
         ExecutableScript executableScript = engine.executable(compiledScript, Collections.<String, Object>singletonMap("value", "a \"value\""));

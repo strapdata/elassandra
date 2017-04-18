@@ -35,7 +35,7 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.discovery.MasterNotDiscoveredException;
-import org.elasticsearch.discovery.zen.ping.unicast.UnicastZenPing;
+
 import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeBuilder;
 import org.elasticsearch.test.ESIntegTestCase;
@@ -64,7 +64,8 @@ import static org.hamcrest.Matchers.notNullValue;
 public class TribeIT extends ESIntegTestCase {
 
     public static final String SECOND_CLUSTER_NODE_PREFIX = "node_tribe2";
-
+    public static final String DISCOVERY_ZEN_PING_UNICAST_HOSTS = "discovery.zen.ping.unicast.hosts";
+    
     private static InternalTestCluster cluster2;
 
     private Node tribeNode;
@@ -72,6 +73,7 @@ public class TribeIT extends ESIntegTestCase {
 
     @BeforeClass
     public static void setupSecondCluster() throws Exception {
+        /*
         ESIntegTestCase.beforeClass();
         NodeConfigurationSource nodeConfigurationSource = new NodeConfigurationSource() {
             @Override
@@ -90,6 +92,7 @@ public class TribeIT extends ESIntegTestCase {
 
         cluster2.beforeTest(getRandom(), 0.1);
         cluster2.ensureAtLeastNumDataNodes(2);
+        */
     }
 
     @AfterClass
@@ -130,8 +133,8 @@ public class TribeIT extends ESIntegTestCase {
             tribe2Defaults.put("tribe.t2." + entry.getKey(), entry.getValue());
         }
         // give each tribe it's unicast hosts to connect to
-        tribe1Defaults.putArray("tribe.t1." + UnicastZenPing.DISCOVERY_ZEN_PING_UNICAST_HOSTS, getUnicastHosts(internalCluster().client()));
-        tribe1Defaults.putArray("tribe.t2." + UnicastZenPing.DISCOVERY_ZEN_PING_UNICAST_HOSTS, getUnicastHosts(cluster2.client()));
+        tribe1Defaults.putArray("tribe.t1." + DISCOVERY_ZEN_PING_UNICAST_HOSTS, getUnicastHosts(internalCluster().client()));
+        tribe1Defaults.putArray("tribe.t2." + DISCOVERY_ZEN_PING_UNICAST_HOSTS, getUnicastHosts(cluster2.client()));
 
         Settings merged = Settings.builder()
                 .put("tribe.t1.cluster.name", internalCluster().getClusterName())

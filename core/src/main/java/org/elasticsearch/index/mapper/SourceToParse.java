@@ -62,6 +62,8 @@ public class SourceToParse {
 
     private long ttl;
 
+    private long token;
+
     private SourceToParse(Origin origin, XContentParser parser) {
         this.origin = origin;
         this.parser = parser;
@@ -174,6 +176,15 @@ public class SourceToParse {
         return this;
     }
 
+    public Long token() {
+        return this.token;
+    }
+
+    public SourceToParse token(Long token) {
+        this.token = token;
+        return this;
+    }
+    
     public enum Origin {
         PRIMARY,
         REPLICA

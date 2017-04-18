@@ -19,19 +19,7 @@
 
 package org.elasticsearch.bootstrap;
 
-import com.carrotsearch.randomizedtesting.RandomizedRunner;
-
-import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util.TestSecurityManager;
-import org.elasticsearch.SecureSM;
-import org.elasticsearch.bootstrap.Bootstrap;
-import org.elasticsearch.bootstrap.ESPolicy;
-import org.elasticsearch.bootstrap.Security;
-import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.SuppressForbidden;
-import org.elasticsearch.common.io.PathUtils;
-import org.elasticsearch.plugins.PluginInfo;
-import org.junit.Assert;
+import static com.carrotsearch.randomizedtesting.RandomizedTest.systemPropertyAsBoolean;
 
 import java.io.FilePermission;
 import java.io.InputStream;
@@ -53,7 +41,15 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 
-import static com.carrotsearch.randomizedtesting.RandomizedTest.systemPropertyAsBoolean;
+import org.apache.lucene.util.LuceneTestCase;
+import org.elasticsearch.SecureSM;
+import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.SuppressForbidden;
+import org.elasticsearch.common.io.PathUtils;
+import org.elasticsearch.plugins.PluginInfo;
+import org.junit.Assert;
+
+import com.carrotsearch.randomizedtesting.RandomizedRunner;
 
 /**
  * Initializes natives and installs test security manager

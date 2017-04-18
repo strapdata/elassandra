@@ -3,7 +3,7 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <groupId>org.elasticsearch.qa.backwards</groupId>
+        <groupId>com.strapdata.elasticsearch.qa.backwards</groupId>
         <artifactId>parent</artifactId>
         <version>2.4.5-SNAPSHOT</version>
     </parent>
@@ -21,7 +21,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.elasticsearch.distribution.tar</groupId>
+            <groupId>com.strapdata.elasticsearch.distribution.tar</groupId>
             <artifactId>elasticsearch</artifactId>
             <version>${project.version}</version>
             <type>tar.gz</type>
@@ -30,7 +30,7 @@
         <dependency>
             <!-- This just picks up ExternalNodeService which is all we need because
                 we grab the tests using testClassesDirectory. -->
-            <groupId>org.elasticsearch.qa.backwards</groupId>
+            <groupId>com.strapdata.elasticsearch.qa.backwards</groupId>
             <artifactId>shared</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -65,7 +65,7 @@
                             <outputDirectory>${integ.deps}/plugins</outputDirectory>
                             <artifactItems>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.distribution.tar</groupId>
+                                    <groupId>com.strapdata.elasticsearch.distribution.tar</groupId>
                                     <artifactId>elasticsearch</artifactId>
                                     <version>${project.version}</version>
                                     <type>tar.gz</type>
@@ -73,7 +73,7 @@
                                     <outputDirectory>${tests.bwc.path}</outputDirectory>
                                 </artifactItem>
                                 <artifactItem>
-                                    <groupId>org.elasticsearch.distribution.tar</groupId>
+                                    <groupId>com.strapdata.elasticsearch.distribution.tar</groupId>
                                     <artifactId>elasticsearch</artifactId>
                                     <version>${tests.bwc.version}</version>
                                     <type>tar.gz</type>

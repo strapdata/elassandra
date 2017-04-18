@@ -19,15 +19,16 @@
 
 package org.elasticsearch.search.internal;
 
+import java.io.IOException;
+import java.util.Collection;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.search.SearchType;
-import org.elasticsearch.common.HasContext;
 import org.elasticsearch.common.HasContextAndHeaders;
-import org.elasticsearch.common.HasHeaders;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.script.Template;
 import org.elasticsearch.search.Scroll;
-
-import java.io.IOException;
 
 /**
  * Shard level request that represents a search.
@@ -79,4 +80,11 @@ public interface ShardSearchRequest extends HasContextAndHeaders {
      * Returns the cache key for this shard search request, based on its content
      */
     BytesReference cacheKey() throws IOException;
+    
+    Boolean tokenRangesBitsetCache();
+    
+    /**
+     * Returns the token range for this request
+     */
+    Collection<Range<Token>> tokenRanges();
 }

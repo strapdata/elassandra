@@ -19,16 +19,28 @@
 
 package org.elasticsearch.search.internal;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Counter;
+import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elassandra.index.search.TokenRangesService;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.ParseFieldMatcher;
 import org.elasticsearch.common.lease.Releasables;
@@ -56,25 +68,16 @@ import org.elasticsearch.search.dfs.DfsSearchResult;
 import org.elasticsearch.search.fetch.FetchSearchResult;
 import org.elasticsearch.search.fetch.FetchSubPhase;
 import org.elasticsearch.search.fetch.FetchSubPhaseContext;
-import org.elasticsearch.search.fetch.innerhits.InnerHitsContext;
 import org.elasticsearch.search.fetch.script.ScriptFieldsContext;
 import org.elasticsearch.search.fetch.source.FetchSourceContext;
 import org.elasticsearch.search.highlight.SearchContextHighlight;
 import org.elasticsearch.search.lookup.SearchLookup;
-import org.elasticsearch.search.query.QueryPhaseExecutionException;
-import org.elasticsearch.search.profile.Profiler;
 import org.elasticsearch.search.profile.Profilers;
+import org.elasticsearch.search.query.QueryPhaseExecutionException;
 import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.rescore.RescoreSearchContext;
 import org.elasticsearch.search.scan.ScanContext;
 import org.elasticsearch.search.suggest.SuggestionSearchContext;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  *
@@ -159,6 +162,11 @@ public class DefaultSearchContext extends SearchContext {
     private volatile long lastAccessTime = -1;
     private Profilers profilers;
 
+    private final ClusterState clusterState;
+    private SearchProcessor searchProcessor;
+    
+    private boolean includeNode;
+    
     private final Map<String, FetchSubPhaseContext> subPhaseContexts = new HashMap<>();
     private final Map<Class<?>, Collector> queryCollectors = new HashMap<>();
 
@@ -166,8 +174,8 @@ public class DefaultSearchContext extends SearchContext {
                                 Engine.Searcher engineSearcher, IndexService indexService, IndexShard indexShard,
                                 ScriptService scriptService, PageCacheRecycler pageCacheRecycler,
                                 BigArrays bigArrays, Counter timeEstimateCounter, ParseFieldMatcher parseFieldMatcher,
-                                TimeValue timeout
-    ) {
+                                TimeValue timeout)
+    {
         super(parseFieldMatcher, request);
         this.id = id;
         this.request = request;
@@ -186,6 +194,11 @@ public class DefaultSearchContext extends SearchContext {
         this.searcher = new ContextIndexSearcher(engineSearcher, indexService.cache().query(), indexShard.getQueryCachingPolicy());
         this.timeEstimateCounter = timeEstimateCounter;
         this.timeoutInMillis = timeout.millis();
+        this.clusterState = indexService.clusterService().state();
+    }
+
+    public ClusterState getClusterState() {
+        return clusterState;
     }
 
     @Override
@@ -254,8 +267,17 @@ public class DefaultSearchContext extends SearchContext {
 
     @Override
     public Query searchFilter(String[] types) {
+        Query tokenRangeQuery = null;
+        
+        if (Boolean.FALSE.equals(this.request.tokenRangesBitsetCache()) || 
+            !this.indexService.isTokenRangesBitsetCacheEnabled()) {
+            if ( (this.request.tokenRanges() != null && this.request.tokenRanges().size() > 0) && 
+                 (this.aggregations == null ||  this.aggregations.factories() == null || !this.aggregations.factories().hasTokenRangeAggregation()) ) {
+                tokenRangeQuery = this.clusterService().getTokenRangesService().getTokenRangesQuery(request.tokenRanges());
+            }
+        }
         Query filter = mapperService().searchFilter(types);
-        if (filter == null && aliasFilter == null) {
+        if (filter == null && aliasFilter == null && tokenRangeQuery == null) {
             return null;
         }
         BooleanQuery.Builder bq = new BooleanQuery.Builder();
@@ -265,9 +287,23 @@ public class DefaultSearchContext extends SearchContext {
         if (aliasFilter != null) {
             bq.add(aliasFilter, Occur.MUST);
         }
+        if (tokenRangeQuery != null) {
+            bq.add(tokenRangeQuery, Occur.FILTER);
+        }
         return new ConstantScoreQuery(bq.build());
     }
 
+    @Override
+    public boolean includeNode() {
+        return includeNode;
+    }
+    
+    @Override
+    public void    includeNode(boolean includeNode) {
+        this.includeNode = includeNode;
+    }
+    
+    
     @Override
     public long id() {
         return this.id;
@@ -771,5 +807,15 @@ public class DefaultSearchContext extends SearchContext {
 
     public void setProfilers(Profilers profilers) {
         this.profilers = profilers;
+    }
+
+    @Override
+    public ClusterService clusterService() {
+        return this.indexService.clusterService();
+    }
+
+    @Override
+    public SearchProcessor searchProcessor() {
+        return this.searchProcessor;
     }
 }

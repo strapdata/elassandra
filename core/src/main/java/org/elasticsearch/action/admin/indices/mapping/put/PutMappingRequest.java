@@ -40,8 +40,8 @@ import static org.elasticsearch.action.ValidateActions.addValidationError;
 /**
  * Puts mapping definition registered under a specific type into one or more indices. Best created with
  * {@link org.elasticsearch.client.Requests#putMappingRequest(String...)}.
- * <p>
- * If the mappings already exists, the new mappings will be merged with the new one. If there are elements
+ * <p/>
+ * <p>If the mappings already exists, the new mappings will be merged with the new one. If there are elements
  * that can't be merged are detected, the request will be rejected.
  *
  * @see org.elasticsearch.client.Requests#putMappingRequest(String...)
@@ -52,7 +52,7 @@ public class PutMappingRequest extends AcknowledgedRequest<PutMappingRequest> im
 
     private static ObjectHashSet<String> RESERVED_FIELDS = ObjectHashSet.from(
             "_uid", "_id", "_type", "_source",  "_all", "_analyzer", "_parent", "_routing", "_index",
-            "_size", "_timestamp", "_ttl"
+            "_size", "_timestamp", "_ttl", "_token", "_node"
     );
 
     private String[] indices;

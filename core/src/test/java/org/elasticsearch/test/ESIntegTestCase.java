@@ -18,14 +18,54 @@
  */
 package org.elasticsearch.test;
 
-import com.carrotsearch.randomizedtesting.RandomizedContext;
-import com.carrotsearch.randomizedtesting.RandomizedTest;
-import com.carrotsearch.randomizedtesting.Randomness;
-import com.carrotsearch.randomizedtesting.annotations.TestGroup;
-import com.carrotsearch.randomizedtesting.generators.RandomInts;
-import com.carrotsearch.randomizedtesting.generators.RandomPicks;
-import com.google.common.base.Joiner;
-import com.google.common.base.Predicate;
+import static org.elasticsearch.client.Requests.syncedFlushRequest;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+import static org.elasticsearch.common.util.CollectionUtils.eagerPartition;
+import static org.elasticsearch.index.query.QueryBuilders.matchAllQuery;
+import static org.elasticsearch.test.XContentTestUtils.convertToMap;
+import static org.elasticsearch.test.XContentTestUtils.differenceBetweenMapsIgnoringArrayOrder;
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFailures;
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoTimeout;
+import static org.hamcrest.Matchers.emptyIterable;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.startsWith;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.annotation.Annotation;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.http.impl.client.HttpClients;
 import org.apache.lucene.util.IOUtils;
@@ -85,15 +125,12 @@ import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.common.unit.ByteSizeUnit;
-import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
-import org.elasticsearch.discovery.zen.elect.ElectMasterService;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.codec.CodecService;
 import org.elasticsearch.index.fielddata.FieldDataType;
@@ -103,10 +140,7 @@ import org.elasticsearch.index.mapper.MappedFieldType.Loading;
 import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
 import org.elasticsearch.index.shard.MergePolicyConfig;
 import org.elasticsearch.index.shard.MergeSchedulerConfig;
-import org.elasticsearch.index.translog.Translog;
-import org.elasticsearch.index.translog.TranslogConfig;
 import org.elasticsearch.index.translog.TranslogService;
-import org.elasticsearch.index.translog.TranslogWriter;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.cache.request.IndicesRequestCache;
 import org.elasticsearch.indices.store.IndicesStore;
@@ -125,54 +159,14 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.annotation.Annotation;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Inherited;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.elasticsearch.client.Requests.syncedFlushRequest;
-import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
-import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
-import static org.elasticsearch.common.settings.Settings.settingsBuilder;
-import static org.elasticsearch.common.util.CollectionUtils.eagerPartition;
-import static org.elasticsearch.index.query.QueryBuilders.matchAllQuery;
-import static org.elasticsearch.test.XContentTestUtils.convertToMap;
-import static org.elasticsearch.test.XContentTestUtils.differenceBetweenMapsIgnoringArrayOrder;
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFailures;
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoTimeout;
-import static org.hamcrest.Matchers.emptyIterable;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.startsWith;
+import com.carrotsearch.randomizedtesting.RandomizedContext;
+import com.carrotsearch.randomizedtesting.RandomizedTest;
+import com.carrotsearch.randomizedtesting.Randomness;
+import com.carrotsearch.randomizedtesting.annotations.TestGroup;
+import com.carrotsearch.randomizedtesting.generators.RandomInts;
+import com.carrotsearch.randomizedtesting.generators.RandomPicks;
+import com.google.common.base.Joiner;
+import com.google.common.base.Predicate;
 
 /**
  * {@link ESIntegTestCase} is an abstract base class to run integration
@@ -223,7 +217,7 @@ import static org.hamcrest.Matchers.startsWith;
 @LuceneTestCase.SuppressFileSystems("ExtrasFS") // doesn't work with potential multi data path from test cluster yet
 @ReproduceInfoPrinter.Properties({ "es.node.mode", "es.node.local", ESIntegTestCase.TESTS_CLUSTER,
         ESIntegTestCase.TESTS_ENABLE_MOCK_MODULES })
-public abstract class ESIntegTestCase extends ESTestCase {
+public abstract class ESIntegTestCase extends ESSingleNodeTestCase {
 
     /**
      * Property that controls whether ThirdParty Integration tests are run (not the default).
@@ -318,6 +312,14 @@ public abstract class ESIntegTestCase extends ESTestCase {
     private static ESIntegTestCase INSTANCE = null; // see @SuiteScope
     private static Long SUITE_SEED = null;
 
+    public ESIntegTestCase() {
+        super();
+        if (currentCluster == null) {
+            currentCluster = new InternalTestCluster(this);
+        }
+    }
+    
+    /*
     @BeforeClass
     public static void beforeClass() throws Exception {
         SUITE_SEED = randomLong();
@@ -341,7 +343,8 @@ public abstract class ESIntegTestCase extends ESTestCase {
         cluster().wipe(excludeTemplates());
         randomIndexTemplate();
     }
-
+    */
+    
     private void printTestMessage(String message) {
         if (isSuiteScopedTest(getClass()) && (getTestName().equals("<unknown>"))) {
             logger.info("[{}]: {} suite", getTestClass().getSimpleName(), message);
@@ -511,7 +514,7 @@ public abstract class ESIntegTestCase extends ESTestCase {
     }
 
     private static Settings.Builder setRandomIndexTranslogSettings(Random random, Settings.Builder builder) {
-        if (random.nextBoolean()) {
+        /*if (random.nextBoolean()) {
             builder.put(TranslogService.INDEX_TRANSLOG_FLUSH_THRESHOLD_OPS, RandomInts.randomIntBetween(random, 1, 10000));
         }
         if (random.nextBoolean()) {
@@ -538,9 +541,10 @@ public abstract class ESIntegTestCase extends ESTestCase {
                 builder.put(TranslogConfig.INDEX_TRANSLOG_SYNC_INTERVAL, RandomInts.randomIntBetween(random, 100, 5000), TimeUnit.MILLISECONDS);
             }
         }
-
+        */
         return builder;
     }
+
 
     private TestCluster buildWithPrivateContext(final Scope scope, final long seed) throws Exception {
         return RandomizedContext.current().runWithPrivateRandomness(new Randomness(seed), new Callable<TestCluster>() {
@@ -570,7 +574,8 @@ public abstract class ESIntegTestCase extends ESTestCase {
         clusters.put(clazz, testCluster);
         return testCluster;
     }
-
+   
+    
     private static void clearClusters() throws IOException {
         if (!clusters.isEmpty()) {
             IOUtils.close(clusters.values());
@@ -640,14 +645,6 @@ public abstract class ESIntegTestCase extends ESTestCase {
             throw new UnsupportedOperationException("current test cluster is immutable");
         }
         return (InternalTestCluster) currentCluster;
-    }
-
-    public ClusterService clusterService() {
-        return internalCluster().clusterService();
-    }
-
-    public static Client client() {
-        return client(null);
     }
 
     public static Client client(@Nullable String node) {
@@ -935,7 +932,7 @@ public abstract class ESIntegTestCase extends ESTestCase {
     public ClusterHealthStatus waitForRelocation() {
         return waitForRelocation(null);
     }
-
+    
     /**
      * Waits for all relocating shards to become active and the cluster has reached the given health status
      * using the cluster health API.
@@ -1036,9 +1033,11 @@ public abstract class ESIntegTestCase extends ESTestCase {
      * Note: this doesn't guarantee that the new setting has taken effect, just that it has been received by all nodes.
      */
     public void setMinimumMasterNodes(int n) {
+        /*
         assertTrue(client().admin().cluster().prepareUpdateSettings().setTransientSettings(
-                settingsBuilder().put(ElectMasterService.DISCOVERY_ZEN_MINIMUM_MASTER_NODES, n))
+                settingsBuilder())
                 .get().isAcknowledged());
+                */
     }
 
     /**
@@ -1232,7 +1231,7 @@ public abstract class ESIntegTestCase extends ESTestCase {
      * @see #waitForRelocation()
      */
     public final RefreshResponse refresh() {
-        waitForRelocation();
+        //waitForRelocation();
         // TODO RANDOMIZE with flush?
         RefreshResponse actionGet = client().admin().indices().prepareRefresh().execute().actionGet();
         assertNoFailures(actionGet);
@@ -1251,7 +1250,7 @@ public abstract class ESIntegTestCase extends ESTestCase {
      * Flush some or all indices in the cluster.
      */
     protected final FlushResponse flush(String... indices) {
-        waitForRelocation();
+        //waitForRelocation();
         FlushResponse actionGet = client().admin().indices().prepareFlush(indices).setWaitIfOngoing(true).execute().actionGet();
         for (ShardOperationFailedException failure : actionGet.getShardFailures()) {
             assertThat("unexpected flush failure " + failure.reason(), failure.status(), equalTo(RestStatus.SERVICE_UNAVAILABLE));
@@ -1263,7 +1262,7 @@ public abstract class ESIntegTestCase extends ESTestCase {
      * Waits for all relocations and force merge all indices in the cluster to 1 segment.
      */
     protected ForceMergeResponse forceMerge() {
-        waitForRelocation();
+        //waitForRelocation();
         ForceMergeResponse actionGet = client().admin().indices().prepareForceMerge().setMaxNumSegments(1).execute().actionGet();
         assertNoFailures(actionGet);
         return actionGet;
@@ -1741,11 +1740,12 @@ public abstract class ESIntegTestCase extends ESTestCase {
         }
         return new ExternalTestCluster(createTempDir(), externalClusterClientSettings(), transportClientPlugins(), transportAddresses);
     }
-
+    
     protected Settings externalClusterClientSettings() {
         return Settings.EMPTY;
     }
 
+   
     protected TestCluster buildTestCluster(Scope scope, long seed) throws IOException {
         String clusterAddresses = System.getProperty(TESTS_CLUSTER);
         if (Strings.hasLength(clusterAddresses)) {
@@ -1756,17 +1756,6 @@ public abstract class ESIntegTestCase extends ESTestCase {
             return buildExternalCluster(clusterAddresses);
         }
 
-        final String nodePrefix;
-        switch (scope) {
-            case TEST:
-                nodePrefix = TEST_CLUSTER_NODE_PREFIX;
-                break;
-            case SUITE:
-                nodePrefix = SUITE_CLUSTER_NODE_PREFIX;
-                break;
-            default:
-                throw new ElasticsearchException("Scope not supported: " + scope);
-        }
         NodeConfigurationSource nodeConfigurationSource = new NodeConfigurationSource() {
             @Override
             public Settings nodeSettings(int nodeOrdinal) {
@@ -1796,23 +1785,17 @@ public abstract class ESIntegTestCase extends ESTestCase {
             minNumDataNodes = getMinNumDataNodes();
             maxNumDataNodes = getMaxNumDataNodes();
         }
-        SuppressLocalMode noLocal = getAnnotation(this.getClass(), SuppressLocalMode.class);
-        SuppressNetworkMode noNetwork = getAnnotation(this.getClass(), SuppressNetworkMode.class);
-        String nodeMode = InternalTestCluster.configuredNodeMode();
-        if (noLocal != null && noNetwork != null) {
-            throw new IllegalStateException("Can't suppress both network and local mode");
-        } else if (noLocal != null){
-            nodeMode = "network";
-        } else if (noNetwork != null) {
-            nodeMode = "local";
-        }
-
+        
         boolean enableMockModules = enableMockModules();
+        return InternalTestCluster.getTestCluster(this);
+        /*
         return new InternalTestCluster(nodeMode, seed, createTempDir(), minNumDataNodes, maxNumDataNodes,
                 InternalTestCluster.clusterName(scope.name(), seed) + "-cluster", nodeConfigurationSource, getNumClientNodes(),
                 InternalTestCluster.DEFAULT_ENABLE_HTTP_PIPELINING, nodePrefix, enableMockModules);
+                */
     }
-
+    
+    
     protected boolean enableMockModules() {
         return RandomizedTest.systemPropertyAsBoolean(TESTS_ENABLE_MOCK_MODULES, true);
     }
@@ -1915,18 +1898,21 @@ public abstract class ESIntegTestCase extends ESTestCase {
     }
 
     private static boolean runTestScopeLifecycle() {
-        return INSTANCE == null;
+        // return INSTANCE == null;
+        return false;
     }
 
 
     @Before
     public final void before() throws Exception {
-
+        // ensure all noes are running
+        /*
         if (runTestScopeLifecycle()) {
             printTestMessage("setup");
             beforeInternal();
         }
         printTestMessage("starting");
+        */
     }
 
 
@@ -1937,15 +1923,18 @@ public abstract class ESIntegTestCase extends ESTestCase {
         // need to check that there are no more in-flight search contexts before
         // we remove indices
         super.ensureAllSearchContextsReleased();
+        /*
         if (runTestScopeLifecycle()) {
             printTestMessage("cleaning up after");
             afterInternal(false);
             printTestMessage("cleaned up after");
         }
+        */
     }
 
     @AfterClass
     public static void afterClass() throws Exception {
+        /*
         if (!runTestScopeLifecycle()) {
             try {
                 INSTANCE.printTestMessage("cleaning up after");
@@ -1958,6 +1947,7 @@ public abstract class ESIntegTestCase extends ESTestCase {
         }
         SUITE_SEED = null;
         currentCluster = null;
+        */
     }
 
     private static void initializeSuiteScope() throws Exception {
@@ -1968,6 +1958,7 @@ public abstract class ESIntegTestCase extends ESTestCase {
          * the reason why INSTANCE is static since this entire method
          * must be executed in a static context.
          */
+        /*
         assert INSTANCE == null;
         if (isSuiteScopedTest(targetClass)) {
             // note we need to do this this way to make sure this is reproducible
@@ -1986,6 +1977,7 @@ public abstract class ESIntegTestCase extends ESTestCase {
         } else {
             INSTANCE = null;
         }
+        */
     }
 
     /**

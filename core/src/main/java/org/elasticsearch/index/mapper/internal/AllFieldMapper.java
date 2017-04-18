@@ -240,6 +240,18 @@ public class AllFieldMapper extends MetadataFieldMapper {
         return null;
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        if (!enabledState.enabled) {
+            return;
+        }
+        // reset the entries
+        context.allEntries().reset();
+        Analyzer analyzer = findAnalyzer(context);
+        context.doc().add(new AllField(fieldType().names().indexName(), context.allEntries(), analyzer, fieldType()));
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {
         if (!enabledState.enabled) {

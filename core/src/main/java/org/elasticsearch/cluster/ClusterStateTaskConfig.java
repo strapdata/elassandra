@@ -43,4 +43,7 @@ public interface ClusterStateTaskConfig {
      * @return the priority
      */
     Priority priority();
+    
+    boolean doPresistMetaData();
+
 }

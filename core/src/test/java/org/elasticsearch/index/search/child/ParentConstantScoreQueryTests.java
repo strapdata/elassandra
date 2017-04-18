@@ -61,7 +61,7 @@ import static org.elasticsearch.index.query.QueryBuilders.*;
 public class ParentConstantScoreQueryTests extends AbstractChildTestCase {
 
     @BeforeClass
-    public static void before() throws IOException {
+    public  static void before() throws IOException {
         SearchContext.setCurrent(createSearchContext("test", "parent", "child"));
     }
 

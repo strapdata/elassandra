@@ -117,7 +117,7 @@ public class GeoPointFieldMapper extends BaseGeoPointFieldMapper  {
     }
 
     @Override
-    protected void parse(ParseContext context, GeoPoint point, String geoHash) throws IOException {
+    public void parse(ParseContext context, GeoPoint point, String geoHash) throws IOException {
         if (ignoreMalformed.value() == false) {
             if (point.lat() > 90.0 || point.lat() < -90.0) {
                 throw new IllegalArgumentException("illegal latitude value [" + point.lat() + "] for " + name());

@@ -19,14 +19,58 @@
 
 package org.elasticsearch.cluster.service;
 
-import com.google.common.collect.Iterables;
+import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.cql3.UntypedResultSet.Row;
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.service.ClientState;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
+import org.elassandra.ConcurrentMetaDataUpdateException;
+import org.elassandra.NoPersistedMetaDataException;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.routing.AbstractSearchStrategy.Router;
+import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy.PrimaryFirstRouter;
+import org.elassandra.gateway.CassandraGatewayService;
+import org.elassandra.index.search.TokenRangesService;
+import org.elassandra.indices.CassandraSecondaryIndicesListener;
+import org.elassandra.shard.CassandraShardStartedBarrier;
+import org.elassandra.shard.CassandraShardStateListener;
 import org.elasticsearch.Version;
+import org.elasticsearch.action.ActionWriteResponse.ShardInfo;
+import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cluster.AckedClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterState.Builder;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ClusterStateTaskConfig;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
@@ -36,57 +80,49 @@ import org.elasticsearch.cluster.LocalNodeMasterListener;
 import org.elasticsearch.cluster.TimeoutClusterStateListener;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlocks;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNodeService;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.logging.ESLogger;
-import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.text.Text;
-import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
-
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
-import org.elasticsearch.common.util.concurrent.CountDown;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.util.concurrent.FutureUtils;
 import org.elasticsearch.common.util.concurrent.PrioritizedEsThreadPoolExecutor;
 import org.elasticsearch.common.util.concurrent.PrioritizedRunnable;
-import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoveryService;
+import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.engine.Engine.GetResult;
+import org.elasticsearch.index.get.GetField;
+import org.elasticsearch.index.mapper.DocumentMapper;
+import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.indices.IndicesLifecycle;
+import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.settings.NodeSettingsService;
 import org.elasticsearch.tasks.TaskManager;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
+import com.google.common.collect.Iterables;
 
 /**
  *
@@ -107,6 +143,10 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     private final NodeSettingsService nodeSettingsService;
     private final DiscoveryNodeService discoveryNodeService;
+    private final IndicesService indicesService;
+    private final IndicesLifecycle indicesLifecycle;
+    private final CassandraSecondaryIndicesListener cassandraSecondaryIndicesService;
+    
     private final Version version;
 
     private final TimeValue reconnectInterval;
@@ -121,8 +161,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     private final Collection<ClusterStateListener> priorityClusterStateListeners = new CopyOnWriteArrayList<>();
     private final Collection<ClusterStateListener> clusterStateListeners = new CopyOnWriteArrayList<>();
     private final Collection<ClusterStateListener> lastClusterStateListeners = new CopyOnWriteArrayList<>();
-    // public for tests
-    public final Map<ClusterStateTaskExecutor, LinkedHashSet<UpdateTask>> updateTasksPerExecutor = new HashMap<>();
+    private final Map<ClusterStateTaskExecutor, List<UpdateTask>> updateTasksPerExecutor = new HashMap<>();
     // TODO this is rather frequently changing I guess a Synced Set would be better here and a dedicated remove API
     private final Collection<ClusterStateListener> postAppliedListeners = new CopyOnWriteArrayList<>();
     private final Iterable<ClusterStateListener> preAppliedListeners = Iterables.concat(
@@ -131,11 +170,13 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             lastClusterStateListeners);
 
     private final LocalNodeMasterListeners localNodeMasterListeners;
-
+    
     private final Queue<NotifyTimeout> onGoingTimeouts = ConcurrentCollections.newQueue();
 
     private volatile ClusterState clusterState;
-
+    
+    private volatile CassandraShardStartedBarrier shardStartedBarrier;
+    
     private final ClusterBlocks.Builder initialBlocks;
 
     private final TaskManager taskManager;
@@ -144,7 +185,8 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     @Inject
     public InternalClusterService(Settings settings, DiscoveryService discoveryService, OperationRouting operationRouting, TransportService transportService,
-                                  NodeSettingsService nodeSettingsService, ThreadPool threadPool, ClusterName clusterName, DiscoveryNodeService discoveryNodeService, Version version) {
+                                  NodeSettingsService nodeSettingsService, ThreadPool threadPool, ClusterName clusterName, DiscoveryNodeService discoveryNodeService, 
+                                  Version version, IndicesService indicesService, IndicesLifecycle indicesLifecycle) {
         super(settings);
         this.operationRouting = operationRouting;
         this.transportService = transportService;
@@ -152,6 +194,9 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         this.threadPool = threadPool;
         this.nodeSettingsService = nodeSettingsService;
         this.discoveryNodeService = discoveryNodeService;
+        this.indicesService = indicesService;
+        this.indicesLifecycle = indicesLifecycle;
+        this.cassandraSecondaryIndicesService = new CassandraSecondaryIndicesListener(this, indicesService);
         this.version = version;
 
         // will be replaced on doStart.
@@ -166,15 +211,16 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
         localNodeMasterListeners = new LocalNodeMasterListeners(threadPool);
 
-        initialBlocks = ClusterBlocks.builder().addGlobalBlock(discoveryService.getNoMasterBlock());
-
+        // Add NO_CASSANDRA_RING_BLOCK to avoid to save metadata while cassandra ring not ready.
+        initialBlocks = ClusterBlocks.builder().addGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK);
+        
         taskManager = transportService.getTaskManager();
     }
 
     public NodeSettingsService settingsService() {
         return this.nodeSettingsService;
     }
-
+    
     @Override
     public void addInitialStateBlock(ClusterBlock block) throws IllegalStateException {
         if (lifecycle.started()) {
@@ -198,14 +244,16 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         this.clusterState = ClusterState.builder(clusterState).blocks(initialBlocks).build();
         this.updateTasksExecutor = EsExecutors.newSinglePrioritizing(UPDATE_THREAD_NAME, daemonThreadFactory(settings, UPDATE_THREAD_NAME));
         this.reconnectToNodes = threadPool.schedule(reconnectInterval, ThreadPool.Names.GENERIC, new ReconnectToNodes());
-        Map<String, String> nodeAttributes = discoveryNodeService.buildAttributes();
-        // note, we rely on the fact that its a new id each time we start, see FD and "kill -9" handling
-        final String nodeId = DiscoveryService.generateNodeId(settings);
-        final TransportAddress publishAddress = transportService.boundAddress().publishAddress();
-        DiscoveryNode localNode = new DiscoveryNode(settings.get("name"), nodeId, publishAddress, nodeAttributes, version);
+       
+        DiscoveryNode localNode = this.discoveryService.localNode();
         DiscoveryNodes.Builder nodeBuilder = DiscoveryNodes.builder().put(localNode).localNodeId(localNode.id());
         this.clusterState = ClusterState.builder(clusterState).nodes(nodeBuilder).blocks(initialBlocks).build();
-        this.transportService.setLocalNode(localNode);
+        
+        // add listener to publish shard state in Application.X1
+        this.indicesLifecycle.addListener(new CassandraShardStateListener(this, this.discoveryService));
+        
+        // add post-applied because 2i shoukd be created/deleted after that cassandra indices have taken the new mapping.
+        addPost(cassandraSecondaryIndicesService);
     }
 
     @Override
@@ -223,6 +271,16 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     protected void doClose() {
     }
 
+    @Override
+    public void updateMapping(String ksName, MappingMetaData mapping) {
+        cassandraSecondaryIndicesService.updateMapping( ksName, mapping);
+    }
+    
+    @Override
+    public void recoverShard(String index) {
+        cassandraSecondaryIndicesService.recoverShard(index);
+    }
+    
     @Override
     public DiscoveryNode localNode() {
         return clusterState.getNodes().localNode();
@@ -249,10 +307,32 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     @Override
+    public void addPost(ClusterStateListener listener) {
+        this.postAppliedListeners.add(listener);
+    }
+
+    @Override
     public void add(ClusterStateListener listener) {
         clusterStateListeners.add(listener);
     }
 
+    @Override
+    public void addShardStartedBarrier() {
+        this.shardStartedBarrier = new CassandraShardStartedBarrier(this);
+    }
+    
+    @Override
+    public void removeShardStartedBarrier() {
+        this.shardStartedBarrier = null;
+    }
+    @Override
+    public void blockUntilShardsStarted() {
+        if (shardStartedBarrier != null) {
+            shardStartedBarrier.blockUntilShardsStarted();
+        }
+    }
+    
+    
     @Override
     public void remove(ClusterStateListener listener) {
         clusterStateListeners.remove(listener);
@@ -333,31 +413,21 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             final UpdateTask<T> updateTask = new UpdateTask<>(source, task, config, executor, listener);
 
             synchronized (updateTasksPerExecutor) {
-                LinkedHashSet<UpdateTask> updateTasksForExecutor = updateTasksPerExecutor.get(executor);
+                List<UpdateTask> updateTasksForExecutor = updateTasksPerExecutor.get(executor);
                 if (updateTasksForExecutor == null) {
-                    updateTasksPerExecutor.put(executor, new LinkedHashSet<UpdateTask>());
+                    updateTasksPerExecutor.put(executor, new ArrayList<UpdateTask>());
                 }
                 updateTasksPerExecutor.get(executor).add(updateTask);
             }
 
-            final TimeValue timeout = config.timeout();
-            if (timeout != null) {
-                updateTasksExecutor.execute(updateTask, threadPool.scheduler(), timeout, new Runnable() {
+            if (config.timeout() != null) {
+                updateTasksExecutor.execute(updateTask, threadPool.scheduler(), config.timeout(), new Runnable() {
                     @Override
                     public void run() {
                         threadPool.generic().execute(new Runnable() {
                             @Override
                             public void run() {
                                 if (updateTask.processed.getAndSet(true) == false) {
-                                    synchronized (updateTasksPerExecutor) {
-                                        LinkedHashSet<UpdateTask> existingTasks = updateTasksPerExecutor.get(executor);
-                                        if (existingTasks != null) {
-                                            existingTasks.remove(updateTask);
-                                            if (existingTasks.isEmpty()) {
-                                                updateTasksPerExecutor.remove(executor);
-                                            }
-                                        }
-                                    }
                                     listener.onFailure(source, new ProcessClusterEventTimeoutException(config.timeout(), source));
                                 }
                             }
@@ -440,7 +510,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         final ArrayList<UpdateTask<T>> toExecute = new ArrayList<>();
         final ArrayList<String> sources = new ArrayList<>();
         synchronized (updateTasksPerExecutor) {
-            LinkedHashSet<UpdateTask> pending = updateTasksPerExecutor.remove(executor);
+            List<UpdateTask> pending = updateTasksPerExecutor.remove(executor);
             if (pending != null) {
                 for (UpdateTask<T> task : pending) {
                     if (task.processed.getAndSet(true) == false) {
@@ -463,13 +533,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         }
         logger.debug("processing [{}]: execute", source);
         ClusterState previousClusterState = clusterState;
-        if (!previousClusterState.nodes().localNodeMaster() && executor.runOnlyOnMaster()) {
-            logger.debug("failing [{}]: local node is no longer master", source);
-            for (UpdateTask<T> updateTask : toExecute) {
-                updateTask.listener.onNoLongerMaster(updateTask.source);
-            }
-            return;
-        }
+        
         ClusterStateTaskExecutor.BatchResult<T> batchResult;
         long startTimeNS = System.nanoTime();
         List<T> inputs = new ArrayList<>();
@@ -488,7 +552,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                 logger.trace(sb.toString(), e);
             }
             warnAboutSlowTaskIfNeeded(executionTime, source);
-            batchResult = ClusterStateTaskExecutor.BatchResult.<T>builder().failures(inputs, e).build(previousClusterState);
+            batchResult = ClusterStateTaskExecutor.BatchResult.<T>builder().failures(inputs, e).build(previousClusterState, false);
         }
 
         assert batchResult.executionResults != null;
@@ -526,6 +590,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             );
         }
 
+
         if (previousClusterState == newClusterState) {
             for (UpdateTask<T> task : proccessedListeners) {
                 if (task.listener instanceof AckedClusterStateTaskListener) {
@@ -540,38 +605,72 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             return;
         }
 
+        // try to update cluster state.
+        boolean newPertistedMetadata = false;
         try {
-            ArrayList<Discovery.AckListener> ackListeners = new ArrayList<>();
-            if (newClusterState.nodes().localNodeMaster()) {
-                // only the master controls the version numbers
-                Builder builder = ClusterState.builder(newClusterState).incrementVersion();
-                if (previousClusterState.routingTable() != newClusterState.routingTable()) {
-                    builder.routingTable(RoutingTable.builder(newClusterState.routingTable()).version(newClusterState.routingTable().version() + 1).build());
-                }
-                if (previousClusterState.metaData() != newClusterState.metaData()) {
-                    builder.metaData(MetaData.builder(newClusterState.metaData()).version(newClusterState.metaData().version() + 1));
-                }
-                newClusterState = builder.build();
-                for (UpdateTask<T> task : proccessedListeners) {
-                    if (task.listener instanceof AckedClusterStateTaskListener) {
-                        final AckedClusterStateTaskListener ackedListener = (AckedClusterStateTaskListener) task.listener;
-                        if (ackedListener.ackTimeout() == null || ackedListener.ackTimeout().millis() == 0) {
-                            ackedListener.onAckTimeout();
-                        } else {
-                            try {
-                                ackListeners.add(new AckCountDownListener(ackedListener, newClusterState.version(), newClusterState.nodes(), threadPool));
-                            } catch (EsRejectedExecutionException ex) {
-                                if (logger.isDebugEnabled()) {
-                                    logger.debug("Couldn't schedule timeout thread - node might be shutting down", ex);
+            String newClusterStateMetaDataString = MetaData.Builder.toXContent(newClusterState.metaData(), ClusterService.persistedParams);
+            String previousClusterStateMetaDataString = MetaData.Builder.toXContent(previousClusterState.metaData(), ClusterService.persistedParams);
+            if (!newClusterStateMetaDataString.equals(previousClusterStateMetaDataString) && !newClusterState.blocks().disableStatePersistence() && batchResult.doPresistMetaData) {
+                // update MeteData.version+cluster_uuid
+                newPertistedMetadata = true;
+                newClusterState = ClusterState.builder(newClusterState)
+                                    .metaData(MetaData.builder(newClusterState.metaData()).incrementVersion().build())
+                                    .incrementVersion()
+                                    .build();
+                // try to persist new metadata in cassandra.
+                try {
+                    persistMetaData(previousClusterState.metaData(), newClusterState.metaData(), source);
+                } catch (ConcurrentMetaDataUpdateException e) {
+                    // should replay the task later when current cluster state will match the expected metadata uuid and version
+                    logger.debug("Cannot overwrite persistent metadata, will resubmit task when metadata.version > {}", previousClusterState.metaData().version());
+                    InternalClusterService.this.addFirst(new ClusterStateListener() {
+                        @Override
+                        public void clusterChanged(ClusterChangedEvent event) {
+                            if (event.metaDataChanged()) {
+                                logger.debug("metadata.version={} => resubmit delayed update source={} tasks={}",InternalClusterService.this.state().metaData().version(), source, inputs);
+                                // TODO: resubmit tasks after the next cluster state update.
+                                for (final UpdateTask<T> updateTask : toExecute) {
+                                    InternalClusterService.this.submitStateUpdateTask(source, (ClusterStateUpdateTask) updateTask.task);
                                 }
-                                //timeout straightaway, otherwise we could wait forever as the timeout thread has not started
-                                ackedListener.onAckTimeout();
+                                InternalClusterService.this.remove(this); // replay only once.
                             }
                         }
+                    });
+                    return;
+                }
+            }
+        } catch (org.apache.cassandra.exceptions.UnavailableException e) {
+            // Cassandra issue => ack with failure.
+            for (UpdateTask<T> task : proccessedListeners) {
+                if (task.listener instanceof AckedClusterStateTaskListener) {
+                    //no need to wait for ack if nothing changed, the update can be counted as acknowledged
+                    try {
+                        ((AckedClusterStateTaskListener) task.listener).onFailure(source, e);
+                    } catch (Throwable t) {
+                        logger.debug("error while processing ack for master node [{}]", t, newClusterState.nodes().localNode());
                     }
                 }
             }
-            final Discovery.AckListener ackListener = new DelegetingAckListener(ackListeners);
+            return;
+        } catch (Throwable e) {
+            TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
+            if (logger.isTraceEnabled()) {
+                StringBuilder sb = new StringBuilder("failed to execute cluster state update in ").append(executionTime)
+                        .append(", state:\nversion [")
+                        .append(previousClusterState.version()).
+                        append("], source [").append(source).append("]\n");
+                logger.warn(sb.toString(), e);
+                // TODO resubmit task on next cluster state change
+            }
+            return;
+        }
+        
+        
+        try {
+            if (newPertistedMetadata) {
+                // publish in gossip state the applied metadata.uuid and version
+                discoveryService.publishX2(newClusterState);
+            }
 
             newClusterState.status(ClusterState.ClusterStateStatus.BEING_APPLIED);
 
@@ -595,7 +694,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
             // TODO, do this in parallel (and wait)
             for (DiscoveryNode node : nodesDelta.addedNodes()) {
-                if (!nodeRequiresConnection(node)) {
+                if (!nodeRequiresConnection(node) || !DiscoveryNodeStatus.ALIVE.equals(node.status())) {
                     continue;
                 }
                 try {
@@ -609,14 +708,20 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             // if we are the master, publish the new state to all nodes
             // we publish here before we send a notification to all the listeners, since if it fails
             // we don't want to notify
+            /*
             if (newClusterState.nodes().localNodeMaster()) {
                 logger.debug("publishing cluster state version [{}]", newClusterState.version());
                 discoveryService.publish(clusterChangedEvent, ackListener);
             }
+            */
 
-            // update the current cluster state
+            // update the current cluster state 
             clusterState = newClusterState;
-            logger.debug("set local cluster state to version {}", newClusterState.version());
+            if (logger.isTraceEnabled())
+                logger.trace("set local clusterState version={} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
+            
+            if (logger.isTraceEnabled())
+                logger.trace("preAppliedListeners={}",preAppliedListeners);
             for (ClusterStateListener listener : preAppliedListeners) {
                 try {
                     listener.clusterChanged(clusterChangedEvent);
@@ -625,16 +730,38 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                 }
             }
 
-            for (DiscoveryNode node : nodesDelta.removedNodes()) {
-                try {
-                    transportService.disconnectFromNode(node);
-                } catch (Throwable e) {
-                    logger.warn("failed to disconnect to node [" + node + "]", e);
+            if (!newPertistedMetadata) {
+                // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
+                discoveryService.publishX2(newClusterState);
+            }
+            
+            Throwable ackFailure = null;
+            if (newPertistedMetadata) {
+                // for the coordinator node, wait for acknowledgment from all nodes
+                if (batchResult.doPresistMetaData && newClusterState.nodes().size() > 1) {
+                    try {
+                        if (logger.isInfoEnabled())
+                            logger.info("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
+                        if (!discoveryService.awaitMetaDataVersion(newClusterState.metaData().version(), new TimeValue(30, TimeUnit.SECONDS))) {
+                            logger.warn("Timeout waiting metadata version = {}", newClusterState.metaData().version());
+                        }
+                    } catch (Throwable e) {
+                        ackFailure = e;
+                        logger.error("Interruped while waiting MetaData.version = {}",e, newClusterState.metaData().version() );
+                    }
                 }
             }
-
+            
             newClusterState.status(ClusterState.ClusterStateStatus.APPLIED);
+            
+            // update cluster state routing table
+            // TODO: update the routing table only for updated indices.
+            RoutingTable newRoutingTable = RoutingTable.build(this, newClusterState);
+            clusterState = ClusterState.builder(newClusterState).routingTable(newRoutingTable).build().status(ClusterState.ClusterStateStatus.APPLIED);
 
+            // notify 2i with the new cluster state, including new local started shard.
+            if (logger.isTraceEnabled())
+                logger.trace("postAppliedListeners={}",postAppliedListeners);
             for (ClusterStateListener listener : postAppliedListeners) {
                 try {
                     listener.clusterChanged(clusterChangedEvent);
@@ -642,16 +769,19 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                     logger.warn("failed to notify ClusterStateListener", ex);
                 }
             }
-
+            
+            
             //manual ack only from the master at the end of the publish
-            if (newClusterState.nodes().localNodeMaster()) {
-                try {
-                    ackListener.onNodeAck(newClusterState.nodes().localNode(), null);
-                } catch (Throwable t) {
-                    logger.debug("error while processing ack for master node [{}]", t, newClusterState.nodes().localNode());
+            for (UpdateTask<T> task : proccessedListeners) {
+                if (task.listener instanceof AckedClusterStateTaskListener) {
+                    //no need to wait for ack if nothing changed, the update can be counted as acknowledged
+                    try {
+                        ((AckedClusterStateTaskListener) task.listener).onAllNodesAcked(ackFailure);
+                    } catch (Throwable t) {
+                        logger.debug("error while processing ack for master node [{}]", t, newClusterState.nodes().localNode());
+                    }
                 }
             }
-
 
             for (UpdateTask<T> task : proccessedListeners) {
                 task.listener.clusterStateProcessed(task.source, previousClusterState, newClusterState);
@@ -659,6 +789,10 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
             executor.clusterStatePublished(newClusterState);
 
+            if (this.shardStartedBarrier != null) {
+                shardStartedBarrier.isReadyToIndex(newClusterState);
+            }
+            
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
             logger.debug("processing [{}]: took {} done applying updated cluster_state (version: {}, uuid: {})", source, executionTime, newClusterState.version(), newClusterState.stateUUID());
             warnAboutSlowTaskIfNeeded(executionTime, source);
@@ -834,7 +968,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                 if (!nodeRequiresConnection(node)) {
                     continue;
                 }
-                if (clusterState.nodes().nodeExists(node.id())) { // we double check existence of node since connectToNode might take time...
+                if (clusterState.nodes().nodeExists(node.id()) && node.status()==DiscoveryNode.DiscoveryNodeStatus.ALIVE) { // we double check existence of node since connectToNode might take time...
                     if (!transportService.nodeConnected(node)) {
                         try {
                             transportService.connectToNode(node);
@@ -950,6 +1084,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
         }
     }
 
+    /*
     private static class DelegetingAckListener implements Discovery.AckListener {
 
         final private List<Discovery.AckListener> listeners;
@@ -970,7 +1105,9 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             throw new UnsupportedOperationException("no timeout delegation");
         }
     }
-
+    */
+    
+    /*
     private static class AckCountDownListener implements Discovery.AckListener {
 
         private static final ESLogger logger = Loggers.getLogger(AckCountDownListener.class);
@@ -1034,12 +1171,371 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
             }
         }
     }
-
+    */
+    
     class ApplySettings implements NodeSettingsService.Listener {
         @Override
         public void onRefreshSettings(Settings settings) {
             final TimeValue slowTaskLoggingThreshold = settings.getAsTime(SETTING_CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD, InternalClusterService.this.slowTaskLoggingThreshold);
             InternalClusterService.this.slowTaskLoggingThreshold = slowTaskLoggingThreshold;
         }
+    }
+
+    @Override
+    public void publishGossipStates() {
+        
+    }
+    
+    @Override
+    public IndexService indexService(String index) {
+        return this.indicesService.indexService(index);
+    }
+    
+    @Override
+    public IndexService indexServiceSafe(String index) {
+        return this.indicesService.indexServiceSafe(index);
+    }
+    
+    @Override
+    public TokenRangesService getTokenRangesService() {
+        return  null;
+    }
+    
+    @Override
+    public AbstractSearchStrategy searchStrategy(IndexMetaData indexMetaData, ClusterState state) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public Router getRouter(IndexMetaData indexMetaData, ClusterState state) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public PrimaryFirstRouter updateRouter(IndexMetaData indexMetaData, ClusterState state) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public Map<String, GetField> flattenGetField(String[] fieldFilter, String path, Object node,
+            Map<String, GetField> flatFields) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public Map<String, List<Object>> flattenTree(Set<String> neededFiedls, String path, Object node,
+            Map<String, List<Object>> fields) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public void createOrUpdateElasticAdminKeyspace() {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void createIndexKeyspace(String index, int replicationFactor) throws IOException {
+        // TODO Auto-generated method stub
+        
+    }
+    
+    @Override
+    public void dropIndexKeyspace(String ksName) throws IOException {
+    }
+    
+    @Override
+    public void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException {
+    }
+
+    @Override
+    public void createSecondaryIndices(IndexMetaData indexMetaData) throws IOException {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void dropSecondaryIndices(IndexMetaData indexMetaData) throws RequestExecutionException {
+        // TODO Auto-generated method stub
+        
+    }
+    
+    @Override
+    public void dropSecondaryIndex(CFMetaData cfMetaData) throws RequestExecutionException {
+        
+    }
+
+    @Override
+    public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException {
+        
+    }
+    
+    @Override
+    public void dropTable(String ksName, String cfName) throws RequestExecutionException {
+        
+    }
+    
+    @Override
+    public DocPrimaryKey parseElasticId(String index, String cfName, String id)
+            throws JsonParseException, JsonMappingException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public ClusterState updateNumberOfShards(ClusterState currentState) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public void submitNumberOfShardsUpdate() {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void updateRoutingTable() {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void updateTableSchema(final IndexService indexService, final MappingMetaData mappingMd)
+            throws IOException {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public boolean isStaticDocument(String index, Uid uid)
+            throws JsonParseException, JsonMappingException, IOException {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public boolean rowExists(final MapperService mapperService, final String type, String id)
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public UntypedResultSet fetchRow(String ksName, String index, String type, String id, String[] columns, Map<String,ColumnDefinition> columnDefs)
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRow(String ksName, String index, String cfName, String id, String[] columns,
+            ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs)
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRow(String ksName, String index, String cfName, DocPrimaryKey docPk, String[] columns,
+            ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs)
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public String buildFetchQuery(String ksName, String index, String cfName, String[] requiredColumns,
+            boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws IndexNotFoundException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String id, String[] columns,  Map<String,ColumnDefinition> columnDefs) throws IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, DocPrimaryKey docPk, String[] columns,  Map<String,ColumnDefinition> columnDefs) throws IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet fetchRowInternal(String ksName, String index, String cfName, String[] columns,
+            Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public GetResult fetchSourceInternal(String ksName, String index, String type, String id) throws IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public Map<String, Object> rowAsMap(String index, String type, Row row) throws IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public int rowAsMap(String index, String type, Row row, Map<String, Object> map) throws IOException {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public Object[] rowAsArray(String index, String type, Row row) throws IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public Object[] rowAsArray(String index, String type, Row row, boolean valueForSearch) throws IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public void deleteRow(String index, String type, String id, ConsistencyLevel cl)
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void updateDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData) throws Exception {
+    }
+    
+    @Override
+    public void insertDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData) throws Exception {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void blockingMappingUpdate(IndexService indexService, String type, String source)
+            throws Exception {
+        // TODO Auto-generated method stub
+        
+    }
+/*
+    @Override
+    public Token getToken(ByteBuffer rowKey, ColumnFamily cf) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+
+    @Override
+    public Token getToken(String index, String type, String routing)
+            throws JsonParseException, JsonMappingException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+*/
+
+    
+    @Override
+    public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public MetaData checkForNewMetaData(Long version) throws NoPersistedMetaDataException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public void persistMetaData(MetaData currentMetadData, MetaData newMetaData, String source)
+            throws ConfigurationException, IOException, InvalidRequestException, RequestExecutionException,
+            RequestValidationException {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public Map<UUID, ShardRoutingState> getShardRoutingStates(String index) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public void putShardRoutingState(String index, ShardRoutingState shardRoutingState)
+            throws JsonGenerationException, JsonMappingException, IOException {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public boolean isDatacenterGroupMember(InetAddress endpoint) {
+        // TODO Auto-generated method stub
+        return false;
+    }
+    
+    @Override
+    public ShardInfo shardInfo(String index, ConsistencyLevel cl) {
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query)
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query, Object... values)
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+    
+    @Override
+    public BytesReference source(DocumentMapper docMapper, Map sourceAsMap, String index, String type, String id)
+            throws JsonParseException, JsonMappingException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public BytesReference source(DocumentMapper docMapper, Map sourceAsMap, String index, Uid uid)
+            throws JsonParseException, JsonMappingException, IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+    
+    @Override
+    public String getElasticAdminKeyspaceName() {
+        return null;
+    }
+
+    @Override
+    public int getLocalDataCenterSize() {
+        return 0;
     }
 }

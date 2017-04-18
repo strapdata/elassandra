@@ -19,6 +19,20 @@
 
 package org.elasticsearch.common.io.stream;
 
+import java.io.EOFException;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.file.NoSuchFileException;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.Token;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
@@ -35,16 +49,6 @@ import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.text.Text;
 import org.elasticsearch.tasks.Task;
 import org.joda.time.ReadableInstant;
-
-import java.io.EOFException;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.file.NoSuchFileException;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  *
@@ -432,6 +436,12 @@ public abstract class StreamOutput extends OutputStream {
         } else if (type == GeoPoint.class) {
             writeByte((byte) 22);
             writeGeoPoint((GeoPoint) value);
+        } else if (value instanceof Token) {
+            writeByte((byte) 64);
+            IPartitioner p = DatabaseDescriptor.getPartitioner();
+            ByteBuffer b = p.getTokenFactory().toByteArray((Token) value);
+            writeVInt(b.array().length);
+            writeBytes(b.array());
         } else {
             throw new IOException("Can't write type [" + type + "]");
         }

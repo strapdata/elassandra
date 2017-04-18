@@ -2541,7 +2541,8 @@ public class SimpleIndexQueryParserTests extends ESSingleNodeTestCase {
     public void testEmptyBoolSubClausesIsMatchAll() throws IOException {
         String query = copyToStringFromClasspath("/org/elasticsearch/index/query/bool-query-with-empty-clauses-for-parsing.json");
         IndexService indexService = createIndex("testidx", client().admin().indices().prepareCreate("testidx")
-                .addMapping("foo", "nested", "type=nested"));
+                //.addMapping("foo", "nested", "type=nested"));
+                .addMapping("foo", "{\"foo\":{\"properties\":{\"nested\":{\"type\":\"nested\",\"properties\":{\"bar\":{\"type\":\"string\"}}}}}}"));
         SearchContext.setCurrent(createSearchContext(indexService));
         IndexQueryParserService queryParser = indexService.queryParserService();
         Query parsedQuery = queryParser.parse(query).query();

@@ -182,6 +182,32 @@ public class UidFieldMapper extends MetadataFieldMapper {
         // nothing to do here, we either do it in post parse, or in pre parse.
         return null;
     }
+    
+    @Override
+    public void postCreate(ParseContext context) throws IOException {
+        // since we did not have the uid in the pre phase, we did not add it automatically to the nested docs
+        // as they were created we need to make sure we add it to all the nested docs...
+        if (context.docs().size() > 1) {
+            final IndexableField uidField = context.rootDoc().getField(UidFieldMapper.NAME);
+            assert uidField != null;
+            // we need to go over the docs and add it...
+            for (int i = 1; i < context.docs().size(); i++) {
+                final Document doc = context.docs().get(i);
+                doc.add(new Field(UidFieldMapper.NAME, uidField.stringValue(), Defaults.NESTED_FIELD_TYPE));
+            }
+        }
+    }
+
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        Uid value = (Uid)object;
+        Field uid = new Field(NAME, value.toString(), Defaults.FIELD_TYPE);
+        context.uid(uid);
+        context.doc().add(uid);
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new BinaryDocValuesField(NAME, new BytesRef(uid.stringValue())));
+        }
+    }
 
     @Override
     protected void parseCreateField(ParseContext context, List<Field> fields) throws IOException {

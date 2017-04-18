@@ -216,6 +216,29 @@ public class LongFieldMapper extends NumberFieldMapper {
     }
 
     @Override
+    public void innerCreateField(ParseContext context, Object object) throws IOException {
+        Long value = (Long)object;
+        float boost = fieldType().boost();
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            value = fieldType().nullValue();
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().names().fullName(), Long.toString(value), boost);
+        }
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            CustomLongNumericField field = new CustomLongNumericField(value, fieldType());
+            field.setBoost(boost);
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            addDocValue(context, value);
+        }
+    }
+    
+    @Override
     protected void innerParseCreateField(ParseContext context, List<Field> fields) throws IOException {
         long value;
         float boost = fieldType().boost();

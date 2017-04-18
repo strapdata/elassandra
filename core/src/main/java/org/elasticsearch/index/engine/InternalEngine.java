@@ -55,6 +55,8 @@ import org.elasticsearch.common.lucene.index.ElasticsearchDirectoryReader;
 import org.elasticsearch.common.lucene.index.ElasticsearchLeafReader;
 import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.common.math.MathUtils;
+import org.elasticsearch.common.metrics.CounterMetric;
+import org.elasticsearch.common.metrics.MeanMetric;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
@@ -87,7 +89,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-
+ 
 /**
  *
  */
@@ -188,38 +190,16 @@ public class InternalEngine extends Engine {
     }
 
     private Translog openTranslog(EngineConfig engineConfig, IndexWriter writer, boolean createNew) throws IOException {
-        final Translog.TranslogGeneration generation = loadTranslogIdFromCommit(writer);
-        final TranslogConfig translogConfig = engineConfig.getTranslogConfig();
-
-        if (createNew == false) {
-            // We expect that this shard already exists, so it must already have an existing translog else something is badly wrong!
-            if (generation == null) {
-                throw new IllegalStateException("no translog generation present in commit data but translog is expected to exist");
-            }
-            translogConfig.setTranslogGeneration(generation);
-            if (generation != null && generation.translogUUID == null) {
-                // only upgrade on pre-2.0 indices...
-                Translog.upgradeLegacyTranslog(logger, translogConfig);
+    boolean success = false;
+        try {
+            commitIndexWriter(writer, translog);
+            success = true;
+        } finally {
+            if (success == false) {
+                IOUtils.closeWhileHandlingException(translog);
             }
         }
-        final Translog translog = new Translog(translogConfig);
-        if (generation == null || generation.translogUUID == null) {
-            if (generation == null) {
-                logger.debug("no translog ID present in the current generation - creating one");
-            } else if (generation.translogUUID == null) {
-                logger.debug("upgraded translog to pre 2.0 format, associating translog with index - writing translog UUID");
-            }
-            boolean success = false;
-            try {
-                commitIndexWriter(writer, translog);
-                success = true;
-            } finally {
-                if (success == false) {
-                    IOUtils.closeWhileHandlingException(translog);
-                }
-            }
-        }
-        return translog;
+        return Translog.DUMMY_TRANSLOG;
     }
 
     @Override
@@ -229,6 +209,7 @@ public class InternalEngine extends Engine {
     }
 
     protected void recoverFromTranslog(EngineConfig engineConfig, Translog.TranslogGeneration translogGeneration) throws IOException {
+    /*
         int opsRecovered = 0;
         final TranslogRecoveryPerformer handler = engineConfig.getTranslogRecoveryPerformer();
         try (Translog.Snapshot snapshot = translog.newSnapshot()) {
@@ -247,6 +228,7 @@ public class InternalEngine extends Engine {
         } else if (translog.isCurrent(translogGeneration) == false) {
             commitIndexWriter(indexWriter, translog, lastCommittedSegmentInfos.getUserData().get(Engine.SYNC_COMMIT_ID));
         }
+        */
     }
 
     /**
@@ -257,6 +239,7 @@ public class InternalEngine extends Engine {
     private Translog.TranslogGeneration loadTranslogIdFromCommit(IndexWriter writer) throws IOException {
         // commit on a just opened writer will commit even if there are no changes done to it
         // we rely on that for the commit data translog id key
+    /*
         final Map<String, String> commitUserData = writer.getCommitData();
         if (commitUserData.containsKey("translog_id")) {
             assert commitUserData.containsKey(Translog.TRANSLOG_UUID_KEY) == false : "legacy commit contains translog UUID";
@@ -269,6 +252,7 @@ public class InternalEngine extends Engine {
             final long translogGen = Long.parseLong(commitUserData.get(Translog.TRANSLOG_GENERATION_KEY));
             return new Translog.TranslogGeneration(translogUUID, translogGen);
         }
+        */
         return null;
     }
 
@@ -538,8 +522,9 @@ public class InternalEngine extends Engine {
                     indexWriter.updateDocument(index.uid(), index.docs().get(0));
                 }
             }
-            Translog.Location translogLocation = translog.add(new Translog.Index(index));
-
+            //Translog.Location translogLocation = translog.add(new Translog.Index(index));
+            Translog.Location translogLocation = translog.add(null);
+            
             versionMap.putUnderLock(index.uid().bytes(), new VersionValue(updatedVersion, translogLocation));
             index.setTranslogLocation(translogLocation);
             indexingService.postIndexUnderLock(index);
@@ -649,7 +634,7 @@ public class InternalEngine extends Engine {
             }
 
             indexWriter.deleteDocuments(query);
-            translog.add(new Translog.DeleteByQuery(delete));
+            //translog.add(new Translog.DeleteByQuery(delete));
         } catch (Throwable t) {
             maybeFailEngine("delete_by_query", t);
             throw new DeleteByQueryFailedEngineException(shardId, delete, t);
@@ -1244,6 +1229,7 @@ public class InternalEngine extends Engine {
 
     private void commitIndexWriter(IndexWriter writer, Translog translog, String syncId) throws IOException {
         try {
+        /*
             Translog.TranslogGeneration translogGeneration = translog.getGeneration();
             logger.trace("committing writer with translog id [{}]  and sync id [{}] ", translogGeneration.translogFileGeneration, syncId);
             Map<String, String> commitData = new HashMap<>(2);
@@ -1253,6 +1239,7 @@ public class InternalEngine extends Engine {
                 commitData.put(Engine.SYNC_COMMIT_ID, syncId);
             }
             indexWriter.setCommitData(commitData);
+            */
             writer.commit();
         } catch (Throwable ex) {
             failEngine("lucene commit failed", ex);
@@ -1298,6 +1285,51 @@ public class InternalEngine extends Engine {
         }
 
         return renewed;
+    }
+    
+    @Override
+    public MeanMetric schedulerTotalMerges() { 
+        return this.mergeScheduler.totalMerges;
+    }
+    
+    @Override
+    public CounterMetric schedulerTotalMergesNumDocs() { 
+        return this.mergeScheduler.totalMergesNumDocs;
+    }
+    
+    @Override
+    public CounterMetric schedulerTotalMergesSizeInBytes() { 
+        return this.mergeScheduler.totalMergesSizeInBytes;
+    }
+    
+    @Override
+    public CounterMetric schedulerCurrentMerges() { 
+        return this.mergeScheduler.currentMerges;
+    }
+    
+    @Override
+    public CounterMetric schedulerCurrentMergesNumDocs() { 
+        return this.mergeScheduler.currentMergesNumDocs;
+    }
+    
+    @Override
+    public CounterMetric schedulerCurrentMergesSizeInBytes() { 
+        return this.mergeScheduler.currentMergesSizeInBytes;
+    }
+    
+    @Override
+    public CounterMetric schedulerTotalMergeStoppedTime() { 
+        return this.mergeScheduler.totalMergeStoppedTime;
+    }
+    
+    @Override
+    public CounterMetric schedulerTotalMergeThrottledTime() { 
+        return this.mergeScheduler.totalMergeThrottledTime;
+    }
+    
+    @Override
+    public double getIORateLimitMBPerSec() {
+        return this.mergeScheduler.getIORateLimitMBPerSec();
     }
 
 }

@@ -5,7 +5,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.elasticsearch.module</groupId>
+    <groupId>com.strapdata.elasticsearch.module</groupId>
     <artifactId>modules</artifactId>
     <version>2.4.5-SNAPSHOT</version>
     <packaging>pom</packaging>
@@ -14,7 +14,7 @@
     <description>A parent project for Elasticsearch modules (Internal)</description>
 
     <parent>
-        <groupId>org.elasticsearch</groupId>
+        <groupId>com.strapdata.elasticsearch</groupId>
         <artifactId>parent</artifactId>
         <version>2.4.5-SNAPSHOT</version>
     </parent>
@@ -41,7 +41,7 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.elasticsearch</groupId>
+            <groupId>com.strapdata.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
@@ -49,7 +49,7 @@
 
         <!-- Provided dependencies by elasticsearch itself  -->
         <dependency>
-            <groupId>org.elasticsearch</groupId>
+            <groupId>com.strapdata.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
             <scope>provided</scope>
         </dependency>
@@ -209,7 +209,7 @@
 
         <!-- trying to outsmart maven: the result will likely be jar hell -->
         <dependency>
-            <groupId>org.elasticsearch.distribution.test</groupId>
+            <groupId>com.strapdata.elasticsearch.distribution.test</groupId>
             <artifactId>elasticsearch</artifactId>
             <version>${elasticsearch.version}</version>
             <type>zip</type>
@@ -394,7 +394,7 @@
                                 <skip>${skip.integ.tests}</skip>
                                 <artifactItems>
                                     <artifactItem>
-                                        <groupId>org.elasticsearch.distribution.test</groupId>
+                                        <groupId>com.strapdata.elasticsearch.distribution.test</groupId>
                                         <artifactId>elasticsearch</artifactId>
                                         <version>${elasticsearch.version}</version>
                                         <type>zip</type>

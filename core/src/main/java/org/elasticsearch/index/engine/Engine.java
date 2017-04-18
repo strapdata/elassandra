@@ -51,6 +51,8 @@ import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.lucene.uid.Versions;
+import org.elasticsearch.common.metrics.CounterMetric;
+import org.elasticsearch.common.metrics.MeanMetric;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.deletionpolicy.SnapshotDeletionPolicy;
@@ -160,7 +162,7 @@ public abstract class Engine implements Closeable {
     public MergeStats getMergeStats() {
         return new MergeStats();
     }
-
+    
     /** A throttling class that can be activated, causing the
      * {@code acquireThrottle} method to block on a lock when throttling
      * is enabled
@@ -286,8 +288,8 @@ public abstract class Engine implements Closeable {
     public final Searcher acquireSearcher(String source) throws EngineException {
         return acquireSearcher(source, true);
     }
-
-    protected final Searcher acquireSearcher(String source, boolean maybeWrap) throws EngineException {
+    
+    public final Searcher acquireSearcher(String source, boolean maybeWrap) throws EngineException {
         boolean success = false;
          /* Acquire order here is store -> manager since we need
           * to make sure that the store is not closed before
@@ -1206,4 +1208,33 @@ public abstract class Engine implements Closeable {
     }
 
     public void onSettingsChanged() {}
+    
+    public MeanMetric schedulerTotalMerges() {
+        return null;
+    }
+    public CounterMetric schedulerTotalMergesNumDocs(){
+        return null;
+    }
+    public CounterMetric schedulerTotalMergesSizeInBytes(){
+        return null;
+    }
+    public CounterMetric schedulerCurrentMerges(){
+        return null;
+    }
+    public CounterMetric schedulerCurrentMergesNumDocs(){
+        return null;
+    }
+    public CounterMetric schedulerCurrentMergesSizeInBytes(){
+        return null;
+    }
+    public CounterMetric schedulerTotalMergeStoppedTime(){
+        return null;
+    }
+    public CounterMetric schedulerTotalMergeThrottledTime(){
+        return null;
+    }
+    
+    public double getIORateLimitMBPerSec() {
+        return Double.NaN;
+    }
 }
