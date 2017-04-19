@@ -1,0 +1,43 @@
+[Unit]
+Description=Elassandra
+Documentation=http://www.elassandra.io
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=-${packaging.env.file}
+
+PIDFile=${packaging.elassandra.pid.dir}/cassandra.pid
+
+User=${packaging.elassandra.user}
+Group=${packaging.elassandra.group}
+
+ExecStart=${packaging.elassandra.sbin.dir}/cassandra -p ${packaging.elassandra.pid.dir}/cassandra.pid
+
+StandardOutput=journal
+StandardError=inherit
+
+# Specifies the maximum file descriptor number that can be opened by this process
+LimitNOFILE=${packaging.os.max.open.files}
+
+# Specifies the maximum number of bytes of memory that may be locked into RAM
+# Set to "infinity" if you use the 'bootstrap.memory_lock: true' option
+# in elasticsearch.yml and 'MAX_LOCKED_MEMORY=unlimited' in ${packaging.env.file}
+#LimitMEMLOCK=infinity
+
+# Disable timeout logic and wait until process is stopped
+TimeoutStopSec=0
+
+# SIGTERM signal is used to stop the Java process
+KillSignal=SIGTERM
+
+# Java process is never killed
+SendSIGKILL=no
+
+# When a JVM receives a SIGTERM signal it exits with code 143
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target
+
+# Built for ${project.name}-${project.version} (${packaging.type})

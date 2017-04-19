@@ -1,9 +1,16 @@
-Package: elasticsearch
+Package: elassandra
 Version: [[version]]
 Architecture: all
-Maintainer: Elasticsearch Team <info@elastic.co>
-Depends: libc6, adduser
-Section: web
-Priority: optional
-Homepage: https://www.elastic.co/
-Description: Elasticsearch is a distributed RESTful search engine built for the cloud. Reference documentation can be found at https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html and the 'Elasticsearch: The Definitive Guide' book can be found at https://www.elastic.co/guide/en/elasticsearch/guide/current/index.html
+Maintainer: Barthelemy Delemotte <barthelemy.delemotte@gmail.com>
+Depends: openjdk-8-jre-headless | java8-runtime, adduser, libc6, python (>= 2.7)
+Section: misc
+Priority: extra
+Build-Depends: debhelper (>= 5), openjdk-8-jdk | java8-jdk, ant (>= 1.7), ant-optional (>= 1.7), dh-python, python-dev (>= 2.7), dpatch, bash-completion
+Homepage: http://http://www.elassandra.io/
+Vcs-Git: https://github.com/strapdata/elassandra.git
+Vcs-Browser: https://github.com/strapdata/elassandra
+Standards-Version: 3.8.3
+Recommends: ntp | time-daemon
+Conflicts: apache-cassandra1, cassandra
+Description: distributed storage system for structured data
+  Elassandra is a fork of Elasticsearch modified to run on top of Apache Cassandra in a scalable and resilient peer-to-peer architecture

@@ -18,21 +18,25 @@
 
 # OPTIONS:
 #   -f: start in foreground
+#   -e: start with elasticsearch enabled
 #   -p <filename>: log the pid to a file (useful to kill it later)
 #   -v: print version string and exit
 
 # CONTROLLING STARTUP:
-# 
+#
 # This script relies on few environment variables to determine startup
 # behavior, those variables are:
 #
 #   CLASSPATH -- A Java classpath containing everything necessary to run.
 #   JVM_OPTS -- Additional arguments to the JVM for heap size, etc
 #   CASSANDRA_CONF -- Directory containing Cassandra configuration files.
+#   CASSANDRA_LOGDIR -- Directory containing cassandra logs, override default location
+#   CASSANDRA_DAEMON -- the cassandra entry point class:
+#        "org.apache.cassandra.service.ElassandraDaemon" to enable elasticsearch
 #
 # As a convenience, a fragment of shell is sourced in order to set one or
-# more of these variables. This so-called `include' can be placed in a 
-# number of locations and will be searched for in order. The lowest 
+# more of these variables. This so-called `include' can be placed in a
+# number of locations and will be searched for in order. The lowest
 # priority search path is the same directory as the startup script, and
 # since this is the location of the sample in the project tree, it should
 # almost work Out Of The Box.
@@ -40,7 +44,7 @@
 # Any serious use-case though will likely require customization of the
 # include. For production installations, it is recommended that you copy
 # the sample to one of /usr/share/cassandra/cassandra.in.sh,
-# /usr/local/share/cassandra/cassandra.in.sh, or 
+# /usr/local/share/cassandra/cassandra.in.sh, or
 # /opt/cassandra/cassandra.in.sh and make your modifications there.
 #
 # Another option is to specify the full path to the include file in the
@@ -48,15 +52,15 @@
 #
 #   $ CASSANDRA_INCLUDE=/path/to/in.sh cassandra -p /var/run/cass.pid
 #
-# Note: This is particularly handy for running multiple instances on a 
+# Note: This is particularly handy for running multiple instances on a
 # single installation, or for quick tests.
 #
-# Finally, developers and enthusiasts who frequently run from an SVN 
+# Finally, developers and enthusiasts who frequently run from an SVN
 # checkout, and do not want to locally modify bin/cassandra.in.sh, can put
 # a customized include file at ~/.cassandra.in.sh.
 #
 # If you would rather configure startup entirely from the environment, you
-# can disable the include by exporting an empty CASSANDRA_INCLUDE, or by 
+# can disable the include by exporting an empty CASSANDRA_INCLUDE, or by
 # ensuring that no include files exist in the aforementioned search list.
 # Be aware that you will be entirely responsible for populating the needed
 # environment variables.
@@ -126,11 +130,21 @@ fi
 
 # Special-case path variables.
 case "`uname`" in
-    CYGWIN*) 
+    CYGWIN*)
         CLASSPATH=`cygpath -p -w "$CLASSPATH"`
         CASSANDRA_CONF=`cygpath -p -w "$CASSANDRA_CONF"`
     ;;
 esac
+
+# Set default log dir if not set
+if [ -z "$CASSANDRA_LOGDIR" ]; then
+  for logdir in "/var/log/cassandra" "$CASSANDRA_HOME/logs"; do
+    if [ -d "$logdir" ]; then
+      CASSANDRA_LOGDIR="$logdir"
+      break
+    fi
+  done
+fi
 
 # Cassandra uses an installed jemalloc via LD_PRELOAD / DYLD_INSERT_LIBRARIES by default to improve off-heap
 # memory allocation performance. The following code searches for an installed libjemalloc.dylib/.so/.1.so using
@@ -188,12 +202,21 @@ launch_service()
     props="$3"
     class="$4"
     cassandra_parms="-Dlogback.configurationFile=$CASSANDRA_CONF/logback.xml"
-    cassandra_parms="$cassandra_parms -Dcassandra.logdir=$CASSANDRA_HOME/logs"
+    cassandra_parms="$cassandra_parms -Dcassandra.logdir=$CASSANDRA_LOGDIR"
     cassandra_parms="$cassandra_parms -Dcassandra.storagedir=$cassandra_storagedir"
+
+    # needed by elaticsearch for graphic computations
+    JVM_OPTS="$JVM_OPTS -Djava.awt.headless=true"
 
     if [ "x$pidpath" != "x" ]; then
         cassandra_parms="$cassandra_parms -Dcassandra-pidfile=$pidpath"
     fi
+
+    echo "Starting cassandra with $class"
+
+    # Problem with ElassandraDaemon if CASSANDRA_HOME is not in environment
+    # We have to export explicitly CASSANDRA_HOME
+    [ -n "$CASSANDRA_HOME" ] && export CASSANDRA_HOME
 
     # The cassandra-foreground option will tell CassandraDaemon not
     # to close stdout/stderr, but it's up to us not to background.
@@ -213,8 +236,6 @@ launch_service()
 # Parse any command line options.
 args=`getopt vefdhp:bD:H:E: "$@"`
 eval set -- "$args"
-
-classname="org.apache.cassandra.service.CassandraDaemon"
 
 while true; do
     case "$1" in
@@ -239,9 +260,7 @@ while true; do
             shift 2
         ;;
         -e)
-            echo "Starting with Elasticsearch enabled."
-            JVM_OPTS="$JVM_OPTS -Djava.awt.headless=true"
-            classname="org.apache.cassandra.service.ElassandraDaemon"
+            elastic="yes"
             shift 1
         ;;
         -d) # start in debug mode
@@ -268,16 +287,24 @@ while true; do
     esac
 done
 
+
+if  [ "$elastic" = "yes" ]; then
+  classname="org.apache.cassandra.service.ElassandraDaemon"
+elif [ -n "$CASSANDRA_DAEMON" ]; then
+  classname="$CASSANDRA_DAEMON"
+else
+  classname="org.apache.cassandra.service.CassandraDaemon"
+fi
+
 # see CASSANDRA-7254
 "$JAVA" -cp "$CLASSPATH" $JVM_OPTS 2>&1 | grep -q 'Error: Exception thrown by the agent : java.lang.NullPointerException'
-if [ $? -ne "1" ]; then 
+if [ $? -ne "1" ]; then
     echo Unable to bind JMX, is Cassandra already running?
     exit 1;
 fi
 
 # Start up the service
 launch_service "$pidfile" "$foreground" "$properties" "$classname"
-
 exit $?
 
 # vi:ai sw=4 ts=4 tw=0 et

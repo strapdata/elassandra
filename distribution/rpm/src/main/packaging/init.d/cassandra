@@ -1,0 +1,189 @@
+#!/bin/bash
+#
+# Cassandra daemon
+#
+# chkconfig: 2345 80 20
+# description: The Apache Cassandra Project - a highly scalable second-generation distributed database
+# processname: java
+# config: /etc/sysconfig/cassandra
+# pidfile: /var/run/cassandra/cassandra.pid
+
+### BEGIN INIT INFO
+# Provides: cassandra
+# Required-Start: $network $named
+# Required-Stop: $network $named
+# Default-Start:  2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: start and stop cassandra daemon
+# Description: Apache Cassandra distributed database
+### END INIT INFO
+
+#
+# init.d / servicectl compatibility (openSUSE)
+#
+if [ -f /etc/rc.status ]; then
+    . /etc/rc.status
+    rc_reset
+fi
+
+#
+# Source function library.
+#
+if [ -f /etc/rc.d/init.d/functions ]; then
+    . /etc/rc.d/init.d/functions
+fi
+
+if [ -f /etc/sysconfig/cassandra ]; then
+  . /etc/sysconfig/cassandra
+fi
+
+PIDFILE=${PIDFILE:-"/var/run/cassandra/cassandra.pid"}
+LOGFILE=/var/log/cassandra/cassandra.log
+PROG=${CASSANDRA_HOME}/bin/cassandra
+CLI=${CASSANDRA_HOME}/bin/cassandra-cli
+CASSANDRA="Cassandra"
+
+
+# The first existing directory is used for JAVA_HOME if needed.
+JVM_SEARCH_DIRS="/usr/lib/jvm/jre /usr/lib/jvm/jre-1.8.* /usr/lib/jvm/java-1.6.*/jre"
+
+# Read configuration variable file if it is present
+[ -r /etc/default/cassandra ] && . /etc/default/cassandra
+
+# If JAVA_HOME has not been set, try to determine it.
+if [ -z "$JAVA_HOME" ]; then
+    # If java is in PATH, use a JAVA_HOME that corresponds to that. This is
+    # both consistent with how the upstream startup script works, and with
+    # the use of alternatives to set a system JVM (as is done on Debian and
+    # Red Hat derivatives).
+    java="`/usr/bin/which java 2>/dev/null`"
+    if [ -n "$java" ]; then
+        java=`readlink --canonicalize "$java"`
+        JAVA_HOME=`dirname "\`dirname \$java\`"`
+    else
+        # No JAVA_HOME set and no java found in PATH; search for a JVM.
+        for jdir in $JVM_SEARCH_DIRS; do
+            if [ -x "$jdir/bin/java" ]; then
+                JAVA_HOME="$jdir"
+                break
+            fi
+        done
+        # if JAVA_HOME is still empty here, punt.
+    fi
+fi
+
+JAVA="$JAVA_HOME/bin/java"
+export JAVA_HOME JAVA
+
+function check() {
+    # Check that we're a privileged user
+    if [ $(id -u) -ne 0 ]; then
+        echo "Please run as a privileged user"
+        exit 4
+    fi
+}
+
+function status {
+    check
+    RUNNING_PID=0
+    if [ -f $PIDFILE ]; then
+        TMP_PID=`cat $PIDFILE`
+        TMP_PID_CHECK=`ps -p $TMP_PID -o pid=`
+        if [ "$TMP_PID_CHECK" != "" ]; then
+            RUNNING_PID=$TMP_PID
+            return 0  # running
+        else
+            return 1  # stopped, but pid file exists
+        fi
+    fi
+    return 3 # stopped
+}
+
+function wait_for_it() {
+    for i in {0..10}; do
+        su $CASSANDRA_OWNR -c "echo \"describe cluster\" | $CLI --batch -h localhost &> /dev/null"
+        RES=$?
+        if [[ $RES == $1 ]]; then
+            break
+        fi
+        sleep 0.5
+        let i+=1
+    done
+    return $RES
+}
+
+# Cassandra startup
+function start() {
+    check
+    status
+    if [ $? -eq 3 ]; then
+       echo -n "Starting ${CASSANDRA}: "
+       su $CASSANDRA_OWNR -c "$PROG -p $PIDFILE" > $LOGFILE 2>&1
+
+       wait_for_it 0
+       status
+
+       if [ $? -ne 0 ]; then
+          echo "${CASSANDRA} failed to start. please check the logs."
+          exit 1
+       else
+          echo "OK"
+       fi
+   fi
+   exit 0
+}
+
+# Cassandra shutdown
+function stop() {
+    check
+
+    status
+    if [ $? -ne 0 ]; then
+        echo "${CASSANDRA} is not running.  aborting."
+    else
+        echo -n "Shutdown ${CASSANDRA}: "
+        su $CASSANDRA_OWNR -c "kill `cat $PIDFILE`"
+
+        wait_for_it 255
+        status
+
+        if [ $? -ne 3 ]; then
+           echo "${CASSANDRA} didn't stop."
+           exit 1
+        else
+           echo "OK"
+        fi
+    fi
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    reload|restart)
+        $0 stop
+    sleep 1
+        $0 start
+        ;;
+    status)
+        status
+
+        RET=$?
+        if [ $RET -eq 0 ]; then
+            echo "${CASSANDRA} (pid $RUNNING_PID) is running..."
+        elif [ $RET -eq 1 ]; then
+            echo "${CASSANDRA} is dead but pidfile ($PIDFILE) exists!"
+        else
+            echo "${CASSANDRA} is stopped."
+        fi
+        exit $RET
+        ;;
+    *)
+        echo "Usage: 'basename $0' start|stop|status|restart|reload"
+        exit 1
+esac
+
+exit 0

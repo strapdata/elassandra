@@ -13,7 +13,7 @@
     <artifactId>elasticsearch</artifactId>
     <name>Distribution: RPM</name>
     <packaging>rpm</packaging>
-    <description>The RPM distribution of Elasticsearch</description>
+    <description>The RPM distribution of Elassandra</description>
 
     <properties>
         <skip.unit.tests>true</skip.unit.tests>
@@ -75,10 +75,27 @@
                                     <directory>${project.basedir}/../src/main/resources</directory>
                                     <filtering>true</filtering>
                                     <includes>
-                                        <include>bin/elasticsearch</include>
-                                        <include>bin/elasticsearch.in.sh</include>
+                                        <include>bin/cassandra</include>
+                                        <include>bin/cassandra.in.sh</include>
+                                        <include>bin/shortcuts-env.sh</include>
                                         <include>bin/plugin</include>
                                         <include>bin/elasticsearch-systemd-pre-exec</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/../core/cassandra</directory>
+                                    <filtering>true</filtering>
+                                    <includes>
+                                        <include>bin/cqlsh</include>
+                                        <include>bin/cqlsh.py</include>
+                                        <include>bin/debug-cql</include>
+                                        <include>bin/nodetool</include>
+                                        <include>bin/sstablekeys</include>
+                                        <include>bin/sstableloader</include>
+                                        <include>bin/sstablescrub</include>
+                                        <include>bin/sstableupgrade</include>
+                                        <include>bin/sstableverify</include>
+                                        <include>bin/stop-server</include>
                                     </includes>
                                 </resource>
                             </resources>
@@ -92,10 +109,10 @@
                 <artifactId>rpm-maven-plugin</artifactId>
                 <configuration>
                     <disabled>false</disabled>
-                    <name>elasticsearch</name>
-                    <distribution>Elasticsearch</distribution>
+                    <name>elassandra</name>
+                    <distribution>Elassandra</distribution>
                     <group>Application/Internet</group>
-                    <packager>Elasticsearch</packager>
+                    <packager>Strapdata</packager>
                     <prefix>/usr</prefix>
                     <!-- To get rpm-maven-plugin to pickup targetOS you need
                          to specify needarch too.... If you don't specify
@@ -119,8 +136,8 @@
                     <defaultDirmode>755</defaultDirmode>
                     <defaultUsername>root</defaultUsername>
                     <defaultGroupname>root</defaultGroupname>
-                    <icon>${project.basedir}/src/main/resources/logo/elastic.gif</icon>
-                    <description>Elasticsearch is a distributed RESTful search engine built for the cloud. Reference documentation can be found at https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html and the 'Elasticsearch: The Definitive Guide' book can be found at https://www.elastic.co/guide/en/elasticsearch/guide/current/index.html</description>
+                    <!--<icon>${project.basedir}/src/main/resources/logo/elastic.gif</icon>-->
+                    <description>Elassandra = Cassandra + Elasticsearch. Reference documentation can be found at https://www.elassandra.io/doc</description>
                     <mappings>
                         <!-- Add bin directory -->
                         <mapping>
@@ -130,8 +147,19 @@
                                 <source>
                                     <location>${project.build.directory}/generated-packaging/rpm/bin</location>
                                     <includes>
-                                        <include>elasticsearch</include>
-                                        <include>elasticsearch.in.sh</include>
+                                        <include>cassandra</include>
+                                        <include>cassandra.in.sh</include>
+                                        <include>shortcuts-env.sh</include>
+                                        <include>cqlsh</include>
+                                        <include>cqlsh.py</include>
+                                        <include>debug-cql</include>
+                                        <include>nodetool</include>
+                                        <include>sstablekeys</include>
+                                        <include>sstableloader</include>
+                                        <include>sstablescrub</include>
+                                        <include>sstableupgrade</include>
+                                        <include>sstableverify</include>
+                                        <include>stop-server</include>
                                         <include>plugin</include>
                                         <include>elasticsearch-systemd-pre-exec</include>
                                     </includes>
@@ -147,19 +175,19 @@
                                  that creates the conf.dir.-->
                             <directory>${packaging.elasticsearch.conf.dir}</directory>
                             <configuration>noreplace</configuration>
-                            <groupname>elasticsearch</groupname>
+                            <groupname>${packaging.elasticsearch.group}</groupname>
                             <filemode>750</filemode>
                         </mapping>
                         <mapping>
                             <directory>${packaging.elasticsearch.conf.dir}/</directory>
                             <configuration>noreplace</configuration>
-                            <groupname>elasticsearch</groupname>
+                            <groupname>${packaging.elasticsearch.group}</groupname>
                             <filemode>750</filemode>
                             <sources>
                                 <source>
-                                    <location>${project.basedir}/../src/main/resources/config/</location>
+                                    <location>${project.basedir}/../src/main/resources/conf/</location>
                                     <includes>
-                                        <include>*.yml</include>
+                                        <include>*</include>
                                     </includes>
                                 </source>
                             </sources>
@@ -167,9 +195,10 @@
                         <mapping>
                             <directory>${packaging.elasticsearch.conf.dir}/scripts</directory>
                             <configuration>noreplace</configuration>
-                            <groupname>elasticsearch</groupname>
+                            <groupname>${packaging.elasticsearch.group}</groupname>
                             <filemode>750</filemode>
                         </mapping>
+                        
                         <!-- Add environment vars file -->
                         <mapping>
                             <directory>/etc/sysconfig/</directory>
@@ -179,7 +208,7 @@
                                 <source>
                                     <location>${project.build.directory}/generated-packaging/rpm/env/</location>
                                     <includes>
-                                        <include>elasticsearch</include>
+                                        <include>cassandra</include>
                                     </includes>
                                 </source>
                             </sources>
@@ -208,6 +237,32 @@
                                 </source>
                             </sources>
                         </mapping>
+                        
+                        <!-- Add pylib -->
+                        <mapping>
+                            <directory>${packaging.elasticsearch.home.dir}/pylib</directory>
+                            <sources>
+                                <source>
+                                    <location>${project.basedir}/../../core/cassandra/pylib</location>
+                                    <includes>
+                                        <include>*</include>
+                                    </includes>
+                                </source>
+                            </sources>
+                        </mapping>
+                        <!-- Add tools -->
+                        <mapping>
+                            <directory>${packaging.elasticsearch.home.dir}/tools</directory>
+                            <sources>
+                                <source>
+                                    <location>${project.basedir}/../../core/cassandra/tools</location>
+                                    <includes>
+                                        <include>*</include>
+                                    </includes>
+                                </source>
+                            </sources>
+                        </mapping>
+                        
                         <!-- Add init.d files  -->
                         <mapping>
                             <directory>/etc/init.d</directory>
@@ -218,7 +273,7 @@
                                 <source>
                                     <location>${project.build.directory}/generated-packaging/rpm/init.d</location>
                                     <includes>
-                                        <include>elasticsearch</include>
+                                        <include>cassandra</include>
                                     </includes>
                                 </source>
                             </sources>
@@ -232,7 +287,7 @@
                                 <source>
                                     <location>${project.build.directory}/generated-packaging/rpm/systemd</location>
                                     <includes>
-                                        <include>elasticsearch.service</include>
+                                        <include>cassandra.service</include>
                                     </includes>
                                 </source>
                             </sources>
@@ -245,7 +300,7 @@
                                 <source>
                                     <location>${project.build.directory}/generated-packaging/rpm/systemd/sysctl</location>
                                     <includes>
-                                        <include>elasticsearch.conf</include>
+                                        <include>cassandra.conf</include>
                                     </includes>
                                 </source>
                             </sources>
@@ -258,7 +313,7 @@
                                 <source>
                                     <location>${project.build.directory}/generated-packaging/rpm/systemd/</location>
                                     <includes>
-                                        <include>elasticsearch.conf</include>
+                                        <include>cassandra.conf</include>
                                     </includes>
                                 </source>
                             </sources>
@@ -272,7 +327,7 @@
                                     <includes>
                                         <include>LICENSE.txt</include>
                                         <include>NOTICE.txt</include>
-                                        <include>README.textile</include>
+                                        <include>README.md</include>
                                     </includes>
                                 </source>
                             </sources>
