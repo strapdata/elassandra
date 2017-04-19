@@ -1,3 +1,0 @@
-This file is used to generate a FAKE jar which is needed by Sonatype
-to validate the artifact.
-
