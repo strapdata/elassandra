@@ -13,7 +13,7 @@
     <artifactId>distributions</artifactId>
     <packaging>pom</packaging>
     <name>Distribution: Parent POM</name>
-
+    
     <properties>
         <!-- Adding a module to the distribution:
              1. modify packaging.module.list below
@@ -22,20 +22,37 @@
         <!-- pipe-separated list of modules. for license checking. -->
         <packaging.module.list>lang-groovy|lang-expression|reindex</packaging.module.list>
 
+        <!-- Elassandra properties used for building RPM & DEB packages (see common/packaging.properties) -->
+        <packaging.elassandra.bin.dir>/usr/bin</packaging.elassandra.bin.dir>
+        <packaging.elassandra.sbin.dir>/usr/sbin</packaging.elassandra.sbin.dir>
+        <packaging.elassandra.home.dir>/usr/share/cassandra</packaging.elassandra.home.dir>
+        <packaging.elassandra.conf.dir>/etc/cassandra</packaging.elassandra.conf.dir>
+        <packaging.elassandra.systemd.dir>/usr/lib/systemd/system</packaging.elassandra.systemd.dir>
+        <packaging.elassandra.systemd.sysctl.dir>/etc/sysctl.d</packaging.elassandra.systemd.sysctl.dir>
+        <packaging.elassandra.tmpfilesd.dir>/usr/lib/tmpfiles.d</packaging.elassandra.tmpfilesd.dir>
+        <packaging.elassandra.data.dir>/var/lib/cassandra</packaging.elassandra.data.dir>
+        <packaging.elassandra.user>cassandra</packaging.elassandra.user>
+        <packaging.elassandra.group>cassandra</packaging.elassandra.group>
+        <packaging.elassandra.log.dir>/var/log/cassandra</packaging.elassandra.log.dir>
+        <packaging.elassandra.plugins.dir>${packaging.elassandra.home.dir}/plugins</packaging.elassandra.plugins.dir>
+        <packaging.elassandra.pid.dir>/var/run/cassandra</packaging.elassandra.pid.dir>
+
+
         <!-- Properties used for building RPM & DEB packages (see common/packaging.properties) -->
-        <packaging.elasticsearch.home.dir>/usr/share/elasticsearch</packaging.elasticsearch.home.dir>
-        <packaging.elasticsearch.bin.dir>/usr/share/elasticsearch/bin</packaging.elasticsearch.bin.dir>
-        <packaging.elasticsearch.conf.dir>/etc/elasticsearch</packaging.elasticsearch.conf.dir>
-        <packaging.elasticsearch.data.dir>/var/lib/elasticsearch</packaging.elasticsearch.data.dir>
-        <packaging.elasticsearch.user>elasticsearch</packaging.elasticsearch.user>
-        <packaging.elasticsearch.group>elasticsearch</packaging.elasticsearch.group>
-        <packaging.elasticsearch.log.dir>/var/log/elasticsearch</packaging.elasticsearch.log.dir>
+        <!-- This properties has been replaced by elassandra properties above -->
+        <packaging.elasticsearch.home.dir>/usr/share/cassandra</packaging.elasticsearch.home.dir>
+        <packaging.elasticsearch.bin.dir>/usr/share/cassandra/bin</packaging.elasticsearch.bin.dir>
+        <packaging.elasticsearch.conf.dir>/etc/cassandra</packaging.elasticsearch.conf.dir>
+        <packaging.elasticsearch.data.dir>/var/lib/cassandra</packaging.elasticsearch.data.dir>
+        <packaging.elasticsearch.user>cassandra</packaging.elasticsearch.user>
+        <packaging.elasticsearch.group>cassandra</packaging.elasticsearch.group>
+        <packaging.elasticsearch.log.dir>/var/log/cassandra</packaging.elasticsearch.log.dir>
         <packaging.elasticsearch.plugins.dir>${packaging.elasticsearch.home.dir}/plugins</packaging.elasticsearch.plugins.dir>
         <packaging.elasticsearch.pid.dir>/var/run/elasticsearch</packaging.elasticsearch.pid.dir>
         <packaging.elasticsearch.systemd.dir>/usr/lib/systemd/system</packaging.elasticsearch.systemd.dir>
         <packaging.elasticsearch.systemd.sysctl.dir>/usr/lib/sysctl.d</packaging.elasticsearch.systemd.sysctl.dir>
         <packaging.elasticsearch.tmpfilesd.dir>/usr/lib/tmpfiles.d</packaging.elasticsearch.tmpfilesd.dir>
-
+        
         <!-- Properties for the license checker -->
         <project.licenses.dir>${project.basedir}/../licenses</project.licenses.dir>
         <project.licenses.check_target>${integ.scratch}</project.licenses.check_target>
@@ -45,14 +62,14 @@
         <!-- we expect packaging formats to have integration tests, but not unit tests -->
         <skip.unit.tests>true</skip.unit.tests>
 
-        <packaging.gpg.shortening.ant.script>${project.basedir}/../correct-sign-path.xml</packaging.gpg.shortening.ant.script>
+        <!-- <packaging.gpg.shortening.ant.script>${project.basedir}/../correct-sign-path.xml</packaging.gpg.shortening.ant.script> -->
         <!-- By default we sign RPMs and DEBs using a dummy gpg directory that we check into
              source control. Releases will override this with the real information. -->
-        <gpg.key>C58CE2B6</gpg.key>
+        <!-- <gpg.key>16E55242</gpg.key> -->
         <!-- We're not using project.parent.basedir here by intention because it causes trouble
         (i.e. the property does not get resolved; verified with
         mvn help:effective-pom -pl distribution/rpm -Prpm). -->
-        <gpg.long.keypath>${project.basedir}/../src/test/resources/dummyGpg</gpg.long.keypath>
+        <!-- <gpg.long.keypath>${project.basedir}/../src/test/resources/dummyGpg</gpg.long.keypath> -->
         <!-- This is the path that is used internally for signing. gpg-agent allows this path to
         be at most 108 characters on Linux (see struct sockaddr_un in <sys/un.h>) and even less
         on other systems. By symlinking to the tmp directory, we reduce the path name length.
@@ -62,11 +79,11 @@
         "gpg.keypath" should be provided (as it has been before). The build script will detect
         this and will not use symlinking magic in this case.
          -->
-        <gpg.default.keypath>${java.io.tmpdir}/shortGpg</gpg.default.keypath>
+        <!-- <gpg.default.keypath>${java.io.tmpdir}/shortGpg</gpg.default.keypath>
         <gpg.keypath>${gpg.default.keypath}</gpg.keypath>
         <gpg.keyring>${gpg.keypath}/secring.gpg</gpg.keyring>
         <gpg.passphrase>dummy</gpg.passphrase>
-        <deb.sign>true</deb.sign>
+        <deb.sign>true</deb.sign> -->
     </properties>
 
     <!-- PUT TEST ONLY DEPS HERE. Let individual distributions figure out what they want -->
@@ -106,6 +123,7 @@
         <dependency>
             <groupId>com.strapdata.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
+            <version>${project.version}</version>
         </dependency>
 
         <dependency>
@@ -306,9 +324,9 @@
         <module>integ-test-zip</module>
         <module>tar</module>
         <module>zip</module>
-        <!--
         <module>deb</module>
-        -->
+        <!-- Enable on Redhat Linux systems only -->
+        <!--<module>rpm</module>-->
     </modules>
 
     <profiles>
