@@ -70,7 +70,7 @@
 
         <!-- Build resources properties -->
         <elassandra.license.header>${elasticsearch.tools.directory}/license-check/elassandra_license_header.txt</elassandra.license.header>
-        
+
         <elasticsearch.tools.directory>${project.build.directory}/dev-tools</elasticsearch.tools.directory>
         <elasticsearch.license.header>${elasticsearch.tools.directory}/license-check/elasticsearch_license_header.txt</elasticsearch.license.header>
         <elasticsearch.license.headerDefinition>${elasticsearch.tools.directory}/license-check/license_header_definition.xml</elasticsearch.license.headerDefinition>
@@ -477,7 +477,7 @@
                 <artifactId>logback-core</artifactId>
                 <version>${logback.version}</version>
             </dependency>
-            
+
         </dependencies>
     </dependencyManagement>
 
@@ -658,17 +658,17 @@
                         <leaveTemporary>true</leaveTemporary>
                         <parallelism>1</parallelism>
                         <threadCount>1</threadCount>
-                        
+
                         <!-- remove cassandra-all.jar dependency for tests -->
                         <classpathDependencyExcludes>
                             <classpathDependencyExclude>org.slf4j:jcl-over-slf4j</classpathDependencyExclude>
                         </classpathDependencyExcludes>
 
-                        
+
                         <forkCount>0</forkCount>
                         <useSystemClassLoader>true</useSystemClassLoader>
                         <debugForkedProcess>true</debugForkedProcess>
-                        
+
                         <!-- System assertions (-esa) are disabled for now because of what looks like a
                              JDK bug triggered by Groovy on JDK7. We should look at re-enabling system
                              assertions when we upgrade to a new version of Groovy (currently 2.4.4) or
@@ -806,12 +806,12 @@
                                     <exclude>org/elasticsearch/tribe/**/*.class</exclude>
                                     <exclude>org/elasticsearch/index/engine/InternalEngineTests*.class</exclude>
                                     <exclude>org/elasticsearch/index/shard/IndexShardTests.class</exclude>
-                                    
+
                                     <!-- require security manager -->
                                     <exclude>org/elasticsearch/bootstrap/SecurityTests*.class</exclude>
                                     <exclude>org/elasticsearch/bootstrap/ESPolicy*.class</exclude>
-                                    
-                                    <!--  
+
+                                    <!--
                                     <exclude>org/elasticsearch/cluster/routing/ShardRoutingTests.class</exclude>
                                     <exclude>org/elasticsearch/plugins/PluginManagerPermissionTests.class</exclude>
                                     -->
@@ -827,13 +827,13 @@
                                     <exclude>org/elasticsearch/index/reindex/UpdateByQueryCancelTests*.class</exclude>
                                     <exclude>org/elasticsearch/index/reindex/UpdateByQueryWhileModifyingTests*.class</exclude>
                                     <exclude>org/elasticsearch/index/reindex/RethrottleTests*.class</exclude>
-                                    
+
                                     <!-- deleteByQuery integration tests -->
                                     <exclude>org/elasticsearch/plugin/deletebyquery/DeleteByQueryTests*.class</exclude>
-                                    
+
                                     <!-- mapper-size integration tests -->
                                     <exclude>org/elasticsearch/index/mapper/murmur3/Murmur3FieldMapperUpgradeTests*.class</exclude>
-                                    
+
                                     <!-- murmur3 integration tests -->
                                     <exclude>org/elasticsearch/index/mapper/size/SizeFieldMapperUpgradeTests*.class</exclude>
                                 </excludes>
@@ -918,8 +918,8 @@
                     <version>1.5</version>
                     <configuration>
                         <resourceBundles>
-                            <resourceBundle>org.elasticsearch:dev-tools:${elasticsearch.version}</resourceBundle>
-                            <resourceBundle>org.elasticsearch:rest-api-spec:${elasticsearch.version}</resourceBundle>
+                            <resourceBundle>com.strapdata.elasticsearch:dev-tools:${elasticsearch.version}</resourceBundle>
+                            <resourceBundle>com.strapdata.elasticsearch:rest-api-spec:${elasticsearch.version}</resourceBundle>
                         </resourceBundles>
                         <outputDirectory>${elasticsearch.tools.directory}</outputDirectory>
                         <!-- don't include dev-tools in artifacts -->
@@ -934,7 +934,7 @@
                         </execution>
                     </executions>
                 </plugin>
-                
+
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>animal-sniffer-maven-plugin</artifactId>
@@ -962,7 +962,7 @@
                         </execution>
                     </executions>
                 </plugin>
-                
+
                 <plugin>
                     <groupId>de.thetaphi</groupId>
                     <artifactId>forbiddenapis</artifactId>
