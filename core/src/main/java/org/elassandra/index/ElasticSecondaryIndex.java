@@ -170,6 +170,7 @@ import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper.Defaults;
 import org.elasticsearch.index.mapper.internal.VersionFieldMapper;
+import org.elasticsearch.index.mapper.object.DynamicTemplate;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
 import org.elasticsearch.index.mapper.object.RootObjectMapper;
 import org.elasticsearch.index.shard.IndexShard;
@@ -363,14 +364,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         }
     
         // recusivelly add fields
-        public void addField(Mapper mapper, Object value) throws IOException {
+        public void addField(ImmutableMappingInfo.ImmutableIndexInfo indexInfo, Mapper mapper, Object value) throws IOException {
             if (value == null && (!(mapper instanceof FieldMapper) || ((FieldMapper)mapper).fieldType().nullValue() == null))
                 return;
             
             if (value instanceof Collection) {
                 // flatten list or set of fields
                 for(Object v : (Collection)value)
-                    addField(mapper, v);
+                    addField(indexInfo, mapper, v);
                 return;
             }
             
@@ -426,66 +427,89 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
    
                 if (value instanceof Map<?,?>) {   
                     for(Entry<String,Object> entry : ((Map<String,Object>)value).entrySet()) {
+                        // see http://docs.oracle.com/javase/7/docs/api/java/util/concurrent/locks/ReentrantReadWriteLock.html for locking a cache
+                        if (mapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
+                            indexInfo.dynamicMappingUpdateLock.readLock().lock();
                         Mapper subMapper = objectMapper.getMapper(entry.getKey());
-                        if (subMapper != null) {
-                            addField(subMapper, entry.getValue());
-                        } else {
+                        
+                        if (subMapper == null) {
+                            // try from the mapperService that could be updated
+                            DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(indexInfo.type);
+                            ObjectMapper newObjectMapper = docMapper.objectMappers().get(mapper.name());
+                            subMapper = newObjectMapper.getMapper(entry.getKey());
+                        }
+                        if (subMapper == null) {
                             // dynamic field in top level map => update mapping and add the field.
                             ColumnDefinition cd = baseCfs.metadata.getColumnDefinition(mapper.cqlName());
-                            if (cd != null && cd.type.isCollection() && cd.type instanceof MapType) {
+                            if (subMapper == null && cd != null && cd.type.isCollection() && cd.type instanceof MapType) {
                                 logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
                                 CollectionType ctype = (CollectionType) cd.type;
                                 if (ctype.kind == CollectionType.Kind.MAP && ((MapType)ctype).getKeysType().asCQL3Type().toString().equals("text")) {
+                                    // upgrade to write lock
+                                    indexInfo.dynamicMappingUpdateLock.readLock().unlock();
+                                    indexInfo.dynamicMappingUpdateLock.writeLock().lock();
                                     try {
-                                        final String valueType = InternalCassandraClusterService.cqlMapping.get(((MapType)ctype).getValuesType().asCQL3Type().toString());
-                                        // build a mapping update
-                                        Map<String,Object> objectMapping = (Map<String,Object>) ((Map<String,Object>)indexInfo.mapping.get("properties")).get(mapper.name());
-                                        XContentBuilder builder = XContentFactory.jsonBuilder()
-                                                .startObject()
-                                                .startObject(docMapper.type())
-                                                .startObject("properties")
-                                                .startObject(mapper.name());
-                                        boolean hasProperties = false;
-                                        for(String key : objectMapping.keySet()) {
-                                            if (key.equals("properties")) {
-                                                Map<String,Object> props = (Map<String,Object>)objectMapping.get(key);
-                                                builder.startObject("properties");
-                                                for(String key2 : props.keySet()) {
-                                                    builder.field(key2, props.get(key2));
+                                        // Recheck objectMapper because another thread might have acquired write lock and changed state before we did.
+                                        if ((subMapper = objectMapper.getMapper(entry.getKey())) == null) {
+                                            final String valueType = InternalCassandraClusterService.cqlMapping.get(((MapType)ctype).getValuesType().asCQL3Type().toString());
+                                            final DynamicTemplate dynamicTemplate = docMapper.root().findTemplate(path, objectMapper.name()+"."+entry.getKey(), valueType);
+                                            
+                                            // build a mapping update
+                                            Map<String,Object> objectMapping = (Map<String,Object>) ((Map<String,Object>)indexInfo.mapping.get("properties")).get(mapper.name());
+                                            XContentBuilder builder = XContentFactory.jsonBuilder()
+                                                    .startObject()
+                                                    .startObject(docMapper.type())
+                                                    .startObject("properties")
+                                                    .startObject(mapper.name());
+                                            boolean hasProperties = false;
+                                            for(String key : objectMapping.keySet()) {
+                                                if (key.equals("properties")) {
+                                                    Map<String,Object> props = (Map<String,Object>)objectMapping.get(key);
+                                                    builder.startObject("properties");
+                                                    for(String key2 : props.keySet()) {
+                                                        builder.field(key2, props.get(key2));
+                                                    }
+                                                    builder.field(entry.getKey(), (dynamicTemplate != null) ? dynamicTemplate.mappingForName(entry.getKey(), valueType) : new HashMap<String,String>() {{ put("type", valueType); }});
+                                                    builder.endObject();
+                                                    hasProperties = true;
+                                                } else {
+                                                    builder.field(key, objectMapping.get(key));
                                                 }
-                                                builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type", valueType); }});
-                                                builder.endObject();
-                                                hasProperties = true;
-                                            } else {
-                                                builder.field(key, objectMapping.get(key));
                                             }
+                                            if (!hasProperties) {
+                                                builder.startObject("properties");
+                                                builder.field(entry.getKey(), (dynamicTemplate != null) ? dynamicTemplate.mappingForName(entry.getKey(), valueType) : new HashMap<String,String>() {{ put("type", valueType); }});
+                                                builder.endObject();
+                                            }
+                                            builder.endObject().endObject().endObject().endObject();
+                                            String mappingUpdate = builder.string();
+                                            logger.info("updating mapping={}", mappingUpdate);
+                                            
+                                            ElasticSecondaryIndex.this.clusterService.blockingMappingUpdate(indexInfo.indexService, docMapper.type(), mappingUpdate);
+                                            DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(indexInfo.type);
+                                            ObjectMapper newObjectMapper = docMapper.objectMappers().get(mapper.name());
+                                            subMapper = newObjectMapper.getMapper(entry.getKey());
                                         }
-                                        if (!hasProperties) {
-                                            builder.startObject("properties");
-                                            builder.field(entry.getKey(), new HashMap<String,String>() {{ put("type", valueType); }});
-                                            builder.endObject();
-                                        }
-                                        builder.endObject().endObject().endObject().endObject();
-                                        String mappingUpdate = builder.string();
-                                        logger.info("updating mapping={}", mappingUpdate);
-                                        
-                                        ElasticSecondaryIndex.this.clusterService.blockingMappingUpdate(indexInfo.indexService, docMapper.type(), mappingUpdate);
-                                        // build and add a new subMapper to the objectMapper until the new clusterState update involves a new ImmutableMappingInfo....
-                                        final Class<? extends FieldMapper.Builder<?,?>> subMapperBuilderClass = InternalCassandraClusterService.cqlToMapperBuilder.get(((MapType)ctype).getValuesType().asCQL3Type().toString());
-                                        final Constructor<? extends FieldMapper.Builder<?,?>> subMapperConstructor = subMapperBuilderClass.getConstructor(String.class);
-                                        final BuilderContext builderContext = new BuilderContext(indexInfo.indexService.settingsService().getSettings(), path());
-                                        final String subFieldName = objectMapper.name() + "." + entry.getKey();
-                                        subMapper = subMapperConstructor.newInstance(subFieldName).build(builderContext);
-                                        objectMapper.putMapper(subMapper);
-                                        addField(subMapper, entry.getValue());
                                     } catch (Exception e) {
                                         logger.error("error while updating mapping",e);
+                                    } finally {
+                                        // Downgrade by acquiring read lock before releasing write lock
+                                        indexInfo.dynamicMappingUpdateLock.readLock().lock();
+                                        indexInfo.dynamicMappingUpdateLock.writeLock().unlock();
                                     }
                                 }
                             } else {
-                                logger.error("Unexpected subfield={} for field={} column type={}",entry.getKey(), mapper.name(), cd.type.asCQL3Type().toString());
+                                logger.error("Unexpected subfield={} for field={} column type={}, ignoring value={}",entry.getKey(), mapper.name(), cd.type.asCQL3Type().toString(), entry.getValue());
                             }
                         }
+
+                        try {
+                            if (subMapper != null)
+                                addField(indexInfo, subMapper, entry.getValue());
+                        } finally {
+                            if (mapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
+                                indexInfo.dynamicMappingUpdateLock.readLock().unlock();
+                        }    
                     }
                 } else {
                     if (docMapper.type().equals(PercolatorService.TYPE_NAME)) {
@@ -809,6 +833,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             final boolean versionLessEngine;
             
             Mapper[] mappers;   // inititalized in the ImmutableMappingInfo constructor.
+            ReadWriteLock dynamicMappingUpdateLock;
             volatile boolean updated = false;
 
             public ImmutableIndexInfo(String name, IndexService indexService, MappingMetaData mappingMetaData, MetaData metadata, boolean versionLessEngine) throws IOException {
@@ -1197,12 +1222,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 indexInfo.mappers = new Mapper[fields.length];
                 for(int i=0; i < fields.length; i++) {
                     DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(typeName);
-                    if (docMapper != null) {
-                        Mapper mapper = docMapper.mappers().smartNameFieldMapper(fields[i]);
-                        indexInfo.mappers[i] = (mapper != null) ? mapper : docMapper.objectMappers().get(fields[i]);
+                    Mapper mapper = docMapper.mappers().smartNameFieldMapper(fields[i]);
+                    if (mapper != null) {
+                        indexInfo.mappers[i] = mapper;
                     } else {
-                        // mapping not yet up-to-date, should be good on next clusterState change.
-                        logger.warn("index=[{}], unknown mapping for type=[{}]", indexInfo.name, typeName);
+                        ObjectMapper objectMapper = docMapper.objectMappers().get(fields[i]);
+                        if (objectMapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
+                            indexInfo.dynamicMappingUpdateLock = new ReentrantReadWriteLock();
+                        indexInfo.mappers[i] = objectMapper;
                     }
                 }
             }
@@ -1795,7 +1822,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     for(int i=0; i < values.length; i++) {
                         if (indexInfo.mappers[i] != null)
                             try {
-                                context.addField(indexInfo.mappers[i], values[i]);
+                                context.addField(indexInfo, indexInfo.mappers[i], values[i]);
                             } catch (IOException e) {
                                 logger.error("error", e);
                             }
