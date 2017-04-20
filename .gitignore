@@ -19,6 +19,7 @@ nbactions.xml
 .gradle/
 build/
 generated-resources/
+private/
 
 # maven stuff (to be removed when trunk becomes 4.x)
 *-execution-hints.log
