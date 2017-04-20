@@ -164,6 +164,16 @@
             <url>https://download.elasticsearch.org/lucenesnapshots/${lucene.snapshot.revision}</url>
         </repository>
         -->
+        <repository>
+            <id>strapdata-releases</id>
+            <url>https://oss.sonatype.org/content/groups/public</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
     </repositories>
 
     <dependencyManagement>
