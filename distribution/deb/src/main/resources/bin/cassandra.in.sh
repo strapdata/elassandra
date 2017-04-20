@@ -22,7 +22,7 @@ for jar in $CASSANDRA_HOME/lib/*.jar; do
     CLASSPATH=$CLASSPATH:$jar
 done
 
-[ -n "$EXTRA_CLASSPATH" ] CLASSPATH="$CLASSPATH:$EXTRA_CLASSPATH"
+[ -n "$EXTRA_CLASSPATH" ] && CLASSPATH="$CLASSPATH:$EXTRA_CLASSPATH"
 
 # set JVM javaagent opts to avoid warnings/errors
 if [ "$JVM_VENDOR" != "OpenJDK" -o "$JVM_VERSION" \> "1.6.0" ] \
