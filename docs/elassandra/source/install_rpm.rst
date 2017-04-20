@@ -22,13 +22,13 @@
 1. Enable EPEL repository
 
    .. code:: bash
-   
+
       yum -y install epel-release
 
 2. Install Cassandra Driver
 
    .. code:: bash
-   
+
       yum -y install python-pip python-cassandra-driver wget
       pip install --upgrade pip
       pip install --upgrade setuptools
@@ -37,17 +37,17 @@
 3. Get and Install Oracle Java
 
    .. note:: Recommended JAVA is Oracle_
-   
+
    .. _Oracle: http://www.oracle.com/technetwork/java/javase/downloads/index.html[Oracle JRE Download page]
-   
+
    .. code:: bash
-   
+
       rpm -ivh /path/to/downloaded/file
 
 4. Set Alternative
 
    .. code:: bash
-   
+
       alternatives --config java
       There are 2 programs which provide 'java'.
         Selection    Command
@@ -55,12 +55,12 @@
       *  2           /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.91-  0.b14.el7_2.x86_64/jre/bin/java
       Enter to keep the current selection[+], or type selection number:
 
-5. Declare Elassandra repository or download. 
+5. Declare Elassandra repository or download.
 
    If your server don't have access to internet, you can download the packages on `http://packages.elassandra.io/rpm/elassandra`_.
 
    .. code:: bash
-   
+
       cat << _EOF_ > /etc/yum.repos.d/elassandra.repo
       [Elassandra]
       name=Elassandra
@@ -72,7 +72,7 @@
 6. Import Elassandra GPG public key and verify it
 
    .. code:: bash
-   
+
       # wget -O- -q http://packages.elassandra.io/pub/RPM-GPG-KEY-Elassandra > /tmp/RPM-GPG-KEY-Elassandra
       # rpm --import /tmp/RPM-GPG-KEY-Elassandra
       # rm -f /tmp/RPM-GPG-KEY-Elassandra
@@ -83,14 +83,14 @@
 7. Install JNA for Redhat and CentOS
 
    .. code:: bash
-   
+
       sudo yum install jna
 
-      
+
 8. Install Elassandra
 
    .. code:: bash
-   
+
       yum clean all --disablerepo=* --enablerepo=Elassandra
       yum install elassandra
 
@@ -100,7 +100,7 @@ See Configuration chapter to configure elassandra before starting.
 9. Start, Stop, and check Status of Elassandra (for systemd enabled systems, RHEL and CentOS > 7)
 
    .. code:: bash
-   
+
       systemctl start elassandra
       systemctl status elassandra
       systemctl stop elassandra
@@ -108,6 +108,5 @@ See Configuration chapter to configure elassandra before starting.
    To enable elassandra at boot time
 
    .. code:: bash
-   
-      systemctl enable elassandra
 
+      systemctl enable elassandra
