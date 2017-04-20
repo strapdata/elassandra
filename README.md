@@ -12,7 +12,9 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
-* **2017-04-18 Release 2.4.2-13 Project refactoring (see How to contribute) and search performance improvement**
+* **2017-04-18 Release 2.4.2-13**
+   * Project refactoring with Cassandra code as a git submodule (see How to contribute below)
+   * Search performance improvement with a new token_ranges_bitset_cache (see [Optimized search requests](http://doc.elassandra.io/en/latest/operations.html#optimized-search-routing) in the documentation)
 * **2017-02-25 Release 2.4.2-9 Significant write performance improvement**
 * **2017-01-15 Release 2.4.2-4 Upgrade to Cassandra 3.0.10**
 * **2016-12-25 Release 2.4.2-2 Upgrade to Elasticsearch 2.4.2 + pass 3000 unit tests from Elasticsearch**
@@ -68,34 +70,37 @@ For Elasticsearch users, elassandra provides useful features :
 # How to contribute
 
 Elassandra is based on a fork of Elasticsearch acting as a plugin for Apache Cassandra :
-* The *ElassandraDaemon* class override the *CassandraDaemon* class in order to manage Elasticsearch internal services.
-* The *ElasticSecondaryIndex* class implements the Cassandra *Index* interface to write in Elasticsearch indices.
+* The **ElassandraDaemon** class override the **CassandraDaemon** class in order to manage Elasticsearch internal services.
+* The **ElasticSecondaryIndex** class implements the Cassandra **Index** interface to write in Elasticsearch indices.
 
 ![Elassandra class inheritance](/docs/elassandra/source/images/elassandra-inheritance.png)
 
 To achieve these operations, both Cassandra and Elasticsearch requires some modifications located in two forks:
-* ![Strapdata-Cassandra](https://github.com/strapdata/cassandra), a fork of ![Apache Cassandra](http://git-wip-us.apache.org/repos/asf/cassandra.git) including slight modifications :
- * Adds function hooks to start Elasticsearch (![CASSANDRA-13270](https://issues.apache.org/jira/browse/CASSANDRA-13270)).
- * Adds support for generic CQL functions (![CASSANDRA-13267](https://issues.apache.org/jira/browse/CASSANDRA-13267)).
- * Adds snapshot support for custom secondary indices (![CASSANDRA-13269](https://issues.apache.org/jira/browse/CASSANDRA-13269)).
- * Provides a multi-threaded **nodetool rebuild_index** command ([CASSANDRA-12837](https://issues.apache.org/jira/browse/CASSANDRA-12837)).
- * Reduce lock contention on instance factories ([CASSANDRA-13271](https://issues.apache.org/jira/browse/CASSANDRA-13271))
- * Fix implicit default *java.util.Locale* in String function calls (byte-code correction within an Ant task based on this [javassit-maven](https://github.com/strapdata/maven-javassist) project).
- * Minor upgrade some java libraries.
- * Don't overwrite the DefaultUncaughtExceptionHandler when testing
-* Elassandra, a fork of Elasticsearch (aka Strapdata-Elasticsearch, branch *${version}-strapdata*) including modifications in :
- * Cluster state management ([org.elassandra.cluster.InternalCassandraClusterService](https://github.com/strapdata/elassandra/blob/master/core/src/main/java/org/elassandra/cluster/InternalCassandraClusterService.java) override a modified [org.elasticsearch.cluster.service.InternalClusterService](https://github.com/strapdata/elassandra/blob/master/core/src/main/java/org/elasticsearch/cluster/service/InternalClusterService.java))
- * Gateway to retrieve Elasticsearch metadata on startup (see [org.elassandra.gateway](https://github.com/strapdata/elassandra/blob/master/core/src/main/java/org/elassandra/gateway/CassandraGatewayService.java))
- * Discovery to manage alive cluster members (see [org.elassandra.discovery.CassandraDiscovery](https://github.com/strapdata/elassandra/blob/master/core/src/main/java/org/elassandra/discovery/CassandraDiscovery.java))
- * Fields mappers to manage CQL mapping and Lucene field factory (see [org.elasticsearch.index.mapper.core](https://github.com/strapdata/elassandra/tree/master/core/src/main/java/org/elasticsearch/index/mapper/core))
- * Search requests routing (see [org.elassandra.cluster.routing](https://github.com/strapdata/elassandra/tree/master/core/src/main/java/org/elassandra/cluster/routing))
+
+[Strapdata-Cassandra](https://github.com/strapdata/cassandra), a fork of [Apache Cassandra](http://git-wip-us.apache.org/repos/asf/cassandra.git) including slight modifications :
+* Adds function hooks to start Elasticsearch ([CASSANDRA-13270](https://issues.apache.org/jira/browse/CASSANDRA-13270)).
+* Adds support for generic CQL functions ([CASSANDRA-13267](https://issues.apache.org/jira/browse/CASSANDRA-13267)).
+* Adds snapshot support for custom secondary indices ([CASSANDRA-13269](https://issues.apache.org/jira/browse/CASSANDRA-13269)).
+* Provides a multi-threaded **nodetool rebuild_index** command ([CASSANDRA-12837](https://issues.apache.org/jira/browse/CASSANDRA-12837)).
+* Reduce lock contention on instance factories ([CASSANDRA-13271](https://issues.apache.org/jira/browse/CASSANDRA-13271))
+* Fix implicit default **java.util.Locale** in String function calls (byte-code correction within an Ant task based on this [javassit-maven](https://github.com/strapdata/maven-javassist) project).
+* Minor upgrade some java libraries.
+* Don't overwrite the DefaultUncaughtExceptionHandler when testing
+
+Elassandra, a fork of Elasticsearch (aka Strapdata-Elasticsearch, branch *${version}-strapdata*) including modifications in :
+* Cluster state management ([org.elassandra.cluster.InternalCassandraClusterService](/core/src/main/java/org/elassandra/cluster/InternalCassandraClusterService.java) override a modified [org.elasticsearch.cluster.service.InternalClusterService](/core/src/main/java/org/elasticsearch/cluster/service/InternalClusterService.java))
+* Gateway to retrieve Elasticsearch metadata on startup (see [org.elassandra.gateway](/core/src/main/java/org/elassandra/gateway/CassandraGatewayService.java))
+* Discovery to manage alive cluster members (see [org.elassandra.discovery.CassandraDiscovery](/core/src/main/java/org/elassandra/discovery/CassandraDiscovery.java))
+* Fields mappers to manage CQL mapping and Lucene field factory (see [org.elasticsearch.index.mapper.core](/core/src/main/java/org/elasticsearch/index/mapper/core))
+* Search requests routing (see [org.elassandra.cluster.routing](/core/src/main/java/org/elassandra/cluster/routing))
 
 As shown below, forked Cassandra and Elasticsearch projects can change independently and changes can be rebased periodically into Strapdata-Cassandra or Elassandra (aka Strapdata-Elasticsearch).
 
 ![Elassandra developpement process](/docs/elassandra/source/images/elassandra-devprocess.png)
 
 Elassandra contains 2 references to the [strapdata-cassandra](https://github.com/strapdata/cassandra) :
-* The Elasticsearch *core/pom.xml* include a maven dependency on the strapdata-cassandra project :
+* The Elasticsearch **core/pom.xml** include a maven dependency on the strapdata-cassandra project :
+
         ```
         <dependency>
           <groupId>com.strapdata.cassandra</groupId>
@@ -103,7 +108,8 @@ Elassandra contains 2 references to the [strapdata-cassandra](https://github.com
           <version>3.0.x</version>
         </dependency>
         ```
-* In order to build the elassandra tarball and packages, the elassandra project includes a reference to the [strapdata-cassandra](https://github.com/strapdata/cassandra) as git submodule located in *core/cassandra*.
+        
+* In order to build the elassandra tarball and packages, the elassandra project includes a reference to the [strapdata-cassandra](https://github.com/strapdata/cassandra) as git submodule located in **core/cassandra**.
 
 Elassandra is an opensource project, contributors are welcome to rise issues or pull requests on both [strapdata-cassandra](https://github.com/strapdata/cassandra) or [elassandra](https://github.com/strapdata/elassandra) github repositories. 
 
@@ -115,7 +121,7 @@ When submitting an issue, please make sure that :
 * You're not in the case of a known Elassandra limitation, see http://doc.elassandra.io/en/latest/limitations.html.
 * Elassandra behavior is abnormally different from the standard Cassandra or Elasticsearch. For example, like Elasticsearch, Elassandra does not display default mappings unless requested, but this is the expected behavior.
 
-It is very helpful if you can provide a test case to reproduce the bug and the associated error logs or stacktrace. See your *conf/logback.xml* to increase logging level in the *logs/system.log* file, and run *nodetool setlogginglevel* to dynamically update your logging level.
+It is very helpful if you can provide a test case to reproduce the bug and the associated error logs or stacktrace. See your **conf/logback.xml** to increase logging level in the **logs/system.log** file, and run **nodetool setlogginglevel** to dynamically update your logging level.
 
 ## Feature requests
 
@@ -127,7 +133,7 @@ Contributors can clone repositories and follow guidelines from Elasticsearch and
 * [Contributing to the elasticsearch codebase](https://github.com/elastic/elasticsearch/blob/2.4/CONTRIBUTING.md#contributing-to-the-elasticsearch-codebase)
 * [Cassandra How To Contribute](https://wiki.apache.org/cassandra/HowToContribute)
 
-When cloning Elassandra, use a use **git clone --recurse-submodules https://github.com/strapdata/elassandra** to clone the strapdata-cassandra submodule and check that your are using the same strapdata-cassandra version in your *core/pom.xm* and in this submodule. Alternatively, this submodule can point to your own cassandra branch, assuming this branch include mandatory modifications to support Elassandra, see [strapdata-cassandra](https://github.com/strapdata/cassandra) for details.
+When cloning Elassandra, use **git clone --recurse-submodules https://github.com/strapdata/elassandra** to clone the strapdata-cassandra submodule and check that your are using the same strapdata-cassandra version in your *core/pom.xm* and in this submodule. Alternatively, this submodule can point to your own cassandra branch, assuming this branch include mandatory modifications to support Elassandra, see [strapdata-cassandra](https://github.com/strapdata/cassandra) for details.
 
 Elassandra documentation is based on [sphinx](http://www.sphinx-doc.org/en/stable/rest.html) and published on [readthedoc.org](https://readthedocs.org/). Source RestructuredText files are located at [Elassandra source documentation](https://github.com/strapdata/elassandra/tree/master/docs/elassandra). To build the documentation, just run **make html** from the *${project.dir}/docs/elassandra*.
 
