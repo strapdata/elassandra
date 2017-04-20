@@ -573,7 +573,7 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
         return this.nestedTypeFilter;
     }
 
-    public void putMapper(Mapper mapper) {
+    protected void putMapper(Mapper mapper) {
         if (mapper instanceof AllFieldMapper.IncludeInAll) {
             mapper = ((AllFieldMapper.IncludeInAll) mapper).includeInAllIfNotSet(includeInAll);
         }

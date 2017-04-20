@@ -256,11 +256,40 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, strings map<text, text>, PRIMARY KEY (id));");
         assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test").setSource("{ \"event_test\" : { \"discover\" : \".*\"}}").get());
         
-        long N = 1000;
+        long N = 10;
         for(int i=0; i < N; i++)
             process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,strings) VALUES ('%d',{'key%d':'b%d'})", i, i, i));
         
         assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"))).get().getHits().getTotalHits(), equalTo(1L));
+    }
+    
+    @Test
+    public void testMapAsObjectWithDynamicMapping() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, strings map<text, text>, PRIMARY KEY (id));");
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test")
+                .setSource("{ \"event_test\" : { \"discover\" : \".*\", "+
+                        "\"dynamic_templates\": [ "+
+                            "{ \"strings_template\": { "+
+                                "\"match\": \"strings.*\", "+ 
+                                "\"mapping\": { "+
+                                    "\"type\": \"string\","+
+                                    "\"doc_values\": true,"+
+                                    "\"index\": \"not_analyzed\""+
+                                "}"+
+                          "}}" +
+                         "]"+
+        "}}}").get());
+        
+        long N = 10;
+        for(int i=0; i < N; i++)
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,strings) VALUES ('%d',{'key%d':'test b%d'})", i, i, i));
+        
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings",QueryBuilders.matchQuery("strings.key1", "test b1"))).get().getHits().getTotalHits(), equalTo(1L));
     }
     
     // #91 test

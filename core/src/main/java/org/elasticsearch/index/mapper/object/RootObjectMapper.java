@@ -259,7 +259,7 @@ public class RootObjectMapper extends ObjectMapper {
         return typeParser.parse(name, dynamicTemplate.mappingForName(name, dynamicType), parserContext);
     }
 
-    private DynamicTemplate findTemplate(ContentPath path, String name, String matchType) {
+    public DynamicTemplate findTemplate(ContentPath path, String name, String matchType) {
         for (DynamicTemplate dynamicTemplate : dynamicTemplates) {
             if (dynamicTemplate.match(path, name, matchType)) {
                 return dynamicTemplate;
