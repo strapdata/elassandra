@@ -636,7 +636,7 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
                 final IndexShard shard = indexService.shard(shardId.id());
                 if (shard != null) {
                     long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
-                    shard.tokenRangeBitsetFilterCache().onCached(ramBytesUsed);
+                    shard.tokenRangesBitsetFilterCache().onCached(ramBytesUsed);
                 }
             }
         }
@@ -647,7 +647,7 @@ public class IndexService extends AbstractIndexComponent implements IndexCompone
                 final IndexShard shard = indexService.shard(shardId.id());
                 if (shard != null) {
                     long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
-                    shard.tokenRangeBitsetFilterCache().onRemoval(ramBytesUsed);
+                    shard.tokenRangesBitsetFilterCache().onRemoval(ramBytesUsed);
                 }
             }
         }

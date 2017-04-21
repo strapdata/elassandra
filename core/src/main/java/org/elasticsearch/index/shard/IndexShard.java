@@ -338,7 +338,7 @@ public class IndexShard extends AbstractIndexShardComponent {
         return shardBitsetFilterCache;
     }
     
-    public ShardBitsetFilterCache tokenRangeBitsetFilterCache() {
+    public ShardBitsetFilterCache tokenRangesBitsetFilterCache() {
         return tokenRangesBitsetFilterCache;
     }
 
