@@ -40,3 +40,5 @@ html_docs
 /tmp/
 backwards/
 
+# virtualenv
+.venv/

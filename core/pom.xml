@@ -196,7 +196,7 @@
             <groupId>com.twitter</groupId>
             <artifactId>jsr166e</artifactId>
         </dependency>
-        
+
         <dependency>
          <groupId>com.strapdata.cassandra</groupId>
           <artifactId>cassandra-all</artifactId>
