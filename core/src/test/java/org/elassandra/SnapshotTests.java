@@ -44,7 +44,7 @@ import org.junit.Test;
  * @author vroyer
  *
  */
-//mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.SnapshotTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+//mvn test -Pdev -pl om.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.SnapshotTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
 public class SnapshotTests extends ESSingleNodeTestCase {
 
     // SSTable snapshotDir = data/data/<keyspace>/<table>/snapshots/<snapshot_name>/
@@ -112,7 +112,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
     }
     
     @Test
-    //mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.SnapshotTests -Dtests.method="onDropSnapshotTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    //mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.SnapshotTests -Dtests.method="onDropSnapshotTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     public void onDropSnapshotTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 ( name text, age int, primary key (name))");

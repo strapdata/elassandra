@@ -45,7 +45,7 @@ import com.codahale.metrics.MetricFilter;
  */
 public class CompactionTests extends ESSingleNodeTestCase {
     
-    // mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CompactionTests -Des.logger.level=INFO -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CompactionTests -Des.logger.level=INFO -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void basicCompactionTest() throws Exception {
         createIndex("test");

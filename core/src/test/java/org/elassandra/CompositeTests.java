@@ -61,7 +61,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         assertThat(rsp.getHits().getTotalHits(), equalTo(2L));
     }
 
-    // mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CompositeTests -Dtests.method="testCompositeTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CompositeTests -Dtests.method="testCompositeTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testCompositeTest() throws Exception {
         createIndex("composite", Settings.builder().put("index.token_ranges_bitset_cache", false).build());
