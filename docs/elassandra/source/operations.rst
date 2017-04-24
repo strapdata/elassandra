@@ -236,8 +236,8 @@ Finally, you can restrict a query to the coordinator node with *preference=_only
        }
    }'
 
-Optimized search requests
--------------------------
+Optimizing search requests
+--------------------------
 
 The search strategy
 ...................
@@ -269,13 +269,13 @@ You can create an index with the ``RandomSearchStrategy`` as shown below.
    To troubleshoot search request routing, set the logging level to **DEBUG** for **class org.elassandra.cluster.routing** in the **conf/logback.xml** file.  
 
 Caching features
-................
+----------------
 
 Compared to Elasticsearch, Elassandra introduces a search overhead by adding to each query a token ranges filter and by fetching fields through a CQL request at the Cassandra layer. These overheads can
 be both mitigated by using caching features.
 
-Token Range Query Cache
-_______________________
+Token Ranges Query Cache
+........................
 
 Token ranges filter depends on the node or vnodes configuration, are quite stable and shared for all keyspaces having the same replication factor. These filters only change when the datacenter topology changes, for example when a node is temporary down or when a node is added to the datacenter.
 So, Elassandra use a cache to keep these queries, a conjunction of Lucene `NumericRangeQuery <https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html>`_ often reused for every search requests.
@@ -283,7 +283,7 @@ So, Elassandra use a cache to keep these queries, a conjunction of Lucene `Numer
 As a classic caching strategy, the ``token_ranges_query_expire`` controls the expiration time of useless token ranges filter queries into memory. The default is 5 minutes.
 
 Token Ranges Bitset Cache
-_________________________
+.........................
 
 When enabled, the token ranges bitset cache keeps into memory the results of the token range filter for each Lucene segment. This in-memory bitset, acting as the liveDocs Lucene thumbstones mechanism, is then reused for subsequent Lucene search queries.
 For each Lucene segment, this document bitset is updated when the Lucene thumbstones count increase (it's a bitwise AND between the actual Lucene thumbstones and the token range filter result), or removed if the corresponding token ranges query is removed because unused from the token range query cache.
@@ -319,11 +319,12 @@ Finally, you can check the in-memory size of the token ranges bitset cache with 
     ...
 
 Cassandra Key and Row Cache
-___________________________
+...........................
 
 To improve CQL fetch requests response time, Cassandra provides key and row caching features configured for each Cassandra table as follow :
 
 .. code::
+
    ALTER TABLE ... WITH caching = {'keys': 'ALL', 'rows_per_partition': '1'};
 
 To enable Cassandra row caching, set the ``row_cache_size_in_mb`` parameter in your **conf/cassandra.yaml**, and set ``row_cache_class_name: org.apache.cassandra.cache.OHCProvider`` to use off-heap memory.

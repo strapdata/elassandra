@@ -181,7 +181,7 @@ An index partition function acts as a selector when many indices are associated 
 
 The target index name is the result your partition function,
 
-A partition function must implements the java interface `PartitionFunction <>'_. Two implementation classes are provided :
+A partition function must implements the java interface **org.elassandra.index.PartitionFunction**. Two implementation classes are provided :
 
 * **StringFormatPartitionFunction** (the default) based on the JDK function `String.format(Locale locale, <parttern>,<arg1>,...) <https://docs.oracle.com/javase/8/docs/api/java/lang/String.html>`_.
 * **MessageFormatPartitionFunction** based on the JDK function `MessageFormat.format(<parttern>,<arg1>,...) <https://docs.oracle.com/javase/8/docs/api/java/text/MessageFormat.html#format-java.lang.String-java.lang.Object...->`_.
@@ -274,7 +274,7 @@ The resulting cassandra user defined types and table.
    1 | ['This is a tweet!'] | [{name: [{last_name: ['Royer'], first_name: ['Vincent']}], uid: ['12345']}]
 
 
-Dynamic mapping of cassandra map
+Dynamic mapping of Cassandra Map
 --------------------------------
 
 Nested document can be mapped to `User Defined Type <https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html>`_ or to CQL `map <http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_map_t.html#toc_pane>`_.
@@ -373,6 +373,80 @@ Now insert a new entry in the attrs map column and search for a nested field `at
      }
    }
 
+Dynamic Template with Dynamic Mapping
+.....................................
+
+Dynamic templates can be used when creating a dynamic field from a Cassandra map.
+
+.. code::
+
+   "mappings" : {
+         "event_test" : {
+            "dynamic_templates": [
+                   { "strings_template": {
+                         "match": "strings.*", 
+                         "mapping": {
+                             "type": "string",
+                             "index": "not_analyzed"
+                         }
+                   }}
+               ],
+           "properties" : {
+             "id" : {
+               "type" : "string",
+               "index" : "not_analyzed",
+               "cql_collection" : "singleton",
+               "cql_partition_key" : true,
+               "cql_primary_key_order" : 0
+             },
+             "strings" : {
+               "type" : "object",
+               "cql_struct" : "map",
+               "cql_collection" : "singleton"
+             }
+           }
+         }
+   }
+   
+Then, a new entry *key1* in the underlying cassandra map will have the following mapping:
+
+.. code::
+
+   "mappings" : {
+          "event_test" : {
+            "dynamic_templates" : [ {
+              "strings_template" : {
+                "mapping" : {
+                  "index" : "not_analyzed",
+                  "type" : "string",
+                  "doc_values" : true
+                },
+                "match" : "strings.*"
+              }
+            } ],
+            "properties" : {
+              "strings" : {
+                "cql_struct" : "map",
+                "cql_collection" : "singleton",
+                "type" : "nested",
+                "properties" : {
+                  "key1" : {
+                    "index" : "not_analyzed",
+                    "type" : "string"
+                  }
+              },
+              "id" : {
+                "index" : "not_analyzed",
+                "type" : "string",
+                "cql_partition_key" : true,
+                "cql_primary_key_order" : 0,
+                "cql_collection" : "singleton"
+              }
+            }
+          }
+        }    
+
+Note that because doc_values is true by default for a not analyzed field, it does not appear in the mapping.
 
 Parent-Child Relationship
 -------------------------
