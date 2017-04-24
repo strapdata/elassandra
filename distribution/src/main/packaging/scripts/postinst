@@ -1,0 +1,101 @@
+${packaging.scripts.header}
+
+# postinst script for elassandra developped by Strapdata
+# it is an hybrid rpm/deb postinst script
+# it does not start or restart cassandra service voluntary because:
+#     - on upgrade we do not want unexpected downtime
+#     - on installation it's annoying to have to stop, remove data, configure
+#       then restart cassandra.
+
+# summary of how this script is called:
+#
+# on debian familly:
+#     $1 = configure      initial installation
+#     $1 = abort-upgrade  upgrade
+
+# on redhat familly:
+#       $1 = 1            initial installation
+#       $1 = 2            upgrade
+
+E_USER="${packaging.elassandra.user}"
+E_GROUP="${packaging.elassandra.group}"
+E_LOG_DIR="${packaging.elassandra.log.dir}"
+E_DATA_DIR="${packaging.elassandra.data.dir}"
+E_PID_DIR="${packaging.elassandra.pid.dir}"
+SYSCTL_CONF="${packaging.elassandra.systemd.sysctl.dir}"/cassandra.conf
+
+do_installation () {
+  if ! getent group $E_GROUP >/dev/null; then
+      groupadd --system $E_GROUP
+  fi
+
+  if ! getent passwd $E_USER >/dev/null; then
+      useradd \
+          --system \
+          -g $E_GROUP \
+          --home-dir $E_DATA_DIR \
+          -M \
+          $E_USER
+      usermod --lock $E_USER
+      if command -v chfn >/dev/null; then
+          chfn --full-name "Elassandra user"
+      fi
+  fi
+
+  if [ -z "$2" ]; then
+      chown -R $E_USER:$E_GROUP $E_DATA_DIR
+      chown -R $E_USER:$E_GROUP $E_LOG_DIR
+      chown -R $E_USER:$E_GROUP $E_PID_DIR
+  fi
+  if ! sysctl -p $SYSCTL_CONF; then
+      echo >&2
+      echo "Warning: unable to set vm.max_map_count; is this an OpenVZ" >&2
+      echo "instance? If so, it is highly recommended that you set" >&2
+      echo "vm.max_map_count to 1048575 in the host." >&2
+      echo >&2
+      echo "Deleting the local sysctl.d/cassandra.conf." >&2
+      rm -vf $SYSCTL_CONF
+  fi
+
+  if command -v systemctl >/dev/null; then
+      echo "To start Elassandra run: 'systemctl start cassandra' as superuser."
+      echo "To enable Elassandra on boot run: 'systemctl enable cassandra' as superuser"
+  else
+      echo "To start Elassandra run: 'service cassandra start' as superuser"
+      echo "To enable Elassandra on boot run: 'service cassandra enable' as superuser"
+  fi
+}
+
+do_upgrade () {
+  if command -v systemctl >/dev/null; then
+      echo "To restart Elassandra run: 'systemctl restart cassandra' as superuser."
+  else
+    echo "To restart Elassandra run: 'service cassandra restart' as superuser."
+  fi
+}
+
+case "$1" in
+    configure)
+        do_installation
+    ;;
+
+    1)
+        do_installation
+    ;;
+
+    abort-upgrade)
+        do_upgrade
+    ;;
+
+    2)
+        do_upgrade
+    ;;
+
+    abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
