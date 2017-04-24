@@ -47,7 +47,7 @@ import com.google.common.net.InetAddresses;
  * @author vroyer
  *
  */
-//mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+//mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
 public class CqlTypesTests extends ESSingleNodeTestCase {
     
     public void testTest() throws Exception {
@@ -119,7 +119,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(fields.get("c8"),equalTo(false));
     }
 
-    // mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testSinglePkTypesTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testSinglePkTypesTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testSinglePkTypesTest() throws Exception {
         createIndex("ks1");
@@ -161,7 +161,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         }
     }
     
-    // mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testCompoundPkTypesTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testCompoundPkTypesTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testCompoundPkTypesTest() throws Exception {
         createIndex("ks2");
@@ -247,7 +247,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
     }
     
     // #91 test
-    // mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testMapAsObject" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testMapAsObject" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testMapAsObject() throws Exception {
         createIndex("test");
@@ -264,6 +264,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"))).get().getHits().getTotalHits(), equalTo(1L));
     }
     
+    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testMapAsObjectWithDynamicMapping" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testMapAsObjectWithDynamicMapping() throws Exception {
         createIndex("test");
@@ -295,7 +296,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
     // #91 test
     // see https://www.elastic.co/guide/en/elasticsearch/reference/2.4/null-value.html
     // see https://www.datastax.com/dev/blog/cql3_collections (empty list = null)
-    // mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testNullValue" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testNullValue" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testNullValue() throws Exception {
         XContentBuilder mapping = XContentFactory.jsonBuilder()
