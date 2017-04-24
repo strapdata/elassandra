@@ -29,13 +29,6 @@
             <classifier>indy</classifier>
             <version>2.4.6</version>
         </dependency>
-        <dependency>
-            <groupId>com.datastax.cassandra</groupId>
-            <artifactId>cassandra-driver-core</artifactId>
-            <version>3.0.1-shaded</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/../../core/cassandra/lib/cassandra-driver-core-3.0.1-shaded.jar</systemPath>
-        </dependency>
     </dependencies>
 
     <build>
