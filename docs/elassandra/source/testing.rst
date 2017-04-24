@@ -63,7 +63,7 @@ To run this specific test :
 
 .. code::
 
-   $mvn test -Pdev -pl com.strapdata:elassandra -Dtests.seed=56E318ABFCECC61 -Dtests.class=org.elassandra.ParentChildTests 
+   $mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=56E318ABFCECC61 -Dtests.class=org.elassandra.ParentChildTests 
       -Des.logger.level=DEEBUG -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=de-GR -Dtests.timezone=Etc/UTC
 
 To run all unit tests :
