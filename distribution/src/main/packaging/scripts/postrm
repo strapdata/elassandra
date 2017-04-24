@@ -12,8 +12,6 @@ ${packaging.scripts.header}
 #       $1=1         : indicates an upgrade
 
 
-
-SOURCE_ENV_FILE=true
 REMOVE_DIRS=false
 REMOVE_SERVICE=false
 REMOVE_USER_AND_GROUP=false
@@ -28,7 +26,6 @@ case "$1" in
 
     purge)
         REMOVE_USER_AND_GROUP=true
-        SOURCE_ENV_FILE=false
     ;;
     failed-upgrade|abort-install|abort-upgrade|disappear|upgrade|disappear)
     ;;
@@ -50,33 +47,26 @@ case "$1" in
     ;;
 esac
 
-# Sets the default values for elasticsearch variables used in this script
-ES_USER="${packaging.elasticsearch.user}"
-ES_GROUP="${packaging.elasticsearch.group}"
-LOG_DIR="${packaging.elasticsearch.log.dir}"
-PLUGINS_DIR="${packaging.elasticsearch.plugins.dir}"
-PID_DIR="${packaging.elasticsearch.pid.dir}"
-DATA_DIR="${packaging.elasticsearch.data.dir}"
+# Sets the default values for elassandra variables used in this script
+ES_USER="${packaging.elassandra.user}"
+ES_GROUP="${packaging.elassandra.group}"
+LOG_DIR="${packaging.elassandra.log.dir}"
+PLUGINS_DIR="${packaging.elassandra.plugins.dir}"
+PID_DIR="${packaging.elassandra.pid.dir}"
+DATA_DIR="${packaging.elassandra.data.dir}"
 
-# Source the default env file
-if [ "$SOURCE_ENV_FILE" = "true" ]; then
-    ES_ENV_FILE="${packaging.env.file}"
-    if [ -f "$ES_ENV_FILE" ]; then
-        . "$ES_ENV_FILE"
-    fi
-fi
 
 if [ "$REMOVE_SERVICE" = "true" ]; then
     if command -v systemctl >/dev/null; then
-        systemctl disable elasticsearch.service > /dev/null 2>&1 || true
+        systemctl disable cassandra.service > /dev/null 2>&1 || true
     fi
 
     if command -v chkconfig >/dev/null; then
-        chkconfig --del elasticsearch 2> /dev/null || true
+        chkconfig --del cassandra 2> /dev/null || true
     fi
 
     if command -v update-rc.d >/dev/null; then
-        update-rc.d elasticsearch remove >/dev/null || true
+        update-rc.d cassandra remove >/dev/null || true
     fi
 fi
 

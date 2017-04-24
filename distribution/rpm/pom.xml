@@ -1,56 +1,88 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>com.strapdata.elasticsearch.distribution</groupId>
-        <artifactId>distributions</artifactId>
-        <version>2.4.2-SNAPSHOT</version>
-    </parent>
+  <project xmlns="http://maven.apache.org/POM/4.0.0"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+      <modelVersion>4.0.0</modelVersion>
+      <parent>
+          <groupId>com.strapdata.elasticsearch.distribution</groupId>
+          <artifactId>distributions</artifactId>
+          <version>2.4.2-SNAPSHOT</version>
+      </parent>
 
-    <groupId>com.strapdata.elasticsearch.distribution.rpm</groupId>
-    <artifactId>elasticsearch</artifactId>
-    <name>Distribution: RPM</name>
-    <packaging>rpm</packaging>
-    <description>The RPM distribution of Elassandra</description>
+      <groupId>com.strapdata.elasticsearch.distribution.rpm</groupId>
+      <artifactId>elasticsearch</artifactId>
+      <name>Distribution: RPM</name>
+      <packaging>rpm</packaging>
+      <description>The RPM distribution of Elassandra</description>
 
-    <properties>
-        <skip.unit.tests>true</skip.unit.tests>
-        <rpm.outputDirectory>${project.build.directory}/releases/</rpm.outputDirectory>
-    </properties>
+      <properties>
+          <skip.unit.tests>true</skip.unit.tests>
+          <rpm.outputDirectory>${project.build.directory}/releases/</rpm.outputDirectory>
+          <rpm.name>elassandra</rpm.name>
+      </properties>
 
-    <build>
-        <filters>
-            <filter>${project.basedir}/src/main/packaging/packaging.properties</filter>
-        </filters>
+      <build>
+          <filters>
+              <filter>${project.basedir}/src/main/packaging/packaging.properties</filter>
+          </filters>
 
-        <plugins>
-            <!-- No need to have some source jar for the RPM -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-source-plugin</artifactId>
-                <version>2.4</version>
-                <configuration><skipSource>true</skipSource></configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-resources-plugin</artifactId>
-                <executions>
-                    <!-- Filters some files and uses packaging.properties when building the .rpm package -->
-                    <execution>
-                        <id>copy-resources-rpm</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/generated-packaging/rpm/</outputDirectory>
-                            <filters>
-                                <filter>${project.basedir}/../src/main/packaging/packaging.properties</filter>
-                                <filter>${project.basedir}/src/main/packaging/packaging.properties</filter>
-                            </filters>
-                            <resources>
+          <plugins>
+              <!-- No need to have some source jar for the RPM -->
+              <plugin>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-source-plugin</artifactId>
+                  <version>2.4</version>
+                  <configuration><skipSource>true</skipSource></configuration>
+              </plugin>
+              <plugin>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-resources-plugin</artifactId>
+                  <executions>
+                      <!-- Filters some files and uses packaging.properties when building the .rpm package -->
+                      <execution>
+                          <id>copy-resources-rpm</id>
+                          <phase>prepare-package</phase>
+                          <goals>
+                              <goal>copy-resources</goal>
+                          </goals>
+                          <configuration>
+                              <outputDirectory>${project.build.directory}/generated-packaging/rpm/</outputDirectory>
+                              <filters>
+                                  <filter>${project.basedir}/../src/main/packaging/packaging.properties</filter>
+                                  <filter>${project.basedir}/src/main/packaging/packaging.properties</filter>
+                              </filters>
+
+                              <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../../core/cassandra</directory>
+                                    <includes>
+                                        <include>bin/cassandra-stress</include>
+                                        <include>bin/cqlsh.py</include>
+                                        <include>bin/cqlsh</include>
+                                        <include>bin/nodetool</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/../../core/cassandra</directory>
+                                    <excludes>
+                                        <exclude>conf/cassandra-env.ps1</exclude>
+                                        <exclude>conf/cassandra.yaml</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <include>conf/**/*</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/../../core/cassandra</directory>
+                                    <includes>
+                                        <include>lib/jsr223/*/**</include>
+                                        <include>lib/licenses/*</include>
+                                        <!-- do not import windows libraries, cause rpm failed while trying to strip them -->
+                                        <include>lib/sigar-bin/*.so</include>
+                                        <include>lib/sigar-bin/*.sl</include>
+                                        <include>lib/sigar-bin/*.dylib</include>
+                                    </includes>
+                                </resource>
                                 <resource>
                                     <directory>${project.basedir}/../src/main/packaging/</directory>
                                     <filtering>true</filtering>
@@ -76,385 +108,381 @@
                                     <filtering>true</filtering>
                                     <includes>
                                         <include>bin/cassandra</include>
-                                        <include>bin/cassandra.in.sh</include>
-                                        <include>bin/shortcuts-env.sh</include>
                                         <include>bin/plugin</include>
-                                        <include>bin/elasticsearch-systemd-pre-exec</include>
+                                        <include>bin/aliases.sh</include>
+                                        <include>conf/cassandra.yaml</include>
+                                        <include>conf/cassandra-rackdc.properties</include>
+                                        <include>conf/cassandra-topology.properties</include>
+                                        <include>conf/elasticsearch.yml</include>
+                                        <include>conf/logback.xml</include>
+                                        <include>conf/triggers/README.txt</include>
                                     </includes>
                                 </resource>
                                 <resource>
-                                    <directory>${project.basedir}/../core/cassandra</directory>
+                                    <directory>${project.basedir}/src/main/resources</directory>
                                     <filtering>true</filtering>
                                     <includes>
-                                        <include>bin/cqlsh</include>
-                                        <include>bin/cqlsh.py</include>
-                                        <include>bin/debug-cql</include>
-                                        <include>bin/nodetool</include>
-                                        <include>bin/sstablekeys</include>
-                                        <include>bin/sstableloader</include>
-                                        <include>bin/sstablescrub</include>
-                                        <include>bin/sstableupgrade</include>
-                                        <include>bin/sstableverify</include>
-                                        <include>bin/stop-server</include>
+                                        <include>bin/cassandra.in.sh</include>
                                     </includes>
                                 </resource>
                             </resources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <!-- Rpm Packaging -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>rpm-maven-plugin</artifactId>
-                <configuration>
-                    <disabled>false</disabled>
-                    <name>elassandra</name>
-                    <distribution>Elassandra</distribution>
-                    <group>Application/Internet</group>
-                    <packager>Strapdata</packager>
-                    <prefix>/usr</prefix>
-                    <!-- To get rpm-maven-plugin to pickup targetOS you need
-                         to specify needarch too.... If you don't specify
-                         targetOS then it'll just use whatever the current
-                         machine's OS is which means you can't build rpms for
-                         linux on OSX even if you have rpmbuild.... -->
-                    <needarch>noarch</needarch>
-                    <targetOS>linux</targetOS>
-                    <changelogFile>src/changelog</changelogFile>
-                    <group>Application/Internet</group>
-                    <keyname>${gpg.key}</keyname>
-                    <keypath>${gpg.keypath}</keypath>
-                    <keyPassphrase>
-                        <passphrase>${gpg.passphrase}</passphrase>
-                    </keyPassphrase>
-                    <defineStatements>
-                        <defineStatement>_unpackaged_files_terminate_build 0</defineStatement>
-                        <defineStatement>_binaries_in_noarch_packages_terminate_build 0</defineStatement>
-                    </defineStatements>
-                    <defaultFilemode>644</defaultFilemode>
-                    <defaultDirmode>755</defaultDirmode>
-                    <defaultUsername>root</defaultUsername>
-                    <defaultGroupname>root</defaultGroupname>
-                    <!--<icon>${project.basedir}/src/main/resources/logo/elastic.gif</icon>-->
-                    <description>Elassandra = Cassandra + Elasticsearch. Reference documentation can be found at https://www.elassandra.io/doc</description>
-                    <mappings>
-                        <!-- Add bin directory -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.bin.dir}/</directory>
+                          </configuration>
+                      </execution>
+                  </executions>
+              </plugin>
+              <!-- Rpm Packaging -->
+              <plugin>
+                  <groupId>org.codehaus.mojo</groupId>
+                  <artifactId>rpm-maven-plugin</artifactId>
+                  <configuration>
+                      <disabled>false</disabled>
+                      <name>elassandra</name>
+                      <distribution>Strapdata</distribution>
+                      <group>Application/Internet</group>
+                      <packager>Strapdata</packager>
+                      <!-- <prefix>/usr</prefix> -->
+
+                      <!-- To get rpm-maven-plugin to pickup targetOS you need
+                           to specify needarch too.... If you don't specify
+                           targetOS then it'll just use whatever the current
+                           machine's OS is which means you can't build rpms for
+                           linux on OSX even if you have rpmbuild.... -->
+                      <needarch>noarch</needarch>
+                      <targetOS>linux</targetOS>
+                      <!-- <changelogFile>src/changelog</changelogFile> -->
+                      <group>Application/Internet</group>
+                      <!-- <keyname>${gpg.key}</keyname>
+                      <keypath>${gpg.keypath}</keypath>
+                      <keyPassphrase>
+                          <passphrase>${gpg.passphrase}</passphrase>
+                      </keyPassphrase> -->
+                      <defineStatements>
+                          <defineStatement>_unpackaged_files_terminate_build 0</defineStatement>
+                          <defineStatement>_binaries_in_noarch_packages_terminate_build 0</defineStatement>
+                          <!-- disable libraries stripping -->
+                          <!-- <defineStatement>__os_install_post %{nil}</defineStatement> -->
+                      </defineStatements>
+                      <defaultFilemode>644</defaultFilemode>
+                      <defaultDirmode>755</defaultDirmode>
+                      <defaultUsername>root</defaultUsername>
+                      <defaultGroupname>root</defaultGroupname>
+                      <description>Elassandra = Cassandra + Elasticsearch</description>
+                      <!--<icon>${project.basedir}/src/main/resources/logo/elastic.gif</icon>-->
+
+                      <requires>
+                          <require>jre &gt;= 1.8</require>
+                      </requires>
+                      <conflicts>
+                          <conflict>cassandra</conflict>
+                      </conflicts>
+
+                      <mappings>
+                          <!-- Add bin directory -->
+                          <mapping>
+                            <directory>${packaging.elassandra.bin.dir}</directory>
+                            <directoryIncluded>false</directoryIncluded>
+                            <sources>
+                                <source>
+                                    <location>${project.build.directory}/generated-packaging/rpm/bin</location>
+                                    <includes>
+                                        <include>nodetool</include>
+                                        <include>cqlsh</include>
+                                        <include>cqlsh.py</include>
+                                    </includes>
+                                </source>
+                            </sources>
                             <filemode>755</filemode>
+                          </mapping>
+                          <!-- Add sbin directory -->
+                          <mapping>
+                            <directory>${packaging.elassandra.sbin.dir}</directory>
+                            <directoryIncluded>false</directoryIncluded>
                             <sources>
                                 <source>
                                     <location>${project.build.directory}/generated-packaging/rpm/bin</location>
                                     <includes>
                                         <include>cassandra</include>
-                                        <include>cassandra.in.sh</include>
-                                        <include>shortcuts-env.sh</include>
-                                        <include>cqlsh</include>
-                                        <include>cqlsh.py</include>
-                                        <include>debug-cql</include>
-                                        <include>nodetool</include>
-                                        <include>sstablekeys</include>
-                                        <include>sstableloader</include>
-                                        <include>sstablescrub</include>
-                                        <include>sstableupgrade</include>
-                                        <include>sstableverify</include>
-                                        <include>stop-server</include>
-                                        <include>plugin</include>
-                                        <include>elasticsearch-systemd-pre-exec</include>
                                     </includes>
                                 </source>
                             </sources>
-                        </mapping>
-                        <!-- Add configuration files -->
-                        <mapping>
-                            <!-- Explicitly add conf.dir to the file list so
-                                 that it is removed when the package is removed.
-                                 This is required because the scripts
-                                 subdirectory is created outside of the mapping
-                                 that creates the conf.dir.-->
-                            <directory>${packaging.elasticsearch.conf.dir}</directory>
-                            <configuration>noreplace</configuration>
-                            <groupname>${packaging.elasticsearch.group}</groupname>
-                            <filemode>750</filemode>
-                        </mapping>
-                        <mapping>
-                            <directory>${packaging.elasticsearch.conf.dir}/</directory>
-                            <configuration>noreplace</configuration>
-                            <groupname>${packaging.elasticsearch.group}</groupname>
-                            <filemode>750</filemode>
-                            <sources>
-                                <source>
-                                    <location>${project.basedir}/../src/main/resources/conf/</location>
-                                    <includes>
-                                        <include>*</include>
-                                    </includes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        <mapping>
-                            <directory>${packaging.elasticsearch.conf.dir}/scripts</directory>
-                            <configuration>noreplace</configuration>
-                            <groupname>${packaging.elasticsearch.group}</groupname>
-                            <filemode>750</filemode>
-                        </mapping>
-                        
-                        <!-- Add environment vars file -->
-                        <mapping>
-                            <directory>/etc/sysconfig/</directory>
-                            <directoryIncluded>false</directoryIncluded>
-                            <configuration>noreplace</configuration>
-                            <sources>
-                                <source>
-                                    <location>${project.build.directory}/generated-packaging/rpm/env/</location>
-                                    <includes>
-                                        <include>cassandra</include>
-                                    </includes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        <!-- Add libs -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.home.dir}/lib</directory>
-                            <sources>
-                                <source>
-                                    <location>target/lib/</location>
-                                    <excludes>
-                                        <exclude>${project.build.finalName}-sources.jar</exclude>
-                                        <exclude>${project.build.finalName}-tests.jar</exclude>
-                                        <exclude>${project.build.finalName}-test-sources.jar</exclude>
-                                        <exclude>slf4j-api-*.jar</exclude>
-                                    </excludes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        <!-- Add modules -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.home.dir}/modules</directory>
-                            <sources>
-                                <source>
-                                    <location>target/modules/</location>
-                                </source>
-                            </sources>
-                        </mapping>
-                        
-                        <!-- Add pylib -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.home.dir}/pylib</directory>
-                            <sources>
-                                <source>
-                                    <location>${project.basedir}/../../core/cassandra/pylib</location>
-                                    <includes>
-                                        <include>*</include>
-                                    </includes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        <!-- Add tools -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.home.dir}/tools</directory>
-                            <sources>
-                                <source>
-                                    <location>${project.basedir}/../../core/cassandra/tools</location>
-                                    <includes>
-                                        <include>*</include>
-                                    </includes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        
-                        <!-- Add init.d files  -->
-                        <mapping>
-                            <directory>/etc/init.d</directory>
-                            <directoryIncluded>false</directoryIncluded>
                             <filemode>755</filemode>
-                            <configuration>true</configuration>
-                            <sources>
-                                <source>
-                                    <location>${project.build.directory}/generated-packaging/rpm/init.d</location>
-                                    <includes>
-                                        <include>cassandra</include>
-                                    </includes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        <!-- Adds systemd file -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.systemd.dir}</directory>
-                            <directoryIncluded>false</directoryIncluded>
-                            <configuration>true</configuration>
-                            <sources>
-                                <source>
-                                    <location>${project.build.directory}/generated-packaging/rpm/systemd</location>
-                                    <includes>
-                                        <include>cassandra.service</include>
-                                    </includes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        <!-- Adds systemd/sysctl.d configuration file -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.systemd.sysctl.dir}</directory>
-                            <configuration>true</configuration>
-                            <sources>
-                                <source>
-                                    <location>${project.build.directory}/generated-packaging/rpm/systemd/sysctl</location>
-                                    <includes>
-                                        <include>cassandra.conf</include>
-                                    </includes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        <!-- Adds systemd/tmpfiles.d configuration file -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.tmpfilesd.dir}</directory>
-                            <configuration>true</configuration>
-                            <sources>
-                                <source>
-                                    <location>${project.build.directory}/generated-packaging/rpm/systemd/</location>
-                                    <includes>
-                                        <include>cassandra.conf</include>
-                                    </includes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        <!-- Add readme files  -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.home.dir}</directory>
-                            <sources>
-                                <source>
-                                    <location>${project.basedir}/../src/main/resources/</location>
-                                    <includes>
-                                        <include>LICENSE.txt</include>
-                                        <include>NOTICE.txt</include>
-                                        <include>README.md</include>
-                                    </includes>
-                                </source>
-                            </sources>
-                        </mapping>
-                        <!-- Add and sets permission on default directories -->
-                        <mapping>
-                            <directory>${packaging.elasticsearch.data.dir}</directory>
-                            <filemode>755</filemode>
-                            <username>${packaging.elasticsearch.user}</username>
-                            <groupname>${packaging.elasticsearch.group}</groupname>
-                        </mapping>
-                        <mapping>
-                            <directory>${packaging.elasticsearch.log.dir}</directory>
-                            <filemode>755</filemode>
-                            <username>${packaging.elasticsearch.user}</username>
-                            <groupname>${packaging.elasticsearch.group}</groupname>
-                        </mapping>
-                        <mapping>
-                            <directory>${packaging.elasticsearch.plugins.dir}</directory>
-                            <filemode>755</filemode>
-                            <username>${packaging.elasticsearch.user}</username>
-                            <groupname>${packaging.elasticsearch.group}</groupname>
-                        </mapping>
-                        <mapping>
-                            <directory>${packaging.elasticsearch.pid.dir}</directory>
-                            <filemode>755</filemode>
-                            <username>${packaging.elasticsearch.user}</username>
-                            <groupname>${packaging.elasticsearch.group}</groupname>
-                        </mapping>
-                    </mappings>
-                    <preinstallScriptlet>
-                        <scriptFile>${project.build.directory}/generated-packaging/rpm/scripts/preinst</scriptFile>
-                        <fileEncoding>utf-8</fileEncoding>
-                    </preinstallScriptlet>
-                    <postinstallScriptlet>
-                        <scriptFile>${project.build.directory}/generated-packaging/rpm/scripts/postinst</scriptFile>
-                        <fileEncoding>utf-8</fileEncoding>
-                    </postinstallScriptlet>
-                    <preremoveScriptlet>
-                        <scriptFile>${project.build.directory}/generated-packaging/rpm/scripts/prerm</scriptFile>
-                        <fileEncoding>utf-8</fileEncoding>
-                    </preremoveScriptlet>
-                    <postremoveScriptlet>
-                        <scriptFile>${project.build.directory}/generated-packaging/rpm/scripts/postrm</scriptFile>
-                        <fileEncoding>utf-8</fileEncoding>
-                    </postremoveScriptlet>
-                </configuration>
-            </plugin>
+                          </mapping>
+                          <!--  Add cassandra.in.sh -->
+                          <mapping>
+                              <directory>${packaging.elassandra.home.dir}</directory>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/generated-packaging/rpm/bin</location>
+                                      <includes>
+                                          <include>cassandra.in.sh</include>
+                                      </includes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <!-- Add configuration files -->
+                          <mapping>
+                              <!-- Explicitly add conf.dir to the file list so
+                                   that it is removed when the package is removed.
+                                   This is required because the scripts
+                                   subdirectory is created outside of the mapping
+                                   that creates the conf.dir.-->
+                              <directory>${packaging.elassandra.conf.dir}</directory>
+                              <configuration>noreplace</configuration>
+                              <groupname>${packaging.elasssandra.group}</groupname>
+                              <filemode>755</filemode>
+                          </mapping>
+                          <mapping>
+                              <directory>${packaging.elassandra.conf.dir}/</directory>
+                              <configuration>noreplace</configuration>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/generated-packaging/rpm/conf</location>
+                                      <includes>
+                                          <include>**/*</include>
+                                      </includes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <!-- Add environment vars file -->
+                          <mapping>
+                              <directory>/etc/default</directory>
+                              <directoryIncluded>false</directoryIncluded>
+                              <configuration>noreplace</configuration>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/generated-packaging/rpm/env/</location>
+                                      <includes>
+                                          <include>cassandra</include>
+                                      </includes>
+                                  </source>
+                              </sources>
+                          </mapping>
 
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <!-- bundle modules -->
-                    <execution>
-                        <id>unpack-modules</id>
-                        <phase>prepare-package</phase>
-                    </execution>
-                    <execution>
-                        <id>copy-rpm</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>copy</goal>
-                        </goals>
-                        <configuration>
-                            <artifactItems>
-                                <artifactItem>
-                                    <groupId>${project.groupId}</groupId>
-                                    <artifactId>${project.artifactId}</artifactId>
-                                    <version>${project.version}</version>
-                                    <type>${project.packaging}</type>
-                                    <overWrite>true</overWrite>
-                                    <outputDirectory>${rpm.outputDirectory}</outputDirectory>
-                                </artifactItem>
-                            </artifactItems>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>shorten-gpg-key-path</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <target>
-                                <ant antfile="${packaging.gpg.shortening.ant.script}"/>
-                            </target>
-                        </configuration>
-                    </execution>
-                    <!-- start up external cluster -->
-                    <execution>
-                        <id>integ-setup</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <skip>${skip.integ.tests}</skip>
-                            <target>
-                                <ant antfile="${elasticsearch.integ.antfile}" target="start-external-cluster-rpm">
-                                    <property name="tests.jvm.argline" value="${tests.jvm.argline}"/>
-                                </ant>
-                            </target>
-                        </configuration>
-                    </execution>
-                    <!-- shut down external cluster -->
-                    <execution>
-                        <id>integ-teardown</id>
-                        <phase>post-integration-test</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <skip>${skip.integ.tests}</skip>
-                            <target>
-                                <ant antfile="${elasticsearch.integ.antfile}" target="stop-external-cluster"/>
-                            </target>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
-</project>
+                          <!-- Add libs -->
+                          <mapping>
+                              <directory>${packaging.elassandra.home.dir}/lib</directory>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/lib</location>
+                                      <includes>
+                                          <!-- do not take sub-directories -->
+                                          <include>*</include>
+                                      </includes>
+                                      <excludes>
+                                          <exclude>${project.build.finalName}-sources.jar</exclude>
+                                          <exclude>${project.build.finalName}-tests.jar</exclude>
+                                          <exclude>${project.build.finalName}-test-sources.jar</exclude>
+                                      </excludes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <mapping>
+                              <directory>${packaging.elassandra.home.dir}/lib</directory>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/generated-packaging/rpm/lib</location>
+                                      <includes>**/*</includes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <!-- Add modules -->
+                          <mapping>
+                              <directory>${packaging.elassandra.home.dir}/modules</directory>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/modules</location>
+                                  </source>
+                              </sources>
+                          </mapping>
+
+                          <!-- Add init.d files  -->
+                          <mapping>
+                              <directory>/etc/init.d</directory>
+                              <directoryIncluded>false</directoryIncluded>
+                              <filemode>755</filemode>
+                              <configuration>true</configuration>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/generated-packaging/rpm/init.d</location>
+                                      <includes>
+                                          <include>cassandra</include>
+                                      </includes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <!-- Adds systemd file -->
+                          <mapping>
+                              <directory>${packaging.elassandra.systemd.dir}</directory>
+                              <directoryIncluded>false</directoryIncluded>
+                              <configuration>true</configuration>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/generated-packaging/rpm/systemd</location>
+                                      <includes>
+                                          <include>cassandra.service</include>
+                                      </includes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <!-- Adds systemd/sysctl.d configuration file -->
+                          <mapping>
+                              <directory>${packaging.elassandra.systemd.sysctl.dir}</directory>
+                              <configuration>true</configuration>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/generated-packaging/rpm/systemd/sysctl</location>
+                                      <includes>
+                                          <include>cassandra.conf</include>
+                                      </includes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <!-- Adds systemd/tmpfiles.d configuration file -->
+                          <mapping>
+                              <directory>${packaging.elassandra.tmpfilesd.dir}</directory>
+                              <configuration>true</configuration>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/generated-packaging/rpm/systemd/</location>
+                                      <includes>
+                                          <include>cassandra.conf</include>
+                                      </includes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <!-- Add readme files  -->
+                          <mapping>
+                              <directory>${packaging.elassandra.home.dir}</directory>
+                              <sources>
+                                  <source>
+                                      <location>${project.basedir}/../src/main/resources/</location>
+                                      <includes>
+                                          <include>LICENSE.txt</include>
+                                          <include>NOTICE.txt</include>
+                                          <include>README.md</include>
+                                      </includes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <!-- Add copyright -->
+                          <mapping>
+                              <directory>/usr/share/doc/elassandra/copyright</directory>
+                              <sources>
+                                  <source>
+                                      <location>${project.build.directory}/generated-packaging/rpm</location>
+                                      <includes>
+                                          <include>copyright</include>
+                                      </includes>
+                                  </source>
+                              </sources>
+                          </mapping>
+                          <!-- Add and sets permission on default directories -->
+                          <mapping>
+                              <directory>${packaging.elassandra.data.dir}</directory>
+                          </mapping>
+                          <mapping>
+                              <directory>${packaging.elassandra.log.dir}</directory>
+                          </mapping>
+                          <mapping>
+                              <directory>${packaging.elassandra.plugins.dir}</directory>
+                          </mapping>
+                          <mapping>
+                              <directory>${packaging.elassandra.pid.dir}</directory>
+                          </mapping>
+                      </mappings>
+                      <postinstallScriptlet>
+                          <scriptFile>${project.build.directory}/generated-packaging/rpm/scripts/postinst</scriptFile>
+                          <fileEncoding>utf-8</fileEncoding>
+                      </postinstallScriptlet>
+                      <preremoveScriptlet>
+                          <scriptFile>${project.build.directory}/generated-packaging/rpm/scripts/prerm</scriptFile>
+                          <fileEncoding>utf-8</fileEncoding>
+                      </preremoveScriptlet>
+                      <postremoveScriptlet>
+                          <scriptFile>${project.build.directory}/generated-packaging/rpm/scripts/postrm</scriptFile>
+                          <fileEncoding>utf-8</fileEncoding>
+                      </postremoveScriptlet>
+                  </configuration>
+              </plugin>
+
+              <plugin>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-dependency-plugin</artifactId>
+                  <executions>
+                      <!-- bundle modules -->
+                      <execution>
+                          <id>unpack-modules</id>
+                          <phase>prepare-package</phase>
+                      </execution>
+                      <execution>
+                          <id>copy-rpm</id>
+                          <phase>package</phase>
+                          <goals>
+                              <goal>copy</goal>
+                          </goals>
+                          <configuration>
+                              <artifactItems>
+                                  <artifactItem>
+                                      <groupId>${project.groupId}</groupId>
+                                      <artifactId>${project.artifactId}</artifactId>
+                                      <version>${project.version}</version>
+                                      <type>${project.packaging}</type>
+                                      <overWrite>true</overWrite>
+                                      <outputDirectory>${rpm.outputDirectory}</outputDirectory>
+                                  </artifactItem>
+                              </artifactItems>
+                          </configuration>
+                      </execution>
+                  </executions>
+              </plugin>
+              <!-- <plugin>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-antrun-plugin</artifactId>
+                  <executions>
+                      <execution>
+                          <id>shorten-gpg-key-path</id>
+                          <phase>prepare-package</phase>
+                          <goals>
+                              <goal>run</goal>
+                          </goals>
+                          <configuration>
+                              <target>
+                                  <ant antfile="${packaging.gpg.shortening.ant.script}"/>
+                              </target>
+                          </configuration>
+                      </execution> -->
+                      <!-- start up external cluster -->
+                      <!-- <execution>
+                          <id>integ-setup</id>
+                          <phase>pre-integration-test</phase>
+                          <goals>
+                              <goal>run</goal>
+                          </goals>
+                          <configuration>
+                              <skip>${skip.integ.tests}</skip>
+                              <target>
+                                  <ant antfile="${elasticsearch.integ.antfile}" target="start-external-cluster-rpm">
+                                      <property name="tests.jvm.argline" value="${tests.jvm.argline}"/>
+                                  </ant>
+                              </target>
+                          </configuration>
+                      </execution> -->
+                      <!-- shut down external cluster -->
+                      <!-- <execution>
+                          <id>integ-teardown</id>
+                          <phase>post-integration-test</phase>
+                          <goals>
+                              <goal>run</goal>
+                          </goals>
+                          <configuration>
+                              <skip>${skip.integ.tests}</skip>
+                              <target>
+                                  <ant antfile="${elasticsearch.integ.antfile}" target="stop-external-cluster"/>
+                              </target>
+                          </configuration>
+                      </execution>
+                  </executions>
+              </plugin> -->
+          </plugins>
+      </build>
+  </project>
