@@ -10,7 +10,7 @@
     <packaging>pom</packaging>
     <name>Elasticsearch: Parent POM</name>
     <description>Parent POM</description>
-    <inceptionYear>2009</inceptionYear>
+    <inceptionYear>2015</inceptionYear>
 
     <parent>
         <groupId>org.sonatype.oss</groupId>
@@ -69,8 +69,9 @@
         <elasticsearch.s3.repository>s3://download.elasticsearch.org/elasticsearch/staging/</elasticsearch.s3.repository>
 
         <!-- Build resources properties -->
-        <elassandra.license.header>${elasticsearch.tools.directory}/license-check/elassandra_license_header.txt</elassandra.license.header>
-
+        <elassandra.license.header>${elasticsearch.tools.directory}/license-check/strapdata_license_header.txt</elassandra.license.header>
+        <cassandra.version>3.0.10</cassandra.version>
+        
         <elasticsearch.tools.directory>${project.build.directory}/dev-tools</elasticsearch.tools.directory>
         <elasticsearch.license.header>${elasticsearch.tools.directory}/license-check/elasticsearch_license_header.txt</elasticsearch.license.header>
         <elasticsearch.license.headerDefinition>${elasticsearch.tools.directory}/license-check/license_header_definition.xml</elasticsearch.license.headerDefinition>
@@ -144,27 +145,6 @@
 
     <repositories>
         <repository>
-            <id>elasticsearch-releases</id>
-            <url>http://maven.elasticsearch.org/releases</url>
-            <releases>
-                <enabled>true</enabled>
-            </releases>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </repository>
-        <repository>
-            <id>oss-snapshots</id>
-            <name>Sonatype OSS Snapshots</name>
-            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
-        </repository>
-        <!--
-        <repository>
-            <id>Lucene snapshots</id>
-            <url>https://download.elasticsearch.org/lucenesnapshots/${lucene.snapshot.revision}</url>
-        </repository>
-        -->
-        <repository>
             <id>strapdata-releases</id>
             <url>https://oss.sonatype.org/content/groups/public</url>
             <releases>
@@ -174,8 +154,30 @@
                 <enabled>false</enabled>
             </snapshots>
         </repository>
+        <repository>
+            <id>ossrh</id>
+            <name>Sonatype OSS Snapshots</name>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        </repository>
+        <!--
+        <repository>
+            <id>Lucene snapshots</id>
+            <url>https://download.elasticsearch.org/lucenesnapshots/${lucene.snapshot.revision}</url>
+        </repository>
+        -->
     </repositories>
-
+    
+  <distributionManagement>
+    <snapshotRepository>
+      <id>ossrh</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+    </snapshotRepository>
+    <repository>
+      <id>ossrh</id>
+      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+    </repository>
+  </distributionManagement>
+    
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -253,6 +255,12 @@
                 <type>zip</type>
             </dependency>
 
+            <dependency>
+                <groupId>com.strapdata.cassandra</groupId>
+                <artifactId>cassandra-all</artifactId>
+                <version>${cassandra.version}</version>
+            </dependency>
+        
             <dependency>
                 <groupId>org.apache.httpcomponents</groupId>
                 <artifactId>httpclient</artifactId>
@@ -557,6 +565,18 @@
                         </execution>
                     </executions>
                 </plugin>
+                <plugin>
+                    <groupId>org.sonatype.plugins</groupId>
+                    <artifactId>nexus-staging-maven-plugin</artifactId>
+                    <version>1.6.7</version>
+                    <extensions>true</extensions>
+                    <configuration>
+                        <serverId>ossrh</serverId>
+                        <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+                        <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                    </configuration>
+                </plugin>
+    
             </plugins>
         <pluginManagement>
             <plugins>
