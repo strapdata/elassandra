@@ -80,10 +80,8 @@ DEB package
 
 RPM package
 -----------
-..
-  .. include:: install_rpm.rst
 
-The rpm package is coming soon. You'll have to install Elassandra with the `tarball`_.
+.. include:: install_rpm.rst
 
 Docker image
 ------------
