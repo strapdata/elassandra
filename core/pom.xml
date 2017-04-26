@@ -202,6 +202,11 @@
           <artifactId>cassandra-all</artifactId>
           <version>${cassandra.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.airlift</groupId>
+            <artifactId>airline</artifactId>
+            <version>0.6</version>
+        </dependency>
 
     </dependencies>
 
