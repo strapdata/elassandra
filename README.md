@@ -12,7 +12,7 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
-* **2017-04-18 Release 2.4.2-13**
+* **2017-04-27 Release 2.4.2-13**
    * Project refactoring with Cassandra code as a git submodule (see How to contribute below)
    * Search performance improvement with a new token_ranges_bitset_cache (see [Optimized search requests](http://doc.elassandra.io/en/latest/operations.html#optimized-search-routing) in the documentation)
 * **2017-02-25 Release 2.4.2-9 Significant write performance improvement**
@@ -134,6 +134,8 @@ Contributors can clone repositories and follow guidelines from Elasticsearch and
 * [Cassandra How To Contribute](https://wiki.apache.org/cassandra/HowToContribute)
 
 When cloning Elassandra, use **git clone --recurse-submodules https://github.com/strapdata/elassandra** to clone the strapdata-cassandra submodule and check that your are using the same strapdata-cassandra version in your *core/pom.xm* and in this submodule. Alternatively, this submodule can point to your own cassandra branch, assuming this branch include mandatory modifications to support Elassandra, see [strapdata-cassandra](https://github.com/strapdata/cassandra) for details.
+
+Then, to build from sources, run **mvn clean packages -DskipTests**.
 
 Elassandra documentation is based on [sphinx](http://www.sphinx-doc.org/en/stable/rest.html) and published on [readthedoc.org](https://readthedocs.org/). Source RestructuredText files are located at [Elassandra source documentation](https://github.com/strapdata/elassandra/tree/master/docs/elassandra). To build the documentation, just run **make html** from the *${project.dir}/docs/elassandra*.
 
