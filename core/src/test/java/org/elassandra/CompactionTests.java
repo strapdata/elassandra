@@ -125,14 +125,6 @@ public class CompactionTests extends ESSingleNodeTestCase {
         
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2000L));
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(00L));
-        Iterator<IndexShardSegments> it = client().admin().indices().prepareSegments("test").get().getIndices().get("test").iterator();
-        long deleteTotal = 0;
-        while (it.hasNext()) {
-            for(ShardSegments shardSegment : it.next().getShards())
-                for(Segment seg : shardSegment.getSegments())
-                    deleteTotal += seg.delDocCount;
-        }
-        assertThat(deleteTotal, equalTo(1000L));
     }
     
     @Test
