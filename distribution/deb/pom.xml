@@ -60,7 +60,6 @@
                               <resource>
                                   <directory>${project.basedir}/../../core/cassandra</directory>
                                   <includes>
-                                      <include>bin/cassandra-stress</include>
                                       <include>bin/cqlsh.py</include>
                                       <include>bin/cqlsh</include>
                                       <include>bin/nodetool</include>
@@ -139,7 +138,9 @@
                 <configuration>
                     <!-- By default it should generates target/${artifactId}_${version}.deb
                         but we get elasticsearch_2.0.0~SNAPSHOT_all.deb -->
-                    <deb>${project.build.directory}/releases/elassandra-${project.version}_all.deb</deb>
+                    <deb>${project.build.directory}/releases/elassandra_${project.version}_all.deb</deb>
+                    <snapshotExpand>true</snapshotExpand>
+                    <snapshotEnv></snapshotEnv>
                     <controlDir>${project.build.directory}/generated-packaging/deb/scripts</controlDir>
                 </configuration>
                 <executions>
@@ -159,7 +160,7 @@
                                 <data>
                                     <src>${project.build.directory}/generated-packaging/deb/bin</src>
                                     <type>directory</type>
-                                    <includes>plugin,nodetool</includes>
+                                    <includes>plugin,nodetool,cqlsh,cqlsh.py</includes>
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>${packaging.elassandra.bin.dir}</prefix>
@@ -233,18 +234,7 @@
                                         <group>root</group>
                                     </mapper>
                                 </data>
-                                <!-- Add elassandra jar -->
-                                <data>
-                                    <src>${project.build.directory}/</src>
-                                    <includes>elassandra-${project.version}.jar</includes>
-                                    <type>directory</type>
-                                    <mapper>
-                                        <type>perm</type>
-                                        <prefix>${packaging.elassandra.home.dir}/lib</prefix>
-                                        <user>root</user>
-                                        <group>root</group>
-                                    </mapper>
-                                </data>
+
                                 <!-- Add libs -->
                                 <data>
                                     <src>${project.build.directory}/lib</src>
@@ -326,8 +316,7 @@
                                 <!-- Add readme files -->
                                 <data>
                                     <src>${project.basedir}/../src/main/resources/</src>
-                                    <includes>*.txt, *.textile</includes>
-                                    <excludes>LICENSE.txt, .DS_Store</excludes>
+                                    <includes>LICENSE.txt, NOTICE.txt, README.md</includes>
                                     <type>directory</type>
                                     <mapper>
                                         <type>perm</type>

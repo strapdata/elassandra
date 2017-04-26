@@ -1,8 +1,0 @@
-${packaging.scripts.header}
-
-if [ -x "/etc/init.d/cassandra" ] || [ -e "/etc/init/cassandra.conf" ]; then
-	invoke-rc.d cassandra stop || exit $?
-fi
-
-${packaging.scripts.footer}
-
