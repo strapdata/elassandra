@@ -5,7 +5,7 @@ Indexing
 ________
 
 Let's try and index some *twitter* like information (demo from `Elasticsearch <https://github.com/elastic/elasticsearch/blob/master/README.textile>`_)).
-First, let's create a twitter user, and add some tweets (the *twitter* index will be created automatically, see automatic index and mapping creation in elasticsearch documentation):
+First, let's create a twitter user, and add some tweets (the *twitter* index will be created automatically, see automatic index and mapping creation in Elasticsearch documentation):
 
 .. code::
 
@@ -265,7 +265,7 @@ You can create an index with the ``RandomSearchStrategy`` as shown below.
    }'
 
 .. TIP::
-   When changing a keyspace replication factor, you can force an elasticsearch routing table update by closing and re-opening all associated elasticsearch indices.
+   When changing a keyspace replication factor, you can force an Elasticsearch routing table update by closing and re-opening all associated elasticsearch indices.
    To troubleshoot search request routing, set the logging level to **DEBUG** for **class org.elassandra.cluster.routing** in the **conf/logback.xml** file.  
 
 Caching features
@@ -296,7 +296,7 @@ You can also bypass this cache by adding *token_ranges_bitset_cache=false* in yo
 
    curl -XPUT "http://localhost:9200/twitter/_search?token_ranges_bitset_cache=false&q=*:*"
 
-Finally, you can check the in-memory size of the token ranges bitset cache with the elasticsearch stats API, and clear it when clearing the Elasticsearch query_cache :
+Finally, you can check the in-memory size of the token ranges bitset cache with the Elasticsearch stats API, and clear it when clearing the Elasticsearch query_cache :
 
 .. code::
 
@@ -353,7 +353,7 @@ with the default mapping, and the *message* is explicitly mapped with a custom m
        }
    }'
 
-Deleting an Elasticsearch index does not remove any Cassandra data, it keeps the underlying Cassandra tables but remove elasticsearch index files.
+Deleting an Elasticsearch index does not remove any Cassandra data, it keeps the underlying Cassandra tables but remove Elasticsearch index files.
 
 .. code::
 
@@ -369,7 +369,7 @@ To re-index your existing data, for example after a mapping change to index a ne
    By default, rebuild index runs on a single thread. In order to improve re-indexing performance, Elassandra comes with a multi-threaded rebuild_index implementation. The **--threads** parameter allows to specify the number of threads dedicated to re-index a Cassandra table.
    Number of indexing threads should be tuned carefully to avoid CPU exhaustion. Moreover, indexing throughput is limited by locking at the lucene level, but this limit can be exceeded by using a partitioned index invloving many independant shards. 
 
-Alternatively, you can use the built-in rebuild action to rebuild index on all your Elasticsearch cluster at the same time. The *num_thread* parameter is optional, default is one, but you should care about the load of your cluster in a production environnement.
+Alternatively, you can use the built-in rebuild action to rebuild index on **all** your Elasticsearch cluster at the same time. The *num_thread* parameter is optional, default is one, but you should care about the load of your cluster in a production environnement.
 
 .. code::
 
@@ -396,8 +396,8 @@ To stop a compaction task (including a rebuild index task), you can either use a
 Open, close, index
 __________________
 
-Open and close operations allow to close and open an elasticsearch index. Even if the Cassandra secondary index remains in the CQL schema while the index is closed, it has no overhead, it's just a dummy function call.
-Obviously, when several elasticsearch indices are associated to the same Cassandra table, data are indexed in opened indices, but not in closed ones.
+Open and close operations allow to close and open an Elasticsearch index. Even if the Cassandra secondary index remains in the CQL schema while the index is closed, it has no overhead, it's just a dummy function call.
+Obviously, when several Elasticsearch indices are associated to the same Cassandra table, data are indexed in opened indices, but not in closed ones.
 
 .. code::
 
@@ -421,7 +421,7 @@ has no effect with Elassandra, because write operations are converted to CQL que
       curl -XPOST 'localhost:9200/my_index/_refresh'
       
 A flush basically write a lucene index on disk. Because document **_source** is stored in Cassandra table in elassandra, it make sense to execute
-a ``nodetool flush <keyspace> <table>`` to flush both Cassandra Memtables to SSTables and lucene files for all associated elasticsearch indices.
+a ``nodetool flush <keyspace> <table>`` to flush both Cassandra Memtables to SSTables and lucene files for all associated Elasticsearch indices.
 Moreover, remember that a ``nodetool snapshot``  also involve a flush before creating a snapshot.
 
 .. code::
@@ -530,11 +530,22 @@ Then search for matching queries.
      } ]
    }
 
+Managing Elassandra nodes
+_________________________
+
+You can add, remove or replace an Elassandra node by using the same procedure as for Cassandra (see `Adding nodes to an existing cluster <http://docs.datastax.com/en/cassandra/3.0/cassandra/operations/opsAddNodeToCluster.html?hl=vnode>`_).
+Even if it's technically possible, you should never boostrap more than one node at a time,
+
+During the bootstrap process, pulled data from existing nodes are automatically indexed by Elasticsearch on the new node, involving a kind of an automatic Elasticsearch resharding.
+You can monitor and resume the Cassandra boostrap process with the `nodetool bootstrap <https://docs.datastax.com/en/cassandra/3.0/cassandra/tools/toolsBootstrap.html>`_ command.
+
+After boostrap successfully ends, you should cleanup nodes to throw out any data that is no longer owned by that node, with a `nodetool cleanup <http://docs.datastax.com/en/archived/cassandra/2.0/cassandra/tools/toolsCleanup.html>`_.
+Because cleanup involves by a Delete-by-query in Elasticsearch indices, it is recommended to smoothly schedule cleanups one at a time in you datacenter.
 
 Backup and restore
 __________________
 
-By design, Elassandra sychronously update elasticsearch indices on Cassandra write path and flushing a Cassandra table invlove a flush of all associated elasticsearch indices. Therefore,
+By design, Elassandra synchronously update Elasticsearch indices on Cassandra write path and flushing a Cassandra table invlove a flush of all associated elasticsearch indices. Therefore,
 elassandra can backup data by taking a snapshot of Cassandra SSTables and Elasticsearch Lucene files on the same time on each node, as follow :
 
 1. ``nodetool snapshot --tag <snapshot_name> <keyspace_name>``
@@ -542,58 +553,58 @@ elassandra can backup data by taking a snapshot of Cassandra SSTables and Elasti
 
    ``cp -al $CASSANDRA_DATA/elasticsearch.data/<cluster_name>/nodes/0/indices/<index_name>/0/index/(_*|segment*) $CASSANDRA_DATA/elasticsearch.data/snapshots/<index_name>/<snapshot_name>/``
 
-Of course, rebuilding elasticsearch indices after a Cassandra restore is another option.
+Of course, rebuilding Elasticsearch indices after a Cassandra restore is another option.
 
 Restoring a snapshot
 --------------------
 
-Restoring Cassandra SSTable and elasticsearch lucene files allow to recover a keyspace and its associated elasticsearch indices without stopping any node.
+Restoring Cassandra SSTable and Elasticsearch Lucene files allow to recover a keyspace and its associated Elasticsearch indices without stopping any node.
 (but it is not intended to duplicate data to another virtual datacenter or cluster)
 
-To perform a hot restore of Cassandra keyspace and its elasticsearch indices :
+To perform a hot restore of Cassandra keyspace and its Elasticsearch indices :
 
-1. Close all elasticsearch indices associated to the keyspace
+1. Close all Elasticsearch indices associated to the keyspace
 2. Trunacte all Cassandra tables of the keyspace (because of delete operation later than the snapshot)
 3. Restore the Cassandra table with your snapshot on each node
-4. Restore elasticsearch snapshot on each nodes (if ES index is open during nodetool refresh, this cause elasticsearch index rebuild by the compaction manager, usually 2 threads).
+4. Restore Elasticsearch snapshot on each nodes (if ES index is open during nodetool refresh, this cause Elasticsearch index rebuild by the compaction manager, usually 2 threads).
 5. Load restored SSTables with a ``nodetool refresh``
 6. Open all indices associated to the keyspace
 
 Point in time recovery
 ----------------------
 
-Point-in-time recovery is intended to recover the data at any time. This require a restore of the last available Cassandra and elasticsearch snapshot before your recovery point and then apply
-the commitlogs from this restore point to the recovery point. In this case, replaying commitlogs on startup also re-index data in elasticsearch indices, ensuring consistency at the recovery point.
+Point-in-time recovery is intended to recover the data at any time. This require a restore of the last available Cassandra and Elasticsearch snapshot before your recovery point and then apply
+the commitlogs from this restore point to the recovery point. In this case, replaying commitlogs on startup also re-index data in Elasticsearch indices, ensuring consistency at the recovery point.
 
 Of course, when stopping a production cluster is not possible, you should restore on a temporary cluster, make a full snapshot, and restore it on your production cluster as describe by the hot restore procedure.
 
-To perform a point-in-time-recovery of a Cassandra keyspace and its elasticsearch indices, for all nodes in the same time :
+To perform a point-in-time-recovery of a Cassandra keyspace and its Elasticsearch indices, for all nodes in the same time :
 
 1. Stop all the datacenter nodes.
 2. Restore the last Cassandra snapshot before the restore point and commitlogs from that point to the restore point
-3. Restore the last elasticsearch snapshot before the restore point.
+3. Restore the last Elasticsearch snapshot before the restore point.
 4. Restart your nodes
 
 Restoring to a different cluster
 --------------------------------
 
-It is possible to restore a Cassandra keyspace and its associated elasticsearch indices to another cluster.
+It is possible to restore a Cassandra keyspace and its associated Elasticsearch indices to another cluster.
 
 1. On the target cluster, create the same Cassandra schema without any custom secondary indices
 2. From the source cluster, extract the mapping of your associated indices and apply it to your destination cluster. Your keyspace and indices should be open and empty at this step.
 
 If you are restoring into a new cluster having the same number of nodes, configure it with the same token ranges
 (see https://docs.datastax.com/en/Cassandra/2.1/cassandra/operations/ops_snapshot_restore_new_cluster.html). In this case,
-you can restore from Cassandra and elasticsearch snapshots as describe in step 1, 3 and 4 of the snapshot restore procedure.
+you can restore from Cassandra and Elasticsearch snapshots as describe in step 1, 3 and 4 of the snapshot restore procedure.
 
 Otherwise, when the number of node and the token ranges from the source and desination cluster does not match, use the sstableloader to restore your Cassandra snapshots
 (see https://docs.datastax.com/en/cassandra/2.0/cassandra/tools/toolsBulkloader_t.html ). This approach is much time-and-io-consuming because all rows
-are read from the sstables and injected into the Cassandra cluster, causing an full elasticsearch index rebuild.
+are read from the sstables and injected into the Cassandra cluster, causing an full Elasticsearch index rebuild.
 
 How to change the elassandra cluster name
 _________________________________________
 
-Because the cluster name is a part of the elasticsearch directory structure, managing snapshots with shell scripts could be a nightmare when cluster name contains space caracters.
+Because the cluster name is a part of the Elasticsearch directory structure, managing snapshots with shell scripts could be a nightmare when cluster name contains space caracters.
 Therfore, it is recommanded to avoid space caraters in your elassandra cluster name.
 
 On all nodes:
@@ -614,5 +625,5 @@ Then:
 5. Stop all nodes in the cluster
 6. On all nodes, in you Cassandra data directory, move elasticsearch.data/<old_cluster_name> to elasticsearch.data/<new_cluster_name>
 7. Restart all nodes
-8. Check the cluster name in the elasticsearch cluster state and that you can update the mapping.
+8. Check the cluster name in the Elasticsearch cluster state and that you can update the mapping.
 
