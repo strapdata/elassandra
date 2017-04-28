@@ -72,7 +72,7 @@ public abstract class MetadataFieldMapper extends FieldMapper {
     
     
     /**
-     * Called before {@link FieldMapper#createField(ParseContext, value)} on the {@link RootObjectMapper}.
+     * Called before {@link FieldMapper#createField(ParseContext, Object)} on the {@link RootObjectMapper}.
      */
     public void preCreate(ParseContext context) throws IOException {
     }

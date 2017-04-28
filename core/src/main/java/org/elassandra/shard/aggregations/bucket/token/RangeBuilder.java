@@ -46,7 +46,7 @@ public class RangeBuilder extends AbstractRangeBuilder<RangeBuilder> {
     }
 
     /**
-     * Same as {@link #addRange(String, double, double)} but the key will be
+     * Same as {@link #addRange(String, long, long)} but the key will be
      * automatically generated based on <code>from</code> and <code>to</code>.
      */
     public RangeBuilder addRange(long from, long to) {
@@ -65,7 +65,7 @@ public class RangeBuilder extends AbstractRangeBuilder<RangeBuilder> {
     }
 
     /**
-     * Same as {@link #addUnboundedTo(String, double)} but the key will be
+     * Same as {@link #addUnboundedTo(String, long)} but the key will be
      * computed automatically.
      */
     public RangeBuilder addUnboundedTo(long to) {
@@ -84,7 +84,7 @@ public class RangeBuilder extends AbstractRangeBuilder<RangeBuilder> {
     }
 
     /**
-     * Same as {@link #addUnboundedFrom(String, double)} but the key will be
+     * Same as {@link #addUnboundedFrom(String, long)} but the key will be
      * computed automatically.
      */
     public RangeBuilder addUnboundedFrom(long from) {

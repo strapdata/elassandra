@@ -414,7 +414,7 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     /**
      * The name of the stored template
      * 
-     * @deprecated use {@link #template(Template))} instead.
+     * @deprecated use {@link #template(Template)} instead.
      */
     @Deprecated
     public void templateName(String templateName) {
@@ -434,7 +434,7 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     /**
      * The type of the stored template
      * 
-     * @deprecated use {@link #template(Template))} instead.
+     * @deprecated use {@link #template(Template)} instead.
      */
     @Deprecated
     public void templateType(ScriptService.ScriptType templateType) {
@@ -444,7 +444,7 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     /**
      * Template parameters used for rendering
      * 
-     * @deprecated use {@link #template(Template))} instead.
+     * @deprecated use {@link #template(Template)} instead.
      */
     @Deprecated
     public void templateParams(Map<String, Object> params) {

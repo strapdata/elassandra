@@ -106,7 +106,7 @@ import com.google.common.collect.ImmutableSet;
  * <p/>
  * Restore operation is performed in several stages.
  * <p/>
- * First {@link #restoreSnapshot(RestoreRequest, org.elasticsearch.action.ActionListener))}
+ * First {@link #restoreSnapshot(RestoreRequest, org.elasticsearch.action.ActionListener)}
  * method reads information about snapshot and metadata from repository. In update cluster state task it checks restore
  * preconditions, restores global state if needed, creates {@link RestoreInProgress} record with list of shards that needs
  * to be restored and adds this shard to the routing table using {@link RoutingTable.Builder#addAsRestore(IndexMetaData, RestoreSource)}
