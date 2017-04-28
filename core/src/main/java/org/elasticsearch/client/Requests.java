@@ -19,6 +19,13 @@
 
 package org.elasticsearch.client;
 
+import org.elassandra.action.admin.indices.cleanup.CleanupRequest;
+import org.elassandra.action.admin.indices.clearsnapshot.ClearSnapshotRequest;
+import org.elassandra.action.admin.indices.listsnapshots.ListSnapshotsRequest;
+import org.elassandra.action.admin.indices.rebuild.RebuildRequest;
+import org.elassandra.action.admin.indices.reload.ReloadRequest;
+import org.elassandra.action.admin.indices.restore.RestoreRequest;
+import org.elassandra.action.admin.indices.snapshot.SnapshotRequest;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
 import org.elasticsearch.action.admin.cluster.node.info.NodesInfoRequest;
 import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequest;
@@ -31,10 +38,6 @@ import org.elasticsearch.action.admin.cluster.repositories.verify.VerifyReposito
 import org.elasticsearch.action.admin.cluster.reroute.ClusterRerouteRequest;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
 import org.elasticsearch.action.admin.cluster.shards.ClusterSearchShardsRequest;
-import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotRequest;
-import org.elasticsearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;
-import org.elasticsearch.action.admin.cluster.snapshots.get.GetSnapshotsRequest;
-import org.elasticsearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
 import org.elasticsearch.action.admin.cluster.snapshots.status.SnapshotsStatusRequest;
 import org.elasticsearch.action.admin.cluster.state.ClusterStateRequest;
 import org.elasticsearch.action.admin.cluster.stats.ClusterStatsRequest;
@@ -45,14 +48,14 @@ import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
+import org.elasticsearch.action.admin.indices.flush.SyncedFlushRequest;
+import org.elasticsearch.action.admin.indices.forcemerge.ForceMergeRequest;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest;
 import org.elasticsearch.action.admin.indices.open.OpenIndexRequest;
-import org.elasticsearch.action.admin.indices.forcemerge.ForceMergeRequest;
 import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.admin.indices.segments.IndicesSegmentsRequest;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.shards.IndicesShardStoresRequest;
-import org.elasticsearch.action.admin.indices.flush.SyncedFlushRequest;
 import org.elasticsearch.action.admin.indices.upgrade.post.UpgradeRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.count.CountRequest;
@@ -286,6 +289,40 @@ public class Requests {
         return new RefreshRequest(indices);
     }
 
+
+    
+    /**
+     * Creates a Cassandra rebuild index request.
+     *
+     * @param indices The indices to rebuild. Use <tt>null</tt> or <tt>_all</tt> to execute against all indices
+     * @return The rebuild request
+     * @see org.elasticsearch.client.IndicesAdminClient#rebuild(org.elassandra.action.admin.indices.rebuild.RebuildRequest)
+     */
+    public static RebuildRequest rebuildRequest(String... indices) {
+        return new RebuildRequest(indices);
+    }
+    
+    /**
+     * Creates a Cassandra reload index request (refresh SSTable).
+     *
+     * @param indices The indices to rebuild. Use <tt>null</tt> or <tt>_all</tt> to execute against all indices
+     * @return The reload request
+     * @see org.elasticsearch.client.IndicesAdminClient#reload(org.elassandra.action.admin.indices.reload.ReloadRequest)
+     */
+    public static ReloadRequest reloadRequest(String... indices) {
+        return new ReloadRequest(indices);
+    }
+    
+    /**
+     * Creates a Cassandra cleanup request.
+     *
+     * @param indices The indices to cleanup. Use <tt>null</tt> or <tt>_all</tt> to execute against all indices
+     * @return The cleanup request
+     * @see org.elasticsearch.client.IndicesAdminClient#cleanup(org.elassandra.action.admin.indices.cleanup.CleanupRequest)
+     */
+    public static CleanupRequest cleanupRequest(String... indices) {
+        return new CleanupRequest(indices);
+    }
     /**
      * Creates a flush indices request.
      *
@@ -497,56 +534,46 @@ public class Requests {
 
 
     /**
-     * Creates new snapshot
+     * Creates new Cassandra snapshot
      *
      * @param repository repository name
      * @param snapshot   snapshot name
      * @return create snapshot request
      */
-    public static CreateSnapshotRequest createSnapshotRequest(String repository, String snapshot) {
-        return new CreateSnapshotRequest(repository, snapshot);
+    public static SnapshotRequest snapshotRequest(String repository, String snapshot) {
+        return new SnapshotRequest(repository, snapshot);
     }
 
     /**
-     * Gets snapshots from repository
+     * Gets Cassandra snapshots from repository
      *
      * @param repository repository name
-     * @return get snapshot  request
+     * @return list snapshot  request
      */
-    public static GetSnapshotsRequest getSnapshotsRequest(String repository) {
-        return new GetSnapshotsRequest(repository);
+    public static ListSnapshotsRequest listSnapshotsRequest(String repository) {
+        return new ListSnapshotsRequest(repository);
     }
 
     /**
-     * Restores new snapshot
+     * Restores new Cassandra snapshot
      *
      * @param repository repository name
      * @param snapshot   snapshot name
      * @return snapshot creation request
      */
-    public static RestoreSnapshotRequest restoreSnapshotRequest(String repository, String snapshot) {
-        return new RestoreSnapshotRequest(repository, snapshot);
+    public static RestoreRequest restoreRequest(String repository, String snapshot) {
+        return new RestoreRequest(repository, snapshot);
     }
 
     /**
-     * Deletes a snapshot
+     * Deletes a Cassandra snapshot
      *
      * @param snapshot   snapshot name
      * @param repository repository name
      * @return delete snapshot request
      */
-    public static DeleteSnapshotRequest deleteSnapshotRequest(String repository, String snapshot) {
-        return new DeleteSnapshotRequest(repository, snapshot);
-    }
-
-    /**
-     *  Get status of snapshots
-     *
-     * @param repository repository name
-     * @return snapshot status request
-     */
-    public static SnapshotsStatusRequest snapshotsStatusRequest(String repository) {
-        return new SnapshotsStatusRequest(repository);
+    public static ClearSnapshotRequest clearSnapshotRequest(String repository, String snapshot) {
+        return new ClearSnapshotRequest(repository, snapshot);
     }
 
 }
