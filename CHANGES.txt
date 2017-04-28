@@ -1,5 +1,5 @@
 2.4.2-13 - 2017-04-25
-  * Elassandra is now a fork of Elasticsearch.
+  * Elassandra is now an Elasticsearch plugin for Strapdata-Cassandra.
   * [breaking change] change _token DocValues type from SORTED_NUMERIC to NUMERIC (remove your indices before upgrade and reindex)
   * [breaking change] change _token default Lucene numeric precision (remove your indices before upgrade and reindex)
   * Add a new token_numeric_precision option to optimize search request.
@@ -9,6 +9,7 @@
   * Add support for pluggable CQL generic functions CASSANDRA-13267
   * Fix cluster state blocks updates in a multi-node cluster.
   * Add rebuild+cleanup command to rebuild and clean index from cassandra on all nodes.
+  * #92 Add support for dynamic mapping for Cassandra map.
 
 2.4.2-12 - 2017-04-11
   * Fix #87 null_value support 

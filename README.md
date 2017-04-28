@@ -1,6 +1,6 @@
 # Elassandra
 
-Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run like a plugin for [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
+Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run as a plugin for [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
 ![Elassandra architecture](/docs/elassandra/source/images/elassandra1.jpg)
 
@@ -13,8 +13,8 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
 * **2017-04-27 Release 2.4.2-13**
-   * Project refactoring with Cassandra code as a git submodule (see How to contribute below)
-   * Search performance improvement with a new token_ranges_bitset_cache (see [Optimized search requests](http://doc.elassandra.io/en/latest/operations.html#optimized-search-routing) in the documentation)
+   * Project refactoring, Elassandra is now an Elasticsearch plugin for [Strapadata-Cassandra](https://github.com/strapdata/cassandra) (see How to contribute below).
+   * Search performance improvement by introducing a new token_ranges_bitset_cache (see [Optimized search requests](http://doc.elassandra.io/en/latest/operations.html#optimized-search-routing) in the documentation)
 * **2017-02-25 Release 2.4.2-9 Significant write performance improvement**
 * **2017-01-15 Release 2.4.2-4 Upgrade to Cassandra 3.0.10**
 * **2016-12-25 Release 2.4.2-2 Upgrade to Elasticsearch 2.4.2 + pass 3000 unit tests from Elasticsearch**
