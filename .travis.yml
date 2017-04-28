@@ -16,8 +16,10 @@ install: mvn package -DskipTests -Dmaven.javadoc.skip
 
 before_deploy:
   - mvn -DskipTests -Dmaven.javadoc.skip package
-  - export TARBALL=$(ls distribution/tar/target/release/elassandra-*.tar.gz)
-  - export ZIPBALL=$(ls distribution/zip/target/release/elassandra-*.zip)
+  - mv distribution/tar/target/release/elasticsearch-*.tar.gz distribution/tar/target/release/elasticsearch-${TRAVIS_TAG}.tar.gz
+  - mv distribution/zip/target/release/elasticsearch-*.zip distribution/tar/target/release/elasticsearch-${TRAVIS_TAG}.zip
+  - export TARBALL=$(ls distribution/tar/target/release/elasticsearch-*.tar.gz)
+  - export ZIPBALL=$(ls distribution/zip/target/release/elasticsearch-*.zip)
 
 deploy:
   provider: releases
