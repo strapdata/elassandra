@@ -20,12 +20,8 @@
 package org.elasticsearch.client;
 
 import org.elassandra.action.admin.indices.cleanup.CleanupRequest;
-import org.elassandra.action.admin.indices.clearsnapshot.ClearSnapshotRequest;
-import org.elassandra.action.admin.indices.listsnapshots.ListSnapshotsRequest;
 import org.elassandra.action.admin.indices.rebuild.RebuildRequest;
 import org.elassandra.action.admin.indices.reload.ReloadRequest;
-import org.elassandra.action.admin.indices.restore.RestoreRequest;
-import org.elassandra.action.admin.indices.snapshot.SnapshotRequest;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
 import org.elasticsearch.action.admin.cluster.node.info.NodesInfoRequest;
 import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequest;
@@ -38,6 +34,10 @@ import org.elasticsearch.action.admin.cluster.repositories.verify.VerifyReposito
 import org.elasticsearch.action.admin.cluster.reroute.ClusterRerouteRequest;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
 import org.elasticsearch.action.admin.cluster.shards.ClusterSearchShardsRequest;
+import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotRequest;
+import org.elasticsearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;
+import org.elasticsearch.action.admin.cluster.snapshots.get.GetSnapshotsRequest;
+import org.elasticsearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
 import org.elasticsearch.action.admin.cluster.snapshots.status.SnapshotsStatusRequest;
 import org.elasticsearch.action.admin.cluster.state.ClusterStateRequest;
 import org.elasticsearch.action.admin.cluster.stats.ClusterStatsRequest;
@@ -534,46 +534,57 @@ public class Requests {
 
 
     /**
-     * Creates new Cassandra snapshot
+     * Creates new snapshot
      *
      * @param repository repository name
      * @param snapshot   snapshot name
      * @return create snapshot request
      */
-    public static SnapshotRequest snapshotRequest(String repository, String snapshot) {
-        return new SnapshotRequest(repository, snapshot);
+    public static CreateSnapshotRequest createSnapshotRequest(String repository, String snapshot) {
+        return new CreateSnapshotRequest(repository, snapshot);
     }
 
     /**
-     * Gets Cassandra snapshots from repository
+     * Gets snapshots from repository
      *
      * @param repository repository name
-     * @return list snapshot  request
+     * @return get snapshot  request
      */
-    public static ListSnapshotsRequest listSnapshotsRequest(String repository) {
-        return new ListSnapshotsRequest(repository);
+    public static GetSnapshotsRequest getSnapshotsRequest(String repository) {
+        return new GetSnapshotsRequest(repository);
     }
 
     /**
-     * Restores new Cassandra snapshot
+     * Restores new snapshot
      *
      * @param repository repository name
      * @param snapshot   snapshot name
      * @return snapshot creation request
      */
-    public static RestoreRequest restoreRequest(String repository, String snapshot) {
-        return new RestoreRequest(repository, snapshot);
+    public static RestoreSnapshotRequest restoreSnapshotRequest(String repository, String snapshot) {
+        return new RestoreSnapshotRequest(repository, snapshot);
     }
 
     /**
-     * Deletes a Cassandra snapshot
+     * Deletes a snapshot
      *
      * @param snapshot   snapshot name
      * @param repository repository name
      * @return delete snapshot request
      */
-    public static ClearSnapshotRequest clearSnapshotRequest(String repository, String snapshot) {
-        return new ClearSnapshotRequest(repository, snapshot);
+    public static DeleteSnapshotRequest deleteSnapshotRequest(String repository, String snapshot) {
+        return new DeleteSnapshotRequest(repository, snapshot);
     }
+
+    /**
+     *  Get status of snapshots
+     *
+     * @param repository repository name
+     * @return snapshot status request
+     */
+    public static SnapshotsStatusRequest snapshotsStatusRequest(String repository) {
+        return new SnapshotsStatusRequest(repository);
+    }
+
 
 }

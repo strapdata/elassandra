@@ -23,7 +23,7 @@ import org.elasticsearch.action.support.broadcast.BroadcastRequest;
  * Cleanup on all nodes from the underlying Cassandra tables.
  *
  * @see org.elasticsearch.client.Requests#cleanupRequest(String...)
- * @see org.elasticsearch.client.IndicesAdminClient#cleanup(CleanupRequest)
+ * @see org.elasticsearch.client.IndicesAdminClient#cleanup(CleanupRequest, ActionListener)
  * @see CleanupResponse
  */
 public class CleanupRequest extends BroadcastRequest<CleanupRequest> {

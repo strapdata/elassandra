@@ -19,10 +19,18 @@
 
 package org.elasticsearch.client.support;
 
+import org.elassandra.action.admin.indices.cleanup.CleanupAction;
+import org.elassandra.action.admin.indices.cleanup.CleanupRequest;
+import org.elassandra.action.admin.indices.cleanup.CleanupRequestBuilder;
+import org.elassandra.action.admin.indices.cleanup.CleanupResponse;
 import org.elassandra.action.admin.indices.rebuild.RebuildAction;
 import org.elassandra.action.admin.indices.rebuild.RebuildRequest;
 import org.elassandra.action.admin.indices.rebuild.RebuildRequestBuilder;
 import org.elassandra.action.admin.indices.rebuild.RebuildResponse;
+import org.elassandra.action.admin.indices.reload.ReloadAction;
+import org.elassandra.action.admin.indices.reload.ReloadRequest;
+import org.elassandra.action.admin.indices.reload.ReloadRequestBuilder;
+import org.elassandra.action.admin.indices.reload.ReloadResponse;
 import org.elasticsearch.action.Action;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.ActionListener;
@@ -351,6 +359,7 @@ import org.elasticsearch.client.IndicesAdminClient;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.rest.action.support.RestBuilderListener;
 import org.elasticsearch.threadpool.ThreadPool;
 
 /**
@@ -1599,6 +1608,26 @@ public abstract class AbstractClient extends AbstractComponent implements Client
         @Override
         public RebuildRequestBuilder prepareRebuild(String... indices) {
             return new RebuildRequestBuilder(this, RebuildAction.INSTANCE).setIndices(indices);
+        }
+        
+        @Override
+        public void reload(ReloadRequest request, ActionListener<ReloadResponse> listener) {
+            execute(ReloadAction.INSTANCE, request, listener);
+        }
+
+        @Override
+        public ReloadRequestBuilder prepareReload(String... indices) {
+            return new ReloadRequestBuilder(this, ReloadAction.INSTANCE).setIndices(indices);
+        }
+        
+        @Override
+        public void cleanup(CleanupRequest request, ActionListener<CleanupResponse> listener) {
+            execute(CleanupAction.INSTANCE, request, listener);
+        }
+
+        @Override
+        public CleanupRequestBuilder prepareCleanup(String... indices) {
+            return new CleanupRequestBuilder(this, CleanupAction.INSTANCE).setIndices(indices);
         }
         
         @Override

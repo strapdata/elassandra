@@ -19,15 +19,11 @@
 
 package org.elasticsearch.repositories;
 
-import org.elasticsearch.action.admin.cluster.snapshots.status.TransportNodesSnapshotsStatus;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.index.snapshots.IndexShardRepository;
 import org.elasticsearch.index.snapshots.blobstore.BlobStoreIndexShardRepository;
 import org.elasticsearch.repositories.fs.FsRepository;
 import org.elasticsearch.repositories.uri.URLRepository;
-import org.elasticsearch.snapshots.RestoreService;
-import org.elasticsearch.snapshots.SnapshotShardsService;
-import org.elasticsearch.snapshots.SnapshotsService;
 
 /**
  * Sets up classes for Snapshot/Restore.
