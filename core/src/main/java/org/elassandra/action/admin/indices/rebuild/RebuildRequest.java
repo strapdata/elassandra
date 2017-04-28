@@ -23,7 +23,7 @@ import org.elasticsearch.action.support.broadcast.BroadcastRequest;
  * Re-index on all nodes from the underlying Cassandra tables.
  *
  * @see org.elasticsearch.client.Requests#rebuildRequest(String...)
- * @see org.elasticsearch.client.IndicesAdminClient#rebuild(RebuildRequest)
+ * @see org.elasticsearch.client.IndicesAdminClient#rebuild(RebuildRequest, ActionListener)
  * @see RebuildResponse
  */
 public class RebuildRequest extends BroadcastRequest<RebuildRequest> {

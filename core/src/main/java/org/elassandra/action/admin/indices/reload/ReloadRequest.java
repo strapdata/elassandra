@@ -23,7 +23,7 @@ import org.elasticsearch.action.support.broadcast.BroadcastRequest;
  * Reload SSTables on all nodes = nodetool refresh <keyspace> <tables>.
  *
  * @see org.elasticsearch.client.Requests#reloadRequest(String...)
- * @see org.elasticsearch.client.IndicesAdminClient#reload(ReloadRequest)
+ * @see org.elasticsearch.client.IndicesAdminClient#reload(ReloadRequest, ActionListener)
  * @see ReloadResponse
  */
 public class ReloadRequest extends BroadcastRequest<ReloadRequest> {
