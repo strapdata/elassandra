@@ -1469,7 +1469,7 @@ org.eclipse.jdt.ui.text.custom_code_templates=<?xml version\="1.0" encoding\="UT
             <properties>
                 <package.rpm>true</package.rpm>
                 <no.commit.pattern>\bno(n|)(release|commit)\b</no.commit.pattern> <!-- check for no-commit / no-release -->
-                <forbidden.test.signatures>org.apache.lucene.util.LuceneTestCase$AwaitsFix @ Please fix all bugs before release or mark them as ignored</forbidden.test.signatures>
+                <!--  <forbidden.test.signatures>org.apache.lucene.util.LuceneTestCase$AwaitsFix @ Please fix all bugs before release or mark them as ignored</forbidden.test.signatures> -->
             </properties>
             <build>
                 <!-- sign the artifacts with GPG -->
