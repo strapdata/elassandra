@@ -19,23 +19,12 @@
 
 package org.elasticsearch.index.mapper;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Objects;
-
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.queries.TermsQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.FuzzyQuery;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.PrefixQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.RegexpQuery;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TermRangeQuery;
+import org.apache.lucene.search.*;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.action.fieldstats.FieldStats;
 import org.elasticsearch.common.Nullable;
@@ -50,6 +39,11 @@ import org.elasticsearch.index.mapper.Mapper.CqlCollection;
 import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.similarity.SimilarityProvider;
+
+import java.io.IOException;
+import java.lang.IllegalArgumentException;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * This defines the core properties and functions to operate on a field.
@@ -311,7 +305,7 @@ public abstract class MappedFieldType extends FieldType {
                      cqlCollection, cqlStruct, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder);
     }
 
-    // norelease: we need to override freeze() and add safety checks that all settings are actually set
+    // we need to override freeze() and add safety checks that all settings are actually set
 
     /** Returns the name of this type, as would be specified in mapping properties */
     public abstract String typeName();
