@@ -138,7 +138,7 @@
                 <configuration>
                     <!-- By default it should generates target/${artifactId}_${version}.deb
                         but we get elasticsearch_2.0.0~SNAPSHOT_all.deb -->
-                    <deb>${project.build.directory}/releases/elassandra_${project.version}_all.deb</deb>
+                    <deb>${project.build.directory}/releases/elassandra_${elasticsearch.version}.${elassandra.version}_all.deb</deb>
                     <snapshotExpand>true</snapshotExpand>
                     <snapshotEnv></snapshotEnv>
                     <controlDir>${project.build.directory}/generated-packaging/deb/scripts</controlDir>

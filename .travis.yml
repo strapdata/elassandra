@@ -5,19 +5,28 @@ sudo: false
 cache:
   directories:
   - $HOME/.m2
+
 notifications:
   email: true
+
 before_install:
 - ulimit -u 65535
-install: mvn package -DskipTests
+
+install: mvn package -DskipTests -Dmaven.javadoc.skip
+
+before_deploy:
+  - mvn -DskipTests -Dmaven.javadoc.skip package
+  - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
+  - export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
+
 deploy:
   provider: releases
   overwrite: true
   api_key:
     secure: aPWTxkKnO4CWEsH7z775JLFlsO4DrMbkp9thr2F0Ntqi510Y168LbNUEOXEm2LQjb68hAIMHOPFnQp6gCa4AxqcFhAoqmEQqR1Uig6LydCykjNTAzcOSmBA+JE+qhznGX2ZnGCx2UdyODXm34lMJ3c59hblVqwCP7C9ZR1gFx55CjBb17MwxPufPDhON3/NDKEZTAhjklWz3pycXDVm2DX6WzyEeENF69JPklY/bQVXQNZ+0y0AgZnuhdlcZxK29Ou2RqlfzV0UoWYjEt4SvXSLhSdORMD0KbBoN7EElPTAZ4gDE+xtE2Q0TN5IWYBwEq5BTozLs7DjRvZw+HQ5cZEu2kOsbRqHUidtYSSRoaclq+4GYarjhAzJ76ySVcI+KN+2QbiHVP7fULIRCVDGogQZMcpD70oNMntWD3ouYzQMgIE+bmq02vQx7XQHxpd4BdqC2Xa3toddnwtzfOgx5RiGePvHdAIx3n1XRaTS8z+xAH/xLfwBxCVGJVKAuPX6z626BQD41BKpfFI+0cyiJ+Ma87JC8JfJhJnTb59cLp5kebXaHNOghSgL2Y4eh/4g0HTg/mIaQJHcmHWUiMvuUFehW3NsgIFjDXWCle2nauy/1pEUOHOk6P4ZVSaCzHQiu2fFHaD4Wmi1eSPMOYhWr4tEs4qE8c9t4Vnq90A7sxV0=
   file: 
-    - "distribution/tar/target/releases/elassandra-2.4.2.tar.gz"
-    - "distribution/zip/target/releases/elassandra-2.4.2.zip"
+    - "${TARBALL}"
+    - "${ZIPBALL}"
   on:
     tags: true
     repo: strapdata/elassandra
