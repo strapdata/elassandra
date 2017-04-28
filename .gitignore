@@ -10,6 +10,7 @@
 .classpath
 eclipse-build
 .settings
+.versionsBackup
 
 # netbeans files
 nb-configuration.xml
