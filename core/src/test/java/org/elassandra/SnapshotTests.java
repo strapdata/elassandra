@@ -22,8 +22,8 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Date;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -121,12 +121,16 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         createIndex("ks", Settings.builder().put("index.snapshot_with_sstable",true).build(),"t1", mapping);
         ensureGreen("ks");
 
+        
         for(long i=0; i < 1000; i++)
            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));
         assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(1000L));
         
         UUID cfId = Schema.instance.getCFMetaData("ks","t1").cfId;
         String id = cfId.toString().replaceAll("\\-", "");
+        
+        if (!DatabaseDescriptor.isAutoSnapshot())
+            StorageService.instance.takeTableSnapshot("ks", "t1", Long.toString(new Date().getTime()));
         
         // drop index + keyspace (C* snapshot before drop => flush before snapshot => ES flush before delete)
         assertAcked(client().admin().indices().prepareDelete("ks").get());
