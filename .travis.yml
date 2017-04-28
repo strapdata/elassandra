@@ -6,15 +6,6 @@ cache:
   directories:
   - $HOME/.m2
 
-# disable the default submodule logic
-git:
-  submodules: false
-
-# use sed to replace the SSH URL with the public URL, then init and update submodules
-before_install:
-  - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
-  - git submodule update --init --recursive
-
 notifications:
   email: true
 
@@ -24,7 +15,7 @@ before_install:
 install: mvn package -DskipTests -Dmaven.javadoc.skip
 
 before_deploy:
-  - "mvn -DskipTests -Dmaven.javadoc.skip package"
+  - mvn -DskipTests -Dmaven.javadoc.skip package
   - export TARBALL=$(ls distribution/tar/target/release/elassandra-*.tar.gz)
   - export ZIPBALL=$(ls distribution/zip/target/release/elassandra-*.zip)
 
