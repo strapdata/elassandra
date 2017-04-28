@@ -42,3 +42,4 @@ backwards/
 
 # virtualenv
 .venv/
+*.versionsBackup
