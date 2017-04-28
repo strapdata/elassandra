@@ -135,6 +135,8 @@ Contributors can clone repositories and follow guidelines from Elasticsearch and
 
 When cloning Elassandra, use **git clone --recurse-submodules https://github.com/strapdata/elassandra** to clone the strapdata-cassandra submodule and check that your are using the same strapdata-cassandra version in your *core/pom.xm* and in this submodule. Alternatively, this submodule can point to your own cassandra branch, assuming this branch include mandatory modifications to support Elassandra, see [strapdata-cassandra](https://github.com/strapdata/cassandra) for details.
 
+If you forgot the **--recurse-submodules** when cloning, you can also fetch the cassandra submodule with **git submodule update --init** and **git checkout cassandra-3.0-strapdata** to set the strapdata branch.
+
 Then, to build from sources, run **mvn clean packages -DskipTests**.
 
 Elassandra documentation is based on [sphinx](http://www.sphinx-doc.org/en/stable/rest.html) and published on [readthedoc.org](https://readthedocs.org/). Source RestructuredText files are located at [Elassandra source documentation](https://github.com/strapdata/elassandra/tree/master/docs/elassandra). To build the documentation, just run **make html** from the *${project.dir}/docs/elassandra*.
