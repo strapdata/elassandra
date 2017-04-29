@@ -17,7 +17,7 @@
         But if you do this, then maven lifecycle does not execute any test (nor compile any test)
      -->
     <!--packaging>pom</packaging-->
-    <description>The ZIP distribution of Elasticsearch</description>
+    <description>The ZIP distribution of Elassandra</description>
 
     <build>
         <filters>
@@ -40,6 +40,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <configuration>
+                    <finalName>elassandra-${elasticsearch.version}.${elassandra.version}</finalName>
                     <appendAssemblyId>false</appendAssemblyId>
                     <outputDirectory>${project.build.directory}/releases/</outputDirectory>
                     <descriptors>
