@@ -131,7 +131,6 @@ public abstract class AbstractSearchStrategy {
                 for(InetAddress endpoint :  (this.metadata == null) ? Collections.singletonList(localNode.getInetAddress()) : this.strategy.calculateNaturalEndpoints(token, this.metadata)) {
                     UUID uuid = StorageService.instance.getHostId(endpoint);
                     DiscoveryNode node =  (uuid == null) ? clusterState.nodes().findByInetAddress(endpoint) : clusterState.nodes().get(uuid.toString());
-                    assert node != null : "Cannot find node with ip = " + endpoint ;
                     if (node != null && node.status() == DiscoveryNode.DiscoveryNodeStatus.ALIVE) {
                         if (ShardRoutingState.STARTED.equals(shardStates.get(node.uuid()))) {
                             orphanRange = false;
