@@ -20,14 +20,13 @@ before_install:
 install: true
 
 script:
-  - docker run -v ${PWD}:/src -v ${MVN_SHARED_CACHE}:/root/.m2 -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
+   - docker run -v ${PWD}:/src -v ${MVN_SHARED_CACHE}:/root/.m2 -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
   - export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
   - export DEBPKG=$(ls distribution/deb/target/releases/elassandra_*.deb)
   - export RPMPKG=$(ls distribution/rpm/target/releases/elassandra-*.rpm)
-  - gem install package_cloud
 
 deploy:
   # deploy to github releases

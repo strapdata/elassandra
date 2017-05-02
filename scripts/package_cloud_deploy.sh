@@ -19,5 +19,6 @@ show_and_exec(){
   eval "$@"
 }
 
+gem install package_cloud
 show_and_exec package_cloud push elassandra/latest/debian/jessie $DEBPKG
 show_and_exec package_cloud push elassandra/latest/el/7 $RPMPKG
