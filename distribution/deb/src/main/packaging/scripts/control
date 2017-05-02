@@ -1,5 +1,5 @@
 Package: elassandra
-Version: [[version]]
+Version: ${elasticsearch.version}.${elassandra.version}-1
 Architecture: all
 Maintainer: Barthelemy Delemotte <barthelemy.delemotte@gmail.com>
 Depends: openjdk-8-jre-headless | java8-runtime, adduser, libc6, python (>= 2.7)
@@ -12,5 +12,4 @@ Vcs-Browser: https://github.com/strapdata/elassandra
 Standards-Version: 3.8.3
 Recommends: ntp | time-daemon
 Conflicts: apache-cassandra1, cassandra
-Description: distributed storage system for structured data
-  Elassandra is a fork of Elasticsearch modified to run on top of Apache Cassandra in a scalable and resilient peer-to-peer architecture
+Description: Elassandra = Cassandra + Elasticsearch
