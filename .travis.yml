@@ -16,7 +16,6 @@ cache:
 
 before_install:
   - mkdir -p ${MVN_SHARED_CACHE}
-  - gem install package_cloud
 
 install: true
 
@@ -28,6 +27,7 @@ before_deploy:
   - export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
   - export DEBPKG=$(ls distribution/deb/target/releases/elassandra_*.deb)
   - export RPMPKG=$(ls distribution/rpm/target/releases/elassandra-*.rpm)
+  - gem install package_cloud
 
 deploy:
   # deploy to github releases
