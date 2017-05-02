@@ -72,7 +72,7 @@
         <elassandra.version>13</elassandra.version>
         <elassandra.license.header>${elasticsearch.tools.directory}/license-check/strapdata_license_header.txt</elassandra.license.header>
         <cassandra.version>3.0.10</cassandra.version>
-        
+
         <elasticsearch.tools.directory>${project.build.directory}/dev-tools</elasticsearch.tools.directory>
         <elasticsearch.license.header>${elasticsearch.tools.directory}/license-check/elasticsearch_license_header.txt</elasticsearch.license.header>
         <elasticsearch.license.headerDefinition>${elasticsearch.tools.directory}/license-check/license_header_definition.xml</elasticsearch.license.headerDefinition>
@@ -167,7 +167,7 @@
         </repository>
         -->
     </repositories>
-    
+
   <distributionManagement>
     <snapshotRepository>
       <id>ossrh</id>
@@ -178,7 +178,7 @@
       <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
     </repository>
   </distributionManagement>
-    
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -261,7 +261,7 @@
                 <artifactId>cassandra-all</artifactId>
                 <version>${cassandra.version}</version>
             </dependency>
-        
+
             <dependency>
                 <groupId>org.apache.httpcomponents</groupId>
                 <artifactId>httpclient</artifactId>
@@ -577,7 +577,7 @@
                         <autoReleaseAfterClose>true</autoReleaseAfterClose>
                     </configuration>
                 </plugin>
-    
+
             </plugins>
         <pluginManagement>
             <plugins>
@@ -1661,7 +1661,7 @@ org.eclipse.jdt.ui.text.custom_code_templates=<?xml version\="1.0" encoding\="UT
         <module>core</module>
         <module>modules</module>
         <module>distribution</module>
-        <module>plugins</module>
-        <module>qa</module>
+        <!-- <module>plugins</module>
+        <module>qa</module> -->
     </modules>
 </project>
