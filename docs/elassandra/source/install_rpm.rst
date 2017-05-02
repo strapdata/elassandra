@@ -8,14 +8,14 @@ Setup the RPM repository
 
 Create a file called ``elassandra.repo`` in the directory ``/etc/yum.repos.d/`` (redhat) or ``/etc/zypp/repos.d/`` (opensuse), containing::
 
-  [elassandra_stable]
+  [elassandra_latest]
   name=Elassandra repository
-  baseurl=https://packagecloud.io/elassandra/stable/el/7/$basearch
+  baseurl=https://packagecloud.io/elassandra/latest/el/7/$basearch
   type=rpm-md
   repo_gpgcheck=1
   gpgcheck=0
   enabled=1
-  gpgkey=https://packagecloud.io/elassandra/stable/gpgkey
+  gpgkey=https://packagecloud.io/elassandra/latest/gpgkey
   autorefresh=1
   sslverify=1
   sslcacert=/etc/pki/tls/certs/ca-bundle.crt
@@ -25,7 +25,7 @@ Install Elassandra
 
 Using yum::
 
-  yum install elassandra
+  sudo yum install elassandra
 
 .. warning:: You should uninstall Cassandra prior to install Elassandra cause the two packages conflict.
 
@@ -45,7 +45,7 @@ For those who don't have systemd, a init.d script is also provided.
 
 To start elassandra using systemd, run::
 
-  sudo systemctl start elassandra
+  sudo systemctl start cassandra
 
 Files locations:
 
