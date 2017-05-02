@@ -9,7 +9,7 @@ Import the GPG Key
 
 Download and install the public signing key::
 
-  curl -L https://packagecloud.io/elassandra/stable/gpgkey | sudo apt-key add -
+  curl -L https://packagecloud.io/elassandra/latest/gpgkey | sudo apt-key add -
 
 Install Elassandra from the APT repository
 ..............................................
@@ -20,7 +20,7 @@ Ensure apt is able to use https::
 
 Add the Elassandra repository to your source list::
 
-  echo "deb https://packagecloud.io/elassandra/stable/debian jessie main" | sudo tee -a /etc/apt/sources.list.d/elassandra.list
+  echo "deb https://packagecloud.io/elassandra/latest/debian jessie main" | sudo tee -a /etc/apt/sources.list.d/elassandra.list
 
 Update apt cache and install Elassandra::
 
@@ -46,7 +46,7 @@ For those who don't have systemd, a init.d script is also provided.
 
 To start elassandra using systemd, run::
 
-  sudo systemctl start elassandra
+  sudo systemctl start cassandra
 
 Files locations:
 
