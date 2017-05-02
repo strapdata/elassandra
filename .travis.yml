@@ -10,6 +10,10 @@ env:
   - DOCKER_IMAGE=strapdata/elassandra-builder
   - MVN_SHARED_CACHE=$HOME/.elassandra_m2
 
+cache:
+  directories:
+  - ${MVN_SHARED_CACHE}
+
 before_install:
   - mkdir -p ${MVN_SHARED_CACHE}
 
