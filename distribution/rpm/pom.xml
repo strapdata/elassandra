@@ -19,6 +19,7 @@
           <skip.unit.tests>true</skip.unit.tests>
           <rpm.outputDirectory>${project.build.directory}/releases/</rpm.outputDirectory>
           <rpm.name>elassandra</rpm.name>
+          <rpm.version>${elasticsearch.version}.${elassandra.version}</rpm.version>
       </properties>
 
       <build>
@@ -430,6 +431,7 @@
                                       <type>${project.packaging}</type>
                                       <overWrite>true</overWrite>
                                       <outputDirectory>${rpm.outputDirectory}</outputDirectory>
+                                      <destFileName>${rpm.name}-${rpm.version}-1.noarch.rpm</destFileName>
                                   </artifactItem>
                               </artifactItems>
                           </configuration>
