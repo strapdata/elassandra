@@ -23,7 +23,6 @@ script:
   - docker run -v ${PWD}:/src -v ${MVN_SHARED_CACHE}:/root/.m2 ${DOCKER_IMAGE}
 
 before_deploy:
-  - mvn -DskipTests -Dmaven.javadoc.skip package
   - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
   - export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
   - export DEBPKG=$(ls distribution/deb/target/releases/elassandra-*.deb)
