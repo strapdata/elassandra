@@ -148,19 +148,13 @@ public class Loggers {
 
     private static String buildClassLoggerName(Class clazz) {
         String name = clazz.getName();
-        if (name.startsWith("org.elasticsearch.") || name.startsWith("org.elassandra.")) {
+        if (name.startsWith("org.elasticsearch.")) {
             name = Classes.getPackageName(clazz);
         }
         return name;
     }
 
     private static String getLoggerName(String name) {
-        if (name.startsWith("org.elassandra.")) {
-            return name;
-        }
-        if (name.startsWith("org.elasticsearch.")) {
-            name = name.substring("org.elasticsearch.".length());
-        }
-        return commonPrefix + name;
+        return name;
     }
 }
