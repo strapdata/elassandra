@@ -143,12 +143,14 @@ public class PercolateShardRequest extends BroadcastShardRequest {
         numberOfShards = in.readVInt();
         startTime = in.readLong(); // no vlong, this can be negative!
         
-        // read tokenRanges
-        Object[] tokens = (Object[]) in.readGenericValue();
-        this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
-        for (int i = 0; i < tokens.length;) {
-            Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
-            this.tokenRanges.add(range);
+        if (in.available() > 0 && in.readBoolean()) {
+            // read tokenRanges
+            Object[] tokens = (Object[]) in.readGenericValue();
+            this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+            for (int i = 0; i < tokens.length;) {
+                Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+                this.tokenRanges.add(range);
+            }
         }
     }
 
@@ -164,6 +166,7 @@ public class PercolateShardRequest extends BroadcastShardRequest {
         
         // write tokenRanges
         if (tokenRanges != null) {
+            out.writeBoolean(tokenRanges != null);
             Token[] tokens = new Token[tokenRanges.size() * 2];
             int i = 0;
             for (Range<Token> range : tokenRanges) {

@@ -601,7 +601,9 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
             template = Template.readTemplate(in);
         }
         requestCache = in.readOptionalBoolean();
-        tokenRangesBitsetCache = in.readOptionalBoolean();
+        
+        if (in.available() > 0)
+            tokenRangesBitsetCache = in.readOptionalBoolean();
         
         if (in.available() > 0 && in.readBoolean()) {
             Object[] tokens = (Object[]) in.readGenericValue();
@@ -645,6 +647,7 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
         }
 
         out.writeOptionalBoolean(requestCache);
+        
         out.writeOptionalBoolean(tokenRangesBitsetCache);
         
         out.writeBoolean(tokenRanges != null);
