@@ -23,11 +23,14 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 
-import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Objects;
 import java.util.concurrent.Semaphore;
+
+import javax.xml.bind.DatatypeConverter;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
@@ -37,19 +40,18 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
-import org.elassandra.cluster.InternalCassandraClusterService;
+import org.elasticsearch.action.ActionRequestBuilder;
+import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequestBuilder;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
+import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequestBuilder;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.ClusterAdminClient;
-import org.elasticsearch.client.Requests;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.health.ClusterHealthStatus;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.settings.Settings;
@@ -78,11 +80,15 @@ import org.junit.BeforeClass;
  */
 public abstract class ESSingleNodeTestCase extends ESTestCase {
 
-     
+    public interface ActionRequestBuilderHelper {
+        public void addHeader(ActionRequestBuilder builder);
+    }
+    
     private static final Semaphore available = new Semaphore(1);
     
     protected static Node NODE;
     protected static Settings settings;
+    public    static ActionRequestBuilderHelper actionRequestHelper = null;
     
     static void initNode(Settings testSettings, Collection<Class<? extends Plugin>> classpathPlugins)  {
         System.out.println("working.dir="+System.getProperty("user.dir"));
@@ -130,7 +136,9 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         NODE = ElassandraDaemon.instance.node();
 
         ClusterAdminClient clusterAdminClient = client().admin().cluster();
-        ClusterHealthResponse clusterHealthResponse = clusterAdminClient.prepareHealth().setWaitForGreenStatus().get();
+        ClusterHealthRequestBuilder builder = clusterAdminClient.prepareHealth();
+        expand(builder);
+        ClusterHealthResponse clusterHealthResponse = builder.setWaitForGreenStatus().get();
         assertFalse(clusterHealthResponse.isTimedOut());
     }
     
@@ -149,14 +157,19 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     
     static void cleanup(boolean resetNode) {
         if (NODE != null) {
-            assertAcked(client().admin().indices().prepareDelete("*").get());
+            DeleteIndexRequestBuilder builder = client().admin().indices().prepareDelete("*");
+            expand(builder);
+            assertAcked(builder.get());
             
             if (resetNode) {
                 reset();
             }
         }
     }
-
+    
+    public static String encodeBasicHeader(final String username, final String password) {
+        return new String(DatatypeConverter.printBase64Binary((username + ":" + Objects.requireNonNull(password)).getBytes(StandardCharsets.UTF_8)));
+    }
     @Before
     public void nodeSetup() throws Exception {
         try {
@@ -192,6 +205,12 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     public static void tearDownClass() {
     }
 
+
+    public static void expand(ActionRequestBuilder builder) {
+        if (actionRequestHelper != null)
+            actionRequestHelper.addHeader(builder);
+    }
+    
     /**
      * This method returns <code>true</code> if the node that is used in the background should be reset
      * after each test. This is useful if the test changes the cluster state metadata etc. The default is
@@ -304,13 +323,19 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         }
         return createIndex(index, createIndexRequestBuilder);
     }
-
-    protected static IndexService createIndex(String index, CreateIndexRequestBuilder createIndexRequestBuilder) {
+    
+     protected static IndexService createIndex(String index, CreateIndexRequestBuilder createIndexRequestBuilder) {
+         expand(createIndexRequestBuilder);
         assertAcked(createIndexRequestBuilder.get());
         // Wait for the index to be allocated so that cluster state updates don't override
         // changes that would have been done locally
-        ClusterHealthResponse health = client().admin().cluster()
-                .health(Requests.clusterHealthRequest(index).waitForYellowStatus().waitForEvents(Priority.LANGUID).waitForRelocatingShards(0)).actionGet();
+        ClusterHealthRequestBuilder builder = client().admin().cluster().prepareHealth(index);
+        expand(builder);
+        builder.setWaitForYellowStatus()
+            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForRelocatingShards(0);
+        ClusterHealthResponse health = builder.get();
+
         assertThat(health.getStatus(), lessThanOrEqualTo(ClusterHealthStatus.YELLOW));
         assertThat("Cluster must be a single node cluster", health.getNumberOfDataNodes(), equalTo(1));
         IndicesService instanceFromNode = getInstanceFromNode(IndicesService.class);
@@ -349,8 +374,13 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
      * @param timeout time out value to set on {@link org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest}
      */
     public ClusterHealthStatus ensureGreen(TimeValue timeout, String... indices) {
-        ClusterHealthResponse actionGet = client().admin().cluster()
-                .health(Requests.clusterHealthRequest(indices).timeout(timeout).waitForGreenStatus().waitForEvents(Priority.LANGUID).waitForRelocatingShards(0)).actionGet();
+        ClusterHealthRequestBuilder builder = client().admin().cluster().prepareHealth(indices);
+        expand(builder);
+        builder.setTimeout(timeout)
+            .setWaitForGreenStatus()
+            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForRelocatingShards(0);
+        ClusterHealthResponse actionGet = builder.get();
         if (actionGet.isTimedOut()) {
             logger.info("ensureGreen timed out, cluster state:\n{}\n{}", client().admin().cluster().prepareState().get().getState().prettyPrint(), client().admin().cluster().preparePendingClusterTasks().get().prettyPrint());
             assertThat("timed out waiting for green state", actionGet.isTimedOut(), equalTo(false));
