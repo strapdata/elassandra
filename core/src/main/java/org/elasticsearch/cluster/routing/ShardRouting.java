@@ -373,6 +373,7 @@ public final class ShardRouting implements Streamable, ToXContent {
             expectedShardSize = UNAVAILABLE_EXPECTED_SHARD_SIZE;
         }
         
+        /* not compatible with the regular elasticsearch client
         // read tokenRanges
         Object[] tokens = (Object[]) in.readGenericValue();
         this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
@@ -380,6 +381,7 @@ public final class ShardRouting implements Streamable, ToXContent {
             Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
             this.tokenRanges.add(range);
         }
+        */
         freeze();
     }
 
@@ -434,6 +436,7 @@ public final class ShardRouting implements Streamable, ToXContent {
         if (relocating() || initializing()) {
             out.writeLong(expectedShardSize);
         }
+        /* not compatible with the regular elasticsearch client.
         if (tokenRanges != null) {
             Token[] tokens = new Token[tokenRanges.size() * 2];
             int i = 0;
@@ -443,7 +446,7 @@ public final class ShardRouting implements Streamable, ToXContent {
             }
             out.writeGenericValue(tokens);
         }
-        
+        */
     }
 
     @Override
