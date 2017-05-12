@@ -685,9 +685,11 @@ public final class ShardRouting implements Streamable, ToXContent {
         if (restoreSource != null ? !restoreSource.equals(other.restoreSource) : other.restoreSource != null) {
             return false;
         }
+        /*
         if (tokenRanges != null ? !tokenRanges.equals(other.tokenRanges) : other.tokenRanges != null) {
             return false;
         }
+        */
         return true;
     }
 
@@ -728,7 +730,7 @@ public final class ShardRouting implements Streamable, ToXContent {
         result = 31 * result + (restoreSource != null ? restoreSource.hashCode() : 0);
         result = 31 * result + (allocationId != null ? allocationId.hashCode() : 0);
         result = 31 * result + (unassignedInfo != null ? unassignedInfo.hashCode() : 0);
-        result = 31 * result + (tokenRanges != null ? tokenRanges.hashCode() : 0);
+        //result = 31 * result + (tokenRanges != null ? tokenRanges.hashCode() : 0);
         return hashCode = result;
     }
 
