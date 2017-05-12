@@ -17,7 +17,7 @@ before_install:
 - mkdir -p ${MVN_SHARED_CACHE}
 install: true
 script:
-- docker run -v ${PWD}:/src -v ${MVN_SHARED_CACHE}:/root/.m2 -e MAVEN_CMD="mvn clean package" -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
+- docker run -v ${PWD}:/home/builder/src -v ${MVN_SHARED_CACHE}:/home/builder/.m2 -e MAVEN_CMD="mvn clean package" -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
 before_deploy:
 - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
 - export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
