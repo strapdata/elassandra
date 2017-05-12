@@ -12,6 +12,7 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
+* **2017-05-18 Release 2.4.5.16 Elasticsearch 2.4.5 + Cassandra 3.0.13**
 * **2017-04-27 Release 2.4.2-13**
    * Project refactoring, Elassandra is now an Elasticsearch plugin for [Strapadata-Cassandra](https://github.com/strapdata/cassandra) (see How to contribute below).
    * Search performance improvement by introducing a new token_ranges_bitset_cache (see [Optimized search requests](http://doc.elassandra.io/en/latest/operations.html#optimized-search-routing) in the documentation)
@@ -77,17 +78,9 @@ Elassandra is based on a fork of Elasticsearch acting as a plugin for Apache Cas
 
 To achieve these operations, both Cassandra and Elasticsearch requires some modifications located in two forks:
 
-[Strapdata-Cassandra](https://github.com/strapdata/cassandra), a fork of [Apache Cassandra](http://git-wip-us.apache.org/repos/asf/cassandra.git) including slight modifications :
-* Adds function hooks to start Elasticsearch ([CASSANDRA-13270](https://issues.apache.org/jira/browse/CASSANDRA-13270)).
-* Adds support for generic CQL functions ([CASSANDRA-13267](https://issues.apache.org/jira/browse/CASSANDRA-13267)).
-* Adds snapshot support for custom secondary indices ([CASSANDRA-13269](https://issues.apache.org/jira/browse/CASSANDRA-13269)).
-* Provides a multi-threaded **nodetool rebuild_index** command ([CASSANDRA-12837](https://issues.apache.org/jira/browse/CASSANDRA-12837)).
-* Reduce lock contention on instance factories ([CASSANDRA-13271](https://issues.apache.org/jira/browse/CASSANDRA-13271))
-* Fix implicit default **java.util.Locale** in String function calls (byte-code correction within an Ant task based on this [javassit-maven](https://github.com/strapdata/maven-javassist) project).
-* Minor upgrade some java libraries.
-* Don't overwrite the DefaultUncaughtExceptionHandler when testing
+A fork of [Apache Cassandra](http://git-wip-us.apache.org/repos/asf/cassandra.git) including slight modifications, see (https://github.com/strapdata/cassandra).
 
-Elassandra, a fork of Elasticsearch (aka Strapdata-Elasticsearch, branch *${version}-strapdata*) including modifications in :
+A fork of Elasticsearch (aka Strapdata-Elasticsearch, branch *${version}-strapdata*) including modifications in :
 * Cluster state management ([org.elassandra.cluster.InternalCassandraClusterService](/core/src/main/java/org/elassandra/cluster/InternalCassandraClusterService.java) override a modified [org.elasticsearch.cluster.service.InternalClusterService](/core/src/main/java/org/elasticsearch/cluster/service/InternalClusterService.java))
 * Gateway to retrieve Elasticsearch metadata on startup (see [org.elassandra.gateway](/core/src/main/java/org/elassandra/gateway/CassandraGatewayService.java))
 * Discovery to manage alive cluster members (see [org.elassandra.discovery.CassandraDiscovery](/core/src/main/java/org/elassandra/discovery/CassandraDiscovery.java))
@@ -135,7 +128,7 @@ Contributors can clone repositories and follow guidelines from Elasticsearch and
 
 When cloning Elassandra, use **git clone --recurse-submodules https://github.com/strapdata/elassandra** to clone the strapdata-cassandra submodule and check that your are using the same strapdata-cassandra version in your *core/pom.xm* and in this submodule. Alternatively, this submodule can point to your own cassandra branch, assuming this branch include mandatory modifications to support Elassandra, see [strapdata-cassandra](https://github.com/strapdata/cassandra) for details.
 
-If you forgot the **--recurse-submodules** when cloning, you can also fetch the cassandra submodule with **git submodule update --init** and **git checkout cassandra-3.0-strapdata** to set the strapdata branch.
+If you forgot the **--recurse-submodules** when cloning, you can also fetch the cassandra submodule with **git submodule update --init** and **git checkout cassandra-3.x-strapdata** to set the strapdata branch.
 
 Then, to build from sources, run **mvn clean packages -DskipTests**.
 

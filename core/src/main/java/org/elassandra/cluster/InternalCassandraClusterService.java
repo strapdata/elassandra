@@ -1252,35 +1252,24 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException {
         final String cfName = typeToCfName(mapping.type());
         final CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
-        if (cfm != null) {
-            String query=null;
-            try {
-                Map<String,Object> mappingProperties = (Map<String,Object>)mapping.sourceAsMap().get("properties");
-                if (mappingProperties != null) {
-                    for (Map.Entry<String, Object> entry : mappingProperties.entrySet()) {
-                        String column = entry.getKey();
-                        if (column.startsWith("_")) {
-                            continue; // ignore pseudo column known by Elasticsearch
-                        }
-                        Map<String,Object> props = (Map<String,Object>)entry.getValue();
-                        if ( (props.get("index") != null && "no".equals(props.get("index"))) || 
-                             (props.get("enabled") != null && !XContentMapValues.nodeBooleanValue(props.get("enabled"))) ) {
-                            continue; // ignore field with index:no or enabled=false
-                        }
-                        ColumnDefinition cdef = (cfm == null) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
-                        String indexName = buildIndexName(cfName, column);
-                        if ((cdef != null) && 
-                           !(cfm.partitionKeyColumns().size()==1 && cdef.kind == ColumnDefinition.Kind.PARTITION_KEY ) &&
-                           !cfm.getIndexes().has(indexName)) {
-                            query = String.format(Locale.ROOT, "CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" (\"%s\") USING '%s' %s",
-                                    indexName, ksName, cfName, column, className, cdef.isStatic() ? "WITH options = { 'enforce':'true' }" : "");
-                            logger.debug(query);
-                            QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
-                        } 
-                    }
+        boolean found = false;
+        if (cfm != null && cfm.getIndexes() != null) {
+            for(IndexMetadata indexMetadata : cfm.getIndexes()) {
+                if (indexMetadata.isCustom() && indexMetadata.options.get(IndexTarget.CUSTOM_INDEX_OPTION_NAME).equals(className)) {
+                    found = true;
+                    break;
                 }
-            } catch (Throwable e) {
-                throw new IOException("Failed to process query=["+query+"]:"+e.getMessage(), e);
+            }
+            if (!found) {
+                String indexName = buildIndexName(cfName);
+                String query = String.format(Locale.ROOT, "CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" () USING '%s'",
+                        indexName, ksName, cfName, className);
+                logger.debug(query);
+                try {
+                    QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+                } catch (Throwable e) {
+                    throw new IOException("Failed to process query=["+query+"]:"+e.getMessage(), e);
+                }
             }
         } else {
             logger.warn("Cannot create SECONDARY INDEX, [{}.{}] does not exist",ksName, cfName);
@@ -1334,6 +1323,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
     }
     
+    public static String buildIndexName(final String cfName) {
+        return new StringBuilder("elastic_")
+            .append(cfName)
+            .append("_idx").toString();
+    }
     
     public static String buildIndexName(final String cfName, final String colName) {
         return new StringBuilder("elastic_")

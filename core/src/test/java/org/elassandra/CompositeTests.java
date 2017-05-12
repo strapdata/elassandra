@@ -160,7 +160,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(0L));
         
         StorageService.instance.forceKeyspaceFlush("composite", "t3");
-        StorageService.instance.rebuildSecondaryIndex("composite", "t3", "elastic_t3_d_idx");
+        StorageService.instance.rebuildSecondaryIndex("composite", "t3", "elastic_t3_idx");
 
         assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(3L));
 

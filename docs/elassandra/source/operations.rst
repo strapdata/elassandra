@@ -363,7 +363,7 @@ To re-index your existing data, for example after a mapping change to index a ne
 
 .. code::
 
-   nodetool rebuild_index [--threads <N>] <keyspace> <table> elastic_<table>
+   nodetool rebuild_index [--threads <N>] <keyspace> <table> elastic_<table>_idx
 
 .. TIP::
    By default, rebuild index runs on a single thread. In order to improve re-indexing performance, Elassandra comes with a multi-threaded rebuild_index implementation. The **--threads** parameter allows to specify the number of threads dedicated to re-index a Cassandra table.

@@ -100,7 +100,7 @@ By default, all text columns are mapped with ``"index":"not_analyzed"``.
 
    .. code::
 
-      nodetool rebuild_index --threads <N> <keyspace_name> <table_name> elastic_<table_name>_<column_name>_idx
+      nodetool rebuild_index --threads <N> <keyspace_name> <table_name> elastic_<table_name>_idx
 
    * *column_name* is any indexed columns (or elasticsearch top-level document field).
    * *rebuild_index* reindexes SSTables from disk, but not from MEMtables. In order to index the very last inserted document, run a **nodetool flush <kespace_name>** before rebuilding your elasticsearch indices.
@@ -153,7 +153,7 @@ You can set a specific mapping for **twitter2** and re-index existing data on ea
 
 .. code::
 
-   nodetool rebuild_index [--threads <N>] twitter tweet elastic_tweet_message_idx
+   nodetool rebuild_index [--threads <N>] twitter tweet elastic_tweet_idx
 
 By default, **rebuild_index** use only one thread, but Elassandra supports multi-threaded index rebuild with the new parameter **--threads**.
 Index name is <elastic>_<table_name>_<column_name>_idx where *column_name* is any indexed column name.

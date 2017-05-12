@@ -216,8 +216,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     protected final ColumnFamilyStore baseCfs;
     protected final IndexMetadata indexMetadata;
-    protected final Set<ColumnDefinition> indexedColumns = Sets.newConcurrentHashSet();
-    protected final AtomicBoolean initialized = new AtomicBoolean(false);
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
@@ -231,7 +229,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     public static ElasticSecondaryIndex newElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         ElasticSecondaryIndex esi = elasticSecondayIndices.computeIfAbsent(baseCfs.keyspace.getName()+"."+baseCfs.name, K -> new ElasticSecondaryIndex(baseCfs, indexDef));
-        esi.indexedColumns.add(parseTarget(baseCfs.metadata, indexDef).left);
         return esi;
     }
     
@@ -2085,19 +2082,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
 
     public Callable<?> getInitializationTask() 
     {
-        if (this.initialized.compareAndSet(false, true)) {
-            return () -> {
-                logger.debug("Initializing elastic secondary index [{}]", index_name);
-                initMapping();
-                
-                // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
-                if (userKeyspaceInitialized)
-                    baseCfs.indexManager.buildIndexBlocking(this);
-                return null;
-            };
-        } else {
+        return () -> {
+            logger.debug("Initializing elastic secondary index [{}]", index_name);
+            initMapping();
+            
+            // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
+            if (userKeyspaceInitialized)
+                baseCfs.indexManager.buildIndexBlocking(this);
             return null;
-        }
+        };
     }
 
     public Callable<?> getMetadataReloadTask(IndexMetadata indexMetadata) {
@@ -2242,7 +2235,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
 
     public boolean dependsOn(ColumnDefinition column) {
-        return this.indexedColumns.contains(column);
+        return this.mappingInfo != null && this.mappingInfo.fieldsToIdx.containsKey(column.name.toString());
     }
 
     @Override
@@ -2293,13 +2286,24 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             if (transactionType == Type.COMPACTION && !this.mappingInfo.indexOnCompaction)
                 return null;
 
-            try {
-                if (baseCfs.getComparator().size() == 0)
-                    return this.mappingInfo.new SkinnyRowcumentIndexer(key, columns, nowInSec, opGroup, transactionType);
-                else 
-                    return this.mappingInfo.new WideRowcumentIndexer(key, columns, nowInSec, opGroup, transactionType);
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
+            boolean found = (columns.size() == 0);
+            if (!found) {
+                for(ColumnDefinition cd : columns) {
+                    if (this.mappingInfo.fieldsToIdx.containsKey(cd.name.toString())) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (found) {
+                try {
+                    if (baseCfs.getComparator().size() == 0)
+                        return this.mappingInfo.new SkinnyRowcumentIndexer(key, columns, nowInSec, opGroup, transactionType);
+                    else 
+                        return this.mappingInfo.new WideRowcumentIndexer(key, columns, nowInSec, opGroup, transactionType);
+                } catch (Throwable e) {
+                    throw new RuntimeException(e);
+                }
             }
         }
         return null;
