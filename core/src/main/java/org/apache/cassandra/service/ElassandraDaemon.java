@@ -17,6 +17,7 @@ package org.apache.cassandra.service;
 
 import static com.google.common.collect.Sets.newHashSet;
 
+import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.util.Collection;
 import java.util.Collections;
@@ -34,6 +35,7 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.WindowsTimer;
 import org.elassandra.NoPersistedMetaDataException;
 import org.elassandra.cluster.InternalCassandraClusterService;
 import org.elassandra.discovery.CassandraDiscovery;
@@ -109,6 +111,35 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     public void activate(boolean addShutdownHook, Settings settings, Environment env, Collection<Class<? extends Plugin>> pluginList) {
+        try
+        {
+            DatabaseDescriptor.forceStaticInitialization();
+            DatabaseDescriptor.setDaemonInitialized();
+        }
+        catch (ExceptionInInitializerError e)
+        {
+            System.out.println("Exception (" + e.getClass().getName() + ") encountered during startup: " + e.getMessage());
+            String errorMessage = buildErrorMessage("Initialization", e);
+            System.err.println(errorMessage);
+            System.err.flush();
+            System.exit(3);
+        }
+
+        if (FBUtilities.isWindows())
+        {
+            // We need to adjust the system timer on windows from the default 15ms down to the minimum of 1ms as this
+            // impacts timer intervals, thread scheduling, driver interrupts, etc.
+            WindowsTimer.startTimerPeriod(DatabaseDescriptor.getWindowsTimerInterval());
+        }
+        
+        String pidFile = System.getProperty("cassandra-pidfile");
+
+        if (pidFile != null)
+        {
+            new File(pidFile).deleteOnExit();
+        }
+        
+        
         instance.setup(addShutdownHook, settings, env, pluginList); 
         
         //enable indexing in cassandra.
@@ -349,19 +380,6 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     public static void main(String[] args) {
-        
-        try
-        {
-            DatabaseDescriptor.forceStaticInitialization();
-        }
-        catch (ExceptionInInitializerError e)
-        {
-            System.out.println("Exception (" + e.getClass().getName() + ") encountered during startup: " + e.getMessage());
-            String errorMessage = buildErrorMessage("Initialization", e);
-            System.err.println(errorMessage);
-            System.err.flush();
-            System.exit(3);
-        }
         
         boolean foreground = System.getProperty("cassandra-foreground") != null;
         // handle the wrapper system property, if its a service, don't run as a
