@@ -29,9 +29,4 @@ deploy:
   skip_cleanup: true
   on:
     tags: true
-    repo: strapdata/elassandra
-- provider: script
-  script: scripts/package_cloud_deploy.sh
-  skip_cleanup: true
-  on:
-    tags: true
+    repo: strapdata/elassandra-test
