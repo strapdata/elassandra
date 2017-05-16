@@ -2,14 +2,23 @@ sudo: false
 language: java
 jdk:
 - oraclejdk8
+services:
+- docker
 notifications:
   email: true
   slack:
     secure: GOdqtHQ7RLa6yyirotScscwdtY/O59p9uzWyhoLQ5F1OEP5H081T/TFTwZpiSG35JBK7P15T/7Etxr6WJsT7s8VU7MDQIP73WXlNt0DKf9PDXLC0Vp0CIdG5s6XL7oT5Ptim2TUVnFfFHm6xKAWzNNHB01u7V5j4glviPdNWns390+rmimx69TEuxa/hkq6Q2K5qcbA9YX6bXWBbXc48RhKl7kRVMrE+y1NWuNKRBJQLeSLb7Rq0ScLwGmgSqHTJRsYLuIWlmHKohrewOtaA0KeGZzTFpVCX7dAKKmpJvVd+AFcoD6CkomY/WBWrXjKl+8U2Tusz9d3PnD+11efNEAmm+irJUMNW17NRxVQqd+VIGbQdhppSXe/9UmnZNV2P4F4XdFYKU20RLJR9JoAqjQh5MDnRrYBoT2cL4DN3SrZKeCD8Xnkyv+UZpYByh05nd7vvn91dDautoTputUrYDxs7Lqcgj9t53hFk5USGGhR+ondnyULWnf5L4pSsB2oBfZxv1Ex9++mH+zOehWrN9vlJbcT7DKvF24vBNOTXtErQXOI2qOeHMK4MGo6PwktxPb5QPjg7QzZoibbp7ppYgSDRb8SRrw0j8ZOwr6d92+UhxPyou6A+BTUEAD7uStktp/ZXWUHuVm1PA8UguBN/Ex4yXB4CYJDzq/7Z8ehh/fM=
 
+env:
+  global:
+  - DOCKER_IMAGE=strapdata/elassandra-builder
+
 install: mvn package -DskipTests -Dmaven.javadoc.skip=true
 
+# script: mvn test -B
+
 before_deploy:
+- docker run -v ${PWD}:/home/builder/src -v -e MAVEN_CMD="mvn package" -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
 - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
 - export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
 - export DEBPKG=$(ls distribution/deb/target/releases/elassandra_*.deb)
