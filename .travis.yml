@@ -15,8 +15,6 @@ env:
 
 install: mvn package -DskipTests -Dmaven.javadoc.skip=true
 
-# script: mvn test -B
-
 before_deploy:
 - docker run -v ${PWD}:/home/builder/src -v -e MAVEN_CMD="mvn package" -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
 - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
