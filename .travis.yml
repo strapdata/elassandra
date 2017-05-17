@@ -20,13 +20,13 @@ cache:
 before_install:
   - mkdir -p ${MVN_SHARED_CACHE}
 
-install: /bin/true
-#mvn package -DskipTests -Dmaven.javadoc.skip=true
+install: docker run -v ${PWD}:/home/builder/src -v ${MVN_SHARED_CACHE}:/home/builder/.m2 -e MAVEN_CMD="mvn package -DskipTests -Dmaven.javadoc.skip=true" -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
 
-script: /bin/true
+#install: /bin/true
+#mvn package -DskipTests -Dmaven.javadoc.skip=true
+#script: /bin/true
 
 before_deploy:
-  - docker run -v ${PWD}:/home/builder/src -v ${MVN_SHARED_CACHE}:/home/builder/.m2 -e MAVEN_CMD="mvn package -DskipTests -Dmaven.javadoc.skip=true" -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
   - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
   - export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
   - export DEBPKG=$(ls distribution/deb/target/releases/elassandra_*.deb)
