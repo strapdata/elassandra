@@ -20,7 +20,7 @@ show_and_exec(){
 }
 
 gem install package_cloud
-show_and_exec package_cloud push elassandra/testing/debian/jessie $DEBPKG
-show_and_exec package_cloud push elassandra/testing/el/7 $RPMPKG
+show_and_exec package_cloud push elassandra/latest/debian/jessie $DEBPKG
+show_and_exec package_cloud push elassandra/latest/el/7 $RPMPKG
 
 exit 0
