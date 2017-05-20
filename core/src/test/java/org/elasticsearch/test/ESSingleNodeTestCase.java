@@ -171,24 +171,18 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         return new String(DatatypeConverter.printBase64Binary((username + ":" + Objects.requireNonNull(password)).getBytes(StandardCharsets.UTF_8)));
     }
     @Before
-    public void nodeSetup() throws Exception {
-        try {
-            available.acquire();
-            if (NODE == null) {
-                initNode(nodeSettings(1), nodePlugins());
-                // register NodeEnvironment to remove node.lock
-                closeAfterTest(NODE.nodeEnvironment());
-            }
-        } catch (InterruptedException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+    public synchronized void nodeSetup() throws Exception {
+        available.acquireUninterruptibly();
+        if (NODE == null) {
+            initNode(nodeSettings(1), nodePlugins());
+            // register NodeEnvironment to remove node.lock
+            closeAfterTest(NODE.nodeEnvironment());
         }
-        
         logger.info("[{}#{}]: setup test {}", getTestClass().getSimpleName(), getTestName());
     }
     
     @After
-    public void nodeTearDown() throws Exception {
+    public synchronized void nodeTearDown() throws Exception {
         logger.info("[{}#{}]: cleaning up after test {}", getTestClass().getSimpleName(), getTestName());
         cleanup(resetNodeAfterTest());
         super.tearDown();
