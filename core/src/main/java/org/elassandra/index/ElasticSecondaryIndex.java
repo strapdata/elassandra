@@ -213,6 +213,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     // updated when create/open/close/remove an ES index.
     protected final ReadWriteLock mappingInfoLock = new ReentrantReadWriteLock();
     protected volatile ImmutableMappingInfo mappingInfo;
+    protected final AtomicBoolean initialized = new AtomicBoolean(false);
     
     protected final ColumnFamilyStore baseCfs;
     protected final IndexMetadata indexMetadata;
@@ -2083,12 +2084,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     public Callable<?> getInitializationTask() 
     {
         return () -> {
-            logger.debug("Initializing elastic secondary index [{}]", index_name);
-            initMapping();
-            
-            // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
-            if (userKeyspaceInitialized)
-                baseCfs.indexManager.buildIndexBlocking(this);
+            if (this.initialized.compareAndSet(false, true)) {
+                logger.debug("Initializing elastic secondary index [{}]", index_name);
+                initMapping();
+                
+                // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
+                if (userKeyspaceInitialized)
+                    baseCfs.indexManager.buildIndexBlocking(this);
+            }
             return null;
         };
     }
