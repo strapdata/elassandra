@@ -1,4 +1,4 @@
-2.4.5.16 - 2017-05-13
+2.4.5.1 - 2017-05-13
   * Upgrade to Elasticsearch 2.4.5 + Cassandra 3.0.13
   * Undo CASSANDRA-13499 and now use a Cassandra custom per-row index.
 
