@@ -1,45 +1,50 @@
-sudo: required
+sudo: false
 language: java
+jdk:
+  - oraclejdk8
 services:
-- docker
+  - docker
 notifications:
   email: true
   slack:
     secure: GOdqtHQ7RLa6yyirotScscwdtY/O59p9uzWyhoLQ5F1OEP5H081T/TFTwZpiSG35JBK7P15T/7Etxr6WJsT7s8VU7MDQIP73WXlNt0DKf9PDXLC0Vp0CIdG5s6XL7oT5Ptim2TUVnFfFHm6xKAWzNNHB01u7V5j4glviPdNWns390+rmimx69TEuxa/hkq6Q2K5qcbA9YX6bXWBbXc48RhKl7kRVMrE+y1NWuNKRBJQLeSLb7Rq0ScLwGmgSqHTJRsYLuIWlmHKohrewOtaA0KeGZzTFpVCX7dAKKmpJvVd+AFcoD6CkomY/WBWrXjKl+8U2Tusz9d3PnD+11efNEAmm+irJUMNW17NRxVQqd+VIGbQdhppSXe/9UmnZNV2P4F4XdFYKU20RLJR9JoAqjQh5MDnRrYBoT2cL4DN3SrZKeCD8Xnkyv+UZpYByh05nd7vvn91dDautoTputUrYDxs7Lqcgj9t53hFk5USGGhR+ondnyULWnf5L4pSsB2oBfZxv1Ex9++mH+zOehWrN9vlJbcT7DKvF24vBNOTXtErQXOI2qOeHMK4MGo6PwktxPb5QPjg7QzZoibbp7ppYgSDRb8SRrw0j8ZOwr6d92+UhxPyou6A+BTUEAD7uStktp/ZXWUHuVm1PA8UguBN/Ex4yXB4CYJDzq/7Z8ehh/fM=
+
 env:
   global:
   - DOCKER_IMAGE=strapdata/elassandra-builder
-  - MVN_SHARED_CACHE=$HOME/.elassandra_m2
+  - MVN_SHARED_CACHE=$HOME/.m2
 cache:
   directories:
-  - "${MVN_SHARED_CACHE}"
+    - "${MVN_SHARED_CACHE}"
+
 before_install:
-- mkdir -p ${MVN_SHARED_CACHE}
-install: true
-script:
-- docker run -v ${PWD}:/src -v ${MVN_SHARED_CACHE}:/root/.m2 -e MAVEN_CMD="mvn clean package" -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
+  - mkdir -p ${MVN_SHARED_CACHE}
+
+install: docker run -v ${PWD}:/home/builder/src -v ${MVN_SHARED_CACHE}:/home/builder/.m2 -e MAVEN_CMD="mvn package -DskipTests -Dmaven.javadoc.skip=true" -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
+
 before_deploy:
-- export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
-- export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
-- export DEBPKG=$(ls distribution/deb/target/releases/elassandra_*.deb)
-- export RPMPKG=$(ls distribution/rpm/target/releases/elassandra-*.rpm)
+  - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
+  - export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
+  - export DEBPKG=$(ls distribution/deb/target/releases/elassandra_*.deb)
+  - export RPMPKG=$(ls distribution/rpm/target/releases/elassandra-*.rpm)
+
 deploy:
-- provider: releases
-  overwrite: true
-  draft: false
-  api_key:
-    secure: aPWTxkKnO4CWEsH7z775JLFlsO4DrMbkp9thr2F0Ntqi510Y168LbNUEOXEm2LQjb68hAIMHOPFnQp6gCa4AxqcFhAoqmEQqR1Uig6LydCykjNTAzcOSmBA+JE+qhznGX2ZnGCx2UdyODXm34lMJ3c59hblVqwCP7C9ZR1gFx55CjBb17MwxPufPDhON3/NDKEZTAhjklWz3pycXDVm2DX6WzyEeENF69JPklY/bQVXQNZ+0y0AgZnuhdlcZxK29Ou2RqlfzV0UoWYjEt4SvXSLhSdORMD0KbBoN7EElPTAZ4gDE+xtE2Q0TN5IWYBwEq5BTozLs7DjRvZw+HQ5cZEu2kOsbRqHUidtYSSRoaclq+4GYarjhAzJ76ySVcI+KN+2QbiHVP7fULIRCVDGogQZMcpD70oNMntWD3ouYzQMgIE+bmq02vQx7XQHxpd4BdqC2Xa3toddnwtzfOgx5RiGePvHdAIx3n1XRaTS8z+xAH/xLfwBxCVGJVKAuPX6z626BQD41BKpfFI+0cyiJ+Ma87JC8JfJhJnTb59cLp5kebXaHNOghSgL2Y4eh/4g0HTg/mIaQJHcmHWUiMvuUFehW3NsgIFjDXWCle2nauy/1pEUOHOk6P4ZVSaCzHQiu2fFHaD4Wmi1eSPMOYhWr4tEs4qE8c9t4Vnq90A7sxV0=
-  file:
-  - "$TARBALL"
-  - "$ZIPBALL"
-  - "$DEBPKG"
-  - "$RPMPKG"
-  skip_cleanup: true
-  on:
-    tags: true
-  repo: strapdata/elassandra
-- provider: script
-  script: scripts/package_cloud_deploy.sh
-  skip_cleanup: true
-  on:
-    tags: true
+  - provider: releases
+    overwrite: true
+    draft: true
+    api_key:
+      secure: aPWTxkKnO4CWEsH7z775JLFlsO4DrMbkp9thr2F0Ntqi510Y168LbNUEOXEm2LQjb68hAIMHOPFnQp6gCa4AxqcFhAoqmEQqR1Uig6LydCykjNTAzcOSmBA+JE+qhznGX2ZnGCx2UdyODXm34lMJ3c59hblVqwCP7C9ZR1gFx55CjBb17MwxPufPDhON3/NDKEZTAhjklWz3pycXDVm2DX6WzyEeENF69JPklY/bQVXQNZ+0y0AgZnuhdlcZxK29Ou2RqlfzV0UoWYjEt4SvXSLhSdORMD0KbBoN7EElPTAZ4gDE+xtE2Q0TN5IWYBwEq5BTozLs7DjRvZw+HQ5cZEu2kOsbRqHUidtYSSRoaclq+4GYarjhAzJ76ySVcI+KN+2QbiHVP7fULIRCVDGogQZMcpD70oNMntWD3ouYzQMgIE+bmq02vQx7XQHxpd4BdqC2Xa3toddnwtzfOgx5RiGePvHdAIx3n1XRaTS8z+xAH/xLfwBxCVGJVKAuPX6z626BQD41BKpfFI+0cyiJ+Ma87JC8JfJhJnTb59cLp5kebXaHNOghSgL2Y4eh/4g0HTg/mIaQJHcmHWUiMvuUFehW3NsgIFjDXWCle2nauy/1pEUOHOk6P4ZVSaCzHQiu2fFHaD4Wmi1eSPMOYhWr4tEs4qE8c9t4Vnq90A7sxV0=
+    file:
+      - "$TARBALL"
+      - "$ZIPBALL"
+      - "$DEBPKG"
+      - "$RPMPKG"
+    skip_cleanup: true
+    on:
+      tags: true
+      repo: strapdata/elassandra
+  - provider: script
+    script: scripts/package_cloud_deploy.sh
+    skip_cleanup: true
+    on:
+      tags: true
