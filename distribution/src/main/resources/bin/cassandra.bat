@@ -48,7 +48,8 @@ echo    functionality on this platform.
 
 echo Starting with legacy startup options
 
-if NOT DEFINED CASSANDRA_MAIN set CASSANDRA_MAIN=org.apache.cassandra.service.CassandraDaemon
+rem In the legacy mode always load Elassandra
+if NOT DEFINED CASSANDRA_MAIN set CASSANDRA_MAIN=org.apache.cassandra.service.ElassandraDaemon
 if NOT DEFINED JAVA_HOME goto :err
 
 REM -----------------------------------------------------------------------------
@@ -111,8 +112,14 @@ if EXIST "%CASSANDRA_HOME%\lib\jsr223\scala\scala-compiler.jar" (
     set JAVA_OPTS=%JAVA_OPTS% "-Dscala.usejavacp=true"
 )
 
-REM Include the build\classes\main directory so it works in development
-set CASSANDRA_CLASSPATH=%CLASSPATH%;"%CASSANDRA_HOME%\build\classes\main";"%CASSANDRA_HOME%\build\classes\thrift"
+REM Include the build\classes\main directory (if they exist only!) so it works in development
+set CASSANDRA_CLASSPATH=%CLASSPATH%
+if exist "%CASSANDRA_HOME%\build\classes\main" (
+	set CASSANDRA_CLASSPATH=%CASSANDRA_CLASSPATH%;"%CASSANDRA_HOME%\build\classes\main"
+)
+if exist "%CASSANDRA_HOME%\build\classes\thrift" (
+	set CASSANDRA_CLASSPATH=%CASSANDRA_CLASSPATH%;"%CASSANDRA_HOME%\build\classes\thrift"
+)
 set CASSANDRA_PARAMS=-Dcassandra -Dcassandra-foreground=yes
 set CASSANDRA_PARAMS=%CASSANDRA_PARAMS% -Dcassandra.logdir="%CASSANDRA_HOME%\logs"
 set CASSANDRA_PARAMS=%CASSANDRA_PARAMS% -Dcassandra.storagedir="%CASSANDRA_HOME%\data"
