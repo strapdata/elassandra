@@ -4,7 +4,7 @@ Breaking changes and limitations
 Deleting an index does not delete cassandra data
 ------------------------------------------------
 
-By default, Cassandra is considered as a primary data storage for Elasticsearch, so deleteing an Elasticsearch index does not delete Cassandra content, keyspace and tables remain unchanged.
+By default, Cassandra is considered as a primary data storage for Elasticsearch, so deleting an Elasticsearch index does not delete Cassandra content, keyspace and tables remain unchanged.
 If you want to use Elassandra as Elasticsearch, you can configure your cluster or only some indices with the ``drop_on delete_index`` like this.
 
 .. code::
@@ -24,8 +24,8 @@ Or to set ``drop_on delete_index`` at cluster level :
 Cannot index document with empty mapping
 ----------------------------------------
 
-Elassandra cannot index any document for a type having no mapped properties and no underlying clustering key because Cassandra connot create a secondary index
-on the partition key and there is no other indexed columns. Exemple :
+Elassandra cannot index any document for a type having no mapped properties and no underlying clustering key because Cassandra cannot create a secondary index
+on the partition key and there is no other indexed columns. Example :
 
 .. code::
 
@@ -105,29 +105,35 @@ Such lightweight transactions is also used when updating the Elassandra mapping 
 Index and type names
 --------------------
 
-Because cassandra does not support special caraters in keyspace and table names, Elassandra automatically replaces dot (.) and dash (-) caraters
+Because cassandra does not support special caraters in keyspace and table names, Elassandra automatically replaces dot (.) and dash (-) characters
 by underscore (_) in index and type names to create underlying Cassandra keyspaces and tables.
 When such a modification occurs, Elassandra keeps this change in memory to correctly convert keyspace/table to index/type.
 
-Morever, Cassandra table names are limited to 48 caraters, so Elasticsearch type names are also limted to 48 caraters.
+Moreover, Cassandra table names are limited to 48 caraters, so Elasticsearch type names are also limited to 48 characters.
 
 Column names
 ------------
 
 For Elasticsearch, field mapping is unique in an index. So, two columns having the same name, indexed in an index, should have the same CQL type and share the same Elasticsearch mapping.
 
+Null values
+-----------
+
+To be able to search for null values, Elasticsearch can replace null by a default value (see `<https://www.elastic.co/guide/en/elasticsearch/reference/2.4/null-value.html>`_ ).
+In Elasticsearch, an empty array is not a null value,  wheras in Cassandra, an empty array is stored as null and replaced by the default null value at index time.
+
 Elasticsearch unsupported feature
 ---------------------------------
 
 * Tribe node allows to query multiple Elasticsearch clusters. This feature is not currently supported by Elassandra.
-* Elasticsearch snapshot and restore operations are diabled (See backup and restore in operations).
+* Elasticsearch snapshot and restore operations are disabled (See backup and restore in operations).
 
 Cassandra limitations
 ---------------------
 
-* Elassandra only supports the murmur3 partitionner.
+* Elassandra only supports the murmur3 partitioner.
 * The thrift protocol is supported only for read operations.
-* Elassandra synchronously indexes rows into Elasticsearch. This may increases the write duration, particulary when indexing complex document like `GeoShape <https://www.elastic.co/guide/en/elasticsearch/reference/current/geo-shape.html>`_, so Cassandra ``write_request_timeout_in_ms`` is set to 5 seconds (Cassandra default is 2000 ms, see `Cassandra config <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configCassandra_yaml_r.html>`_)
-* In order to avoid concurrent mapping or persistent cluster settings updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommanded to have at least 3 nodes in 3 distincts racks (A 2 nodes datacenter won't accept any mapping update when a node is unavailable).
-* CQL3 **TRUNCATE** on a Cassandra table deletes all associated Elasticsearch documents by playing a delete_by_query where *_type = <table_name>*. Of course, such a delete_by_query comes with a perfomance cost.
+* Elassandra synchronously indexes rows into Elasticsearch. This may increases the write duration, particulary when indexing complex document like `GeoShape <https://www.elastic.co/guide/en/elasticsearch/reference/current/geo-shape.html>`_, so Cassandra ``write_request_timeout_in_ms`` is set to 5 seconds (Cassandra default is 2000ms, see `Cassandra config <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configCassandra_yaml_r.html>`_)
+* In order to avoid concurrent mapping or persistent cluster settings updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommended to have at least 3 nodes in 3 distinct racks (A 2 nodes datacenter won't accept any mapping update when a node is unavailable).
+* CQL3 **TRUNCATE** on a Cassandra table deletes all associated Elasticsearch documents by playing a delete_by_query where *_type = <table_name>*. Of course, such a delete_by_query comes with a performance cost.
 
