@@ -12,6 +12,7 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
+* **2017-05-29 Release 2.4.5.2 Elasticsearch 2.4.5 + Cassandra 3.10**
 * **2017-05-22 Release 2.4.5.1 Elasticsearch 2.4.5 + Cassandra 3.0.13**
 * **2017-04-27 Release 2.4.2-13**
    * Project refactoring, Elassandra is now an Elasticsearch plugin for [Strapadata-Cassandra](https://github.com/strapdata/cassandra) (see How to contribute below).

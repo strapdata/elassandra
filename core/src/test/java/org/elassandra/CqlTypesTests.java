@@ -303,18 +303,22 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .startObject()
                     .startObject("properties")
                         .startObject("id").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
-                        .startObject("status_code").field("type", "string").field("index", "not_analyzed").field("null_value", "NULL").endObject()
+                        .startObject("status_code")
+                            .field("type", "string")
+                            .field("index", "not_analyzed")
+                            .field("null_value", "NULL")
+                        .endObject()
                     .endObject()
                 .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("my_type", mapping));
         ensureGreen("test");
-        
+
         assertThat(client().prepareIndex("test", "my_type", "1").setSource("{\"status_code\": \"OK\" }").get().isCreated(), equalTo(true));
-        assertThat(client().prepareIndex("test", "my_type", "1").setSource("{\"status_code\": [ \"NOK\", \"OK\" ] }").get().isCreated(), equalTo(true));
-        assertThat(client().prepareIndex("test", "my_type", "1").setSource("{\"status_code\": null }").get().isCreated(), equalTo(true));
-        assertThat(client().prepareIndex("test", "my_type", "2").setSource("{\"status_code\": [] }").get().isCreated(), equalTo(true));
-        assertThat(client().prepareIndex("test", "my_type", "3").setSource("{\"status_code\": \"NULL\" }").get().isCreated(), equalTo(true));
-        
+        assertThat(client().prepareIndex("test", "my_type", "2").setSource("{\"status_code\": [ \"NOK\", \"OK\" ] }").get().isCreated(), equalTo(true));
+        assertThat(client().prepareIndex("test", "my_type", "3").setSource("{\"status_code\": null }").get().isCreated(), equalTo(true));
+        assertThat(client().prepareIndex("test", "my_type", "4").setSource("{\"status_code\": [] }").get().isCreated(), equalTo(true));
+        assertThat(client().prepareIndex("test", "my_type", "5").setSource("{\"status_code\": \"NULL\" }").get().isCreated(), equalTo(true));
+       
         assertThat(client().prepareSearch().setIndices("test").setTypes("my_type").setQuery(QueryBuilders.queryStringQuery("status_code:NULL")).get().getHits().getTotalHits(), equalTo(3L));
     }
 }

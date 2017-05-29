@@ -86,7 +86,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     
     private static final Semaphore available = new Semaphore(1);
     
-    protected static Node NODE;
+    protected static volatile Node NODE;
     protected static Settings settings;
     public    static ActionRequestBuilderHelper actionRequestHelper = null;
     
@@ -102,6 +102,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
 
         System.out.println("settings="+testSettings.getAsMap());
         System.out.println("plugins="+classpathPlugins);
+        DatabaseDescriptor.daemonInitialization();
         DatabaseDescriptor.createAllDirectories();
 
         settings = Settings.builder()
@@ -183,7 +184,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     
     @After
     public synchronized void nodeTearDown() throws Exception {
-        logger.info("[{}#{}]: cleaning up after test {}", getTestClass().getSimpleName(), getTestName());
+        logger.info("[{}#{}]: cleaning up after test", getTestClass().getSimpleName(), getTestName());
         cleanup(resetNodeAfterTest());
         super.tearDown();
         available.release();

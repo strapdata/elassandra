@@ -17,7 +17,6 @@ package org.elassandra.index;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
@@ -59,15 +58,16 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.cql3.statements.IndexTarget;
 import org.apache.cassandra.db.Clustering;
+import org.apache.cassandra.db.ClusteringBound;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.PartitionColumns;
 import org.apache.cassandra.db.RangeTombstone;
 import org.apache.cassandra.db.ReadCommand;
+import org.apache.cassandra.db.ReadExecutionController;
 import org.apache.cassandra.db.SinglePartitionReadCommand;
 import org.apache.cassandra.db.Slice;
-import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.filter.RowFilter;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CollectionType;
@@ -149,7 +149,6 @@ import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.DocumentMapperParser;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
-import org.elasticsearch.index.mapper.Mapper.BuilderContext;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
@@ -903,8 +902,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 IndexShard shard = shard();
                 if (shard != null) {
                     Slice slice = tombstone.deletedSlice();
-                    Bound start = slice.start();
-                    Bound end = slice.end();
+                    ClusteringBound start = slice.start();
+                    ClusteringBound end = slice.end();
     
                     DocumentMapper docMapper = indexService.mapperService().documentMapper(typeName);
                     BooleanQuery.Builder builder = new BooleanQuery.Builder();
@@ -1624,8 +1623,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             public abstract void flush(); 
             
             public RowIterator read(SinglePartitionReadCommand command) {
-                UnfilteredRowIterator unfilteredRows = command.queryMemtableAndDisk(baseCfs, opGroup);
-                return UnfilteredRowIterators.filter(unfilteredRows, nowInSec);
+                ReadExecutionController control = command.executionController();
+                try {
+                    UnfilteredRowIterator unfilteredRows = command.queryMemtableAndDisk(baseCfs, control);
+                    return UnfilteredRowIterators.filter(unfilteredRows, nowInSec);
+                } finally {
+                    control.close();
+                }
             }
             
             class Rowcument {

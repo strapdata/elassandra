@@ -87,9 +87,9 @@ import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.UUIDSerializer;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
-import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -143,7 +143,6 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.json.JsonXContentParser;
-import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
@@ -496,7 +495,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
         }
         QueryState queryState = new QueryState(clientState);
         QueryOptions queryOptions = QueryOptions.forInternalCalls(cl, serialConsistencyLevel, boundValues);
-        ResultMessage result = QueryProcessor.instance.process(query, queryState, queryOptions);
+        ResultMessage result = QueryProcessor.instance.process(query, queryState, queryOptions, System.nanoTime());
         writetime = queryState.getTimestamp();
         if (result instanceof ResultMessage.Rows)
             return UntypedResultSet.create(((ResultMessage.Rows) result).result);
@@ -1901,7 +1900,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                             switch (((CollectionType<?>)cd.type).kind) {
                             case LIST :
                             case SET : 
-                                map.put(field, CollectionSerializer.pack(Collections.emptyList(), 0, Server.VERSION_3)); 
+                                map.put(field, CollectionSerializer.pack(Collections.emptyList(), 0, ProtocolVersion.CURRENT)); 
                                 break;
                             case MAP :
                                 break;
@@ -2502,7 +2501,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
             } else {
                 Map<String, Object> mapValue = (Map<String, Object>) value;
                 for (int j = 0; j < udt.size(); j++) {
-                    String subName = UTF8Type.instance.compose(udt.fieldName(j));
+                    String subName = UTF8Type.instance.compose(udt.fieldName(j).bytes);
                     AbstractType<?> subType = udt.fieldType(j);
                     Object subValue = mapValue.get(subName);
                     Mapper subMapper = (mapper instanceof ObjectMapper) ? ((ObjectMapper) mapper).getMapper(subName) : null;
@@ -2515,7 +2514,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
             MapSerializer serializer = mapType.getSerializer();
             Map map = (Map)value;
             List<ByteBuffer> buffers = serializer.serializeValues((Map)value);
-            return CollectionSerializer.pack(buffers, map.size(), Server.VERSION_3);
+            return CollectionSerializer.pack(buffers, map.size(), ProtocolVersion.CURRENT);
         } else if (type instanceof CollectionType) {
             AbstractType elementType = (type instanceof ListType) ? ((ListType)type).getElementsType() : ((SetType)type).getElementsType();
             
@@ -2528,7 +2527,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     serialize(ksName, cfName, udt.fieldType(1), GeoPointFieldMapper.Names.LON, values.get(0), null)
                 };
                 ByteBuffer geo_point = TupleType.buildValue(elements);
-                return CollectionSerializer.pack(ImmutableList.of(geo_point), 1, Server.VERSION_3);
+                return CollectionSerializer.pack(ImmutableList.of(geo_point), 1, ProtocolVersion.CURRENT);
             } 
             
             if (value instanceof Collection) {
@@ -2538,11 +2537,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     ByteBuffer bb = serialize(ksName, cfName, elementType, name, v, mapper);
                     elements.add(bb);
                 }
-                return CollectionSerializer.pack(elements, elements.size(), Server.VERSION_3);
+                return CollectionSerializer.pack(elements, elements.size(), ProtocolVersion.CURRENT);
             } else {
                 // singleton list
                 ByteBuffer bb = serialize(ksName, cfName, elementType, name, value, mapper);
-                return CollectionSerializer.pack(ImmutableList.of(bb), 1, Server.VERSION_3);
+                return CollectionSerializer.pack(ImmutableList.of(bb), 1, ProtocolVersion.CURRENT);
             } 
         } else if (type.getSerializer() instanceof UUIDSerializer) {
             // #74 workaround
@@ -2583,7 +2582,7 @@ public class InternalCassandraClusterService extends InternalClusterService {
                     mapValue.put(GeoPointFieldMapper.Names.LON, deserialize(udt.type(1), components[1], null));
             } else {
                 for (int i = 0; i < components.length; i++) {
-                    String fieldName = UTF8Type.instance.compose(udt.fieldName(i));
+                    String fieldName = UTF8Type.instance.compose(udt.fieldName(i).bytes);
                     AbstractType<?> ctype = udt.type(i);
                     Mapper subMapper = null;
                     if (mapper != null && mapper instanceof ObjectMapper)
@@ -2596,10 +2595,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
         } else if (type instanceof ListType) {
             ListType<?> ltype = (ListType<?>)type;
             ByteBuffer input = bb.duplicate();
-            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
+            int size = CollectionSerializer.readCollectionSize(input, ProtocolVersion.CURRENT);
             List list = new ArrayList(size);
             for (int i = 0; i < size; i++) {
-                list.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, Server.VERSION_3), mapper));
+                list.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, ProtocolVersion.CURRENT), mapper));
             }
             if (input.hasRemaining())
                 throw new MarshalException("Unexpected extraneous bytes after map value");
@@ -2607,10 +2606,10 @@ public class InternalCassandraClusterService extends InternalClusterService {
         } else if (type instanceof SetType) {
             SetType<?> ltype = (SetType<?>)type;
             ByteBuffer input = bb.duplicate();
-            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
+            int size = CollectionSerializer.readCollectionSize(input, ProtocolVersion.CURRENT);
             Set set = new HashSet(size);
             for (int i = 0; i < size; i++) {
-                set.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, Server.VERSION_3), mapper));
+                set.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, ProtocolVersion.CURRENT), mapper));
             }
             if (input.hasRemaining())
                 throw new MarshalException("Unexpected extraneous bytes after map value");
@@ -2618,11 +2617,11 @@ public class InternalCassandraClusterService extends InternalClusterService {
         } else if (type instanceof MapType) {
             MapType<?,?> ltype = (MapType<?,?>)type;
             ByteBuffer input = bb.duplicate();
-            int size = CollectionSerializer.readCollectionSize(input, Server.VERSION_3);
+            int size = CollectionSerializer.readCollectionSize(input, ProtocolVersion.CURRENT);
             Map map = new LinkedHashMap(size);
             for (int i = 0; i < size; i++) {
-                ByteBuffer kbb = CollectionSerializer.readValue(input, Server.VERSION_3);
-                ByteBuffer vbb = CollectionSerializer.readValue(input, Server.VERSION_3);
+                ByteBuffer kbb = CollectionSerializer.readValue(input, ProtocolVersion.CURRENT);
+                ByteBuffer vbb = CollectionSerializer.readValue(input, ProtocolVersion.CURRENT);
                 String key = (String) ltype.getKeysType().compose(kbb);
                 Mapper subMapper = null;
                 if (mapper != null) {

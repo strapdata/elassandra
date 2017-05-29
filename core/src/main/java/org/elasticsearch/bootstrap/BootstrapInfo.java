@@ -19,7 +19,7 @@
 
 package org.elasticsearch.bootstrap;
 
-import org.apache.cassandra.utils.NativeLibrary;
+import org.apache.cassandra.utils.CLibrary;
 
 /** 
  * Exposes system startup information 
@@ -36,14 +36,14 @@ public final class BootstrapInfo {
      * memory did not work.
      */
     public static boolean isNativesAvailable() {
-        return NativeLibrary.isAvailable();
+        return CLibrary.jnaAvailable();
     }
     
     /** 
      * Returns true if we were able to lock the process's address space.
      */
     public static boolean isMemoryLocked() {
-        return NativeLibrary.jnaMemoryLockable();
+        return CLibrary.jnaMemoryLockable();
     }
     
     /**

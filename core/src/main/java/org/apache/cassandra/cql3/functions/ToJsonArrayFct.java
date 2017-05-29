@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
@@ -53,7 +54,7 @@ public class ToJsonArrayFct extends NativeScalarFunction implements IGenericFunc
         super("tojsonarray", UTF8Type.instance, argTypes.toArray(new AbstractType<?>[argTypes.size()]));
     }
 
-    public ByteBuffer execute(int protocolVersion, List<ByteBuffer> parameters) throws InvalidRequestException
+    public ByteBuffer execute(ProtocolVersion protocolVersion, List<ByteBuffer> parameters) throws InvalidRequestException
     {
         assert parameters.size() >= 1 : "Expected at least 1 argument for toJsonArray(), but got " + parameters.size();
         StringBuilder sb = new StringBuilder();

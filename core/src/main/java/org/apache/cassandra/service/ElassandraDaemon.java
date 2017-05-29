@@ -113,8 +113,8 @@ public class ElassandraDaemon extends CassandraDaemon {
     public void activate(boolean addShutdownHook, Settings settings, Environment env, Collection<Class<? extends Plugin>> pluginList) {
         try
         {
-            DatabaseDescriptor.forceStaticInitialization();
-            DatabaseDescriptor.setDaemonInitialized();
+            DatabaseDescriptor.daemonInitialization();
+            DatabaseDescriptor.createAllDirectories();
         }
         catch (ExceptionInInitializerError e)
         {
@@ -124,8 +124,8 @@ public class ElassandraDaemon extends CassandraDaemon {
             System.err.flush();
             System.exit(3);
         }
-
-        if (FBUtilities.isWindows())
+        
+        if (FBUtilities.isWindows)
         {
             // We need to adjust the system timer on windows from the default 15ms down to the minimum of 1ms as this
             // impacts timer intervals, thread scheduling, driver interrupts, etc.
@@ -370,16 +370,26 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     public static String getElasticsearchDataDir() {
-        String cassandra_storagedir = (DatabaseDescriptor.getAllDataFileLocations().length == 0 ) ? null : DatabaseDescriptor.getAllDataFileLocations()[0];
-        if (cassandra_storagedir == null) {
-            cassandra_storagedir =  System.getProperty("cassandra_storagedir");
-            if (cassandra_storagedir == null)
-                cassandra_storagedir = System.getProperty("path.data",getHomeDir()+"/data/elasticsearch.data");
-        } 
+        String cassandra_storagedir =  System.getProperty("cassandra_storagedir");
+        if (cassandra_storagedir == null)
+            cassandra_storagedir = System.getProperty("path.data",getHomeDir()+"/data/elasticsearch.data");
         return cassandra_storagedir + "/elasticsearch.data";
     }
     
     public static void main(String[] args) {
+        try
+        {
+            DatabaseDescriptor.daemonInitialization();
+            DatabaseDescriptor.createAllDirectories();
+        }
+        catch (ExceptionInInitializerError e)
+        {
+            System.out.println("Exception (" + e.getClass().getName() + ") encountered during startup: " + e.getMessage());
+            String errorMessage = buildErrorMessage("Initialization", e);
+            System.err.println(errorMessage);
+            System.err.flush();
+            System.exit(3);
+        }
         
         boolean foreground = System.getProperty("cassandra-foreground") != null;
         // handle the wrapper system property, if its a service, don't run as a
@@ -387,8 +397,6 @@ public class ElassandraDaemon extends CassandraDaemon {
         if (System.getProperty("wrapper.service", "XXX").equalsIgnoreCase("true")) {
             foreground = false;
         }
-
-        
         
         if (System.getProperty("es.max-open-files", "false").equals("true")) {
             ESLogger logger = Loggers.getLogger(Bootstrap.class);
