@@ -2261,8 +2261,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
     @Override
     public int getLocalDataCenterSize() {
         int count = 1; 
-        for (UntypedResultSet.Row row : executeInternal("SELECT data_center from system." + SystemKeyspace.PEERS))
-            if (DatabaseDescriptor.getLocalDataCenter().equals(row.getString("data_center")))
+        for (UntypedResultSet.Row row : executeInternal("SELECT data_center, rpc_address FROM system." + SystemKeyspace.PEERS))
+            if (row.has("rpc_address") && DatabaseDescriptor.getLocalDataCenter().equals(row.getString("data_center")))
                 count++;
         logger.info(" datacenter=[{}] size={} from peers", DatabaseDescriptor.getLocalDataCenter(), count);
         return count;

@@ -159,16 +159,18 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
             // WARNING: system.peers may be incomplete because commitlogs not yet applied
             for (UntypedResultSet.Row row : executeInternal("SELECT peer, data_center, rack, rpc_address, host_id from system." + SystemKeyspace.PEERS)) {
                 InetAddress peer = row.getInetAddress("peer");
-                InetAddress rpc_address = row.getInetAddress("rpc_address");
-                String datacenter = row.getString("data_center");
-                if ((!peer.equals(localAddress)) && (localDc.equals(datacenter))) {
+                InetAddress rpc_address = row.has("rpc_address") ? row.getInetAddress("rpc_address") : null;
+                String datacenter = row.has("data_center") ? row.getString("data_center") : null;
+                String host_id = row.has("host_id") ? row.getUUID("host_id").toString() : null;
+                if ((!peer.equals(localAddress)) && (rpc_address != null) && (localDc.equals(datacenter))) {
                     Map<String, String> attrs = Maps.newHashMap();
                     attrs.put("data", "true");
                     attrs.put("master", "true");
                     attrs.put("data_center", datacenter);
-                    attrs.put("rack", row.getString("rack"));
+                    if (row.has("rack"))
+                        attrs.put("rack", row.getString("rack"));
                     
-                    DiscoveryNode dn = new DiscoveryNode(buildNodeName(peer), row.getUUID("host_id").toString(), new InetSocketTransportAddress(rpc_address, publishPort()), attrs, version);
+                    DiscoveryNode dn = new DiscoveryNode(buildNodeName(peer), host_id, new InetSocketTransportAddress(peer, publishPort()), attrs, version);
                     EndpointState endpointState = Gossiper.instance.getEndpointStateForEndpoint(peer);
                     if (endpointState == null) {
                         dn.status( DiscoveryNodeStatus.UNKNOWN );
@@ -176,7 +178,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                         dn.status((endpointState.isAlive()) ? DiscoveryNodeStatus.ALIVE : DiscoveryNodeStatus.DEAD);
                     }
                     clusterGroup.put(dn.getId(), dn);
-                    logger.debug("  node internal_ip={} host_id={} node_name={} ", NetworkAddress.format(peer), dn.getId(), dn.getName());
+                    logger.debug("node internal_ip={} host_id={} node_name={} ", NetworkAddress.format(peer), dn.getId(), dn.getName());
                 }
             }
 
@@ -265,9 +267,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                         attrs.put("data_center", localDc);
                         attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(entry.getKey()));
 
-                        InetAddress rpc_address = com.google.common.net.InetAddresses.forString(entry.getValue().getApplicationState(ApplicationState.RPC_ADDRESS).value);
+                        InetAddress internal_address = com.google.common.net.InetAddresses.forString(entry.getValue().getApplicationState(ApplicationState.INTERNAL_IP).value);
                         dn = new DiscoveryNode(buildNodeName(entry.getKey()), hostId.toString(), 
-                                new InetSocketTransportAddress(rpc_address, publishPort()), attrs, version);
+                                new InetSocketTransportAddress(internal_address, publishPort()), attrs, version);
                         dn.status(status);
 
                         if (localAddress.equals(entry.getKey())) {
