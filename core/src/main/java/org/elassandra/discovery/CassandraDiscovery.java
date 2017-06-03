@@ -322,14 +322,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent<Discovery> im
                 attrs.put("data_center", localDc);
                 attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(addr));
 
-                InetAddress rpc_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.RPC_ADDRESS).value);
+                InetAddress internal_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.INTERNAL_IP).value);
                 dn = new DiscoveryNode(buildNodeName(addr), 
                         hostId.toString(), 
-                        new InetSocketTransportAddress(rpc_address, publishPort()), 
+                        new InetSocketTransportAddress(internal_address, publishPort()), 
                         attrs, version);
                 dn.status(status);
                 logger.debug("New node soure=updateNode internal_ip={} rpc_address={}, node_name={} host_id={} status={} timestamp={}", 
-                        NetworkAddress.format(addr), NetworkAddress.format(rpc_address), dn.getId(), dn.getName(), status, state.getUpdateTimestamp());
+                        NetworkAddress.format(addr), NetworkAddress.format(internal_address), dn.getId(), dn.getName(), status, state.getUpdateTimestamp());
                 clusterGroup.members.put(dn.getId(), dn);
                 if (ElassandraDaemon.hasWorkloadColumn && (state.getApplicationState(ApplicationState.X1) != null || state.getApplicationState(ApplicationState.X2) !=null)) {
                     SystemKeyspace.updatePeerInfo(addr, "workload", "elasticsearch");
