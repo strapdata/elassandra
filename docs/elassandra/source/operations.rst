@@ -391,7 +391,7 @@ If the compaction manager is busy, secondary index rebuild is added as a pending
    052c70f0-8690-11e6-aa56-674c194215f6   Secondary index build     lastfm   playlist    66347424   330228366   bytes     20,09%
    Active compaction remaining time :   0h00m00s
 
-To stop a compaction task (including a rebuild index task), you can either use a **nodetool stop** or use the JMX management operation  **stopCompactionById**.
+To stop a compaction task (including a rebuild index task), you can either use a **nodetool stop** or use the JMX management operation  **stopCompactionById**  (on MBean org.apache.cassandra.db.CompactionManager).
 
 Open, close, index
 __________________
