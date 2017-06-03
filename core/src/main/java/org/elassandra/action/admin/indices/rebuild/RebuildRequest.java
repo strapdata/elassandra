@@ -16,8 +16,12 @@
 
 package org.elassandra.action.admin.indices.rebuild;
 
+import java.io.IOException;
+
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.support.broadcast.BroadcastRequest;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
 
 /**
  * Re-index on all nodes from the underlying Cassandra tables.
@@ -53,5 +57,21 @@ public class RebuildRequest extends BroadcastRequest<RebuildRequest> {
         this.numThreads = numThreads;
     }
 
-    
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        super.writeTo(out);
+        out.writeInt(numThreads);
+    }
+
+    @Override
+    public void readFrom(StreamInput in) throws IOException {
+        super.readFrom(in);
+        numThreads = in.readInt();
+    }
+
+    @Override
+    public String toString() {
+        return "RebuildRequest{" +
+                "numThreads=" + numThreads + "}";
+    }
 }

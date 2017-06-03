@@ -16,8 +16,12 @@
 
 package org.elassandra.action.admin.indices.cleanup;
 
+import java.io.IOException;
+
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.support.broadcast.BroadcastRequest;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
 
 /**
  * Cleanup on all nodes from the underlying Cassandra tables.
@@ -53,5 +57,21 @@ public class CleanupRequest extends BroadcastRequest<CleanupRequest> {
         this.jobs = jobs;
     }
 
-    
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        super.writeTo(out);
+        out.writeInt(jobs);
+    }
+
+    @Override
+    public void readFrom(StreamInput in) throws IOException {
+        super.readFrom(in);
+        jobs = in.readInt();
+    }
+
+    @Override
+    public String toString() {
+        return "CleanupRequest{" +
+                "jobs=" + jobs + "}";
+    }
 }
