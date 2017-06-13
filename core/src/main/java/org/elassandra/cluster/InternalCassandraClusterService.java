@@ -41,6 +41,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import org.apache.cassandra.config.CFMetaData;
@@ -216,7 +217,8 @@ public class InternalCassandraClusterService extends InternalClusterService {
     public static final String CLUSTER_PREFIX = "cluster.";
     public static final String INDEX_PREFIX = "index.";
     public static final String TABLE_PREFIX = "";
-    
+    private static final int CREATE_ELASTIC_ADMIN_RETRY_ATTEMPTS = Integer.getInteger(SYSTEM_PREFIX + "create_elastic_admin_retry_attempts", 5);
+
     /**
      * Dynamic mapping update timeout
      */
@@ -2267,7 +2269,97 @@ public class InternalCassandraClusterService extends InternalClusterService {
         logger.info(" datacenter=[{}] size={} from peers", DatabaseDescriptor.getLocalDataCenter(), count);
         return count;
     }
-    
+
+
+    Void createElasticAdminKeyspace()  {
+        try {
+            Map<String, String> replication = new HashMap<String, String>();
+
+            replication.put("class", NetworkTopologyStrategy.class.getName());
+            replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(getLocalDataCenterSize()));
+
+            String createKeyspace = String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s;",
+                elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
+            logger.info(createKeyspace);
+            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createKeyspace);
+        } catch (Exception e) {
+            logger.error("Failed to initialize keyspace {}", elasticAdminKeyspaceName, e);
+            throw e;
+        }
+        return null;
+    }
+
+    // Modify keyspace replication
+    void alterElasticAdminKeyspaceReplication(Map<String,String> replication) {
+        logger.debug("keyspace={} replication={}", elasticAdminKeyspaceName, replication);
+
+        if (!NetworkTopologyStrategy.class.getName().equals(replication.get("class")))
+            throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+NetworkTopologyStrategy.class.getName()+" replication strategy");
+
+        int currentRF = -1;
+        if (replication.get(DatabaseDescriptor.getLocalDataCenter()) != null) {
+            currentRF = Integer.valueOf(replication.get(DatabaseDescriptor.getLocalDataCenter()).toString());
+        }
+        int targetRF = getLocalDataCenterSize();
+        if (targetRF != currentRF) {
+            replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(targetRF));
+            try {
+                String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s",
+                    elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
+                logger.info(query);
+                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
+            } catch (Throwable e) {
+                logger.error("Failed to alter keyspace [{}]", e, this.elasticAdminKeyspaceName);
+                throw e;
+            }
+        } else {
+            logger.info("Keep unchanged keyspace={} datacenter={} RF={}", elasticAdminKeyspaceName, DatabaseDescriptor.getLocalDataCenter(), targetRF);
+        }
+    }
+
+    // Create The meta Data Table if needed
+    Void createElasticAdminMetaTable(final String metaDataString) {
+        try {
+            String createTable = String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';",
+                elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metaDataString);
+            logger.info(createTable);
+            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createTable);
+
+        } catch (Exception e) {
+            logger.error("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, e);
+            throw e;
+        }
+        return null;
+    }
+
+    // initialize a first row if needed
+    Void insertFirstMetaRow(final MetaData metadata, final String metaDataString) {
+        try {
+            logger.info(insertMetadataQuery);
+            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), insertMetadataQuery,
+                DatabaseDescriptor.getClusterName(), UUID.fromString(StorageService.instance.getLocalHostId()), metadata.version(), metaDataString);
+        } catch (Exception e) {
+            logger.error("Failed insert first row into table {}.{}",e, elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+            throw e;
+        }
+        return null;
+    }
+
+    void retry (final Supplier<Void> function, final String label) {
+        for (int i = 0; ; ++i) {
+            try {
+                function.get();
+                break;
+            } catch (final Exception e) {
+                if (i >= CREATE_ELASTIC_ADMIN_RETRY_ATTEMPTS) {
+                    logger.error("Failed to {} after {} attempts", label, CREATE_ELASTIC_ADMIN_RETRY_ATTEMPTS);
+                    throw new NoPersistedMetaDataException("Failed to " + label + " after " + CREATE_ELASTIC_ADMIN_RETRY_ATTEMPTS + " attempts", e);
+                } else
+                    logger.info("Retrying: {}", label);
+            }
+        }
+    }
+
     /**
      * Create or update elastic_admin keyspace.
      * @throws IOException 
@@ -2278,27 +2370,23 @@ public class InternalCassandraClusterService extends InternalClusterService {
         if (result.isEmpty()) {
             MetaData metadata = state().metaData();
             try {
-                String metaDataString = MetaData.Builder.toXContent(metadata);
-                
-                Map<String,String> replication = new HashMap<String,String>();
-                replication.put("class", NetworkTopologyStrategy.class.getName());
-                replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(getLocalDataCenterSize()));
-                
-                String createKeyspace = String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s;", 
-                        elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
-                logger.info(createKeyspace);
-                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createKeyspace);
-                
-                String createTable =  String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';", 
-                        elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, MetaData.Builder.toXContent(metadata));
-                logger.info(createTable);
-                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createTable);
-                
-                // initialize a first row if needed
-                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), insertMetadataQuery,
-                        DatabaseDescriptor.getClusterName(), UUID.fromString(StorageService.instance.getLocalHostId()), metadata.version(), metaDataString);
-                logger.info("Succefully initialize {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE,metaDataString);
-                writeMetaDataAsComment(metaDataString);
+                final String metaDataString;
+                try {
+                    metaDataString = MetaData.Builder.toXContent(metadata);
+                } catch (IOException e) {
+                    logger.error("Failed to build metadata", e);
+                    throw new NoPersistedMetaDataException("Failed to build metadata", e);
+                }
+                // create elastic_admin if not exists after joining the ring and before allowing metadata update.
+                retry(() -> createElasticAdminKeyspace(), "create elastic admin keyspace");
+                retry(() -> createElasticAdminMetaTable(metaDataString), "create elastic admin metadata table");
+                retry(() -> insertFirstMetaRow(metadata, metaDataString), "write first row to metadata table");
+                logger.info("Succefully initialize {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metaDataString);
+                try {
+                    writeMetaDataAsComment(metaDataString);
+                } catch (IOException e) {
+                    logger.error("Failed to write metadata as comment", e);
+                }
             } catch (Throwable e) {
                 logger.error("Failed to initialize table {}.{}",e, elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
             }
