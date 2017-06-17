@@ -122,6 +122,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
                 .put("script.indexed", "on")
                 //.put(EsExecutors.PROCESSORS, 1) // limit the number of threads created
                 .put("http.enabled", true)
+                .put("client.type", "node")
                 .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
                 
                 .put(testSettings)
