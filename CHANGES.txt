@@ -1,5 +1,7 @@
 2.4.5.2 - 2017-05-26
   * Upgrade to Elasticsearch 2.4.5 + Cassandra 3.10
+  * Add Windows launch scripts (#97)
+  * Add retry to creation of metadata keyspace/table
 
 2.4.5.1 - 2017-05-13
   * Upgrade to Elasticsearch 2.4.5 + Cassandra 3.0.13
