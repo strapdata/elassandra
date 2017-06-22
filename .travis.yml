@@ -19,8 +19,8 @@ cache:
 
 before_install:
   - mkdir -p ${MVN_SHARED_CACHE}
-
-install: docker run -v ${PWD}:/home/builder/src -v ${MVN_SHARED_CACHE}:/home/builder/.m2 -e MAVEN_CMD="mvn package -DskipTests -Dmaven.javadoc.skip=true" -e FIX_OWNERSHIP=true -e FIXED_OWNER=$(id -u) -e FIXED_GROUP=$(id -g) ${DOCKER_IMAGE}
+  
+install: docker run -u 2000 -v ${PWD}:/home/builder/src -v ${MVN_SHARED_CACHE}:/home/builder/.m2 -e MAVEN_CMD="mvn package -DskipTests -Dmaven.javadoc.skip=true" ${DOCKER_IMAGE}
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
