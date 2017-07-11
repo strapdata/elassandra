@@ -53,8 +53,8 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
             license.appendNode('distribution', 'repo')
 
             Node developer = node.appendNode('developers').appendNode('developer')
-            developer.appendNode('name', 'Elastic')
-            developer.appendNode('url', 'http://www.elastic.co')
+            developer.appendNode('name', 'Elastic & Strapdata')
+            developer.appendNode('url', 'http://www.strapdata.com')
           }
         }
       }
@@ -182,35 +182,35 @@ subprojects {
     them as external dependencies so the build plugin that we use can be used
     to build elasticsearch plugins outside of the elasticsearch source tree. */
   ext.projectSubstitutions = [
-    "org.elasticsearch.gradle:build-tools:${version}": ':build-tools',
-    "org.elasticsearch:rest-api-spec:${version}": ':rest-api-spec',
-    "org.elasticsearch:elasticsearch:${version}": ':core',
-    "org.elasticsearch.client:rest:${version}": ':client:rest',
-    "org.elasticsearch.client:sniffer:${version}": ':client:sniffer',
-    "org.elasticsearch.client:test:${version}": ':client:test',
-    "org.elasticsearch.client:transport:${version}": ':client:transport',
-    "org.elasticsearch.test:framework:${version}": ':test:framework',
-    "org.elasticsearch.distribution.integ-test-zip:elasticsearch:${version}": ':distribution:integ-test-zip',
-    "org.elasticsearch.distribution.zip:elasticsearch:${version}": ':distribution:zip',
-    "org.elasticsearch.distribution.tar:elasticsearch:${version}": ':distribution:tar',
-    "org.elasticsearch.distribution.rpm:elasticsearch:${version}": ':distribution:rpm',
-    "org.elasticsearch.distribution.deb:elasticsearch:${version}": ':distribution:deb',
-    "org.elasticsearch.test:logger-usage:${version}": ':test:logger-usage',
+    "com.strapdata.elasticsearch.gradle:build-tools:${version}": ':build-tools',
+    "com.strapdata.elasticsearch:rest-api-spec:${version}": ':rest-api-spec',
+    "com.strapdata.elasticsearch:elasticsearch:${version}": ':core',
+    "com.strapdata.elasticsearch.client:rest:${version}": ':client:rest',
+    "com.strapdata.elasticsearch.client:sniffer:${version}": ':client:sniffer',
+    "com.strapdata.elasticsearch.client:test:${version}": ':client:test',
+    "com.strapdata.elasticsearch.client:transport:${version}": ':client:transport',
+    "com.strapdata.elasticsearch.test:framework:${version}": ':test:framework',
+    "com.strapdata.elasticsearch.distribution.integ-test-zip:elasticsearch:${version}": ':distribution:integ-test-zip',
+    "com.strapdata.elasticsearch.distribution.zip:elasticsearch:${version}": ':distribution:zip',
+    "com.strapdata.elasticsearch.distribution.tar:elasticsearch:${version}": ':distribution:tar',
+    "com.strapdata.elasticsearch.distribution.rpm:elasticsearch:${version}": ':distribution:rpm',
+    "com.strapdata.elasticsearch.distribution.deb:elasticsearch:${version}": ':distribution:deb',
+    "com.strapdata.elasticsearch.test:logger-usage:${version}": ':test:logger-usage',
     // for transport client
-    "org.elasticsearch.plugin:transport-netty3-client:${version}": ':modules:transport-netty3',
-    "org.elasticsearch.plugin:transport-netty4-client:${version}": ':modules:transport-netty4',
-    "org.elasticsearch.plugin:reindex-client:${version}": ':modules:reindex',
-    "org.elasticsearch.plugin:lang-mustache-client:${version}": ':modules:lang-mustache',
-    "org.elasticsearch.plugin:parent-join-client:${version}": ':modules:parent-join',
-    "org.elasticsearch.plugin:aggs-matrix-stats-client:${version}": ':modules:aggs-matrix-stats',
-    "org.elasticsearch.plugin:percolator-client:${version}": ':modules:percolator',
+    "com.strapdata.elasticsearch.plugin:transport-netty3-client:${version}": ':modules:transport-netty3',
+    "com.strapdata.elasticsearch.plugin:transport-netty4-client:${version}": ':modules:transport-netty4',
+    "com.strapdata.elasticsearch.plugin:reindex-client:${version}": ':modules:reindex',
+    "com.strapdata.elasticsearch.plugin:lang-mustache-client:${version}": ':modules:lang-mustache',
+    "com.strapdata.elasticsearch.plugin:parent-join-client:${version}": ':modules:parent-join',
+    "com.strapdata.elasticsearch.plugin:aggs-matrix-stats-client:${version}": ':modules:aggs-matrix-stats',
+    "com.strapdata.elasticsearch.plugin:percolator-client:${version}": ':modules:percolator',
   ]
   if (wireCompatVersions[-1].snapshot) {
     // if the most previous version is a snapshot, we need to connect that version to the
     // bwc project which will checkout and build that snapshot version
-    ext.projectSubstitutions["org.elasticsearch.distribution.deb:elasticsearch:${wireCompatVersions[-1]}"] = ':distribution:bwc'
-    ext.projectSubstitutions["org.elasticsearch.distribution.rpm:elasticsearch:${wireCompatVersions[-1]}"] = ':distribution:bwc'
-    ext.projectSubstitutions["org.elasticsearch.distribution.zip:elasticsearch:${wireCompatVersions[-1]}"] = ':distribution:bwc'
+    ext.projectSubstitutions["com.strapdata.elasticsearch.distribution.deb:elasticsearch:${wireCompatVersions[-1]}"] = ':distribution:bwc'
+    ext.projectSubstitutions["com.strapdata.elasticsearch.distribution.rpm:elasticsearch:${wireCompatVersions[-1]}"] = ':distribution:bwc'
+    ext.projectSubstitutions["com.strapdata.elasticsearch.distribution.zip:elasticsearch:${wireCompatVersions[-1]}"] = ':distribution:bwc'
   }
   project.afterEvaluate {
     configurations.all {

@@ -23,7 +23,7 @@ subprojects {
   // fixtures is just intermediate parent project
   if (name == 'fixtures') return
 
-  group = 'org.elasticsearch.test'
+  group = 'com.strapdata.elasticsearch.test'
   apply plugin: 'elasticsearch.build'
   apply plugin: 'nebula.maven-base-publish'
   apply plugin: 'nebula.maven-scm'

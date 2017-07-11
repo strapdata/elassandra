@@ -28,7 +28,7 @@ apply plugin: 'nebula.maven-scm'
 targetCompatibility = JavaVersion.VERSION_1_7
 sourceCompatibility = JavaVersion.VERSION_1_7
 
-group = 'org.elasticsearch.client'
+group = 'com.strapdata.elasticsearch.client'
 
 dependencies {
   compile "org.apache.httpcomponents:httpclient:${versions.httpclient}"
@@ -38,7 +38,7 @@ dependencies {
   compile "commons-codec:commons-codec:${versions.commonscodec}"
   compile "commons-logging:commons-logging:${versions.commonslogging}"
 
-  testCompile "org.elasticsearch.client:test:${version}"
+  testCompile "com.strapdata.elasticsearch.client:test:${version}"
   testCompile "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
   testCompile "junit:junit:${versions.junit}"
   testCompile "org.hamcrest:hamcrest-all:${versions.hamcrest}"

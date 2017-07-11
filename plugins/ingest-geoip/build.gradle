@@ -38,7 +38,7 @@ task copyDefaultGeoIp2DatabaseFiles(type: Copy) {
   include "*.mmdb.gz"
 }
 
-project.bundlePlugin.dependsOn(copyDefaultGeoIp2DatabaseFiles)
+//project.bundlePlugin.dependsOn(copyDefaultGeoIp2DatabaseFiles)
 
 compileJava.options.compilerArgs << "-Xlint:-rawtypes,-unchecked,-serial"
 compileTestJava.options.compilerArgs << "-Xlint:-rawtypes,-unchecked"
