@@ -52,6 +52,10 @@ public abstract class AbstractComponent {
         return Node.NODE_NAME_SETTING.get(settings);
     }
 
+    public Settings settings() {
+        return this.settings;
+    }
+    
     /**
      * Checks for a deprecated setting and logs the correct alternative
      */

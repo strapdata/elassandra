@@ -23,8 +23,10 @@ import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.Counter;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.action.search.SearchTask;
 import org.elasticsearch.action.search.SearchType;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.index.cache.bitset.BitsetFilterCache;
@@ -231,6 +233,16 @@ public abstract class FilteredSearchContext extends SearchContext {
         return in.fetchSourceContext(fetchSourceContext);
     }
 
+    @Override
+    public ClusterService clusterService() {
+        return in.clusterService();
+    }
+    
+    @Override
+    public ClusterState getClusterState() {
+        return in.getClusterState();
+    }
+    
     @Override
     public ContextIndexSearcher searcher() {
         return in.searcher();

@@ -22,20 +22,29 @@ package org.elasticsearch.cluster.routing;
 import com.carrotsearch.hppc.IntSet;
 import com.carrotsearch.hppc.cursors.IntCursor;
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
+
 import org.apache.lucene.util.CollectionUtil;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.AbstractDiffable;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.IndexMetaData.State;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.routing.RecoverySource.LocalShardsRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.PeerRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.StoreRecoverySource;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.collect.ImmutableOpenIntMap;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
 
@@ -67,6 +76,11 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
     private final Index index;
     private final ShardShuffler shuffler;
 
+    final public static  UnassignedInfo UNASSIGNED_INFO_NODE_LEFT = new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "cassandra node left");
+    final public static  UnassignedInfo UNASSIGNED_INFO_UNAVAILABLE = new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "shard or keyspace unavailable");
+    final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_CREATED = new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null);
+    final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_REOPEN = new UnassignedInfo(UnassignedInfo.Reason.INDEX_REOPENED, null);
+
     // note, we assume that when the index routing is created, ShardRoutings are created for all possible number of
     // shards with state set to UNASSIGNED
     private final ImmutableOpenIntMap<IndexShardRoutingTable> shards;
@@ -97,6 +111,22 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         return index;
     }
 
+    /*
+     * Return the primary ShardRouting hosted on nodeId.
+     * (There is no more replica shards in elasticsearch, so you can't have more than one shardRouting per node for an index.
+     */
+    public ShardRouting primaryShardRouting(String nodeId) {
+        for (IntObjectCursor<IndexShardRoutingTable> cursor : shards) {
+            for (ShardRouting sr : cursor.value.shards) {
+                if (sr.currentNodeId() != null && sr.currentNodeId().equals(nodeId) && sr.primary()) {
+                    return sr;
+                }
+            }
+        }
+        return null;
+    }
+
+    
     boolean validate(MetaData metaData) {
         // check index exists
         if (!metaData.hasIndex(index.getName())) {
@@ -318,9 +348,59 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
 
     public static class Builder {
 
-        private final Index index;
-        private final ImmutableOpenIntMap.Builder<IndexShardRoutingTable> shards = ImmutableOpenIntMap.builder();
+        final Index index;
+        final ImmutableOpenIntMap.Builder<IndexShardRoutingTable> shards = ImmutableOpenIntMap.builder();
 
+        /**
+         * Build the local per index routing table including all primary shards and some secondary shards to reflect unavailable nodes in the cluster state.
+         * (Do not use for per query routing, but when cluster state change)
+         * 
+         * One local primary ShardRouting (index 0) + X remote primary shard for alive nodes, each ShardRouting with an allocated set of token ranges (green status).
+         * If some range are missing, add one unassigned primary shard with orphan ranges to reflect partial unavailability with CL=1 (red status).
+         * If N node are dead, add N unassigned replica shards with empty ranges to reflect partial unavailability with no impact (orange status)  
+         */
+        public Builder(Index index, ClusterService clusterService, ClusterState targetState) {
+            this.index = index;
+            IndexMetaData targetIndexMetaData = targetState.metaData().index(index);
+            if (targetIndexMetaData == null || targetIndexMetaData.getState() == State.CLOSE)
+                return;
+            try {
+                PrimaryFirstSearchStrategy.PrimaryFirstRouter router = clusterService.updateRouter(targetIndexMetaData, targetState);
+                AbstractSearchStrategy.Router.Route route = router.newRoute(null, null);
+                for(IndexShardRoutingTable isrt : route.getShardRouting()) {
+                    // TODO: keep only nodes matching at least one routing entry
+                     shards.put(isrt.getShardId().id(), isrt);
+                }
+            } catch (NullPointerException | java.lang.AssertionError e) {
+                // thrown by cassandra when the keyspace is not yet create locally. 
+                // We must wait for a gossip schema change to update the routing Table.
+                Loggers.getLogger(getClass()).warn("Keyspace {} not available", e, this.index);
+            }
+        }
+        
+        // build a dynamic IndexRoutingTable for each query (do not use for cluster state).
+        public Builder(Index index, ClusterService clusterService, ClusterState targetState, @Nullable String preference, TransportAddress src) {
+            this.index = index;
+            IndexMetaData targetIndexMetaData = targetState.metaData().index(index);
+            if (targetIndexMetaData == null || targetIndexMetaData.getState() == State.CLOSE)
+                return;
+            try {
+                AbstractSearchStrategy.Router router = clusterService.getRouter(targetIndexMetaData, targetState);
+                AbstractSearchStrategy.Router.Route route = router.newRoute(preference, src);
+                for(IndexShardRoutingTable isrt : route.getShardRouting()) {
+                    // TODO: keep only nodes matching at least one routing entry
+                     shards.put(isrt.getShardId().id(), isrt);
+                }
+            
+            } catch (NullPointerException | java.lang.AssertionError e) {
+                // thrown by cassandra when the keyspace is not yet create locally. 
+                // We must wait for a gossip schema change to update the routing Table.
+                Loggers.getLogger(getClass()).warn("Keyspace {} not  available", e, this.index);
+            } catch (Exception e1) {
+                Loggers.getLogger(getClass()).warn("Failde to compute route for {}", e1, this.index);
+            }
+        }
+        
         public Builder(Index index) {
             this.index = index;
         }
@@ -530,7 +610,10 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         });
 
         for (IndexShardRoutingTable indexShard : ordered) {
-            sb.append("----shard_id [").append(indexShard.shardId().getIndex().getName()).append("][").append(indexShard.shardId().id()).append("]\n");
+            sb.append("----shard_id [").append(indexShard.shardId().getIndex().getName()).append("][").append(indexShard.shardId().id())
+            .append("][")
+            .append(indexShard.getPrimaryShardRouting().tokenRanges())
+            .append("]\n");
             for (ShardRouting shard : indexShard) {
                 sb.append("--------").append(shard.shortSummary()).append("\n");
             }

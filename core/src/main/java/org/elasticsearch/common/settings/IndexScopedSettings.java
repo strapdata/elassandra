@@ -18,6 +18,7 @@
  */
 package org.elasticsearch.common.settings;
 
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.cluster.routing.allocation.decider.EnableAllocationDecider;
@@ -82,6 +83,17 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         IndexMetaData.INDEX_BLOCKS_READ_ONLY_ALLOW_DELETE_SETTING,
         IndexMetaData.INDEX_PRIORITY_SETTING,
         IndexMetaData.INDEX_DATA_PATH_SETTING,
+        
+        IndexMetaData.INDEX_DROP_ON_DELETE_INDEX_SETTING,
+        IndexMetaData.INDEX_INCLUDE_NODE_ID_SETTING,
+        IndexMetaData.INDEX_INDEX_ON_COMPACTION_SETTING,
+        IndexMetaData.INDEX_PARTITION_FUNCTION_SETTING,
+        IndexMetaData.INDEX_PARTITION_FUNCTION_CLASS_SETTING,
+        IndexMetaData.INDEX_SYNCHRONOUS_REFRESH_SETTING,
+        IndexMetaData.INDEX_SNAPSHOT_WITH_SSTABLE_SETTING,
+        IndexMetaData.INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING,
+        IndexMetaData.INDEX_SETTING_KEYSPACE_SETTING,
+        
         SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING,
         SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_WARN_SETTING,
         SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_INFO_SETTING,

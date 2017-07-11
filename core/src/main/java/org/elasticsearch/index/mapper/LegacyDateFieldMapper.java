@@ -530,4 +530,9 @@ public class LegacyDateFieldMapper extends LegacyNumberFieldMapper {
             }
         }
     }
+
+    @Override
+    public String cqlType() {
+        return "timestamp";
+    }
 }

@@ -603,4 +603,9 @@ public class CompletionFieldMapper2x extends FieldMapper {
                 return false;
         }
     }
+
+    @Override
+    public String cqlType() {
+        return null;
+    }
 }

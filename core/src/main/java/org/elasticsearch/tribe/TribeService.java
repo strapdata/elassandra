@@ -38,7 +38,7 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTable;
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
@@ -437,7 +437,7 @@ public class TribeService extends AbstractLifecycleComponent {
             boolean clusterStateChanged = false;
             ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
             MetaData.Builder metaData = MetaData.builder(currentState.metaData());
-            RoutingTable.Builder routingTable = RoutingTable.builder(currentState.routingTable());
+            RoutingTable.Builder routingTable = RoutingTable.builder(clusterService, currentState);
             // go over existing indices, and see if they need to be removed
             for (IndexMetaData index : currentState.metaData()) {
                 String markedTribeName = TRIBE_NAME_SETTING.get(index.getSettings());

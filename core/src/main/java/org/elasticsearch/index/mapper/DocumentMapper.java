@@ -19,10 +19,16 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
+import org.elassandra.cluster.service.ClusterService;
+import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.ElasticsearchGenerationException;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
@@ -126,6 +132,84 @@ public class DocumentMapper implements ToXContent {
 
     private final boolean hasNestedObjects;
 
+    
+    private CqlFragments cqlFragments = null;
+    private Map<String, ColumnDefinition> columnDefs = null;
+    
+    public CqlFragments getCqlFragments() {
+        if (this.cqlFragments == null) {
+            synchronized(this) {
+                if (this.cqlFragments == null)
+                    this.cqlFragments = new CqlFragments(ClusterService.getCFMetaData(mapperService.keyspace(), ClusterService.typeToCfName(type)));
+            }
+        }
+        return this.cqlFragments;
+    }
+    
+    // used by elassandra, added there for performance reasons.
+    public class CqlFragments {
+        public String ptCols;
+        public String ptWhere;
+        public String pkCols;
+        public String pkWhere;
+        
+        CqlFragments(CFMetaData metadata) {
+            StringBuilder pkColsBuilder = new StringBuilder();
+            StringBuilder pkWhereBuilder = new StringBuilder();
+            
+            for (ColumnDefinition cd : metadata.partitionKeyColumns()) {
+                if (pkColsBuilder.length() > 0) {
+                    pkColsBuilder.append(',');
+                    pkWhereBuilder.append(" AND ");
+                }
+                pkColsBuilder.append('\"').append(cd.name.toString()).append('\"');
+                pkWhereBuilder.append('\"').append(cd.name.toString()).append("\" = ?");
+            }
+            
+            this.ptCols = pkColsBuilder.toString();
+            this.ptWhere = pkWhereBuilder.toString();
+            
+            for (ColumnDefinition cd : metadata.clusteringColumns()) {
+                if (pkColsBuilder.length() > 0) {
+                    pkColsBuilder.append(',');
+                    pkWhereBuilder.append(" AND ");
+                }
+                pkColsBuilder.append('\"').append(cd.name.toString()).append('\"');
+                pkWhereBuilder.append('\"').append(cd.name.toString()).append("\" = ?");
+            }
+            
+            this.pkCols = pkColsBuilder.toString();
+            this.pkWhere = pkWhereBuilder.toString();
+        }
+    }
+     
+    // returns ColumnDefintion
+    public Map<String, ColumnDefinition> getColumnDefinitions() {
+        if (this.columnDefs == null) {
+            synchronized(this) {
+                if (this.columnDefs == null) {
+                    CFMetaData metadata = ClusterService.getCFMetaData(mapperService.keyspace(), ClusterService.typeToCfName(type));
+                    this.columnDefs = new HashMap<String, ColumnDefinition>();
+                    for(Mapper fieldMapper : fieldMappers) {
+                        if (fieldMapper.name().indexOf('.') == -1) {
+                            ColumnDefinition cd = metadata.getColumnDefinition(new ColumnIdentifier(fieldMapper.name(), true));
+                            if (cd != null)
+                                columnDefs.put(fieldMapper.name(), cd);
+                        }
+                    }
+                    for(String name : objectMappers.keySet()) {
+                        if (name.indexOf('.') == -1) {
+                            ColumnDefinition cd = metadata.getColumnDefinition(new ColumnIdentifier(name, true));
+                            if (cd != null)
+                                columnDefs.put(name, cd);
+                        }
+                    }
+                }
+            }
+        }
+        return this.columnDefs;
+    }
+    
     public DocumentMapper(MapperService mapperService, Mapping mapping) {
         this.mapperService = mapperService;
         this.type = mapping.root().name();
@@ -236,6 +320,14 @@ public class DocumentMapper implements ToXContent {
         return metadataMapper(RoutingFieldMapper.class);
     }
 
+    public TokenFieldMapper tokenFieldMapper() {
+        return metadataMapper(TokenFieldMapper.class);
+    }
+    
+    public NodeFieldMapper nodeFieldMapper() {
+        return metadataMapper(NodeFieldMapper.class);
+    }
+    
     public ParentFieldMapper parentFieldMapper() {
         return metadataMapper(ParentFieldMapper.class);
     }

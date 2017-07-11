@@ -19,7 +19,13 @@
 
 package org.elasticsearch.index.get;
 
-import org.apache.lucene.index.Term;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
+import org.elassandra.cluster.service.ClusterService;
+import org.elassandra.cluster.service.ClusterService.DocPrimaryKey;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -32,6 +38,7 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
+import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.engine.Engine;
@@ -42,33 +49,40 @@ import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ParentFieldMapper;
 import org.elasticsearch.index.mapper.SourceFieldMapper;
+import org.elasticsearch.index.mapper.TTLFieldMapper;
+import org.elasticsearch.index.mapper.TimestampFieldMapper;
 import org.elasticsearch.index.shard.AbstractIndexShardComponent;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.search.fetch.subphase.FetchSourceContext;
 import org.elasticsearch.search.fetch.subphase.ParentFieldSubFetchPhase;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
  */
 public final class ShardGetService extends AbstractIndexShardComponent {
     private final MapperService mapperService;
-    private final MeanMetric existsMetric = new MeanMetric();
-    private final MeanMetric missingMetric = new MeanMetric();
-    private final CounterMetric currentMetric = new CounterMetric();
+    public final MeanMetric existsMetric = new MeanMetric();
+    public final MeanMetric missingMetric = new MeanMetric();
+    public final CounterMetric currentMetric = new CounterMetric();
     private final IndexShard indexShard;
-
+    private final IndexService indexService;
+    private final ClusterService clusterService;
+    
     public ShardGetService(IndexSettings indexSettings, IndexShard indexShard,
-                           MapperService mapperService) {
+                           MapperService mapperService, IndexService indexService, ClusterService clusterService) {
         super(indexShard.shardId(), indexSettings);
         this.mapperService = mapperService;
         this.indexShard = indexShard;
+        this.clusterService = clusterService;
+        this.indexService = indexService;
     }
 
     public GetStats stats() {
@@ -140,52 +154,144 @@ public final class ShardGetService extends AbstractIndexShardComponent {
 
     private GetResult innerGet(String type, String id, String[] gFields, boolean realtime, long version, VersionType versionType, FetchSourceContext fetchSourceContext) {
         fetchSourceContext = normalizeFetchSourceContent(fetchSourceContext, gFields);
-        final Collection<String> types;
+      
+        //Engine.GetResult get = null;
         if (type == null || type.equals("_all")) {
-            types = mapperService.types();
-        } else {
-            types = Collections.singleton(type);
+            try {
+                for (String typeX : mapperService.types() ) {
+                    // search for the matching type (table)
+                    if (clusterService.rowExists(indexService, typeX, id)) {
+                        type = typeX;
+                        break;
+                    }
+                }
+            } catch (RequestExecutionException | RequestValidationException | IOException e1) {
+                throw new ElasticsearchException("Cannot fetch source type [" + type + "] and id [" + id + "]", e1);
+            }
+        }
+        if (type == null || type.equals("_all")) {
+            return new GetResult(shardId.getIndexName(), type, id, -1, false, null, null);
+        }
+        
+        DocumentMapper docMapper = mapperService.documentMapper(type);
+        if (docMapper == null) {
+            //get.release();
+            return new GetResult(shardId.getIndexName(), type, id, -1, false, null, null);
         }
 
-        Engine.GetResult get = null;
-        for (String typeX : types) {
-            Term uidTerm = mapperService.createUidTerm(typeX, id);
-            if (uidTerm != null) {
-                get = indexShard.get(new Engine.Get(realtime, typeX, id, uidTerm)
-                        .version(version).versionType(versionType));
-                if (get.exists()) {
-                    type = typeX;
-                    break;
-                } else {
-                    get.release();
+        fetchSourceContext = normalizeFetchSourceContent(fetchSourceContext, gFields);
+        Set<String> columns = new HashSet<String>();
+        if ((gFields != null) && (!fetchSourceContext.fetchSource())) {
+            for (String field : gFields) {
+                int i = field.indexOf('.');
+                String colName = (i > 0) ? field.substring(0, i ) : field;
+                if (!columns.contains(colName))
+                    columns.add(colName);
+            }
+        } else {
+            columns.addAll( mapperService.documentMapper(type).getColumnDefinitions().keySet() );
+        }
+
+        if (docMapper.parentFieldMapper().active()) {
+            columns.add(ParentFieldMapper.NAME);
+        }
+        if (docMapper.timestampFieldMapper().enabled()) {
+            columns.add(TimestampFieldMapper.NAME);
+        }
+        if (docMapper.TTLFieldMapper().enabled()) {
+            columns.add(TTLFieldMapper.NAME);
+        }
+        if (docMapper.sourceMapper().enabled()) {
+            columns.add(SourceFieldMapper.NAME);
+        }
+        
+        Map<String, GetField> fields = null;
+     
+        // deal with source, but only if it's enabled (we always have it from the translog)
+        Map<String, Object> sourceAsMap = null;
+        BytesReference sourceToBeReturned = null;
+        SourceFieldMapper sourceFieldMapper = docMapper.sourceMapper();
+        
+        // In elassandra, Engine does not store the source any more, but fetch it from cassandra.
+        try {
+            String ksName = mapperService.keyspace();
+            UntypedResultSet result = clusterService.fetchRow(this.indexService, type, id, columns.toArray(new String[columns.size()]), 
+                    docMapper.getColumnDefinitions());
+            if (result.isEmpty()) {
+                return new GetResult(shardId.getIndexName(), type, id, -1, false, null, null);
+            }
+            sourceAsMap = clusterService.rowAsMap(this.indexService, type, result.one());
+            if (fetchSourceContext.fetchSource()) {
+                sourceToBeReturned = clusterService.source(this.indexService, docMapper, sourceAsMap, id);
+            }
+        } catch (RequestExecutionException | RequestValidationException | IOException e1) {
+            throw new ElasticsearchException("Cannot fetch source type [" + type + "] and id [" + id + "]", e1);
+        }
+        
+        if (gFields != null && gFields.length > 0) {
+            fields = new HashMap<String, GetField>();
+            clusterService.flattenGetField(gFields, "", sourceAsMap, fields);
+        }
+        
+        if (fetchSourceContext.fetchSource() && sourceFieldMapper.enabled()) {
+            // Cater for source excludes/includes at the cost of performance
+            // We must first apply the field mapper filtering to make sure we get correct results
+            // in the case that the fetchSourceContext white lists something that's not included by the field mapper
+
+            boolean sourceFieldFiltering = sourceFieldMapper.includes().length > 0 || sourceFieldMapper.excludes().length > 0;
+            boolean sourceFetchFiltering = fetchSourceContext.includes().length > 0 || fetchSourceContext.excludes().length > 0;
+            if (sourceFieldFiltering || sourceFetchFiltering) {
+                // TODO: The source might parsed and available in the sourceLookup but that one uses unordered maps so different. Do we care?
+                XContentType sourceContentType = XContentType.JSON;
+                /*
+                if (fetchSourceContext.transformSource()) {
+                    sourceAsMap = docMapper.transformSourceAsMap(sourceAsMap);
+                }
+                */
+                if (sourceFieldFiltering) {
+                    sourceAsMap = XContentMapValues.filter(sourceAsMap, sourceFieldMapper.includes(), sourceFieldMapper.excludes());
+                }
+                if (sourceFetchFiltering) {
+                    sourceAsMap = XContentMapValues.filter(sourceAsMap, fetchSourceContext.includes(), fetchSourceContext.excludes());
+                }
+                try {
+                    sourceToBeReturned = XContentFactory.contentBuilder(sourceContentType).map(sourceAsMap).bytes();
+                } catch (IOException e) {
+                    throw new ElasticsearchException("Failed to get type [" + type + "] and id [" + id + "] with includes/excludes set", e);
                 }
             }
         }
 
-        if (get == null || get.exists() == false) {
-            return new GetResult(shardId.getIndexName(), type, id, -1, false, null, null);
-        }
-
-        try {
-            // break between having loaded it from translog (so we only have _source), and having a document to load
-            return innerGetLoadFromStoredFields(type, id, gFields, fetchSourceContext, get, mapperService);
-        } finally {
-            get.release();
-        }
+        return new GetResult(shardId.getIndexName(), type, id, 1L, true, sourceToBeReturned, fields);
     }
 
     private GetResult innerGetLoadFromStoredFields(String type, String id, String[] gFields, FetchSourceContext fetchSourceContext, Engine.GetResult get, MapperService mapperService) {
         Map<String, GetField> fields = null;
         BytesReference source = null;
         DocIdAndVersion docIdAndVersion = get.docIdAndVersion();
+        DocumentMapper docMapper = mapperService.documentMapper(type);
         FieldsVisitor fieldVisitor = buildFieldsVisitors(gFields, fetchSourceContext);
         if (fieldVisitor != null) {
             try {
-                docIdAndVersion.context.reader().document(docIdAndVersion.docId, fieldVisitor);
-            } catch (IOException e) {
+                // fetch source from cassandra
+                DocPrimaryKey docPk = clusterService.parseElasticId(this.indexService, type, id);
+                String cfName = ClusterService.typeToCfName(type);
+                Map<String, ColumnDefinition> columnDefs = mapperService.documentMapper(type).getColumnDefinitions();
+                UntypedResultSet result = clusterService.fetchRow(this.indexService, 
+                        cfName, docPk, 
+                        columnDefs.keySet().toArray(new String[columnDefs.size()]), 
+                        ConsistencyLevel.LOCAL_ONE,
+                        columnDefs);
+                Map<String, Object> sourceMap = clusterService.rowAsMap(this.indexService, type, result.one());
+               
+                source = clusterService.source(this.indexService, docMapper, sourceMap, fieldVisitor.uid().id());
+                
+                fieldVisitor.source( BytesReference.toBytes(source) );
+                //docIdAndVersion.context.reader().document(docIdAndVersion.docId, fieldVisitor);
+            } catch (IOException | RequestExecutionException | RequestValidationException e) {
                 throw new ElasticsearchException("Failed to get type [" + type + "] and id [" + id + "]", e);
             }
-            source = fieldVisitor.source();
+            //source = fieldVisitor.source();
 
             if (!fieldVisitor.fields().isEmpty()) {
                 fieldVisitor.postProcess(mapperService);
@@ -196,7 +302,6 @@ public final class ShardGetService extends AbstractIndexShardComponent {
             }
         }
 
-        DocumentMapper docMapper = mapperService.documentMapper(type);
         if (docMapper.parentFieldMapper().active()) {
             String parentId = ParentFieldSubFetchPhase.getParentId(docMapper.parentFieldMapper(), docIdAndVersion.context.reader(), docIdAndVersion.docId);
             if (fields == null) {

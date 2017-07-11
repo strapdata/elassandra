@@ -587,4 +587,9 @@ public class ScaledFloatFieldMapper extends FieldMapper {
         }
 
     }
+
+    @Override
+    public String cqlType() {
+        return "bigint";
+    }
 }

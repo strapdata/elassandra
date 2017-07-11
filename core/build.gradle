@@ -96,7 +96,23 @@ dependencies {
     }
   }
   testCompile 'com.google.jimfs:jimfs:1.1'
-  testCompile 'com.google.guava:guava:18.0'
+  compile 'com.google.guava:guava:19.0'
+
+  // Elassandra add-ons
+  compile "com.strapdata.cassandra:cassandra-all:3.10"
+  compile "org.apache.commons:commons-lang3:3.4", optional
+  compile "org.codehaus.jackson:jackson-core-asl:1.9.13", optional
+  compile "org.codehaus.jackson:jackson-mapper-asl:1.9.13", optional
+
+  // https://www.elastic.co/guide/en/elasticsearch/client/java-api/current/_using_another_logger.html
+  compile "org.apache.logging.log4j:log4j-to-slf4j:2.8.2", optional
+  compile "org.slf4j:slf4j-api:1.7.25", optional
+  compile "ch.qos.logback:logback-classic:1.1.8", optional
+  compile "ch.qos.logback:logback-core:1.1.8", optional
+
+  compile "org.antlr:antlr:3.5.2", optional
+  compile "org.antlr:antlr-runtime:3.5.2", optional
+
 }
 
 if (isEclipse) {

@@ -33,7 +33,7 @@ import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.component.AbstractComponent;
@@ -190,8 +190,13 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
             }
 
             @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
+            @Override
             public ClusterState execute(ClusterState currentState) {
-                RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+                RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, currentState);
                 MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
 
                 // allow to change any settings to a close index, and only allow dynamic settings to be changed
@@ -272,6 +277,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(metaDataBuilder).routingTable(routingTableBuilder.build()).blocks(blocks).build();
 
+                /*
                 // now, reroute in case things change that require it (like number of replicas)
                 updatedState = allocationService.reroute(updatedState, "settings update");
                 try {
@@ -292,6 +298,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                 } catch (IOException ex) {
                     throw ExceptionsHelper.convertToElastic(ex);
                 }
+                */
                 return updatedState;
             }
         });
@@ -342,6 +349,11 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                     }
                 }
                 return ClusterState.builder(currentState).metaData(metaDataBuilder).build();
+            }
+
+            @Override
+            public boolean doPresistMetaData() {
+                return false;
             }
         });
     }

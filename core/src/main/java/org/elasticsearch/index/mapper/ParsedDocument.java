@@ -43,6 +43,8 @@ public class ParsedDocument {
 
     private final long ttl;
 
+    private final long token;
+
     private final List<Document> documents;
 
     private BytesReference source;
@@ -53,6 +55,11 @@ public class ParsedDocument {
     private String parent;
 
     public ParsedDocument(Field version, String id, String type, String routing, long timestamp, long ttl, List<Document> documents,
+            BytesReference source, XContentType xContentType, Mapping dynamicMappingsUpdate) {
+        this(version, id, type, routing, timestamp, ttl, 0, documents, source, xContentType, dynamicMappingsUpdate);
+    }
+    
+    public ParsedDocument(Field version, String id, String type, String routing, long timestamp, long ttl, long token, List<Document> documents,
                           BytesReference source, XContentType xContentType, Mapping dynamicMappingsUpdate) {
         this.version = version;
         this.id = id;
@@ -61,6 +68,7 @@ public class ParsedDocument {
         this.routing = routing;
         this.timestamp = timestamp;
         this.ttl = ttl;
+        this.token = token;
         this.documents = documents;
         this.source = source;
         this.dynamicMappingsUpdate = dynamicMappingsUpdate;
@@ -90,6 +98,10 @@ public class ParsedDocument {
         return this.ttl;
     }
 
+    public long token() {
+        return this.token;
+    }
+    
     public Document rootDoc() {
         return documents.get(documents.size() - 1);
     }

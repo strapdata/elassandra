@@ -19,9 +19,12 @@
 
 package org.elasticsearch.search.internal;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchType;
+import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -35,6 +38,7 @@ import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -71,14 +75,17 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
     private long nowInMillis;
 
     private boolean profile;
+    
+    private Boolean tokenRangesBitsetCache;
+    private Collection<Range<Token>> tokenRanges = null;
 
     ShardSearchLocalRequest() {
     }
 
     ShardSearchLocalRequest(SearchRequest searchRequest, ShardId shardId, int numberOfShards,
                             AliasFilter aliasFilter, float indexBoost, long nowInMillis) {
-        this(shardId, numberOfShards, searchRequest.searchType(),
-                searchRequest.source(), searchRequest.types(), searchRequest.requestCache(), aliasFilter, indexBoost);
+        this(shardId, searchRequest.tokenRanges(), numberOfShards, searchRequest.searchType(),
+                searchRequest.source(), searchRequest.types(), searchRequest.requestCache(), searchRequest.tokenRangesBitsetCache(), aliasFilter, indexBoost);
         this.scroll = searchRequest.scroll();
         this.nowInMillis = nowInMillis;
     }
@@ -91,8 +98,8 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         indexBoost = 1.0f;
     }
 
-    public ShardSearchLocalRequest(ShardId shardId, int numberOfShards, SearchType searchType, SearchSourceBuilder source, String[] types,
-            Boolean requestCache, AliasFilter aliasFilter, float indexBoost) {
+    public ShardSearchLocalRequest(ShardId shardId, Collection<Range<Token>> tokenRanges, int numberOfShards, SearchType searchType, SearchSourceBuilder source, String[] types,
+            Boolean requestCache, Boolean tokenRangesBitsetCache, AliasFilter aliasFilter, float indexBoost) {
         this.shardId = shardId;
         this.numberOfShards = numberOfShards;
         this.searchType = searchType;
@@ -101,6 +108,10 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         this.requestCache = requestCache;
         this.aliasFilter = aliasFilter;
         this.indexBoost = indexBoost;
+        
+        // Use the user provided token_range of the shardRouting one.
+        this.tokenRanges = tokenRanges;
+        this.tokenRangesBitsetCache = tokenRangesBitsetCache;
     }
 
 
@@ -237,5 +248,15 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
             source = rewritten;
         }
         this.source = source;
+    }
+
+    @Override
+    public Boolean tokenRangesBitsetCache() {
+        return this.tokenRangesBitsetCache;
+    }
+
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+        return this.tokenRanges;
     }
 }

@@ -154,6 +154,7 @@ final class DocumentParser {
             source.routing(),
             source.timestamp(),
             source.ttl(),
+            source.token(),
             context.docs(),
             context.sourceToParse().source(),
             context.sourceToParse().getXContentType(),

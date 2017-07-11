@@ -87,6 +87,11 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
             }
 
             @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
+            @Override
             public ClusterState execute(ClusterState currentState) {
                 return innerExecute(currentState, request.actions());
             }

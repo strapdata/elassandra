@@ -23,6 +23,9 @@ import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.SetOnce;
+import org.elassandra.cluster.service.ClusterService;
+import org.elassandra.gateway.CassandraGatewayModule;
+import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.Build;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchTimeoutException;
@@ -50,7 +53,6 @@ import org.elasticsearch.cluster.metadata.MetaDataIndexUpgradeService;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.RoutingService;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.component.Lifecycle;
@@ -86,7 +88,6 @@ import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.gateway.GatewayAllocator;
-import org.elasticsearch.gateway.GatewayModule;
 import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.gateway.MetaStateService;
 import org.elasticsearch.http.HttpServerTransport;
@@ -230,7 +231,10 @@ public class Node implements Closeable {
     private final NodeClient client;
     private final Collection<LifecycleComponent> pluginLifecycleComponents;
     private final LocalNodeFactory localNodeFactory;
-
+    
+    private final ClusterService clusterService;
+    private TransportService transportService;
+    
     /**
      * Constructs a node with the given settings.
      *
@@ -345,8 +349,7 @@ public class Node implements Closeable {
             resourcesToClose.add(resourceWatcherService);
             final NetworkService networkService = new NetworkService(settings,
                 getCustomNameResolvers(pluginsService.filterPlugins(DiscoveryPlugin.class)));
-            final ClusterService clusterService = new ClusterService(settings, settingsModule.getClusterSettings(), threadPool,
-                localNodeFactory::getNode);
+            clusterService = new ClusterService(settings, settingsModule.getClusterSettings(), threadPool, localNodeFactory::getNode);
             clusterService.addListener(scriptModule.getScriptService());
             resourcesToClose.add(clusterService);
             final IngestService ingestService = new IngestService(clusterService.getClusterSettings(), settings, threadPool, this.environment,
@@ -366,7 +369,7 @@ public class Node implements Closeable {
             IndicesModule indicesModule = new IndicesModule(pluginsService.filterPlugins(MapperPlugin.class));
             modules.add(indicesModule);
 
-            SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class));
+            SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class), clusterService);
             CircuitBreakerService circuitBreakerService = createCircuitBreakerService(settingsModule.getSettings(),
                 settingsModule.getClusterSettings());
             resourcesToClose.add(circuitBreakerService);
@@ -374,7 +377,7 @@ public class Node implements Closeable {
                     settingsModule.getIndexScopedSettings(), settingsModule.getClusterSettings(), settingsModule.getSettingsFilter(),
                     threadPool, pluginsService.filterPlugins(ActionPlugin.class), client, circuitBreakerService);
             modules.add(actionModule);
-            modules.add(new GatewayModule());
+            modules.add(new CassandraGatewayModule());
 
 
             BigArrays bigArrays = createBigArrays(settings, circuitBreakerService);
@@ -653,7 +656,8 @@ public class Node implements Closeable {
         Logger logger = Loggers.getLogger(Node.class, NODE_NAME_SETTING.get(settings));
         logger.info("starting ...");
         // hack around dependency injection problem (for now...)
-        injector.getInstance(Discovery.class).setAllocationService(injector.getInstance(AllocationService.class));
+        final AllocationService allocationService = injector.getInstance(AllocationService.class);
+        injector.getInstance(Discovery.class).setAllocationService(allocationService);
         pluginLifecycleComponents.forEach(LifecycleComponent::start);
 
         injector.getInstance(MappingUpdatedAction.class).setClient(client);
@@ -666,8 +670,7 @@ public class Node implements Closeable {
         injector.getInstance(SearchService.class).start();
         injector.getInstance(MonitorService.class).start();
 
-        final ClusterService clusterService = injector.getInstance(ClusterService.class);
-
+        
         final NodeConnectionsService nodeConnectionsService = injector.getInstance(NodeConnectionsService.class);
         nodeConnectionsService.start();
         clusterService.setNodeConnectionsService(nodeConnectionsService);
@@ -676,7 +679,6 @@ public class Node implements Closeable {
         injector.getInstance(GatewayAllocator.class).setReallocation(clusterService, injector.getInstance(RoutingService.class));
 
         injector.getInstance(ResourceWatcherService.class).start();
-        injector.getInstance(GatewayService.class).start();
         Discovery discovery = injector.getInstance(Discovery.class);
         clusterService.setDiscoverySettings(discovery.getDiscoverySettings());
         clusterService.addInitialStateBlock(discovery.getDiscoverySettings().getNoMasterBlock());
@@ -687,7 +689,7 @@ public class Node implements Closeable {
         tribeService.start();
 
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
-        TransportService transportService = injector.getInstance(TransportService.class);
+        transportService = injector.getInstance(TransportService.class);
         transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
         transportService.start();
         validateNodeBeforeAcceptingRequests(settings, transportService.boundAddress(), pluginsService.filterPlugins(Plugin.class).stream()
@@ -702,7 +704,7 @@ public class Node implements Closeable {
             : "clusterService has a different local node than the factory provided";
         // start after cluster service so the local disco is known
         discovery.start();
-        transportService.acceptIncomingRequests();
+       
         discovery.startInitialJoin();
         // tribe nodes don't have a master so we shouldn't register an observer         s
         final TimeValue initialStateTimeout = DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.get(settings);
@@ -759,7 +761,15 @@ public class Node implements Closeable {
         return this;
     }
 
-    private Node stop() {
+    /**
+     * Start servicing rpc requests.
+     */
+    public void open() {
+        transportService.acceptIncomingRequests();
+    }
+    
+    
+    public Node stop() {
         if (!lifecycle.moveToStopped()) {
             return this;
         }
@@ -944,6 +954,14 @@ public class Node implements Closeable {
         return pluginsService;
     }
 
+    public synchronized ClusterService clusterService() {
+        return this.clusterService;
+   }
+   
+   public synchronized CassandraGatewayService gatewayService() {
+        return this.injector.getInstance(CassandraGatewayService.class);
+   }
+   
     /**
      * Creates a new {@link CircuitBreakerService} based on the settings provided.
      * @see #BREAKER_TYPE_KEY

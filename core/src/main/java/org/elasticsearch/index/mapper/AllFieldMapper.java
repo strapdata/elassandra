@@ -226,6 +226,18 @@ public class AllFieldMapper extends MetadataFieldMapper {
         }
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        if (!enabledState.enabled) {
+            return;
+        }
+       
+        for (AllEntries.Entry entry : context.allEntries().entries()) {
+            context.doc().add(new AllField(fieldType().name(), entry.value(), entry.boost(), fieldType()));
+        }
+    }
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

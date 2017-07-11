@@ -56,10 +56,10 @@ public abstract class TransportWriteAction<
         > extends TransportReplicationAction<Request, ReplicaRequest, Response> {
 
     protected TransportWriteAction(Settings settings, String actionName, TransportService transportService,
-            ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+            ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool,
             ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
                                    Supplier<ReplicaRequest> replicaRequest, String executor) {
-        super(settings, actionName, transportService, clusterService, indicesService, threadPool, shardStateAction, actionFilters,
+        super(settings, actionName, transportService, clusterService, indicesService, threadPool, actionFilters,
                 indexNameExpressionResolver, request, replicaRequest, executor);
     }
 

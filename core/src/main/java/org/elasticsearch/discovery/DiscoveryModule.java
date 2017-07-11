@@ -19,16 +19,16 @@
 
 package org.elasticsearch.discovery;
 
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elassandra.discovery.CassandraDiscovery;
+import org.elasticsearch.Version;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.network.NetworkService;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.discovery.single.SingleNodeDiscovery;
 import org.elasticsearch.discovery.zen.UnicastHostsProvider;
-import org.elasticsearch.discovery.zen.ZenDiscovery;
 import org.elasticsearch.plugins.DiscoveryPlugin;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -79,10 +79,15 @@ public class DiscoveryModule {
         }
 
         Map<String, Supplier<Discovery>> discoveryTypes = new HashMap<>();
+        /*
         discoveryTypes.put("zen",
             () -> new ZenDiscovery(settings, threadPool, transportService, namedWriteableRegistry, clusterService, hostsProvider));
         discoveryTypes.put("none", () -> new NoneDiscovery(settings, clusterService, clusterService.getClusterSettings()));
         discoveryTypes.put("single-node", () -> new SingleNodeDiscovery(settings, clusterService));
+        */
+        discoveryTypes.put("cassandra",
+                () -> new CassandraDiscovery(settings, transportService, clusterService, Version.CURRENT));
+            
         for (DiscoveryPlugin plugin : plugins) {
             plugin.getDiscoveryTypes(threadPool, transportService, namedWriteableRegistry,
                 clusterService, hostsProvider).entrySet().forEach(entry -> {

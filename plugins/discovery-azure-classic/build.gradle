@@ -45,8 +45,8 @@ dependencies {
   compile "com.sun.jersey:jersey-json:${versions.jersey}"
   compile 'org.codehaus.jettison:jettison:1.1' 
   compile 'com.sun.xml.bind:jaxb-impl:2.2.3-1'
-  compile 'org.codehaus.jackson:jackson-core-asl:1.9.2'
-  compile 'org.codehaus.jackson:jackson-mapper-asl:1.9.2'
+  compile 'org.codehaus.jackson:jackson-core-asl:1.9.13'
+  compile 'org.codehaus.jackson:jackson-mapper-asl:1.9.13'
   compile 'org.codehaus.jackson:jackson-jaxrs:1.9.2'
   compile 'org.codehaus.jackson:jackson-xc:1.9.2'  
 

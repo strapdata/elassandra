@@ -25,10 +25,13 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.IOUtils;
+import org.elassandra.cluster.service.ClusterService;
+import org.elassandra.index.search.TokenRangesBitsetFilterCache;
+import org.elassandra.index.search.TokenRangesService;
+import org.elassandra.search.SearchProcessorFactory;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardRouting;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
@@ -94,6 +97,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private final IndexEventListener eventListener;
     private final IndexFieldDataService indexFieldData;
     private final BitsetFilterCache bitsetFilterCache;
+    private final TokenRangesBitsetFilterCache tokenRangesBitsetFilterCache;
     private final NodeEnvironment nodeEnv;
     private final ShardStoreDeleter shardStoreDeleter;
     private final IndexStore indexStore;
@@ -118,6 +122,8 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private final ClusterService clusterService;
     private final Client client;
 
+    private SearchProcessorFactory searchProcessorFactory;
+    
     public IndexService(IndexSettings indexSettings, NodeEnvironment nodeEnv,
                         NamedXContentRegistry xContentRegistry,
                         SimilarityService similarityService,
@@ -158,6 +164,9 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         this.indexStore = indexStore;
         indexFieldData.setListener(new FieldDataCacheListener(this));
         this.bitsetFilterCache = new BitsetFilterCache(indexSettings, new BitsetCacheListener(this));
+        this.tokenRangesBitsetFilterCache = new TokenRangesBitsetFilterCache(indexSettings, clusterService.tokenRangesService());
+        this.searchProcessorFactory = searchProcessorFactory;
+        
         this.warmer = new IndexWarmer(indexSettings.getSettings(), threadPool,
             bitsetFilterCache.createListener(threadPool));
         this.indexCache = new IndexCache(indexSettings, queryCache, bitsetFilterCache);
@@ -254,7 +263,22 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         }
     }
 
-
+    public SearchProcessorFactory searchProcessorFactory() {
+        return this.searchProcessorFactory;
+    }
+    
+    public boolean isTokenRangesBitsetCacheEnabled() {
+        return this.indexSettings.getSettings().getAsBoolean(IndexMetaData.SETTING_TOKEN_RANGES_BITSET_CACHE, this.clusterService.settings().getAsBoolean(ClusterService.SETTING_CLUSTER_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE)));
+    }
+    
+    public ClusterService clusterService() {
+        return this.clusterService;
+    }
+    
+    public String keyspace() {
+        return this.mapperService.keyspace();
+    }
+    
     public String indexUUID() {
         return indexSettings.getUUID();
     }
@@ -348,12 +372,12 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             if (useShadowEngine(primary, this.indexSettings)) {
                 indexShard = new ShadowIndexShard(routing, this.indexSettings, path, store, indexCache, mapperService, similarityService,
                     indexFieldData, engineFactory, eventListener, searcherWrapper, threadPool, bigArrays, engineWarmer,
-                    searchOperationListeners);
+                    searchOperationListeners, this, clusterService);
                 // no indexing listeners - shadow  engines don't index
             } else {
                 indexShard = new IndexShard(routing, this.indexSettings, path, store, indexCache, mapperService, similarityService,
                     indexFieldData, engineFactory, eventListener, searcherWrapper, threadPool, bigArrays, engineWarmer,
-                    searchOperationListeners, indexingOperationListeners);
+                    searchOperationListeners, indexingOperationListeners, this, this.clusterService);
             }
             eventListener.indexShardStateChanged(indexShard, null, indexShard.state(), "shard created");
             eventListener.afterIndexShardCreated(indexShard);

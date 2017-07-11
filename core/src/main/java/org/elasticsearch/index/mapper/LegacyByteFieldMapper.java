@@ -332,4 +332,9 @@ public class LegacyByteFieldMapper extends LegacyNumberFieldMapper {
             return Byte.toString(number);
         }
     }
+
+    @Override
+    public String cqlType() {
+        return "int";
+    }
 }

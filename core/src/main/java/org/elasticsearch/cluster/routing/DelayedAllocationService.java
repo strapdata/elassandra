@@ -124,6 +124,11 @@ public class DelayedAllocationService extends AbstractLifecycleComponent impleme
             removeIfSameTask(this);
             logger.warn("failed to schedule/execute reroute post unassigned shard", e);
         }
+
+        @Override
+        public boolean doPresistMetaData() {
+            return false;
+        }
     }
 
     @Inject

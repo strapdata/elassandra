@@ -41,6 +41,7 @@ import org.elasticsearch.common.geo.builders.ShapeBuilder.Orientation;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.DistanceUnit;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.QueryShardException;
 import org.locationtech.spatial4j.shape.Point;
@@ -428,6 +429,15 @@ public class GeoShapeFieldMapper extends FieldMapper {
              */
             return new FieldStats.Text(maxDoc, -1, -1, -1, isSearchable(), isAggregatable());
         }
+        
+        @Override
+        public Object cqlValue(Object value) {
+            try {
+                return XContentFactory.jsonBuilder().map((Map)value).string();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     protected Explicit<Boolean> coerce;
@@ -526,5 +536,10 @@ public class GeoShapeFieldMapper extends FieldMapper {
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
+    }
+
+    @Override
+    public String cqlType() {
+        return "text";
     }
 }

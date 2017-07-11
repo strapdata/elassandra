@@ -42,10 +42,10 @@ public class TransportDeleteAction extends TransportSingleItemBulkWriteAction<De
 
     @Inject
     public TransportDeleteAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                 IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                 IndicesService indicesService, ThreadPool threadPool,
                                  ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                  TransportBulkAction bulkAction, TransportShardBulkAction shardBulkAction) {
-        super(settings, DeleteAction.NAME, transportService, clusterService, indicesService, threadPool, shardStateAction,
+        super(settings, DeleteAction.NAME, transportService, clusterService, indicesService, threadPool,
             actionFilters, indexNameExpressionResolver, DeleteRequest::new, DeleteRequest::new, ThreadPool.Names.INDEX,
             bulkAction, shardBulkAction);
     }

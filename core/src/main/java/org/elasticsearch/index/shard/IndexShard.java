@@ -19,6 +19,10 @@
 
 package org.elasticsearch.index.shard;
 
+import org.apache.cassandra.cql3.statements.ParsedStatement;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.utils.Pair;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.index.CheckIndex;
@@ -32,6 +36,10 @@ import org.apache.lucene.search.UsageTrackingQueryCachingPolicy;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.ThreadInterruptedException;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.service.ClusterService;
+import org.elassandra.util.ConcurrentReferenceHashMap;
+import org.elassandra.util.ConcurrentReferenceHashMap.ReferenceType;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
@@ -40,9 +48,13 @@ import org.elasticsearch.action.admin.indices.upgrade.post.UpgradeRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.cluster.routing.AllocationId;
+import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.RecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
+import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.Tuple;
@@ -124,11 +136,13 @@ import java.io.PrintStream;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -153,6 +167,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     private final ShardFieldData shardFieldData;
     private final IndexFieldDataService indexFieldDataService;
     private final ShardBitsetFilterCache shardBitsetFilterCache;
+    private final ShardBitsetFilterCache tokenRangesBitsetFilterCache;
     private final Object mutex = new Object();
     private final String checkIndexOnStartup;
     private final CodecService codecService;
@@ -162,6 +177,9 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     private final TranslogConfig translogConfig;
     private final IndexEventListener indexEventListener;
     private final QueryCachingPolicy cachingPolicy;
+    
+    private final IndexService indexService; 
+    private final ClusterService clusterService;
 
 
     /**
@@ -184,8 +202,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     private RecoveryState recoveryState;
 
     private final RecoveryStats recoveryStats = new RecoveryStats();
-    private final MeanMetric refreshMetric = new MeanMetric();
-    private final MeanMetric flushMetric = new MeanMetric();
+    public final MeanMetric refreshMetric = new MeanMetric();
+    public final MeanMetric flushMetric = new MeanMetric();
 
     private final ShardEventListener shardEventListener = new ShardEventListener();
 
@@ -216,11 +234,28 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     @Nullable
     private final RefreshListeners refreshListeners;
 
+    private ConcurrentMap<Pair<String, Set<String>>, ParsedStatement.Prepared> cqlStatementCache = 
+            //new ConcurrentHashMap<Pair<String, Set<String>>, ParsedStatement.Prepared>();
+            new ConcurrentReferenceHashMap<Pair<String, Set<String>>, ParsedStatement.Prepared>(4, 0.9f, 1, ReferenceType.WEAK);
+    
+    public IndexShard(ShardRouting shardRouting, IndexSettings indexSettings, ShardPath path, Store store, IndexCache indexCache,
+            MapperService mapperService, SimilarityService similarityService, IndexFieldDataService indexFieldDataService,
+            @Nullable EngineFactory engineFactory,
+            IndexEventListener indexEventListener, IndexSearcherWrapper indexSearcherWrapper, ThreadPool threadPool, BigArrays bigArrays,
+            Engine.Warmer warmer, List<SearchOperationListener> searchOperationListener, List<IndexingOperationListener> listeners) throws IOException {
+        this( shardRouting,  indexSettings,  path,  store,  indexCache,
+             mapperService,  similarityService,  indexFieldDataService,
+            engineFactory,
+             indexEventListener,  indexSearcherWrapper,  threadPool,  bigArrays,
+            warmer, searchOperationListener, listeners, null, null);
+    }
+    
     public IndexShard(ShardRouting shardRouting, IndexSettings indexSettings, ShardPath path, Store store, IndexCache indexCache,
                       MapperService mapperService, SimilarityService similarityService, IndexFieldDataService indexFieldDataService,
                       @Nullable EngineFactory engineFactory,
                       IndexEventListener indexEventListener, IndexSearcherWrapper indexSearcherWrapper, ThreadPool threadPool, BigArrays bigArrays,
-                      Engine.Warmer warmer, List<SearchOperationListener> searchOperationListener, List<IndexingOperationListener> listeners) throws IOException {
+                      Engine.Warmer warmer, List<SearchOperationListener> searchOperationListener, List<IndexingOperationListener> listeners,
+                      IndexService indexService, ClusterService clusterService) throws IOException {
         super(shardRouting.shardId(), indexSettings);
         assert shardRouting.initializing();
         this.shardRouting = shardRouting;
@@ -243,12 +278,15 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         final List<SearchOperationListener> searchListenersList = new ArrayList<>(searchOperationListener);
         searchListenersList.add(searchStats);
         this.searchOperationListener = new SearchOperationListener.CompositeListener(searchListenersList, logger);
-        this.getService = new ShardGetService(indexSettings, this, mapperService);
+        this.getService = new ShardGetService(indexSettings, this, mapperService,indexService, clusterService);
         this.shardWarmerService = new ShardIndexWarmerService(shardId, indexSettings);
         this.requestCacheStats = new ShardRequestCache();
         this.shardFieldData = new ShardFieldData();
         this.indexFieldDataService = indexFieldDataService;
         this.shardBitsetFilterCache = new ShardBitsetFilterCache(shardId, indexSettings);
+        this.tokenRangesBitsetFilterCache = new ShardBitsetFilterCache(shardId, indexSettings);
+        this.indexService = indexService;
+        this.clusterService = clusterService;
         state = IndexShardState.CREATED;
         this.path = path;
         /* create engine config */
@@ -286,6 +324,10 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return true;
     }
 
+    public IndexService indexService() {
+        return this.indexService;
+    }
+    
     public ShardGetService getService() {
         return this.getService;
     }
@@ -294,6 +336,19 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return shardBitsetFilterCache;
     }
 
+    public ShardBitsetFilterCache tokenRangesBitsetFilterCache() {
+        return tokenRangesBitsetFilterCache;
+    }
+
+
+    public ParsedStatement.Prepared getCqlPreparedStatement(Pair<String, Set<String>> key) {
+        return cqlStatementCache.get(key);
+    }
+
+    public void putCqlPreparedStatement(Pair<String, Set<String>> key, ParsedStatement.Prepared query) {
+        cqlStatementCache.put(key, query);
+    }
+    
     public IndexFieldDataService indexFieldDataService() {
         return indexFieldDataService;
     }
@@ -363,6 +418,39 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return this.shardRouting;
     }
 
+
+    public void shardRouting(ShardRouting shardRouting) {
+        this.shardRouting = shardRouting;
+    }
+    
+    public synchronized void moveToStart() {
+        if (state == IndexShardState.CREATED || state == IndexShardState.POST_RECOVERY) {
+            // we want to refresh *before* we move to internal STARTED state
+            try {
+                getEngine().refresh("cluster_state_started");
+            } catch (Throwable t) {
+                logger.warn("failed to refresh due to move to cluster wide started", t);
+            }
+            /*
+            ShardRouting(ShardId shardId, String currentNodeId,
+                    String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
+                    UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize, Collection<Range<Token>> tokenRanges)
+            */
+            this.shardRouting = new ShardRouting(this.shardId, 
+                    this.clusterService.localNode().getId(), null,
+                    true, 
+                    ShardRoutingState.STARTED, 
+                    null,
+                    (state == IndexShardState.CREATED) ? IndexRoutingTable.UNASSIGNED_INFO_INDEX_CREATED : IndexRoutingTable.UNASSIGNED_INFO_INDEX_REOPEN, 
+                    null,
+                    1L, 
+                    AbstractSearchStrategy.EMPTY_RANGE_TOKEN_LIST);
+            changeState(IndexShardState.STARTED, "start shard [" + state + "]");
+            indexEventListener.afterIndexShardStarted(this);
+        }
+    }
+    
+    
     public QueryCachingPolicy getQueryCachingPolicy() {
         return cachingPolicy;
     }
@@ -610,11 +698,25 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         indexingOperationListeners.postDelete(shardId, delete, result);
         return result;
     }
-    public Engine.GetResult get(Engine.Get get) {
+    
+    
+    
+    public Engine.GetResult get(String type, String id) throws IOException {
         readAllowed();
-        return getEngine().get(get, this::acquireSearcher, (timeElapsed) -> refreshMetric.inc(timeElapsed));
+        return clusterService.fetchSourceInternal(this.indexService, type, id, this.mapperService.documentMapper(type).getColumnDefinitions());
     }
-
+    
+    
+    public Engine.GetResult get(Engine.Get get) {
+        //readAllowed();
+        //return getEngine().get(get, this::acquireSearcher, (timeElapsed) -> refreshMetric.inc(timeElapsed));
+        try {
+            return get(get.type(), get.id());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
     /**
      * Writes all indexing changes to disk and opens a new searcher reflecting all changes.  This can throw {@link AlreadyClosedException}.
      */
@@ -722,6 +824,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     public SegmentsStats segmentStats(boolean includeSegmentFileSizes) {
         SegmentsStats segmentsStats = getEngine().segmentsStats(includeSegmentFileSizes);
         segmentsStats.addBitsetMemoryInBytes(shardBitsetFilterCache.getMemorySizeInBytes());
+        segmentsStats.addTokenRangesBitsetMemoryInBytes(tokenRangesBitsetFilterCache.getMemorySizeInBytes());
         return segmentsStats;
     }
 
@@ -892,7 +995,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         // fail the engine. This will cause this shard to also be removed from the node's index service.
         getEngine().failEngine(reason, e);
     }
-
+    
     public Engine.Searcher acquireSearcher(String source) {
         readAllowed();
         final Engine engine = getEngine();
@@ -1441,7 +1544,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         recoveryState.getVerifyIndex().checkIndexTime(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - timeNS)));
     }
 
-    Engine getEngine() {
+    public Engine getEngine() {
         Engine engine = getEngineOrNull();
         if (engine == null) {
             throw new AlreadyClosedException("engine is closed");
@@ -1607,6 +1710,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     // pkg private for testing
     void persistMetadata(ShardRouting newRouting, @Nullable ShardRouting currentRouting) throws IOException {
+        /*
         assert newRouting != null : "newRouting must not be null";
 
         // only persist metadata if routing information that is persisted in shard state metadata actually changed
@@ -1626,6 +1730,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         } else {
             logger.trace("{} skip writing shard state, has been written before", shardId);
         }
+        */
     }
 
     private String getIndexUUID() {
@@ -1711,7 +1816,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
      * Returns the current translog durability mode
      */
     public Translog.Durability getTranslogDurability() {
-        return indexSettings.getTranslogDurability();
+        //return indexSettings.getTranslogDurability();
+        return Translog.Durability.ASYNC; // dummy settings
     }
 
     private final AtomicBoolean asyncFlushRunning = new AtomicBoolean();

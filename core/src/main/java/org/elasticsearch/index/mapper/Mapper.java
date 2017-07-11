@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.settings.Settings;
@@ -27,6 +28,7 @@ import org.elasticsearch.index.analysis.IndexAnalyzers;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.similarity.SimilarityProvider;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
@@ -34,6 +36,14 @@ import java.util.function.Supplier;
 
 public abstract class Mapper implements ToXContent, Iterable<Mapper> {
 
+    public static enum CqlCollection {
+        LIST, SET, SINGLETON
+    }
+    
+    public static enum CqlStruct {
+        UDT, MAP, TUPLE
+    }
+    
     public static class BuilderContext {
         private final Settings indexSettings;
         private final ContentPath contentPath;
@@ -163,7 +173,8 @@ public abstract class Mapper implements ToXContent, Iterable<Mapper> {
     }
 
     private final String simpleName;
-
+    private ByteBuffer   cqlName;
+    
     public Mapper(String simpleName) {
         Objects.requireNonNull(simpleName);
         this.simpleName = simpleName;
@@ -188,4 +199,33 @@ public abstract class Mapper implements ToXContent, Iterable<Mapper> {
      * so that the current mapper is not modified.
      */
     public abstract Mapper updateFieldType(Map<String, MappedFieldType> fullNameToFieldType);
+    
+
+    /**
+     * @return cql column name as a ByteBuffer
+     */
+    public ByteBuffer cqlName() {
+        if (cqlName == null) {
+            cqlName = ByteBufferUtil.bytes(this.simpleName);
+        }
+        return cqlName;
+    }
+
+    public abstract CqlCollection cqlCollection();
+    
+    public abstract String cqlCollectionTag();
+
+    public abstract CqlStruct cqlStruct();
+    
+    public abstract boolean cqlPartialUpdate();
+    
+    public abstract boolean cqlPartitionKey();
+    
+    public abstract boolean cqlStaticColumn();
+    
+    public abstract int cqlPrimaryKeyOrder();
+    
+    public String cqlType() {
+        return null;
+    }
 }

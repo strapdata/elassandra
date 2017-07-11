@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
@@ -30,6 +31,7 @@ import org.elasticsearch.common.collect.CopyOnWriteHashMap;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.support.XContentMapValues;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -51,6 +53,13 @@ public class ObjectMapper extends Mapper implements Cloneable {
         public static final boolean ENABLED = true;
         public static final Nested NESTED = Nested.NO;
         public static final Dynamic DYNAMIC = null; // not set, inherited from root
+        
+        public static final CqlCollection CQL_COLLECTION = CqlCollection.LIST;
+        public static final CqlStruct CQL_STRUCT = CqlStruct.UDT;
+        public static final boolean  CQL_MANDATORY = true; // if true, force a read if field is missing when indexing.
+        public static final boolean  CQL_PARTITION_KEY = false;
+        public static final boolean  CQL_STATIC_COLUMN = false;
+        public static final int  CQL_PRIMARY_KEY_ORDER = -1;
     }
 
     public enum Dynamic {
@@ -96,6 +105,7 @@ public class ObjectMapper extends Mapper implements Cloneable {
 
         protected boolean enabled = Defaults.ENABLED;
 
+        
         protected Nested nested = Defaults.NESTED;
 
         protected Dynamic dynamic = Defaults.DYNAMIC;
@@ -104,11 +114,60 @@ public class ObjectMapper extends Mapper implements Cloneable {
 
         protected final List<Mapper.Builder> mappersBuilders = new ArrayList<>();
 
+        protected CqlCollection cqlCollection = Defaults.CQL_COLLECTION;
+
+        protected CqlStruct cqlStruct = Defaults.CQL_STRUCT;
+        
+        protected String cqlUdtName = null;
+
+        protected boolean cqlMandatory = Defaults.CQL_MANDATORY;
+        
+        protected boolean cqlPartitionKey = Defaults.CQL_PARTITION_KEY;
+        
+        protected boolean cqlStaticColumn = Defaults.CQL_STATIC_COLUMN;
+        
+        protected int cqlPrimaryKeyOrder = Defaults.CQL_PRIMARY_KEY_ORDER;
+        
         public Builder(String name) {
             super(name);
             this.builder = (T) this;
         }
 
+        public T cqlCollection(CqlCollection cqlCollection) {
+            this.cqlCollection = cqlCollection;
+            return builder;
+        }
+        
+        public T cqlStruct(CqlStruct cqlStruct) {
+            this.cqlStruct = cqlStruct;
+            return builder;
+        }
+        
+        public T cqlUdtName(String cqlUdtName) {
+            this.cqlUdtName = cqlUdtName;
+            return builder;
+        }
+        
+        public T cqlPartialUpdate(boolean cqlPartialUpdate) {
+            this.cqlMandatory = cqlPartialUpdate;
+            return builder;
+        }
+        
+        public T cqlStaticColumn(boolean cqlStaticColumn) {
+            this.cqlStaticColumn = cqlStaticColumn;
+            return builder;
+        }
+        
+        public T cqlPartitionKey(boolean cqlPartitionKey) {
+            this.cqlPartitionKey = cqlPartitionKey;
+            return builder;
+        }
+        
+        public T cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
+            this.cqlPrimaryKeyOrder = cqlPrimaryKeyOrder;
+            return builder;
+        }
+        
         public T enabled(boolean enabled) {
             this.enabled = enabled;
             return builder;
@@ -149,15 +208,15 @@ public class ObjectMapper extends Mapper implements Cloneable {
             }
             context.path().remove();
 
-            ObjectMapper objectMapper = createMapper(name, context.path().pathAsText(name), enabled, nested, dynamic,
+            ObjectMapper objectMapper = createMapper(name, context.path().pathAsText(name), cqlCollection, cqlStruct, cqlUdtName, cqlMandatory, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn,  enabled, nested, dynamic,
                     includeInAll, mappers, context.indexSettings());
 
             return (Y) objectMapper;
         }
 
-        protected ObjectMapper createMapper(String name, String fullPath, boolean enabled, Nested nested, Dynamic dynamic,
+        protected ObjectMapper createMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, String cqlUdtName, boolean cqlPartialUpdate, boolean cqlPartitionKey, int cqlPrimaryKeyOrder, boolean cqlStaticColumn, boolean enabled, Nested nested, Dynamic dynamic,
                 Boolean includeInAll, Map<String, Mapper> mappers, @Nullable Settings settings) {
-            return new ObjectMapper(name, fullPath, enabled, nested, dynamic, includeInAll, mappers, settings);
+            return new ObjectMapper(name, fullPath, cqlCollection, cqlStruct, cqlUdtName, cqlPartialUpdate, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn, enabled, nested, dynamic, includeInAll, mappers, settings);
         }
     }
 
@@ -189,6 +248,37 @@ public class ObjectMapper extends Mapper implements Cloneable {
                 return true;
             } else if (fieldName.equals("enabled")) {
                 builder.enabled(TypeParsers.nodeBooleanValue(fieldName, "enabled", fieldNode));
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_MANDATORY)) {
+                builder.cqlPartialUpdate(TypeParsers.nodeBooleanValue(fieldName, TypeParsers.CQL_MANDATORY, fieldNode));
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_PARTITION_KEY)) {
+                builder.cqlPartitionKey(TypeParsers.nodeBooleanValue(fieldName, TypeParsers.CQL_PARTITION_KEY, fieldNode));
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_STATIC_COLUMN)) {
+                builder.cqlStaticColumn(TypeParsers.nodeBooleanValue(fieldName, TypeParsers.CQL_STATIC_COLUMN, fieldNode));
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_PRIMARY_KEY_ORDER)) {
+                builder.cqlPrimaryKeyOrder(XContentMapValues.nodeIntegerValue(fieldNode));
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_COLLECTION)) {
+                String value = StringUtils.lowerCase(fieldNode.toString());
+                switch (value) {
+                case "list": builder.cqlCollection(CqlCollection.LIST); break;
+                case "set": builder.cqlCollection(CqlCollection.SET); break;
+                case "singleton": builder.cqlCollection(CqlCollection.SINGLETON); break;
+                }
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_STRUCT)) {
+                String value = StringUtils.lowerCase(fieldNode.toString());
+                switch (value) {
+                case "tuple": builder.cqlStruct(CqlStruct.TUPLE); break;
+                case "map": builder.cqlStruct(CqlStruct.MAP); break;
+                case "udt": builder.cqlStruct(CqlStruct.UDT); break;
+                }
+                return true;
+            } else if (fieldName.equals(TypeParsers.CQL_UDT_NAME)) {
+                builder.cqlUdtName(fieldNode.toString());
                 return true;
             } else if (fieldName.equals("properties")) {
                 if (fieldNode instanceof Collection && ((Collection) fieldNode).isEmpty()) {
@@ -305,6 +395,14 @@ public class ObjectMapper extends Mapper implements Cloneable {
 
     private final Nested nested;
 
+    private final CqlCollection cqlCollection;
+    private final CqlStruct cqlStruct;
+    private final String cqlUdtName;
+    private final boolean cqlPartialUpdate;
+    private final boolean cqlPartitionKey;
+    private final boolean cqlStaticColumn;
+    private final int cqlPrimaryKeyOrder;
+    
     private final String nestedTypePathAsString;
     private final BytesRef nestedTypePathAsBytes;
 
@@ -316,7 +414,7 @@ public class ObjectMapper extends Mapper implements Cloneable {
 
     private volatile CopyOnWriteHashMap<String, Mapper> mappers;
 
-    ObjectMapper(String name, String fullPath, boolean enabled, Nested nested, Dynamic dynamic,
+    ObjectMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, String cqlUdtName, boolean cqlPartialUpdate, boolean cqlPartitionKey, int cqlPrimaryKeyOrder, boolean cqlStaticColumn, boolean enabled, Nested nested, Dynamic dynamic,
             Boolean includeInAll, Map<String, Mapper> mappers, Settings settings) {
         super(name);
         assert settings != null;
@@ -327,6 +425,13 @@ public class ObjectMapper extends Mapper implements Cloneable {
             }
         }
         this.fullPath = fullPath;
+        this.cqlCollection = cqlCollection;
+        this.cqlStruct = cqlStruct;
+        this.cqlUdtName = cqlUdtName;
+        this.cqlPartialUpdate = cqlPartialUpdate;
+        this.cqlPartitionKey = cqlPartitionKey;
+        this.cqlStaticColumn = cqlStaticColumn;
+        this.cqlPrimaryKeyOrder = cqlPrimaryKeyOrder;
         this.enabled = enabled;
         this.nested = nested;
         this.dynamic = dynamic;
@@ -491,6 +596,45 @@ public class ObjectMapper extends Mapper implements Cloneable {
         } else if (mappers.isEmpty() && custom == null) { // only write the object content type if there are no properties, otherwise, it is automatically detected
             builder.field("type", CONTENT_TYPE);
         }
+        
+        if (cqlStruct != Defaults.CQL_STRUCT) {
+            if (cqlStruct.equals(CqlStruct.MAP)) {
+                builder.field(TypeParsers.CQL_STRUCT, "map");
+            } else if (cqlStruct.equals(CqlStruct.UDT)) {
+                builder.field(TypeParsers.CQL_STRUCT, "udt");
+            } else if (cqlStruct.equals(CqlStruct.TUPLE)) {
+                builder.field(TypeParsers.CQL_STRUCT, "tuple");
+            }
+        }
+        
+        if (cqlCollection != Defaults.CQL_COLLECTION) {
+            if (cqlCollection.equals(CqlCollection.SET)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "set");
+            } else if (cqlCollection.equals(CqlCollection.LIST)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "list");
+            } else if (cqlCollection.equals(CqlCollection.SINGLETON)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "singleton");
+            }
+        }
+        if (cqlUdtName != null) {
+            builder.field(TypeParsers.CQL_UDT_NAME, cqlUdtName);
+        }
+        if (cqlPartialUpdate != Defaults.CQL_MANDATORY) {
+            builder.field(TypeParsers.CQL_MANDATORY, cqlPartialUpdate);
+        }
+        
+        if (cqlPartitionKey != Defaults.CQL_PARTITION_KEY) {
+            builder.field(TypeParsers.CQL_PARTITION_KEY, cqlPartitionKey);
+        }
+        
+        if (cqlPrimaryKeyOrder != Defaults.CQL_PRIMARY_KEY_ORDER) {
+            builder.field(TypeParsers.CQL_PRIMARY_KEY_ORDER, cqlPrimaryKeyOrder);
+        }
+        
+        if (cqlStaticColumn != Defaults.CQL_STATIC_COLUMN) {
+            builder.field(TypeParsers.CQL_STATIC_COLUMN, cqlStaticColumn);
+        }
+        
         if (dynamic != null) {
             builder.field("dynamic", dynamic.name().toLowerCase(Locale.ROOT));
         }
@@ -535,4 +679,47 @@ public class ObjectMapper extends Mapper implements Cloneable {
 
     }
 
+    public CqlCollection cqlCollection() {
+        return this.cqlCollection;
+    }
+    
+
+    public String cqlCollectionTag() {
+        if (this.cqlCollection.equals(CqlCollection.LIST)) return "list";
+        if (this.cqlCollection.equals(CqlCollection.SET)) return "set";
+        return "";
+    }
+    
+
+    public CqlStruct cqlStruct() {
+        return this.cqlStruct;
+    }
+
+    public String cqlUdtName() {
+        return this.cqlUdtName;
+    }
+    
+    public boolean cqlPartialUpdate() {
+        return this.cqlPartialUpdate;
+    }
+
+    @Override
+    public boolean cqlPartitionKey() {
+        return this.cqlPartitionKey;
+    }
+
+    @Override
+    public int cqlPrimaryKeyOrder() {
+        return this.cqlPrimaryKeyOrder;
+    }
+
+    @Override
+    public boolean cqlStaticColumn() {
+        return this.cqlStaticColumn;
+    }
+
+    @Override
+    public String cqlType() {
+        return null;
+    }
 }

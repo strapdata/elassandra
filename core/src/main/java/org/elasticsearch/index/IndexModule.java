@@ -20,8 +20,8 @@
 package org.elasticsearch.index;
 
 import org.apache.lucene.util.SetOnce;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
@@ -34,6 +34,7 @@ import org.elasticsearch.index.cache.query.DisabledQueryCache;
 import org.elasticsearch.index.cache.query.IndexQueryCache;
 import org.elasticsearch.index.cache.query.QueryCache;
 import org.elasticsearch.index.engine.EngineFactory;
+import org.elasticsearch.index.engine.VersionLessInternalEngineFactory;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.shard.IndexEventListener;
 import org.elasticsearch.index.shard.IndexSearcherWrapper;
@@ -359,6 +360,7 @@ public final class IndexModule {
         } else {
             queryCache = new DisabledQueryCache(indexSettings);
         }
+        engineFactory.set(new VersionLessInternalEngineFactory());
         return new IndexService(indexSettings, environment, xContentRegistry, new SimilarityService(indexSettings, similarities),
                 shardStoreDeleter, analysisRegistry, engineFactory.get(), circuitBreakerService, bigArrays, threadPool, scriptService,
                 clusterService, client, queryCache, store, eventListener, searcherWrapperFactory, mapperRegistry,

@@ -98,8 +98,8 @@ public abstract class TransportReplicationAction<
 
     private final TransportService transportService;
     protected final ClusterService clusterService;
-    private final IndicesService indicesService;
-    private final ShardStateAction shardStateAction;
+    protected final IndicesService indicesService;
+    //private final ShardStateAction shardStateAction;
     private final TransportRequestOptions transportOptions;
     private final String executor;
 
@@ -110,7 +110,7 @@ public abstract class TransportReplicationAction<
 
     protected TransportReplicationAction(Settings settings, String actionName, TransportService transportService,
                                          ClusterService clusterService, IndicesService indicesService,
-                                         ThreadPool threadPool, ShardStateAction shardStateAction,
+                                         ThreadPool threadPool,
                                          ActionFilters actionFilters,
                                          IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
                                          Supplier<ReplicaRequest> replicaRequest, String executor) {
@@ -118,7 +118,7 @@ public abstract class TransportReplicationAction<
         this.transportService = transportService;
         this.clusterService = clusterService;
         this.indicesService = indicesService;
-        this.shardStateAction = shardStateAction;
+        //this.shardStateAction = shardStateAction;
         this.executor = executor;
 
         this.transportPrimaryAction = actionName + "[p]";
@@ -127,11 +127,12 @@ public abstract class TransportReplicationAction<
         transportService.registerRequestHandler(transportPrimaryAction, () -> new ConcreteShardRequest<>(request), executor,
             new PrimaryOperationTransportHandler());
         // we must never reject on because of thread pool capacity on replicas
+       /*
         transportService.registerRequestHandler(transportReplicaAction,
             () -> new ConcreteShardRequest<>(replicaRequest),
             executor, true, true,
             new ReplicaOperationTransportHandler());
-
+        */
         this.transportOptions = transportOptions();
 
         this.replicasProxy = new ReplicasProxy();
@@ -284,6 +285,7 @@ public abstract class TransportReplicationAction<
         @Override
         public void onResponse(PrimaryShardReference primaryShardReference) {
             try {
+                /*
                 if (primaryShardReference.isRelocated()) {
                     primaryShardReference.close(); // release shard operation lock as soon as possible
                     setPhase(replicationTask, "primary_delegation");
@@ -321,6 +323,7 @@ public abstract class TransportReplicationAction<
                             primaryShardReference, executeOnReplicas)
                             .execute();
                 }
+                */
             } catch (Exception e) {
                 Releasables.closeWhileHandlingException(primaryShardReference); // release shard operation lock before responding to caller
                 onFailure(e);
@@ -646,7 +649,7 @@ public abstract class TransportReplicationAction<
 
             // resolve all derived request fields, so we can route and apply it
             resolveRequest(state.metaData(), indexMetaData, request);
-            assert request.shardId() != null : "request shardId must be set in resolveRequest";
+            //assert request.shardId() != null : "request shardId must be set in resolveRequest";
             assert request.waitForActiveShards() != ActiveShardCount.DEFAULT : "request waitForActiveShards must be set in resolveRequest";
 
             final ShardRouting primary = primary(state);
@@ -663,6 +666,7 @@ public abstract class TransportReplicationAction<
 
         private void performLocalAction(ClusterState state, ShardRouting primary, DiscoveryNode node) {
             setPhase(task, "waiting_on_primary");
+            request.setShardId(new ShardId(request.shardId().getIndex(), 0));
             if (logger.isTraceEnabled()) {
                 logger.trace("send action [{}] on primary [{}] for request [{}] with cluster state version [{}] to [{}] ",
                     transportPrimaryAction, request.shardId(), request, state.version(), primary.currentNodeId());
@@ -967,15 +971,19 @@ public abstract class TransportReplicationAction<
         @Override
         public void failShard(ShardRouting replica, long primaryTerm, String message, Exception exception,
                               Runnable onSuccess, Consumer<Exception> onPrimaryDemoted, Consumer<Exception> onIgnoredFailure) {
+            /*
             shardStateAction.remoteShardFailed(replica.shardId(), replica.allocationId().getId(), primaryTerm, message, exception,
                 createListener(onSuccess, onPrimaryDemoted, onIgnoredFailure));
+                */
         }
 
         @Override
         public void markShardCopyAsStale(ShardId shardId, String allocationId, long primaryTerm, Runnable onSuccess,
                                          Consumer<Exception> onPrimaryDemoted, Consumer<Exception> onIgnoredFailure) {
+            /*
             shardStateAction.remoteShardFailed(shardId, allocationId, primaryTerm, "mark copy as stale", null,
                 createListener(onSuccess, onPrimaryDemoted, onIgnoredFailure));
+                */
         }
 
         private ShardStateAction.Listener createListener(final Runnable onSuccess, final Consumer<Exception> onPrimaryDemoted,

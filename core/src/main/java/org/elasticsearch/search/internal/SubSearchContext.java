@@ -20,6 +20,7 @@ package org.elasticsearch.search.internal;
 
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.Counter;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.query.ParsedQuery;
 import org.elasticsearch.search.aggregations.SearchContextAggregations;
@@ -65,7 +66,7 @@ public class SubSearchContext extends FilteredSearchContext {
     private boolean explain;
     private boolean trackScores;
     private boolean version;
-
+ 
     public SubSearchContext(SearchContext context) {
         super(context);
         this.fetchSearchResult = new FetchSearchResult();

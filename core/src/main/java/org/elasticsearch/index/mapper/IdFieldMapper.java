@@ -172,6 +172,15 @@ public class IdFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object _id) throws IOException {
+        String id = (String) _id;
+        //context.sourceToParse().id(id);
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            context.doc().add(new Field(fieldType().name(), context.sourceToParse().id(), fieldType()));
+        }
+    }
+    
+    @Override
     protected String contentType() {
         return CONTENT_TYPE;
     }

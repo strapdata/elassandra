@@ -198,14 +198,19 @@ public final class Settings implements ToXContent {
         int maxIndex = -1;
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             if (isArray) {
-                try {
-                    int index = Integer.parseInt(entry.getKey());
-                    if (index >= 0) {
-                        maxIndex = Math.max(maxIndex, index);
-                    } else {
+                // avoid cost of NumberFormatException
+                if (org.apache.commons.lang3.math.NumberUtils.isNumber(entry.getKey())) {
+                    try {
+                        int index = Integer.parseInt(entry.getKey());
+                        if (index >= 0) {
+                            maxIndex = Math.max(maxIndex, index);
+                        } else {
+                            isArray = false;
+                        }
+                    } catch (NumberFormatException ex) {
                         isArray = false;
                     }
-                } catch (NumberFormatException ex) {
+                } else {
                     isArray = false;
                 }
             }

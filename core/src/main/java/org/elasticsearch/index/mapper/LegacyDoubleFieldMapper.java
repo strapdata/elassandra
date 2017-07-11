@@ -335,4 +335,9 @@ public class LegacyDoubleFieldMapper extends LegacyNumberFieldMapper {
         }
     }
 
+    @Override
+    public String cqlType() {
+        return "double";
+    }
+
 }

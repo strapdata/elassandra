@@ -19,6 +19,9 @@
 
 package org.elasticsearch.common.io.stream;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.Token;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
@@ -42,6 +45,7 @@ import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryNotEmptyException;
@@ -619,6 +623,13 @@ public abstract class StreamOutput extends OutputStream {
         writers.put(GeoPoint.class, (o, v) -> {
             o.writeByte((byte) 22);
             o.writeGeoPoint((GeoPoint) v);
+        });
+        writers.put(Token.class, (o, v) -> {
+            o.writeByte((byte) 64);
+            IPartitioner p = DatabaseDescriptor.getPartitioner();
+            ByteBuffer b = p.getTokenFactory().toByteArray((Token) v);
+            o.writeVInt(b.array().length);
+            o.writeBytes(b.array());
         });
         WRITERS = Collections.unmodifiableMap(writers);
     }

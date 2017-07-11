@@ -61,7 +61,7 @@ public class PutMappingRequest extends AcknowledgedRequest<PutMappingRequest> im
 
     private static ObjectHashSet<String> RESERVED_FIELDS = ObjectHashSet.from(
             "_uid", "_id", "_type", "_source",  "_all", "_analyzer", "_parent", "_routing", "_index",
-            "_size", "_timestamp", "_ttl", "_field_names"
+            "_size", "_timestamp", "_ttl", "_field_names", "_token", "_node"
     );
 
     private String[] indices;

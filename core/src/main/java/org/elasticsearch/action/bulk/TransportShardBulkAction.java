@@ -19,8 +19,12 @@
 
 package org.elasticsearch.action.bulk;
 
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
+import org.apache.lucene.index.Term;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.DocWriteResponse;
@@ -29,19 +33,17 @@ import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.action.support.replication.ReplicationOperation;
 import org.elasticsearch.action.support.TransportActions;
+import org.elasticsearch.action.support.replication.ReplicationOperation;
 import org.elasticsearch.action.support.replication.ReplicationResponse.ShardInfo;
 import org.elasticsearch.action.support.replication.TransportWriteAction;
 import org.elasticsearch.action.update.UpdateHelper;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
@@ -54,6 +56,7 @@ import org.elasticsearch.index.engine.VersionConflictEngineException;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.Mapping;
 import org.elasticsearch.index.mapper.SourceToParse;
+import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.translog.Translog;
@@ -73,17 +76,21 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
     private final UpdateHelper updateHelper;
     private final boolean allowIdGeneration;
     private final MappingUpdatedAction mappingUpdatedAction;
-
+    private final IndicesService indicesService;
+    private final ClusterService clusterService;
+    
     @Inject
     public TransportShardBulkAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                    IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                    IndicesService indicesService, ThreadPool threadPool,
                                     MappingUpdatedAction mappingUpdatedAction, UpdateHelper updateHelper, ActionFilters actionFilters,
                                     IndexNameExpressionResolver indexNameExpressionResolver) {
-        super(settings, ACTION_NAME, transportService, clusterService, indicesService, threadPool, shardStateAction, actionFilters,
+        super(settings, ACTION_NAME, transportService, clusterService, indicesService, threadPool, actionFilters,
                 indexNameExpressionResolver, BulkShardRequest::new, BulkShardRequest::new, ThreadPool.Names.BULK);
         this.updateHelper = updateHelper;
         this.allowIdGeneration = settings.getAsBoolean("action.allow_id_generation", true);
         this.mappingUpdatedAction = mappingUpdatedAction;
+        this.indicesService = indicesService;
+        this.clusterService = clusterService;
     }
 
     @Override
@@ -140,7 +147,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                 case CREATE:
                 case INDEX:
                     final IndexRequest indexRequest = (IndexRequest) itemRequest;
-                    Engine.IndexResult indexResult = executeIndexRequestOnPrimary(indexRequest, primary, mappingUpdatedAction);
+                    Engine.IndexResult indexResult = executeIndexRequestOnPrimary(indexRequest, primary, mappingUpdatedAction, this.clusterService, this.indicesService, metaData);
                     if (indexResult.hasFailure()) {
                         response = null;
                     } else {
@@ -164,7 +171,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                     break;
                 case DELETE:
                     final DeleteRequest deleteRequest = (DeleteRequest) itemRequest;
-                    Engine.DeleteResult deleteResult = executeDeleteRequestOnPrimary(deleteRequest, primary, mappingUpdatedAction);
+                    Engine.DeleteResult deleteResult = executeDeleteRequestOnPrimary(deleteRequest, primary, mappingUpdatedAction, clusterService);
                     if (deleteResult.hasFailure()) {
                         response = null;
                     } else {
@@ -280,7 +287,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                     IndexRequest indexRequest = translate.action();
                     MappingMetaData mappingMd = metaData.mappingOrDefault(indexRequest.type());
                     indexRequest.process(mappingMd, allowIdGeneration, request.index());
-                    updateOperationResult = executeIndexRequestOnPrimary(indexRequest, primary, mappingUpdatedAction);
+                    updateOperationResult = executeIndexRequestOnPrimary(indexRequest, primary, mappingUpdatedAction, this.clusterService, this.indicesService, metaData);
                     if (updateOperationResult.hasFailure() == false) {
                         // update the version on request so it will happen on the replicas
                         final long version = updateOperationResult.getVersion();
@@ -291,7 +298,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                     break;
                 case DELETED:
                     DeleteRequest deleteRequest = translate.action();
-                    updateOperationResult = executeDeleteRequestOnPrimary(deleteRequest, primary, mappingUpdatedAction);
+                    updateOperationResult = executeDeleteRequestOnPrimary(deleteRequest, primary, mappingUpdatedAction, this.clusterService);
                     if (updateOperationResult.hasFailure() == false) {
                         // update the request with the version so it will go to the replicas
                         deleteRequest.versionType(deleteRequest.versionType().versionTypeForReplicationAndRecovery());
@@ -452,7 +459,8 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
 
     /** Executes index operation on primary shard after updates mapping if dynamic mappings are found */
     public static Engine.IndexResult executeIndexRequestOnPrimary(IndexRequest request, IndexShard primary,
-                                                                  MappingUpdatedAction mappingUpdatedAction) throws Exception {
+                                                                  MappingUpdatedAction mappingUpdatedAction, 
+                                                                  ClusterService clusterService, IndicesService indicesService, IndexMetaData metaData) throws Exception {
         Engine.Index operation;
         try {
             operation = prepareIndexOperationOnPrimary(request, primary);
@@ -481,11 +489,18 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                         "Dynamic mappings are not available on the node that holds the primary yet");
             }
         }
-        return primary.index(operation);
+        
+        Long writetime = new Long(1);
+        clusterService.insertDocument(indicesService, request, metaData);
+
+        assert request.versionType().validateVersionForWrites(request.version());
+
+        return new Engine.IndexResult(1L, true);
+        //return primary.index(operation);
     }
 
     public static Engine.DeleteResult executeDeleteRequestOnPrimary(DeleteRequest request, IndexShard primary,
-            MappingUpdatedAction mappingUpdatedAction) throws Exception {
+            MappingUpdatedAction mappingUpdatedAction, ClusterService clusterService) throws Exception {
         boolean mappingUpdateNeeded = false;
         final ShardId shardId = primary.shardId();
         if (primary.indexSettings().isSingleType()) {
@@ -513,8 +528,10 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                         "Dynamic mappings are not available on the node that holds the primary yet");
             }
         }
-        final Engine.Delete delete = primary.prepareDeleteOnPrimary(request.type(), request.id(), request.version(), request.versionType());
-        return primary.delete(delete);
+        clusterService.deleteRow(primary.indexService(), request.type(), request.id(), request.waitForActiveShards().toCassandraConsistencyLevel());
+        return new Engine.DeleteResult(1L, true);
+        //final Engine.Delete delete = primary.prepareDeleteOnPrimary(request.type(), request.id(), request.version(), request.versionType());
+        //return primary.delete(delete);
     }
 
     public static Engine.DeleteResult executeDeleteRequestOnReplica(DeleteRequest request, IndexShard replica) throws IOException {

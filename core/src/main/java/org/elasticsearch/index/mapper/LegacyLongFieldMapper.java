@@ -322,4 +322,9 @@ public class LegacyLongFieldMapper extends LegacyNumberFieldMapper {
             return Long.toString(number);
         }
     }
+
+    @Override
+    public String cqlType() {
+        return "bigint";
+    }
 }

@@ -42,9 +42,9 @@ public class TransportShardFlushAction extends TransportReplicationAction<ShardF
 
     @Inject
     public TransportShardFlushAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                     IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                     IndicesService indicesService, ThreadPool threadPool,
                                      ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver) {
-        super(settings, NAME, transportService, clusterService, indicesService, threadPool, shardStateAction,
+        super(settings, NAME, transportService, clusterService, indicesService, threadPool,
             actionFilters, indexNameExpressionResolver, ShardFlushRequest::new, ShardFlushRequest::new, ThreadPool.Names.FLUSH);
     }
 

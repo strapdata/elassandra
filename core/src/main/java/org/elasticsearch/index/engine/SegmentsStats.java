@@ -47,7 +47,8 @@ public class SegmentsStats implements Streamable, ToXContent {
     private long maxUnsafeAutoIdTimestamp = Long.MIN_VALUE;
     private long bitsetMemoryInBytes;
     private ImmutableOpenMap<String, Long> fileSizes = ImmutableOpenMap.of();
-
+    private long tokenRangesBitsetMemoryInBytes;
+    
     /*
      * A map to provide a best-effort approach describing Lucene index files.
      *
@@ -122,6 +123,11 @@ public class SegmentsStats implements Streamable, ToXContent {
     public void addBitsetMemoryInBytes(long bitsetMemoryInBytes) {
         this.bitsetMemoryInBytes += bitsetMemoryInBytes;
     }
+    
+
+    public void addTokenRangesBitsetMemoryInBytes(long bitsetMemoryInBytes) {
+        this.tokenRangesBitsetMemoryInBytes += bitsetMemoryInBytes;
+    }
 
     public void addFileSizes(ImmutableOpenMap<String, Long> fileSizes) {
         ImmutableOpenMap.Builder<String, Long> map = ImmutableOpenMap.builder(this.fileSizes);
@@ -154,6 +160,7 @@ public class SegmentsStats implements Streamable, ToXContent {
         addIndexWriterMemoryInBytes(mergeStats.indexWriterMemoryInBytes);
         addVersionMapMemoryInBytes(mergeStats.versionMapMemoryInBytes);
         addBitsetMemoryInBytes(mergeStats.bitsetMemoryInBytes);
+        addTokenRangesBitsetMemoryInBytes(mergeStats.tokenRangesBitsetMemoryInBytes);
         addFileSizes(mergeStats.fileSizes);
     }
 
@@ -300,6 +307,8 @@ public class SegmentsStats implements Streamable, ToXContent {
         builder.byteSizeField(Fields.INDEX_WRITER_MEMORY_IN_BYTES, Fields.INDEX_WRITER_MEMORY, indexWriterMemoryInBytes);
         builder.byteSizeField(Fields.VERSION_MAP_MEMORY_IN_BYTES, Fields.VERSION_MAP_MEMORY, versionMapMemoryInBytes);
         builder.byteSizeField(Fields.FIXED_BIT_SET_MEMORY_IN_BYTES, Fields.FIXED_BIT_SET, bitsetMemoryInBytes);
+        builder.byteSizeField(Fields.TOKEN_RANGES_BIT_SET_MEMORY_IN_BYTES, Fields.TOKEN_RANGES_BIT_SET, tokenRangesBitsetMemoryInBytes);
+        
         builder.field(Fields.MAX_UNSAFE_AUTO_ID_TIMESTAMP, maxUnsafeAutoIdTimestamp);
         builder.startObject(Fields.FILE_SIZES);
         for (Iterator<ObjectObjectCursor<String, Long>> it = fileSizes.iterator(); it.hasNext();) {
@@ -338,6 +347,8 @@ public class SegmentsStats implements Streamable, ToXContent {
         static final String MAX_UNSAFE_AUTO_ID_TIMESTAMP = "max_unsafe_auto_id_timestamp";
         static final String FIXED_BIT_SET = "fixed_bit_set";
         static final String FIXED_BIT_SET_MEMORY_IN_BYTES = "fixed_bit_set_memory_in_bytes";
+        static final String TOKEN_RANGES_BIT_SET = "token_ranges_bit_set";
+        static final String TOKEN_RANGES_BIT_SET_MEMORY_IN_BYTES = "token_ranges_bit_set_memory_in_bytes";
         static final String FILE_SIZES = "file_sizes";
         static final String SIZE = "size";
         static final String SIZE_IN_BYTES = "size_in_bytes";
@@ -357,6 +368,7 @@ public class SegmentsStats implements Streamable, ToXContent {
         indexWriterMemoryInBytes = in.readLong();
         versionMapMemoryInBytes = in.readLong();
         bitsetMemoryInBytes = in.readLong();
+        tokenRangesBitsetMemoryInBytes = in.readLong();
         maxUnsafeAutoIdTimestamp = in.readLong();
 
         int size = in.readVInt();
@@ -382,6 +394,7 @@ public class SegmentsStats implements Streamable, ToXContent {
         out.writeLong(indexWriterMemoryInBytes);
         out.writeLong(versionMapMemoryInBytes);
         out.writeLong(bitsetMemoryInBytes);
+        out.writeLong(tokenRangesBitsetMemoryInBytes);
         out.writeLong(maxUnsafeAutoIdTimestamp);
 
         out.writeVInt(fileSizes.size());

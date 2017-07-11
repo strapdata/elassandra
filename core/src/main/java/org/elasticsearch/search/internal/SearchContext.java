@@ -23,8 +23,11 @@ import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.Counter;
+import org.elassandra.cluster.service.ClusterService;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.search.SearchTask;
 import org.elasticsearch.action.search.SearchType;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.lease.Releasables;
@@ -38,7 +41,6 @@ import org.elasticsearch.index.fielddata.IndexFieldDataService;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ObjectMapper;
-import org.elasticsearch.search.collapse.CollapseContext;
 import org.elasticsearch.index.query.ParsedQuery;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.shard.IndexShard;
@@ -46,6 +48,7 @@ import org.elasticsearch.index.similarity.SimilarityService;
 import org.elasticsearch.search.SearchExtBuilder;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.aggregations.SearchContextAggregations;
+import org.elasticsearch.search.collapse.CollapseContext;
 import org.elasticsearch.search.dfs.DfsSearchResult;
 import org.elasticsearch.search.fetch.FetchPhase;
 import org.elasticsearch.search.fetch.FetchSearchResult;
@@ -96,6 +99,10 @@ public abstract class SearchContext extends AbstractRefCounted implements Releas
 
     public abstract boolean isCancelled();
 
+    protected ClusterState clusterState = null;
+    protected SearchProcessor processor = null;
+    protected boolean includeNode;
+    
     @Override
     public final void close() {
         if (closed.compareAndSet(false, true)) { // prevent double closing
@@ -125,6 +132,30 @@ public abstract class SearchContext extends AbstractRefCounted implements Releas
      */
     public abstract void preProcess(boolean rewrite);
 
+    public boolean includeNode() {
+        return this.includeNode;
+    }
+    
+    public void includeNode(boolean includeNode) {
+        this.includeNode = includeNode;
+    }
+
+    public ClusterService clusterService() {
+        return null;
+    }
+
+    public ClusterState getClusterState() {
+        return this.clusterState;
+    }
+    
+    public void searchProcessor(SearchProcessor processor) {
+        this.processor = processor;
+    }
+    
+    public SearchProcessor searchProcessor() {
+        return processor;
+    }
+    
     /** Automatically apply all required filters to the given query such as
      *  alias filters, types filters, etc. */
     public abstract Query buildFilteredQuery(Query query);

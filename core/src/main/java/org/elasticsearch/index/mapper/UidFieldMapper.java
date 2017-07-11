@@ -22,8 +22,9 @@ package org.elasticsearch.index.mapper;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.search.Query;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.search.MatchNoDocsQuery;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermInSetQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
@@ -31,6 +32,7 @@ import org.apache.lucene.util.StringHelper;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.lucene.BytesRefs;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.IndexSettings;
@@ -39,6 +41,7 @@ import org.elasticsearch.index.fielddata.IndexFieldDataCache;
 import org.elasticsearch.index.fielddata.IndexOrdinalsFieldData;
 import org.elasticsearch.index.fielddata.UidIndexFieldData;
 import org.elasticsearch.index.fielddata.plain.PagedBytesIndexFieldData;
+import org.elasticsearch.index.mapper.ParseContext.Document;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 
@@ -114,6 +117,14 @@ public class UidFieldMapper extends MetadataFieldMapper {
             return CONTENT_TYPE;
         }
 
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            return Uid.createUid(value.toString()).id();
+        }
+        
         @Override
         public IndexFieldData.Builder fielddataBuilder() {
             if (indexOptions() == IndexOptions.NONE) {
@@ -216,10 +227,38 @@ public class UidFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        Uid value = (Uid)object;
+        Field uid = new Field(NAME, value.toString(), fieldType);
+        //context.uid(uid);
+        context.doc().add(uid);
+    }
+
+    @Override
+    public void postCreate(ParseContext context) throws IOException {
+        // since we did not have the uid in the pre phase, we did not add it automatically to the nested docs
+        // as they were created we need to make sure we add it to all the nested docs...
+        if (context.docs().size() > 1) {
+            final IndexableField uidField = context.rootDoc().getField(UidFieldMapper.NAME);
+            assert uidField != null;
+            // we need to go over the docs and add it...
+            for (int i = 1; i < context.docs().size(); i++) {
+                final Document doc = context.docs().get(i);
+                doc.add(new Field(UidFieldMapper.NAME, uidField.stringValue(), Defaults.NESTED_FIELD_TYPE));
+            }
+        }
+    }
+
+    
+    @Override
     protected String contentType() {
         return CONTENT_TYPE;
     }
 
+    public Term term(String uid) {
+        return new Term(fieldType().name(), BytesRefs.toBytesRef(uid));
+    }
+    
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         return builder;

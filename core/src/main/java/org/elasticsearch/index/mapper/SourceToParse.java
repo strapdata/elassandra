@@ -58,6 +58,8 @@ public class SourceToParse {
 
     private long ttl;
 
+    private long token;
+
     private XContentType xContentType;
 
     private SourceToParse(Origin origin, String index, String type, String id, BytesReference source, XContentType xContentType) {
@@ -90,7 +92,7 @@ public class SourceToParse {
     public String id() {
         return this.id;
     }
-
+    
     public String parent() {
         return this.parentId;
     }
@@ -131,6 +133,15 @@ public class SourceToParse {
         return this.ttl;
     }
 
+    public Long token() {
+        return this.token;
+    }
+
+    public SourceToParse token(Long token) {
+        this.token = token;
+        return this;
+    }
+    
     public SourceToParse ttl(TimeValue ttl) {
         if (ttl == null) {
             this.ttl = -1;

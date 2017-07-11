@@ -827,7 +827,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
         void processPendingDeletes(Index index, IndexSettings indexSettings, TimeValue timeValue)
             throws IOException, InterruptedException, ShardLockObtainFailedException;
 
-        enum IndexRemovalReason {
+        public enum IndexRemovalReason {
             /**
              * Shard of this index were previously assigned to this node but all shards have been relocated.
              * The index should be removed and all associated resources released. Persistent parts of the index

@@ -32,7 +32,7 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -129,7 +129,8 @@ public class LocalAllocateDangledIndices extends AbstractComponent {
                     }
                     MetaData.Builder metaData = MetaData.builder(currentState.metaData());
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+                    //RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(LocalAllocateDangledIndices.this.clusterService, currentState);
                     final Version minIndexCompatibilityVersion = currentState.getNodes().getMaxNodeVersion()
                         .minimumIndexCompatibilityVersion();
                     boolean importNeeded = false;

@@ -73,6 +73,7 @@ public class MetaStateService extends AbstractComponent {
         return metaDataBuilder.build();
     }
 
+    
     /**
      * Loads the index state for the provided index name, returning null if doesn't exists.
      */
@@ -111,6 +112,23 @@ public class MetaStateService extends AbstractComponent {
      */
     MetaData loadGlobalState() throws IOException {
         MetaData globalState = MetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, nodeEnv.nodeDataPaths());
+        // ES 2.0 now requires units for all time and byte-sized settings, so we add the default unit if it's missing
+        // TODO: can we somehow only do this for pre-2.0 cluster state?
+        if (globalState != null) {
+            return MetaData.addDefaultUnitsIfNeeded(logger, globalState);
+        } else {
+            return null;
+        }
+    }
+    
+    /**
+     * Decode global state from a string.
+     * @param stringMetaData
+     * @return
+     * @throws Exception
+     */
+    public MetaData loadGlobalState(String stringMetaData) throws Exception {
+        MetaData globalState = MetaData.CASSANDRA_FORMAT.loadLatestState(logger, namedXContentRegistry, stringMetaData);
         // ES 2.0 now requires units for all time and byte-sized settings, so we add the default unit if it's missing
         // TODO: can we somehow only do this for pre-2.0 cluster state?
         if (globalState != null) {

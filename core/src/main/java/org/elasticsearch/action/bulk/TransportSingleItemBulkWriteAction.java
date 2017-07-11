@@ -53,11 +53,11 @@ public abstract class TransportSingleItemBulkWriteAction<
 
     protected TransportSingleItemBulkWriteAction(Settings settings, String actionName, TransportService transportService,
                                                  ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool,
-                                                 ShardStateAction shardStateAction, ActionFilters actionFilters,
+                                                 ActionFilters actionFilters,
                                                  IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
                                                  Supplier<Request> replicaRequest, String executor,
                                                  TransportBulkAction bulkAction, TransportShardBulkAction shardBulkAction) {
-        super(settings, actionName, transportService, clusterService, indicesService, threadPool, shardStateAction, actionFilters,
+        super(settings, actionName, transportService, clusterService, indicesService, threadPool, actionFilters,
             indexNameExpressionResolver, request, replicaRequest, executor);
         this.bulkAction = bulkAction;
         this.shardBulkAction = shardBulkAction;

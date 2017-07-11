@@ -258,6 +258,25 @@ public class BooleanFieldMapper extends FieldMapper {
             fields.add(new SortedNumericDocValuesField(fieldType().name(), value ? 1 : 0));
         }
     }
+    
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        Boolean value = (Boolean) object;
+        if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored() && !fieldType().hasDocValues()) {
+            return;
+        }
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+               return;
+            }
+            value = fieldType().nullValue();
+        }
+        context.doc().add(new Field(fieldType().name(), value ? "T" : "F", fieldType()));
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedNumericDocValuesField(fieldType().name(), value ? 1 : 0));
+        }
+        super.createField(context,value);
+    }
 
     @Override
     protected String contentType() {
@@ -270,5 +289,10 @@ public class BooleanFieldMapper extends FieldMapper {
         if (includeDefaults || fieldType().nullValue() != null) {
             builder.field("null_value", fieldType().nullValue());
         }
+    }
+
+    @Override
+    public String cqlType() {
+        return "boolean";
     }
 }

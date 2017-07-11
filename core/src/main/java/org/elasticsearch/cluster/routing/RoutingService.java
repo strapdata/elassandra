@@ -114,6 +114,11 @@ public class RoutingService extends AbstractLifecycleComponent {
                         logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected failure during [{}], current state version [{}]", source, state.version()), e);
                     }
                 }
+
+                @Override
+                public boolean doPresistMetaData() {
+                    return false;
+                }
             });
         } catch (Exception e) {
             rerouting.set(false);

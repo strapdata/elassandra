@@ -20,6 +20,9 @@
 package org.elasticsearch.search;
 
 import org.apache.lucene.search.BooleanQuery;
+import org.elassandra.cluster.service.ClusterService;
+import org.elassandra.search.aggregations.bucket.token.InternalTokenRange;
+import org.elassandra.search.aggregations.bucket.token.TokenRangeAggregationBuilder;
 import org.elasticsearch.common.NamedRegistry;
 import org.elasticsearch.common.geo.ShapesAvailability;
 import org.elasticsearch.common.geo.builders.ShapeBuilders;
@@ -31,6 +34,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.ParseFieldRegistry;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.BoostingQueryBuilder;
 import org.elasticsearch.index.query.CommonTermsQueryBuilder;
@@ -277,11 +281,17 @@ public class SearchModule {
     private final List<FetchSubPhase> fetchSubPhases = new ArrayList<>();
 
     private final Settings settings;
+    private final ClusterService clusterService;
     private final List<NamedWriteableRegistry.Entry> namedWriteables = new ArrayList<>();
     private final List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>();
 
     public SearchModule(Settings settings, boolean transportClient, List<SearchPlugin> plugins) {
+        this(settings, transportClient, plugins, null);
+    }
+    
+    public SearchModule(Settings settings, boolean transportClient, List<SearchPlugin> plugins, ClusterService clusterService) {
         this.settings = settings;
+        this.clusterService = clusterService;
         this.transportClient = transportClient;
         registerSuggesters(plugins);
         highlighters = setupHighlighters(settings, plugins);
@@ -387,6 +397,8 @@ public class SearchModule {
                 DateRangeAggregationBuilder::parse).addResultReader(InternalDateRange::new));
         registerAggregation(new AggregationSpec(IpRangeAggregationBuilder.NAME, IpRangeAggregationBuilder::new,
                 IpRangeAggregationBuilder::parse).addResultReader(InternalBinaryRange::new));
+        registerAggregation(new AggregationSpec(TokenRangeAggregationBuilder.NAME, TokenRangeAggregationBuilder::new,
+                TokenRangeAggregationBuilder::parse).addResultReader(InternalTokenRange::new));
         registerAggregation(new AggregationSpec(HistogramAggregationBuilder.NAME, HistogramAggregationBuilder::new,
                 HistogramAggregationBuilder::parse).addResultReader(InternalHistogram::new));
         registerAggregation(new AggregationSpec(DateHistogramAggregationBuilder.NAME, DateHistogramAggregationBuilder::new,
@@ -766,6 +778,6 @@ public class SearchModule {
     }
 
     public FetchPhase getFetchPhase() {
-        return new FetchPhase(fetchSubPhases);
+        return new FetchPhase(fetchSubPhases, clusterService);
     }
 }

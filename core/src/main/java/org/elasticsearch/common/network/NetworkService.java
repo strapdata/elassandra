@@ -267,6 +267,12 @@ public class NetworkService extends AbstractComponent {
                     }
             }
         }
+        
+        // if host is a string representation of InetAddress, nothing to resolve...
+        try {
+            return new InetAddress[] { com.google.common.net.InetAddresses.forString(host) };
+        } catch (IllegalArgumentException e) {
+        }
         return InetAddress.getAllByName(host);
     }
 }

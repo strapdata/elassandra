@@ -22,6 +22,7 @@ package org.elasticsearch.cluster.service;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
+import org.elassandra.ConcurrentMetaDataUpdateException;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.cluster.AckedClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterChangedEvent;
@@ -35,6 +36,7 @@ import org.elasticsearch.cluster.ClusterStateTaskConfig;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor.ClusterTasksResult;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
+import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.LocalNodeMasterListener;
 import org.elasticsearch.cluster.NodeConnectionsService;
 import org.elasticsearch.cluster.TimeoutClusterStateListener;
@@ -44,6 +46,7 @@ import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.common.Nullable;
@@ -98,7 +101,7 @@ public class ClusterService extends AbstractLifecycleComponent {
                     Property.Dynamic, Property.NodeScope);
 
     public static final String UPDATE_THREAD_NAME = "clusterService#updateTask";
-    private final ThreadPool threadPool;
+    protected final ThreadPool threadPool;
     private final ClusterName clusterName;
     private final Supplier<DiscoveryNode> localNodeSupplier;
 
@@ -106,7 +109,7 @@ public class ClusterService extends AbstractLifecycleComponent {
 
     private final OperationRouting operationRouting;
 
-    private final ClusterSettings clusterSettings;
+    protected final ClusterSettings clusterSettings;
 
     private TimeValue slowTaskLoggingThreshold;
 
@@ -116,14 +119,14 @@ public class ClusterService extends AbstractLifecycleComponent {
     /**
      * Those 3 state listeners are changing infrequently - CopyOnWriteArrayList is just fine
      */
-    private final Collection<ClusterStateApplier> highPriorityStateAppliers = new CopyOnWriteArrayList<>();
-    private final Collection<ClusterStateApplier> normalPriorityStateAppliers = new CopyOnWriteArrayList<>();
-    private final Collection<ClusterStateApplier> lowPriorityStateAppliers = new CopyOnWriteArrayList<>();
-    private final Iterable<ClusterStateApplier> clusterStateAppliers = Iterables.concat(highPriorityStateAppliers,
+    protected final Collection<ClusterStateApplier> highPriorityStateAppliers = new CopyOnWriteArrayList<>();
+    protected final Collection<ClusterStateApplier> normalPriorityStateAppliers = new CopyOnWriteArrayList<>();
+    protected final Collection<ClusterStateApplier> lowPriorityStateAppliers = new CopyOnWriteArrayList<>();
+    protected final Iterable<ClusterStateApplier> clusterStateAppliers = Iterables.concat(highPriorityStateAppliers,
         normalPriorityStateAppliers, lowPriorityStateAppliers);
 
-    private final Collection<ClusterStateListener> clusterStateListeners = new CopyOnWriteArrayList<>();
-    private final Collection<TimeoutClusterStateListener> timeoutClusterStateListeners =
+    protected final Collection<ClusterStateListener> clusterStateListeners = new CopyOnWriteArrayList<>();
+    protected final Collection<TimeoutClusterStateListener> timeoutClusterStateListeners =
         Collections.newSetFromMap(new ConcurrentHashMap<TimeoutClusterStateListener, Boolean>());
 
     private final LocalNodeMasterListeners localNodeMasterListeners;
@@ -134,9 +137,9 @@ public class ClusterService extends AbstractLifecycleComponent {
 
     private final ClusterBlocks.Builder initialBlocks;
 
-    private NodeConnectionsService nodeConnectionsService;
+    protected NodeConnectionsService nodeConnectionsService;
 
-    private DiscoverySettings discoverySettings;
+    protected DiscoverySettings discoverySettings;
 
     public ClusterService(Settings settings,
                           ClusterSettings clusterSettings, ThreadPool threadPool, Supplier<DiscoveryNode> localNodeSupplier) {
@@ -167,7 +170,7 @@ public class ClusterService extends AbstractLifecycleComponent {
         clusterStatePublisher = publisher;
     }
 
-    private void updateState(UnaryOperator<ClusterState> updateFunction) {
+    protected void updateState(UnaryOperator<ClusterState> updateFunction) {
         this.state.getAndUpdate(updateFunction);
     }
 
@@ -242,7 +245,7 @@ public class ClusterService extends AbstractLifecycleComponent {
     protected synchronized void doClose() {
     }
 
-    class ClusterServiceTaskBatcher extends TaskBatcher {
+    public class ClusterServiceTaskBatcher extends TaskBatcher {
 
         ClusterServiceTaskBatcher(Logger logger, PrioritizedEsThreadPoolExecutor threadExecutor) {
             super(logger, threadExecutor);
@@ -263,7 +266,7 @@ public class ClusterService extends AbstractLifecycleComponent {
             runTasks(new ClusterService.TaskInputs(taskExecutor, updateTasks, tasksSummary));
         }
 
-        class UpdateTask extends BatchedTask {
+        public class UpdateTask extends BatchedTask {
             final ClusterStateTaskListener listener;
 
             UpdateTask(Priority priority, String source, Object task, ClusterStateTaskListener listener,
@@ -649,7 +652,7 @@ public class ClusterService extends AbstractLifecycleComponent {
             warnAboutSlowTaskIfNeeded(executionTime, taskInputs.summary);
             clusterTasksResult = ClusterTasksResult.builder()
                 .failures(taskInputs.updateTasks.stream().map(ClusterServiceTaskBatcher.UpdateTask::getTask)::iterator, e)
-                .build(previousClusterState);
+                .build(previousClusterState, false);
         }
 
         assert clusterTasksResult.executionResults != null;
@@ -688,10 +691,12 @@ public class ClusterService extends AbstractLifecycleComponent {
         } else if (newClusterState.nodes().isLocalNodeElectedMaster() && previousClusterState != newClusterState) {
             // only the master controls the version numbers
             Builder builder = ClusterState.builder(newClusterState).incrementVersion();
+            /*
             if (previousClusterState.routingTable() != newClusterState.routingTable()) {
-                builder.routingTable(RoutingTable.builder(newClusterState.routingTable())
+                builder.routingTable(RoutingTable.builder(ClusterService.this, newClusterState)
                     .version(newClusterState.routingTable().version() + 1).build());
             }
+            */
             if (previousClusterState.metaData() != newClusterState.metaData()) {
                 builder.metaData(MetaData.builder(newClusterState.metaData()).version(newClusterState.metaData().version() + 1));
             }
@@ -821,7 +826,7 @@ public class ClusterService extends AbstractLifecycleComponent {
     /**
      * Represents a set of tasks to be processed together with their executor
      */
-    class TaskInputs {
+    public class TaskInputs {
         public final String summary;
         public final List<ClusterServiceTaskBatcher.UpdateTask> updateTasks;
         public final ClusterStateTaskExecutor<Object> executor;
@@ -844,7 +849,7 @@ public class ClusterService extends AbstractLifecycleComponent {
     /**
      * Output created by executing a set of tasks provided as TaskInputs
      */
-    class TaskOutputs {
+    public class TaskOutputs {
         public final TaskInputs taskInputs;
         public final ClusterState previousClusterState;
         public final ClusterState newClusterState;
@@ -1024,7 +1029,7 @@ public class ClusterService extends AbstractLifecycleComponent {
         }
     }
 
-    private void warnAboutSlowTaskIfNeeded(TimeValue executionTime, String source) {
+    protected void warnAboutSlowTaskIfNeeded(TimeValue executionTime, String source) {
         if (executionTime.getMillis() > slowTaskLoggingThreshold.getMillis()) {
             logger.warn("cluster state update task [{}] took [{}] above the warn threshold of {}", source, executionTime,
                     slowTaskLoggingThreshold);

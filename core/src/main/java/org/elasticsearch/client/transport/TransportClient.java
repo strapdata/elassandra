@@ -137,7 +137,7 @@ public abstract class TransportClient extends AbstractClient {
             }
             SettingsModule settingsModule = new SettingsModule(settings, additionalSettings, additionalSettingsFilter);
 
-            SearchModule searchModule = new SearchModule(settings, true, pluginsService.filterPlugins(SearchPlugin.class));
+            SearchModule searchModule = new SearchModule(settings, true, pluginsService.filterPlugins(SearchPlugin.class), null);
             List<NamedWriteableRegistry.Entry> entries = new ArrayList<>();
             entries.addAll(NetworkModule.getNamedWriteables());
             entries.addAll(searchModule.getNamedWriteables());

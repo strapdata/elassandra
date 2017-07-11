@@ -150,8 +150,8 @@ import static org.hamcrest.Matchers.hasItem;
         ReproduceInfoPrinter.class,
         LoggingListener.class
 })
-@ThreadLeakScope(Scope.SUITE)
-@ThreadLeakLingering(linger = 5000) // 5 sec lingering
+@ThreadLeakScope(Scope.NONE)
+@ThreadLeakLingering(linger = 20000)
 @TimeoutSuite(millis = 20 * TimeUnits.MINUTE)
 @LuceneTestCase.SuppressSysoutChecks(bugUrl = "we log a lot on purpose")
 // we suppress pretty much all the lucene codecs for now, except asserting

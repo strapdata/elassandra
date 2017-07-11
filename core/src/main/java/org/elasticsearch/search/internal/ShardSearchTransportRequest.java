@@ -19,12 +19,15 @@
 
 package org.elasticsearch.search.internal;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.IndicesRequest;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchTask;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.action.support.IndicesOptions;
+import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -38,6 +41,7 @@ import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.transport.TransportRequest;
 
 import java.io.IOException;
+import java.util.Collection;
 
 /**
  * Shard level search request that represents an actual search sent from the coordinating node to the nodes holding
@@ -179,5 +183,15 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
     public String getDescription() {
         // Shard id is enough here, the request itself can be found by looking at the parent task description
         return "shardId[" + shardSearchLocalRequest.shardId() + "]";
+    }
+    
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+         return shardSearchLocalRequest.tokenRanges();
+    }
+
+    @Override
+    public Boolean tokenRangesBitsetCache() {
+        return shardSearchLocalRequest.tokenRangesBitsetCache();
     }
 }

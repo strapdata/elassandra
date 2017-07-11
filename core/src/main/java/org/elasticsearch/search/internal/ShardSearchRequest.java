@@ -19,6 +19,8 @@
 
 package org.elasticsearch.search.internal;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cluster.metadata.AliasMetaData;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -36,6 +38,7 @@ import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -142,4 +145,11 @@ public interface ShardSearchRequest {
         }
     }
 
+    
+    Boolean tokenRangesBitsetCache();
+    
+    /**
+     * Returns the token range for this request
+     */
+    Collection<Range<Token>> tokenRanges();
 }

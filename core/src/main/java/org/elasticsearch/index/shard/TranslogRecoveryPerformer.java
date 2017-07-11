@@ -66,6 +66,7 @@ public class TranslogRecoveryPerformer {
      */
     int performBatchRecovery(Engine engine, Iterable<Translog.Operation> operations) {
         int numOps = 0;
+        /*
         try {
             for (Translog.Operation operation : operations) {
                 performRecoveryOperation(engine, operation, false, Engine.Operation.Origin.PEER_RECOVERY);
@@ -75,12 +76,14 @@ public class TranslogRecoveryPerformer {
         } catch (Exception e) {
             throw new BatchOperationException(shardId, "failed to apply batch translog operation", numOps, e);
         }
+        */
         return numOps;
     }
 
     public int recoveryFromSnapshot(Engine engine, Translog.Snapshot snapshot) throws IOException {
         Translog.Operation operation;
         int opsRecovered = 0;
+        /*
         while ((operation = snapshot.next()) != null) {
             try {
                 performRecoveryOperation(engine, operation, true, Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY);
@@ -94,6 +97,7 @@ public class TranslogRecoveryPerformer {
                 }
             }
         }
+        */
         return opsRecovered;
     }
 

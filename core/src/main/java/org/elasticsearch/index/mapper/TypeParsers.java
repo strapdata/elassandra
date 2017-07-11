@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.index.IndexOptions;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.Version;
@@ -29,6 +30,8 @@ import org.elasticsearch.common.logging.ESLoggerFactory;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
+import org.elasticsearch.index.mapper.Mapper.CqlCollection;
+import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.similarity.SimilarityProvider;
 
 import java.util.Collections;
@@ -55,6 +58,14 @@ public class TypeParsers {
     public static final String INDEX_OPTIONS_FREQS = "freqs";
     public static final String INDEX_OPTIONS_POSITIONS = "positions";
     public static final String INDEX_OPTIONS_OFFSETS = "offsets";
+
+    public static final String CQL_COLLECTION = "cql_collection";
+    public static final String CQL_STRUCT = "cql_struct";
+    public static final String CQL_UDT_NAME = "cql_udt_name";
+    public static final String CQL_MANDATORY = "cql_mandatory";
+    public static final String CQL_STATIC_COLUMN = "cql_static_column";
+    public static final String CQL_PARTITION_KEY = "cql_partition_key";
+    public static final String CQL_PRIMARY_KEY_ORDER = "cql_primary_key_order";
 
     private static final DeprecationLogger DEPRECATION_LOGGER = new DeprecationLogger(Loggers.getLogger(TypeParsers.class));
 
@@ -113,6 +124,25 @@ public class TypeParsers {
                 iterator.remove();
             } else if (propName.equals("store_term_vector_payloads")) {
                 builder.storeTermVectorPayloads(nodeBooleanValue(name,"store_term_vector_payloads", propNode));
+                iterator.remove();
+            } else if (propName.equals(CQL_STRUCT)) {
+                switch(StringUtils.lowerCase(propNode.toString())) {
+                case "map" : builder.cqlStruct(CqlStruct.MAP); break;
+                case "udt" : builder.cqlStruct(CqlStruct.UDT); break;
+                case "tuple" : builder.cqlStruct(CqlStruct.TUPLE); break;
+                }
+                iterator.remove();
+            } else if (propName.equals(CQL_MANDATORY)) {
+                builder.cqlPartialUpdate(nodeBooleanValue(name, CQL_MANDATORY, propNode));
+                iterator.remove();
+            } else if (propName.equals(CQL_PARTITION_KEY)) {
+                builder.cqlPartitionKey(nodeBooleanValue(name, CQL_PARTITION_KEY, propNode));
+                iterator.remove();
+            } else if (propName.equals(CQL_STATIC_COLUMN)) {
+                builder.cqlStaticColumn(nodeBooleanValue(name, CQL_STATIC_COLUMN, propNode));
+                iterator.remove();
+            } else if (propName.equals(CQL_PRIMARY_KEY_ORDER)) {
+                builder.cqlPrimaryKeyOrder(nodeIntegerValue(propNode));
                 iterator.remove();
             } else if (propName.equals("analyzer")) {
                 NamedAnalyzer analyzer = parserContext.getIndexAnalyzers().get(propNode.toString());
@@ -283,6 +313,34 @@ public class TypeParsers {
                     }
                 } else {
                     parseCopyFields(propNode, builder);
+                }
+                iterator.remove();
+            } else if (propName.equals(TypeParsers.CQL_MANDATORY)) {
+                builder.cqlPartialUpdate((boolean)propNode);
+                iterator.remove();
+            } else if (propName.equals(TypeParsers.CQL_PARTITION_KEY)) {
+                builder.cqlPartitionKey((boolean)propNode);
+                iterator.remove();
+            } else if (propName.equals(TypeParsers.CQL_STATIC_COLUMN)) {
+                builder.cqlStaticColumn((Boolean)propNode);
+                iterator.remove();
+            } else if (propName.equals(TypeParsers.CQL_PRIMARY_KEY_ORDER)) {
+                builder.cqlPrimaryKeyOrder((Integer)propNode);
+                iterator.remove();
+            } else if (propName.equals(TypeParsers.CQL_COLLECTION)) {
+                String value = StringUtils.lowerCase(propNode.toString());
+                switch (value) {
+                case "list": builder.cqlCollection(CqlCollection.LIST); break;
+                case "set": builder.cqlCollection(CqlCollection.SET); break;
+                case "singleton": builder.cqlCollection(CqlCollection.SINGLETON); break;
+                }
+                iterator.remove();
+            } else if (propName.equals(TypeParsers.CQL_STRUCT)) {
+                String value = StringUtils.lowerCase(propNode.toString());
+                switch (value) {
+                case "tuple": builder.cqlStruct(CqlStruct.TUPLE); break;
+                case "map": builder.cqlStruct(CqlStruct.MAP); break;
+                case "udt": builder.cqlStruct(CqlStruct.UDT); break;
                 }
                 iterator.remove();
             }

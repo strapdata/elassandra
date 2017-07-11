@@ -75,6 +75,10 @@ public class ContextMappings implements ToXContent {
         return contextMappings.size();
     }
 
+    public List<ContextMapping> contextMappings() {
+        return this.contextMappings;
+    }
+    
     /**
      * Returns a context mapping by its name
      */

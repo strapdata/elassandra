@@ -19,6 +19,9 @@
 
 package org.elasticsearch.client;
 
+import org.elassandra.action.admin.indices.cleanup.CleanupRequest;
+import org.elassandra.action.admin.indices.rebuild.RebuildRequest;
+import org.elassandra.action.admin.indices.reload.ReloadRequest;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
 import org.elasticsearch.action.admin.cluster.node.info.NodesInfoRequest;
 import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequest;
@@ -247,12 +250,42 @@ public class Requests {
         return new RefreshRequest(indices);
     }
 
+    
+    /**
+     * Creates a Cassandra rebuild index request.
+     *
+     * @param indices The indices to rebuild. Use <tt>null</tt> or <tt>_all</tt> to execute against all indices
+     * @return The rebuild request
+     */
+    public static RebuildRequest rebuildRequest(String... indices) {
+        return new RebuildRequest(indices);
+    }
+    
+    /**
+     * Creates a Cassandra reload index request (refresh SSTable).
+     *
+     * @param indices The indices to rebuild. Use <tt>null</tt> or <tt>_all</tt> to execute against all indices
+     * @return The reload request
+      */
+    public static ReloadRequest reloadRequest(String... indices) {
+        return new ReloadRequest(indices);
+    }
+    
+    /**
+     * Creates a Cassandra cleanup request.
+     *
+     * @param indices The indices to cleanup. Use <tt>null</tt> or <tt>_all</tt> to execute against all indices
+     * @return The cleanup request
+     */
+    public static CleanupRequest cleanupRequest(String... indices) {
+        return new CleanupRequest(indices);
+    }
+    
     /**
      * Creates a flush indices request.
      *
      * @param indices The indices to flush. Use <tt>null</tt> or <tt>_all</tt> to execute against all indices
      * @return The flush request
-     * @see org.elasticsearch.client.IndicesAdminClient#flush(org.elasticsearch.action.admin.indices.flush.FlushRequest)
      */
     public static FlushRequest flushRequest(String... indices) {
         return new FlushRequest(indices);

@@ -50,7 +50,10 @@ public class ClusterChangedEvent {
 
     private final DiscoveryNodes.Delta nodesDelta;
 
-    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState) {
+    // added to avoid to save a just recovered cluster state.
+    private final boolean peristMetaData;
+    
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState, boolean peristMetaData) {
         Objects.requireNonNull(source, "source must not be null");
         Objects.requireNonNull(state, "state must not be null");
         Objects.requireNonNull(previousState, "previousState must not be null");
@@ -58,8 +61,17 @@ public class ClusterChangedEvent {
         this.state = state;
         this.previousState = previousState;
         this.nodesDelta = state.nodes().delta(previousState.nodes());
+        this.peristMetaData = peristMetaData;
     }
 
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState) {
+        this(source, state, previousState, true);
+    }
+    
+    public boolean peristMetaData() {
+        return peristMetaData;
+    }
+    
     /**
      * The source that caused this cluster event to be raised.
      */

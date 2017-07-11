@@ -20,6 +20,7 @@
 package org.elasticsearch.index.mapper;
 
 import com.carrotsearch.hppc.ObjectArrayList;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
@@ -38,6 +39,7 @@ import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.QueryShardException;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -117,6 +119,9 @@ public class BinaryFieldMapper extends FieldMapper {
                 bytes = (BytesReference) value;
             } else if (value instanceof byte[]) {
                 bytes = new BytesArray((byte[]) value);
+            } else if (value instanceof ByteBuffer) {
+                ByteBuffer bb = (ByteBuffer)value;
+                bytes = new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
             } else {
                 bytes = new BytesArray(Base64.getDecoder().decode(value.toString()));
             }
@@ -132,6 +137,15 @@ public class BinaryFieldMapper extends FieldMapper {
         @Override
         public Query termQuery(Object value, QueryShardContext context) {
             throw new QueryShardException(context, "Binary fields do not support searching");
+        }
+        
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            BytesReference br = valueForDisplay(value);
+            return ByteBuffer.wrap(BytesReference.toBytes(br));
         }
     }
 
@@ -172,6 +186,32 @@ public class BinaryFieldMapper extends FieldMapper {
 
     }
 
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        if (!fieldType().stored() && !fieldType().hasDocValues()) {
+            return;
+        }
+        byte[] value = (byte[])object;
+        if (value == null) {
+            return;
+        }
+        
+        if (fieldType().stored()) {
+            context.doc().add(new Field(fieldType().name(), value, fieldType()));
+        }
+
+        if (fieldType().hasDocValues()) {
+            CustomBinaryDocValuesField field = (CustomBinaryDocValuesField) context.doc().getByKey(fieldType().name());
+            if (field == null) {
+                field = new CustomBinaryDocValuesField(fieldType().name(), value);
+                context.doc().addWithKey(fieldType().name(), field);
+            } else {
+                field.add(value);
+            }
+        }
+        super.createField(context,value);
+    }
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -214,5 +254,10 @@ public class BinaryFieldMapper extends FieldMapper {
             }
 
         }
+    }
+
+    @Override
+    public String cqlType() {
+        return "blob";
     }
 }

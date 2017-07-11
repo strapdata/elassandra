@@ -25,6 +25,7 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.transport.TransportAddressSerializers;
 import org.elasticsearch.common.xcontent.ToXContent;
@@ -32,11 +33,13 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.node.Node;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 
 import static org.elasticsearch.common.transport.TransportAddressSerializers.addressToStream;
@@ -80,7 +83,72 @@ public class DiscoveryNode implements Writeable, ToXContent {
     private final Version version;
     private final Set<Role> roles;
 
+    private transient UUID nodeUuid;
+    private DiscoveryNodeStatus status = DiscoveryNodeStatus.UNKNOWN;
+    
+    public static enum DiscoveryNodeStatus {
+        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2), OFFSEARCH((byte) 3);
 
+        private final byte status;
+
+        DiscoveryNodeStatus(byte status) {
+            this.status = status;
+        }
+
+        public byte status() {
+            return this.status;
+        }
+
+        @Override
+        public String toString() {
+            switch (this) {
+            case UNKNOWN:
+                return "UNKNOWN";
+            case ALIVE:
+                return "ALIVE";
+            case DEAD:
+                return "DEAD";
+            case OFFSEARCH:
+                return "OFFSEARCH";
+            default:
+                throw new IllegalArgumentException();
+            }
+        }
+    }
+
+    public void status(DiscoveryNodeStatus status) {
+        this.status = status;
+    }
+    
+    /**
+     * The name of the node.
+     */
+    public DiscoveryNodeStatus status() {
+        return this.status;
+    }
+
+    /**
+     * The name of the node.
+     */
+    public DiscoveryNodeStatus getStatus() {
+        return status();
+    }
+    
+    
+    public UUID uuid() {
+        return this.nodeUuid;
+    }
+    
+    /**
+     * The inet listen address of the node.
+     */
+    public InetAddress getInetAddress() {
+        if (getAddress() instanceof InetSocketTransportAddress)
+            return ((InetSocketTransportAddress) getAddress()).address().getAddress();
+        return null;
+    }
+
+    
     /**
      * Creates a new {@link DiscoveryNode}
      * <p>
@@ -165,6 +233,11 @@ public class DiscoveryNode implements Writeable, ToXContent {
             this.nodeName = "";
         }
         this.nodeId = nodeId.intern();
+        try {
+            this.nodeUuid = UUID.fromString(nodeId);
+        } catch (Exception e) {
+            this.nodeUuid = UUID.randomUUID();
+        }
         this.ephemeralId = ephemeralId.intern();
         this.hostName = hostName.intern();
         this.hostAddress = hostAddress.intern();
@@ -385,6 +458,7 @@ public class DiscoveryNode implements Writeable, ToXContent {
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject(getId());
         builder.field("name", getName());
+        builder.field("status", getStatus().toString());
         builder.field("ephemeral_id", getEphemeralId());
         builder.field("transport_address", getAddress().toString());
 

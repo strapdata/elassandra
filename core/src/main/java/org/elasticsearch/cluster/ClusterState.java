@@ -364,6 +364,7 @@ public class ClusterState implements ToXContent, Diffable<ClusterState> {
         // meta data
         if (metrics.contains(Metric.METADATA)) {
             builder.startObject("metadata");
+            builder.field("version", metaData().version());
             builder.field("cluster_uuid", metaData().clusterUUID());
             builder.startObject("templates");
             for (ObjectCursor<IndexTemplateMetaData> cursor : metaData().templates().values()) {

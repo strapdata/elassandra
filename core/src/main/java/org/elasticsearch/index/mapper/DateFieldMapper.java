@@ -19,14 +19,14 @@
 
 package org.elasticsearch.index.mapper;
 
-import org.apache.lucene.document.StoredField;
-import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.LongPoint;
+import org.apache.lucene.document.SortedNumericDocValuesField;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.PointValues;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.PointValues;
 import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.IndexOrDocValuesQuery;
 import org.apache.lucene.search.Query;
@@ -35,6 +35,7 @@ import org.elasticsearch.Version;
 import org.elasticsearch.action.fieldstats.FieldStats;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.joda.DateMathParser;
 import org.elasticsearch.common.joda.FormatDateTimeFormatter;
 import org.elasticsearch.common.joda.Joda;
@@ -51,11 +52,13 @@ import org.elasticsearch.search.DocValueFormat;
 import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+
 import static org.elasticsearch.index.mapper.TypeParsers.parseDateTimeFormatter;
 
 /** A {@link FieldMapper} for ip addresses. */
@@ -392,9 +395,29 @@ public class DateFieldMapper extends FieldMapper {
             if (val == null) {
                 return null;
             }
+            if (value instanceof Date) {
+                return ((Date) value).getTime();
+            }
             return dateTimeFormatter().printer().print(val);
         }
 
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof Date) {
+                return (Date)value;
+            }
+            if (value instanceof Number) {
+                return new Date(((Number) value).longValue());
+            }
+            if (value instanceof BytesRef) {
+                return new Date(Numbers.bytesToLong((BytesRef) value));
+            }
+            return dateTimeFormatter.parser().parseDateTime(value.toString()).toDate();
+        }
+        
         @Override
         public DocValueFormat docValueFormat(@Nullable String format, DateTimeZone timeZone) {
             FormatDateTimeFormatter dateTimeFormatter = this.dateTimeFormatter;
@@ -490,6 +513,44 @@ public class DateFieldMapper extends FieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        String dateAsString = null;
+        Long value = null;
+        float boost = fieldType().boost();
+        if (object == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            dateAsString = fieldType().nullValueAsString();
+            if (dateAsString != null) {
+                value = fieldType().parse(dateAsString);
+            }
+        } else {
+            if (object instanceof Date) {
+                value = ((Date)object).getTime();
+            } else {
+                value = (Long)object;
+            }
+            dateAsString = fieldType().dateTimeFormatter.printer().print(value);
+        }
+        if (dateAsString != null) {
+            if (context.includeInAll(includeInAll, this)) {
+                context.allEntries().addText(fieldType().name(), dateAsString, boost);
+            }
+        }
+        
+        if (fieldType().indexOptions() != IndexOptions.NONE) {
+            context.doc().add(new LongPoint(fieldType().name(), value));
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedNumericDocValuesField(fieldType().name(), value));
+        }
+        if (fieldType().stored()) {
+            context.doc().add(new StoredField(fieldType().name(), value));
+        }
+    }
+    
+    @Override
     protected void doMerge(Mapper mergeWith, boolean updateAllTypes) {
         super.doMerge(mergeWith, updateAllTypes);
         DateFieldMapper other = (DateFieldMapper) mergeWith;
@@ -525,4 +586,10 @@ public class DateFieldMapper extends FieldMapper {
             builder.field("locale", fieldType().dateTimeFormatter().locale());
         }
     }
+
+    @Override
+    public String cqlType() {
+        return "timestamp";
+    }
+
 }

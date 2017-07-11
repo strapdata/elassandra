@@ -337,4 +337,9 @@ public class LegacyShortFieldMapper extends LegacyNumberFieldMapper {
             return Short.toString(number);
         }
     }
+
+    @Override
+    public String cqlType() {
+        return "int";
+    }
 }

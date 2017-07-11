@@ -336,4 +336,9 @@ public class LegacyIntegerFieldMapper extends LegacyNumberFieldMapper {
             return Integer.toString(number);
         }
     }
+
+    @Override
+    public String cqlType() {
+        return "int";
+    }
 }

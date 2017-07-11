@@ -277,6 +277,23 @@ public class JarHell {
                         "class: " + clazz + System.lineSeparator() +
                         "exists multiple times in jar: " + jarpath + " !!!!!!!!!");
             } else {
+                if (clazz.startsWith("org.apache.lucene.util.LuceneTestCase")) {
+                    return; // for modified version of LuceneTestCase to ignore cassandra static variables leaks.
+                }
+                
+                // workaround for cassandra thrift
+                if (clazz.startsWith("org.apache.cassandra.thrift")) {
+                    return; // Because org.apache.commons.collections.FastHashMap in commons-collections and commons-beanutils
+                }
+                
+                // workaround for hadoop
+                if (clazz.startsWith("org.apache.commons")) {
+                    return; // Because org.apache.commons.collections.FastHashMap in commons-collections and commons-beanutils
+                }
+                if (clazz.startsWith("org.apache.jasper")) {
+                    return; // Because of Hadoop
+                }
+                
                 throw new IllegalStateException("jar hell!" + System.lineSeparator() +
                         "class: " + clazz + System.lineSeparator() +
                         "jar1: " + previous + System.lineSeparator() +

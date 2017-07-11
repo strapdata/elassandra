@@ -22,6 +22,7 @@ package org.elasticsearch.index.mapper;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
+import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
 import org.elasticsearch.Version;
@@ -34,8 +35,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeIntegerValue;
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeIntegerValue;
 import static org.elasticsearch.index.mapper.TypeParsers.parseField;
 
 /**
@@ -150,6 +151,31 @@ public class TokenCountFieldMapper extends FieldMapper {
         boolean stored = fieldType().stored();
         fields.addAll(NumberFieldMapper.NumberType.INTEGER.createFields(fieldType().name(), tokenCount, indexed, docValued, stored));
     }
+    
+
+    public void createField(ParseContext context, Object object) throws IOException {
+        Integer value = (Integer)object;
+        float boost = fieldType().boost();
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            value = (Integer) fieldType().nullValue();
+        }
+        final int tokenCount;
+        if (value == null) {
+            tokenCount = (Integer) fieldType().nullValue();
+        } else {
+            tokenCount = countPositions(analyzer, name(), value.toString(), enablePositionIncrements);
+        }
+
+        boolean indexed = fieldType().indexOptions() != IndexOptions.NONE;
+        boolean docValued = fieldType().hasDocValues();
+        boolean stored = fieldType().stored();
+        for(Field field : NumberFieldMapper.NumberType.INTEGER.createFields(fieldType().name(), tokenCount, indexed, docValued, stored))
+            context.doc().add(field);
+    }
+    
 
     /**
      * Count position increments in a token stream.  Package private for testing.
@@ -215,6 +241,11 @@ public class TokenCountFieldMapper extends FieldMapper {
         if (includeDefaults || enablePositionIncrements() != Defaults.DEFAULT_POSITION_INCREMENTS) {
             builder.field("enable_position_increments", enablePositionIncrements());
         }
+    }
+
+    @Override
+    public String cqlType() {
+        return null;
     }
 
 }

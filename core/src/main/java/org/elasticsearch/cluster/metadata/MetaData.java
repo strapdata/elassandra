@@ -22,12 +22,13 @@ package org.elasticsearch.cluster.metadata;
 import com.carrotsearch.hppc.ObjectHashSet;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.CollectionUtil;
 import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.Diffable;
 import org.elasticsearch.cluster.DiffableUtils;
-import org.elasticsearch.cluster.InternalClusterInfoService;
 import org.elasticsearch.cluster.NamedDiffable;
 import org.elasticsearch.cluster.NamedDiffableValueSerializer;
 import org.elasticsearch.cluster.block.ClusterBlock;
@@ -183,10 +184,12 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         this.templates = templates;
         int totalNumberOfShards = 0;
         int numberOfShards = 0;
+        /*
         for (ObjectCursor<IndexMetaData> cursor : indices.values()) {
             totalNumberOfShards += cursor.value.getTotalNumberOfShards();
             numberOfShards += cursor.value.getNumberOfShards();
         }
+        */
         this.totalNumberOfShards = totalNumberOfShards;
         this.numberOfShards = numberOfShards;
 
@@ -737,8 +740,8 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
                                     RecoverySettings.INDICES_RECOVERY_INTERNAL_ACTION_TIMEOUT_SETTING.getKey(),
                                     RecoverySettings.INDICES_RECOVERY_INTERNAL_LONG_ACTION_TIMEOUT_SETTING.getKey(),
                                     DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(),
-                                    InternalClusterInfoService.INTERNAL_CLUSTER_INFO_UPDATE_INTERVAL_SETTING.getKey(),
-                                    InternalClusterInfoService.INTERNAL_CLUSTER_INFO_TIMEOUT_SETTING.getKey(),
+                                    //InternalClusterInfoService.INTERNAL_CLUSTER_INFO_UPDATE_INTERVAL_SETTING.getKey(),
+                                    //InternalClusterInfoService.INTERNAL_CLUSTER_INFO_TIMEOUT_SETTING.getKey(),
                                     DiscoverySettings.PUBLISH_TIMEOUT_SETTING.getKey(),
             ClusterService.CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING.getKey()));
 
@@ -811,7 +814,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         private final ImmutableOpenMap.Builder<String, Custom> customs;
 
         public Builder() {
-            clusterUUID = "_na_";
+            clusterUUID = SystemKeyspace.getLocalHostId().toString();
             indices = ImmutableOpenMap.builder();
             templates = ImmutableOpenMap.builder();
             customs = ImmutableOpenMap.builder();
@@ -985,10 +988,18 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             return this;
         }
 
+        public Builder incrementVersion() {
+            this.version = version + 1;
+            this.clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            return this;
+        }
+        
         public Builder generateClusterUuidIfNeeded() {
+            /*
             if (clusterUUID.equals("_na_")) {
-                clusterUUID = UUIDs.randomBase64UUID();
+                clusterUUID = Strings.randomBase64UUID();
             }
+            */
             return this;
         }
 
@@ -1050,9 +1061,13 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         }
 
         public static String toXContent(MetaData metaData) throws IOException {
+            return toXContent(metaData, ToXContent.EMPTY_PARAMS);
+        }
+        
+        public static String toXContent(MetaData metaData, ToXContent.Params params) throws IOException {
             XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
             builder.startObject();
-            toXContent(metaData, builder, ToXContent.EMPTY_PARAMS);
+            toXContent(metaData, builder, params);
             builder.endObject();
             return builder.string();
         }
@@ -1187,6 +1202,30 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         @Override
         public void toXContent(XContentBuilder builder, MetaData state) throws IOException {
             Builder.toXContent(state, builder, FORMAT_PARAMS);
+        }
+
+        @Override
+        public MetaData fromXContent(XContentParser parser) throws IOException {
+            return Builder.fromXContent(parser);
+        }
+    };
+    
+    public static final ToXContent.Params CASSANDRA_FORMAT_PARAMS;
+    static {
+        Map<String, String> params = new HashMap<>(2);
+        params.put("binary", "false");
+        params.put(MetaData.CONTEXT_MODE_PARAM, MetaData.CONTEXT_MODE_GATEWAY);
+        CASSANDRA_FORMAT_PARAMS = new MapParams(params);
+    }
+    
+    /**
+     * State format for {@link MetaData} to write to and load from cassandra
+     */
+    public static final MetaDataStateFormat<MetaData> CASSANDRA_FORMAT = new MetaDataStateFormat<MetaData>(XContentType.JSON, "cassandra-global-") {
+
+        @Override
+        public void toXContent(XContentBuilder builder, MetaData state) throws IOException {
+            Builder.toXContent(state, builder, CASSANDRA_FORMAT_PARAMS);
         }
 
         @Override

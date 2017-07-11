@@ -151,7 +151,7 @@ public class LatLonPointFieldMapper extends BaseGeoPointFieldMapper {
     }
 
     @Override
-    protected void parse(ParseContext originalContext, GeoPoint point, String geoHash) throws IOException {
+    public void parse(ParseContext originalContext, GeoPoint point, String geoHash) throws IOException {
         // Geopoint fields, by default, will not be included in _all
         final ParseContext context = originalContext.setIncludeInAllDefault(false);
 

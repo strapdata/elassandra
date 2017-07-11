@@ -28,6 +28,8 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.mapper.DynamicTemplate.XContentFieldType;
+import org.elasticsearch.index.mapper.Mapper.CqlCollection;
+import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -78,10 +80,10 @@ public class RootObjectMapper extends ObjectMapper {
         }
 
         @Override
-        protected ObjectMapper createMapper(String name, String fullPath, boolean enabled, Nested nested, Dynamic dynamic,
+        protected ObjectMapper createMapper(String name, String fullPath, CqlCollection cqlCollection, CqlStruct cqlStruct, String cqlUdtName, boolean cqlPartialUpdate, boolean cqlPartitionKey, int cqlPrimaryKeyOrder, boolean cqlStaticColumn, boolean enabled, Nested nested, Dynamic dynamic,
                 Boolean includeInAll, Map<String, Mapper> mappers, @Nullable Settings settings) {
             assert !nested.isNested();
-            return new RootObjectMapper(name, enabled, dynamic, includeInAll, mappers,
+            return new RootObjectMapper(name, cqlCollection, cqlStruct, cqlUdtName, cqlPartialUpdate, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn, enabled, dynamic, includeInAll, mappers,
                     dynamicDateTimeFormatters,
                     dynamicTemplates,
                     dateDetection, numericDetection, settings);
@@ -168,10 +170,10 @@ public class RootObjectMapper extends ObjectMapper {
     private Explicit<Boolean> numericDetection;
     private Explicit<DynamicTemplate[]> dynamicTemplates;
 
-    RootObjectMapper(String name, boolean enabled, Dynamic dynamic, Boolean includeInAll, Map<String, Mapper> mappers,
+    RootObjectMapper(String name, CqlCollection cqlCollection, CqlStruct cqlStruct, String cqlUdtName, boolean cqlPartialUpdate, boolean cqlPartitionKey, int cqlPrimaryKeyOrder, boolean cqlStaticColumn, boolean enabled, Dynamic dynamic, Boolean includeInAll, Map<String, Mapper> mappers,
                      Explicit<FormatDateTimeFormatter[]> dynamicDateTimeFormatters, Explicit<DynamicTemplate[]> dynamicTemplates,
                      Explicit<Boolean> dateDetection, Explicit<Boolean> numericDetection, Settings settings) {
-        super(name, name, enabled, Nested.NO, dynamic, includeInAll, mappers, settings);
+        super(name, name, cqlCollection, cqlStruct, cqlUdtName, cqlPartialUpdate, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn, enabled, Nested.NO, dynamic, includeInAll, mappers, settings);
         this.dynamicTemplates = dynamicTemplates;
         this.dynamicDateTimeFormatters = dynamicDateTimeFormatters;
         this.dateDetection = dateDetection;

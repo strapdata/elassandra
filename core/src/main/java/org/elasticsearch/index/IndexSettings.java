@@ -163,6 +163,10 @@ public final class IndexSettings {
     private volatile int maxAdjacencyMatrixFilters;
     private volatile int maxRescoreWindow;
     private volatile boolean TTLPurgeDisabled;
+    
+    private final String keyspace;
+    private volatile boolean tokenRangesBitsetCache;
+    
     /**
      * The maximum number of refresh listeners allows on this shard.
      */
@@ -249,6 +253,8 @@ public final class IndexSettings {
         this.defaultAllowUnmappedFields = scopedSettings.get(ALLOW_UNMAPPED);
         this.indexNameMatcher = indexNameMatcher;
         this.durability = scopedSettings.get(INDEX_TRANSLOG_DURABILITY_SETTING);
+        this.keyspace = indexMetaData.keyspace();
+        
         syncInterval = INDEX_TRANSLOG_SYNC_INTERVAL_SETTING.get(settings);
         refreshInterval = scopedSettings.get(INDEX_REFRESH_INTERVAL_SETTING);
         flushThresholdSize = scopedSettings.get(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING);
@@ -288,6 +294,7 @@ public final class IndexSettings {
         scopedSettings.addSettingsUpdateConsumer(MAX_REFRESH_LISTENERS_PER_SHARD, this::setMaxRefreshListeners);
         scopedSettings.addSettingsUpdateConsumer(MAX_SLICES_PER_SCROLL, this::setMaxSlicesPerScroll);
 
+        scopedSettings.addSettingsUpdateConsumer(IndexMetaData.INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING, this::setTokenRangesBitsetCache);
     }
 
     private void setTranslogFlushThresholdSize(ByteSizeValue byteSizeValue) {
@@ -302,6 +309,10 @@ public final class IndexSettings {
         this.refreshInterval = timeValue;
     }
 
+    private void setTokenRangesBitsetCache(Boolean enable) {
+        this.tokenRangesBitsetCache = enable;
+    }
+    
     /**
      * Returns the settings for this index. These settings contain the node and index level settings where
      * settings that are specified on both index and node level are overwritten by the index settings.
@@ -561,4 +572,8 @@ public final class IndexSettings {
     }
 
     public IndexScopedSettings getScopedSettings() { return scopedSettings;}
+    
+    public String getKeyspace() {
+        return this.keyspace;
+    }
 }

@@ -20,6 +20,15 @@
 package org.elasticsearch.action;
 
 import org.apache.logging.log4j.Logger;
+import org.elassandra.action.admin.indices.cleanup.CleanupAction;
+import org.elassandra.action.admin.indices.cleanup.TransportCleanupAction;
+import org.elassandra.action.admin.indices.rebuild.RebuildAction;
+import org.elassandra.action.admin.indices.rebuild.TransportRebuildAction;
+import org.elassandra.action.admin.indices.reload.ReloadAction;
+import org.elassandra.action.admin.indices.reload.TransportReloadAction;
+import org.elassandra.rest.action.admin.indices.cleanup.RestCleanupAction;
+import org.elassandra.rest.action.admin.indices.rebuild.RestRebuildAction;
+import org.elassandra.rest.action.admin.indices.reload.RestReloadAction;
 import org.elasticsearch.action.admin.cluster.allocation.ClusterAllocationExplainAction;
 import org.elasticsearch.action.admin.cluster.allocation.TransportClusterAllocationExplainAction;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthAction;
@@ -47,22 +56,10 @@ import org.elasticsearch.action.admin.cluster.repositories.put.PutRepositoryActi
 import org.elasticsearch.action.admin.cluster.repositories.put.TransportPutRepositoryAction;
 import org.elasticsearch.action.admin.cluster.repositories.verify.TransportVerifyRepositoryAction;
 import org.elasticsearch.action.admin.cluster.repositories.verify.VerifyRepositoryAction;
-import org.elasticsearch.action.admin.cluster.reroute.ClusterRerouteAction;
-import org.elasticsearch.action.admin.cluster.reroute.TransportClusterRerouteAction;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsAction;
 import org.elasticsearch.action.admin.cluster.settings.TransportClusterUpdateSettingsAction;
 import org.elasticsearch.action.admin.cluster.shards.ClusterSearchShardsAction;
 import org.elasticsearch.action.admin.cluster.shards.TransportClusterSearchShardsAction;
-import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.create.TransportCreateSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.delete.DeleteSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.delete.TransportDeleteSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.get.GetSnapshotsAction;
-import org.elasticsearch.action.admin.cluster.snapshots.get.TransportGetSnapshotsAction;
-import org.elasticsearch.action.admin.cluster.snapshots.restore.RestoreSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.restore.TransportRestoreSnapshotAction;
-import org.elasticsearch.action.admin.cluster.snapshots.status.SnapshotsStatusAction;
-import org.elasticsearch.action.admin.cluster.snapshots.status.TransportSnapshotsStatusAction;
 import org.elasticsearch.action.admin.cluster.state.ClusterStateAction;
 import org.elasticsearch.action.admin.cluster.state.TransportClusterStateAction;
 import org.elasticsearch.action.admin.cluster.stats.ClusterStatsAction;
@@ -217,17 +214,13 @@ import org.elasticsearch.rest.action.admin.cluster.RestCancelTasksAction;
 import org.elasticsearch.rest.action.admin.cluster.RestClusterAllocationExplainAction;
 import org.elasticsearch.rest.action.admin.cluster.RestClusterGetSettingsAction;
 import org.elasticsearch.rest.action.admin.cluster.RestClusterHealthAction;
-import org.elasticsearch.rest.action.admin.cluster.RestClusterRerouteAction;
 import org.elasticsearch.rest.action.admin.cluster.RestClusterSearchShardsAction;
 import org.elasticsearch.rest.action.admin.cluster.RestClusterStateAction;
 import org.elasticsearch.rest.action.admin.cluster.RestClusterStatsAction;
 import org.elasticsearch.rest.action.admin.cluster.RestClusterUpdateSettingsAction;
-import org.elasticsearch.rest.action.admin.cluster.RestCreateSnapshotAction;
 import org.elasticsearch.rest.action.admin.cluster.RestDeleteRepositoryAction;
-import org.elasticsearch.rest.action.admin.cluster.RestDeleteSnapshotAction;
 import org.elasticsearch.rest.action.admin.cluster.RestDeleteStoredScriptAction;
 import org.elasticsearch.rest.action.admin.cluster.RestGetRepositoriesAction;
-import org.elasticsearch.rest.action.admin.cluster.RestGetSnapshotsAction;
 import org.elasticsearch.rest.action.admin.cluster.RestGetStoredScriptAction;
 import org.elasticsearch.rest.action.admin.cluster.RestGetTaskAction;
 import org.elasticsearch.rest.action.admin.cluster.RestListTasksAction;
@@ -238,8 +231,6 @@ import org.elasticsearch.rest.action.admin.cluster.RestPendingClusterTasksAction
 import org.elasticsearch.rest.action.admin.cluster.RestPutRepositoryAction;
 import org.elasticsearch.rest.action.admin.cluster.RestPutStoredScriptAction;
 import org.elasticsearch.rest.action.admin.cluster.RestRemoteClusterInfoAction;
-import org.elasticsearch.rest.action.admin.cluster.RestRestoreSnapshotAction;
-import org.elasticsearch.rest.action.admin.cluster.RestSnapshotsStatusAction;
 import org.elasticsearch.rest.action.admin.cluster.RestVerifyRepositoryAction;
 import org.elasticsearch.rest.action.admin.indices.RestAnalyzeAction;
 import org.elasticsearch.rest.action.admin.indices.RestClearIndicesCacheAction;
@@ -415,19 +406,26 @@ public class ActionModule extends AbstractModule {
         actions.register(ClusterStateAction.INSTANCE, TransportClusterStateAction.class);
         actions.register(ClusterHealthAction.INSTANCE, TransportClusterHealthAction.class);
         actions.register(ClusterUpdateSettingsAction.INSTANCE, TransportClusterUpdateSettingsAction.class);
-        actions.register(ClusterRerouteAction.INSTANCE, TransportClusterRerouteAction.class);
+        //actions.register(ClusterRerouteAction.INSTANCE, TransportClusterRerouteAction.class);
         actions.register(ClusterSearchShardsAction.INSTANCE, TransportClusterSearchShardsAction.class);
         actions.register(PendingClusterTasksAction.INSTANCE, TransportPendingClusterTasksAction.class);
         actions.register(PutRepositoryAction.INSTANCE, TransportPutRepositoryAction.class);
         actions.register(GetRepositoriesAction.INSTANCE, TransportGetRepositoriesAction.class);
         actions.register(DeleteRepositoryAction.INSTANCE, TransportDeleteRepositoryAction.class);
         actions.register(VerifyRepositoryAction.INSTANCE, TransportVerifyRepositoryAction.class);
+        /*
         actions.register(GetSnapshotsAction.INSTANCE, TransportGetSnapshotsAction.class);
         actions.register(DeleteSnapshotAction.INSTANCE, TransportDeleteSnapshotAction.class);
         actions.register(CreateSnapshotAction.INSTANCE, TransportCreateSnapshotAction.class);
         actions.register(RestoreSnapshotAction.INSTANCE, TransportRestoreSnapshotAction.class);
         actions.register(SnapshotsStatusAction.INSTANCE, TransportSnapshotsStatusAction.class);
-
+        */
+        
+        // cassandra index rebuild, reload, cleanup
+        actions.register(RebuildAction.INSTANCE, TransportRebuildAction.class);
+        actions.register(ReloadAction.INSTANCE, TransportReloadAction.class);
+        actions.register(CleanupAction.INSTANCE, TransportCleanupAction.class);
+        
         actions.register(IndicesStatsAction.INSTANCE, TransportIndicesStatsAction.class);
         actions.register(IndicesSegmentsAction.INSTANCE, TransportIndicesSegmentsAction.class);
         actions.register(IndicesShardStoresAction.INSTANCE, TransportIndicesShardStoresAction.class);
@@ -522,19 +520,26 @@ public class ActionModule extends AbstractModule {
         registerHandler.accept(new RestClusterHealthAction(settings, restController));
         registerHandler.accept(new RestClusterUpdateSettingsAction(settings, restController));
         registerHandler.accept(new RestClusterGetSettingsAction(settings, restController, clusterSettings, settingsFilter));
-        registerHandler.accept(new RestClusterRerouteAction(settings, restController, settingsFilter));
+        //registerHandler.accept(new RestClusterRerouteAction(settings, restController, settingsFilter));
         registerHandler.accept(new RestClusterSearchShardsAction(settings, restController));
         registerHandler.accept(new RestPendingClusterTasksAction(settings, restController));
         registerHandler.accept(new RestPutRepositoryAction(settings, restController));
         registerHandler.accept(new RestGetRepositoriesAction(settings, restController, settingsFilter));
         registerHandler.accept(new RestDeleteRepositoryAction(settings, restController));
         registerHandler.accept(new RestVerifyRepositoryAction(settings, restController));
+        /*
         registerHandler.accept(new RestGetSnapshotsAction(settings, restController));
         registerHandler.accept(new RestCreateSnapshotAction(settings, restController));
         registerHandler.accept(new RestRestoreSnapshotAction(settings, restController));
         registerHandler.accept(new RestDeleteSnapshotAction(settings, restController));
         registerHandler.accept(new RestSnapshotsStatusAction(settings, restController));
-
+         */
+        
+        registerHandler.accept(new RestRebuildAction(settings, restController));
+        registerHandler.accept(new RestReloadAction(settings, restController));
+        registerHandler.accept(new RestCleanupAction(settings, restController));
+        
+        
         registerHandler.accept(new RestGetIndicesAction(settings, restController, indexScopedSettings, settingsFilter));
         registerHandler.accept(new RestIndicesStatsAction(settings, restController));
         registerHandler.accept(new RestIndicesSegmentsAction(settings, restController));

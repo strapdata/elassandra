@@ -510,7 +510,7 @@ public abstract class BaseGeoPointFieldMapper extends FieldMapper implements Arr
         throw new UnsupportedOperationException("Parsing is implemented in parse(), this method should NEVER be called");
     }
 
-    protected void parse(ParseContext context, GeoPoint point, String geoHash) throws IOException {
+    public void parse(ParseContext context, GeoPoint point, String geoHash) throws IOException {
         if (legacyFieldType().isGeoHashEnabled()) {
             if (geoHash == null) {
                 geoHash = GeoHashUtils.stringEncode(point.lon(), point.lat());
@@ -674,5 +674,10 @@ public abstract class BaseGeoPointFieldMapper extends FieldMapper implements Arr
 
     private static long fromBytes(byte b1, byte b2, byte b3, byte b4, byte b5, byte b6, byte b7, byte b8) {
         return ((long)b1 & 255L) << 56 | ((long)b2 & 255L) << 48 | ((long)b3 & 255L) << 40 | ((long)b4 & 255L) << 32 | ((long)b5 & 255L) << 24 | ((long)b6 & 255L) << 16 | ((long)b7 & 255L) << 8 | (long)b8 & 255L;
+    }
+    
+    @Override
+    public String cqlType() {
+        return "geo_point";
     }
 }

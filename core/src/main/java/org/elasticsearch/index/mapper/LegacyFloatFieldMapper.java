@@ -329,4 +329,9 @@ public class LegacyFloatFieldMapper extends LegacyNumberFieldMapper {
             return Float.toString(number);
         }
     }
+
+    @Override
+    public String cqlType() {
+        return "float";
+    }
 }

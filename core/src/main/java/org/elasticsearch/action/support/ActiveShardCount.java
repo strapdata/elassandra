@@ -20,6 +20,8 @@
 package org.elasticsearch.action.support;
 
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
+
+import org.apache.cassandra.db.ConsistencyLevel;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
@@ -38,6 +40,8 @@ import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_WAIT_FOR_
  */
 public final class ActiveShardCount implements Writeable {
 
+    private static final int ACTIVE_SHARD_COUNT_QUORUM = -4;
+    private static final int ACTIVE_SHARD_COUNT_LOCAL_QUORUM = -3;
     private static final int ACTIVE_SHARD_COUNT_DEFAULT = -2;
     private static final int ALL_ACTIVE_SHARDS = -1;
 
@@ -89,6 +93,25 @@ public final class ActiveShardCount implements Writeable {
         }
     }
 
+    public ConsistencyLevel toCassandraConsistencyLevel() {
+        switch (value) {
+        case 1:
+        case ACTIVE_SHARD_COUNT_DEFAULT:
+            return ConsistencyLevel.LOCAL_ONE;
+        case 2:
+            return ConsistencyLevel.TWO;
+        case 3:
+            return ConsistencyLevel.THREE;
+        case ACTIVE_SHARD_COUNT_LOCAL_QUORUM:
+            return ConsistencyLevel.LOCAL_QUORUM;
+        case ACTIVE_SHARD_COUNT_QUORUM:
+            return ConsistencyLevel.QUORUM;
+        case ALL_ACTIVE_SHARDS:
+            return ConsistencyLevel.ALL;
+        }
+        return ConsistencyLevel.LOCAL_ONE;
+    }
+    
     @Override
     public void writeTo(final StreamOutput out) throws IOException {
         out.writeInt(value);

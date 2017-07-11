@@ -34,7 +34,7 @@ import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Setting;
@@ -95,12 +95,9 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
 
     @Inject
     public GatewayService(Settings settings, AllocationService allocationService, ClusterService clusterService,
-                          ThreadPool threadPool, GatewayMetaState metaState,
-                          TransportNodesListGatewayMetaState listGatewayMetaState, Discovery discovery,
-                          IndicesService indicesService) {
+                          ThreadPool threadPool) {
         super(settings);
-        this.gateway = new Gateway(settings, clusterService, metaState, listGatewayMetaState, discovery,
-            indicesService);
+        this.gateway = new Gateway(settings, clusterService);
         this.allocationService = allocationService;
         this.clusterService = clusterService;
         this.threadPool = threadPool;
@@ -130,10 +127,13 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
         this.clusterService.addInitialStateBlock(STATE_NOT_RECOVERED_BLOCK);
     }
 
+    public Gateway gateway() {
+        return this.gateway;
+    }
+    
     @Override
     protected void doStart() {
-        // use post applied so that the state will be visible to the background recovery thread we spawn in performStateRecovery
-        clusterService.addListener(this);
+        performStateRecovery(false, "startup recovery");
     }
 
     @Override
@@ -278,7 +278,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
                             .build();
 
                     // initialize all index routing tables as empty
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(updatedState.routingTable());
+                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(GatewayService.this.clusterService, updatedState);
                     for (ObjectCursor<IndexMetaData> cursor : updatedState.metaData().indices().values()) {
                         routingTableBuilder.addAsRecovery(cursor.value);
                     }

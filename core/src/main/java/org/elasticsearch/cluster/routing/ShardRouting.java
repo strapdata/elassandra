@@ -19,6 +19,9 @@
 
 package org.elasticsearch.cluster.routing;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
+import org.elassandra.cluster.routing.AbstractSearchStrategy.Router;
 import org.elasticsearch.cluster.routing.RecoverySource.PeerRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.StoreRecoverySource;
 import org.elasticsearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
@@ -32,6 +35,7 @@ import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -46,6 +50,11 @@ public final class ShardRouting implements Writeable, ToXContent {
      */
     public static final long UNAVAILABLE_EXPECTED_SHARD_SIZE = -1;
 
+    /**
+     * Dummy allocation ID to avoid unless random generation (this involve a lock on java.security.SecureRandom.nextBytes).
+     */
+    static AllocationId DUMMY_ALLOCATION_ID = AllocationId.newInitializing();
+    
     private final ShardId shardId;
     private final String currentNodeId;
     private final String relocatingNodeId;
@@ -59,13 +68,34 @@ public final class ShardRouting implements Writeable, ToXContent {
     @Nullable
     private final ShardRouting targetRelocatingShard;
 
+    protected transient Collection<Range<Token>> tokenRanges;
+    
+
+    public Collection<Range<Token>> tokenRanges() {
+        return tokenRanges;
+    }
+
+    public void tokenRanges(Collection<Range<Token>> tokenRanges) {
+        this.tokenRanges = tokenRanges;
+    }
+
+    public ShardRouting(ShardId shardId, String currentNodeId, boolean primary, ShardRoutingState state, UnassignedInfo unassignedInfo, Collection<Range<Token>> tokenRanges) {
+        this(shardId, currentNodeId, null, primary, state, null, unassignedInfo, DUMMY_ALLOCATION_ID, 0,tokenRanges);
+    }
+    public ShardRouting(ShardId shardId, String currentNodeId,
+            String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
+            UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize) {
+        this(shardId, currentNodeId,
+            relocatingNodeId, primary, state, recoverySource,
+            unassignedInfo, allocationId, expectedShardSize, null);
+    }
     /**
      * A constructor to internally create shard routing instances, note, the internal flag should only be set to true
      * by either this class or tests. Visible for testing.
      */
-    ShardRouting(ShardId shardId, String currentNodeId,
+    public ShardRouting(ShardId shardId, String currentNodeId,
                  String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
-                 UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize) {
+                 UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize, Collection<Range<Token>> tokenRanges) {
         this.shardId = shardId;
         this.currentNodeId = currentNodeId;
         this.relocatingNodeId = relocatingNodeId;
@@ -82,6 +112,8 @@ public final class ShardRouting implements Writeable, ToXContent {
         assert !(state == ShardRoutingState.UNASSIGNED && unassignedInfo == null) : "unassigned shard must be created with meta";
         assert (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) == (recoverySource != null) : "recovery source only available on unassigned or initializing shard but was " + state;
         assert recoverySource == null || recoverySource == PeerRecoverySource.INSTANCE || primary : "replica shards always recover from primary";
+        
+        this.tokenRanges = tokenRanges;
     }
 
     @Nullable
@@ -630,6 +662,9 @@ public final class ShardRouting implements Writeable, ToXContent {
             .field("relocating_node", relocatingNodeId())
             .field("shard", id())
             .field("index", getIndexName());
+        if (tokenRanges != null && tokenRanges.size() > 0) {
+            builder.field("token_ranges", tokenRanges);
+        }
         if (expectedShardSize != UNAVAILABLE_EXPECTED_SHARD_SIZE) {
             builder.field("expected_shard_size_in_bytes", expectedShardSize);
         }

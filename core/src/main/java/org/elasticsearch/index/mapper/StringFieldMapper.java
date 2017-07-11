@@ -562,6 +562,42 @@ public class StringFieldMapper extends FieldMapper {
         }
     }
 
+    
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        //ValueAndBoost valueAndBoost = new ValueAndBoost((String)object, fieldType().boost());
+        ValueAndBoost valueAndBoost = createFieldForString(context, fieldType().nullValueAsString(), fieldType().boost(), (String)object);
+        if (valueAndBoost.value() == null) {
+            return;
+        }
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().name(), valueAndBoost.value(), valueAndBoost.boost());
+        }
+
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            Field field = new Field(fieldType().name(), valueAndBoost.value(), fieldType());
+            if (valueAndBoost.boost() != 1f && Version.indexCreated(context.indexSettings()).before(Version.V_5_0_0_alpha1)) {
+                field.setBoost(valueAndBoost.boost());
+            }
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            Field field = new SortedSetDocValuesField(fieldType().name(), new BytesRef(valueAndBoost.value()));
+            context.doc().add(field);
+        }
+        super.createField(context, object);
+    }
+    
+    public static ValueAndBoost createFieldForString(ParseContext context, String nullValue, float defaultBoost, String value) throws IOException {
+        if (context.externalValueSet()) {
+            return new ValueAndBoost(context.externalValue().toString(), defaultBoost);
+        }
+        if (value == null)
+            value = nullValue;
+        
+        return new ValueAndBoost(value, defaultBoost);
+    }
+    
     /**
      * Parse a field as though it were a string.
      * @param context parse context used during parsing
@@ -701,5 +737,10 @@ public class StringFieldMapper extends FieldMapper {
         public float boost() {
             return boost;
         }
+    }
+
+    @Override
+    public String cqlType() {
+        return "text";
     }
 }

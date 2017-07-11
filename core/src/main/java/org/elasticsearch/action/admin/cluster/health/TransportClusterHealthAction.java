@@ -49,15 +49,15 @@ import java.util.function.Predicate;
 
 public class TransportClusterHealthAction extends TransportMasterNodeReadAction<ClusterHealthRequest, ClusterHealthResponse> {
 
-    private final GatewayAllocator gatewayAllocator;
+    //private final GatewayAllocator gatewayAllocator;
 
     @Inject
     public TransportClusterHealthAction(Settings settings, TransportService transportService, ClusterService clusterService,
                                         ThreadPool threadPool, ActionFilters actionFilters,
-                                        IndexNameExpressionResolver indexNameExpressionResolver, GatewayAllocator gatewayAllocator) {
+                                        IndexNameExpressionResolver indexNameExpressionResolver) {
         super(settings, ClusterHealthAction.NAME, false, transportService, clusterService, threadPool, actionFilters,
             indexNameExpressionResolver, ClusterHealthRequest::new);
-        this.gatewayAllocator = gatewayAllocator;
+        //this.gatewayAllocator = gatewayAllocator;
     }
 
     @Override
@@ -195,13 +195,13 @@ public class TransportClusterHealthAction extends TransportMasterNodeReadAction<
 
     private boolean validateRequest(final ClusterHealthRequest request, ClusterState clusterState, final int waitFor) {
         ClusterHealthResponse response = clusterHealth(request, clusterState, clusterService.numberOfPendingTasks(),
-                gatewayAllocator.getNumberOfInFlightFetch(), clusterService.getMaxTaskWaitTime());
+                0, clusterService.getMaxTaskWaitTime());
         return prepareResponse(request, response, clusterState, waitFor);
     }
 
     private ClusterHealthResponse getResponse(final ClusterHealthRequest request, ClusterState clusterState, final int waitFor, boolean timedOut) {
         ClusterHealthResponse response = clusterHealth(request, clusterState, clusterService.numberOfPendingTasks(),
-                gatewayAllocator.getNumberOfInFlightFetch(), clusterService.getMaxTaskWaitTime());
+                0, clusterService.getMaxTaskWaitTime());
         boolean valid = prepareResponse(request, response, clusterState, waitFor);
         assert valid || timedOut;
         // we check for a timeout here since this method might be called from the wait_for_events

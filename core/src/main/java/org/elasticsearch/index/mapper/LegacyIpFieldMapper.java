@@ -347,4 +347,9 @@ public class LegacyIpFieldMapper extends LegacyNumberFieldMapper {
 
     }
 
+    @Override
+    public String cqlType() {
+        return "inet";
+    }
+
 }

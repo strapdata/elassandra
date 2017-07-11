@@ -19,6 +19,7 @@
 
 package org.elasticsearch.common.io.stream;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
@@ -45,6 +46,7 @@ import java.io.FileNotFoundException;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryNotEmptyException;
@@ -542,6 +544,10 @@ public abstract class StreamInput extends InputStream {
                 return readBytesRef();
             case 22:
                 return readGeoPoint();
+            case 64: // Token
+                byte[] buf = new byte[readVInt()];
+                readFully(buf);
+                return DatabaseDescriptor.getPartitioner().getTokenFactory().fromByteArray(ByteBuffer.wrap(buf));
             default:
                 throw new IOException("Can't read unknown type [" + type + "]");
         }

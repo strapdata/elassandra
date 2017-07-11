@@ -32,7 +32,7 @@ import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -87,6 +87,11 @@ public class MetaDataIndexStateService extends AbstractComponent {
             }
 
             @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
+            @Override
             public ClusterState execute(ClusterState currentState) {
                 Set<IndexMetaData> indicesToClose = new HashSet<>();
                 for (Index index : request.indices()) {
@@ -117,6 +122,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocksBuilder).build();
 
+                /*
                 RoutingTable.Builder rtBuilder = RoutingTable.builder(currentState.routingTable());
                 for (IndexMetaData index : indicesToClose) {
                     rtBuilder.remove(index.getIndex().getName());
@@ -126,6 +132,9 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 return  allocationService.reroute(
                         ClusterState.builder(updatedState).routingTable(rtBuilder.build()).build(),
                         "indices closed [" + indicesAsString + "]");
+                */
+                RoutingTable routingTable = RoutingTable.build(MetaDataIndexStateService.this.clusterService, updatedState);
+                return ClusterState.builder(updatedState).incrementVersion().routingTable(routingTable).build();
             }
         });
     }
@@ -140,6 +149,11 @@ public class MetaDataIndexStateService extends AbstractComponent {
             @Override
             protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
                 return new ClusterStateUpdateResponse(acknowledged);
+            }
+            
+            @Override
+            public boolean doPresistMetaData() {
+                return true;
             }
 
             @Override
@@ -180,7 +194,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 }
 
                 ClusterState updatedState = ClusterState.builder(currentState).metaData(mdBuilder).blocks(blocksBuilder).build();
-
+                /*
                 RoutingTable.Builder rtBuilder = RoutingTable.builder(updatedState.routingTable());
                 for (IndexMetaData index : indicesToOpen) {
                     rtBuilder.addAsFromCloseToOpen(updatedState.metaData().getIndexSafe(index.getIndex()));
@@ -190,6 +204,8 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 return allocationService.reroute(
                         ClusterState.builder(updatedState).routingTable(rtBuilder.build()).build(),
                         "indices opened [" + indicesAsString + "]");
+                */
+                return ClusterState.builder(updatedState).incrementVersion().build();
             }
         });
     }

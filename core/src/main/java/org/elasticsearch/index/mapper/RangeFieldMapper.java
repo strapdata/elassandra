@@ -805,4 +805,9 @@ public class RangeFieldMapper extends FieldMapper {
             return sb.toString();
         }
     }
+
+    @Override
+    public String cqlType() {
+        return null;
+    }
 }

@@ -67,7 +67,7 @@ import java.util.concurrent.CountDownLatch;
 /**
  * Internal startup code.
  */
-final class Bootstrap {
+public final class Bootstrap {
 
     private static volatile Bootstrap INSTANCE;
     private volatile Node node;
@@ -153,7 +153,7 @@ final class Bootstrap {
         StringHelper.randomId();
     }
 
-    static void initializeProbes() {
+    public static void initializeProbes() {
         // Force probes to be loaded
         ProcessProbe.getInstance();
         OsProbe.getInstance();

@@ -19,6 +19,7 @@
 
 package org.elasticsearch.bootstrap;
 
+import org.apache.cassandra.utils.CLibrary;
 import org.elasticsearch.common.SuppressForbidden;
 
 import java.util.Dictionary;
@@ -40,14 +41,14 @@ public final class BootstrapInfo {
      * memory did not work.
      */
     public static boolean isNativesAvailable() {
-        return Natives.JNA_AVAILABLE;
+        return CLibrary.jnaAvailable();
     }
 
     /**
      * Returns true if we were able to lock the process's address space.
      */
     public static boolean isMemoryLocked() {
-        return Natives.isMemoryLocked();
+        return CLibrary.jnaMemoryLockable();
     }
 
     /**

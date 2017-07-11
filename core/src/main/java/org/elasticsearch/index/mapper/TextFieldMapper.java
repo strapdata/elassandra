@@ -394,6 +394,26 @@ public class TextFieldMapper extends FieldMapper {
         }
     }
 
+    
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        final String value = (String)object;
+        if (value == null) {
+            return;
+        }
+        
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().name(), value, fieldType().boost());
+        }
+
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            Field field = new Field(fieldType().name(), value, fieldType());
+            context.doc().add(field);
+        }
+        
+        super.createField(context, object); // for multi fields.
+    }
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -446,5 +466,10 @@ public class TextFieldMapper extends FieldMapper {
                 builder.endObject();
             }
         }
+    }
+    
+    @Override
+    public String cqlType() {
+        return "text";
     }
 }

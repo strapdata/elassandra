@@ -28,6 +28,7 @@ import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.Version;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -38,6 +39,7 @@ import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.fielddata.plain.DocValuesIndexFieldData;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -45,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 import static java.util.Collections.unmodifiableList;
 import static org.elasticsearch.index.mapper.TypeParsers.parseField;
@@ -269,7 +272,20 @@ public final class KeywordFieldMapper extends FieldMapper {
         }
 
         @Override
-        protected BytesRef indexedValueForSearch(Object value) {
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof UUID)
+                return value;
+
+            // keywords are internally stored as utf8 bytes
+            BytesRef binaryValue = (BytesRef) value;
+            return binaryValue.utf8ToString();
+        }
+        
+        @Override
+        public BytesRef indexedValueForSearch(Object value) {
             if (searchAnalyzer() == Lucene.KEYWORD_ANALYZER) {
                 // keyword analyzer with the default attribute source which encodes terms using UTF8
                 // in that case we skip normalization, which may be slow if there many terms need to
@@ -323,6 +339,55 @@ public final class KeywordFieldMapper extends FieldMapper {
         return includeInAll;
     }
 
+    
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        String value = (String) object;
+        if (value == null)
+            value = fieldType().nullValueAsString();
+        
+        if (value == null || value.length() > ignoreAbove) {
+            return;
+        }
+        
+        final NamedAnalyzer normalizer = fieldType().normalizer();
+        if (normalizer != null) {
+            try (TokenStream ts = normalizer.tokenStream(name(), value)) {
+                final CharTermAttribute termAtt = ts.addAttribute(CharTermAttribute.class);
+                ts.reset();
+                if (ts.incrementToken() == false) {
+                  throw new IllegalStateException("The normalization token stream is "
+                      + "expected to produce exactly 1 token, but got 0 for analyzer "
+                      + normalizer + " and input \"" + value + "\"");
+                }
+                final String newValue = termAtt.toString();
+                if (ts.incrementToken()) {
+                  throw new IllegalStateException("The normalization token stream is "
+                      + "expected to produce exactly 1 token, but got 2+ for analyzer "
+                      + normalizer + " and input \"" + value + "\"");
+                }
+                ts.end();
+                value = newValue;
+            }
+        }
+
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().name(), value, fieldType().boost());
+        }
+
+        // convert to utf8 only once before feeding postings/dv/stored fields
+        final BytesRef binaryValue = new BytesRef(value);
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            Field field = new Field(fieldType().name(), binaryValue, fieldType());
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
+        }
+        super.createField(context, object);
+    }
+    
+    
     @Override
     protected void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException {
         String value;
@@ -412,5 +477,10 @@ public final class KeywordFieldMapper extends FieldMapper {
         } else if (includeDefaults) {
             builder.nullField("normalizer");
         }
+    }
+    
+    @Override
+    public String cqlType() {
+        return "text";
     }
 }

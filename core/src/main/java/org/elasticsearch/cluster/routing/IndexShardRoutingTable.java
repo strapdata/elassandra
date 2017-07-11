@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static java.util.Collections.emptyMap;
 
@@ -74,7 +75,7 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
      */
     final List<ShardRouting> allInitializingShards;
 
-    IndexShardRoutingTable(ShardId shardId, List<ShardRouting> shards) {
+    public IndexShardRoutingTable(ShardId shardId, List<ShardRouting> shards) {
         this.shardId = shardId;
         this.shuffler = new RotationShardShuffler(Randomness.get().nextInt());
         this.shards = Collections.unmodifiableList(shards);
@@ -121,6 +122,41 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
         this.allInitializingShards = Collections.unmodifiableList(allInitializingShards);
     }
 
+    private static RotationShardShuffler DUMMY_SHARD_SHUFFLER = new RotationShardShuffler(ThreadLocalRandom.current().nextInt());
+    private static List<ShardRouting> EMPTY_LIST = Collections.emptyList();
+
+    /**
+     * Elassandra default ctor for single primary shard IndexShardRoutingTable
+     * @param shardId
+     * @param shard
+     */
+    public IndexShardRoutingTable(ShardId shardId, ShardRouting shard) {
+         List<ShardRouting> singleton = Collections.singletonList(shard);
+        
+         this.shardId = shardId;
+         this.shards = singleton;
+         
+         this.allShardsStarted = shard.started();
+         this.primary = shard;
+         this.primaryAsList = singleton;
+         this.replicas = EMPTY_LIST;
+         this.activeShards = (shard.active()) ? singleton : EMPTY_LIST;
+         this.allInitializingShards = (shard.initializing()) ? singleton : EMPTY_LIST;
+         this.assignedShards = (shard.assignedToNode()) ? singleton :  EMPTY_LIST;
+         
+         this.shuffler = DUMMY_SHARD_SHUFFLER;
+    }
+    
+    @Override
+    public String toString() {
+         return this.shards().toString();
+    }
+    
+    public ShardRouting getPrimaryShardRouting() {
+        return primaryAsList.get(0);
+    }
+    
+    
     /**
      * Returns the shards id
      *

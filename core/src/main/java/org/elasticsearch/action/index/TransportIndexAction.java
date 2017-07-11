@@ -50,10 +50,10 @@ public class TransportIndexAction extends TransportSingleItemBulkWriteAction<Ind
     @Inject
     public TransportIndexAction(Settings settings, TransportService transportService, ClusterService clusterService,
                                 IndicesService indicesService,
-                                ThreadPool threadPool, ShardStateAction shardStateAction,
+                                ThreadPool threadPool,
                                 ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                 TransportBulkAction bulkAction, TransportShardBulkAction shardBulkAction) {
-        super(settings, IndexAction.NAME, transportService, clusterService, indicesService, threadPool, shardStateAction,
+        super(settings, IndexAction.NAME, transportService, clusterService, indicesService, threadPool,
             actionFilters, indexNameExpressionResolver, IndexRequest::new, IndexRequest::new, ThreadPool.Names.INDEX,
             bulkAction, shardBulkAction);
     }

@@ -19,6 +19,15 @@
 
 package org.elasticsearch.client;
 
+import org.elassandra.action.admin.indices.cleanup.CleanupRequest;
+import org.elassandra.action.admin.indices.cleanup.CleanupRequestBuilder;
+import org.elassandra.action.admin.indices.cleanup.CleanupResponse;
+import org.elassandra.action.admin.indices.rebuild.RebuildRequest;
+import org.elassandra.action.admin.indices.rebuild.RebuildRequestBuilder;
+import org.elassandra.action.admin.indices.rebuild.RebuildResponse;
+import org.elassandra.action.admin.indices.reload.ReloadRequest;
+import org.elassandra.action.admin.indices.reload.ReloadRequestBuilder;
+import org.elassandra.action.admin.indices.reload.ReloadResponse;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest;
@@ -374,6 +383,45 @@ public interface IndicesAdminClient extends ElasticsearchClient {
      * Explicitly refresh one or more indices (making the content indexed since the last refresh searchable).
      */
     RefreshRequestBuilder prepareRefresh(String... indices);
+
+    /**
+     * Explicitly rebuild one or more indices (releasing memory from the node).
+     *
+     * @param request  The rebuild request
+     * @param listener A listener to be notified with a result
+     */
+    void rebuild(RebuildRequest request, ActionListener <RebuildResponse> listener);
+
+    /**
+     * Explicitly rebuild one or more indices (releasing memory from the node).
+     */
+    RebuildRequestBuilder prepareRebuild(String... indices);
+
+    /**
+     * Explicitly reload one or more indices (refresh Cassandra SSTable).
+     *
+     * @param request  The reload request
+     * @param listener A listener to be notified with a result
+     */
+    void reload(ReloadRequest request, ActionListener <ReloadResponse> listener);
+
+    /**
+     * Explicitly reload one or more indices (releasing memory from the node).
+     */
+    ReloadRequestBuilder prepareReload(String... indices);
+    
+    /**
+     * Explicitly cleanup one or more indices (cleanup Cassandra keyspaces).
+     *
+     * @param request  The cleanup request
+     * @param listener A listener to be notified with a result
+     */
+    void cleanup(CleanupRequest request, ActionListener <CleanupResponse> listener);
+
+    /**
+     * Explicitly reload one or more indices (releasing memory from the node).
+     */
+    CleanupRequestBuilder prepareCleanup(String... indices);
 
     /**
      * Explicitly flush one or more indices (releasing memory from the node).

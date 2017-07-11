@@ -22,8 +22,10 @@ package org.elasticsearch.index.mapper;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.TimestampParsingException;
+import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.joda.FormatDateTimeFormatter;
 import org.elasticsearch.common.joda.Joda;
 import org.elasticsearch.common.lucene.Lucene;
@@ -32,6 +34,7 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -183,6 +186,23 @@ public class TimestampFieldMapper extends MetadataFieldMapper {
         public Object valueForDisplay(Object value) {
             return value;
         }
+        
+        @Override
+        public Long cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof Date) {
+                return ((Date)value).getTime();
+            }
+            if (value instanceof Number) {
+                return ((Number) value).longValue();
+            }
+            if (value instanceof BytesRef) {
+                return Numbers.bytesToLong((BytesRef) value);
+            }
+            return dateTimeFormatter.parser().parseMillis(value.toString());
+        }
     }
 
     private EnabledAttributeMapper enabledState;
@@ -250,6 +270,19 @@ public class TimestampFieldMapper extends MetadataFieldMapper {
         }
     }
 
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        Long timestamp = (Long)value;
+        if (enabledState.enabled) {
+            if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+                context.doc().add(new LegacyLongFieldMapper.CustomLongNumericField(timestamp, fieldType()));
+            }
+            if (fieldType().hasDocValues()) {
+                context.doc().add(new NumericDocValuesField(fieldType().name(), timestamp));
+            }
+        }
+    }
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

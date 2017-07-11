@@ -19,10 +19,14 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.compress.CompressedXContent;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -33,6 +37,7 @@ import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.similarity.SimilarityService;
 import org.elasticsearch.indices.mapper.MapperRegistry;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -47,7 +52,8 @@ public class DocumentMapperParser {
     private final NamedXContentRegistry xContentRegistry;
     private final SimilarityService similarityService;
     private final Supplier<QueryShardContext> queryShardContextSupplier;
-
+    private static final Logger logger = Loggers.getLogger(DocumentMapperParser.class);
+    
     private final RootObjectMapper.TypeParser rootObjectTypeParser = new RootObjectMapper.TypeParser();
 
     private final Version indexVersionCreated;
@@ -116,16 +122,20 @@ public class DocumentMapperParser {
             String fieldName = entry.getKey();
             Object fieldNode = entry.getValue();
 
-            MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
-            if (typeParser != null) {
+            if (MapperService.DISCOVER.equals(fieldName)) {
                 iterator.remove();
-                if (false == fieldNode instanceof Map) {
-                    throw new IllegalArgumentException("[_parent] must be an object containing [type]");
+            } else {
+                MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
+                if (typeParser != null) {
+                    iterator.remove();
+                    if (false == fieldNode instanceof Map) {
+                        throw new IllegalArgumentException("[_parent] must be an object containing [type]");
+                    }
+                    Map<String, Object> fieldNodeMap = (Map<String, Object>) fieldNode;
+                    docBuilder.put(typeParser.parse(fieldName, fieldNodeMap, parserContext));
+                    fieldNodeMap.remove("type");
+                    checkNoRemainingFields(fieldName, fieldNodeMap, parserContext.indexVersionCreated());
                 }
-                Map<String, Object> fieldNodeMap = (Map<String, Object>) fieldNode;
-                docBuilder.put(typeParser.parse(fieldName, fieldNodeMap, parserContext));
-                fieldNodeMap.remove("type");
-                checkNoRemainingFields(fieldName, fieldNodeMap, parserContext.indexVersionCreated());
             }
         }
 
@@ -182,6 +192,12 @@ public class DocumentMapperParser {
             mapping = new Tuple<>(rootName, (Map<String, Object>) root.get(rootName));
         } else {
             mapping = new Tuple<>(type, root);
+        }
+        
+        try {
+            this.mapperService.discoverTableMapping(mapping.v1(), mapping.v2());
+        } catch (SyntaxException | ConfigurationException | IOException e) {
+            logger.error("Failed to expand mapping", e);
         }
         return mapping;
     }

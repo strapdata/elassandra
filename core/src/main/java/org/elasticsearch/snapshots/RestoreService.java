@@ -55,7 +55,7 @@ import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
@@ -250,7 +250,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateApp
                     ClusterState.Builder builder = ClusterState.builder(currentState);
                     MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                    RoutingTable.Builder rtBuilder = RoutingTable.builder(currentState.routingTable());
+                    RoutingTable.Builder rtBuilder = RoutingTable.builder(clusterService, currentState);
                     ImmutableOpenMap<ShardId, RestoreInProgress.ShardRestoreStatus> shards;
                     Set<String> aliases = new HashSet<>();
                     if (!renamedIndices.isEmpty()) {

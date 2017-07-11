@@ -193,6 +193,11 @@ public class AggregatorFactories {
         return pipelineAggregators;
     }
 
+    // hack to avoid token_ranges filtering when aggregating on token range.
+    public boolean hasTokenRangeAggregation() {
+        return factories.length > 0 && (factories[0] instanceof org.elassandra.search.aggregations.bucket.token.RangeAggregatorFactory);
+    }
+    
     /**
      * Create all aggregators so that they can be consumed with multiple
      * buckets.

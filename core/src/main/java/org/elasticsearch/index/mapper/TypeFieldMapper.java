@@ -363,6 +363,17 @@ public class TypeFieldMapper extends MetadataFieldMapper {
             fields.add(new SortedSetDocValuesField(fieldType().name(), new BytesRef(context.sourceToParse().type())));
         }
     }
+    
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored()) {
+            return;
+        }
+        context.doc().add(new Field(fieldType().name(), context.sourceToParse().type(), fieldType()));
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedSetDocValuesField(fieldType().name(), new BytesRef(context.sourceToParse().type())));
+        }
+    }
 
     @Override
     protected String contentType() {

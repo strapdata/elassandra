@@ -47,7 +47,14 @@ public abstract class LocalClusterUpdateTask implements ClusterStateTaskConfig, 
                                                                     List<LocalClusterUpdateTask> tasks) throws Exception {
         assert tasks.size() == 1 && tasks.get(0) == this : "expected one-element task list containing current object but was " + tasks;
         ClusterTasksResult<LocalClusterUpdateTask> result = execute(currentState);
-        return ClusterTasksResult.<LocalClusterUpdateTask>builder().successes(tasks).build(result, currentState);
+        boolean doPeristMetadata = false;
+        for(LocalClusterUpdateTask task : tasks) {
+            if (task.doPresistMetaData()) {
+                doPeristMetadata = true;
+                break;
+            }
+        }
+        return ClusterTasksResult.<LocalClusterUpdateTask>builder().successes(tasks).build(result, currentState, doPeristMetadata);
     }
 
     /**
@@ -88,6 +95,11 @@ public abstract class LocalClusterUpdateTask implements ClusterStateTaskConfig, 
 
     @Override
     public final boolean runOnlyOnMaster() {
+        return false;
+    }
+    
+    @Override
+    public boolean doPresistMetaData() {
         return false;
     }
 }

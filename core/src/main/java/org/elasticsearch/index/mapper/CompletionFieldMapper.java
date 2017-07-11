@@ -18,6 +18,8 @@
  */
 package org.elasticsearch.index.mapper;
 
+import com.google.common.collect.Maps;
+
 import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
@@ -28,6 +30,7 @@ import org.apache.lucene.search.suggest.document.FuzzyCompletionQuery;
 import org.apache.lucene.search.suggest.document.PrefixCompletionQuery;
 import org.apache.lucene.search.suggest.document.RegexCompletionQuery;
 import org.apache.lucene.search.suggest.document.SuggestField;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.ParseField;
@@ -43,6 +46,7 @@ import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.search.suggest.completion.CompletionSuggester;
 import org.elasticsearch.search.suggest.completion.context.ContextMapping;
 import org.elasticsearch.search.suggest.completion.context.ContextMappings;
+import org.elasticsearch.search.suggest.completion2x.context.ContextMapping.ContextConfig;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -53,6 +57,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.SortedMap;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseMultiField;
 
@@ -591,6 +596,49 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
     }
 
     @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        Map<String, Object> map = (Map<String, Object>) value;
+        SortedMap<String, ContextConfig> contextConfig = null;
+        /*
+        if(contextConfig == null) {
+            contextConfig = Maps.newTreeMap();
+            for (ContextMapping mapping : fieldType().getContextMappings().contextMappings()) {
+                contextConfig.put(mapping.name(), mapping.defaultConfig());
+            }
+        }
+
+
+        final ContextMapping.Context ctx = new ContextMapping.Context(contextConfig, context.doc());
+        String surfaceForm = (String) map.get(Fields.CONTENT_FIELD_NAME_OUTPUT);
+        BytesRef payload = new BytesRef( (String) map.get(Fields.CONTENT_FIELD_NAME_PAYLOAD));
+        long weight = (Long) map.get(Fields.CONTENT_FIELD_NAME_WEIGHT);
+        List<String> inputs = (List<String>) map.get(Fields.CONTENT_FIELD_NAME_INPUT);
+        
+        payload = payload == null ? EMPTY : payload;
+        if (surfaceForm == null) { // no surface form use the input
+            for (String input : inputs) {
+                if (input.length() == 0) {
+                    continue;
+                }
+                BytesRef suggestPayload = fieldType().analyzingSuggestLookupProvider.buildPayload(new BytesRef(
+                    input), weight, payload);
+                context.doc().add(getCompletionField(ctx, input, suggestPayload));
+            }
+        } else {
+            BytesRef suggestPayload = fieldType().analyzingSuggestLookupProvider.buildPayload(new BytesRef(
+                surfaceForm), weight, payload);
+            for (String input : inputs) {
+                if (input.length() == 0) {
+                    continue;
+                }
+                context.doc().add(getCompletionField(ctx, input, suggestPayload));
+            }
+        }
+        */
+        super.createField(context,value);
+    }
+    
+    @Override
     protected String contentType() {
         return CONTENT_TYPE;
     }
@@ -600,5 +648,10 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         super.doMerge(mergeWith, updateAllTypes);
         CompletionFieldMapper fieldMergeWith = (CompletionFieldMapper) mergeWith;
         this.maxInputLength = fieldMergeWith.maxInputLength;
+    }
+
+    @Override
+    public String cqlType() {
+        return null;
     }
 }

@@ -45,7 +45,7 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
         static {
             FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
             FIELD_TYPE.setTokenized(false);
-            FIELD_TYPE.setStored(true);
+            FIELD_TYPE.setStored(false);
             FIELD_TYPE.setOmitNorms(true);
             FIELD_TYPE.setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
             FIELD_TYPE.setSearchAnalyzer(Lucene.KEYWORD_ANALYZER);
@@ -159,6 +159,17 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
         return null;
     }
 
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        String routing = (String)object;
+        if (routing != null) {
+            if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+                Field field = new Field(fieldType().name(), routing, fieldType());
+                context.doc().add(field);
+            }
+        }
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException {
         String routing = context.sourceToParse().routing();

@@ -205,7 +205,7 @@ public class NumberFieldMapper extends FieldMapper {
             }
 
             @Override
-            Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
+            public Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
                              boolean includeLower, boolean includeUpper,
                              boolean hasDocValues) {
                 float l = Float.NEGATIVE_INFINITY;
@@ -269,6 +269,11 @@ public class NumberFieldMapper extends FieldMapper {
                     isSearchable, isAggregatable,
                     HalfFloatPoint.decodeDimension(min, 0), HalfFloatPoint.decodeDimension(max, 0));
             }
+
+            @Override
+            String cqlType() {
+                return "float";
+            }
         },
         FLOAT("float", NumericType.FLOAT) {
             @Override
@@ -303,7 +308,7 @@ public class NumberFieldMapper extends FieldMapper {
             }
 
             @Override
-            Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
+            public Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
                              boolean includeLower, boolean includeUpper,
                              boolean hasDocValues) {
                 float l = Float.NEGATIVE_INFINITY;
@@ -365,6 +370,11 @@ public class NumberFieldMapper extends FieldMapper {
                     isSearchable, isAggregatable,
                     FloatPoint.decodeDimension(min, 0), FloatPoint.decodeDimension(max, 0));
             }
+
+            @Override
+            String cqlType() {
+                return "float";
+            }
         },
         DOUBLE("double", NumericType.DOUBLE) {
             @Override
@@ -399,7 +409,7 @@ public class NumberFieldMapper extends FieldMapper {
             }
 
             @Override
-            Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
+            public Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
                              boolean includeLower, boolean includeUpper,
                              boolean hasDocValues) {
                 double l = Double.NEGATIVE_INFINITY;
@@ -461,6 +471,11 @@ public class NumberFieldMapper extends FieldMapper {
                     isSearchable, isAggregatable,
                     DoublePoint.decodeDimension(min, 0), DoublePoint.decodeDimension(max, 0));
             }
+
+            @Override
+            String cqlType() {
+                return "double";
+            }
         },
         BYTE("byte", NumericType.BYTE) {
             @Override
@@ -501,7 +516,7 @@ public class NumberFieldMapper extends FieldMapper {
             }
 
             @Override
-            Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
+            public Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
                              boolean includeLower, boolean includeUpper,
                              boolean hasDocValues) {
                 return INTEGER.rangeQuery(field, lowerTerm, upperTerm, includeLower, includeUpper, hasDocValues);
@@ -522,6 +537,11 @@ public class NumberFieldMapper extends FieldMapper {
             @Override
             Number valueForSearch(Number value) {
                 return value.byteValue();
+            }
+
+            @Override
+            String cqlType() {
+                return "int";
             }
         },
         SHORT("short", NumericType.SHORT) {
@@ -563,7 +583,7 @@ public class NumberFieldMapper extends FieldMapper {
             }
 
             @Override
-            Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
+            public Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
                              boolean includeLower, boolean includeUpper,
                              boolean hasDocValues) {
                 return INTEGER.rangeQuery(field, lowerTerm, upperTerm, includeLower, includeUpper, hasDocValues);
@@ -584,6 +604,11 @@ public class NumberFieldMapper extends FieldMapper {
             @Override
             Number valueForSearch(Number value) {
                 return value.shortValue();
+            }
+
+            @Override
+            String cqlType() {
+                return "int";
             }
         },
         INTEGER("integer", NumericType.INT) {
@@ -641,7 +666,7 @@ public class NumberFieldMapper extends FieldMapper {
             }
 
             @Override
-            Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
+            public Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
                              boolean includeLower, boolean includeUpper,
                              boolean hasDocValues) {
                 int l = Integer.MIN_VALUE;
@@ -715,6 +740,11 @@ public class NumberFieldMapper extends FieldMapper {
                     isSearchable, isAggregatable,
                     IntPoint.decodeDimension(min, 0), IntPoint.decodeDimension(max, 0));
             }
+
+            @Override
+            String cqlType() {
+                return "int";
+            }
         },
         LONG("long", NumericType.LONG) {
             @Override
@@ -771,7 +801,7 @@ public class NumberFieldMapper extends FieldMapper {
             }
 
             @Override
-            Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
+            public Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
                              boolean includeLower, boolean includeUpper,
                              boolean hasDocValues) {
                 long l = Long.MIN_VALUE;
@@ -845,6 +875,11 @@ public class NumberFieldMapper extends FieldMapper {
                     isSearchable, isAggregatable,
                     LongPoint.decodeDimension(min, 0), LongPoint.decodeDimension(max, 0));
             }
+
+            @Override
+            String cqlType() {
+                return "bigint";
+            }
         };
 
         private final String name;
@@ -865,7 +900,7 @@ public class NumberFieldMapper extends FieldMapper {
         }
         abstract Query termQuery(String field, Object value);
         abstract Query termsQuery(String field, List<Object> values);
-        abstract Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
+        public abstract Query rangeQuery(String field, Object lowerTerm, Object upperTerm,
                                   boolean includeLower, boolean includeUpper,
                                   boolean hasDocValues);
         abstract Number parse(XContentParser parser, boolean coerce) throws IOException;
@@ -878,6 +913,8 @@ public class NumberFieldMapper extends FieldMapper {
             return value;
         }
 
+        abstract String cqlType();
+        
         /**
          * Returns true if the object is a number and has a decimal part
          */
@@ -911,7 +948,7 @@ public class NumberFieldMapper extends FieldMapper {
 
     }
 
-    public static final class NumberFieldType extends MappedFieldType {
+    public static class NumberFieldType extends MappedFieldType {
 
         NumberType type;
 
@@ -923,7 +960,7 @@ public class NumberFieldMapper extends FieldMapper {
             setOmitNorms(true);
         }
 
-        NumberFieldType(NumberFieldType other) {
+        public NumberFieldType(NumberFieldType other) {
             super(other);
             this.type = other.type;
         }
@@ -986,7 +1023,7 @@ public class NumberFieldMapper extends FieldMapper {
             }
             return type.valueForSearch((Number) value);
         }
-
+        
         @Override
         public DocValueFormat docValueFormat(String format, DateTimeZone timeZone) {
             if (timeZone != null) {
@@ -1093,6 +1130,29 @@ public class NumberFieldMapper extends FieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        if (value == null) {
+            value = fieldType().nullValue();
+        }
+
+        if (value == null) {
+            return;
+        }
+
+        Number numericValue = fieldType().type.parse(value, coerce.value());
+
+        if (includeInAll) {
+            context.allEntries().addText(fieldType().name(), value.toString(), fieldType().boost());
+        }
+
+        boolean indexed = fieldType().indexOptions() != IndexOptions.NONE;
+        boolean docValued = fieldType().hasDocValues();
+        boolean stored = fieldType().stored();
+        for(Field field : fieldType().type.createFields(fieldType().name(), numericValue, indexed, docValued, stored))
+            context.doc().add(field);
+    }
+    
+    @Override
     protected void doMerge(Mapper mergeWith, boolean updateAllTypes) {
         super.doMerge(mergeWith, updateAllTypes);
         NumberFieldMapper other = (NumberFieldMapper) mergeWith;
@@ -1125,5 +1185,10 @@ public class NumberFieldMapper extends FieldMapper {
         } else if (includeDefaults) {
             builder.field("include_in_all", false);
         }
+    }
+
+    @Override
+    public String cqlType() {
+        return fieldType().type.cqlType();
     }
 }

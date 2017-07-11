@@ -28,7 +28,7 @@ import org.elasticsearch.gradle.Version
 
 // common maven publishing configuration
 subprojects {
-  group = 'org.elasticsearch'
+  group = 'com.strapdata.elasticsearch'
   version = org.elasticsearch.gradle.VersionProperties.elasticsearch
   description = "Elasticsearch subproject ${project.path}"
 }
@@ -45,7 +45,7 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
         all {
           pom.withXml { XmlProvider xml ->
             Node node = xml.asNode()
-            node.appendNode('inceptionYear', '2009')
+            node.appendNode('inceptionYear', '2015')
 
             Node license = node.appendNode('licenses').appendNode('license')
             license.appendNode('name', 'The Apache Software License, Version 2.0')
@@ -119,7 +119,7 @@ task verifyVersions {
     }
     // Read the list from maven central
     Node xml
-    new URL('https://repo1.maven.org/maven2/org/elasticsearch/elasticsearch/maven-metadata.xml').openStream().withStream { s ->
+    new URL('https://oss.sonatype.org/content/repositories/snapshots/com/strapdata/elasticsearch/elasticsearch/maven-metadata.xml').openStream().withStream { s ->
         xml = new XmlParser().parse(s)
     }
     Set<Version> knownVersions = new TreeSet<>(xml.versioning.versions.version.collect { it.text() }.findAll { it ==~ /\d\.\d\.\d/ }.collect { Version.fromString(it) })

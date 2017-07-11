@@ -97,6 +97,11 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
             }
 
             @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
+            @Override
             public ClusterState execute(ClusterState currentState) {
                 Set<String> templateNames = new HashSet<>();
                 for (ObjectCursor<String> cursor : currentState.metaData().templates().keys()) {
@@ -163,6 +168,11 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
                 listener.onFailure(e);
             }
 
+            @Override
+            public boolean doPresistMetaData() {
+                return true;
+            }
+            
             @Override
             public ClusterState execute(ClusterState currentState) throws Exception {
                 if (request.create && currentState.metaData().templates().containsKey(request.name)) {

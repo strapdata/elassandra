@@ -19,6 +19,18 @@
 
 package org.elasticsearch.client.support;
 
+import org.elassandra.action.admin.indices.cleanup.CleanupAction;
+import org.elassandra.action.admin.indices.cleanup.CleanupRequest;
+import org.elassandra.action.admin.indices.cleanup.CleanupRequestBuilder;
+import org.elassandra.action.admin.indices.cleanup.CleanupResponse;
+import org.elassandra.action.admin.indices.rebuild.RebuildAction;
+import org.elassandra.action.admin.indices.rebuild.RebuildRequest;
+import org.elassandra.action.admin.indices.rebuild.RebuildRequestBuilder;
+import org.elassandra.action.admin.indices.rebuild.RebuildResponse;
+import org.elassandra.action.admin.indices.reload.ReloadAction;
+import org.elassandra.action.admin.indices.reload.ReloadRequest;
+import org.elassandra.action.admin.indices.reload.ReloadRequestBuilder;
+import org.elassandra.action.admin.indices.reload.ReloadResponse;
 import org.elasticsearch.action.Action;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.ActionListener;
@@ -1567,6 +1579,36 @@ public abstract class AbstractClient extends AbstractComponent implements Client
             return new RefreshRequestBuilder(this, RefreshAction.INSTANCE).setIndices(indices);
         }
 
+        @Override
+        public void rebuild(final RebuildRequest request, final ActionListener<RebuildResponse> listener) {
+            execute(RebuildAction.INSTANCE, request, listener);
+        }
+
+        @Override
+        public RebuildRequestBuilder prepareRebuild(String... indices) {
+            return new RebuildRequestBuilder(this, RebuildAction.INSTANCE).setIndices(indices);
+        }
+        
+        @Override
+        public void reload(final ReloadRequest request, final ActionListener<ReloadResponse> listener) {
+            execute(ReloadAction.INSTANCE, request, listener);
+        }
+
+        @Override
+        public ReloadRequestBuilder prepareReload(String... indices) {
+            return new ReloadRequestBuilder(this, ReloadAction.INSTANCE).setIndices(indices);
+        }
+        
+        @Override
+        public void cleanup(final CleanupRequest request, final ActionListener<CleanupResponse> listener) {
+            execute(CleanupAction.INSTANCE, request, listener);
+        }
+
+        @Override
+        public CleanupRequestBuilder prepareCleanup(String... indices) {
+            return new CleanupRequestBuilder(this, CleanupAction.INSTANCE).setIndices(indices);
+        }
+        
         @Override
         public ActionFuture<IndicesStatsResponse> stats(final IndicesStatsRequest request) {
             return execute(IndicesStatsAction.INSTANCE, request);

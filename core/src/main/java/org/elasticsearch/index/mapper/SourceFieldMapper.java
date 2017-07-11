@@ -24,10 +24,13 @@ import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
+import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
+import org.elasticsearch.common.compress.CompressorFactory;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
@@ -40,6 +43,7 @@ import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.QueryShardException;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -56,7 +60,7 @@ public class SourceFieldMapper extends MetadataFieldMapper {
 
     public static class Defaults {
         public static final String NAME = SourceFieldMapper.NAME;
-        public static final boolean ENABLED = true;
+        public static final boolean ENABLED = false;
 
         public static final MappedFieldType FIELD_TYPE = new SourceFieldType();
 
@@ -149,10 +153,13 @@ public class SourceFieldMapper extends MetadataFieldMapper {
 
     static final class SourceFieldType extends MappedFieldType {
 
-        SourceFieldType() {}
+        SourceFieldType() {
+            this.cqlCollection(CqlCollection.SINGLETON);
+        }
 
         protected SourceFieldType(SourceFieldType ref) {
             super(ref);
+            this.cqlCollection(CqlCollection.SINGLETON);
         }
 
         @Override
@@ -168,6 +175,28 @@ public class SourceFieldMapper extends MetadataFieldMapper {
         @Override
         public Query termQuery(Object value, QueryShardContext context) {
             throw new QueryShardException(context, "The _source field is not searchable");
+        }
+        
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            BytesReference br;
+            if (value instanceof BytesRef) {
+                br = new BytesArray((BytesRef) value);
+            } else  if (value instanceof ByteBuffer) {
+                ByteBuffer bb = (ByteBuffer)value;
+                br = new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
+            } else{
+                br = (BytesReference) value;
+            }
+            try {
+                br = CompressorFactory.uncompressIfNeeded(br);
+            } catch (IOException e) {
+                throw new ElasticsearchParseException("failed to decompress source", e);
+            }
+            return ByteBuffer.wrap(BytesReference.toBytes(br));
         }
     }
 
@@ -225,6 +254,11 @@ public class SourceFieldMapper extends MetadataFieldMapper {
         return null;
     }
 
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        // Nothing to, _source should be disabled in elassandra.
+    }
+    
     @Override
     protected void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException {
         if (!enabled) {
