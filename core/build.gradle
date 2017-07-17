@@ -84,35 +84,42 @@ dependencies {
   compile "org.apache.logging.log4j:log4j-api:${versions.log4j}"
   compile "org.apache.logging.log4j:log4j-core:${versions.log4j}", optional
   // to bridge dependencies that are still on Log4j 1 to Log4j 2
-  compile "org.apache.logging.log4j:log4j-1.2-api:${versions.log4j}", optional
+  //compile "org.apache.logging.log4j:log4j-1.2-api:${versions.log4j}", optional
+  //compile "org.apache.logging.log4j:log4j-to-slf4j:2.8.2", optional
 
   // repackaged jna with native bits linked against all elastic supported platforms
   compile "org.elasticsearch:jna:${versions.jna}"
 
   if (isEclipse == false || project.path == ":core-tests") {
-    testCompile("org.elasticsearch.test:framework:${version}") {
+    testCompile("com.strapdata.elasticsearch.test:framework:${version}") {
       // tests use the locally compiled version of core
-      exclude group: 'org.elasticsearch', module: 'elasticsearch'
+      exclude group: 'com.strapdata.elasticsearch', module: 'elasticsearch'
     }
   }
   testCompile 'com.google.jimfs:jimfs:1.1'
   compile 'com.google.guava:guava:19.0'
 
   // Elassandra add-ons
-  compile "com.strapdata.cassandra:cassandra-all:3.10"
-  compile "org.apache.commons:commons-lang3:3.4", optional
-  compile "org.codehaus.jackson:jackson-core-asl:1.9.13", optional
-  compile "org.codehaus.jackson:jackson-mapper-asl:1.9.13", optional
+  compile("com.strapdata.cassandra:cassandra-all:3.10") {
+    exclude group:'net.java.dev.jna', module:'jna'
+    exclude group:'io.netty'
+  }
+  // Elasticsearch require netty 4.1
+  compile "io.netty:netty-all:4.1.11.Final"
+
+  //compile "org.apache.commons:commons-lang3:3.4", optional
+  //compile "org.codehaus.jackson:jackson-core-asl:1.9.13", optional
+  //compile "org.codehaus.jackson:jackson-mapper-asl:1.9.13", optional
 
   // https://www.elastic.co/guide/en/elasticsearch/client/java-api/current/_using_another_logger.html
-  compile "org.apache.logging.log4j:log4j-to-slf4j:2.8.2", optional
+  compile "org.apache.logging.log4j:log4j-to-slf4j:2.8.2"
   compile "org.slf4j:slf4j-api:1.7.25", optional
-  compile "ch.qos.logback:logback-classic:1.1.8", optional
-  compile "ch.qos.logback:logback-core:1.1.8", optional
-
-  compile "org.antlr:antlr:3.5.2", optional
-  compile "org.antlr:antlr-runtime:3.5.2", optional
-
+  //compile "ch.qos.logback:logback-classic:1.1.8", optional
+  //compile "ch.qos.logback:logback-core:1.1.8", optional
+  //compile "io.dropwizard.metrics:metrics-core:3.1.0", optional
+  //compile "org.antlr:antlr:3.5.2", optional
+  //compile "org.antlr:antlr-runtime:3.5.2", optional
+  compile "org.javassist:javassist:3.20.0-GA"
 }
 
 if (isEclipse) {
