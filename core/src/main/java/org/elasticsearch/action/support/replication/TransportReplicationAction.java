@@ -24,11 +24,11 @@ import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.UnavailableShardsException;
-import org.elasticsearch.action.admin.indices.flush.ShardFlushRequest;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.ActiveShardCount;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.action.support.TransportActions;
+import org.elasticsearch.action.support.replication.ReplicationOperation.Primary;
 import org.elasticsearch.client.transport.NoNodeAvailableException;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
@@ -51,7 +51,6 @@ import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.shard.IndexShard;
@@ -279,7 +278,20 @@ public abstract class TransportReplicationAction<
 
         @Override
         protected void doRun() throws Exception {
-            acquirePrimaryShardReference(request.shardId(), targetAllocationID, this);
+            //acquirePrimaryShardReference(request.shardId(), targetAllocationID, this);
+            try {
+                setPhase(replicationTask, "primary");
+                final IndexMetaData indexMetaData = clusterService.state().getMetaData().index(request.shardId().getIndex());
+                final boolean executeOnReplicas = (indexMetaData == null) || shouldExecuteReplication(indexMetaData);
+                final ActionListener<Response> listener = createResponseListener(null);
+                final PrimaryShardReference primary = new PrimaryShardReference(getIndexShard(request.shardId()), null);
+                createReplicatedOperation(request,
+                        ActionListener.wrap(result -> result.respond(listener), listener::onFailure),
+                        primary, executeOnReplicas)
+                        .execute();
+            } catch (Exception e) {
+                onFailure(e);
+            }
         }
 
         @Override
@@ -345,7 +357,7 @@ public abstract class TransportReplicationAction<
             return new ActionListener<Response>() {
                 @Override
                 public void onResponse(Response response) {
-                    primaryShardReference.close(); // release shard operation lock before responding to caller
+                    //primaryShardReference.close(); // release shard operation lock before responding to caller
                     setPhase(replicationTask, "finished");
                     try {
                         channel.sendResponse(response);
@@ -356,7 +368,7 @@ public abstract class TransportReplicationAction<
 
                 @Override
                 public void onFailure(Exception e) {
-                    primaryShardReference.close(); // release shard operation lock before responding to caller
+                    //primaryShardReference.close(); // release shard operation lock before responding to caller
                     setPhase(replicationTask, "finished");
                     try {
                         channel.sendResponse(e);
@@ -906,7 +918,8 @@ public abstract class TransportReplicationAction<
      * will be skipped. For example writes such as index and delete don't need to be replicated on shadow replicas but refresh and flush do.
      */
     protected boolean shouldExecuteReplication(IndexMetaData indexMetaData) {
-        return IndexMetaData.isIndexUsingShadowReplicas(indexMetaData.getSettings()) == false;
+        //return IndexMetaData.isIndexUsingShadowReplicas(indexMetaData.getSettings()) == false;
+        return true;
     }
 
     class PrimaryShardReference implements

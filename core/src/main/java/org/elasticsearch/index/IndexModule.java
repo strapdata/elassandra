@@ -20,8 +20,8 @@
 package org.elasticsearch.index;
 
 import org.apache.lucene.util.SetOnce;
-import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;

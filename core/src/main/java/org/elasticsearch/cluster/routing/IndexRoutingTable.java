@@ -26,7 +26,6 @@ import com.carrotsearch.hppc.cursors.IntObjectCursor;
 import org.apache.lucene.util.CollectionUtil;
 import org.elassandra.cluster.routing.AbstractSearchStrategy;
 import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
-import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.AbstractDiffable;
 import org.elasticsearch.cluster.ClusterState;
@@ -38,6 +37,7 @@ import org.elasticsearch.cluster.routing.RecoverySource.LocalShardsRecoverySourc
 import org.elasticsearch.cluster.routing.RecoverySource.PeerRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.StoreRecoverySource;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.collect.ImmutableOpenIntMap;
@@ -374,7 +374,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
             } catch (NullPointerException | java.lang.AssertionError e) {
                 // thrown by cassandra when the keyspace is not yet create locally. 
                 // We must wait for a gossip schema change to update the routing Table.
-                Loggers.getLogger(getClass()).warn("Keyspace {} not available", e, this.index);
+                Loggers.getLogger(getClass().getName()).warn("Keyspace {} not available", e, this.index);
             }
         }
         

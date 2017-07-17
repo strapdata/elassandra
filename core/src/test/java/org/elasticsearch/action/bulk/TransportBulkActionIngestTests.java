@@ -123,7 +123,7 @@ public class TransportBulkActionIngestTests extends ESTestCase {
 
         TestSingleItemBulkWriteAction(TestTransportBulkAction bulkAction) {
             super(Settings.EMPTY, IndexAction.NAME, transportService, TransportBulkActionIngestTests.this.clusterService,
-                    null, null, null, new ActionFilters(Collections.emptySet()), null,
+                    null, null, new ActionFilters(Collections.emptySet()), null,
                     IndexRequest::new, IndexRequest::new, ThreadPool.Names.INDEX, bulkAction, null);
         }
 

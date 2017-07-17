@@ -53,7 +53,7 @@ public final class ShardRouting implements Writeable, ToXContent {
     /**
      * Dummy allocation ID to avoid unless random generation (this involve a lock on java.security.SecureRandom.nextBytes).
      */
-    static AllocationId DUMMY_ALLOCATION_ID = AllocationId.newInitializing();
+    public static AllocationId DUMMY_ALLOCATION_ID = AllocationId.newInitializing("dummy_alloc_id");
     
     private final ShardId shardId;
     private final String currentNodeId;
@@ -80,7 +80,7 @@ public final class ShardRouting implements Writeable, ToXContent {
     }
 
     public ShardRouting(ShardId shardId, String currentNodeId, boolean primary, ShardRoutingState state, UnassignedInfo unassignedInfo, Collection<Range<Token>> tokenRanges) {
-        this(shardId, currentNodeId, null, primary, state, null, unassignedInfo, DUMMY_ALLOCATION_ID, 0,tokenRanges);
+        this(shardId, currentNodeId, null, primary, state, null, unassignedInfo, DUMMY_ALLOCATION_ID, UNAVAILABLE_EXPECTED_SHARD_SIZE,tokenRanges);
     }
     public ShardRouting(ShardId shardId, String currentNodeId,
             String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
@@ -110,7 +110,7 @@ public final class ShardRouting implements Writeable, ToXContent {
         assert expectedShardSize == UNAVAILABLE_EXPECTED_SHARD_SIZE || state == ShardRoutingState.INITIALIZING || state == ShardRoutingState.RELOCATING : expectedShardSize + " state: " + state;
         assert expectedShardSize >= 0 || state != ShardRoutingState.INITIALIZING || state != ShardRoutingState.RELOCATING : expectedShardSize + " state: " + state;
         assert !(state == ShardRoutingState.UNASSIGNED && unassignedInfo == null) : "unassigned shard must be created with meta";
-        assert (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) == (recoverySource != null) : "recovery source only available on unassigned or initializing shard but was " + state;
+        //assert (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) == (recoverySource != null) : "recovery source only available on unassigned or initializing shard but was " + state;
         assert recoverySource == null || recoverySource == PeerRecoverySource.INSTANCE || primary : "replica shards always recover from primary";
         
         this.tokenRanges = tokenRanges;
@@ -132,7 +132,7 @@ public final class ShardRouting implements Writeable, ToXContent {
     public static ShardRouting newUnassigned(ShardId shardId, boolean primary, RecoverySource recoverySource, UnassignedInfo unassignedInfo) {
         return new ShardRouting(shardId, null, null, primary, ShardRoutingState.UNASSIGNED, recoverySource, unassignedInfo, null, UNAVAILABLE_EXPECTED_SHARD_SIZE);
     }
-
+    
     public Index index() {
         return shardId.getIndex();
     }
@@ -487,9 +487,12 @@ public final class ShardRouting implements Writeable, ToXContent {
      * no allocation at all..
      **/
     public boolean isSameAllocation(ShardRouting other) {
+        return true;
+        /*
         boolean b = this.allocationId != null && other.allocationId != null && this.allocationId.getId().equals(other.allocationId.getId());
         assert b == false || this.currentNodeId.equals(other.currentNodeId) : "ShardRoutings have the same allocation id but not the same node. This [" + this + "], other [" + other + "]";
         return b;
+        */
     }
 
     /**

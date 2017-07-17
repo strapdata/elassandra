@@ -901,7 +901,7 @@ public class ClusterServiceTests extends ESTestCase {
         assertTrue(applierCalled.get());
     }
 
-    static class TimedClusterService extends ClusterService {
+    static class TimedClusterService extends org.elasticsearch.cluster.service.ClusterService {
 
         public volatile Long currentTimeOverride = null;
 

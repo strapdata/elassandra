@@ -77,7 +77,7 @@ public class Loggers {
         return getLogger(loggerName, prefixesList.toArray(new String[prefixesList.size()]));
     }
 
-    private static List<String> prefixesList(Settings settings, String... prefixes) {
+    public static List<String> prefixesList(Settings settings, String... prefixes) {
         List<String> prefixesList = new ArrayList<>();
         if (Node.NODE_NAME_SETTING.exists(settings)) {
             prefixesList.add(Node.NODE_NAME_SETTING.get(settings));

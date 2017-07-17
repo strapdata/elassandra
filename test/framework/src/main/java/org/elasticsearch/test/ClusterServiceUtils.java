@@ -51,7 +51,7 @@ public class ClusterServiceUtils {
     }
 
     public static ClusterService createClusterService(Settings settings, ThreadPool threadPool, DiscoveryNode localNode) {
-        ClusterService clusterService = new ClusterService(
+        ClusterService clusterService = new org.elasticsearch.cluster.service.ClusterService(
             Settings.builder().put("cluster.name", "ClusterServiceTests").put(settings).build(),
                 new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
                 threadPool, () -> localNode);

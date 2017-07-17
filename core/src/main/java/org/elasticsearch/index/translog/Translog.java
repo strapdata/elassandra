@@ -92,8 +92,6 @@ import java.util.stream.Stream;
  */
 public class Translog extends AbstractIndexShardComponent implements IndexShardComponent, Closeable, TwoPhaseCommit {
 
-    public static final Translog DUMMY_TRANSLOG = new Translog(null, null);
-
     /*
      * TODO
      *  - we might need something like a deletion policy to hold on to more than one translog eventually (I think sequence IDs needs this) but we can refactor as we go

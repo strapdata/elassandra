@@ -54,7 +54,7 @@ public class CassandraDiscoveryPlugin implements DiscoveryPlugin {
             NamedWriteableRegistry namedWriteableRegistry,
             ClusterService clusterService, UnicastHostsProvider hostsProvider) {
         return Collections.singletonMap(CASSANDRA, () ->
-            new CassandraDiscovery(settings, transportService, (org.elassandra.cluster.service.ClusterService) clusterService, Version.CURRENT));
+            new CassandraDiscovery(settings, transportService, (org.elasticsearch.cluster.service.ClusterService) clusterService, namedWriteableRegistry));
         
     }
 }

@@ -15,7 +15,10 @@
  */
 package org.apache.cassandra.service;
 
+import com.google.common.collect.Maps;
+
 import org.apache.cassandra.config.CFMetaData;
+
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.QueryProcessor;
@@ -24,8 +27,6 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.WindowsTimer;
 import org.apache.logging.log4j.Logger;
 import org.elassandra.NoPersistedMetaDataException;
-import org.elassandra.cluster.service.ClusterService;
-import org.elassandra.discovery.CassandraDiscovery;
 import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
@@ -35,6 +36,7 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Injector;
 import org.elasticsearch.common.inject.spi.Message;
@@ -54,6 +56,7 @@ import java.lang.management.ManagementFactory;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
@@ -160,7 +163,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         super.start(); // start Thrift+RPC service
 
         if (instance.node != null) {
-            //instance.node.activate();
+            instance.node.activate();
             instance.node.clusterService().submitNumberOfShardsUpdate();
             try {
                 instance.node.start();
@@ -218,7 +221,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     
     @Override
     public void ringReady() {
-        node.open();
+        node.activate();
     }
 
     /**
@@ -250,7 +253,7 @@ public class ElassandraDaemon extends CassandraDaemon {
      * hook for JSVC
      */
     public void activate() {
-        //node.activate();
+        node.activate();
     }
     
     /**
@@ -275,8 +278,8 @@ public class ElassandraDaemon extends CassandraDaemon {
         this.env = environment;
         org.elasticsearch.bootstrap.Bootstrap.initializeNatives(
                           env.tmpFile(),
-                          settings.getAsBoolean("bootstrap.mlockall", false),
-                          settings.getAsBoolean("bootstrap.seccomp", true),
+                          settings.getAsBoolean("bootstrap.memory_lock", true),
+                          settings.getAsBoolean("bootstrap.system_call_filter", false),
                           settings.getAsBoolean("bootstrap.ctrlhandler", true));
 
         // initialize probes before the security manager is installed
@@ -320,7 +323,12 @@ public class ElassandraDaemon extends CassandraDaemon {
         
         Settings nodeSettings = Settings.builder()
                 .put(settings)
-                .put("name", CassandraDiscovery.buildNodeName())
+                .put("discovery.type","cassandra")
+                .put("node.data",true)
+                .put("node.master",true)
+                .put("node.name", SystemKeyspace.getLocalHostId().toString())
+                .put("node.attr.dc", DatabaseDescriptor.getLocalDataCenter())
+                .put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastAddress()))
                 .put("network.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
                 .put("network.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
                 .put("transport.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())

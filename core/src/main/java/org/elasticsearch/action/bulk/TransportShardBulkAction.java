@@ -24,7 +24,6 @@ import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
 import org.apache.lucene.index.Term;
-import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.DocWriteResponse;
@@ -44,6 +43,7 @@ import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
@@ -196,7 +196,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                 replicaRequest.setIgnoreOnReplica();
                 replicaRequest.setPrimaryResponse(new BulkItemResponse(replicaRequest.id(), opType, response));
             } else if (operationResult.hasFailure() == false) {
-                location = locationToSync(location, operationResult.getTranslogLocation());
+                //location = locationToSync(location, operationResult.getTranslogLocation());
                 BulkItemResponse primaryResponse = new BulkItemResponse(replicaRequest.id(), opType, response);
                 replicaRequest.setPrimaryResponse(primaryResponse);
                 // set an empty ShardInfo to indicate no shards participated in the request execution

@@ -305,6 +305,8 @@ final class StoreRecovery {
      * Recovers the state of the shard from the store.
      */
     private void internalRecoverFromStore(IndexShard indexShard) throws IndexShardRecoveryException {
+
+        
         final RecoveryState recoveryState = indexShard.recoveryState();
         boolean indexShouldExists = recoveryState.getRecoverySource().getType() != RecoverySource.Type.EMPTY_STORE;
         indexShard.prepareForIndexRecovery();
@@ -363,7 +365,7 @@ final class StoreRecovery {
                 } catch (IOException e) {
                     logger.debug("failed to list file details", e);
                 }
-                //indexShard.performTranslogRecovery(indexShouldExists);
+                indexShard.performTranslogRecovery(indexShouldExists);
             }
             indexShard.finalizeRecovery();
             indexShard.postRecovery("post recovery from shard_store");

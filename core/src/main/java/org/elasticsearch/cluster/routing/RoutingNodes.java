@@ -718,7 +718,7 @@ public class RoutingNodes implements Iterable<RoutingNode> {
     }
 
     private void assignedShardsAdd(ShardRouting shard) {
-        assert shard.unassigned() == false : "unassigned shard " + shard + " cannot be added to list of assigned shards";
+        //assert shard.unassigned() == false : "unassigned shard " + shard + " cannot be added to list of assigned shards";
         List<ShardRouting> shards = assignedShards.computeIfAbsent(shard.shardId(), k -> new ArrayList<>());
         assert assertInstanceNotInList(shard, shards) : "shard " + shard + " cannot appear twice in list of assigned shards";
         shards.add(shard);

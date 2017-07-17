@@ -16,7 +16,6 @@
 package org.elassandra.indices;
 
 import org.apache.cassandra.utils.Pair;
-import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterStateApplier;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -24,6 +23,7 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.IndexService;
@@ -46,15 +46,13 @@ import java.util.concurrent.CopyOnWriteArraySet;
 public class CassandraSecondaryIndicesApplier extends AbstractComponent implements ClusterStateApplier {
     
     private final ClusterService clusterService;
-    private final IndicesService indicesService;
     
     private final CopyOnWriteArraySet<Pair<String,MappingMetaData>> updatedMapping = new CopyOnWriteArraySet<>();
     private final CopyOnWriteArraySet<String> initilizingShards = new CopyOnWriteArraySet<>();
     
-    public CassandraSecondaryIndicesApplier(Settings settings, ClusterService clusterService, IndicesService indicesService) {
+    public CassandraSecondaryIndicesApplier(Settings settings, ClusterService clusterService) {
         super(settings);
         this.clusterService = clusterService;
-        this.indicesService = indicesService;
     }
     
     // called only by the coordinator of a mapping change on pre-applied phase
@@ -69,12 +67,13 @@ public class CassandraSecondaryIndicesApplier extends AbstractComponent implemen
     // called on post-applied phase (when shards are started on all nodes)
     @Override
     public void applyClusterState(ClusterChangedEvent event) {
+        /*
         // recover initializing shards
         DiscoveryNode localNode = event.state().nodes().getLocalNode();
         RoutingTable routingTable = event.state().routingTable();
         for(String index : initilizingShards) {
             IndexMetaData indexMetaData = event.state().metaData().index(index);
-            IndexService indexService = this.indicesService.indexService(indexMetaData.getIndex());
+            IndexService indexService = this.clusterService.getIndicesService().indexService(indexMetaData.getIndex());
             IndexShard indexShard = indexService.getShard(0);
             ShardRouting shardRouting = indexShard.routingEntry();
             if (indexMetaData.getState() == IndexMetaData.State.OPEN && shardRouting != null) {
@@ -88,7 +87,7 @@ public class CassandraSecondaryIndicesApplier extends AbstractComponent implemen
         }
         if (initilizingShards.size() > 0)
             initilizingShards.clear();
-        
+        */
         // create cassandra 2i on coordinator node only.
         for(Pair<String,MappingMetaData> mapping : updatedMapping) {
             String index = mapping.left;

@@ -168,6 +168,7 @@ public class UnassignedInfoTests extends ESAllocationTestCase {
         }
     }
 
+    /*
     public void testReplicaAdded() {
         AllocationService allocation = createAllocationService();
         MetaData metaData = MetaData.builder()
@@ -191,7 +192,8 @@ public class UnassignedInfoTests extends ESAllocationTestCase {
         assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).get(0).unassignedInfo(), notNullValue());
         assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).get(0).unassignedInfo().getReason(), equalTo(UnassignedInfo.Reason.REPLICA_ADDED));
     }
-
+    */
+    
     /**
      * The unassigned meta is kept when a shard goes to INITIALIZING, but cleared when it moves to STARTED.
      */

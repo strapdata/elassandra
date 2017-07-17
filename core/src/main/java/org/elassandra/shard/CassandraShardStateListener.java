@@ -15,10 +15,11 @@
  */
 package org.elassandra.shard;
 
-import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -61,7 +62,8 @@ public class CassandraShardStateListener extends AbstractComponent implements In
             clusterService.submitStateUpdateTask("shard-started-update-routing", new ClusterStateUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
-                    return ClusterState.builder(currentState).incrementVersion().build();
+                    RoutingTable routingTable = RoutingTable.build(clusterService, currentState);
+                    return ClusterState.builder(currentState).incrementVersion().routingTable(routingTable).build();
                 }
 
                 @Override

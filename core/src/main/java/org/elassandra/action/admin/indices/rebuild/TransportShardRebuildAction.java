@@ -70,12 +70,12 @@ public class TransportShardRebuildAction extends TransportReplicationAction<Shar
         MetaData metaData = clusterService.state().metaData();
         IndexMetaData indexMetaData = metaData.index(shardRequest.shardId().getIndex());
         String secondaryIndexClass = indexMetaData.getSettings().get(IndexMetaData.SETTING_SECONDARY_INDEX_CLASS, 
-                metaData.settings().get(org.elassandra.cluster.service.ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS, org.elassandra.cluster.service.ClusterService.defaultSecondaryIndexClass.getName()));
+                metaData.settings().get(org.elasticsearch.cluster.service.ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS, org.elasticsearch.cluster.service.ClusterService.defaultSecondaryIndexClass.getName()));
         for(ObjectCursor<MappingMetaData> it : indexMetaData.getMappings().values()) {
             MappingMetaData mapping = it.value;
-            String table = org.elassandra.cluster.service.ClusterService.typeToCfName(mapping.type());
+            String table = org.elasticsearch.cluster.service.ClusterService.typeToCfName(mapping.type());
             tables.add(table);
-            CFMetaData cfMetadata = org.elassandra.cluster.service.ClusterService.getCFMetaData(indexService.keyspace(), table);
+            CFMetaData cfMetadata = org.elasticsearch.cluster.service.ClusterService.getCFMetaData(indexService.keyspace(), table);
             for(IndexMetadata index : cfMetadata.getIndexes()) {
                 if (index.isCustom() && secondaryIndexClass.equals(index.options.get("class_name"))) {
                     indexes.add(index.name);

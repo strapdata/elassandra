@@ -18,8 +18,8 @@
  */
 package org.elasticsearch.index.shard;
 
-import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.index.IndexService;

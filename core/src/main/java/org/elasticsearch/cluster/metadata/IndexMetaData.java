@@ -27,7 +27,6 @@ import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
 import org.apache.cassandra.utils.FBUtilities;
 import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
-import org.elassandra.cluster.service.ClusterService;
 import org.elassandra.index.ExtendedElasticSecondaryIndex;
 import org.elassandra.index.MessageFormatPartitionFunction;
 import org.elassandra.index.PartitionFunction;
@@ -41,6 +40,7 @@ import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.node.DiscoveryNodeFilters;
 import org.elasticsearch.cluster.routing.allocation.IndexMetaDataUpdater;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.collect.ImmutableOpenIntMap;
@@ -318,39 +318,39 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
     
     public static final String SETTING_INCLUDE_NODE_ID = "index."+ClusterService.INCLUDE_NODE_ID; 
     public static final Setting<Boolean> INDEX_INCLUDE_NODE_ID_SETTING =
-            Setting.boolSetting(SETTING_INCLUDE_NODE_ID, false, Property.Final, Property.NodeScope);
+            Setting.boolSetting(SETTING_INCLUDE_NODE_ID, false, Property.Final, Property.IndexScope);
     
     public static final String SETTING_INDEX_ON_COMPACTION = "index."+ClusterService.INDEX_ON_COMPACTION; 
     public static final Setting<Boolean> INDEX_INDEX_ON_COMPACTION_SETTING =
-            Setting.boolSetting(SETTING_INDEX_ON_COMPACTION, false, Property.Final, Property.NodeScope);
+            Setting.boolSetting(SETTING_INDEX_ON_COMPACTION, false, Property.Final, Property.IndexScope);
     
     public static final String SETTING_SYNCHRONOUS_REFRESH = "index."+ClusterService.SYNCHRONOUS_REFRESH; 
     public static final Setting<Boolean> INDEX_SYNCHRONOUS_REFRESH_SETTING =
-            Setting.boolSetting(SETTING_SYNCHRONOUS_REFRESH, false, Property.Final, Property.NodeScope);
+            Setting.boolSetting(SETTING_SYNCHRONOUS_REFRESH, false, Property.Final, Property.IndexScope);
     
     public static final String SETTING_DROP_ON_DELETE_INDEX = "index."+ClusterService.DROP_ON_DELETE_INDEX; 
     public static final Setting<Boolean> INDEX_DROP_ON_DELETE_INDEX_SETTING =
-            Setting.boolSetting(SETTING_DROP_ON_DELETE_INDEX, false, Property.Final, Property.NodeScope);
+            Setting.boolSetting(SETTING_DROP_ON_DELETE_INDEX, false, Property.Final, Property.IndexScope);
     
     public static final String SETTING_SNAPSHOT_WITH_SSTABLE = "index."+ClusterService.SNAPSHOT_WITH_SSTABLE; 
     public static final Setting<Boolean> INDEX_SNAPSHOT_WITH_SSTABLE_SETTING =
-            Setting.boolSetting(SETTING_SNAPSHOT_WITH_SSTABLE, false, Property.Final, Property.NodeScope);
+            Setting.boolSetting(SETTING_SNAPSHOT_WITH_SSTABLE, false, Property.Final, Property.IndexScope);
     
     public static final String SETTING_TOKEN_RANGES_BITSET_CACHE = "index."+ClusterService.TOKEN_RANGES_BITSET_CACHE; 
     public static final Setting<Boolean> INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING =
-            Setting.boolSetting(SETTING_TOKEN_RANGES_BITSET_CACHE, false, Property.Final, Property.NodeScope);
+            Setting.boolSetting(SETTING_TOKEN_RANGES_BITSET_CACHE, false, Property.Dynamic, Property.IndexScope);
     
     public static final String SETTING_VERSION_LESS_ENGINE = "index."+ClusterService.VERSION_LESS_ENGINE; 
     public static final Setting<Boolean> INDEX_VERSION_LESS_ENGINE_SETTING =
-            Setting.boolSetting(SETTING_VERSION_LESS_ENGINE, false, Property.Final, Property.NodeScope);
+            Setting.boolSetting(SETTING_VERSION_LESS_ENGINE, false, Property.Final, Property.IndexScope);
     
     public static final String SETTING_INDEX_STATIC_COLUMN = "index."+ClusterService.INDEX_STATIC_COLUMNS; 
     public static final Setting<Boolean> INDEX_INDEX_STATIC_COLUMN_SETTING =
-            Setting.boolSetting(SETTING_INDEX_STATIC_COLUMN, false, Property.Dynamic, Property.NodeScope);
+            Setting.boolSetting(SETTING_INDEX_STATIC_COLUMN, false, Property.Dynamic, Property.IndexScope);
     
     public static final String SETTING_INDEX_STATIC_ONLY = "index."+ClusterService.INDEX_STATIC_ONLY; 
     public static final Setting<Boolean> INDEX_INDEX_STATIC_ONLY_SETTING =
-            Setting.boolSetting(SETTING_INDEX_STATIC_ONLY, false, Property.Dynamic, Property.NodeScope);
+            Setting.boolSetting(SETTING_INDEX_STATIC_ONLY, false, Property.Dynamic, Property.IndexScope);
     
     // hard-coded hash function as of 2.0
     // older indices will read which hash function to use in their index settings

@@ -146,7 +146,7 @@ public class IndexModuleTests extends ESTestCase {
 
     private IndexService newIndexService(IndexModule module) throws IOException {
         return module.newIndexService(nodeEnvironment, xContentRegistry(), deleter, circuitBreakerService, bigArrays, threadPool,
-                scriptService, clusterService, null, indicesQueryCache, mapperRegistry,
+                scriptService, (org.elasticsearch.cluster.service.ClusterService) clusterService, null, indicesQueryCache, mapperRegistry,
                 new IndicesFieldDataCache(settings, listener));
     }
 

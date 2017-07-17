@@ -1,1229 +1,3011 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
+ * Contains some code from Elasticsearch (http://www.elastic.co)
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
 package org.elasticsearch.cluster.service;
 
-import org.apache.logging.log4j.Logger;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.net.InetAddresses;
+
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.cql3.ColumnSpecification;
+import org.apache.cassandra.cql3.QueryOptions;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.cql3.UntypedResultSet.Row;
+import org.apache.cassandra.cql3.statements.IndexTarget;
+import org.apache.cassandra.cql3.statements.ParsedStatement;
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.CollectionType;
+import org.apache.cassandra.db.marshal.ListType;
+import org.apache.cassandra.db.marshal.MapType;
+import org.apache.cassandra.db.marshal.SetType;
+import org.apache.cassandra.db.marshal.TupleType;
+import org.apache.cassandra.db.marshal.TypeParser;
+import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.db.marshal.UserType;
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.cassandra.exceptions.UnavailableException;
+import org.apache.cassandra.index.Index;
+import org.apache.cassandra.locator.AbstractReplicationStrategy;
+import org.apache.cassandra.locator.NetworkTopologyStrategy;
+import org.apache.cassandra.schema.IndexMetadata;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.ReplicationParams;
+import org.apache.cassandra.serializers.CollectionSerializer;
+import org.apache.cassandra.serializers.MapSerializer;
+import org.apache.cassandra.serializers.MarshalException;
+import org.apache.cassandra.serializers.UUIDSerializer;
+import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.service.QueryState;
+import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.transport.ProtocolVersion;
+import org.apache.cassandra.transport.messages.ResultMessage;
+import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.Pair;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.elassandra.ConcurrentMetaDataUpdateException;
-import org.elasticsearch.Assertions;
-import org.elasticsearch.cluster.AckedClusterStateTaskListener;
+import org.elassandra.NoPersistedMetaDataException;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
+import org.elassandra.discovery.CassandraDiscovery;
+import org.elassandra.index.ExtendedElasticSecondaryIndex;
+import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.TokenFieldMapper;
+import org.elassandra.index.search.TokenRangesService;
+import org.elassandra.indices.CassandraSecondaryIndicesApplier;
+import org.elassandra.shard.CassandraShardStartedBarrier;
+import org.elasticsearch.ElasticsearchTimeoutException;
+import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionRequestValidationException;
+import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.support.replication.ReplicationResponse.ShardInfo;
 import org.elasticsearch.cluster.ClusterChangedEvent;
-import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterState.Builder;
 import org.elasticsearch.cluster.ClusterStateApplier;
 import org.elasticsearch.cluster.ClusterStateListener;
-import org.elasticsearch.cluster.ClusterStateObserver;
-import org.elasticsearch.cluster.ClusterStateTaskConfig;
-import org.elasticsearch.cluster.ClusterStateTaskExecutor;
-import org.elasticsearch.cluster.ClusterStateTaskExecutor.ClusterTasksResult;
-import org.elasticsearch.cluster.ClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
-import org.elasticsearch.cluster.LocalNodeMasterListener;
-import org.elasticsearch.cluster.NodeConnectionsService;
-import org.elasticsearch.cluster.TimeoutClusterStateListener;
-import org.elasticsearch.cluster.block.ClusterBlock;
-import org.elasticsearch.cluster.block.ClusterBlocks;
+import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
+import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
-import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
+import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
-import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.RoutingTable;
-import org.elasticsearch.common.Nullable;
-import org.elasticsearch.common.Priority;
-import org.elasticsearch.common.component.AbstractLifecycleComponent;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
+import org.elasticsearch.common.SuppressForbidden;
+import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.geo.GeoPoint;
+import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.lucene.uid.VersionsResolver;
+import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.ClusterSettings;
-import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
-import org.elasticsearch.common.util.concurrent.CountDown;
-import org.elasticsearch.common.util.concurrent.EsExecutors;
-import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
-import org.elasticsearch.common.util.concurrent.FutureUtils;
-import org.elasticsearch.common.util.concurrent.PrioritizedEsThreadPoolExecutor;
-import org.elasticsearch.common.util.iterable.Iterables;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.discovery.Discovery;
-import org.elasticsearch.discovery.DiscoverySettings;
+import org.elasticsearch.gateway.MetaStateService;
+import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.engine.VersionConflictEngineException;
+import org.elasticsearch.index.get.GetField;
+import org.elasticsearch.index.mapper.BaseGeoPointFieldMapper;
+import org.elasticsearch.index.mapper.CompletionFieldMapper;
+import org.elasticsearch.index.mapper.DocumentFieldMappers;
+import org.elasticsearch.index.mapper.DocumentMapper;
+import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.index.mapper.GeoPointFieldMapper;
+import org.elasticsearch.index.mapper.GeoShapeFieldMapper;
+import org.elasticsearch.index.mapper.IdFieldMapper;
+import org.elasticsearch.index.mapper.LegacyGeoPointFieldMapper;
+import org.elasticsearch.index.mapper.MappedFieldType;
+import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.Mapper.CqlCollection;
+import org.elasticsearch.index.mapper.Mapper.CqlStruct;
+import org.elasticsearch.index.mapper.MapperException;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.Mapping;
+import org.elasticsearch.index.mapper.MetadataFieldMapper;
+import org.elasticsearch.index.mapper.ObjectMapper;
+import org.elasticsearch.index.mapper.ParentFieldMapper;
+import org.elasticsearch.index.mapper.RoutingFieldMapper;
+import org.elasticsearch.index.mapper.SourceFieldMapper;
+import org.elasticsearch.index.mapper.SourceToParse;
+import org.elasticsearch.index.mapper.TTLFieldMapper;
+import org.elasticsearch.index.mapper.TimestampFieldMapper;
+import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.indices.cluster.IndicesClusterStateService;
+import org.elasticsearch.indices.flush.SyncedFlushService;
+import org.elasticsearch.indices.recovery.PeerRecoverySourceService;
+import org.elasticsearch.indices.recovery.PeerRecoveryTargetService;
+import org.elasticsearch.repositories.RepositoriesService;
+import org.elasticsearch.search.SearchService;
+import org.elasticsearch.snapshots.RestoreService;
+import org.elasticsearch.snapshots.SnapshotShardsService;
 import org.elasticsearch.threadpool.ThreadPool;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Queue;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiConsumer;
-import java.util.function.UnaryOperator;
-import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
+import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
 
-public class ClusterService extends AbstractLifecycleComponent {
 
-    public static final Setting<TimeValue> CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING =
-            Setting.positiveTimeSetting("cluster.service.slow_task_logging_threshold", TimeValue.timeValueSeconds(30),
-                    Property.Dynamic, Property.NodeScope);
+public class ClusterService extends org.elasticsearch.cluster.service.BaseClusterService {
 
-    public static final String UPDATE_THREAD_NAME = "clusterService#updateTask";
-    protected final ThreadPool threadPool;
-    private final ClusterName clusterName;
-    private final Supplier<DiscoveryNode> localNodeSupplier;
+    public static final String ELASTIC_ID_COLUMN_NAME = "_id";
+    public static final String ELASTIC_ADMIN_KEYSPACE = "elastic_admin";
+    public static final String ELASTIC_ADMIN_METADATA_TABLE = "metadata";
 
-    private BiConsumer<ClusterChangedEvent, Discovery.AckListener> clusterStatePublisher;
-
-    private final OperationRouting operationRouting;
-
-    protected final ClusterSettings clusterSettings;
-
-    private TimeValue slowTaskLoggingThreshold;
-
-    private volatile PrioritizedEsThreadPoolExecutor threadPoolExecutor;
-    private volatile ClusterServiceTaskBatcher taskBatcher;
+    public static final String SETTING_CLUSTER_DATACENTER_GROUP = "datacenter.group";
+    
+    // settings levels : system, cluster, index, table(_meta)
+    public static final String SYSTEM_PREFIX = "es.";
+    public static final String CLUSTER_PREFIX = "cluster.";
+    public static final String INDEX_PREFIX = "index.";
+    public static final String TABLE_PREFIX = "";
+    private static final int CREATE_ELASTIC_ADMIN_RETRY_ATTEMPTS = Integer.getInteger(SYSTEM_PREFIX + "create_elastic_admin_retry_attempts", 5);
 
     /**
-     * Those 3 state listeners are changing infrequently - CopyOnWriteArrayList is just fine
+     * Dynamic mapping update timeout
      */
-    protected final Collection<ClusterStateApplier> highPriorityStateAppliers = new CopyOnWriteArrayList<>();
-    protected final Collection<ClusterStateApplier> normalPriorityStateAppliers = new CopyOnWriteArrayList<>();
-    protected final Collection<ClusterStateApplier> lowPriorityStateAppliers = new CopyOnWriteArrayList<>();
-    protected final Iterable<ClusterStateApplier> clusterStateAppliers = Iterables.concat(highPriorityStateAppliers,
-        normalPriorityStateAppliers, lowPriorityStateAppliers);
-
-    protected final Collection<ClusterStateListener> clusterStateListeners = new CopyOnWriteArrayList<>();
-    protected final Collection<TimeoutClusterStateListener> timeoutClusterStateListeners =
-        Collections.newSetFromMap(new ConcurrentHashMap<TimeoutClusterStateListener, Boolean>());
-
-    private final LocalNodeMasterListeners localNodeMasterListeners;
-
-    private final Queue<NotifyTimeout> onGoingTimeouts = ConcurrentCollections.newQueue();
-
-    private final AtomicReference<ClusterState> state;
-
-    private final ClusterBlocks.Builder initialBlocks;
-
-    protected NodeConnectionsService nodeConnectionsService;
-
-    protected DiscoverySettings discoverySettings;
-
-    public ClusterService(Settings settings,
-                          ClusterSettings clusterSettings, ThreadPool threadPool, Supplier<DiscoveryNode> localNodeSupplier) {
-        super(settings);
-        this.localNodeSupplier = localNodeSupplier;
-        this.operationRouting = new OperationRouting(settings, clusterSettings);
-        this.threadPool = threadPool;
-        this.clusterSettings = clusterSettings;
-        this.clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);
-        // will be replaced on doStart.
-        this.state = new AtomicReference<>(ClusterState.builder(clusterName).build());
-
-        this.clusterSettings.addSettingsUpdateConsumer(CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING,
-                this::setSlowTaskLoggingThreshold);
-
-        this.slowTaskLoggingThreshold = CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING.get(settings);
-
-        localNodeMasterListeners = new LocalNodeMasterListeners(threadPool);
-
-        initialBlocks = ClusterBlocks.builder();
-    }
-
-    private void setSlowTaskLoggingThreshold(TimeValue slowTaskLoggingThreshold) {
-        this.slowTaskLoggingThreshold = slowTaskLoggingThreshold;
-    }
-
-    public synchronized void setClusterStatePublisher(BiConsumer<ClusterChangedEvent, Discovery.AckListener> publisher) {
-        clusterStatePublisher = publisher;
-    }
-
-    protected void updateState(UnaryOperator<ClusterState> updateFunction) {
-        this.state.getAndUpdate(updateFunction);
-    }
-
-    public synchronized void setNodeConnectionsService(NodeConnectionsService nodeConnectionsService) {
-        assert this.nodeConnectionsService == null : "nodeConnectionsService is already set";
-        this.nodeConnectionsService = nodeConnectionsService;
-    }
-
+    public static final String MAPPING_UPDATE_TIMEOUT = "mapping_update_timeout";
+    
     /**
-     * Adds an initial block to be set on the first cluster state created.
+     * Secondary index class
      */
-    public synchronized void addInitialStateBlock(ClusterBlock block) throws IllegalStateException {
-        if (lifecycle.started()) {
-            throw new IllegalStateException("can't set initial block when started");
+    public static final String SECONDARY_INDEX_CLASS = "secondary_index_class";
+    
+    /**
+     * Search strategy class
+     */
+    public static final String SEARCH_STRATEGY_CLASS = "search_strategy_class";
+    
+    /**
+     * When true, add the cassandra node id to documents (for use with the token aggregation feature)
+     */
+    public static final String INCLUDE_NODE_ID       = "include_node_id";
+    
+    /**
+     * When true, re-indexes a row when compacting, usefull to delete expired documents or columns.
+     */
+    public static final String INDEX_ON_COMPACTION   = "index_on_compaction";
+    
+    /**
+     * When true, refreshes ES index after each update (used for testing).
+     */
+    public static final String SYNCHRONOUS_REFRESH   = "synchronous_refresh";
+    
+    /**
+     * When true, delete kespace/table when removing an index.
+     */
+    public static final String DROP_ON_DELETE_INDEX  = "drop_on_delete_index";
+    
+    /**
+     * When true, snapshot lucene files with sstables.
+     */
+    public static final String SNAPSHOT_WITH_SSTABLE = "snapshot_with_sstable";
+    
+    /**
+     * When true, use the optimized version less Elasticsearch engine.
+     */
+    public static final String VERSION_LESS_ENGINE   = "version_less_engine";
+    
+    /**
+     * Lucene numeric precision to store _token , see http://blog-archive.griddynamics.com/2014/10/numeric-range-queries-in-lucenesolr.html
+     */
+    public static final String TOKEN_PRECISION_STEP  = "token_precision_step";
+    
+    /**
+     * Enable the token_ranges bitset cache (cache the token_ranges filter result at the lucene liveDocs level).
+     */
+    public static final String TOKEN_RANGES_BITSET_CACHE    = "token_ranges_bitset_cache";
+    
+    /**
+     * Expiration time for unused cached token_ranges queries. 
+     */
+    public static final String TOKEN_RANGES_QUERY_EXPIRE = "token_ranges_query_expire";
+    
+    /**
+     * Add static columns to indexed documents (default is false).
+     */
+    public static final String INDEX_STATIC_COLUMNS = "index_static_columns"; 
+    
+    /**
+     * Index only static columns (one document per partition row, ex: timeseries tags).
+     */
+    public static final String INDEX_STATIC_ONLY = "index_static_only";
+    
+    // system property settings
+    public static final String SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT = SYSTEM_PREFIX+MAPPING_UPDATE_TIMEOUT;
+    public static final String SETTING_SYSTEM_SECONDARY_INDEX_CLASS = SYSTEM_PREFIX+SECONDARY_INDEX_CLASS;
+    public static final String SETTING_SYSTEM_SEARCH_STRATEGY_CLASS = SYSTEM_PREFIX+SEARCH_STRATEGY_CLASS;
+    public static final String SETTING_SYSTEM_INCLUDE_NODE_ID = SYSTEM_PREFIX+INCLUDE_NODE_ID;
+    public static final String SETTING_SYSTEM_INDEX_ON_COMPACTION = SYSTEM_PREFIX+INDEX_ON_COMPACTION;
+    public static final String SETTING_SYSTEM_SYNCHRONOUS_REFRESH = SYSTEM_PREFIX+SYNCHRONOUS_REFRESH;
+    public static final String SETTING_SYSTEM_DROP_ON_DELETE_INDEX = SYSTEM_PREFIX+DROP_ON_DELETE_INDEX;
+    public static final String SETTING_SYSTEM_SNAPSHOT_WITH_SSTABLE = SYSTEM_PREFIX+SNAPSHOT_WITH_SSTABLE;
+    public static final String SETTING_SYSTEM_VERSION_LESS_ENGINE = SYSTEM_PREFIX+VERSION_LESS_ENGINE; 
+    public static final String SETTING_SYSTEM_TOKEN_PRECISION_STEP = SYSTEM_PREFIX+TOKEN_PRECISION_STEP;
+    public static final String SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE = SYSTEM_PREFIX+TOKEN_RANGES_BITSET_CACHE;
+    public static final String SETTING_SYSTEM_TOKEN_RANGES_QUERY_EXPIRE = SYSTEM_PREFIX+TOKEN_RANGES_QUERY_EXPIRE;
+    
+    // elassandra cluster settings
+    public static final String SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT = CLUSTER_PREFIX+MAPPING_UPDATE_TIMEOUT;
+    public static final String SETTING_CLUSTER_SECONDARY_INDEX_CLASS = CLUSTER_PREFIX+SECONDARY_INDEX_CLASS;
+    public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = CLUSTER_PREFIX+SEARCH_STRATEGY_CLASS;
+    public static final String SETTING_CLUSTER_INCLUDE_NODE_ID = CLUSTER_PREFIX+INCLUDE_NODE_ID;
+    public static final String SETTING_CLUSTER_INDEX_ON_COMPACTION = CLUSTER_PREFIX+INDEX_ON_COMPACTION;
+    public static final String SETTING_CLUSTER_SYNCHRONOUS_REFRESH = CLUSTER_PREFIX+SYNCHRONOUS_REFRESH;
+    public static final String SETTING_CLUSTER_DROP_ON_DELETE_INDEX = CLUSTER_PREFIX+DROP_ON_DELETE_INDEX;
+    public static final String SETTING_CLUSTER_SNAPSHOT_WITH_SSTABLE = CLUSTER_PREFIX+SNAPSHOT_WITH_SSTABLE;
+    public static final String SETTING_CLUSTER_VERSION_LESS_ENGINE = CLUSTER_PREFIX+VERSION_LESS_ENGINE; 
+    public static final String SETTING_CLUSTER_TOKEN_PRECISION_STEP = CLUSTER_PREFIX+TOKEN_PRECISION_STEP;
+    public static final String SETTING_CLUSTER_TOKEN_RANGES_BITSET_CACHE = CLUSTER_PREFIX+TOKEN_RANGES_BITSET_CACHE;
+    
+    public static int defaultPrecisionStep = Integer.getInteger(SETTING_SYSTEM_TOKEN_PRECISION_STEP, 6);
+    
+    public static class DocPrimaryKey {
+        public String[] names;
+        public Object[] values;
+        public boolean isStaticDocument; // pk = partition key and pk has clustering key.
+        
+        public DocPrimaryKey(String[] names, Object[] values, boolean isStaticDocument) {
+            this.names = names;
+            this.values = values;
+            this.isStaticDocument = isStaticDocument;
         }
-        initialBlocks.addGlobalBlock(block);
-    }
-
-    /**
-     * Remove an initial block to be set on the first cluster state created.
-     */
-    public synchronized void removeInitialStateBlock(ClusterBlock block) throws IllegalStateException {
-        removeInitialStateBlock(block.id());
-    }
-
-    /**
-     * Remove an initial block to be set on the first cluster state created.
-     */
-    public synchronized void removeInitialStateBlock(int blockId) throws IllegalStateException {
-        if (lifecycle.started()) {
-            throw new IllegalStateException("can't set initial block when started");
+        
+        public DocPrimaryKey(String[] names, Object[] values) {
+            this.names = names;
+            this.values = values;
+            this.isStaticDocument = false;
         }
-        initialBlocks.removeGlobalBlock(blockId);
-    }
-
-    @Override
-    protected synchronized void doStart() {
-        Objects.requireNonNull(clusterStatePublisher, "please set a cluster state publisher before starting");
-        Objects.requireNonNull(nodeConnectionsService, "please set the node connection service before starting");
-        Objects.requireNonNull(discoverySettings, "please set discovery settings before starting");
-        addListener(localNodeMasterListeners);
-        DiscoveryNode localNode = localNodeSupplier.get();
-        assert localNode != null;
-        updateState(state -> {
-            assert state.nodes().getLocalNodeId() == null : "local node is already set";
-            DiscoveryNodes nodes = DiscoveryNodes.builder(state.nodes()).add(localNode).localNodeId(localNode.getId()).build();
-            return ClusterState.builder(state).nodes(nodes).blocks(initialBlocks).build();
-        });
-        this.threadPoolExecutor = EsExecutors.newSinglePrioritizing(UPDATE_THREAD_NAME,
-            daemonThreadFactory(settings, UPDATE_THREAD_NAME), threadPool.getThreadContext(), threadPool.scheduler());
-        this.taskBatcher = new ClusterServiceTaskBatcher(logger, threadPoolExecutor);
-    }
-
-    @Override
-    protected synchronized void doStop() {
-        for (NotifyTimeout onGoingTimeout : onGoingTimeouts) {
-            onGoingTimeout.cancel();
-            try {
-                onGoingTimeout.cancel();
-                onGoingTimeout.listener.onClose();
-            } catch (Exception ex) {
-                logger.debug("failed to notify listeners on shutdown", ex);
+        
+        public List<ByteBuffer> serialize(ParsedStatement.Prepared prepared) {
+            List<ByteBuffer> boundValues = new ArrayList<ByteBuffer>(values.length);
+            for (int i = 0; i < values.length; i++) {
+                Object v = values[i];
+                AbstractType type = prepared.boundNames.get(i).type;
+                boundValues.add(v instanceof ByteBuffer || v == null ? (ByteBuffer) v : type.decompose(v));
             }
-        }
-        ThreadPool.terminate(threadPoolExecutor, 10, TimeUnit.SECONDS);
-        // close timeout listeners that did not have an ongoing timeout
-        timeoutClusterStateListeners.forEach(TimeoutClusterStateListener::onClose);
-        removeListener(localNodeMasterListeners);
-    }
-
-    @Override
-    protected synchronized void doClose() {
-    }
-
-    public class ClusterServiceTaskBatcher extends TaskBatcher {
-
-        ClusterServiceTaskBatcher(Logger logger, PrioritizedEsThreadPoolExecutor threadExecutor) {
-            super(logger, threadExecutor);
-        }
-
-        @Override
-        protected void onTimeout(List<? extends BatchedTask> tasks, TimeValue timeout) {
-            threadPool.generic().execute(
-                () -> tasks.forEach(
-                    task -> ((UpdateTask) task).listener.onFailure(task.source,
-                        new ProcessClusterEventTimeoutException(timeout, task.source))));
-        }
-
-        @Override
-        protected void run(Object batchingKey, List<? extends BatchedTask> tasks, String tasksSummary) {
-            ClusterStateTaskExecutor<Object> taskExecutor = (ClusterStateTaskExecutor<Object>) batchingKey;
-            List<UpdateTask> updateTasks = (List<UpdateTask>) tasks;
-            runTasks(new ClusterService.TaskInputs(taskExecutor, updateTasks, tasksSummary));
-        }
-
-        public class UpdateTask extends BatchedTask {
-            final ClusterStateTaskListener listener;
-
-            UpdateTask(Priority priority, String source, Object task, ClusterStateTaskListener listener,
-                       ClusterStateTaskExecutor<?> executor) {
-                super(priority, source, executor, task);
-                this.listener = listener;
-            }
-
-            @Override
-            public String describeTasks(List<? extends BatchedTask> tasks) {
-                return ((ClusterStateTaskExecutor<Object>) batchingKey).describeTasks(
-                    tasks.stream().map(BatchedTask::getTask).collect(Collectors.toList()));
-            }
+            return boundValues;
         }
     }
+    public static Map<String, String> cqlMapping = new ImmutableMap.Builder<String,String>()
+            .put("text", "string")
+            .put("varchar", "string")
+            .put("timestamp", "date")
+            .put("int", "integer")
+            .put("double", "double")
+            .put("float", "float")
+            .put("bigint", "long")
+            .put("boolean", "boolean")
+            .put("blob", "binary")
+            .put("inet", "ip" )
+            .put("uuid", "string" )
+            .put("timeuuid", "string" )
+            .build();
 
-    /**
-     * The local node.
-     */
-    public DiscoveryNode localNode() {
-        DiscoveryNode localNode = state().getNodes().getLocalNode();
-        if (localNode == null) {
-            throw new IllegalStateException("No local node found. Is the node started?");
+    /*
+    public static Map<String,Class<? extends FieldMapper.Builder<?,?>>> cqlToMapperBuilder = new java.util.HashMap<String, Class<? extends FieldMapper.Builder<?,?>>>() {
+        {
+            put("text", StringFieldMapper.Builder.class);
+            put("ascii", StringFieldMapper.Builder.class);
+            put("timestamp", DateFieldMapper.Builder.class);
+            put("double", NumberFieldMapper.NumberType.DOUBLE::createFields);
+            put("float" , NumberFieldMapper.Builder.class);
+            put("int", NumberFieldMapper.Builder.class);
+            put("bigint", NumberFieldMapper.Builder.class);
+            put("smallint", NumberFieldMapper.Builder.class);
+            put("boolean", BooleanFieldMapper.Builder.class);
+            put("blob", BinaryFieldMapper.Builder.class);
+            put("inet", IpFieldMapper.Builder.class);
         }
-        return localNode;
-    }
-
-    public OperationRouting operationRouting() {
-        return operationRouting;
-    }
-
-    /**
-     * The current cluster state.
-     */
-    public ClusterState state() {
-        assert assertNotCalledFromClusterStateApplier("the applied cluster state is not yet available");
-        return this.state.get();
-    }
-
-    /**
-     * Adds a high priority applier of updated cluster states.
-     */
-    public void addHighPriorityApplier(ClusterStateApplier applier) {
-        highPriorityStateAppliers.add(applier);
-    }
-
-    /**
-     * Adds an applier which will be called after all high priority and normal appliers have been called.
-     */
-    public void addLowPriorityApplier(ClusterStateApplier applier) {
-        lowPriorityStateAppliers.add(applier);
-    }
-
-    /**
-     * Adds a applier of updated cluster states.
-     */
-    public void addStateApplier(ClusterStateApplier applier) {
-        normalPriorityStateAppliers.add(applier);
-    }
-
-    /**
-     * Removes an applier of updated cluster states.
-     */
-    public void removeApplier(ClusterStateApplier applier) {
-        normalPriorityStateAppliers.remove(applier);
-        highPriorityStateAppliers.remove(applier);
-        lowPriorityStateAppliers.remove(applier);
-    }
-
-    /**
-     * Add a listener for updated cluster states
-     */
-    public void addListener(ClusterStateListener listener) {
-        clusterStateListeners.add(listener);
-    }
-
-    /**
-     * Removes a listener for updated cluster states.
-     */
-    public void removeListener(ClusterStateListener listener) {
-        clusterStateListeners.remove(listener);
-    }
-
-    /**
-     * Removes a timeout listener for updated cluster states.
-     */
-    public void removeTimeoutListener(TimeoutClusterStateListener listener) {
-        timeoutClusterStateListeners.remove(listener);
-        for (Iterator<NotifyTimeout> it = onGoingTimeouts.iterator(); it.hasNext(); ) {
-            NotifyTimeout timeout = it.next();
-            if (timeout.listener.equals(listener)) {
-                timeout.cancel();
-                it.remove();
-            }
-        }
-    }
-
-    /**
-     * Add a listener for on/off local node master events
-     */
-    public void addLocalNodeMasterListener(LocalNodeMasterListener listener) {
-        localNodeMasterListeners.add(listener);
-    }
-
-    /**
-     * Remove the given listener for on/off local master events
-     */
-    public void removeLocalNodeMasterListener(LocalNodeMasterListener listener) {
-        localNodeMasterListeners.remove(listener);
-    }
-
-    /**
-     * Adds a cluster state listener that is expected to be removed during a short period of time.
-     * If provided, the listener will be notified once a specific time has elapsed.
-     *
-     * NOTE: the listener is not remmoved on timeout. This is the responsibility of the caller.
-     */
-    public void addTimeoutListener(@Nullable final TimeValue timeout, final TimeoutClusterStateListener listener) {
-        if (lifecycle.stoppedOrClosed()) {
-            listener.onClose();
-            return;
-        }
-
-        // call the post added notification on the same event thread
-        try {
-            threadPoolExecutor.execute(new SourcePrioritizedRunnable(Priority.HIGH, "_add_listener_") {
-                @Override
-                public void run() {
-                    if (timeout != null) {
-                        NotifyTimeout notifyTimeout = new NotifyTimeout(listener, timeout);
-                        notifyTimeout.future = threadPool.schedule(timeout, ThreadPool.Names.GENERIC, notifyTimeout);
-                        onGoingTimeouts.add(notifyTimeout);
-                    }
-                    timeoutClusterStateListeners.add(listener);
-                    listener.postAdded();
-                }
-            });
-        } catch (EsRejectedExecutionException e) {
-            if (lifecycle.stoppedOrClosed()) {
-                listener.onClose();
-            } else {
-                throw e;
-            }
-        }
-    }
-
-    /**
-     * Submits a cluster state update task; unlike {@link #submitStateUpdateTask(String, Object, ClusterStateTaskConfig,
-     * ClusterStateTaskExecutor, ClusterStateTaskListener)}, submitted updates will not be batched.
-     *
-     * @param source     the source of the cluster state update task
-     * @param updateTask the full context for the cluster state update
-     *                   task
-     *
-     */
-    public <T extends ClusterStateTaskConfig & ClusterStateTaskExecutor<T> & ClusterStateTaskListener> void submitStateUpdateTask(
-        final String source, final T updateTask) {
-        submitStateUpdateTask(source, updateTask, updateTask, updateTask, updateTask);
-    }
-
-    /**
-     * Submits a cluster state update task; submitted updates will be
-     * batched across the same instance of executor. The exact batching
-     * semantics depend on the underlying implementation but a rough
-     * guideline is that if the update task is submitted while there
-     * are pending update tasks for the same executor, these update
-     * tasks will all be executed on the executor in a single batch
-     *
-     * @param source   the source of the cluster state update task
-     * @param task     the state needed for the cluster state update task
-     * @param config   the cluster state update task configuration
-     * @param executor the cluster state update task executor; tasks
-     *                 that share the same executor will be executed
-     *                 batches on this executor
-     * @param listener callback after the cluster state update task
-     *                 completes
-     * @param <T>      the type of the cluster state update task state
-     *
-     */
-    public <T> void submitStateUpdateTask(final String source, final T task,
-                                          final ClusterStateTaskConfig config,
-                                          final ClusterStateTaskExecutor<T> executor,
-                                          final ClusterStateTaskListener listener) {
-        submitStateUpdateTasks(source, Collections.singletonMap(task, listener), config, executor);
-    }
-
-    /**
-     * Submits a batch of cluster state update tasks; submitted updates are guaranteed to be processed together,
-     * potentially with more tasks of the same executor.
-     *
-     * @param source   the source of the cluster state update task
-     * @param tasks    a map of update tasks and their corresponding listeners
-     * @param config   the cluster state update task configuration
-     * @param executor the cluster state update task executor; tasks
-     *                 that share the same executor will be executed
-     *                 batches on this executor
-     * @param <T>      the type of the cluster state update task state
-     *
-     */
-    public <T> void submitStateUpdateTasks(final String source,
-                                           final Map<T, ClusterStateTaskListener> tasks, final ClusterStateTaskConfig config,
-                                           final ClusterStateTaskExecutor<T> executor) {
-        if (!lifecycle.started()) {
-            return;
-        }
-        try {
-            List<ClusterServiceTaskBatcher.UpdateTask> safeTasks = tasks.entrySet().stream()
-                .map(e -> taskBatcher.new UpdateTask(config.priority(), source, e.getKey(), safe(e.getValue(), logger), executor))
-                .collect(Collectors.toList());
-            taskBatcher.submitTasks(safeTasks, config.timeout());
-        } catch (EsRejectedExecutionException e) {
-            // ignore cases where we are shutting down..., there is really nothing interesting
-            // to be done here...
-            if (!lifecycle.stoppedOrClosed()) {
-                throw e;
-            }
-        }
-    }
-
-    /**
-     * Returns the tasks that are pending.
-     */
-    public List<PendingClusterTask> pendingTasks() {
-        return Arrays.stream(threadPoolExecutor.getPending()).map(pending -> {
-            assert pending.task instanceof SourcePrioritizedRunnable :
-                "thread pool executor should only use SourcePrioritizedRunnable instances but found: " + pending.task.getClass().getName();
-            SourcePrioritizedRunnable task = (SourcePrioritizedRunnable) pending.task;
-            return new PendingClusterTask(pending.insertionOrder, pending.priority, new Text(task.source()),
-                task.getAgeInMillis(), pending.executing);
-        }).collect(Collectors.toList());
-    }
-
-    /**
-     * Returns the number of currently pending tasks.
-     */
-    public int numberOfPendingTasks() {
-        return threadPoolExecutor.getNumberOfPendingTasks();
-    }
-
-    /**
-     * Returns the maximum wait time for tasks in the queue
-     *
-     * @return A zero time value if the queue is empty, otherwise the time value oldest task waiting in the queue
-     */
-    public TimeValue getMaxTaskWaitTime() {
-        return threadPoolExecutor.getMaxTaskWaitTime();
-    }
-
-    /** asserts that the current thread is the cluster state update thread */
-    public static boolean assertClusterStateThread() {
-        assert Thread.currentThread().getName().contains(ClusterService.UPDATE_THREAD_NAME) :
-                "not called from the cluster state update thread";
-        return true;
-    }
-
-    /** asserts that the current thread is <b>NOT</b> the cluster state update thread */
-    public static boolean assertNotClusterStateUpdateThread(String reason) {
-        assert Thread.currentThread().getName().contains(UPDATE_THREAD_NAME) == false :
-            "Expected current thread [" + Thread.currentThread() + "] to not be the cluster state update thread. Reason: [" + reason + "]";
-        return true;
-    }
-
-    /** asserts that the current stack trace does <b>NOT</b> invlove a cluster state applier */
-    private static boolean assertNotCalledFromClusterStateApplier(String reason) {
-        if (Thread.currentThread().getName().contains(UPDATE_THREAD_NAME)) {
-            for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
-                final String className = element.getClassName();
-                final String methodName = element.getMethodName();
-                if (className.equals(ClusterStateObserver.class.getName())) {
-                    // people may start an observer from an applier
-                    return true;
-                } else if (className.equals(ClusterService.class.getName())
-                    && methodName.equals("callClusterStateAppliers")) {
-                    throw new AssertionError("should not be called by a cluster state applier. reason [" + reason + "]");
-                }
-            }
-        }
-        return true;
-    }
-
-    public ClusterName getClusterName() {
-        return clusterName;
-    }
-
-    public void setDiscoverySettings(DiscoverySettings discoverySettings) {
-        this.discoverySettings = discoverySettings;
-    }
-
-    void runTasks(TaskInputs taskInputs) {
-        if (!lifecycle.started()) {
-            logger.debug("processing [{}]: ignoring, cluster service not started", taskInputs.summary);
-            return;
-        }
-
-        logger.debug("processing [{}]: execute", taskInputs.summary);
-        ClusterState previousClusterState = state();
-
-        if (!previousClusterState.nodes().isLocalNodeElectedMaster() && taskInputs.runOnlyOnMaster()) {
-            logger.debug("failing [{}]: local node is no longer master", taskInputs.summary);
-            taskInputs.onNoLongerMaster();
-            return;
-        }
-
-        long startTimeNS = currentTimeInNanos();
-        TaskOutputs taskOutputs = calculateTaskOutputs(taskInputs, previousClusterState, startTimeNS);
-        taskOutputs.notifyFailedTasks();
-
-        if (taskOutputs.clusterStateUnchanged()) {
-            taskOutputs.notifySuccessfulTasksOnUnchangedClusterState();
-            TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(currentTimeInNanos() - startTimeNS)));
-            logger.debug("processing [{}]: took [{}] no change in cluster_state", taskInputs.summary, executionTime);
-            warnAboutSlowTaskIfNeeded(executionTime, taskInputs.summary);
+    };
+    */
+    
+    private MetaStateService metaStateService;
+    private IndicesService indicesService;
+    private CassandraDiscovery discovery;
+    
+    private final TokenRangesService tokenRangeService;
+    private final CassandraSecondaryIndicesApplier cassandraSecondaryIndicesApplier;
+    
+    protected final MappingUpdatedAction mappingUpdatedAction;
+    
+    public final static Class<? extends Index> defaultSecondaryIndexClass = ExtendedElasticSecondaryIndex.class;
+    
+    protected final PrimaryFirstSearchStrategy primaryFirstSearchStrategy = new PrimaryFirstSearchStrategy();
+    protected final Map<String, AbstractSearchStrategy> strategies = new ConcurrentHashMap<String, AbstractSearchStrategy>();
+    protected final Map<String, AbstractSearchStrategy.Router> routers = new ConcurrentHashMap<String, AbstractSearchStrategy.Router>();
+     
+    private final ConsistencyLevel metadataWriteCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.write.cl","QUORUM"));
+    private final ConsistencyLevel metadataReadCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.read.cl","QUORUM"));
+    private final ConsistencyLevel metadataSerialCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.serial.cl","SERIAL"));
+    
+    private final String elasticAdminKeyspaceName;
+    private final String selectMetadataQuery;
+    private final String insertMetadataQuery;
+    private final String updateMetaDataQuery;
+    
+    private volatile CassandraShardStartedBarrier shardStartedBarrier;
+    
+    @Inject
+    public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool, Supplier<DiscoveryNode> localNodeSupplier) {
+        super(settings, clusterSettings, threadPool, localNodeSupplier);
+        this.mappingUpdatedAction = null;
+        this.tokenRangeService = new TokenRangesService(settings);
+        this.cassandraSecondaryIndicesApplier = new CassandraSecondaryIndicesApplier(settings, this);
+        
+        String datacenterGroup = settings.get(SETTING_CLUSTER_DATACENTER_GROUP);
+        if (datacenterGroup != null && datacenterGroup.length() > 0) {
+            logger.info("Starting with datacenter.group=[{}]", datacenterGroup.trim().toLowerCase(Locale.ROOT));
+            elasticAdminKeyspaceName = String.format(Locale.ROOT, "%s_%s", ELASTIC_ADMIN_KEYSPACE,datacenterGroup.trim().toLowerCase(Locale.ROOT));
         } else {
-            ClusterState newClusterState = taskOutputs.newClusterState;
-            if (logger.isTraceEnabled()) {
-                logger.trace("cluster state updated, source [{}]\n{}", taskInputs.summary, newClusterState);
-            } else if (logger.isDebugEnabled()) {
-                logger.debug("cluster state updated, version [{}], source [{}]", newClusterState.version(), taskInputs.summary);
-            }
+            elasticAdminKeyspaceName = ELASTIC_ADMIN_KEYSPACE;
+        }
+        selectMetadataQuery = String.format(Locale.ROOT, "SELECT metadata,version,owner FROM \"%s\".\"%s\" WHERE cluster_name = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        insertMetadataQuery = String.format(Locale.ROOT, "INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version,metadata) VALUES (?,?,?,?) IF NOT EXISTS", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        updateMetaDataQuery = String.format(Locale.ROOT, "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE cluster_name = ? IF version < ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+    }
+    
+    public void setMetaStateService(MetaStateService metaStateService) {
+        this.metaStateService = metaStateService;
+    }
+    public void setIndicesService(IndicesService indicesService) {
+        this.indicesService = indicesService;
+    }
+    public IndicesService getIndicesService() {
+        return this.indicesService;
+    }
+    
+    public void setDiscovery(Discovery discovery) {
+        this.discovery = (CassandraDiscovery)discovery;
+    }
+    
+    
+    public TokenRangesService tokenRangesService() {
+        return this.tokenRangeService;
+    }
+    
+    public void addShardStartedBarrier() {
+        this.shardStartedBarrier = new CassandraShardStartedBarrier(settings, this);
+    }
+    
+    public void removeShardStartedBarrier() {
+        this.shardStartedBarrier = null;
+    }
+    
+    public void blockUntilShardsStarted() {
+        if (shardStartedBarrier != null) {
+            shardStartedBarrier.blockUntilShardsStarted();
+        }
+    }
+    
+    public String getElasticAdminKeyspaceName() {
+        return this.elasticAdminKeyspaceName;
+    }
+    
+    public boolean isNativeCql3Type(String cqlType) {
+        return cqlMapping.keySet().contains(cqlType) && !cqlType.startsWith("geo_");
+    }
+    
+    public Class<AbstractSearchStrategy> searchStrategyClass(IndexMetaData indexMetaData, ClusterState state) {
+        return AbstractSearchStrategy.getSearchStrategyClass( 
+                indexMetaData.getSettings().get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS, 
+                state.metaData().settings().get(ClusterService.SETTING_CLUSTER_SEARCH_STRATEGY_CLASS,PrimaryFirstSearchStrategy.class.getName()))
+                );
+    }
+    
+    private AbstractSearchStrategy searchStrategyInstance(Class<AbstractSearchStrategy> clazz) {
+        AbstractSearchStrategy searchStrategy = strategies.get(clazz.getName());
+        if (searchStrategy == null) {
             try {
-                publishAndApplyChanges(taskInputs, taskOutputs);
-                TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(currentTimeInNanos() - startTimeNS)));
-                logger.debug("processing [{}]: took [{}] done applying updated cluster_state (version: {}, uuid: {})", taskInputs.summary,
-                    executionTime, newClusterState.version(), newClusterState.stateUUID());
-                warnAboutSlowTaskIfNeeded(executionTime, taskInputs.summary);
+                searchStrategy = clazz.newInstance();
             } catch (Exception e) {
-                TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(currentTimeInNanos() - startTimeNS)));
-                final long version = newClusterState.version();
-                final String stateUUID = newClusterState.stateUUID();
-                final String fullState = newClusterState.toString();
-                logger.warn(
-                    (Supplier<?>) () -> new ParameterizedMessage(
-                        "failed to apply updated cluster state in [{}]:\nversion [{}], uuid [{}], source [{}]\n{}",
-                        executionTime,
-                        version,
-                        stateUUID,
-                        taskInputs.summary,
-                        fullState),
-                    e);
-                // TODO: do we want to call updateTask.onFailure here?
+                logger.error("Cannot instanciate search strategy {}", e, clazz.getName());
+                searchStrategy = new PrimaryFirstSearchStrategy();
             }
+            strategies.putIfAbsent(clazz.getName(), searchStrategy);
         }
+        return searchStrategy;
+    }
+    
+    
+    public PrimaryFirstSearchStrategy.PrimaryFirstRouter updateRouter(IndexMetaData indexMetaData, ClusterState state) {
+        // update and returns a PrimaryFirstRouter for the build table.
+        PrimaryFirstSearchStrategy.PrimaryFirstRouter router = (PrimaryFirstSearchStrategy.PrimaryFirstRouter)this.primaryFirstSearchStrategy.newRouter(indexMetaData.getIndex(), indexMetaData.keyspace(), getShardRoutingStates(indexMetaData.getIndex()), state);
+        
+        // update the router cache with the effective router
+        AbstractSearchStrategy effectiveSearchStrategy = searchStrategyInstance(searchStrategyClass(indexMetaData, state));
+        if (! effectiveSearchStrategy.equals(PrimaryFirstSearchStrategy.class) ) {
+            AbstractSearchStrategy.Router router2 = effectiveSearchStrategy.newRouter(indexMetaData.getIndex(), indexMetaData.keyspace(), getShardRoutingStates(indexMetaData.getIndex()), state);
+            this.routers.put(indexMetaData.getIndex().getName(), router2);
+        } else {
+            this.routers.put(indexMetaData.getIndex().getName(), router);
+        }
+        
+        return router;
+    }
+    
+    public AbstractSearchStrategy.Router getRouter(IndexMetaData indexMetaData, ClusterState state) {
+        AbstractSearchStrategy.Router router = this.routers.get(indexMetaData.getIndex());
+        return router;
+    }
+    
+    public UntypedResultSet process(final ConsistencyLevel cl, final ClientState clientState, final String query) 
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return process(cl, null, clientState, query, new Long(0), new Object[] {});
     }
 
-    public TaskOutputs calculateTaskOutputs(TaskInputs taskInputs, ClusterState previousClusterState, long startTimeNS) {
-        ClusterTasksResult<Object> clusterTasksResult = executeTasks(taskInputs, startTimeNS, previousClusterState);
-        // extract those that are waiting for results
-        List<ClusterServiceTaskBatcher.UpdateTask> nonFailedTasks = new ArrayList<>();
-        for (ClusterServiceTaskBatcher.UpdateTask updateTask : taskInputs.updateTasks) {
-            assert clusterTasksResult.executionResults.containsKey(updateTask.task) : "missing " + updateTask;
-            final ClusterStateTaskExecutor.TaskResult taskResult =
-                clusterTasksResult.executionResults.get(updateTask.task);
-            if (taskResult.isSuccess()) {
-                nonFailedTasks.add(updateTask);
-            }
-        }
-        ClusterState newClusterState = patchVersionsAndNoMasterBlocks(previousClusterState, clusterTasksResult);
-
-        return new TaskOutputs(taskInputs, previousClusterState, newClusterState, nonFailedTasks,
-                                  clusterTasksResult.executionResults);
+    public UntypedResultSet process(final ConsistencyLevel cl, final ClientState clientState, final String query, Object... values) 
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return process(cl, null, clientState, query, new Long(0), values);
+    }
+   
+    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, final Object... values) 
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return process(cl, serialConsistencyLevel, ClientState.forInternalCalls(), query, new Long(0), values);
     }
 
-    private ClusterTasksResult<Object> executeTasks(TaskInputs taskInputs, long startTimeNS, ClusterState previousClusterState) {
-        ClusterTasksResult<Object> clusterTasksResult;
+    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, Long writetime, final Object... values) {
+        return process(cl, serialConsistencyLevel, ClientState.forInternalCalls(), query, writetime, values);
+    }
+    
+    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final ClientState clientState, final String query, Long writetime, final Object... values)
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        if (logger.isDebugEnabled()) 
+            logger.debug("processing CL={} SERIAL_CL={} query={}", cl, serialConsistencyLevel, query);
+        
+        ParsedStatement.Prepared prepared = QueryProcessor.getStatement(query, clientState);
+        List<ByteBuffer> boundValues = new ArrayList<ByteBuffer>(values.length);
+        for (int i = 0; i < values.length; i++) {
+            Object v = values[i];
+            AbstractType type = prepared.boundNames.get(i).type;
+            boundValues.add(v instanceof ByteBuffer || v == null ? (ByteBuffer) v : type.decompose(v));
+        }
+        QueryState queryState = new QueryState(clientState);
+        QueryOptions queryOptions = QueryOptions.forInternalCalls(cl, serialConsistencyLevel, boundValues);
+        ResultMessage result = QueryProcessor.instance.process(query, queryState, queryOptions, System.nanoTime());
+        writetime = queryState.getTimestamp();
+        if (result instanceof ResultMessage.Rows)
+            return UntypedResultSet.create(((ResultMessage.Rows) result).result);
+        else
+            return null;
+    }
+
+   
+    public boolean processConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, final String query, Object... values) 
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         try {
-            List<Object> inputs = taskInputs.updateTasks.stream()
-                .map(ClusterServiceTaskBatcher.UpdateTask::getTask).collect(Collectors.toList());
-            clusterTasksResult = taskInputs.executor.execute(previousClusterState, inputs);
+            UntypedResultSet result = process(cl, serialCl, query, values);
+            if (serialCl != null) {
+                if (!result.isEmpty()) {
+                    Row row = result.one();
+                    if (row.has("[applied]")) {
+                         return row.getBoolean("[applied]");
+                    }
+                }
+                return false;
+            } 
+            return true;
         } catch (Exception e) {
-            TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(currentTimeInNanos() - startTimeNS)));
-            if (logger.isTraceEnabled()) {
-                logger.trace(
-                    (Supplier<?>) () -> new ParameterizedMessage(
-                        "failed to execute cluster state update in [{}], state:\nversion [{}], source [{}]\n{}{}{}",
-                        executionTime,
-                        previousClusterState.version(),
-                        taskInputs.summary,
-                        previousClusterState.nodes(),
-                        previousClusterState.routingTable(),
-                        previousClusterState.getRoutingNodes()),
-                    e);
-            }
-            warnAboutSlowTaskIfNeeded(executionTime, taskInputs.summary);
-            clusterTasksResult = ClusterTasksResult.builder()
-                .failures(taskInputs.updateTasks.stream().map(ClusterServiceTaskBatcher.UpdateTask::getTask)::iterator, e)
-                .build(previousClusterState, false);
+            logger.error("Failed to process query=" + query + " values=" + Arrays.toString(values), e);
+            throw e;
         }
-
-        assert clusterTasksResult.executionResults != null;
-        assert clusterTasksResult.executionResults.size() == taskInputs.updateTasks.size()
-                : String.format(Locale.ROOT, "expected [%d] task result%s but was [%d]", taskInputs.updateTasks.size(),
-                taskInputs.updateTasks.size() == 1 ? "" : "s", clusterTasksResult.executionResults.size());
-        if (Assertions.ENABLED) {
-            for (ClusterServiceTaskBatcher.UpdateTask updateTask : taskInputs.updateTasks) {
-                assert clusterTasksResult.executionResults.containsKey(updateTask.task) :
-                    "missing task result for " + updateTask;
-            }
-        }
-
-        return clusterTasksResult;
     }
 
-    private ClusterState patchVersionsAndNoMasterBlocks(ClusterState previousClusterState, ClusterTasksResult<Object> executionResult) {
-        ClusterState newClusterState = executionResult.resultingState;
-
-        if (executionResult.noMaster) {
-            assert newClusterState == previousClusterState : "state can only be changed by ClusterService when noMaster = true";
-            if (previousClusterState.nodes().getMasterNodeId() != null) {
-                // remove block if it already exists before adding new one
-                assert previousClusterState.blocks().hasGlobalBlock(discoverySettings.getNoMasterBlock().id()) == false :
-                    "NO_MASTER_BLOCK should only be added by ClusterService";
-                ClusterBlocks clusterBlocks = ClusterBlocks.builder().blocks(previousClusterState.blocks())
-                    .addGlobalBlock(discoverySettings.getNoMasterBlock())
-                    .build();
-
-                DiscoveryNodes discoveryNodes = new DiscoveryNodes.Builder(previousClusterState.nodes()).masterNodeId(null).build();
-                newClusterState = ClusterState.builder(previousClusterState)
-                    .blocks(clusterBlocks)
-                    .nodes(discoveryNodes)
-                    .build();
+    
+    /**
+     * Don't use QueryProcessor.executeInternal, we need to propagate this on all nodes.
+     **/
+    
+    public void createIndexKeyspace(final String ksname, final int replicationFactor) throws IOException {
+        Keyspace ks = null;
+        try {
+            ks = Keyspace.open(ksname);
+            if (ks != null && !(ks.getReplicationStrategy() instanceof NetworkTopologyStrategy)) {
+                throw new IOException("Cannot create index, underlying keyspace requires the NetworkTopologyStrategy.");
             }
-        } else if (newClusterState.nodes().isLocalNodeElectedMaster() && previousClusterState != newClusterState) {
-            // only the master controls the version numbers
-            Builder builder = ClusterState.builder(newClusterState).incrementVersion();
-            /*
-            if (previousClusterState.routingTable() != newClusterState.routingTable()) {
-                builder.routingTable(RoutingTable.builder(ClusterService.this, newClusterState)
-                    .version(newClusterState.routingTable().version() + 1).build());
-            }
-            */
-            if (previousClusterState.metaData() != newClusterState.metaData()) {
-                builder.metaData(MetaData.builder(newClusterState.metaData()).version(newClusterState.metaData().version() + 1));
-            }
-
-            // remove the no master block, if it exists
-            if (newClusterState.blocks().hasGlobalBlock(discoverySettings.getNoMasterBlock().id())) {
-                builder.blocks(ClusterBlocks.builder().blocks(newClusterState.blocks())
-                    .removeGlobalBlock(discoverySettings.getNoMasterBlock().id()));
-            }
-
-            newClusterState = builder.build();
+        } catch(AssertionError | NullPointerException e) {
         }
 
-        assert newClusterState.nodes().getMasterNodeId() == null ||
-            newClusterState.blocks().hasGlobalBlock(discoverySettings.getNoMasterBlock().id()) == false :
-            "cluster state with master node must not have NO_MASTER_BLOCK";
-
-        return newClusterState;
+        try {
+            if (ks == null)
+               process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
+                    String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = {'class':'NetworkTopologyStrategy', '%s':'%d' };", 
+                    ksname, DatabaseDescriptor.getLocalDataCenter(), replicationFactor));
+        } catch (Throwable e) {
+            throw new IOException(e.getMessage(), e);
+        }
+    }
+    
+    
+    public void dropIndexKeyspace(final String ksname) throws IOException {
+        try {
+            String query = String.format(Locale.ROOT, "DROP KEYSPACE IF EXISTS \"%s\"", ksname);
+            logger.debug(query);
+            QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+        } catch (Throwable e) {
+            throw new IOException(e.getMessage(), e);
+        }
     }
 
+    public static Pair<List<String>, List<String>> getUDTInfo(final String ksName, final String typeName) {
+        try {
+            UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT field_names, field_types FROM system_schema.types WHERE keyspace_name = ? AND type_name = ?", 
+                    new Object[] { ksName, typeName });
+            Row row = result.one();
+            if ((row != null) && row.has("field_names")) {
+                List<String> field_names = row.getList("field_names", UTF8Type.instance);
+                List<String> field_types = row.getList("field_types", UTF8Type.instance);
+                return Pair.<List<String>, List<String>> create(field_names, field_types);
+            }
+        } catch (Exception e) {
+        }
+        return null;
+    }
+    
+    public static MapType<?,?> getMapType(final String ksName, final String cfName, final String colName) {
+        try {
+            UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT validator FROM system.schema_columns WHERE keyspace_name = ? AND columnfamily_name = ? AND column_name = ?", 
+                    new Object[] { ksName, cfName, colName });
+            Row row = result.one();
+            if ((row != null) && row.has("validator")) {
+                AbstractType<?> type = TypeParser.parse(row.getString("validator"));
+                if (type instanceof MapType) {
+                    return (MapType<?,?>)type;
+                }
+            }
+        } catch (Exception e) {
+        }
+        return null;
+    }
+    
+    // see https://docs.datastax.com/en/cql/3.0/cql/cql_reference/keywords_r.html
+    public static final Pattern keywordsPattern = Pattern.compile("(ADD|ALLOW|ALTER|AND|ANY|APPLY|ASC|AUTHORIZE|BATCH|BEGIN|BY|COLUMNFAMILY|CREATE|DELETE|DESC|DROP|EACH_QUORUM|GRANT|IN|INDEX|INET|INSERT|INTO|KEYSPACE|KEYSPACES|LIMIT|LOCAL_ONE|LOCAL_QUORUM|MODIFY|NOT|NORECURSIVE|OF|ON|ONE|ORDER|PASSWORD|PRIMARY|QUORUM|RENAME|REVOKE|SCHEMA|SELECT|SET|TABLE|TO|TOKEN|THREE|TRUNCATE|TWO|UNLOGGED|UPDATE|USE|USING|WHERE|WITH)"); 
+    
+    public static boolean isReservedKeyword(String identifier) {
+        return keywordsPattern.matcher(identifier.toUpperCase(Locale.ROOT)).matches();
+    }
+    
+    private static Object toJsonValue(Object o) {
+        if (o instanceof UUID)
+            return o.toString();
+        if (o instanceof Date)
+            return ((Date)o).getTime();
+        if (o instanceof ByteBuffer) {
+            // encode byte[] as Base64 encoded string
+            ByteBuffer bb = ByteBufferUtil.clone((ByteBuffer)o);
+            ByteBuffer encoded = Base64.getEncoder().encode(bb);
+            return encoded.toString();
+        }
+        if (o instanceof InetAddress)
+            return InetAddresses.toAddrString((InetAddress)o);
+        return o;
+    }
+    
+    private static org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+
+    // wrap string values with quotes
+    private static String stringify(Object o) throws IOException {
+        Object v = toJsonValue(o);
+        return v instanceof String ?  "\""+jsonMapper.writeValueAsString(v)+"\"" : v.toString();
+    }
+    
+    public static String stringify(Object[] cols, int length) {
+        if (cols.length == 1)
+            return toJsonValue(cols[0]).toString();
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        for(int i = 0; i < length; i++) {
+            if (i > 0)
+                sb.append(",");
+            Object val = toJsonValue(cols[i]);
+            if (val instanceof String) {
+                try {
+                    sb.append('"').append(jsonMapper.writeValueAsString(val)).append('"');
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                sb.append(val);
+            }
+        }
+        return sb.append("]").toString();
+    }
+
+    public static ByteBuffer fromString(AbstractType<?> atype, String v) throws IOException {
+        if (atype instanceof BytesType)
+            return ByteBuffer.wrap(Base64.getDecoder().decode(v));
+        return atype.fromString(v);
+    }
+    
+    public static void toXContent(XContentBuilder builder, Mapper mapper, String field, Object value) throws IOException {
+        if (value instanceof Collection) {
+           if (field == null) {
+               builder.startArray(); 
+           } else {
+               builder.startArray(field);
+           }
+           for(Iterator<Object> i = ((Collection)value).iterator(); i.hasNext(); ) {
+               toXContent(builder, mapper, null, i.next());
+           } 
+           builder.endArray();
+        } else if (value instanceof Map) {
+           Map<String, Object> map = (Map<String,Object>)value;
+           if (field != null) {
+               builder.startObject(field);
+           } else {
+               builder.startObject();
+           }
+           for(String subField : map.keySet()) {
+               Object subValue = map.get(subField);
+               if (subValue == null)
+                   continue;
+               
+               if (subValue instanceof Collection && ((Collection)subValue).size() == 1)
+                   subValue = ((Collection)subValue).iterator().next();
+
+               if (mapper != null) {
+                   if (mapper instanceof ObjectMapper) {
+                       toXContent(builder, ((ObjectMapper)mapper).getMapper(subField), subField, subValue);
+                   } else if (mapper instanceof GeoPointFieldMapper) {
+                       GeoPointFieldMapper geoMapper = (GeoPointFieldMapper)mapper;
+                       if (geoMapper.fieldType().isLatLonEnabled()) {
+                           Iterator<Mapper> it = geoMapper.iterator();
+                           switch(subField) {
+                           case org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LAT:
+                               toXContent(builder, it.next(), org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LAT, map.get(org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LAT));
+                               break;
+                           case org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LON: 
+                               it.next();
+                               toXContent(builder, it.next(), org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LON, map.get(org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LON));
+                               break;
+                           }
+                       } else {
+                           // No mapper known
+                           // TODO: support geohashing
+                           builder.field(subField, subValue);
+                       }
+                   } else {
+                       builder.field(subField, subValue);
+                   }
+               } else {
+                   builder.field(subField, subValue);
+               }
+           }
+           builder.endObject();
+        } else {
+           if (mapper instanceof FieldMapper) {
+               FieldMapper fieldMapper = (FieldMapper)mapper;
+               if (!(fieldMapper instanceof MetadataFieldMapper)) {
+                   if (field != null) {
+                       builder.field(field, fieldMapper.fieldType().valueForDisplay(value));
+                   } else {
+                       builder.value((fieldMapper==null) ? value : fieldMapper.fieldType().valueForDisplay(value));
+                   }
+               }
+           } else if (mapper instanceof ObjectMapper) {
+               ObjectMapper objectMapper = (ObjectMapper)mapper;
+               if (!objectMapper.isEnabled()) {
+                   builder.field(field, value);
+               } else {
+                   throw new IOException("Unexpected object value ["+value+"]");
+               }
+           }
+        }
+    }
+    
+    public static XContentBuilder buildDocument(DocumentMapper documentMapper, Map<String, Object> docMap, boolean humanReadable) throws IOException {
+        return buildDocument(documentMapper, docMap, humanReadable, false);
+    }
+        
+    public static XContentBuilder buildDocument(DocumentMapper documentMapper, Map<String, Object> docMap, boolean humanReadable, boolean forStaticDocument) throws IOException {
+        XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON).humanReadable(true);
+        builder.startObject();
+        for(String field : docMap.keySet()) {
+            if (field.equals(ParentFieldMapper.NAME)) continue;
+            FieldMapper fieldMapper = documentMapper.mappers().smartNameFieldMapper(field);
+            if (fieldMapper != null) {
+                if (forStaticDocument && !isStaticOrPartitionKey(fieldMapper)) 
+                    continue;
+                toXContent(builder, fieldMapper, field, docMap.get(field));
+            } else {
+                ObjectMapper objectMapper = documentMapper.objectMappers().get(field);
+                if (objectMapper != null) {
+                     if (forStaticDocument && !isStaticOrPartitionKey(objectMapper)) 
+                         continue;
+                     toXContent(builder, objectMapper, field, docMap.get(field));
+                } else {
+                    Loggers.getLogger(ClusterService.class).error("No mapper found for field "+field);
+                    throw new IOException("No mapper found for field "+field);
+                }
+            }
+        }
+        builder.endObject();
+        return builder;
+    }
+
+    public static boolean isStaticOrPartitionKey(Mapper mapper) {
+        return mapper.cqlStaticColumn() || mapper.cqlPartitionKey();
+    }
+
+    public static final String PERCOLATOR_TABLE = "_percolator";
+    
+    private static final Map<String, String> cfNameToType = new ConcurrentHashMap<String, String>() {{
+       put(PERCOLATOR_TABLE, MapperService.PERCOLATOR_LEGACY_TYPE_NAME);
+    }};
+    
+    public static String typeToCfName(String type) {
+        if (type.indexOf('-') >= 0) {
+            String cfName = type.replaceAll("\\-", "_");
+            cfNameToType.putIfAbsent(cfName, type);
+            return cfName;
+        }
+        return type;
+    }
+   
+    public static String cfNameToType(String cfName) {
+        if (cfName.indexOf('_') >= 0) {
+            String type = cfNameToType.get(cfName);
+            if (type != null)
+                return type;
+        }
+        return cfName;
+    }
+    
+    public static String indexToKsName(String index) {
+        return index.replaceAll("\\.", "_").replaceAll("\\-", "_");
+    }
+    
+    
+    public String buildCql(final String ksName, final String cfName, final String name, final ObjectMapper objectMapper) throws RequestExecutionException {
+        if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
+            return buildUDT(ksName, cfName, name, objectMapper);
+        } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
+            if (objectMapper.iterator().hasNext()) {
+                Mapper childMapper = objectMapper.iterator().next();
+                if (childMapper instanceof FieldMapper) {
+                    return "map<text,"+childMapper.cqlType()+">";
+                } else if (childMapper instanceof ObjectMapper) {
+                    return "map<text,frozen<"+buildCql(ksName,cfName,childMapper.simpleName(),(ObjectMapper)childMapper)+">>";
+                }
+            } else {
+                // default map prototype, no mapper to determine the value type.
+                return "map<text,text>";
+            }
+        }
+        return null;
+    }
+
+    public String buildUDT(final String ksName, final String cfName, final String name, final ObjectMapper objectMapper) throws RequestExecutionException {
+        String typeName = (objectMapper.cqlUdtName() == null) ? cfName + "_" + objectMapper.fullPath().replace('.', '_') : objectMapper.cqlUdtName();
+
+        if (!objectMapper.iterator().hasNext()) {
+            throw new InvalidRequestException("Cannot create an empty nested type (not supported)");
+        }
+        
+        // create sub-type first
+        for (Iterator<Mapper> it = objectMapper.iterator(); it.hasNext(); ) {
+            Mapper mapper = it.next();
+            if (mapper instanceof ObjectMapper) {
+                buildCql(ksName, cfName, mapper.simpleName(), (ObjectMapper) mapper);
+            } else if (mapper instanceof GeoPointFieldMapper) {
+                buildGeoPointType(ksName);
+            } 
+        }
+
+        Pair<List<String>, List<String>> udt = getUDTInfo(ksName, typeName);
+        if (udt == null) {
+            // create new UDT.
+            StringBuilder create = new StringBuilder(String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( ", ksName, typeName));
+            boolean first = true;
+            for (Iterator<Mapper> it = objectMapper.iterator(); it.hasNext(); ) {
+                Mapper mapper = it.next();
+                if (first)
+                    first = false;
+                else
+                    create.append(", ");
+                
+                // Use only the last part of the fullname to build UDT.
+                int lastDotIndex = mapper.name().lastIndexOf('.');
+                String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
+                
+                if (isReservedKeyword(shortName))
+                    logger.warn("Allowing a CQL reserved keyword in ES: {}", shortName);
+                
+                create.append('\"').append(shortName).append("\" ");
+                if (mapper instanceof ObjectMapper) {
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(mapper.cqlCollectionTag()).append("<");
+                    create.append("frozen<")
+                        .append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_'))
+                        .append(">");
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
+                        create.append(">");
+                } else if (mapper instanceof BaseGeoPointFieldMapper) {
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(mapper.cqlCollectionTag()).append("<");
+                    create.append("frozen<")
+                        .append(GEO_POINT_TYPE)
+                        .append(">");
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(">");
+                } else if (mapper instanceof GeoShapeFieldMapper) {
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(mapper.cqlCollectionTag()).append("<");
+                    create.append("frozen<")
+                        .append("text")
+                        .append(">");
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        create.append(">");
+                } else {
+                    String cqlType = mapper.cqlType();
+                    if (mapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                        create.append(cqlType);
+                    } else {
+                        create.append(mapper.cqlCollectionTag()).append("<");
+                        if (!isNativeCql3Type(cqlType)) create.append("frozen<");
+                        create.append(cqlType);
+                        if (!isNativeCql3Type(cqlType)) create.append(">");
+                        create.append(">");
+                    }
+                }
+            }
+            create.append(" )");
+            if (logger.isDebugEnabled())
+                logger.debug("create UDT:"+ create.toString());
+            
+            QueryProcessor.process(create.toString(), ConsistencyLevel.LOCAL_ONE);
+        } else {
+            // update existing UDT
+            for (Iterator<Mapper> it = objectMapper.iterator(); it.hasNext(); ) {
+                Mapper mapper = it.next();
+                int lastDotIndex = mapper.name().lastIndexOf('.');
+                String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
+                if (isReservedKeyword(shortName))
+                    logger.warn("Allowing a CQL reserved keyword in ES: {}", shortName);
+                
+                StringBuilder update = new StringBuilder(String.format(Locale.ROOT, "ALTER TYPE \"%s\".\"%s\" ADD \"%s\" ", ksName, typeName, shortName));
+                if (!udt.left.contains(shortName)) {
+                    if (mapper instanceof ObjectMapper) {
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                            update.append(mapper.cqlCollectionTag()).append("<");
+                        update.append("frozen<")
+                            .append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_'))
+                            .append(">");
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                            update.append(">");
+                    } else if (mapper instanceof GeoPointFieldMapper) {
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                            update.append(mapper.cqlCollectionTag()).append("<");
+                        update.append("frozen<")
+                            .append(GEO_POINT_TYPE)
+                            .append(">");
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                            update.append(">");
+                    } else {
+                        String cqlType = mapper.cqlType();
+                        if (mapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                            update.append(cqlType);
+                        } else {
+                            update.append(mapper.cqlCollectionTag()).append("<");
+                            if (!isNativeCql3Type(cqlType)) update.append("frozen<");
+                            update.append(cqlType);
+                            if (!isNativeCql3Type(cqlType)) update.append(">");
+                            update.append(">");
+                        }
+                    }
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("update UDT: "+update.toString());
+                    }
+                    QueryProcessor.process(update.toString(), ConsistencyLevel.LOCAL_ONE);
+                }
+            }
+        }
+        return typeName;
+    }
+
+    private static final String GEO_POINT_TYPE = "geo_point";
+    private static final String ATTACHEMENT_TYPE = "attachement";
+    private static final String COMPLETION_TYPE = "completion";
+    
+    private void buildGeoPointType(String ksName) throws RequestExecutionException {
+        String query = String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( %s double, %s double)", 
+                ksName, GEO_POINT_TYPE,org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LAT,org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LON);
+        QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+    }
+
+    private void buildAttachementType(String ksName) throws RequestExecutionException {
+        String query = String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" (context text, content_type text, content_length bigint, date timestamp, title text, author text, keywords text, language text)", ksName, ATTACHEMENT_TYPE);
+        QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+    }
+    
+    private void buildCompletionType(String ksName) throws RequestExecutionException {
+        String query = String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" (input list<text>, contexts text, weight bigint)", ksName, COMPLETION_TYPE);
+        QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+    }
+    
+    public TokenRangesService getTokenRangesService() {
+        return  this.tokenRangeService;
+    }
+
+    public ClusterState updateNumberOfShards(ClusterState currentState) {
+        int numberOfNodes = currentState.nodes().getSize();
+        assert numberOfNodes > 0;
+        MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
+        for(Iterator<IndexMetaData> it = currentState.metaData().iterator(); it.hasNext(); ) {
+            IndexMetaData indexMetaData = it.next();
+            IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
+            indexMetaDataBuilder.numberOfShards(numberOfNodes);
+            String keyspace = indexMetaData.keyspace();
+            if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
+                AbstractReplicationStrategy replicationStrategy = Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy();
+                int rf = replicationStrategy.getReplicationFactor();
+                if (replicationStrategy instanceof NetworkTopologyStrategy) {
+                    rf = ((NetworkTopologyStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter());
+                } 
+                indexMetaDataBuilder.numberOfReplicas( Math.max(0, rf - 1) );
+            } else {
+                indexMetaDataBuilder.numberOfReplicas( 0 );
+            }
+            metaDataBuilder.put(indexMetaDataBuilder.build(), false);
+        }
+        return ClusterState.builder(currentState).metaData(metaDataBuilder.build()).build();
+    }
+    
+    /**
+     * Submit an updateTask to update numberOfShard and numberOfReplica of all indices in clusterState.
+     */
+    public void submitNumberOfShardsUpdate() {
+        submitStateUpdateTask("Update numberOfShard and numberOfReplica of all indices" , new ClusterStateUpdateTask() {
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+                return updateNumberOfShards(currentState);
+            }
+    
+            @Override
+            public boolean doPresistMetaData() {
+                return false;
+            }
+    
+            @Override
+            public void onFailure(String source, Exception t) {
+                logger.error("unexpected failure during [{}]", t, source);
+            }
+        });
+    }
+
+    
+    public void updateRoutingTable() {
+        submitStateUpdateTask("Update-routing-table" , new ClusterStateUpdateTask() {
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+                 return ClusterState.builder(currentState).incrementVersion().build();
+            }
+    
+            @Override
+            public boolean doPresistMetaData() {
+                return false;
+            }
+    
+            @Override
+            public void onFailure(String source, Exception t) {
+                logger.error("unexpected failure during [{}]", t, source);
+            }
+        });
+    }
+    
+    
+    public void updateTableSchema(final MapperService mapperService, final MappingMetaData mappingMd) throws IOException {
+        try {
+            String ksName = mapperService.keyspace();
+            String cfName = ClusterService.typeToCfName(mappingMd.type());
+            
+            createIndexKeyspace(ksName, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1);
+            
+            CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
+            boolean newTable = (cfm == null);
+            
+            DocumentMapper docMapper = mapperService.documentMapper(mappingMd.type());
+            Map<String, Object> mappingMap = mappingMd.sourceAsMap();
+            
+            Set<String> columns = new HashSet();
+            if (docMapper.sourceMapper().enabled()) 
+                columns.add(SourceFieldMapper.NAME);
+            if (mappingMap.get("properties") != null) 
+                columns.addAll( ((Map<String, Object>)mappingMap.get("properties")).keySet() );
+            
+            logger.debug("Updating CQL3 schema {}.{} columns={}", ksName, cfName, columns);
+            StringBuilder columnsList = new StringBuilder();
+            Map<String,Boolean> columnsMap = new HashMap<String, Boolean>(columns.size());
+            String[] primaryKeyList = new String[(newTable) ? columns.size()+1 : cfm.partitionKeyColumns().size()+cfm.clusteringColumns().size()];
+            int primaryKeyLength = 0;
+            int partitionKeyLength = 0;
+            for (String column : columns) {
+                if (isReservedKeyword(column))
+                    logger.warn("Allowing a CQL reserved keyword in ES: {}", column);
+                
+                if (column.equals(TokenFieldMapper.NAME))
+                    continue; // ignore pseudo column known by Elasticsearch
+                
+                if (columnsList.length() > 0) 
+                    columnsList.append(',');
+                
+                String cqlType = null;
+                boolean isStatic = false;
+                FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
+                if (fieldMapper != null) {
+                    if (fieldMapper instanceof GeoPointFieldMapper || fieldMapper instanceof LegacyGeoPointFieldMapper) {
+                        ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+                        if (cdef != null && cdef.type instanceof UTF8Type) {
+                            // index geohash stored as text in cassandra.
+                            cqlType = "text";
+                        } else {
+                            // create a geo_point UDT to store lat,lon
+                            cqlType = GEO_POINT_TYPE;
+                            buildGeoPointType(ksName);
+                        }
+                    } else if (fieldMapper instanceof GeoShapeFieldMapper) {
+                        cqlType = "text";
+                    } else if (fieldMapper instanceof CompletionFieldMapper) {
+                        cqlType = COMPLETION_TYPE;
+                        buildCompletionType(ksName);
+                    } else if (fieldMapper.getClass().getName().equals("org.elasticsearch.mapper.attachments.AttachmentMapper")) {
+                        // attachement is a plugin, so class may not found.
+                        cqlType = ATTACHEMENT_TYPE;
+                        buildAttachementType(ksName);
+                    } else if (fieldMapper instanceof SourceFieldMapper) {
+                        cqlType = "blob";
+                    } else {
+                        cqlType = fieldMapper.cqlType();
+                        if (cqlType == null) {
+                            logger.warn("Ignoring field [{}] type [{}]", column, fieldMapper.name());
+                            continue;
+                        }
+                    }
+                    
+                    columnsMap.put(column, fieldMapper.cqlPartialUpdate());
+                    if (fieldMapper.cqlPrimaryKeyOrder() >= 0) {
+                        if (fieldMapper.cqlPrimaryKeyOrder() < primaryKeyList.length && primaryKeyList[fieldMapper.cqlPrimaryKeyOrder()] == null) {
+                            primaryKeyList[fieldMapper.cqlPrimaryKeyOrder()] = column;
+                            primaryKeyLength = Math.max(primaryKeyLength, fieldMapper.cqlPrimaryKeyOrder()+1);
+                            if (fieldMapper.cqlPartitionKey()) {
+                                partitionKeyLength++;
+                            }
+                        } else {
+                            throw new Exception("Wrong primary key order for column "+column);
+                        }
+                    }
+                    
+                    if (!isNativeCql3Type(cqlType)) {
+                        cqlType = "frozen<" + cqlType + ">";
+                    }
+                    if (!fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                        cqlType = fieldMapper.cqlCollectionTag()+"<" + cqlType + ">";
+                    }
+                    isStatic = fieldMapper.cqlStaticColumn();
+                } else {
+                    ObjectMapper objectMapper = docMapper.objectMappers().get(column);
+                    if (objectMapper == null) {
+                       logger.warn("Cannot infer CQL type from object mapping for field [{}]", column);
+                       continue;
+                    }
+                    columnsMap.put(column,  objectMapper.cqlPartialUpdate());
+                    if (objectMapper.cqlPrimaryKeyOrder() >= 0) {
+                        if (objectMapper.cqlPrimaryKeyOrder() < primaryKeyList.length && primaryKeyList[objectMapper.cqlPrimaryKeyOrder()] == null) {
+                            primaryKeyList[objectMapper.cqlPrimaryKeyOrder()] = column;
+                            primaryKeyLength = Math.max(primaryKeyLength, objectMapper.cqlPrimaryKeyOrder()+1);
+                            if (objectMapper.cqlPartitionKey()) {
+                                partitionKeyLength++;
+                            }
+                        } else {
+                            throw new Exception("Wrong primary key order for column "+column);
+                        }
+                    }
+                    if (!objectMapper.isEnabled()) {
+                        logger.debug("Object [{}] not enabled stored as text", column);
+                        cqlType = "text";
+                    } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
+                        // TODO: check columnName exists and is map<text,?>
+                        cqlType = buildCql(ksName, cfName, column, objectMapper);
+                        if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                            cqlType = objectMapper.cqlCollectionTag()+"<"+cqlType+">";
+                        }
+                        //logger.debug("Expecting column [{}] to be a map<text,?>", column);
+                    } else  if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
+                        // enabled=false => opaque json object
+                        cqlType = (objectMapper.isEnabled()) ? "frozen<" + ColumnIdentifier.maybeQuote(buildCql(ksName, cfName, column, objectMapper)) + ">" : "text";
+                        if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON) && !(cfName.equals(PERCOLATOR_TABLE) && column.equals("query"))) {
+                            cqlType = objectMapper.cqlCollectionTag()+"<"+cqlType+">";
+                        }
+                    }
+                    isStatic = objectMapper.cqlStaticColumn();
+                }
+
+                
+                if (newTable) {
+                    if (cqlType != null) {
+                        columnsList.append("\"").append(column).append("\" ").append(cqlType);
+                        if (isStatic) columnsList.append(" static");
+                    }
+                } else {
+                    ColumnDefinition cdef = cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+                    if (cqlType != null) {
+                        if (cdef == null) {
+                            for(int i=0; i < primaryKeyLength; i++) {
+                                if (primaryKeyList[i] != null && primaryKeyList[i].equals(column))
+                                    throw new Exception("Cannot alter primary key of an existing table");
+                            }
+                            try {
+                                String query = String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" ADD \"%s\" %s %s", ksName, cfName, column, cqlType,(isStatic) ? "static":"");
+                                logger.debug(query);
+                                QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+                            } catch (Exception e) {
+                                logger.warn("Failed to alter table {}.{} column [{}] with type [{}]", e, ksName, cfName, column, cqlType);
+                            }
+                        } else {
+                            // check that the existing column matches the provided mapping
+                            // TODO: do this check for collection
+                            String existingCqlType = cdef.type.asCQL3Type().toString();
+                            if (!cdef.type.isCollection()) {
+                                // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
+                                if (!existingCqlType.equals(cqlType) && 
+                                    !cqlType.equals("frozen<"+existingCqlType+">") &&
+                                    !(existingCqlType.endsWith("uuid") && cqlType.equals("text")) ) // #74 uuid is mapped as text
+                                    throw new IOException("Existing column "+column+" mismatch type "+cqlType);
+                            }
+                        }
+                    }
+                }
+              
+            }
+
+            // add _parent column if necessary. Parent and child documents should have the same partition key.
+            if (docMapper.parentFieldMapper().active() && docMapper.parentFieldMapper().pkColumns() == null) {
+                if (newTable) {
+                    // _parent is a JSON array representation of the parent PK.
+                    if (columnsList.length() > 0) 
+                        columnsList.append(", ");
+                    columnsList.append("\"_parent\" text");
+                } else {
+                    try {
+                        String query = String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" ADD \"_parent\" text", ksName, cfName);
+                        logger.debug(query);
+                        QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+                    } catch (org.apache.cassandra.exceptions.InvalidRequestException e) {
+                        logger.warn("Cannot alter table {}.{} column _parent with type text", e, ksName, cfName);
+                    }
+                }
+            }
+            
+            if (newTable) {
+                if (partitionKeyLength == 0) {
+                    // build a default primary key _id text
+                    if (columnsList.length() > 0) columnsList.append(',');
+                    columnsList.append("\"").append(ELASTIC_ID_COLUMN_NAME).append("\" text");
+                    primaryKeyList[0] = ELASTIC_ID_COLUMN_NAME;
+                    primaryKeyLength = 1;
+                    partitionKeyLength = 1;
+                }
+                // build the primary key definition
+                StringBuilder primaryKey = new StringBuilder();
+                primaryKey.append("(");
+                for(int i=0; i < primaryKeyLength; i++) {
+                    if (primaryKeyList[i] == null) throw new Exception("Incomplet primary key definition at index "+i);
+                    primaryKey.append("\"").append( primaryKeyList[i] ).append("\"");
+                    if ( i == partitionKeyLength -1) primaryKey.append(")");
+                    if (i+1 < primaryKeyLength )   primaryKey.append(",");
+                }
+                String query = String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".\"%s\" ( %s, PRIMARY KEY (%s) ) WITH COMMENT='Auto-created by Elassandra'", 
+                        ksName, cfName, columnsList.toString(), primaryKey.toString());
+                logger.debug(query);
+                QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+            }
+            
+            updateMapping(mapperService.index().getName(), mappingMd);
+            
+        } catch (Throwable e) {
+            throw new IOException(e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    protected void doStart() {
+        super.doStart();
+        // add post-applied because 2i shoukd be created/deleted after that cassandra indices have taken the new mapping.
+        this.addStateApplier(cassandraSecondaryIndicesApplier);
+    }
+    
+    public void updateMapping(String ksName, MappingMetaData mapping) {
+        cassandraSecondaryIndicesApplier.updateMapping( ksName, mapping);
+    }
+    
+    public void recoverShard(String index) {
+        cassandraSecondaryIndicesApplier.recoverShard(index);
+    }
+    
     private void publishAndApplyChanges(TaskInputs taskInputs, TaskOutputs taskOutputs) {
         ClusterState previousClusterState = taskOutputs.previousClusterState;
         ClusterState newClusterState = taskOutputs.newClusterState;
 
-        ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(taskInputs.summary, newClusterState, previousClusterState);
-        // new cluster state, notify all listeners
-        final DiscoveryNodes.Delta nodesDelta = clusterChangedEvent.nodesDelta();
-        if (nodesDelta.hasChanges() && logger.isInfoEnabled()) {
-            String summary = nodesDelta.shortSummary();
-            if (summary.length() > 0) {
-                logger.info("{}, reason: {}", summary, taskInputs.summary);
-            }
-        }
-
-        final Discovery.AckListener ackListener = newClusterState.nodes().isLocalNodeElectedMaster() ?
-            taskOutputs.createAckListener(threadPool, newClusterState) :
-            null;
-
-        nodeConnectionsService.connectToNodes(newClusterState.nodes());
-
-        // if we are the master, publish the new state to all nodes
-        // we publish here before we send a notification to all the listeners, since if it fails
-        // we don't want to notify
-        if (newClusterState.nodes().isLocalNodeElectedMaster()) {
-            logger.debug("publishing cluster state version [{}]", newClusterState.version());
-            try {
-                clusterStatePublisher.accept(clusterChangedEvent, ackListener);
-            } catch (Discovery.FailedToCommitClusterStateException t) {
-                final long version = newClusterState.version();
-                logger.warn(
-                    (Supplier<?>) () -> new ParameterizedMessage(
-                        "failing [{}]: failed to commit cluster state version [{}]", taskInputs.summary, version),
-                    t);
-                // ensure that list of connected nodes in NodeConnectionsService is in-sync with the nodes of the current cluster state
-                nodeConnectionsService.connectToNodes(previousClusterState.nodes());
-                nodeConnectionsService.disconnectFromNodesExcept(previousClusterState.nodes());
-                taskOutputs.publishingFailed(t);
-                return;
-            }
-        }
-
-        logger.debug("applying cluster state version {}", newClusterState.version());
+        // try to update cluster state.
+        long startTimeNS = System.nanoTime();
+        boolean newPertistedMetadata = false;
         try {
-            // nothing to do until we actually recover from the gateway or any other block indicates we need to disable persistency
-            if (clusterChangedEvent.state().blocks().disableStatePersistence() == false && clusterChangedEvent.metaDataChanged()) {
-                final Settings incomingSettings = clusterChangedEvent.state().metaData().settings();
-                clusterSettings.applySettings(incomingSettings);
-            }
-        } catch (Exception ex) {
-            logger.warn("failed to apply cluster settings", ex);
-        }
-
-        logger.debug("set local cluster state to version {}", newClusterState.version());
-        callClusterStateAppliers(newClusterState, clusterChangedEvent);
-
-        nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
-
-        updateState(css -> newClusterState);
-
-        Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
-            try {
-                logger.trace("calling [{}] with change to version [{}]", listener, newClusterState.version());
-                listener.clusterChanged(clusterChangedEvent);
-            } catch (Exception ex) {
-                logger.warn("failed to notify ClusterStateListener", ex);
-            }
-        });
-
-        //manual ack only from the master at the end of the publish
-        if (newClusterState.nodes().isLocalNodeElectedMaster()) {
-            try {
-                ackListener.onNodeAck(newClusterState.nodes().getLocalNode(), null);
-            } catch (Exception e) {
-                final DiscoveryNode localNode = newClusterState.nodes().getLocalNode();
-                logger.debug(
-                    (Supplier<?>) () -> new ParameterizedMessage("error while processing ack for master node [{}]", localNode),
-                    e);
-            }
-        }
-
-        taskOutputs.processedDifferentClusterState(previousClusterState, newClusterState);
-
-        if (newClusterState.nodes().isLocalNodeElectedMaster()) {
-            try {
-                taskOutputs.clusterStatePublished(clusterChangedEvent);
-            } catch (Exception e) {
-                logger.error(
-                    (Supplier<?>) () -> new ParameterizedMessage(
-                        "exception thrown while notifying executor of new cluster state publication [{}]",
-                        taskInputs.summary),
-                    e);
-            }
-        }
-    }
-
-    private void callClusterStateAppliers(ClusterState newClusterState, ClusterChangedEvent clusterChangedEvent) {
-        for (ClusterStateApplier applier : clusterStateAppliers) {
-            try {
-                logger.trace("calling [{}] with change to version [{}]", applier, newClusterState.version());
-                applier.applyClusterState(clusterChangedEvent);
-            } catch (Exception ex) {
-                logger.warn("failed to notify ClusterStateApplier", ex);
-            }
-        }
-    }
-
-    /**
-     * Represents a set of tasks to be processed together with their executor
-     */
-    public class TaskInputs {
-        public final String summary;
-        public final List<ClusterServiceTaskBatcher.UpdateTask> updateTasks;
-        public final ClusterStateTaskExecutor<Object> executor;
-
-        TaskInputs(ClusterStateTaskExecutor<Object> executor, List<ClusterServiceTaskBatcher.UpdateTask> updateTasks, String summary) {
-            this.summary = summary;
-            this.executor = executor;
-            this.updateTasks = updateTasks;
-        }
-
-        public boolean runOnlyOnMaster() {
-            return executor.runOnlyOnMaster();
-        }
-
-        public void onNoLongerMaster() {
-            updateTasks.stream().forEach(task -> task.listener.onNoLongerMaster(task.source));
-        }
-    }
-
-    /**
-     * Output created by executing a set of tasks provided as TaskInputs
-     */
-    public class TaskOutputs {
-        public final TaskInputs taskInputs;
-        public final ClusterState previousClusterState;
-        public final ClusterState newClusterState;
-        public final List<ClusterServiceTaskBatcher.UpdateTask> nonFailedTasks;
-        public final Map<Object, ClusterStateTaskExecutor.TaskResult> executionResults;
-
-        TaskOutputs(TaskInputs taskInputs, ClusterState previousClusterState,
-                           ClusterState newClusterState, List<ClusterServiceTaskBatcher.UpdateTask> nonFailedTasks,
-                           Map<Object, ClusterStateTaskExecutor.TaskResult> executionResults) {
-            this.taskInputs = taskInputs;
-            this.previousClusterState = previousClusterState;
-            this.newClusterState = newClusterState;
-            this.nonFailedTasks = nonFailedTasks;
-            this.executionResults = executionResults;
-        }
-
-        public void publishingFailed(Discovery.FailedToCommitClusterStateException t) {
-            nonFailedTasks.forEach(task -> task.listener.onFailure(task.source, t));
-        }
-
-        public void processedDifferentClusterState(ClusterState previousClusterState, ClusterState newClusterState) {
-            nonFailedTasks.forEach(task -> task.listener.clusterStateProcessed(task.source, previousClusterState, newClusterState));
-        }
-
-        public void clusterStatePublished(ClusterChangedEvent clusterChangedEvent) {
-            taskInputs.executor.clusterStatePublished(clusterChangedEvent);
-        }
-
-        public Discovery.AckListener createAckListener(ThreadPool threadPool, ClusterState newClusterState) {
-            ArrayList<Discovery.AckListener> ackListeners = new ArrayList<>();
-
-            //timeout straightaway, otherwise we could wait forever as the timeout thread has not started
-            nonFailedTasks.stream().filter(task -> task.listener instanceof AckedClusterStateTaskListener).forEach(task -> {
-                final AckedClusterStateTaskListener ackedListener = (AckedClusterStateTaskListener) task.listener;
-                if (ackedListener.ackTimeout() == null || ackedListener.ackTimeout().millis() == 0) {
-                    ackedListener.onAckTimeout();
-                } else {
-                    try {
-                        ackListeners.add(new AckCountDownListener(ackedListener, newClusterState.version(), newClusterState.nodes(),
-                            threadPool));
-                    } catch (EsRejectedExecutionException ex) {
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("Couldn't schedule timeout thread - node might be shutting down", ex);
+            String newClusterStateMetaDataString = MetaData.Builder.toXContent(newClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
+            String previousClusterStateMetaDataString = MetaData.Builder.toXContent(previousClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
+            if (!newClusterStateMetaDataString.equals(previousClusterStateMetaDataString) && !newClusterState.blocks().disableStatePersistence()) {
+                // update MeteData.version+cluster_uuid
+                newPertistedMetadata = true;
+                newClusterState = ClusterState.builder(newClusterState)
+                                    .metaData(MetaData.builder(newClusterState.metaData()).incrementVersion().build())
+                                    .incrementVersion()
+                                    .build();
+                // try to persist new metadata in cassandra.
+                try {
+                    persistMetaData(previousClusterState.metaData(), newClusterState.metaData(), taskInputs.summary);
+                } catch (ConcurrentMetaDataUpdateException e) {
+                    // should replay the task later when current cluster state will match the expected metadata uuid and version
+                    logger.debug("Cannot overwrite persistent metadata, will resubmit task when metadata.version > {}", previousClusterState.metaData().version());
+                    ClusterService.this.addListener(new ClusterStateListener() {
+                        @Override
+                        public void clusterChanged(ClusterChangedEvent event) {
+                            if (event.metaDataChanged()) {
+                                logger.debug("metadata.version={} => resubmit delayed update source={} tasks={}",ClusterService.this.state().metaData().version(), taskInputs.summary, taskInputs.updateTasks);
+                                // TODO: resubmit tasks after the next cluster state update.
+                                for (final ClusterServiceTaskBatcher.UpdateTask updateTask : taskInputs.updateTasks) {
+                                    ClusterService.this.submitStateUpdateTask(taskInputs.summary, (ClusterStateUpdateTask) updateTask.task);
+                                }
+                                ClusterService.this.removeListener(this); // replay only once.
+                            }
                         }
-                        //timeout straightaway, otherwise we could wait forever as the timeout thread has not started
-                        ackedListener.onAckTimeout();
-                    }
-                }
-            });
-
-            return new DelegetingAckListener(ackListeners);
-        }
-
-        public boolean clusterStateUnchanged() {
-            return previousClusterState == newClusterState;
-        }
-
-        public void notifyFailedTasks() {
-            // fail all tasks that have failed
-            for (ClusterServiceTaskBatcher.UpdateTask updateTask : taskInputs.updateTasks) {
-                assert executionResults.containsKey(updateTask.task) : "missing " + updateTask;
-                final ClusterStateTaskExecutor.TaskResult taskResult = executionResults.get(updateTask.task);
-                if (taskResult.isSuccess() == false) {
-                    updateTask.listener.onFailure(updateTask.source, taskResult.getFailure());
-                }
-            }
-        }
-
-        public void notifySuccessfulTasksOnUnchangedClusterState() {
-            nonFailedTasks.forEach(task -> {
-                if (task.listener instanceof AckedClusterStateTaskListener) {
-                    //no need to wait for ack if nothing changed, the update can be counted as acknowledged
-                    ((AckedClusterStateTaskListener) task.listener).onAllNodesAcked(null);
-                }
-                task.listener.clusterStateProcessed(task.source, newClusterState, newClusterState);
-            });
-        }
-    }
-
-    // this one is overridden in tests so we can control time
-    protected long currentTimeInNanos() {
-        return System.nanoTime();
-    }
-
-    private static SafeClusterStateTaskListener safe(ClusterStateTaskListener listener, Logger logger) {
-        if (listener instanceof AckedClusterStateTaskListener) {
-            return new SafeAckedClusterStateTaskListener((AckedClusterStateTaskListener) listener, logger);
-        } else {
-            return new SafeClusterStateTaskListener(listener, logger);
-        }
-    }
-
-    private static class SafeClusterStateTaskListener implements ClusterStateTaskListener {
-        private final ClusterStateTaskListener listener;
-        private final Logger logger;
-
-        SafeClusterStateTaskListener(ClusterStateTaskListener listener, Logger logger) {
-            this.listener = listener;
-            this.logger = logger;
-        }
-
-        @Override
-        public void onFailure(String source, Exception e) {
-            try {
-                listener.onFailure(source, e);
-            } catch (Exception inner) {
-                inner.addSuppressed(e);
-                logger.error(
-                    (Supplier<?>) () -> new ParameterizedMessage(
-                        "exception thrown by listener notifying of failure from [{}]", source), inner);
-            }
-        }
-
-        @Override
-        public void onNoLongerMaster(String source) {
-            try {
-                listener.onNoLongerMaster(source);
-            } catch (Exception e) {
-                logger.error(
-                    (Supplier<?>) () -> new ParameterizedMessage(
-                            "exception thrown by listener while notifying no longer master from [{}]", source), e);
-            }
-        }
-
-        @Override
-        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-            try {
-                listener.clusterStateProcessed(source, oldState, newState);
-            } catch (Exception e) {
-                logger.error(
-                    (Supplier<?>) () -> new ParameterizedMessage(
-                        "exception thrown by listener while notifying of cluster state processed from [{}], old cluster state:\n" +
-                            "{}\nnew cluster state:\n{}",
-                        source, oldState, newState),
-                    e);
-            }
-        }
-    }
-
-    private static class SafeAckedClusterStateTaskListener extends SafeClusterStateTaskListener implements AckedClusterStateTaskListener {
-        private final AckedClusterStateTaskListener listener;
-        private final Logger logger;
-
-        SafeAckedClusterStateTaskListener(AckedClusterStateTaskListener listener, Logger logger) {
-            super(listener, logger);
-            this.listener = listener;
-            this.logger = logger;
-        }
-
-        @Override
-        public boolean mustAck(DiscoveryNode discoveryNode) {
-            return listener.mustAck(discoveryNode);
-        }
-
-        @Override
-        public void onAllNodesAcked(@Nullable Exception e) {
-            try {
-                listener.onAllNodesAcked(e);
-            } catch (Exception inner) {
-                inner.addSuppressed(e);
-                logger.error("exception thrown by listener while notifying on all nodes acked", inner);
-            }
-        }
-
-        @Override
-        public void onAckTimeout() {
-            try {
-                listener.onAckTimeout();
-            } catch (Exception e) {
-                logger.error("exception thrown by listener while notifying on ack timeout", e);
-            }
-        }
-
-        @Override
-        public TimeValue ackTimeout() {
-            return listener.ackTimeout();
-        }
-    }
-
-    protected void warnAboutSlowTaskIfNeeded(TimeValue executionTime, String source) {
-        if (executionTime.getMillis() > slowTaskLoggingThreshold.getMillis()) {
-            logger.warn("cluster state update task [{}] took [{}] above the warn threshold of {}", source, executionTime,
-                    slowTaskLoggingThreshold);
-        }
-    }
-
-    class NotifyTimeout implements Runnable {
-        final TimeoutClusterStateListener listener;
-        final TimeValue timeout;
-        volatile ScheduledFuture future;
-
-        NotifyTimeout(TimeoutClusterStateListener listener, TimeValue timeout) {
-            this.listener = listener;
-            this.timeout = timeout;
-        }
-
-        public void cancel() {
-            FutureUtils.cancel(future);
-        }
-
-        @Override
-        public void run() {
-            if (future != null && future.isCancelled()) {
-                return;
-            }
-            if (lifecycle.stoppedOrClosed()) {
-                listener.onClose();
-            } else {
-                listener.onTimeout(this.timeout);
-            }
-            // note, we rely on the listener to remove itself in case of timeout if needed
-        }
-    }
-
-    private static class LocalNodeMasterListeners implements ClusterStateListener {
-
-        private final List<LocalNodeMasterListener> listeners = new CopyOnWriteArrayList<>();
-        private final ThreadPool threadPool;
-        private volatile boolean master = false;
-
-        private LocalNodeMasterListeners(ThreadPool threadPool) {
-            this.threadPool = threadPool;
-        }
-
-        @Override
-        public void clusterChanged(ClusterChangedEvent event) {
-            if (!master && event.localNodeMaster()) {
-                master = true;
-                for (LocalNodeMasterListener listener : listeners) {
-                    Executor executor = threadPool.executor(listener.executorName());
-                    executor.execute(new OnMasterRunnable(listener));
-                }
-                return;
-            }
-
-            if (master && !event.localNodeMaster()) {
-                master = false;
-                for (LocalNodeMasterListener listener : listeners) {
-                    Executor executor = threadPool.executor(listener.executorName());
-                    executor.execute(new OffMasterRunnable(listener));
-                }
-            }
-        }
-
-        private void add(LocalNodeMasterListener listener) {
-            listeners.add(listener);
-        }
-
-        private void remove(LocalNodeMasterListener listener) {
-            listeners.remove(listener);
-        }
-
-        private void clear() {
-            listeners.clear();
-        }
-    }
-
-    private static class OnMasterRunnable implements Runnable {
-
-        private final LocalNodeMasterListener listener;
-
-        private OnMasterRunnable(LocalNodeMasterListener listener) {
-            this.listener = listener;
-        }
-
-        @Override
-        public void run() {
-            listener.onMaster();
-        }
-    }
-
-    private static class OffMasterRunnable implements Runnable {
-
-        private final LocalNodeMasterListener listener;
-
-        private OffMasterRunnable(LocalNodeMasterListener listener) {
-            this.listener = listener;
-        }
-
-        @Override
-        public void run() {
-            listener.offMaster();
-        }
-    }
-
-    private static class DelegetingAckListener implements Discovery.AckListener {
-
-        private final List<Discovery.AckListener> listeners;
-
-        private DelegetingAckListener(List<Discovery.AckListener> listeners) {
-            this.listeners = listeners;
-        }
-
-        @Override
-        public void onNodeAck(DiscoveryNode node, @Nullable Exception e) {
-            for (Discovery.AckListener listener : listeners) {
-                listener.onNodeAck(node, e);
-            }
-        }
-
-        @Override
-        public void onTimeout() {
-            throw new UnsupportedOperationException("no timeout delegation");
-        }
-    }
-
-    private static class AckCountDownListener implements Discovery.AckListener {
-
-        private static final Logger logger = Loggers.getLogger(AckCountDownListener.class);
-
-        private final AckedClusterStateTaskListener ackedTaskListener;
-        private final CountDown countDown;
-        private final DiscoveryNodes nodes;
-        private final long clusterStateVersion;
-        private final Future<?> ackTimeoutCallback;
-        private Exception lastFailure;
-
-        AckCountDownListener(AckedClusterStateTaskListener ackedTaskListener, long clusterStateVersion, DiscoveryNodes nodes,
-                             ThreadPool threadPool) {
-            this.ackedTaskListener = ackedTaskListener;
-            this.clusterStateVersion = clusterStateVersion;
-            this.nodes = nodes;
-            int countDown = 0;
-            for (DiscoveryNode node : nodes) {
-                if (ackedTaskListener.mustAck(node)) {
-                    countDown++;
-                }
-            }
-            //we always wait for at least 1 node (the master)
-            countDown = Math.max(1, countDown);
-            logger.trace("expecting {} acknowledgements for cluster_state update (version: {})", countDown, clusterStateVersion);
-            this.countDown = new CountDown(countDown);
-            this.ackTimeoutCallback = threadPool.schedule(ackedTaskListener.ackTimeout(), ThreadPool.Names.GENERIC, () -> onTimeout());
-        }
-
-        @Override
-        public void onNodeAck(DiscoveryNode node, @Nullable Exception e) {
-            if (!ackedTaskListener.mustAck(node)) {
-                //we always wait for the master ack anyway
-                if (!node.equals(nodes.getMasterNode())) {
+                    });
                     return;
                 }
             }
-            if (e == null) {
-                logger.trace("ack received from node [{}], cluster_state update (version: {})", node, clusterStateVersion);
-            } else {
-                this.lastFailure = e;
-                logger.debug(
-                    (Supplier<?>) () -> new ParameterizedMessage(
-                        "ack received from node [{}], cluster_state update (version: {})", node, clusterStateVersion),
-                    e);
+        } catch (org.apache.cassandra.exceptions.UnavailableException e) {
+            // Cassandra issue => ack with failure.
+            /*
+            for (UpdateTask<T> task : proccessedListeners) {
+                if (task.listener instanceof AckedClusterStateTaskListener) {
+                    //no need to wait for ack if nothing changed, the update can be counted as acknowledged
+                    try {
+                        ((AckedClusterStateTaskListener) task.listener).onFailure(source, e);
+                    } catch (Throwable t) {
+                        logger.debug("error while processing ack for master node [{}]", t, newClusterState.nodes().getLocalNode());
+                    }
+                }
+            }
+            */
+            logger.debug("Cassandra issue", e);
+            return;
+        } catch (Throwable e) {
+            TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
+            if (logger.isTraceEnabled()) {
+                StringBuilder sb = new StringBuilder("failed to execute cluster state update in ").append(executionTime)
+                        .append(", state:\nversion [")
+                        .append(previousClusterState.version()).
+                        append("], source [").append(taskInputs.summary).append("]\n");
+                logger.warn(sb.toString(), e);
+                // TODO resubmit task on next cluster state change
+            }
+            return;
+        }
+        
+        final Discovery.AckListener ackListener = newClusterState.nodes().isLocalNodeElectedMaster() ?
+                taskOutputs.createAckListener(threadPool, newClusterState) :
+                null;
+                
+        try {
+            if (newPertistedMetadata) {
+                // publish in gossip state the applied metadata.uuid and version
+                publishX2(newClusterState);
             }
 
-            if (countDown.countDown()) {
-                logger.trace("all expected nodes acknowledged cluster_state update (version: {})", clusterStateVersion);
-                FutureUtils.cancel(ackTimeoutCallback);
-                ackedTaskListener.onAllNodesAcked(lastFailure);
+            if (logger.isTraceEnabled()) {
+                StringBuilder sb = new StringBuilder("cluster state updated, source [").append(taskInputs.summary).append("]\n");
+                sb.append(newClusterState.toString());
+                logger.trace(sb.toString());
+            } else if (logger.isDebugEnabled()) {
+                logger.debug("cluster state updated, version [{}], source [{}]", newClusterState.version(), taskInputs.summary);
             }
+
+            ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(taskInputs.summary, newClusterState, previousClusterState);
+            // new cluster state, notify all listeners
+            final DiscoveryNodes.Delta nodesDelta = clusterChangedEvent.nodesDelta();
+            if (nodesDelta.hasChanges() && logger.isInfoEnabled()) {
+                String summary = nodesDelta.shortSummary();
+                if (summary.length() > 0) {
+                    logger.info("{}, reason: {}", summary, taskInputs.summary);
+                }
+            }
+
+            nodeConnectionsService.connectToNodes(newClusterState.nodes());
+
+            logger.debug("applying cluster state version {}", newClusterState.version());
+            try {
+                // nothing to do until we actually recover from the gateway or any other block indicates we need to disable persistency
+                if (clusterChangedEvent.state().blocks().disableStatePersistence() == false && clusterChangedEvent.metaDataChanged()) {
+                    final Settings incomingSettings = clusterChangedEvent.state().metaData().settings();
+                    clusterSettings.applySettings(incomingSettings);
+                }
+            } catch (Exception ex) {
+                logger.warn("failed to apply cluster settings", ex);
+            }
+            
+            nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
+            
+            final ClusterState newClusterState2 = newClusterState;
+            // update the current cluster state 
+            updateState(css -> newClusterState2);
+            Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
+                try {
+                    logger.trace("calling [{}] with change to version [{}]", listener, newClusterState2.version());
+                    listener.clusterChanged(clusterChangedEvent);
+                } catch (Exception ex) {
+                    logger.warn("failed to notify ClusterStateListener", ex);
+                }
+            });
+            
+            if (logger.isTraceEnabled())
+                logger.trace("set local clusterState version={} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
+            
+            if (logger.isTraceEnabled())
+                logger.trace("highPriorityStateAppliers={}",highPriorityStateAppliers);
+            for (ClusterStateApplier applier : this.highPriorityStateAppliers) {
+                try {
+                    applier.applyClusterState(clusterChangedEvent);
+                } catch (Exception ex) {
+                    logger.warn("failed to notify ClusterStateListener", ex);
+                }
+            }
+
+            if (!newPertistedMetadata) {
+                // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
+                publishX2(newClusterState);
+            }
+            
+            Throwable ackFailure = null;
+            if (newPertistedMetadata) {
+                // for the coordinator node, wait for acknowledgment from all nodes
+                if (newClusterState.nodes().getSize() > 1) {
+                    try {
+                        if (logger.isInfoEnabled())
+                            logger.info("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
+                        if (!awaitMetaDataVersion(newClusterState.metaData().version(), new TimeValue(30, TimeUnit.SECONDS))) {
+                            logger.warn("Timeout waiting metadata version = {}", newClusterState.metaData().version());
+                        }
+                    } catch (Throwable e) {
+                        ackFailure = e;
+                        logger.error("Interruped while waiting MetaData.version = {}",e, newClusterState.metaData().version() );
+                    }
+                }
+            }
+            
+            
+            // update cluster state routing table
+            // TODO: update the routing table only for updated indices.
+            RoutingTable newRoutingTable = RoutingTable.build(this, newClusterState);
+            final ClusterState newClusterState3 = ClusterState.builder(newClusterState).routingTable(newRoutingTable).build();
+            updateState(css -> newClusterState3);
+            
+            // notify 2i with the new cluster state, including new local started shard.
+            if (logger.isTraceEnabled())
+                logger.trace("lowPriorityStateAppliers={}",lowPriorityStateAppliers);
+            for (ClusterStateApplier applier : lowPriorityStateAppliers) {
+                try {
+                    applier.applyClusterState(clusterChangedEvent);
+                } catch (Exception ex) {
+                    logger.warn("failed to notify ClusterStateListener", ex);
+                }
+            }
+            
+            
+            //manual ack only from the master at the end of the publish
+            if (newClusterState.nodes().isLocalNodeElectedMaster()) {
+                try {
+                    ackListener.onNodeAck(newClusterState.nodes().getLocalNode(), null);
+                } catch (Exception e) {
+                    final DiscoveryNode localNode = newClusterState.nodes().getLocalNode();
+                    logger.debug(
+                        (Supplier<?>) () -> new ParameterizedMessage("error while processing ack for master node [{}]", localNode),
+                        e);
+                }
+            }
+
+            // notify processed listeners
+            taskOutputs.processedDifferentClusterState(previousClusterState, newClusterState);
+            
+            if (newClusterState.nodes().isLocalNodeElectedMaster()) {
+                try {
+                    taskOutputs.clusterStatePublished(clusterChangedEvent);
+                } catch (Exception e) {
+                    logger.error(
+                        (Supplier<?>) () -> new ParameterizedMessage(
+                            "exception thrown while notifying executor of new cluster state publication [{}]",
+                            taskInputs.summary),
+                        e);
+                }
+            }
+
+            //manual ack only from the master at the end of the publish
+            if (newClusterState.nodes().isLocalNodeElectedMaster()) {
+                try {
+                    ackListener.onNodeAck(newClusterState.nodes().getLocalNode(), null);
+                } catch (Exception e) {
+                    final DiscoveryNode localNode = newClusterState.nodes().getLocalNode();
+                    logger.debug(
+                        (Supplier<?>) () -> new ParameterizedMessage("error while processing ack for master node [{}]", localNode),
+                        e);
+                }
+            }
+            
+            if (this.shardStartedBarrier != null) {
+                shardStartedBarrier.isReadyToIndex(newClusterState);
+            }
+            
+            TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
+            logger.debug("processing [{}]: took {} done applying updated cluster_state (version: {}, uuid: {})", taskInputs.summary, executionTime, newClusterState.version(), newClusterState.stateUUID());
+            warnAboutSlowTaskIfNeeded(executionTime, taskInputs.summary);
+        } catch (Throwable t) {
+            TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
+            StringBuilder sb = new StringBuilder("failed to apply updated cluster state in ").append(executionTime).append(":\nversion [").append(newClusterState.version())
+                    .append("], uuid [").append(newClusterState.stateUUID()).append("], source [").append(taskInputs.summary).append("]\n");
+            sb.append(newClusterState.nodes());
+            sb.append(newClusterState.routingTable());
+            sb.append(newClusterState.getRoutingNodes());
+            logger.warn(sb.toString(), t);
+            // TODO: do we want to call updateTask.onFailure here?
+        }
+
+    }
+
+    public void createSecondaryIndices(final IndexMetaData indexMetaData) throws IOException {
+        String ksName = indexMetaData.keyspace();
+        String className = indexMetaData.getSettings().get(IndexMetaData.SETTING_SECONDARY_INDEX_CLASS, this.settings.get(SETTING_CLUSTER_SECONDARY_INDEX_CLASS, defaultSecondaryIndexClass.getName()));
+        for(ObjectCursor<MappingMetaData> cursor: indexMetaData.getMappings().values()) {
+            createSecondaryIndex(ksName, cursor.value, className);
+        }
+    }
+   
+    // build secondary indices when shard is started and mapping applied
+    public void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException {
+        final String cfName = typeToCfName(mapping.type());
+        final CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
+        boolean found = false;
+        if (cfm != null && cfm.getIndexes() != null) {
+            for(IndexMetadata indexMetadata : cfm.getIndexes()) {
+                if (indexMetadata.isCustom() && indexMetadata.options.get(IndexTarget.CUSTOM_INDEX_OPTION_NAME).equals(className)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                String indexName = buildIndexName(cfName);
+                String query = String.format(Locale.ROOT, "CREATE CUSTOM INDEX IF NOT EXISTS \"%s\" ON \"%s\".\"%s\" () USING '%s'",
+                        indexName, ksName, cfName, className);
+                logger.debug(query);
+                try {
+                    QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
+                } catch (Throwable e) {
+                    throw new IOException("Failed to process query=["+query+"]:"+e.getMessage(), e);
+                }
+            }
+        } else {
+            logger.warn("Cannot create SECONDARY INDEX, [{}.{}] does not exist",ksName, cfName);
+        }
+    }
+    
+    
+    public void dropSecondaryIndices(final IndexMetaData indexMetaData) throws RequestExecutionException {
+        String ksName = indexMetaData.keyspace();
+        for(CFMetaData cfMetaData : Schema.instance.getKSMetaData(ksName).tablesAndViews()) {
+            if (cfMetaData.isCQLTable())
+                dropSecondaryIndex(cfMetaData);
+        }
+    }
+   
+    
+    public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException  {
+        CFMetaData cfMetaData = Schema.instance.getCFMetaData(ksName, cfName);
+        if (cfMetaData != null)
+            dropSecondaryIndex(cfMetaData);
+    }
+    
+    
+    public void dropSecondaryIndex(CFMetaData cfMetaData) throws RequestExecutionException  {
+        for(IndexMetadata idx : cfMetaData.getIndexes()) {
+            if (idx.isCustom()) {
+                String className = idx.options.get(IndexTarget.CUSTOM_INDEX_OPTION_NAME);
+                if (className != null && className.endsWith("ElasticSecondaryIndex")) {
+                    logger.debug("DROP INDEX IF EXISTS {}.{}", cfMetaData.ksName, idx.name);
+                    QueryProcessor.process(String.format(Locale.ROOT, "DROP INDEX IF EXISTS \"%s\".\"%s\"",
+                            cfMetaData.ksName, idx.name), 
+                            ConsistencyLevel.LOCAL_ONE);
+                }
+            }
+        }
+    }
+    
+    public void dropTables(final IndexMetaData indexMetaData) throws RequestExecutionException {
+        String ksName = indexMetaData.keyspace();
+        for(ObjectCursor<String> cfName : indexMetaData.getMappings().keys()) {
+            dropTable(ksName, cfName.value);
+        }
+    }
+    
+    
+    public void dropTable(String ksName, String cfName) throws RequestExecutionException  {
+        CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
+        if (cfm != null) {
+            logger.warn("DROP TABLE IF EXISTS {}.{}", ksName, cfName);
+            QueryProcessor.process(String.format(Locale.ROOT, "DROP TABLE IF EXISTS \"%s\".\"%s\"", ksName, cfName), ConsistencyLevel.LOCAL_ONE);
+        }
+    }
+    
+    public static String buildIndexName(final String cfName) {
+        return new StringBuilder("elastic_")
+            .append(cfName)
+            .append("_idx").toString();
+    }
+    
+    public static String buildIndexName(final String cfName, final String colName) {
+        return new StringBuilder("elastic_")
+            .append(cfName).append('_')
+            .append(colName.replaceAll("\\W+", "_"))
+            .append("_idx").toString();
+    }
+    
+    public static CFMetaData getCFMetaData(final String ksName, final String cfName) throws ActionRequestValidationException {
+        CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
+        if (metadata == null) {
+            ActionRequestValidationException arve = new ActionRequestValidationException();
+            arve.addValidationError(ksName+"."+cfName+" table does not exists");;
+            throw arve;
+        }
+        return metadata;
+    }
+    
+    
+    public Map<String, GetField> flattenGetField(final String[] fieldFilter, final String path, final Object node, Map<String, GetField> flatFields) {
+        if ((node instanceof List) || (node instanceof Set)) {
+            for(Object o : ((Collection)node)) {
+                flattenGetField(fieldFilter, path, o, flatFields);
+            }
+        } else if (node instanceof Map) {
+            for (String key : ((Map<String,Object>)node).keySet()) {
+                String fullname = (path.length() > 0) ? path + '.' + key : key;
+                flattenGetField(fieldFilter, fullname, ((Map<String,Object>)node).get(key), flatFields);
+            }
+        } else {
+            if (fieldFilter != null) {
+                for (String f : fieldFilter) {
+                    if (path.equals(f)) {
+                        GetField gf = flatFields.get(path);
+                        if (gf == null) {
+                            gf = new GetField(path, ImmutableList.builder().add(node).build());
+                        } else {
+                            gf = new GetField(path, ImmutableList.builder().addAll(gf.getValues()).add(node).build());
+                        }
+                        flatFields.put(path, gf);
+                        break;
+                    }
+                }
+            }
+        }
+        return flatFields;
+    }
+
+    public Map<String, List<Object>> flattenTree(final Set<String> neededFiedls, final String path, final Object node, Map<String, List<Object>> flatMap) {
+        if ((node instanceof List) || (node instanceof Set)) {
+            for(Object o : ((Collection)node)) {
+                flattenTree(neededFiedls, path, o, flatMap);
+            }
+        } else if (node instanceof Map) {
+            for (String key : ((Map<String,Object>)node).keySet()) {
+                String fullname = (path.length() > 0) ? path + '.' + key : key;
+                flattenTree(neededFiedls, fullname, ((Map<String,Object>)node).get(key), flatMap);
+            }
+        } else {
+            if ((neededFiedls == null) || (neededFiedls.contains(path))) {
+                List<Object> values = (List<Object>) flatMap.get(path);
+                if (values == null) {
+                    values = new ArrayList<Object>();
+                    flatMap.put(path, values);
+                }
+                values.add(node);
+            }
+        }
+        return flatMap;
+    }
+    
+    
+    
+    public boolean rowExists(final IndexService indexService, final String type, final String id) 
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        DocPrimaryKey docPk = parseElasticId(indexService, type, id);
+        return process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), buildExistsQuery(indexService.mapperService().documentMapper(type), indexService.keyspace(), typeToCfName(type), id), docPk.values).size() > 0;
+    }
+    
+    
+    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final String id, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException, RequestExecutionException,
+            RequestValidationException, IOException {
+        return fetchRow(indexService, type, id, columns, ConsistencyLevel.LOCAL_ONE, columnDefs);
+    }
+
+    /**
+     * Fetch from the coordinator node.
+     */
+    
+    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final String id, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException,
+            RequestExecutionException, RequestValidationException, IOException {
+        DocPrimaryKey docPk = parseElasticId(indexService, type, id);
+        return fetchRow(indexService, type, docPk, columns, cl, columnDefs);
+    }
+    
+    /**
+     * Fetch from the coordinator node.
+     */
+    
+    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException,
+            RequestExecutionException, RequestValidationException, IOException {
+        return process(cl, ClientState.forInternalCalls(), buildFetchQuery(indexService, type, columns, docPk.isStaticDocument, columnDefs), docPk. values);
+    }
+    
+    public Engine.GetResult fetchSourceInternal(final IndexService indexService, String type, String id, Map<String,ColumnDefinition> columnDefs) throws IOException {
+        DocPrimaryKey docPk = parseElasticId(indexService, type, id);
+        UntypedResultSet result = fetchRowInternal(indexService, type, docPk, columnDefs.keySet().toArray(new String[columnDefs.size()]), columnDefs);
+        if (!result.isEmpty()) {
+            Map<String, Object> sourceMap = rowAsMap(indexService, type, result.one());
+            BytesReference source = XContentFactory.contentBuilder(XContentType.JSON).map(sourceMap).bytes();
+            Long timestamp = 0L;
+            if (sourceMap.get(TimestampFieldMapper.NAME) != null) {
+                timestamp = (Long) sourceMap.get(TimestampFieldMapper.NAME);
+            }
+            Long ttl = 0L;
+            if (sourceMap.get(TTLFieldMapper.NAME) != null) {
+                ttl = (Long) sourceMap.get(TTLFieldMapper.NAME);
+            }
+            return new Engine.GetResult(null, new VersionsResolver.DocIdAndVersion(0, 1L, null));
+        }
+        return Engine.GetResult.NOT_EXISTS;
+    }
+
+    
+    
+    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String id, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
+        DocPrimaryKey docPk = parseElasticId(indexService, cfName, id);
+        return fetchRowInternal(indexService, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
+    }
+    
+    
+    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final  DocPrimaryKey docPk, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
+        return fetchRowInternal(indexService, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
+    }
+    
+    
+    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String[] columns, final Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException, IndexNotFoundException  {
+        return QueryProcessor.executeInternal(buildFetchQuery(indexService, cfName, columns, forStaticDocument, columnDefs), pkColumns);
+    }
+  
+    private String regularColumn(final IndexService indexService, final String type) throws IOException {
+        if (indexService != null) {
+            DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
+            if (docMapper != null) {
+                for(FieldMapper fieldMapper : docMapper.mappers()) {
+                    if (fieldMapper instanceof MetadataFieldMapper)
+                        continue;
+                    if (fieldMapper.cqlPrimaryKeyOrder() == -1 && !fieldMapper.cqlStaticColumn() && fieldMapper.cqlCollection() == Mapper.CqlCollection.SINGLETON) {
+                        return fieldMapper.name();
+                    }
+                }
+            }
+        }
+        if (logger.isDebugEnabled())
+            logger.debug("no regular columns for index=[{}] type=[{}]", indexService.index().getName(), type);
+        return null;
+    }
+    
+    public String buildFetchQuery(final IndexService indexService, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs) 
+            throws IndexNotFoundException, IOException 
+    {
+        DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
+        String cfName = typeToCfName(type);
+        CFMetaData metadata = getCFMetaData(indexService.keyspace(), cfName);
+        DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
+        String regularColumn = null;
+        StringBuilder query = new StringBuilder();
+        query.append("SELECT ");
+        if (requiredColumns.length == 0) {
+            query.append("\"_id\"");
+        } else {
+            for (String c : requiredColumns) {
+                switch(c){
+                case TokenFieldMapper.NAME: 
+                    query.append(query.length() > 7 ? ',':' ')
+                        .append("token(")
+                        .append(cqlFragment.ptCols)
+                        .append(") as \"_token\""); 
+                    break;
+                case RoutingFieldMapper.NAME:
+                    query.append(query.length() > 7 ? ',':' ')
+                        .append( (metadata.partitionKeyColumns().size() > 1) ? "toJsonArray(" : "toString(" )
+                        .append(cqlFragment.ptCols)
+                        .append(") as \"_routing\"");
+                    break;
+                case TTLFieldMapper.NAME: 
+                    if (regularColumn == null) 
+                        regularColumn = regularColumn(indexService, cfName);
+                    if (regularColumn != null)
+                        query.append(query.length() > 7 ? ',':' ').append("TTL(").append(regularColumn).append(") as \"_ttl\""); 
+                    break;
+                case TimestampFieldMapper.NAME: 
+                    if (regularColumn == null) 
+                        regularColumn = regularColumn(indexService, cfName);
+                    if (regularColumn != null)
+                        query.append(query.length() > 7 ? ',':' ').append("WRITETIME(").append(regularColumn).append(") as \"_timestamp\"");
+                    break;
+                case ParentFieldMapper.NAME:
+                    ParentFieldMapper parentMapper = docMapper.parentFieldMapper();
+                    if (parentMapper.active()) {
+                        query.append(query.length() > 7 ? ',':' ');
+                        if  (parentMapper.pkColumns() == null) {
+                            // default column name for _parent should be string.
+                            query.append("\"_parent\"");
+                        } else {
+                            query.append( (parentMapper.pkColumns().indexOf(',') > 0) ? "toJsonArray(" : "toString(")
+                                 .append(parentMapper.pkColumns())
+                                 .append(") as \"_parent\"");
+                        }
+                    }
+                    break;
+                case NodeFieldMapper.NAME:
+                    // nothing to add.
+                    break;
+                default:
+                    ColumnDefinition cd = columnDefs.get(c);
+                    if (cd != null && (cd.isPartitionKey() || cd.isStatic() || !forStaticDocument)) {
+                       query.append(query.length() > 7 ? ',':' ').append("\"").append(c).append("\"");
+                    }
+                }
+            }
+        }
+        query.append(" FROM \"").append(indexService.keyspace()).append("\".\"").append(cfName)
+             .append("\" WHERE ").append((forStaticDocument) ? cqlFragment.ptWhere : cqlFragment.pkWhere )
+             .append(" LIMIT 1");
+        return query.toString();
+    }
+    
+    public static String buildDeleteQuery(final DocumentMapper docMapper, final String ksName, final String cfName, final String id) {
+        return "DELETE FROM \""+ksName+"\".\""+cfName+"\" WHERE "+ docMapper.getCqlFragments().pkWhere;
+    }
+    
+    public static String buildExistsQuery(final DocumentMapper docMapper, final String ksName, final String cfName, final String id) {
+        return "SELECT "+docMapper.getCqlFragments().pkCols+" FROM \""+ksName+"\".\""+cfName+"\" WHERE "+ docMapper.getCqlFragments().pkWhere;
+    }
+
+    
+    public void deleteRow(final IndexService indexService, final String type, final String id, final ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
+            IOException {
+        String cfName = typeToCfName(type);
+        DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
+        process(cl, ClientState.forInternalCalls(), buildDeleteQuery(docMapper, indexService.keyspace(), cfName, id), parseElasticId(indexService, type, id).values);
+    }
+    
+    
+    public Map<String, Object> rowAsMap(final IndexService indexService, final String type, UntypedResultSet.Row row) throws IOException {
+        Map<String, Object> mapObject = new HashMap<String, Object>();
+        rowAsMap(indexService, type, row, mapObject);
+        return mapObject;
+    }
+    
+    
+    public int rowAsMap(final IndexService indexService, final String type, UntypedResultSet.Row row, Map<String, Object> mapObject) throws IOException {
+        Object[] values = rowAsArray(indexService, type, row);
+        int i=0;
+        int j=0;
+        for(ColumnSpecification colSpec: row.getColumns()) {
+            if (values[i] != null && !IdFieldMapper.NAME.equals(colSpec.name.toString())) {
+                mapObject.put(colSpec.name.toString(), values[i]);
+                j++;
+            }
+            i++;
+        }
+        return j;
+    }
+    
+    
+    public Object[] rowAsArray(final IndexService indexService, final String type, UntypedResultSet.Row row) throws IOException {
+        return rowAsArray(indexService, type, row, true);
+    }
+    
+    private Object value(FieldMapper fieldMapper, Object rowValue, boolean valueForSearch) {
+        if (fieldMapper != null) {
+            final MappedFieldType fieldType = fieldMapper.fieldType();
+            return (valueForSearch) ? fieldType.valueForDisplay( rowValue ) : fieldType.cqlValue( rowValue );
+        } else {
+            return rowValue;
+        }
+    }
+    
+    // TODO: return raw values if no mapper found.
+    
+    public Object[] rowAsArray(final IndexService indexService, final String type, UntypedResultSet.Row row, boolean valueForSearch) throws IOException {
+        final Object values[] = new Object[row.getColumns().size()];
+        final DocumentMapper documentMapper = indexService.mapperService().documentMapper(type);
+        final DocumentFieldMappers docFieldMappers = documentMapper.mappers();
+        
+        int i = 0;
+        for (ColumnSpecification colSpec : row.getColumns()) {
+            String columnName = colSpec.name.toString();
+            CQL3Type cql3Type = colSpec.type.asCQL3Type();
+            
+            if (!row.has(columnName) || ByteBufferUtil.EMPTY_BYTE_BUFFER.equals(row.getBlob(columnName)) ) {
+                values[i++] = null;
+                continue;
+            }
+
+            if (cql3Type instanceof CQL3Type.Native) {
+                final FieldMapper fieldMapper = docFieldMappers.smartNameFieldMapper(columnName);
+                switch ((CQL3Type.Native) cql3Type) {
+                case ASCII:
+                case TEXT:
+                case VARCHAR:
+                    values[i] = row.getString(columnName);
+                    if (values[i] != null && fieldMapper == null) {
+                        ObjectMapper objectMapper = documentMapper.objectMappers().get(columnName);
+                        if (objectMapper != null && !objectMapper.isEnabled()) {
+                            // parse text as JSON Map (not enabled object)
+                            values[i] = FBUtilities.fromJsonMap(row.getString(columnName));
+                        }
+                    }
+                    break;
+                case TIMEUUID:
+                case UUID:
+                    values[i] = row.getUUID(columnName).toString();
+                    break;
+                case TIMESTAMP:
+                    values[i] = value(fieldMapper, row.getTimestamp(columnName).getTime(), valueForSearch);
+                    break;
+                case INT:
+                    values[i] = value(fieldMapper, row.getInt(columnName), valueForSearch);
+                    break;
+                case SMALLINT:
+                    values[i] = value(fieldMapper, row.getShort(columnName), valueForSearch);
+                    break;
+                case TINYINT:
+                    values[i] = value(fieldMapper, row.getByte(columnName), valueForSearch);
+                    break;
+                case BIGINT:
+                    values[i] = value(fieldMapper, row.getLong(columnName), valueForSearch);
+                    break;
+                case DOUBLE:
+                    values[i] = value(fieldMapper, row.getDouble(columnName), valueForSearch);
+                    break;
+                case FLOAT:
+                    values[i] = value(fieldMapper, row.getFloat(columnName), valueForSearch);
+                    break;
+                case BLOB:
+                    values[i] = value(fieldMapper, 
+                            row.getBlob(columnName), 
+                            valueForSearch);
+                    break;
+                case BOOLEAN:
+                    values[i] = value(fieldMapper, row.getBoolean(columnName), valueForSearch);
+                    break;
+                case COUNTER:
+                    logger.warn("Ignoring unsupported counter {} for column {}", cql3Type, columnName);
+                    break;
+                case INET:
+                    values[i] = value(fieldMapper, NetworkAddress.format(row.getInetAddress(columnName)), valueForSearch);
+                    break;
+                default:
+                    logger.error("Ignoring unsupported type {} for column {}", cql3Type, columnName);
+                }
+            } else if (cql3Type.isCollection()) {
+                AbstractType<?> elementType;
+                switch (((CollectionType<?>) colSpec.type).kind) {
+                case LIST:
+                    List list;
+                    elementType = ((ListType<?>) colSpec.type).getElementsType();
+                    if (elementType instanceof UserType) {
+                        final ObjectMapper objectMapper = documentMapper.objectMappers().get(columnName);
+                        final List<ByteBuffer> lbb = row.getList(columnName, BytesType.instance);
+                        list = new ArrayList(lbb.size());
+                        for (ByteBuffer bb : lbb) {
+                            list.add(deserialize(elementType, bb, objectMapper));
+                        }
+                    } else {
+                        final FieldMapper fieldMapper = docFieldMappers.smartNameFieldMapper(columnName);
+                        final List list2 = row.getList(colSpec.name.toString(), elementType);
+                        list = new ArrayList(list2.size());
+                        for(Object v : list2) {
+                            list.add(value(fieldMapper, v, valueForSearch));
+                        }
+                    }
+                    values[i] =  (list.size() == 1) ? list.get(0) : list;
+                    break;
+                case SET :
+                    Set set;
+                    elementType = ((SetType<?>) colSpec.type).getElementsType();
+                    if (elementType instanceof UserType) {
+                        final ObjectMapper objectMapper = documentMapper.objectMappers().get(columnName);
+                        final Set<ByteBuffer> lbb = row.getSet(columnName, BytesType.instance);
+                        set = new HashSet(lbb.size());
+                        for (ByteBuffer bb : lbb) {
+                            set.add(deserialize(elementType, bb, objectMapper));
+                        }
+                    } else {
+                        final FieldMapper fieldMapper = docFieldMappers.smartNameFieldMapper(columnName);
+                        final Set set2 = row.getSet(columnName, elementType);
+                        set = new HashSet(set2.size());
+                        for(Object v : set2) {
+                            set.add( value(fieldMapper, v, valueForSearch) );
+                        }
+                    }
+                    values[i] =  (set.size() == 1) ? set.iterator().next() : set;
+                    break;
+                case MAP :
+                    Map map;
+                    if (((MapType<?,?>) colSpec.type).getKeysType().asCQL3Type() != CQL3Type.Native.TEXT) {
+                        throw new IOException("Only support map<text,?>, bad type for column "+columnName);
+                    }
+                    UTF8Type keyType = (UTF8Type) ((MapType<?,?>) colSpec.type).getKeysType();
+                    elementType = ((MapType<?,?>) colSpec.type).getValuesType();
+                    final ObjectMapper objectMapper = documentMapper.objectMappers().get(columnName);
+                    if (elementType instanceof UserType) {
+                        final Map<String, ByteBuffer> lbb = row.getMap(columnName, keyType, BytesType.instance);
+                        map = new HashMap<String , Map<String, Object>>(lbb.size());
+                        for(String key : lbb.keySet()) {
+                            map.put(key, deserialize(elementType, lbb.get(key), objectMapper.getMapper(key)));
+                        }
+                    } else {
+                        Map<String,Object> map2 = (Map<String,Object>) row.getMap(columnName, keyType, elementType);
+                        map = new HashMap<String, Object>(map2.size());
+                        for(String key : map2.keySet()) {
+                            FieldMapper subMapper = (FieldMapper)objectMapper.getMapper(key);
+                            map.put(key,  value(subMapper, map2.get(key), valueForSearch) );
+                        }
+                    }
+                    values[i] =  map;
+                    break;
+                }
+            } else if (colSpec.type instanceof UserType) {
+                ByteBuffer bb = row.getBytes(columnName);
+                values[i] = deserialize(colSpec.type, bb, documentMapper.objectMappers().get(columnName));
+            } else if (cql3Type instanceof CQL3Type.Custom) {
+                logger.warn("CQL3.Custum type not supported for column "+columnName);
+            }
+            i++;
+        }
+        return values;
+    }
+
+    public static class BlockingActionListener implements ActionListener<ClusterStateUpdateResponse> {
+        private final CountDownLatch latch = new CountDownLatch(1);
+        private volatile Throwable error = null;
+        
+        public void waitForUpdate(TimeValue timeValue) throws Exception {
+            if (timeValue != null && timeValue.millis() > 0) {
+                if (!latch.await(timeValue.millis(), TimeUnit.MILLISECONDS)) {
+                    throw new ElasticsearchTimeoutException("blocking update timeout");
+                }
+            } else {
+                latch.await();
+            }
+            if (error != null)
+                throw new RuntimeException(error);
         }
 
         @Override
-        public void onTimeout() {
-            if (countDown.fastForward()) {
-                logger.trace("timeout waiting for acknowledgement for cluster_state update (version: {})", clusterStateVersion);
-                ackedTaskListener.onAckTimeout();
+        public void onResponse(ClusterStateUpdateResponse response) {
+            latch.countDown();
+        }
+
+        @Override
+        public void onFailure(Exception e) {
+            error = e;
+            latch.countDown();
+        }
+    }
+
+    
+    public void blockingMappingUpdate(IndexService indexService, String type, String source) throws Exception {
+        BlockingActionListener mappingUpdateListener = new BlockingActionListener();
+        MetaDataMappingService metaDataMappingService = ElassandraDaemon.injector().getInstance(MetaDataMappingService.class);
+        PutMappingClusterStateUpdateRequest putRequest = new PutMappingClusterStateUpdateRequest().type(type).source(source);
+        metaDataMappingService.putMapping(putRequest, mappingUpdateListener);
+        mappingUpdateListener.waitForUpdate(settings.getAsTime(SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT, TimeValue.timeValueSeconds(Integer.getInteger(SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT, 30))));
+    }
+    
+    
+    public void updateDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData) throws Exception {
+        upsertDocument(indicesService, request, indexMetaData, true);
+    }
+    
+    
+    public void insertDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData) throws Exception {
+        upsertDocument(indicesService, request, indexMetaData, false);
+    }
+    
+    private void upsertDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation) throws Exception {
+        final IndexService indexService = indicesService.indexService(indexMetaData.getIndex());
+        final IndexShard indexShard = indexService.getShard(0);
+        
+        final SourceToParse sourceToParse = SourceToParse.source(SourceToParse.Origin.PRIMARY, request.index(), request.type(), request.id(), request.source(), XContentType.JSON);
+        if (request.routing() != null)
+            sourceToParse.routing(request.routing());
+        if (request.parent() != null)
+            sourceToParse.parent(request.parent());
+        if (request.timestamp() != null)
+            sourceToParse.timestamp(request.timestamp());
+        if (request.ttl() != null)
+            sourceToParse.ttl(request.ttl());
+
+        final String keyspaceName = indexMetaData.keyspace();
+        final String cfName = typeToCfName(request.type());
+
+        final Engine.Index operation = indexShard.prepareIndexOnPrimary(sourceToParse, request.version(), request.versionType(), request.getAutoGeneratedTimestamp(), false);
+        final Mapping update = operation.parsedDoc().dynamicMappingsUpdate();
+        final boolean dynamicMappingEnable = indexService.mapperService().dynamic();
+        if (update != null && dynamicMappingEnable) {
+            if (logger.isDebugEnabled()) 
+                logger.debug("Document source={} require a blocking mapping update of [{}]", request.sourceAsMap(), indexService.index().getName());
+            // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
+            blockingMappingUpdate(indexService, request.type(), update.toString());
+        }
+
+        // get the docMapper after a potential mapping update
+        final DocumentMapper docMapper = indexShard.mapperService().documentMapperWithAutoCreate(request.type()).getDocumentMapper();
+        
+        // insert document into cassandra keyspace=index, table = type
+        final Map<String, Object> sourceMap = request.sourceAsMap();
+        final Map<String, ObjectMapper> objectMappers = docMapper.objectMappers();
+        final DocumentFieldMappers fieldMappers = docMapper.mappers();
+
+        Long timestamp = null;
+        if (docMapper.timestampFieldMapper().enabled() && request.timestamp() != null) {
+            timestamp = docMapper.timestampFieldMapper().fieldType().cqlValue(request.timestamp());
+        }
+        
+        if (logger.isTraceEnabled()) 
+            logger.trace("Insert metadata.version={} index=[{}] table=[{}] id=[{}] source={} consistency={} ttl={}",
+                state().metaData().version(),
+                indexService.index().getName(), cfName, request.id(), sourceMap, 
+                request.waitForActiveShards().toCassandraConsistencyLevel(), request.ttl());
+
+        final CFMetaData metadata = getCFMetaData(keyspaceName, cfName);
+        
+        String id = request.id();
+        Map<String, ByteBuffer> map = new HashMap<String, ByteBuffer>();
+        if (request.parent() != null) 
+            sourceMap.put(ParentFieldMapper.NAME, request.parent());
+        
+        // normalize the _id and may find some column value in _id.
+        // if the provided columns does not contains all the primary key columns, parse the _id to populate the columns in map.
+        parseElasticId(indexService, cfName, request.id(), sourceMap);
+        
+        // workaround because ParentFieldMapper.value() and UidFieldMapper.value() create an Uid.
+        if (sourceMap.get(ParentFieldMapper.NAME) != null && ((String)sourceMap.get(ParentFieldMapper.NAME)).indexOf(Uid.DELIMITER) < 0) {
+            sourceMap.put(ParentFieldMapper.NAME, request.type() + Uid.DELIMITER + sourceMap.get(ParentFieldMapper.NAME));
+        } 
+       
+        if (docMapper.sourceMapper().enabled()) {
+            sourceMap.put(SourceFieldMapper.NAME, request.source());
+        }
+        
+        for (String field : sourceMap.keySet()) {
+            FieldMapper fieldMapper = fieldMappers.getMapper(field);
+            Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMappers.get(field);
+            ByteBuffer colName;
+            if (mapper == null) {
+                if (dynamicMappingEnable)
+                    throw new MapperException("Unmapped field ["+field+"]");
+                colName = ByteBufferUtil.bytes(field);
+            } else {
+                colName = mapper.cqlName();    // cached ByteBuffer column name.
+            }
+            final ColumnDefinition cd = metadata.getColumnDefinition(colName);
+            if (cd != null) {
+                // we got a CQL column.
+                Object fieldValue = sourceMap.get(field);
+                try {
+                    if (fieldValue == null) {
+                        if (cd.type.isCollection()) {
+                            switch (((CollectionType<?>)cd.type).kind) {
+                            case LIST :
+                            case SET : 
+                                map.put(field, CollectionSerializer.pack(Collections.emptyList(), 0, ProtocolVersion.CURRENT)); 
+                                break;
+                            case MAP :
+                                break;
+                            }
+                        } else {
+                            map.put(field, null); 
+                        }
+                        continue;
+                    }
+                    
+                    if (mapper != null && mapper.cqlCollection().equals(CqlCollection.SINGLETON) && (fieldValue instanceof Collection)) {
+                        throw new MapperParsingException("field " + fieldMapper.name() + " should be a single value");
+                    }
+                    
+                    // hack to store percolate query as a string while mapper is an object mapper.
+                    if (metadata.cfName.equals("_percolator") && field.equals("query")) {
+                        if (cd.type.isCollection()) {
+                            switch (((CollectionType<?>)cd.type).kind) {
+                            case LIST :
+                                if ( ((ListType)cd.type).getElementsType().asCQL3Type().equals(CQL3Type.Native.TEXT) && !(fieldValue instanceof String)) {
+                                    // opaque list of objects serialized to JSON text 
+                                    fieldValue = Collections.singletonList( stringify(fieldValue) );
+                                }
+                                break;
+                            case SET :
+                                if ( ((SetType)cd.type).getElementsType().asCQL3Type().equals(CQL3Type.Native.TEXT) &&  !(fieldValue instanceof String)) {
+                                    // opaque set of objects serialized to JSON text 
+                                    fieldValue = Collections.singleton( stringify(fieldValue) );
+                                }
+                                break;
+                            }
+                        } else {
+                            if (cd.type.asCQL3Type().equals(CQL3Type.Native.TEXT) && !(fieldValue instanceof String)) {
+                                // opaque singleton object serialized to JSON text 
+                                fieldValue = stringify(fieldValue);
+                            }
+                        }
+                    }
+                    
+                    
+                    map.put(field, serialize(request.index(), cfName, cd.type, field, fieldValue, mapper));
+                } catch (Exception e) {
+                    logger.error("[{}].[{}] failed to parse field {}={}", e, request.index(), cfName, field, fieldValue );
+                    throw e;
+                }
+            }
+        }
+        
+        String query;
+        ByteBuffer[] values;
+        if (request.opType() == DocWriteRequest.OpType.CREATE) {
+            values = new ByteBuffer[map.size()];
+            query = buildInsertQuery(keyspaceName, cfName, map, id, 
+                    true,                
+                    (request.ttl() != null) ? request.ttl().getSeconds() : null, // ttl
+                    timestamp,
+                    values, 0);
+            final boolean applied = processConditional(request.waitForActiveShards().toCassandraConsistencyLevel(), ConsistencyLevel.LOCAL_SERIAL, query, (Object[])values);
+            if (!applied)
+                throw new VersionConflictEngineException(indexShard.shardId(), cfName, request.id(), "PAXOS insert failed, document already exists");
+        } else {
+            // set empty top-level fields to null to overwrite existing columns.
+            for(FieldMapper m : fieldMappers) {
+                String fullname = m.name();
+                if (map.get(fullname) == null && !fullname.startsWith("_") && fullname.indexOf('.') == -1 && metadata.getColumnDefinition(m.cqlName()) != null) 
+                    map.put(fullname, null);
+            }
+            for(String m : objectMappers.keySet()) {
+                if (map.get(m) == null && m.indexOf('.') == -1 && metadata.getColumnDefinition(objectMappers.get(m).cqlName()) != null)
+                    map.put(m, null);
+            }
+            values = new ByteBuffer[map.size()];
+            query = buildInsertQuery(keyspaceName, cfName, map, id, 
+                    false,      
+                    (request.ttl() != null) ? request.ttl().getSeconds() : null,
+                    timestamp,
+                    values, 0);
+            process(request.waitForActiveShards().toCassandraConsistencyLevel(), ClientState.forInternalCalls(), query, (Object[])values);
+        }
+    }
+
+    public String buildInsertQuery(final String ksName, final String cfName, Map<String, ByteBuffer> map, String id, final boolean ifNotExists, final Long ttl, 
+            final Long writetime, ByteBuffer[] values, int valuesOffset) throws Exception {
+        final StringBuilder questionsMarks = new StringBuilder();
+        final StringBuilder columnNames = new StringBuilder();
+        
+        int i=0;
+        for (Entry<String,ByteBuffer> entry : map.entrySet()) {
+            if (entry.getKey().equals(TokenFieldMapper.NAME)) 
+                continue;
+            
+            if (columnNames.length() > 0) {
+                columnNames.append(',');
+                questionsMarks.append(',');
+            }
+            columnNames.append("\"").append(entry.getKey()).append("\"");
+            questionsMarks.append('?');
+            values[valuesOffset + i] = entry.getValue();
+            i++;
+        }
+        
+        final StringBuilder query = new StringBuilder();
+        query.append("INSERT INTO \"").append(ksName).append("\".\"").append(cfName)
+             .append("\" (").append(columnNames.toString()).append(") VALUES (").append(questionsMarks.toString()).append(") ");
+        if (ifNotExists) query.append("IF NOT EXISTS ");
+        if (ttl != null && ttl > 0 || writetime != null) query.append("USING ");
+        if (ttl != null && ttl > 0) query.append("TTL ").append(Long.toString(ttl));
+        if (ttl != null &&ttl > 0 && writetime != null) query.append(" AND ");
+        if (writetime != null) query.append("TIMESTAMP ").append(Long.toString(writetime*1000));
+        
+        return query.toString();
+    }
+    
+    
+    public BytesReference source(IndexService indexService, DocumentMapper docMapper, Map sourceAsMap, Uid uid) throws JsonParseException, JsonMappingException, IOException {
+        if (docMapper.sourceMapper().enabled()) {
+            // retreive from _source columns stored as blob in cassandra if available.
+            ByteBuffer bb = (ByteBuffer) sourceAsMap.get(SourceFieldMapper.NAME);
+            if (bb != null)
+               return new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
+        } 
+        // rebuild _source from all cassandra columns.
+        XContentBuilder builder = buildDocument(docMapper, sourceAsMap, true, isStaticDocument(indexService, uid));
+        builder.humanReadable(true);
+        return builder.bytes();
+    }
+    
+    
+    public BytesReference source(IndexService indexService, DocumentMapper docMapper, Map sourceAsMap, String id) throws JsonParseException, JsonMappingException, IOException {
+        return source( indexService, docMapper, sourceAsMap, new Uid(docMapper.type(), id));
+    }
+
+    
+    public DocPrimaryKey parseElasticId(final IndexService indexService, final String type, final String id) throws IOException {
+        return parseElasticId(indexService, type, id, null);
+    }
+    
+    /**
+     * Parse elastic _id (a value or a JSON array) to build a DocPrimaryKey or populate map.
+     */
+    public DocPrimaryKey parseElasticId(final IndexService indexService, final String type, final String id, Map<String, Object> map) throws JsonParseException, JsonMappingException, IOException {
+        String ksName = indexService.keyspace();
+        String cfName = typeToCfName(type);
+        CFMetaData metadata = getCFMetaData(ksName, cfName);
+        
+        List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
+        List<ColumnDefinition> clusteringColumns = metadata.clusteringColumns();
+        int ptLen = partitionColumns.size();
+        
+        if (id.startsWith("[") && id.endsWith("]")) {
+            // _id is JSON array of values.
+            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+            Object[] elements = jsonMapper.readValue(id, Object[].class);
+            Object[] values = (map != null) ? null : new Object[elements.length];
+            String[] names = (map != null) ? null : new String[elements.length];
+            if (elements.length > ptLen + clusteringColumns.size()) 
+                throw new JsonMappingException("_id="+id+" longer than the primary key size="+(ptLen+clusteringColumns.size()) );
+            
+            for(int i=0; i < elements.length; i++) {
+                ColumnDefinition cd = (i < ptLen) ? partitionColumns.get(i) : clusteringColumns.get(i - ptLen);
+                AbstractType<?> atype = cd.type;
+                if (map == null) {
+                    names[i] = cd.name.toString();
+                    values[i] = atype.compose( fromString(atype, elements[i].toString()) );
+                } else {
+                    map.put(cd.name.toString(), atype.compose( fromString(atype, elements[i].toString()) ) );
+                }
+            }
+            return (map != null) ? null : new DocPrimaryKey(names, values, (clusteringColumns.size() > 0 && elements.length == partitionColumns.size()) ) ;
+        } else {
+            // _id is a single columns, parse its value.
+            AbstractType<?> atype = partitionColumns.get(0).type;
+            if (map == null) {
+                return new DocPrimaryKey( new String[] { partitionColumns.get(0).name.toString() } , new Object[] { atype.compose(fromString(atype, id)) }, clusteringColumns.size() != 0);
+            } else {
+                map.put(partitionColumns.get(0).name.toString(), atype.compose( fromString(atype, id) ) );
+                return null;
+            }
+        }
+    }
+    
+    public DocPrimaryKey parseElasticRouting(final IndexService indexService, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
+        String ksName = indexService.keyspace();
+        String cfName = typeToCfName(type);
+        CFMetaData metadata = getCFMetaData(ksName, cfName);
+        List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
+        int ptLen = partitionColumns.size();
+        if (routing.startsWith("[") && routing.endsWith("]")) {
+            // _routing is JSON array of values.
+            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+            Object[] elements = jsonMapper.readValue(routing, Object[].class);
+            Object[] values = new Object[elements.length];
+            String[] names = new String[elements.length];
+            if (elements.length != ptLen) 
+                throw new JsonMappingException("_routing="+routing+" does not match the partition key size="+ptLen);
+            
+            for(int i=0; i < elements.length; i++) {
+                ColumnDefinition cd = partitionColumns.get(i);
+                AbstractType<?> atype = cd.type;
+                names[i] = cd.name.toString();
+                values[i] = atype.compose( fromString(atype, elements[i].toString()) );
+                i++;
+            }
+            return new DocPrimaryKey(names, values) ;
+        } else {
+            // _id is a single columns, parse its value.
+            AbstractType<?> atype = partitionColumns.get(0).type;
+            return new DocPrimaryKey( new String[] { partitionColumns.get(0).name.toString() } , new Object[] { atype.compose( fromString(atype, routing) ) });
+        }
+    }
+    
+    
+    public boolean isStaticDocument(final IndexService indexService, Uid uid) throws JsonParseException, JsonMappingException, IOException {
+        CFMetaData metadata = getCFMetaData(indexService.keyspace(), typeToCfName(uid.type()));
+        String id = uid.id();
+        if (id.startsWith("[") && id.endsWith("]")) {
+            org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
+            Object[] elements = jsonMapper.readValue(id, Object[].class);
+            return metadata.clusteringColumns().size() > 0 && elements.length == metadata.partitionKeyColumns().size();
+        } else {
+            return metadata.clusteringColumns().size() != 0;
+        }
+    }
+    
+    @SuppressForbidden(reason = "toUpperCase() for consistency level")
+    public static ConsistencyLevel consistencyLevelFromString(String value) {
+        switch(value.toUpperCase(Locale.ROOT)) {
+        case "ANY": return ConsistencyLevel.ANY;
+        case "ONE": return ConsistencyLevel.ONE;
+        case "TWO": return ConsistencyLevel.TWO;
+        case "THREE": return ConsistencyLevel.THREE;
+        case "QUORUM": return ConsistencyLevel.QUORUM;
+        case "ALL": return ConsistencyLevel.ALL;
+        case "LOCAL_QUORUM": return ConsistencyLevel.LOCAL_QUORUM;
+        case "EACH_QUORUM": return ConsistencyLevel.EACH_QUORUM;
+        case "SERIAL": return ConsistencyLevel.SERIAL;
+        case "LOCAL_SERIAL": return ConsistencyLevel.LOCAL_SERIAL;
+        case "LOCAL_ONE": return ConsistencyLevel.LOCAL_ONE;
+        default :
+            throw new IllegalArgumentException("No write consistency match [" + value + "]");
+        }
+    }
+    
+    
+    
+    public boolean isDatacenterGroupMember(InetAddress endpoint) {
+        String endpointDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint);
+        KeyspaceMetadata  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
+        if (elasticAdminMetadata != null) {
+            ReplicationParams replicationParams = elasticAdminMetadata.params.replication;
+            if (replicationParams.klass == NetworkTopologyStrategy.class && replicationParams.options.get(endpointDc) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+
+    
+    public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException {
+        // Issue #91, update C* schema asynchronously to avoid inter-locking with map column as nested object.
+        Runnable task = new Runnable() {
+            @Override 
+            public void run() { 
+                try { 
+                    QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'", elasticAdminKeyspaceName,  ELASTIC_ADMIN_METADATA_TABLE, metaDataString));
+                } catch (Exception ex) { 
+                    logger.error("Failed to persist Elasticsearch mapping in the Cassandra schema:", ex);
+                } 
+            } 
+        }; 
+        new Thread(task, "ServiceThread").start();
+    }
+
+    /**
+     * Should only be used after a SCHEMA change.
+     */
+    
+    public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException {
+        try {
+            String query = String.format(Locale.ROOT, "SELECT comment FROM system_schema.tables WHERE keyspace_name='%s' AND table_name='%s'", 
+                this.elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+            UntypedResultSet result = QueryProcessor.executeInternal(query);
+            if (result.isEmpty())
+                throw new NoPersistedMetaDataException("Failed to read comment from "+elasticAdminKeyspaceName+"+"+ELASTIC_ADMIN_METADATA_TABLE);
+
+            String metadataString = result.one().getString("comment");
+            logger.debug("Recover metadata from {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metadataString);
+            return parseMetaDataString( metadataString );
+        } catch (RequestValidationException | RequestExecutionException e) {
+            throw new NoPersistedMetaDataException("Failed to read comment from "+elasticAdminKeyspaceName+"+"+ELASTIC_ADMIN_METADATA_TABLE, e);
+        }
+    }
+    
+    private MetaData parseMetaDataString(String metadataString) throws NoPersistedMetaDataException {
+        if (metadataString != null && metadataString.length() > 0) {
+            MetaData metaData;
+            try {
+                metaData =  metaStateService.loadGlobalState(metadataString);
+            } catch (Exception e) {
+                logger.error("Failed to parse metadata={}", e, metadataString);
+                throw new NoPersistedMetaDataException("Failed to parse metadata="+metadataString, e);
+            }
+            return metaData;
+        }
+        throw new NoPersistedMetaDataException("metadata null or empty");
+    }
+
+    /**
+     * Try to read fresher metadata from cassandra.
+     */
+    
+    public MetaData checkForNewMetaData(Long expectedVersion) throws NoPersistedMetaDataException {
+        MetaData localMetaData = readMetaDataAsRow(ConsistencyLevel.ONE);
+        if (localMetaData != null && localMetaData.version() >= expectedVersion) {
+           return localMetaData;
+        }
+        if (localMetaData == null) {
+            throw new NoPersistedMetaDataException("No cluster metadata in "+this.elasticAdminKeyspaceName);
+        }
+        MetaData quorumMetaData = readMetaDataAsRow(this.metadataReadCL);
+        if (quorumMetaData.version() >= expectedVersion) {
+            return quorumMetaData;
+        }
+        return null;
+    }
+    
+    
+    public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException {
+        UntypedResultSet result;
+        try {
+            result = process(cl, ClientState.forInternalCalls(), selectMetadataQuery, DatabaseDescriptor.getClusterName());
+            Row row = result.one();
+            if (row != null && row.has("metadata")) {
+                return parseMetaDataString(row.getString("metadata"));
+            }
+        } catch (UnavailableException e) {
+            logger.warn("Cannot read metadata with consistency="+cl,e);
+            return null;
+        } catch (Exception e) {
+            throw new NoPersistedMetaDataException("Unexpected error",e);
+        }
+        throw new NoPersistedMetaDataException("Unexpected error");
+    }
+    
+    
+    public int getLocalDataCenterSize() {
+        int count = 1; 
+        for (UntypedResultSet.Row row : executeInternal("SELECT data_center, rpc_address FROM system." + SystemKeyspace.PEERS))
+            if (row.has("rpc_address") && DatabaseDescriptor.getLocalDataCenter().equals(row.getString("data_center")))
+                count++;
+        logger.info(" datacenter=[{}] size={} from peers", DatabaseDescriptor.getLocalDataCenter(), count);
+        return count;
+    }
+
+
+    Void createElasticAdminKeyspace()  {
+        try {
+            Map<String, String> replication = new HashMap<String, String>();
+
+            replication.put("class", NetworkTopologyStrategy.class.getName());
+            replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(getLocalDataCenterSize()));
+
+            String createKeyspace = String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s;",
+                elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
+            logger.info(createKeyspace);
+            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createKeyspace);
+        } catch (Exception e) {
+            logger.error("Failed to initialize keyspace {}", elasticAdminKeyspaceName, e);
+            throw e;
+        }
+        return null;
+    }
+
+    // Modify keyspace replication
+    void alterElasticAdminKeyspaceReplication(Map<String,String> replication) {
+        logger.debug("keyspace={} replication={}", elasticAdminKeyspaceName, replication);
+
+        if (!NetworkTopologyStrategy.class.getName().equals(replication.get("class")))
+            throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+NetworkTopologyStrategy.class.getName()+" replication strategy");
+
+        int currentRF = -1;
+        if (replication.get(DatabaseDescriptor.getLocalDataCenter()) != null) {
+            currentRF = Integer.valueOf(replication.get(DatabaseDescriptor.getLocalDataCenter()).toString());
+        }
+        int targetRF = getLocalDataCenterSize();
+        if (targetRF != currentRF) {
+            replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(targetRF));
+            try {
+                String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s",
+                    elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
+                logger.info(query);
+                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
+            } catch (Throwable e) {
+                logger.error("Failed to alter keyspace [{}]", e, this.elasticAdminKeyspaceName);
+                throw e;
+            }
+        } else {
+            logger.info("Keep unchanged keyspace={} datacenter={} RF={}", elasticAdminKeyspaceName, DatabaseDescriptor.getLocalDataCenter(), targetRF);
+        }
+    }
+
+    // Create The meta Data Table if needed
+    Void createElasticAdminMetaTable(final String metaDataString) {
+        try {
+            String createTable = String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';",
+                elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metaDataString);
+            logger.info(createTable);
+            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createTable);
+
+        } catch (Exception e) {
+            logger.error("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, e);
+            throw e;
+        }
+        return null;
+    }
+
+    // initialize a first row if needed
+    Void insertFirstMetaRow(final MetaData metadata, final String metaDataString) {
+        try {
+            logger.info(insertMetadataQuery);
+            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), insertMetadataQuery,
+                DatabaseDescriptor.getClusterName(), UUID.fromString(StorageService.instance.getLocalHostId()), metadata.version(), metaDataString);
+        } catch (Exception e) {
+            logger.error("Failed insert first row into table {}.{}",e, elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+            throw e;
+        }
+        return null;
+    }
+
+    void retry (final Supplier<Void> function, final String label) {
+        for (int i = 0; ; ++i) {
+            try {
+                function.get();
+                break;
+            } catch (final Exception e) {
+                if (i >= CREATE_ELASTIC_ADMIN_RETRY_ATTEMPTS) {
+                    logger.error("Failed to {} after {} attempts", label, CREATE_ELASTIC_ADMIN_RETRY_ATTEMPTS);
+                    throw new NoPersistedMetaDataException("Failed to " + label + " after " + CREATE_ELASTIC_ADMIN_RETRY_ATTEMPTS + " attempts", e);
+                } else
+                    logger.info("Retrying: {}", label);
             }
         }
     }
 
-    public ClusterSettings getClusterSettings() {
-        return clusterSettings;
+    /**
+     * Create or update elastic_admin keyspace.
+     */
+    
+    public void createOrUpdateElasticAdminKeyspace()  {
+        UntypedResultSet result = QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name='%s'", elasticAdminKeyspaceName)); 
+        if (result.isEmpty()) {
+            MetaData metadata = state().metaData();
+            try {
+                final String metaDataString;
+                try {
+                    metaDataString = MetaData.Builder.toXContent(metadata);
+                } catch (IOException e) {
+                    logger.error("Failed to build metadata", e);
+                    throw new NoPersistedMetaDataException("Failed to build metadata", e);
+                }
+                // create elastic_admin if not exists after joining the ring and before allowing metadata update.
+                retry(() -> createElasticAdminKeyspace(), "create elastic admin keyspace");
+                retry(() -> createElasticAdminMetaTable(metaDataString), "create elastic admin metadata table");
+                retry(() -> insertFirstMetaRow(metadata, metaDataString), "write first row to metadata table");
+                logger.info("Succefully initialize {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metaDataString);
+                try {
+                    writeMetaDataAsComment(metaDataString);
+                } catch (IOException e) {
+                    logger.error("Failed to write metadata as comment", e);
+                }
+            } catch (Throwable e) {
+                logger.error("Failed to initialize table {}.{}",e, elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+            }
+        } else {
+            Map<String,String> replication = result.one().getFrozenTextMap("replication");
+            logger.debug("keyspace={} replication={}", elasticAdminKeyspaceName, replication);
+            
+            if (!NetworkTopologyStrategy.class.getName().equals(replication.get("class")))
+                    throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+NetworkTopologyStrategy.class.getName()+" replication strategy");
+            
+            int currentRF = -1;
+            if (replication.get(DatabaseDescriptor.getLocalDataCenter()) != null) {
+                currentRF = Integer.valueOf(replication.get(DatabaseDescriptor.getLocalDataCenter()).toString());
+            }
+            int targetRF = getLocalDataCenterSize();
+            if (targetRF != currentRF) {
+                replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(targetRF));
+                try {
+                    String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s", 
+                            elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
+                    logger.info(query);
+                    process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
+                } catch (Throwable e) {
+                    logger.error("Failed to alter keyspace [{}]", e, this.elasticAdminKeyspaceName);
+                    throw e;
+                }
+            } else {
+                logger.info("Keep unchanged keyspace={} datacenter={} RF={}", elasticAdminKeyspaceName, DatabaseDescriptor.getLocalDataCenter(), targetRF);
+            }
+        }
+    }
+    
+    
+    public ShardInfo shardInfo(String index, ConsistencyLevel cl) {
+        Keyspace keyspace = Schema.instance.getKeyspaceInstance(state().metaData().index(index).keyspace());
+        AbstractReplicationStrategy replicationStrategy = keyspace.getReplicationStrategy();
+        int rf = replicationStrategy.getReplicationFactor();
+        if (replicationStrategy instanceof NetworkTopologyStrategy)
+            rf = ((NetworkTopologyStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter());
+        return new ShardInfo(rf, cl.blockFor(keyspace));
+    }
+    
+    
+    public void persistMetaData(MetaData oldMetaData, MetaData newMetaData, String source) throws IOException, InvalidRequestException, RequestExecutionException, RequestValidationException {
+        if (!newMetaData.clusterUUID().equals(localNode().getId())) {
+            logger.error("should not push metadata updated from another node {}/{}", newMetaData.clusterUUID(), newMetaData.version());
+            return;
+        }
+        if (newMetaData.clusterUUID().equals(state().metaData().clusterUUID()) && newMetaData.version() < state().metaData().version()) {
+            logger.warn("don't push obsolete metadata uuid={} version {} < {}", newMetaData.clusterUUID(), newMetaData.version(), state().metaData().version());
+            return;
+        }
+
+        String metaDataString = MetaData.Builder.toXContent(newMetaData);
+        UUID owner = UUID.fromString(localNode().getId());
+        boolean applied = processConditional(
+                this.metadataWriteCL,
+                this.metadataSerialCL,
+                updateMetaDataQuery,
+                new Object[] { owner, newMetaData.version(), metaDataString, DatabaseDescriptor.getClusterName(), newMetaData.version() });
+        if (applied) {
+            logger.debug("PAXOS Succefully update metadata source={} newMetaData={} in cluster {}", source, metaDataString, DatabaseDescriptor.getClusterName());
+            writeMetaDataAsComment(metaDataString);
+            return;
+        } else {
+            logger.warn("PAXOS Failed to update metadata oldMetadata={}/{} currentMetaData={}/{} in cluster {}", 
+                    oldMetaData.clusterUUID(), oldMetaData.version(), localNode().getId(), newMetaData.version(), DatabaseDescriptor.getClusterName());
+            throw new ConcurrentMetaDataUpdateException(owner, newMetaData.version());
+        }
     }
 
-    public Settings getSettings() {
-        return settings;
+    /*
+    private static Object value(FieldMapper mapper, Object value) throws IOException {
+        if (mapper instanceof DateFieldMapper) {
+            // workaround because elasticsearch manage Date as Long
+            DateFieldMapper.DateFieldType dateFiledType = ((DateFieldMapper) mapper).fieldType();
+            return new Date( dateFiledType.parseStringValue( value.toString() ) );
+        } else if (mapper instanceof IpFieldMapper) {
+            // workaround because elasticsearch manage InetAddress as Long
+            Long ip = (Long) ((IpFieldMapper) mapper).fieldType().value(value);
+            return  com.google.common.net.InetAddresses.forString(IpFieldMapper.longToIp(ip));
+        } else if (mapper instanceof GeoShapeFieldMapper) {
+            return XContentFactory.jsonBuilder().map((Map)value).string();
+        } else if (mapper instanceof BinaryFieldMapper) {
+            BytesReference br = (BytesReference) ((BinaryFieldMapper)mapper).fieldType().value(value);
+            return ByteBuffer.wrap(br.array(), br.arrayOffset(), br.length());
+        } else if (mapper instanceof SourceFieldMapper) {
+            byte[] bytes = (byte[]) ((SourceFieldMapper)mapper).fieldType().value(value);
+            return ByteBuffer.wrap(bytes, 0, bytes.length);
+        } else if (value instanceof UUID) {
+            // workaround for #74
+            return value;
+        } else {
+            Object v = mapper.fieldType().value(value);
+            if (v instanceof Uid) {
+                // workaround because ParentFieldMapper.value() and UidFieldMapper.value() return an Uid (not a string).
+                return ((Uid)v).id();
+            } else {
+                return v;
+            }
+        }
+    }
+    */
+   
+    
+    
+    public static Collection flattenCollection(Collection c) {
+        List l = new ArrayList(c.size());
+        for(Object o : c) {
+            if (o instanceof Collection) {
+                l.addAll( flattenCollection((Collection)o) );
+            } else {
+                l.add(o);
+            }
+        }
+        return l;
+    }
+
+
+    /**
+     * Serialize a cassandra typed object.
+     */
+    public static ByteBuffer serialize(final String ksName, final String cfName, final AbstractType type, final String name, final Object value, final Mapper mapper) 
+            throws SyntaxException, ConfigurationException, JsonGenerationException, JsonMappingException, IOException {
+        if (value == null) {
+            return null;
+        }
+        if (type instanceof UserType) {
+            UserType udt = (UserType) type;
+            ByteBuffer[] components = new ByteBuffer[udt.size()];
+            int i=0;
+            
+            if (GEO_POINT_TYPE.equals(ByteBufferUtil.string(udt.name))) {
+                GeoPoint geoPoint = new GeoPoint();
+                if (value instanceof String) {
+                    // parse from string lat,lon (ex: "41.12,-71.34") or geohash (ex:"drm3btev3e86")
+                    geoPoint.resetFromString((String)value);
+                } else {
+                    // parse from lat, lon fields as map
+                    Map<String, Object> mapValue = (Map<String, Object>) value;
+                    geoPoint.reset((Double)mapValue.get(GeoPointFieldMapper.Names.LAT), (Double)mapValue.get(GeoPointFieldMapper.Names.LON));
+                }
+                components[i++]=serialize(ksName, cfName, udt.fieldType(0), GeoPointFieldMapper.Names.LAT, geoPoint.lat(), null);
+                components[i++]=serialize(ksName, cfName, udt.fieldType(1), GeoPointFieldMapper.Names.LON, geoPoint.lon(), null);
+            } else if (COMPLETION_TYPE.equals(ByteBufferUtil.string(udt.name))) {
+                // input list<text>, output text, weight int, payload text
+                Map<String, Object> mapValue = (Map<String, Object>) value;
+                components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_INPUT) == null) ? null : serialize(ksName, cfName, udt.fieldType(0), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_INPUT, mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_INPUT), null);
+                components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT) == null) ? null : serialize(ksName, cfName, udt.fieldType(2), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT, new Long((Integer) mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT)), null);
+                components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS) == null) ? null : serialize(ksName, cfName, udt.fieldType(3), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS, stringify(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS)), null);
+            } else {
+                Map<String, Object> mapValue = (Map<String, Object>) value;
+                for (int j = 0; j < udt.size(); j++) {
+                    String subName = UTF8Type.instance.compose(udt.fieldName(j).bytes);
+                    AbstractType<?> subType = udt.fieldType(j);
+                    Object subValue = mapValue.get(subName);
+                    Mapper subMapper = (mapper instanceof ObjectMapper) ? ((ObjectMapper) mapper).getMapper(subName) : null;
+                    components[i++]=serialize(ksName, cfName, subType, subName, subValue, subMapper);
+                }
+            }
+            return TupleType.buildValue(components);
+        } else if (type instanceof MapType) {
+            MapType mapType = ClusterService.getMapType(ksName, cfName, name);
+            MapSerializer serializer = mapType.getSerializer();
+            Map map = (Map)value;
+            List<ByteBuffer> buffers = serializer.serializeValues((Map)value);
+            return CollectionSerializer.pack(buffers, map.size(), ProtocolVersion.CURRENT);
+        } else if (type instanceof CollectionType) {
+            AbstractType elementType = (type instanceof ListType) ? ((ListType)type).getElementsType() : ((SetType)type).getElementsType();
+            
+            if (elementType instanceof UserType && ClusterService.GEO_POINT_TYPE.equals(ByteBufferUtil.string(((UserType)elementType).name)) && value instanceof List && ((List)value).get(0) instanceof Double) {
+                // geo_point as array of double lon,lat like [1.2, 1.3]
+                UserType udt = (UserType)elementType;
+                List<Double> values = (List<Double>)value;
+                ByteBuffer[] elements = new ByteBuffer[] {
+                    serialize(ksName, cfName, udt.fieldType(0), GeoPointFieldMapper.Names.LAT, values.get(1), null),
+                    serialize(ksName, cfName, udt.fieldType(1), GeoPointFieldMapper.Names.LON, values.get(0), null)
+                };
+                ByteBuffer geo_point = TupleType.buildValue(elements);
+                return CollectionSerializer.pack(ImmutableList.of(geo_point), 1, ProtocolVersion.CURRENT);
+            } 
+            
+            if (value instanceof Collection) {
+                // list of elementType
+                List<ByteBuffer> elements = new ArrayList<ByteBuffer>();
+                for(Object v : flattenCollection((Collection) value)) {
+                    ByteBuffer bb = serialize(ksName, cfName, elementType, name, v, mapper);
+                    elements.add(bb);
+                }
+                return CollectionSerializer.pack(elements, elements.size(), ProtocolVersion.CURRENT);
+            } else {
+                // singleton list
+                ByteBuffer bb = serialize(ksName, cfName, elementType, name, value, mapper);
+                return CollectionSerializer.pack(ImmutableList.of(bb), 1, ProtocolVersion.CURRENT);
+            } 
+        } else if (type.getSerializer() instanceof UUIDSerializer) {
+            // #74 workaround
+            return type.decompose( (value instanceof UUID) ? value : UUID.fromString((String)value));
+        } else {
+            // Native cassandra type, encoded with mapper if available.
+            if (mapper != null) {
+                if (mapper instanceof FieldMapper) {
+                    return type.decompose( ((FieldMapper) mapper).fieldType().cqlValue(value) );
+                } else if (mapper instanceof ObjectMapper && !((ObjectMapper)mapper).isEnabled()) {
+                    // enabled=false => store field as json text
+                    if (value instanceof Map) {
+                        XContentBuilder builder = XContentFactory.jsonBuilder();
+                        builder.map( (Map) value);
+                        return type.decompose( builder.string() );
+                    }
+                    return type.decompose( value );
+                }
+            } 
+            return type.decompose( value );
+        }
+    }
+    
+    public static Object deserialize(AbstractType<?> type, ByteBuffer bb) throws CharacterCodingException {
+        return deserialize(type, bb, null);
+    }
+    
+    public static Object deserialize(AbstractType<?> type, ByteBuffer bb, Mapper mapper) throws CharacterCodingException {
+        if (type instanceof UserType) {
+            UserType udt = (UserType) type;
+            Map<String, Object> mapValue = new HashMap<String, Object>();
+            ByteBuffer[] components = udt.split(bb);
+            
+            if (GEO_POINT_TYPE.equals(ByteBufferUtil.string(udt.name))) {
+                if (components[0] != null) 
+                    mapValue.put(GeoPointFieldMapper.Names.LAT, deserialize(udt.type(0), components[0], null));
+                if (components[1] != null) 
+                    mapValue.put(GeoPointFieldMapper.Names.LON, deserialize(udt.type(1), components[1], null));
+            } else {
+                for (int i = 0; i < components.length; i++) {
+                    String fieldName = UTF8Type.instance.compose(udt.fieldName(i).bytes);
+                    AbstractType<?> ctype = udt.type(i);
+                    Mapper subMapper = null;
+                    if (mapper != null && mapper instanceof ObjectMapper)
+                        subMapper = ((ObjectMapper)mapper).getMapper(fieldName);
+                    Object value = (components[i] == null) ? null : deserialize(ctype, components[i], subMapper);
+                    mapValue.put(fieldName, value);
+                }
+            }
+            return mapValue;
+        } else if (type instanceof ListType) {
+            ListType<?> ltype = (ListType<?>)type;
+            ByteBuffer input = bb.duplicate();
+            int size = CollectionSerializer.readCollectionSize(input, ProtocolVersion.CURRENT);
+            List list = new ArrayList(size);
+            for (int i = 0; i < size; i++) {
+                list.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, ProtocolVersion.CURRENT), mapper));
+            }
+            if (input.hasRemaining())
+                throw new MarshalException("Unexpected extraneous bytes after map value");
+            return list;
+        } else if (type instanceof SetType) {
+            SetType<?> ltype = (SetType<?>)type;
+            ByteBuffer input = bb.duplicate();
+            int size = CollectionSerializer.readCollectionSize(input, ProtocolVersion.CURRENT);
+            Set set = new HashSet(size);
+            for (int i = 0; i < size; i++) {
+                set.add( deserialize(ltype.getElementsType(), CollectionSerializer.readValue(input, ProtocolVersion.CURRENT), mapper));
+            }
+            if (input.hasRemaining())
+                throw new MarshalException("Unexpected extraneous bytes after map value");
+            return set;
+        } else if (type instanceof MapType) {
+            MapType<?,?> ltype = (MapType<?,?>)type;
+            ByteBuffer input = bb.duplicate();
+            int size = CollectionSerializer.readCollectionSize(input, ProtocolVersion.CURRENT);
+            Map map = new LinkedHashMap(size);
+            for (int i = 0; i < size; i++) {
+                ByteBuffer kbb = CollectionSerializer.readValue(input, ProtocolVersion.CURRENT);
+                ByteBuffer vbb = CollectionSerializer.readValue(input, ProtocolVersion.CURRENT);
+                String key = (String) ltype.getKeysType().compose(kbb);
+                Mapper subMapper = null;
+                if (mapper != null) {
+                    assert mapper instanceof ObjectMapper : "Expecting an object mapper for MapType";
+                    subMapper = ((ObjectMapper)mapper).getMapper(key);
+                }
+                map.put(key, deserialize(ltype.getValuesType(), vbb, subMapper));
+            }
+            if (input.hasRemaining())
+                throw new MarshalException("Unexpected extraneous bytes after map value");
+            return map;
+        } else {
+             Object value = type.compose(bb);
+             if (mapper != null && mapper instanceof FieldMapper) {
+                 return ((FieldMapper)mapper).fieldType().valueForDisplay(value);
+             }
+             return value;
+        }
+    }
+
+    public IndexService indexServiceSafe(org.elasticsearch.index.Index index) {
+        return this.indicesService.indexServiceSafe(index);
+    }
+
+    /**
+     * Return a set of started shards according t the gossip state map and the local shard state.
+     */
+    public Map<UUID, ShardRoutingState> getShardRoutingStates(org.elasticsearch.index.Index index) {
+        Map<UUID, ShardRoutingState> shards = this.discovery.getShardRoutingStates(index.getName());
+        try {
+            IndexShard localIndexShard = indexServiceSafe(index).getShardOrNull(0);
+            if (localIndexShard != null && localIndexShard.routingEntry() != null)
+                shards.put(this.localNode().uuid(), localIndexShard.routingEntry().state());
+        } catch (IndexNotFoundException e) {
+        }
+        return shards;
+    }
+    
+    public void publishGossipStates() {
+        this.discovery.publishX2(state());
+        this.discovery.publishX1(state());
+    }
+    
+    
+    /**
+     * Set index shard state in the gossip endpoint map (must be synchronized).
+     */
+    public void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
+        this.discovery.putShardRoutingState(index, shardRoutingState);
+    }
+
+    public void removeIndexShardState(final String index) throws JsonGenerationException, JsonMappingException, IOException {
+        this.discovery.putShardRoutingState(index, null);
+    }
+    
+    /**
+     * Publish cluster metadata uuid and version in gossip state.
+     */
+    public void publishX2(final ClusterState clusterState) {
+        this.discovery.publishX2(clusterState);
+    }
+    
+    /**
+     * Publish local routingShard state in gossip state.
+     */
+    public void publishX1(final ClusterState clusterState) {
+        this.discovery.publishX1(clusterState);
+    }
+
+    public boolean awaitMetaDataVersion(long version, TimeValue ackTimeout) throws Exception  {
+        return this.discovery.awaitMetaDataVersion(version, ackTimeout);
+    }
+    
+    public void connectToNodes() {
+        this.discovery.connectToNodes();
     }
 }

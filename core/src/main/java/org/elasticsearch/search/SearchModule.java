@@ -20,9 +20,9 @@
 package org.elasticsearch.search;
 
 import org.apache.lucene.search.BooleanQuery;
-import org.elassandra.cluster.service.ClusterService;
 import org.elassandra.search.aggregations.bucket.token.InternalTokenRange;
 import org.elassandra.search.aggregations.bucket.token.TokenRangeAggregationBuilder;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.NamedRegistry;
 import org.elasticsearch.common.geo.ShapesAvailability;
 import org.elasticsearch.common.geo.builders.ShapeBuilders;

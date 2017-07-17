@@ -37,7 +37,6 @@ import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.ThreadInterruptedException;
 import org.elassandra.cluster.routing.AbstractSearchStrategy;
-import org.elassandra.cluster.service.ClusterService;
 import org.elassandra.util.ConcurrentReferenceHashMap;
 import org.elassandra.util.ConcurrentReferenceHashMap.ReferenceType;
 import org.elasticsearch.ElasticsearchException;
@@ -52,6 +51,7 @@ import org.elasticsearch.cluster.routing.AllocationId;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.RecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
@@ -424,29 +424,31 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     }
     
     public synchronized void moveToStart() {
-        if (state == IndexShardState.CREATED || state == IndexShardState.POST_RECOVERY) {
-            // we want to refresh *before* we move to internal STARTED state
-            try {
-                getEngine().refresh("cluster_state_started");
-            } catch (Throwable t) {
-                logger.warn("failed to refresh due to move to cluster wide started", t);
+        synchronized(mutex) {
+            if (state == IndexShardState.CREATED || state == IndexShardState.POST_RECOVERY) {
+                // we want to refresh *before* we move to internal STARTED state
+                try {
+                    getEngine().refresh("cluster_state_started");
+                } catch (Throwable t) {
+                    logger.warn("failed to refresh due to move to cluster wide started", t);
+                }
+                /*
+                ShardRouting(ShardId shardId, String currentNodeId,
+                        String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
+                        UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize, Collection<Range<Token>> tokenRanges)
+                */
+                this.shardRouting = new ShardRouting(this.shardId, 
+                        this.clusterService.localNode().getId(), null,
+                        true, 
+                        ShardRoutingState.STARTED, 
+                        null,
+                        null,
+                        ShardRouting.DUMMY_ALLOCATION_ID,
+                        ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE, 
+                        AbstractSearchStrategy.EMPTY_RANGE_TOKEN_LIST);
+                changeState(IndexShardState.STARTED, "start shard [" + state + "]");
+                indexEventListener.afterIndexShardStarted(this);
             }
-            /*
-            ShardRouting(ShardId shardId, String currentNodeId,
-                    String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
-                    UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize, Collection<Range<Token>> tokenRanges)
-            */
-            this.shardRouting = new ShardRouting(this.shardId, 
-                    this.clusterService.localNode().getId(), null,
-                    true, 
-                    ShardRoutingState.STARTED, 
-                    null,
-                    (state == IndexShardState.CREATED) ? IndexRoutingTable.UNASSIGNED_INFO_INDEX_CREATED : IndexRoutingTable.UNASSIGNED_INFO_INDEX_REOPEN, 
-                    null,
-                    1L, 
-                    AbstractSearchStrategy.EMPTY_RANGE_TOKEN_LIST);
-            changeState(IndexShardState.STARTED, "start shard [" + state + "]");
-            indexEventListener.afterIndexShardStarted(this);
         }
     }
     

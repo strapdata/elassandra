@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index;
 
-import org.apache.logging.log4j.Logger;
+import org.apache.cassandra.service.StorageService;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Setting;
@@ -28,6 +28,7 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.index.shard.SearchOperationListener;
 import org.elasticsearch.search.internal.SearchContext;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
@@ -45,8 +46,8 @@ public final class SearchSlowLog implements SearchOperationListener {
 
     private SlowLogLevel level;
 
-    private final Logger queryLogger;
-    private final Logger fetchLogger;
+    private final ch.qos.logback.classic.Logger queryLogger;
+    private final ch.qos.logback.classic.Logger fetchLogger;
 
     private static final String INDEX_SEARCH_SLOWLOG_PREFIX = "index.search.slowlog";
     public static final Setting<TimeValue> INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_WARN_SETTING =
@@ -80,9 +81,10 @@ public final class SearchSlowLog implements SearchOperationListener {
     private static final ToXContent.Params FORMAT_PARAMS = new ToXContent.MapParams(Collections.singletonMap("pretty", "false"));
 
     public SearchSlowLog(IndexSettings indexSettings) {
-
-        this.queryLogger = Loggers.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".query", indexSettings.getSettings());
-        this.fetchLogger = Loggers.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".fetch", indexSettings.getSettings());
+        //this.queryLogger = Loggers.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".query", indexSettings.getSettings());
+        //this.fetchLogger = Loggers.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".fetch", indexSettings.getSettings());
+        this.queryLogger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".query." +indexSettings.getIndex().getName());
+        this.fetchLogger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(INDEX_SEARCH_SLOWLOG_PREFIX + ".fetch." + indexSettings.getIndex().getName());
 
         indexSettings.getScopedSettings().addSettingsUpdateConsumer(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_WARN_SETTING, this::setQueryWarnThreshold);
         this.queryWarnThreshold = indexSettings.getValue(INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_WARN_SETTING).nanos();
@@ -108,9 +110,15 @@ public final class SearchSlowLog implements SearchOperationListener {
 
     private void setLevel(SlowLogLevel level) {
         this.level = level;
-        Loggers.setLevel(queryLogger, level.name());
-        Loggers.setLevel(fetchLogger, level.name());
+        //Loggers.setLevel(queryLogger, level.name());
+        //Loggers.setLevel(fetchLogger, level.name());
+        try {
+            StorageService.instance.setLoggingLevel(this.queryLogger.getName(), level.toString());
+            StorageService.instance.setLoggingLevel(this.fetchLogger.getName(), level.toString());
+        } catch (Exception e) {
+        }
     }
+    
     @Override
     public void onQueryPhase(SearchContext context, long tookInNanos) {
         if (queryWarnThreshold >= 0 && tookInNanos > queryWarnThreshold) {

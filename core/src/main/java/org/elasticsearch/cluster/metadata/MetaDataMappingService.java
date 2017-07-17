@@ -24,7 +24,6 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
 import org.apache.lucene.util.IOUtils;
-import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
 import org.elasticsearch.cluster.AckedClusterStateTaskListener;
@@ -34,6 +33,7 @@ import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractComponent;
@@ -178,7 +178,7 @@ public class MetaDataMappingService extends AbstractComponent {
                     // don't apply the default mapping, it has been applied when the mapping was created
                     DocumentMapper docMapper = indexService.mapperService().merge(metaData.value.type(), metaData.value.source(), MapperService.MergeReason.MAPPING_RECOVERY, true);
                     if (!metaData.value.type().equals(MapperService.DEFAULT_MAPPING)) {
-                        clusterService.updateTableSchema(indexService, metaData.value);
+                        clusterService.updateTableSchema(indexService.mapperService(), metaData.value);
                     }
                 }
             }
@@ -224,7 +224,7 @@ public class MetaDataMappingService extends AbstractComponent {
                     builder.putMapping(mappingMetaData2);
                     
                     if (!mappingMetaData2.type().equals(MapperService.DEFAULT_MAPPING)) {
-                        clusterService.updateTableSchema(indexService, mappingMetaData2);
+                        clusterService.updateTableSchema(indexService.mapperService(), mappingMetaData2);
                     }
                 }
             }
@@ -378,13 +378,13 @@ public class MetaDataMappingService extends AbstractComponent {
                 IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
                 // Mapping updates on a single type may have side-effects on other types so we need to
                 // update mapping metadata on all types
-                for (DocumentMapper mapper : indexService.mapperService().docMappers(true)) {
+                for (DocumentMapper mapper : mapperService.docMappers(true)) {
                     MappingMetaData mappingMd = new MappingMetaData(mapper.mappingSource());
                     indexMetaDataBuilder.putMapping(mappingMd);
                     
                     // update CQL schema.
                     if (mappingMd.type().equals(mappingType) && !mappingMd.type().equals(MapperService.DEFAULT_MAPPING)) {
-                        clusterService.updateTableSchema(indicesService.indexService(index), mappingMd);
+                        clusterService.updateTableSchema(mapperService, mappingMd);
                     }
                 }
                 builder.put(indexMetaDataBuilder);

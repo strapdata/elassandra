@@ -32,7 +32,6 @@ import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
-import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.ClusterChangedEvent;
@@ -51,8 +50,11 @@ import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
+import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.network.NetworkAddress;
+import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
@@ -78,6 +80,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 
@@ -92,52 +95,48 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private final TransportService transportService;
     private final ClusterService clusterService;
     private final ClusterName clusterName;
-    private final Version version;
+    private final DiscoverySettings discoverySettings;
+    private final NamedWriteableRegistry namedWriteableRegistry;
 
     private final CopyOnWriteArrayList<MetaDataVersionListener> metaDataVersionListeners = new CopyOnWriteArrayList<>();
-
-    private DiscoveryNode localNode;
 
     private static final ConcurrentMap<ClusterName, ClusterGroup> clusterGroups = ConcurrentCollections.newConcurrentMap();
 
     private final ClusterGroup clusterGroup;
 
-    private InetAddress localAddress;
-    private String localDc;
+    private final InetAddress localAddress;
+    private final String localDc;
+    private DiscoveryNode localNode;
     
-    public CassandraDiscovery(Settings settings, TransportService transportService, ClusterService clusterService, Version version) {
+    public CassandraDiscovery(Settings settings, TransportService transportService, ClusterService clusterService, NamedWriteableRegistry namedWriteableRegistry) {
         super(settings);
         this.clusterService = clusterService;
-        this.clusterService.setDiscovery(this);
+        this.discoverySettings = new DiscoverySettings(settings, clusterService.getClusterSettings());
+        this.namedWriteableRegistry = namedWriteableRegistry;
         this.transportService = transportService;
-        this.version = version;
         this.clusterName = clusterService.getClusterName();
+        
         
         this.localAddress = FBUtilities.getBroadcastAddress();
         this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(localAddress);
-
+        
+        /*
         Map<String, String> attrs = Maps.newHashMap();
-        attrs.put("data", "true");
-        attrs.put("master", "true");
         attrs.put("data_center", localDc);
         attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(localAddress));
 
         String localHostId = SystemKeyspace.getLocalHostId().toString();
-        localNode = new DiscoveryNode(buildNodeName(localAddress), localHostId, new InetSocketTransportAddress(FBUtilities.getBroadcastAddress(), publishPort()), attrs, CASSANDRA_ROLES, version);
+        localNode = new DiscoveryNode(buildNodeName(localAddress), localHostId, clusterService.state().nodes().getLocalNode().getEphemeralId(), new InetSocketTransportAddress(FBUtilities.getBroadcastAddress(), publishPort()), attrs, CASSANDRA_ROLES, version);
         localNode.status(DiscoveryNodeStatus.ALIVE);
         //this.transportService.setLocalNode(localNode);
-        
+        */
         this.clusterGroup = new ClusterGroup();
-        clusterGroups.put(clusterName, clusterGroup);
-        clusterGroup.put(this.localNode.getId(), this.localNode);
-        
-        logger.info("localNode name={} id={} localAddress={} publish_host={}", this.localNode.getName(), this.localNode.getId(), localAddress, this.localNode.getAddress());
     }
 
     public static String buildNodeName() {
         return buildNodeName(FBUtilities.getLocalAddress());
     }
-    
+
     public static String buildNodeName(InetAddress addr) {
         String hostname = NetworkAddress.format(addr);
         if (hostname != null)
@@ -149,8 +148,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     
     @Override
     protected void doStart()  {
+        this.localNode = transportService.getLocalNode();
+        
         synchronized (clusterGroup) {
             logger.debug("Connected to cluster [{}]", clusterName.value());
+            clusterGroups.put(clusterName, clusterGroup);
+            clusterGroup.put(this.localNode.getId(), this.localNode);
+            logger.info("localNode name={} id={} localAddress={} publish_host={}", this.clusterService.localNode().getName(), this.clusterService.localNode().getId(), localAddress, this.clusterService.localNode().getAddress());
+
             // initialize cluster from cassandra system.peers 
             // WARNING: system.peers may be incomplete because commitlogs not yet applied
             for (UntypedResultSet.Row row : executeInternal("SELECT peer, data_center, rack, rpc_address, host_id from system." + SystemKeyspace.PEERS)) {
@@ -160,13 +165,13 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 String host_id = row.has("host_id") ? row.getUUID("host_id").toString() : null;
                 if ((!peer.equals(localAddress)) && (rpc_address != null) && (localDc.equals(datacenter))) {
                     Map<String, String> attrs = Maps.newHashMap();
-                    attrs.put("data", "true");
-                    attrs.put("master", "true");
-                    attrs.put("data_center", datacenter);
-                    if (row.has("rack"))
+                    attrs.put("node.data", "true");
+                    attrs.put("node.master", "true");
+                    attrs.put("node.attr.dc", datacenter);
+                    if (row.has("node.attr.rack"))
                         attrs.put("rack", row.getString("rack"));
                     
-                    DiscoveryNode dn = new DiscoveryNode(buildNodeName(peer), host_id, new InetSocketTransportAddress(peer, publishPort()), attrs, CASSANDRA_ROLES, version);
+                    DiscoveryNode dn = new DiscoveryNode(buildNodeName(peer), host_id, new InetSocketTransportAddress(peer, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
                     EndpointState endpointState = Gossiper.instance.getEndpointStateForEndpoint(peer);
                     if (endpointState == null) {
                         dn.status( DiscoveryNodeStatus.UNKNOWN );
@@ -258,22 +263,17 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     DiscoveryNode dn = clusterGroup.get(hostId);
                     if (dn == null) {
                         Map<String, String> attrs = Maps.newHashMap();
-                        attrs.put("data", "true");
-                        attrs.put("master", "true");
-                        attrs.put("data_center", localDc);
-                        attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(entry.getKey()));
+                        attrs.put("node.data", "true");
+                        attrs.put("node.master", "true");
+                        attrs.put("node.attr.dc", localDc);
+                        attrs.put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(entry.getKey()));
 
                         InetAddress internal_address = com.google.common.net.InetAddresses.forString(entry.getValue().getApplicationState(ApplicationState.INTERNAL_IP).value);
                         dn = new DiscoveryNode(buildNodeName(entry.getKey()), hostId.toString(), 
-                                new InetSocketTransportAddress(internal_address, publishPort()), attrs, CASSANDRA_ROLES, version);
+                                new InetSocketTransportAddress(internal_address, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
                         dn.status(status);
 
-                        if (localAddress.equals(entry.getKey())) {
-                            logger.debug("Update local node host_id={} status={} timestamp={}", 
-                                    NetworkAddress.format(entry.getKey()), dn.getId(), dn.getName(), entry.getValue().isAlive(), entry.getValue().getUpdateTimestamp());
-                            clusterGroup.remove(this.localNode.getId());
-                            this.localNode = dn;
-                        } else {
+                        if (!localAddress.equals(entry.getKey())) {
                             logger.debug("New node addr_ip={} node_name={} host_id={} status={} timestamp={}", 
                                     NetworkAddress.format(entry.getKey()), dn.getId(), dn.getName(), entry.getValue().isAlive(), entry.getValue().getUpdateTimestamp());
                         }
@@ -313,16 +313,16 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             DiscoveryNode dn = clusterGroup.get(hostId);
             if (dn == null) {
                 Map<String, String> attrs = Maps.newHashMap();
-                attrs.put("data", "true");
-                attrs.put("master", "true");
-                attrs.put("data_center", localDc);
-                attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(addr));
+                attrs.put("node.data", "true");
+                attrs.put("node.master", "true");
+                attrs.put("node.attr.dc", localDc);
+                attrs.put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(addr));
 
                 InetAddress internal_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.INTERNAL_IP).value);
                 dn = new DiscoveryNode(buildNodeName(addr), 
                         hostId.toString(), 
                         new InetSocketTransportAddress(internal_address, publishPort()), 
-                        attrs, CASSANDRA_ROLES, version);
+                        attrs, CASSANDRA_ROLES, Version.CURRENT);
                 dn.status(status);
                 logger.debug("New node soure=updateNode internal_ip={} rpc_address={}, node_name={} host_id={} status={} timestamp={}", 
                         NetworkAddress.format(addr), NetworkAddress.format(internal_address), dn.getId(), dn.getName(), status, state.getUpdateTimestamp());
@@ -646,13 +646,13 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     @Override
     public DiscoveryNode localNode() {
-        return localNode;
+        return this.localNode;
     }
 
     
     @Override
     public String nodeDescription() {
-        return clusterName.value() + "/" + localNode.getId();
+        return clusterName.value() + "/" + this.localNode.getId();
     }
 
 
@@ -711,7 +711,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     @Override
     public DiscoverySettings getDiscoverySettings() {
-        return null;
+        return this.discoverySettings;
     }
 
     @Override

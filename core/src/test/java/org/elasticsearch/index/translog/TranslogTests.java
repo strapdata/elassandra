@@ -1695,7 +1695,7 @@ public class TranslogTests extends ESTestCase {
             };
             // if we have a LeakFS here we fail if not all resources are closed
             fail("should have been failed");
-        } catch (MockDirectoryWrapper.FakeIOException ex) {
+        } catch (Exception ex) {
             // all is well
         }
     }

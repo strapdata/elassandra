@@ -121,6 +121,11 @@ public class TaskExecutorTests extends ESTestCase {
         }
 
         public abstract void run();
+        
+        @Override
+        public boolean doPresistMetaData() {
+            return false;
+        }
     }
 
     class UpdateTask extends SourcePrioritizedRunnable {

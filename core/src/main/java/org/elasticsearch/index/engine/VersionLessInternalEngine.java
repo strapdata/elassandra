@@ -188,6 +188,9 @@ public class VersionLessInternalEngine extends Engine {
                 searcherManager.addListener(engineConfig.getRefreshListeners());
             }
             success = true;
+        } catch(Throwable t) {
+            logger.error("unexpected error",  t);
+            throw t;
         } finally {
             if (success == false) {
                 IOUtils.closeWhileHandlingException(writer, translog, manager, scheduler);
@@ -267,20 +270,22 @@ public class VersionLessInternalEngine extends Engine {
     }
 
     private Translog openTranslog(EngineConfig engineConfig, IndexWriter writer) throws IOException {
-        /*
+       
         final TranslogConfig translogConfig = engineConfig.getTranslogConfig();
         Translog.TranslogGeneration generation = null;
         if (openMode == EngineConfig.OpenMode.OPEN_INDEX_AND_TRANSLOG) {
             generation = loadTranslogIdFromCommit(writer);
             // We expect that this shard already exists, so it must already have an existing translog else something is badly wrong!
+            /*
             if (generation == null) {
                 throw new IllegalStateException("no translog generation present in commit data but translog is expected to exist");
             }
             if (generation != null && generation.translogUUID == null) {
                 throw new IndexFormatTooOldException("trasnlog", "translog has no generation nor a UUID - this might be an index from a previous version consider upgrading to N-1 first");
             }
+            */
         }
-        final Translog translog = new Translog(translogConfig, generation);
+        //final Translog translog = new Translog(translogConfig, generation);
         if (generation == null || generation.translogUUID == null) {
             assert openMode != EngineConfig.OpenMode.OPEN_INDEX_AND_TRANSLOG : "OpenMode must not be "
                 + EngineConfig.OpenMode.OPEN_INDEX_AND_TRANSLOG;
@@ -291,7 +296,7 @@ public class VersionLessInternalEngine extends Engine {
             }
             boolean success = false;
             try {
-                commitIndexWriter(writer, translog, openMode == EngineConfig.OpenMode.OPEN_INDEX_CREATE_TRANSLOG
+                commitIndexWriter(writer, null, openMode == EngineConfig.OpenMode.OPEN_INDEX_CREATE_TRANSLOG
                     ? writer.getCommitData().get(SYNC_COMMIT_ID) : null);
                 success = true;
             } finally {
@@ -300,8 +305,7 @@ public class VersionLessInternalEngine extends Engine {
                 }
             }
         }
-        */
-        return Translog.DUMMY_TRANSLOG;
+        return new Translog(translogConfig, null);
     }
 
     @Override
@@ -1574,14 +1578,14 @@ public class VersionLessInternalEngine extends Engine {
     private void commitIndexWriter(IndexWriter writer, Translog translog, String syncId) throws IOException {
         ensureCanFlush();
         try {
-            final Translog.TranslogGeneration translogGeneration = translog.getGeneration();
-            final String translogFileGeneration = Long.toString(translogGeneration.translogFileGeneration);
-            final String translogUUID = translogGeneration.translogUUID;
+            //final Translog.TranslogGeneration translogGeneration = translog.getGeneration();
+            //final String translogFileGeneration = Long.toString(translogGeneration.translogFileGeneration);
+            //final String translogUUID = translogGeneration.translogUUID;
 
             writer.setLiveCommitData(() -> {
                 final Map<String, String> commitData = new HashMap<>(4);
-                commitData.put(Translog.TRANSLOG_GENERATION_KEY, translogFileGeneration);
-                commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);
+                //commitData.put(Translog.TRANSLOG_GENERATION_KEY, translogFileGeneration);
+                //commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);
                 if (syncId != null) {
                     commitData.put(Engine.SYNC_COMMIT_ID, syncId);
                 }

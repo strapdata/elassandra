@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -39,6 +41,7 @@ import org.elasticsearch.test.TestSearchContext;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.IOException;
+import java.util.Collection;
 
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.containsString;
@@ -124,6 +127,16 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
 
                 @Override
                 public void rewrite(QueryShardContext context) throws IOException {
+                }
+
+                @Override
+                public Boolean tokenRangesBitsetCache() {
+                    return null;
+                }
+
+                @Override
+                public Collection<Range<Token>> tokenRanges() {
+                    return null;
                 }
             };
             @Override

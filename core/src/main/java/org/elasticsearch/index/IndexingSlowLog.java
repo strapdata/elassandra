@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index;
 
-import org.apache.logging.log4j.Logger;
+import org.apache.cassandra.service.StorageService;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.logging.DeprecationLogger;
@@ -32,6 +32,7 @@ import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.index.shard.IndexingOperationListener;
 import org.elasticsearch.index.shard.ShardId;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -54,7 +55,7 @@ public final class IndexingSlowLog implements IndexingOperationListener {
 
     private SlowLogLevel level;
 
-    private final Logger indexLogger;
+    private final ch.qos.logback.classic.Logger indexLogger;
 
     private static final String INDEX_INDEXING_SLOWLOG_PREFIX = "index.indexing.slowlog";
     public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_WARN_SETTING =
@@ -95,7 +96,8 @@ public final class IndexingSlowLog implements IndexingOperationListener {
             }, Property.Dynamic, Property.IndexScope);
 
     IndexingSlowLog(IndexSettings indexSettings) {
-        this.indexLogger = Loggers.getLogger(INDEX_INDEXING_SLOWLOG_PREFIX + ".index", indexSettings.getSettings());
+        //this.indexLogger = Loggers.getLogger(INDEX_INDEXING_SLOWLOG_PREFIX + ".index", indexSettings.getSettings());
+        this.indexLogger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(INDEX_INDEXING_SLOWLOG_PREFIX + ".index." + indexSettings.getIndex().getName());
         this.index = indexSettings.getIndex();
 
         indexSettings.getScopedSettings().addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING, this::setReformat);
@@ -125,7 +127,11 @@ public final class IndexingSlowLog implements IndexingOperationListener {
 
     private void setLevel(SlowLogLevel level) {
         this.level = level;
-        Loggers.setLevel(this.indexLogger, level.name());
+        try {
+            StorageService.instance.setLoggingLevel(this.indexLogger.getName(), level.toString());
+        } catch (Exception e) {
+        }
+        //Loggers.setLevel(this.indexLogger, level.name());
     }
 
     private void setWarnThreshold(TimeValue warnThreshold) {

@@ -21,7 +21,7 @@ package org.elasticsearch.discovery;
 
 import org.elassandra.discovery.CassandraDiscovery;
 import org.elasticsearch.Version;
-import org.elassandra.cluster.service.ClusterService;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.network.NetworkService;
@@ -86,7 +86,7 @@ public class DiscoveryModule {
         discoveryTypes.put("single-node", () -> new SingleNodeDiscovery(settings, clusterService));
         */
         discoveryTypes.put("cassandra",
-                () -> new CassandraDiscovery(settings, transportService, clusterService, Version.CURRENT));
+                () -> new CassandraDiscovery(settings, transportService, clusterService, namedWriteableRegistry));
             
         for (DiscoveryPlugin plugin : plugins) {
             plugin.getDiscoveryTypes(threadPool, transportService, namedWriteableRegistry,

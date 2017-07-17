@@ -34,7 +34,7 @@ import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elassandra.cluster.service.ClusterService;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Setting;
@@ -124,7 +124,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
         }
 
         // Add the not recovered as initial state block, we don't allow anything until
-        this.clusterService.addInitialStateBlock(STATE_NOT_RECOVERED_BLOCK);
+        //this.clusterService.addInitialStateBlock(STATE_NOT_RECOVERED_BLOCK);
     }
 
     public Gateway gateway() {

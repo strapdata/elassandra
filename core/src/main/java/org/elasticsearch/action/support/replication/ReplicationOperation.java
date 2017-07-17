@@ -111,6 +111,7 @@ public class ReplicationOperation<
         totalShards.incrementAndGet();
         pendingActions.incrementAndGet();
         primaryResult = primary.perform(request);
+        /*
         final ReplicaRequest replicaRequest = primaryResult.replicaRequest();
         if (replicaRequest != null) {
             assert replicaRequest.primaryTerm() > 0 : "replicaRequest doesn't have a primary term";
@@ -129,7 +130,7 @@ public class ReplicationOperation<
 
             performOnReplicas(replicaRequest, shards);
         }
-
+        */
         successfulShards.incrementAndGet();
         decPendingAndFinishIfNeeded();
     }

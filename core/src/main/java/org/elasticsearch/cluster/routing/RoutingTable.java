@@ -24,7 +24,6 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import com.google.common.collect.ImmutableMap;
 
-import org.elassandra.cluster.service.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.Diffable;
@@ -32,6 +31,7 @@ import org.elasticsearch.cluster.DiffableUtils;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -431,6 +431,10 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
     public static Builder builder() {
         return new Builder();
     }
+    
+    public static Builder builder(RoutingTable routingTable) {
+        return new Builder(routingTable);
+    }
 
     public static RoutingTable.Builder builder(ClusterService clusterService, ClusterState clusterState) {
         return new RoutingTable.Builder(clusterService, clusterState);
@@ -481,14 +485,14 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
             this(clusterService, clusterService.state());
         }
         
-        /*
+        
         public Builder(RoutingTable routingTable) {
             version = routingTable.version;
             for (IndexRoutingTable indexRoutingTable : routingTable) {
                 indicesRouting.put(indexRoutingTable.getIndex().getName(), indexRoutingTable);
             }
         }
-        */
+        
 
         /**
          * Build a RoutingTable according to clusterState (

@@ -46,3 +46,17 @@ html_docs
 backwards/
 eclipse-build
 
+# ignore build dirs
+benchmarks/bin/
+buildSrc/bin/
+client/client-benchmark-noop-api-plugin/bin/
+client/rest/bin/
+client/sniffer/bin/
+client/test/bin/
+client/transport/bin/
+docs/bin/
+modules/parent-join/bin/
+modules/percolator/bin/
+private/
+test/framework/bin/
+

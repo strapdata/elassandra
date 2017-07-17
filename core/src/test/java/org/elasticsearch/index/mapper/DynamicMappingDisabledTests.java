@@ -91,8 +91,8 @@ public class DynamicMappingDisabledTests extends ESSingleNodeTestCase {
         AutoCreateIndex autoCreateIndex = new AutoCreateIndex(settings, new ClusterSettings(settings,
                 ClusterSettings.BUILT_IN_CLUSTER_SETTINGS), indexNameExpressionResolver);
         UpdateHelper updateHelper = new UpdateHelper(settings, null);
-        TransportShardBulkAction shardBulkAction = new TransportShardBulkAction(settings, transportService, clusterService,
-                indicesService, threadPool, shardStateAction, null, updateHelper, actionFilters, indexNameExpressionResolver);
+        TransportShardBulkAction shardBulkAction = new TransportShardBulkAction(settings, transportService, (org.elasticsearch.cluster.service.ClusterService)clusterService,
+                indicesService, threadPool, null, updateHelper, actionFilters, indexNameExpressionResolver);
         transportBulkAction = new TransportBulkAction(settings, threadPool, transportService, clusterService,
                 null, shardBulkAction, null, actionFilters, indexNameExpressionResolver, autoCreateIndex, System::currentTimeMillis);
     }

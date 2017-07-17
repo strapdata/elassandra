@@ -46,12 +46,14 @@ import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData.Custom;
+import org.elasticsearch.cluster.metadata.IndexMetaData.State;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
+import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elassandra.cluster.service.ClusterService;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
@@ -468,7 +470,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                                     for (ObjectObjectCursor<String,MappingMetaData> cursor : indexMetaData.getMappings()) {
                                         MappingMetaData mappingMd = cursor.value;
                                         if (!mappingMd.type().equals(MapperService.DEFAULT_MAPPING)) {
-                                            clusterService.updateTableSchema(indicesService.indexService(indexMetaData.getIndex()), mappingMd);
+                                            clusterService.updateTableSchema(indicesService.indexService(indexMetaData.getIndex()).mapperService(), mappingMd);
                                         }
                                     }
                                 } else {
@@ -501,7 +503,14 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                             blocks.updateBlocks(indexMetaData);
 
                             //ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).metaData(newMetaData).build();
-                            ClusterState updatedState = ClusterState.builder(currentState).incrementVersion().blocks(blocks).metaData(newMetaData).build();
+                            ClusterState updatedState = ClusterState.builder(currentState).incrementVersion()
+                                    .blocks(blocks)
+                                    .metaData(newMetaData)
+                                    .build();
+                            if (request.state() == State.OPEN) {
+                                RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, updatedState);
+                                updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder.build()).build();
+                            }
                             /*
                             if (request.state() == State.OPEN) {
                                 RoutingTable.Builder routingTableBuilder = RoutingTable.builder(updatedState.routingTable())
