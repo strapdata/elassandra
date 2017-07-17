@@ -19,7 +19,7 @@
 
 task buildTar(type: Tar) {
   dependsOn createPluginsDir
-  baseName = 'elasticsearch'
+  baseName = 'elassandra'
   extension = 'tar.gz'
   with archivesFiles
   compression = Compression.GZIP

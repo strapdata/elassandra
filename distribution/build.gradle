@@ -147,7 +147,7 @@ configure(distributions) {
    *****************************************************************************/
   // note: the group must be correct before applying the nexus plugin, or it will capture the wrong value...
   project.group = "com.strapdata.elasticsearch.distribution.${project.name}"
-  project.archivesBaseName = 'elasticsearch'
+  project.archivesBaseName = 'elassandra'
 
   // TODO: the map needs to be an input of the tasks, so that when it changes, the task will re-run...
   /*****************************************************************************
@@ -179,19 +179,33 @@ configure(distributions) {
     }
 
     configFiles = copySpec {
-      from '../src/main/resources/config'
+      from '../src/main/resources/conf'
       MavenFilteringHack.filter(it, expansions)
     }
 
     binFiles = copySpec {
       // everything except windows files
-      from '../src/main/resources/bin'
+      from '../src/main/resources/bin2'
       exclude '*.bat'
       exclude '*.exe'
       eachFile { it.setMode(0755) }
       MavenFilteringHack.filter(it, expansions)
     }
 
+    pylibFiles = copySpec {
+      // everything except windows files
+      from '../../core/cassandra/pylib'
+      eachFile { it.setMode(0755) }
+      MavenFilteringHack.filter(it, expansions)
+    }
+    
+    sigarFiles = copySpec {
+      // everything except windows files
+      from '../../core/cassandra/lib/sigar-bin'
+      eachFile { it.setMode(0755) }
+      MavenFilteringHack.filter(it, expansions)
+    }
+    
     commonFiles = copySpec {
       from rootProject.projectDir
       include 'LICENSE.txt'
@@ -229,10 +243,20 @@ configure(distributions.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.n
     dir "${plugins}"
     dirMode 0755
   }
+  File data = new File(buildDir, 'data-hack/data')
+  task createDataDir(type: EmptyDirTask) {
+    dir "${data}"
+    dirMode 0755
+  }
+  File logs = new File(buildDir, 'logs-hack/logs')
+  task createLogsDir(type: EmptyDirTask) {
+    dir "${logs}"
+    dirMode 0755
+  }
   project.ext.archivesFiles = copySpec {
-    into("elasticsearch-${version}") {
+    into("elassandra-${version}") {
       with libFiles
-      into('config') {
+      into('conf') {
         dirMode 0750
         fileMode 0660
         with configFiles
@@ -240,7 +264,7 @@ configure(distributions.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.n
       into('bin') {
         with copySpec {
           with binFiles
-          from('../src/main/resources/bin') {
+          from('../src/main/resources/bin2') {
             include '*.bat'
             filter(FixCrLfFilter, eol: FixCrLfFilter.CrLf.newInstance('crlf'))
           }
@@ -252,12 +276,29 @@ configure(distributions.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.n
           dirMode 0755
           plugins.getParent()
         }
+        from {
+          dirMode 0755
+          data.getParent()
+        }
+        from {
+          dirMode 0755
+          logs.getParent()
+        }
+      }
+      into('pylib') {
+        with copySpec {
+           with pylibFiles
+        }
+      }
+      into('lib') {
+         into('sigar-bin') {
+           with copySpec {
+              with sigarFiles
+           }
+         }
       }
       with commonFiles
       with noticeFile
-      from('../src/main/resources') {
-        include 'bin/*.exe'
-      }
       if (project.name != 'integ-test-zip') {
         with modulesFiles
       } else {
