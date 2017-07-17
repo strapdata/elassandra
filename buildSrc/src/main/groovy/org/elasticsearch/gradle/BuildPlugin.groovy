@@ -264,12 +264,12 @@ class BuildPlugin implements Plugin<Project> {
                 // just a self contained test-fixture configuration, likely transitive and hellacious
                 return
             }
-            configuration.resolutionStrategy.failOnVersionConflict()
+            //configuration.resolutionStrategy.failOnVersionConflict()
         })
 
-        // force all dependencies added directly to compile/testCompile to be non-transitive, except for ES itself
+        // force all dependencies added directly to compile/testCompile to be non-transitive, except for ES itself and Cassandra
         Closure disableTransitiveDeps = { ModuleDependency dep ->
-            if (!(dep instanceof ProjectDependency) && dep.group.startsWith('com.strapdata.elasticsearch') == false) {
+            if (!(dep instanceof ProjectDependency) && dep.group.startsWith('com.strapdata') == false) {
                 dep.transitive = false
 
                 // also create a configuration just for this dependency version, so that later
@@ -501,12 +501,16 @@ class BuildPlugin implements Plugin<Project> {
             leaveTemporary true
 
             // TODO: why are we not passing maxmemory to junit4?
-            jvmArg '-Xmx' + System.getProperty('tests.heap.size', '512m')
-            jvmArg '-Xms' + System.getProperty('tests.heap.size', '512m')
+            jvmArg '-Xmx' + System.getProperty('tests.heap.size', '1512m')
+            jvmArg '-Xms' + System.getProperty('tests.heap.size', '1512m')
             jvmArg '-XX:+HeapDumpOnOutOfMemoryError'
             File heapdumpDir = new File(project.buildDir, 'heapdump')
             heapdumpDir.mkdirs()
             jvmArg '-XX:HeapDumpPath=' + heapdumpDir
+            
+            jvmArg '-Xdebug'
+            jvmArg '-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4242'
+                            
             argLine System.getProperty('tests.jvm.argline')
 
             // we use './temp' since this is per JVM and tests are forbidden from writing to CWD
@@ -515,7 +519,7 @@ class BuildPlugin implements Plugin<Project> {
             systemProperty 'tests.gradle', 'true'
             systemProperty 'tests.artifact', project.name
             systemProperty 'tests.task', path
-            systemProperty 'tests.security.manager', 'true'
+            systemProperty 'tests.security.manager', 'false'
             // Breaking change in JDK-9, revert to JDK-8 behavior for now, see https://github.com/elastic/elasticsearch/issues/21534
             systemProperty 'jdk.io.permissionsUseCanonicalPath', 'true'
             systemProperty 'jna.nosys', 'true'
@@ -530,6 +534,19 @@ class BuildPlugin implements Plugin<Project> {
                 }
             }
 
+            // cassandra settings
+            systemProperty 'cassandra.home', "${project.buildDir}/testrun/test/J0"
+            systemProperty 'cassandra.logdir', "${project.buildDir}/testrun/test/J0"
+            systemProperty 'logback.configurationFile', "${project.projectDir}/src/test/resources/conf/logback.xml"
+            systemProperty 'java.library.path', "${project.projectDir}/cassandra/lib/sigar-bin" 
+            systemProperty 'cassandra.config', "file://${project.projectDir}/src/test/resources/conf/cassandra.yaml"
+            systemProperty 'cassandra.config.dir', "${project.projectDir}/src/test/resources/conf"
+            systemProperty 'cassandra-rackdc.properties', "file://${project.projectDir}/src/test/resources/conf/cassandra-rackdc.properties"
+            systemProperty 'cassandra.config.loader', "org.elassandra.config.YamlTestConfigurationLoader"
+            systemProperty 'cassandra.storagedir', "${project.buildDir}/testrun/test/J0"
+            systemProperty 'es.synchronous_refresh', 'true'
+            systemProperty 'es.drop_on_delete_index', 'true'
+            
             boolean assertionsEnabled = Boolean.parseBoolean(System.getProperty('tests.asserts', 'true'))
             enableSystemAssertions assertionsEnabled
             enableAssertions assertionsEnabled
@@ -577,6 +594,10 @@ class BuildPlugin implements Plugin<Project> {
         test.configure(commonTestConfig(project))
         test.configure {
             include '**/*Tests.class'
+            exclude '**/MockNodeTests.class'
+            exclude '**/MockTcpTransportTests.class'
+            exclude '**/InternalTestCluster.class'
+            exclude '**/discovery/*.class'
         }
 
         // Add a method to create additional unit tests for a project, which will share the same
