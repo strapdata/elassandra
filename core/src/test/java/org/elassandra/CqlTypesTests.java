@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -166,16 +166,23 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
     public void testCompoundPkTypesTest() throws Exception {
         createIndex("ks2");
         ensureGreen("ks2");
-        
-        String[] types = new String[] { "text", "int","bigint","double","float","boolean","blob","timestamp","inet","uuid" };
-        Object[] values = new Object[] { "foo", 1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID() };
+        String[] types = new String[] {
+            "text","int","bigint","double","float",
+            "boolean","blob","timestamp","inet","uuid",
+            "text", "text", "text", "text"
+        };
+        Object[] values = new Object[] {
+            "foo",1,2L, new Double(3.14), new Float(3.14),
+            true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID(),
+            "San Francisco \\ DC", "'San Francisco'", "San \" Francisco", "San \n Francisco"
+        };
         int randomCk = randomInt(types.length-1);
         int randomVal= randomInt(types.length-1);
         for(int i=0; i < types.length; i++) {
             String type = types[i];
             System.out.println("insert pk type="+type);
-            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"CREATE TABLE ks2.t%s (pk%s %s, ck %s, v %s, PRIMARY KEY (pk%s,ck))", type, type, type, types[randomCk], types[randomVal], type));
-            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"INSERT INTO ks2.t%s (pk%s, ck, v) VALUES (?, ?, ?)", type, type), values[i], values[randomCk], values[randomVal]);
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"CREATE TABLE ks2.t%s%d (pk%s %s, ck %s, v %s, PRIMARY KEY (pk%s,ck))", type, i, type, type, types[randomCk], types[randomVal], type));
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"INSERT INTO ks2.t%s%d (pk%s, ck, v) VALUES (?, ?, ?)", type, i, type), values[i], values[randomCk], values[randomVal]);
         }
         
         // flush for rebuild_index
@@ -185,8 +192,8 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             System.out.println("discover pk type="+type);
             assertAcked(client().admin().indices()
                     .preparePutMapping("ks2")
-                    .setType(String.format(Locale.ROOT,"t%s",type))
-                    .setSource(String.format(Locale.ROOT,"{ \"t%s\" : { \"discover\" : \".*\" }}",type)).get());
+                    .setType(String.format(Locale.ROOT,"t%s%d",type, i))
+                    .setSource(String.format(Locale.ROOT,"{ \"t%s%d\" : { \"discover\" : \".*\" }}",type, i)).get());
         }
         
         // search
@@ -197,7 +204,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         
             assertThat(client().prepareSearch()
                     .setIndices("ks2")
-                    .setTypes(String.format(Locale.ROOT,"t%s",type))
+                    .setTypes(String.format(Locale.ROOT,"t%s%d",type, i))
                     .setQuery(QueryBuilders.queryStringQuery("*:*"))
                     .addFields("_id","_routing","_ttl","_timestamp","_source","ck","v")
                     .get().getHits().getTotalHits(), equalTo(1L));
@@ -275,7 +282,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .setSource("{ \"event_test\" : { \"discover\" : \".*\", "+
                         "\"dynamic_templates\": [ "+
                             "{ \"strings_template\": { "+
-                                "\"match\": \"strings.*\", "+ 
+                                "\"match\": \"strings.*\", "+
                                 "\"mapping\": { "+
                                     "\"type\": \"string\","+
                                     "\"doc_values\": true,"+
