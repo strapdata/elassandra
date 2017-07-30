@@ -12,6 +12,7 @@ Elassandra supports Cassandra vnodes and scale horizontally by adding more nodes
 
 Project documentation is available at [doc.elassandra.io](http://doc.elassandra.io).
 
+* **2017-07-30 Release 2.4.5.4 Elasticsearch 2.4.5 + Cassandra 3.11.0**
 * **2017-06-17 Release 2.4.5.2 Elasticsearch 2.4.5 + Cassandra 3.10**
 * **2017-05-22 Release 2.4.5.1 Elasticsearch 2.4.5 + Cassandra 3.0.13**
 * **2017-04-27 Release 2.4.2-13**

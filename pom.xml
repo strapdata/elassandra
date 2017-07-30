@@ -69,9 +69,9 @@
         <elasticsearch.s3.repository>s3://download.elasticsearch.org/elasticsearch/staging/</elasticsearch.s3.repository>
 
         <!-- Build resources properties -->
-        <elassandra.version>3</elassandra.version>
+        <elassandra.version>4</elassandra.version>
         <elassandra.license.header>${elasticsearch.tools.directory}/license-check/strapdata_license_header.txt</elassandra.license.header>
-        <cassandra.version>3.10</cassandra.version>
+        <cassandra.version>3.11.0</cassandra.version>
 
         <elasticsearch.tools.directory>${project.build.directory}/dev-tools</elasticsearch.tools.directory>
         <elasticsearch.license.header>${elasticsearch.tools.directory}/license-check/elasticsearch_license_header.txt</elasticsearch.license.header>

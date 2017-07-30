@@ -21,7 +21,7 @@ package org.elasticsearch.bootstrap;
 
 import java.nio.file.Path;
 
-import org.apache.cassandra.utils.CLibrary;
+import org.apache.cassandra.utils.NativeLibrary;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
 
@@ -55,7 +55,7 @@ final class Natives {
     */
     
     static void tryMlockall() {
-        logger.info("JNA loaded by cassandra, jnaAvailable="+CLibrary.jnaAvailable()+" jnaMemoryLockable="+CLibrary.jnaMemoryLockable());
+        logger.info("JNA loaded by cassandra, jnaAvailable="+NativeLibrary.isAvailable()+" jnaMemoryLockable="+NativeLibrary.jnaMemoryLockable());
         /*
          * Done by cassandra.
         if (!JNA_AVAILABLE) {
@@ -67,7 +67,7 @@ final class Natives {
     }
 
     static boolean definitelyRunningAsRoot() {
-        if (!CLibrary.jnaAvailable()) {
+        if (!NativeLibrary.isAvailable()) {
             logger.warn("cannot check if running as root because JNA is not available");
             return false;
         }
@@ -75,7 +75,7 @@ final class Natives {
     }
  
     static void tryVirtualLock() {
-        if (!CLibrary.jnaAvailable()) {
+        if (!NativeLibrary.isAvailable()) {
             logger.warn("cannot mlockall because JNA is not available");
             return;
         }
@@ -83,7 +83,7 @@ final class Natives {
     }
 
     static void addConsoleCtrlHandler(ConsoleCtrlHandler handler) {
-        if (!CLibrary.jnaAvailable()) {
+        if (!NativeLibrary.isAvailable()) {
             logger.warn("cannot register console handler because JNA is not available");
             return;
         }
@@ -91,11 +91,11 @@ final class Natives {
     }
 
     static boolean isMemoryLocked() {
-        return CLibrary.jnaMemoryLockable();
+        return NativeLibrary.jnaMemoryLockable();
     }
     
     static void trySeccomp(Path tmpFile) {
-        if (!CLibrary.jnaAvailable()) {
+        if (!NativeLibrary.isAvailable()) {
             logger.warn("cannot install syscall filters because JNA is not available");
             return;
         }
@@ -103,7 +103,7 @@ final class Natives {
     }
     
     static boolean isSeccompInstalled() {
-        if (!CLibrary.jnaAvailable()) {
+        if (!NativeLibrary.isAvailable()) {
             return false;
         }
         return JNANatives.LOCAL_SECCOMP;
