@@ -42,6 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 import org.apache.cassandra.config.CFMetaData;
@@ -98,6 +99,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.elassandra.ConcurrentMetaDataUpdateException;
 import org.elassandra.NoPersistedMetaDataException;
@@ -618,17 +620,24 @@ public class InternalCassandraClusterService extends InternalClusterService {
             return InetAddresses.toAddrString((InetAddress)o);
         return o;
     }
-    
+
+    private static org.codehaus.jackson.map.ObjectMapper mapper = new org.codehaus.jackson.map.ObjectMapper();
+
     // wrap string values with quotes
     private static String stringify(Object o) {
         Object v = toJsonValue(o);
-        return v instanceof String ?  "\""+v+"\"" : v.toString();
+        try {
+            return v instanceof String ? mapper.writeValueAsString(v) : v.toString();
+        } catch (IOException e) {
+            Loggers.getLogger(ClusterService.class).error("Unexpected json encoding error", e);
+            throw new RuntimeException(e);
+        }
     }
-    
+
     public static String stringify(Object[] cols, int length) {
         if (cols.length == 1)
             return toJsonValue(cols[0]).toString();
-        
+
         StringBuilder sb = new StringBuilder();
         sb.append("[");
         for(int i = 0; i < length; i++) {
@@ -636,7 +645,12 @@ public class InternalCassandraClusterService extends InternalClusterService {
                 sb.append(",");
             Object val = toJsonValue(cols[i]);
             if (val instanceof String) {
-                sb.append('"').append(val).append('"');
+                try {
+                    sb.append(mapper.writeValueAsString(val));
+                } catch (IOException e) {
+                    Loggers.getLogger(ClusterService.class).error("Unexpected json encoding error", e);
+                    throw new RuntimeException(e);
+                }
             } else {
                 sb.append(val);
             }

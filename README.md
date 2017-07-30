@@ -1,4 +1,4 @@
-# Elassandra
+# Elassandra [![Build Status](https://travis-ci.org/strapdata/elassandra.svg?branch=v2.4.5-strapdata)](https://travis-ci.org/strapdata/elassandra)
 
 Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run as a plugin for [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
