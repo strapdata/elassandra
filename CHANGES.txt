@@ -1,5 +1,6 @@
 2.4.5.4 - 2017-07-30
   * Upgrade to Cassandra 3.11.0
+  * Escape special characters in serialized primary keys #101
 
 2.4.5.2 - 2017-05-26
   * Upgrade to Elasticsearch 2.4.5 + Cassandra 3.10
