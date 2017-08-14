@@ -262,6 +262,7 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
         assertTrue(indexService.mapperService().allEnabled()); // this returns true if any of the types has _all enabled
     }
 
+    /*
      public void testPartitionedConstraints() {
         // partitioned index must have routing
          IllegalArgumentException noRoutingException = expectThrows(IllegalArgumentException.class, () -> {
@@ -294,7 +295,8 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                 .put("index.routing_partition_size", 2))
             .execute().actionGet().isAcknowledged());
     }
-
+    */
+    
     public void testForbidMultipleTypes() throws IOException {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject().string();
         MapperService mapperService = createIndex("test", Settings.builder().put("index.mapping.single_type", true).build()).mapperService();

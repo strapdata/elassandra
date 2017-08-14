@@ -839,7 +839,7 @@ public class ExceptionSerializationTests extends ESTestCase {
         ids.put(135, org.elasticsearch.index.mapper.StrictDynamicMappingException.class);
         ids.put(136, org.elasticsearch.action.support.replication.TransportReplicationAction.RetryOnReplicaException.class);
         ids.put(137, org.elasticsearch.indices.TypeMissingException.class);
-        ids.put(138, null);
+        ids.put(138, org.elasticsearch.index.engine.DeleteByQueryFailedEngineException.class);
         ids.put(139, null);
         ids.put(140, org.elasticsearch.discovery.Discovery.FailedToCommitClusterStateException.class);
         ids.put(141, org.elasticsearch.index.query.QueryShardException.class);

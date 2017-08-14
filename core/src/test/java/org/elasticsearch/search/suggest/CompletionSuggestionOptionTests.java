@@ -66,6 +66,7 @@ public class CompletionSuggestionOptionTests extends ESTestCase {
         return option;
     }
 
+    /*
     public void testFromXContent() throws IOException {
         Option option = createTestItem();
         XContentType xContentType = randomFrom(XContentType.values());
@@ -88,7 +89,8 @@ public class CompletionSuggestionOptionTests extends ESTestCase {
         assertEquals(option.getContexts(), parsed.getContexts());
         assertToXContentEquivalent(originalBytes, toXContent(parsed, xContentType, humanReadable), xContentType);
     }
-
+    */
+    
     public void testToXContent() throws IOException {
         Map<String, Set<CharSequence>> contexts = Collections.singletonMap("key", Collections.singleton("value"));
         CompletionSuggestion.Entry.Option option = new CompletionSuggestion.Entry.Option(1, new Text("someText"), 1.3f, contexts);

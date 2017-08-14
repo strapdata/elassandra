@@ -319,6 +319,7 @@ final class StoreRecovery {
                 store.failIfCorrupted();
                 try {
                     si = store.readLastCommittedSegmentsInfo();
+                    indexShouldExists = true;
                 } catch (Exception e) {
                     String files = "_unknown_";
                     try {

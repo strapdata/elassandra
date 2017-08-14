@@ -100,25 +100,18 @@ dependencies {
   compile 'com.google.guava:guava:19.0'
 
   // Elassandra add-ons
-  compile("com.strapdata.cassandra:cassandra-all:3.10") {
+  compile("com.strapdata.cassandra:cassandra-all:3.11.0") {
     exclude group:'net.java.dev.jna', module:'jna'
     exclude group:'io.netty'
   }
   // Elasticsearch require netty 4.1
-  compile "io.netty:netty-all:4.1.11.Final"
-
-  //compile "org.apache.commons:commons-lang3:3.4", optional
-  //compile "org.codehaus.jackson:jackson-core-asl:1.9.13", optional
-  //compile "org.codehaus.jackson:jackson-mapper-asl:1.9.13", optional
+  // https://github.com/netty/netty/issues/6855
+  compile "io.netty:netty-all:4.1.12.Final"
 
   // https://www.elastic.co/guide/en/elasticsearch/client/java-api/current/_using_another_logger.html
+  // log4j2 to slf4j to logback
   compile "org.apache.logging.log4j:log4j-to-slf4j:2.8.2"
   compile "org.slf4j:slf4j-api:1.7.25", optional
-  //compile "ch.qos.logback:logback-classic:1.1.8", optional
-  //compile "ch.qos.logback:logback-core:1.1.8", optional
-  //compile "io.dropwizard.metrics:metrics-core:3.1.0", optional
-  //compile "org.antlr:antlr:3.5.2", optional
-  //compile "org.antlr:antlr-runtime:3.5.2", optional
   compile "org.javassist:javassist:3.20.0-GA"
 }
 

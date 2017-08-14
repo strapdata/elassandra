@@ -201,7 +201,7 @@ public class VersionLessInternalEngine extends Engine {
                 }
             }
         }
-        logger.trace("created new InternalEngine");
+        logger.trace("created new VersionLessInternalEngine");
     }
 
     private void updateMaxUnsafeAutoIdTimestampFromWriter(IndexWriter writer) {
@@ -577,7 +577,8 @@ public class VersionLessInternalEngine extends Engine {
     private IndexingStrategy planIndexingAsPrimary(Index index) throws IOException {
         assert index.origin() == Operation.Origin.PRIMARY :
             "planing as primary but origin isn't. got " + index.origin();
-        final IndexingStrategy plan;
+        final IndexingStrategy plan = IndexingStrategy.overrideExistingAsIfNotThere(1L);
+        /*
         // resolve an external operation into an internal one which is safe to replay
         if (canOptimizeAddDocument(index)) {
             if (mayHaveBeenIndexedBefore(index)) {
@@ -609,6 +610,7 @@ public class VersionLessInternalEngine extends Engine {
                 );
             }
         }
+        */
         return plan;
     }
 
@@ -616,13 +618,13 @@ public class VersionLessInternalEngine extends Engine {
         throws IOException {
         assert plan.versionForIndexing >= 0 : "version must be set. got " + plan.versionForIndexing;
         assert plan.indexIntoLucene;
-        index.parsedDoc().version().setLongValue(plan.versionForIndexing);
+        //index.parsedDoc().version().setLongValue(plan.versionForIndexing);
         try {
             if (plan.useLuceneUpdateDocument) {
                 update(index.uid(), index.docs(), indexWriter);
             } else {
                 // document does not exists, we can optimize for create, but double check if assertions are running
-                assert assertDocDoesNotExist(index, canOptimizeAddDocument(index) == false);
+                // assert assertDocDoesNotExist(index, canOptimizeAddDocument(index) == false);
                 index(index.docs(), indexWriter);
             }
             //versionMap.putUnderLock(index.uid().bytes(), new VersionValue(plan.versionForIndexing));
@@ -829,6 +831,7 @@ public class VersionLessInternalEngine extends Engine {
     private DeletionStrategy planDeletionAsPrimary(Delete delete) throws IOException {
         assert delete.origin() == Operation.Origin.PRIMARY : "planing as primary but got "
             + delete.origin();
+        /*
         // resolve operation from external to internal
         final VersionValue versionValue = resolveDocVersion(delete);
         assert incrementVersionLookup();
@@ -850,6 +853,8 @@ public class VersionLessInternalEngine extends Engine {
             plan = DeletionStrategy.processNormally(currentlyDeleted, delete.versionType().updateVersion(currentVersion, delete.version()));
         }
         return plan;
+        */
+        return DeletionStrategy.processNormally(false, 1L);
     }
 
     private DeleteResult deleteInLucene(Delete delete, DeletionStrategy plan)

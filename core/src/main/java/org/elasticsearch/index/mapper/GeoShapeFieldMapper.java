@@ -432,11 +432,14 @@ public class GeoShapeFieldMapper extends FieldMapper {
         
         @Override
         public Object cqlValue(Object value) {
-            try {
-                return XContentFactory.jsonBuilder().map((Map)value).string();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+            if (value instanceof Map) {
+                try {
+                    return XContentFactory.jsonBuilder().map((Map)value).string();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
             }
+            return value;
         }
     }
 

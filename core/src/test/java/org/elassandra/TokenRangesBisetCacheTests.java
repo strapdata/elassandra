@@ -38,7 +38,6 @@ import org.junit.Test;
  * @author vroyer
  *
  */
-//mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.TokenRangesBisetCacheTests -Des.logger.lel=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
 public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
     static long N = 11000; // start query caching at 10k
     
@@ -79,6 +78,7 @@ public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
             .get().getHits().getTotalHits();
         
         long upper = client().prepareSearch().setIndices("test").setTypes("t1")
+                .setQuery(QueryBuilders.matchAllQuery())
                 .setQuery(QueryBuilders.rangeQuery("b").from(0).to(Long.MAX_VALUE))
                 .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(0), new LongToken(Long.MAX_VALUE-1))))
                 .get().getHits().getTotalHits();

@@ -464,6 +464,7 @@ public class AllFieldMapperTests extends ESSingleNodeTestCase {
 
     }
 
+    /* TODO:
     public void testAutoBoost() throws Exception {
         for (boolean boost : new boolean[] {false, true}) {
             String index = "test_" + boost;
@@ -481,7 +482,8 @@ public class AllFieldMapperTests extends ESSingleNodeTestCase {
             }
         }
     }
-
+    */
+    
     public void testIncludeInObjectNotAllowed() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject()
             .startObject("type").endObject().endObject().string();

@@ -83,7 +83,6 @@ import org.elasticsearch.discovery.DiscoveryModule;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.gateway.GatewayModule;
-import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.gateway.MetaStateService;
 import org.elasticsearch.http.HttpServerTransport;
 import org.elasticsearch.index.analysis.AnalysisRegistry;
@@ -94,7 +93,6 @@ import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.indices.breaker.HierarchyCircuitBreakerService;
 import org.elasticsearch.indices.breaker.NoneCircuitBreakerService;
 import org.elasticsearch.indices.cluster.IndicesClusterStateService;
-import org.elasticsearch.indices.flush.SyncedFlushService;
 import org.elasticsearch.indices.recovery.PeerRecoverySourceService;
 import org.elasticsearch.indices.recovery.PeerRecoveryTargetService;
 import org.elasticsearch.indices.recovery.RecoverySettings;
@@ -242,6 +240,10 @@ public class Node implements Closeable {
         this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null));
     }
 
+    public Node(Settings preparedSettings, Collection<Class<? extends Plugin>> classpathPlugins) {
+        this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), classpathPlugins);
+    }
+    
     public Node(Environment environment) {
         this(environment, Collections.emptyList());
     }
@@ -415,7 +417,8 @@ public class Node implements Closeable {
                 clusterModule.getIndexNameExpressionResolver(), indicesModule.getMapperRegistry(), namedWriteableRegistry,
                 threadPool, settingsModule.getIndexScopedSettings(), circuitBreakerService, bigArrays, scriptModule.getScriptService(),
                 clusterService, client, metaStateService);
-
+            clusterService.setMetaStateService(metaStateService);
+            
             Collection<Object> pluginComponents = pluginsService.filterPlugins(Plugin.class).stream()
                 .flatMap(p -> p.createComponents(client, clusterService, threadPool, resourceWatcherService,
                                                  scriptModule.getScriptService(), xContentRegistry).stream())
@@ -850,7 +853,7 @@ public class Node implements Closeable {
         injector.getInstance(ClusterService.class).stop();
         injector.getInstance(NodeConnectionsService.class).stop();
         injector.getInstance(MonitorService.class).stop();
-        injector.getInstance(GatewayService.class).stop();
+        injector.getInstance(CassandraGatewayService.class).stop();
         injector.getInstance(SearchService.class).stop();
         injector.getInstance(TransportService.class).stop();
 
@@ -910,7 +913,7 @@ public class Node implements Closeable {
         toClose.add(() -> stopWatch.stop().start("monitor"));
         toClose.add(injector.getInstance(MonitorService.class));
         toClose.add(() -> stopWatch.stop().start("gateway"));
-        toClose.add(injector.getInstance(GatewayService.class));
+        toClose.add(injector.getInstance(CassandraGatewayService.class));
         toClose.add(() -> stopWatch.stop().start("search"));
         toClose.add(injector.getInstance(SearchService.class));
         toClose.add(() -> stopWatch.stop().start("transport"));

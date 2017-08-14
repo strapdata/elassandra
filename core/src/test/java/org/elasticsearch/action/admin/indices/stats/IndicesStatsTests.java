@@ -113,11 +113,13 @@ public class IndicesStatsTests extends ESSingleNodeTestCase {
             assertNotNull(commitStats);
             assertThat(commitStats.getGeneration(), greaterThan(0L));
             assertThat(commitStats.getId(), notNullValue());
-            assertThat(commitStats.getUserData(), hasKey(Translog.TRANSLOG_GENERATION_KEY));
-            assertThat(commitStats.getUserData(), hasKey(Translog.TRANSLOG_UUID_KEY));
+            //assertThat(commitStats.getUserData(), hasKey(Translog.TRANSLOG_GENERATION_KEY));
+            //assertThat(commitStats.getUserData(), hasKey(Translog.TRANSLOG_UUID_KEY));
         }
     }
 
+    /*
+    // Refresh Listener not supported by Elassandra.
     public void testRefreshListeners() throws Exception {
         // Create an index without automatic refreshes
         createIndex("test", Settings.builder().put("refresh_interval", -1).build());
@@ -153,7 +155,9 @@ public class IndicesStatsTests extends ESSingleNodeTestCase {
         assertEquals(1, common.docs.getCount());
         assertEquals(0, common.refresh.getListeners());
     }
+    */
 
+    
     /**
      * Gives access to package private IndicesStatsResponse constructor for test purpose.
      **/

@@ -281,6 +281,12 @@ public class IpFieldMapper extends FieldMapper {
             if (value == null) {
                 return null;
             }
+            if (value instanceof String) {
+                return value;
+            }
+            if (value instanceof InetAddress) {
+                return NetworkAddress.format((InetAddress)value);
+            }
             return DocValueFormat.IP.format((BytesRef) value);
         }
         
@@ -289,7 +295,10 @@ public class IpFieldMapper extends FieldMapper {
             if (value == null) {
                 return null;
             }
-            return com.google.common.net.InetAddresses.forString(DocValueFormat.IP.format((BytesRef) value));
+            if (value instanceof String) {
+                return com.google.common.net.InetAddresses.forString((String)value);
+            }
+            return value;
         }
 
         @Override
@@ -418,6 +427,7 @@ public class IpFieldMapper extends FieldMapper {
         if (fieldType().hasDocValues()) {
             context.doc().add(new SortedSetDocValuesField(fieldType().name(), new BytesRef(InetAddressPoint.encode(address))));
         }
+        super.createField(context, object); // for multi fields.
     }
     
     @Override

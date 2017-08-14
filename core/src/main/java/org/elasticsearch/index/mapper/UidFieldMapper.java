@@ -230,7 +230,6 @@ public class UidFieldMapper extends MetadataFieldMapper {
     public void createField(ParseContext context, Object object) throws IOException {
         Uid value = (Uid)object;
         Field uid = new Field(NAME, value.toString(), fieldType);
-        //context.uid(uid);
         context.doc().add(uid);
     }
 

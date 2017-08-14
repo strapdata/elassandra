@@ -374,7 +374,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
             } catch (NullPointerException | java.lang.AssertionError e) {
                 // thrown by cassandra when the keyspace is not yet create locally. 
                 // We must wait for a gossip schema change to update the routing Table.
-                Loggers.getLogger(getClass().getName()).warn("Keyspace {} not available", e, this.index);
+                Loggers.getLogger(getClass().getName()).warn("Keyspace not available: {}", e, this.index);
             }
         }
         

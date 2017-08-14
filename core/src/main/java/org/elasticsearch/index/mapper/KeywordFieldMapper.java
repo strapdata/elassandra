@@ -262,26 +262,11 @@ public final class KeywordFieldMapper extends FieldMapper {
         }
 
         @Override
-        public Object valueForDisplay(Object value) {
-            if (value == null) {
-                return null;
-            }
-            // keywords are internally stored as utf8 bytes
-            BytesRef binaryValue = (BytesRef) value;
-            return binaryValue.utf8ToString();
-        }
-
-        @Override
         public Object cqlValue(Object value) {
             if (value == null) {
                 return null;
             }
-            if (value instanceof UUID)
-                return value;
-
-            // keywords are internally stored as utf8 bytes
-            BytesRef binaryValue = (BytesRef) value;
-            return binaryValue.utf8ToString();
+            return value.toString();
         }
         
         @Override

@@ -61,8 +61,8 @@ public final class ShardPath {
         return path.resolve(TRANSLOG_FOLDER_NAME);
     }
 
-    // default index path    = data/elasticsearch.data/<cluster_name>/nodes/0/indices/<index_name>/0
-    // default snapshot path = data/elasticsearch.data/<cluster_name>/nodes/0/snapshots/<index_name>
+    // default index path    = data/elasticsearch.data/<cluster_name>/nodes/0/indices/<index_uuid>/0
+    // default snapshot path = data/elasticsearch.data/<cluster_name>/nodes/0/snapshots/<index_uuid>
     public Path resolveSnapshot() {
         return path.getParent().getParent().resolveSibling(SNAPSHOT_FOLDER_NAME);
     }

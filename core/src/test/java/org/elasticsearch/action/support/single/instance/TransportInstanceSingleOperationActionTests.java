@@ -190,6 +190,7 @@ public class TransportInstanceSingleOperationActionTests extends ESTestCase {
         }
     }
 
+    /*
     public void testBasicRequestWorks() throws InterruptedException, ExecutionException, TimeoutException {
         Request request = new Request().index("test");
         request.shardId = new ShardId("test", "_na_", 0);
@@ -322,4 +323,5 @@ public class TransportInstanceSingleOperationActionTests extends ESTestCase {
             }
         }
     }
+    */
 }

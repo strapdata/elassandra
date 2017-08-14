@@ -26,7 +26,6 @@ import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.IOUtils;
 import org.elassandra.index.search.TokenRangesBitsetFilterCache;
-import org.elassandra.index.search.TokenRangesService;
 import org.elassandra.search.SearchProcessorFactory;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -97,7 +96,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private final IndexEventListener eventListener;
     private final IndexFieldDataService indexFieldData;
     private final BitsetFilterCache bitsetFilterCache;
-    private final TokenRangesBitsetFilterCache tokenRangesBitsetFilterCache;
+    protected final TokenRangesBitsetFilterCache tokenRangesBitsetFilterCache;
     private final NodeEnvironment nodeEnv;
     private final ShardStoreDeleter shardStoreDeleter;
     private final IndexStore indexStore;
@@ -164,12 +163,15 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         this.indexStore = indexStore;
         indexFieldData.setListener(new FieldDataCacheListener(this));
         this.bitsetFilterCache = new BitsetFilterCache(indexSettings, new BitsetCacheListener(this));
+        
         this.tokenRangesBitsetFilterCache = new TokenRangesBitsetFilterCache(indexSettings, clusterService.tokenRangesService());
+        this.tokenRangesBitsetFilterCache.setListener(new TokenRangeBitsetCacheListener(this));
         this.searchProcessorFactory = searchProcessorFactory;
         
-        this.warmer = new IndexWarmer(indexSettings.getSettings(), threadPool,
-            bitsetFilterCache.createListener(threadPool));
+        this.warmer = new IndexWarmer(indexSettings.getSettings(), threadPool, bitsetFilterCache.createListener(threadPool));
         this.indexCache = new IndexCache(indexSettings, queryCache, bitsetFilterCache);
+        this.indexCache.tokenRangeBitsetFilterCache(this.tokenRangesBitsetFilterCache);
+        
         this.engineFactory = engineFactory;
         // initialize this last -- otherwise if the wrapper requires any other member to be non-null we fail with an NPE
         this.searcherWrapper = wrapperFactory.newWrapper(this);
@@ -258,7 +260,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
                     }
                 }
             } finally {
-                IOUtils.close(bitsetFilterCache, indexCache, indexFieldData, mapperService, refreshTask, fsyncTask);
+                IOUtils.close(bitsetFilterCache, tokenRangesBitsetFilterCache, indexCache, indexFieldData, mapperService, refreshTask, fsyncTask);
             }
         }
     }
@@ -584,6 +586,36 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         }
     }
 
+    private static final class TokenRangeBitsetCacheListener implements TokenRangesBitsetFilterCache.Listener {
+        final IndexService indexService;
+
+        private TokenRangeBitsetCacheListener(IndexService indexService) {
+            this.indexService = indexService;
+        }
+
+        @Override
+        public void onCache(ShardId shardId, Accountable accountable) {
+            if (shardId != null) {
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+                if (shard != null) {
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
+                    shard.tokenRangesBitsetFilterCache().onCached(ramBytesUsed);
+                }
+            }
+        }
+
+        @Override
+        public void onRemoval(ShardId shardId, Accountable accountable) {
+            if (shardId != null) {
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+                if (shard != null) {
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
+                    shard.tokenRangesBitsetFilterCache().onRemoval(ramBytesUsed);
+                }
+            }
+        }
+    }
+    
     private final class FieldDataCacheListener implements IndexFieldDataCache.Listener {
         final IndexService indexService;
 

@@ -48,9 +48,9 @@ import java.util.function.Supplier;
 public class DiscoveryModule {
 
     public static final Setting<String> DISCOVERY_TYPE_SETTING =
-        new Setting<>("discovery.type", "zen", Function.identity(), Property.NodeScope);
+        new Setting<>("discovery.type", "cassandra", Function.identity(), Property.NodeScope);
     public static final Setting<Optional<String>> DISCOVERY_HOSTS_PROVIDER_SETTING =
-        new Setting<>("discovery.zen.hosts_provider", (String)null, Optional::ofNullable, Property.NodeScope);
+        new Setting<>("discovery.cassandra.hosts_provider", (String)null, Optional::ofNullable, Property.NodeScope);
 
     private final Discovery discovery;
 

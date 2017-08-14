@@ -56,7 +56,7 @@ public class Gateway extends AbstractComponent implements ClusterStateApplier {
              */
             metadata = clusterService.readMetaDataAsComment();
         } catch (NoPersistedMetaDataException |ActionRequestValidationException e) {
-            logger.trace("Failed to read metadata from table comment", e);
+            logger.trace("Cannot read metadata from table comment", e);
             metadata = clusterService.state().metaData();
             if (metadata.clusterUUID().equals("_na_")) {
                 metadata = MetaData.builder(metadata).clusterUUID(clusterService.localNode().getId()).build();

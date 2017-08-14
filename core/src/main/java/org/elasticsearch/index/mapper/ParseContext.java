@@ -553,6 +553,14 @@ public abstract class ParseContext {
 
     public abstract void version(Field version);
 
+    public String type() {
+        return this.sourceToParse().type();
+    }
+    
+    public String id() {
+        return this.sourceToParse().id();
+    }
+    
     public final boolean includeInAll(Boolean includeInAll, FieldMapper mapper) {
         return includeInAll(includeInAll, mapper.fieldType().indexOptions() != IndexOptions.NONE);
     }

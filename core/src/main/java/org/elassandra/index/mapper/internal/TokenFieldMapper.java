@@ -15,6 +15,8 @@
  */
 package org.elassandra.index.mapper.internal;
 
+import org.apache.lucene.document.LongPoint;
+import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
@@ -128,6 +130,11 @@ public class TokenFieldMapper extends MetadataFieldMapper {
         public TokenFieldType clone() {
             return new TokenFieldType(this);
         }
+        
+        @Override
+        public String name() {
+            return NAME;
+        }
     }
 
     private EnabledAttributeMapper enabledState;
@@ -155,12 +162,12 @@ public class TokenFieldMapper extends MetadataFieldMapper {
         super.parse(context);
     }
 
-    
     @Override
     public void createField(ParseContext context, Object object) throws IOException {
         Long token = (Long) object;
         if (token != null) {
-            context.doc().add(new LegacyLongFieldMapper.CustomLongNumericField(token, fieldType()));
+            context.doc().add(new LongPoint(TokenFieldMapper.NAME, token));
+            context.doc().add(new SortedNumericDocValuesField(TokenFieldMapper.NAME, token)); 
         }
     }
     
@@ -169,7 +176,8 @@ public class TokenFieldMapper extends MetadataFieldMapper {
         if (context.sourceToParse().token() != null) {
             Long token = context.sourceToParse().token();
             if (token != null) {
-                fields.add(new LegacyLongFieldMapper.CustomLongNumericField(token, fieldType()));
+                fields.add(new LongPoint( TokenFieldMapper.NAME, token));
+                fields.add(new SortedNumericDocValuesField(TokenFieldMapper.NAME, token)); 
             }
         }
     }

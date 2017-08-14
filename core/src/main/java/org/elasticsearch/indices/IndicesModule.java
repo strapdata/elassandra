@@ -19,6 +19,8 @@
 
 package org.elasticsearch.indices;
 
+import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.action.admin.indices.rollover.Condition;
 import org.elasticsearch.action.admin.indices.rollover.MaxAgeCondition;
 import org.elasticsearch.action.admin.indices.rollover.MaxDocsCondition;
@@ -145,6 +147,8 @@ public class IndicesModule extends AbstractModule {
         metadataMappers.put(TTLFieldMapper.NAME, new TTLFieldMapper.TypeParser());
         metadataMappers.put(VersionFieldMapper.NAME, new VersionFieldMapper.TypeParser());
         metadataMappers.put(ParentFieldMapper.NAME, new ParentFieldMapper.TypeParser());
+        metadataMappers.put(TokenFieldMapper.NAME, new TokenFieldMapper.TypeParser());
+        metadataMappers.put(NodeFieldMapper.NAME, new NodeFieldMapper.TypeParser());
         // _field_names is not registered here, see below
 
         for (MapperPlugin mapperPlugin : mapperPlugins) {

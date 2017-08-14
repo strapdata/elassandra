@@ -43,6 +43,7 @@ public class LoggingListenerTests extends ESTestCase {
         loggingListener.testRunStarted(description);
     }
 
+    /*
     public void testCustomLevelPerMethod() throws Exception {
         LoggingListener loggingListener = new LoggingListener();
 
@@ -120,6 +121,7 @@ public class LoggingListenerTests extends ESTestCase {
         assertThat(fooBarLogger.getLevel(), equalTo(level));
     }
 
+    
     public void testCustomLevelPerClassAndPerMethod() throws Exception {
         LoggingListener loggingListener = new LoggingListener();
 
@@ -162,7 +164,8 @@ public class LoggingListenerTests extends ESTestCase {
         assertThat(xyzLogger.getLevel(), equalTo(level));
         assertThat(abcLogger.getLevel(), equalTo(level));
     }
-
+    */
+    
     public void testInvalidClassTestLoggingAnnotation() throws Exception {
         final LoggingListener loggingListener = new LoggingListener();
 

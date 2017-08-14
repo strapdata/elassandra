@@ -67,11 +67,6 @@ public class CassandraShardStateListener extends AbstractComponent implements In
                 }
 
                 @Override
-                public boolean doPresistMetaData() {
-                    return false;
-                }
-
-                @Override
                 public void onFailure(String source, Exception e) {
                     logger.error("unexpected failure during [{}]", e, source);
                 }

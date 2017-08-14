@@ -297,10 +297,10 @@ public class ParentFieldMapper extends MetadataFieldMapper {
     @Override
     public void createField(ParseContext context, Object value) throws IOException {
         String parentId = (String) value;
-        boolean parent = context.docMapper().isParent(context.sourceToParse().type());
+        boolean parent = context.docMapper().isParent(context.type());
         if (parent) {
             //addJoinFieldIfNeeded(context, parentJoinFieldType, context.id());
-            context.doc().add(new SortedDocValuesField(parentJoinField.fieldType().name(), new BytesRef(context.sourceToParse().id())));
+            context.doc().add(new SortedDocValuesField(parentJoinField.fieldType().name(), new BytesRef(context.id())));
         }
 
         if (!active()) {

@@ -442,7 +442,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                         true, 
                         ShardRoutingState.STARTED, 
                         null,
-                        null,
+                        IndexRoutingTable.UNASSIGNED_INFO_INDEX_CREATED,
                         ShardRouting.DUMMY_ALLOCATION_ID,
                         ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE, 
                         AbstractSearchStrategy.EMPTY_RANGE_TOKEN_LIST);
@@ -705,7 +705,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     
     public Engine.GetResult get(String type, String id) throws IOException {
         readAllowed();
-        return clusterService.fetchSourceInternal(this.indexService, type, id, this.mapperService.documentMapper(type).getColumnDefinitions());
+        return clusterService.fetchSourceInternal(this.indexService, type, id, this.mapperService.documentMapper(type).getColumnDefinitions(), (timeElapsed) -> refreshMetric.inc(timeElapsed));
     }
     
     
@@ -1092,7 +1092,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
             translogStats.totalOperations(0);
             translogStats.totalOperationsOnStart(0);
         }
-        internalPerformTranslogRecovery(false, indexExists, IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP);
+        internalPerformTranslogRecovery(true, indexExists, IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP);
         assert recoveryState.getStage() == RecoveryState.Stage.TRANSLOG : "TRANSLOG stage expected but was: " + recoveryState.getStage();
     }
 

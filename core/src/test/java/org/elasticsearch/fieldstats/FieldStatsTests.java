@@ -605,7 +605,7 @@ public class FieldStatsTests extends ESSingleNodeTestCase {
 
     public void testMetaFieldsNotIndexed() {
         createIndex("test", Settings.EMPTY);
-        client().prepareIndex("test", "type").setSource().get();
+        client().prepareIndex("test", "type").setSource("{ \"foo\":\"bar\" }").get();
         client().admin().indices().prepareRefresh().get();
 
         FieldStatsResponse response = client().prepareFieldStats()

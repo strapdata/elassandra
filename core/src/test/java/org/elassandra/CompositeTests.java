@@ -45,10 +45,10 @@ public class CompositeTests extends ESSingleNodeTestCase {
             .startObject()
                 .startObject("properties")
                     .startObject("id").field("type", "integer").field("cql_collection", "singleton").field("index", "no").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
-                    .startObject("surname").field("type", "string").field("cql_collection", "singleton").field("index", "analyzed").field("cql_primary_key_order", 1).field("cql_partition_key", true).endObject()
-                    .startObject("name").field("type", "string").field("cql_collection", "singleton").field("index", "analyzed").field("cql_primary_key_order", 2).endObject()
-                    .startObject("phonetic_name").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_static_column", true).endObject()
-                    .startObject("nicks").field("type", "string").field("cql_collection", "list").field("index", "analyzed").endObject()
+                    .startObject("surname").field("type", "text").field("cql_collection", "singleton").field("cql_primary_key_order", 1).field("cql_partition_key", true).endObject()
+                    .startObject("name").field("type", "text").field("cql_collection", "singleton").field("cql_primary_key_order", 2).endObject()
+                    .startObject("phonetic_name").field("type", "text").field("cql_collection", "singleton").field("cql_static_column", true).endObject()
+                    .startObject("nicks").field("type", "text").field("cql_collection", "list").endObject()
                 .endObject()
             .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").setSettings(Settings.builder().put("index.token_ranges_bitset_cache",false).build()).addMapping("t2", mapping));
@@ -136,10 +136,12 @@ public class CompositeTests extends ESSingleNodeTestCase {
         assertThat(client().prepareMultiGet().add("composite", "t13", "[\"a\",\"b3\",2]", "[\"a\",\"b3\",3]").get().getResponses()[0].getIndex(), equalTo("composite")  );
         
         // delete with partition key
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
         process(ConsistencyLevel.ONE,"DELETE FROM composite.t1 WHERE a='a'");
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("c:*")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("c:2")).get().getHits().getTotalHits(), equalTo(1L));
         
         // delete with primary key
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
         process(ConsistencyLevel.ONE,"DELETE FROM composite.t2 WHERE a='a' AND b='b2' AND c=2");
         assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(1L));
         
@@ -157,6 +159,8 @@ public class CompositeTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',3,3)");
         process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',4,4)");
         assertAcked(client().admin().indices().prepareOpen("composite").get());
+        ensureGreen("composite");
+        
         assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(0L));
         
         StorageService.instance.forceKeyspaceFlush("composite", "t3");
@@ -222,12 +226,12 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         XContentBuilder mapping = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
-                        .startObject("m").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("m").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
                         .startObject("t").field("type", "date").field("cql_collection", "singleton").field("cql_primary_key_order", 1).endObject()
                         .startObject("v").field("type", "double").field("cql_collection", "singleton").endObject()
                         .startObject("meta").field("type", "nested").field("cql_collection", "singleton").field("cql_struct", "map").field("cql_static_column", true).field("include_in_parent", true)
                             .startObject("properties")
-                                .startObject("region").field("type", "string").field("index", "analyzed").endObject()
+                                .startObject("region").field("type", "text").endObject()
                             .endObject()
                         .endObject()
                     .endObject()
@@ -266,12 +270,12 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         XContentBuilder mapping = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
-                        .startObject("m").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("m").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
                         .startObject("t").field("type", "date").field("cql_collection", "singleton").field("cql_primary_key_order", 1).endObject()
                         .startObject("v").field("type", "double").field("cql_collection", "singleton").endObject()
                         .startObject("meta").field("type", "nested").field("cql_collection", "singleton").field("cql_struct", "map").field("cql_static_column", true).field("include_in_parent", true)
                             .startObject("properties")
-                                .startObject("region").field("type", "string").field("index", "analyzed").endObject()
+                                .startObject("region").field("type", "text").endObject()
                             .endObject()
                         .endObject()
                     .endObject()
@@ -303,12 +307,12 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         XContentBuilder mapping = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
-                        .startObject("m").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("m").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
                         .startObject("t").field("type", "date").field("cql_collection", "singleton").field("cql_primary_key_order", 1).endObject()
                         .startObject("v").field("type", "double").field("cql_collection", "singleton").endObject()
                         .startObject("meta").field("type", "nested").field("cql_collection", "singleton").field("cql_struct", "map").field("cql_static_column", true).field("include_in_parent", true)
                             .startObject("properties")
-                                .startObject("region").field("type", "string").field("index", "analyzed").endObject()
+                                .startObject("region").field("type", "text").endObject()
                             .endObject()
                         .endObject()
                     .endObject()

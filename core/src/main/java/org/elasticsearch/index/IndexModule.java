@@ -20,7 +20,9 @@
 package org.elasticsearch.index;
 
 import org.apache.lucene.util.SetOnce;
+import org.elassandra.index.search.TokenRangesSearcherWrapper;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Setting;
@@ -329,8 +331,19 @@ public final class IndexModule {
             ClusterService clusterService, Client client, IndicesQueryCache indicesQueryCache, MapperRegistry mapperRegistry,
             IndicesFieldDataCache indicesFieldDataCache) throws IOException {
         final IndexEventListener eventListener = freeze();
-        IndexSearcherWrapperFactory searcherWrapperFactory = indexSearcherWrapper.get() == null
-            ? (shard) -> null : indexSearcherWrapper.get();
+        
+        IndexSearcherWrapperFactory searcherWrapperFactory;
+        if (indexSearcherWrapper.get() == null) {
+            searcherWrapperFactory = (this.indexSettings.getValue(IndexMetaData.INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING)) ? 
+                    new IndexSearcherWrapperFactory() {
+                        public IndexSearcherWrapper newWrapper(IndexService indexService) {
+                            return new TokenRangesSearcherWrapper(indexService.tokenRangesBitsetFilterCache, clusterService.tokenRangesService());
+                        }
+                    } : (shard) -> null;
+        } else {
+            searcherWrapperFactory = indexSearcherWrapper.get();
+        }
+        
         eventListener.beforeIndexCreated(indexSettings.getIndex(), indexSettings.getSettings());
         final String storeType = indexSettings.getValue(INDEX_STORE_TYPE_SETTING);
         final IndexStore store;
@@ -360,7 +373,8 @@ public final class IndexModule {
         } else {
             queryCache = new DisabledQueryCache(indexSettings);
         }
-        engineFactory.set(new VersionLessInternalEngineFactory());
+        if (engineFactory.get() == null)
+            engineFactory.set(new VersionLessInternalEngineFactory());
         return new IndexService(indexSettings, environment, xContentRegistry, new SimilarityService(indexSettings, similarities),
                 shardStoreDeleter, analysisRegistry, engineFactory.get(), circuitBreakerService, bigArrays, threadPool, scriptService,
                 clusterService, client, queryCache, store, eventListener, searcherWrapperFactory, mapperRegistry,

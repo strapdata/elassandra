@@ -19,8 +19,6 @@
 
 package org.elasticsearch.cluster.node;
 
-import org.apache.cassandra.db.SystemKeyspace;
-import org.apache.cassandra.utils.FBUtilities;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -28,6 +26,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
+import org.elasticsearch.common.transport.LocalTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.transport.TransportAddressSerializers;
 import org.elasticsearch.common.xcontent.ToXContent;
@@ -145,8 +144,11 @@ public class DiscoveryNode implements Writeable, ToXContent {
      * The inet listen address of the node.
      */
     public InetAddress getInetAddress() {
-        if (getAddress() instanceof InetSocketTransportAddress)
+        TransportAddress addr = getAddress();
+        if (addr instanceof InetSocketTransportAddress)
             return ((InetSocketTransportAddress) getAddress()).address().getAddress();
+        if (addr instanceof LocalTransportAddress)
+            return InetAddress.getLoopbackAddress();
         return null;
     }
 

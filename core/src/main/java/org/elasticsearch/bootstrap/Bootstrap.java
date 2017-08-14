@@ -400,7 +400,7 @@ public final class Bootstrap {
             }
             // re-enable it if appropriate, so they can see any logging during the shutdown process
             if (foreground && maybeConsoleAppender != null) {
-                Loggers.addAppender(rootLogger, maybeConsoleAppender);
+                //Loggers.addAppender(rootLogger, maybeConsoleAppender);
             }
 
             throw e;

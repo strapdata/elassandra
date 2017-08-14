@@ -101,6 +101,11 @@ public class NodeFieldMapper extends MetadataFieldMapper {
         public String typeName() {
             return CONTENT_TYPE;
         }
+        
+        @Override
+        public String name() {
+            return NAME;
+        }
 
         @Override
         public Query termQuery(Object value, QueryShardContext context) {

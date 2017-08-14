@@ -38,7 +38,7 @@ import org.elasticsearch.common.util.concurrent.AtomicArray;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.tasks.Task;
-import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.elasticsearch.test.transport.CapturingTransport;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -60,16 +60,17 @@ import static org.elasticsearch.test.StreamsUtils.copyToStringFromClasspath;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 
-public class TransportBulkActionTookTests extends ESTestCase {
+public class TransportBulkActionTookTests extends ESSingleNodeTestCase {
 
     private static ThreadPool threadPool;
-    private ClusterService clusterService;
+    //private ClusterService clusterService;
 
     @BeforeClass
     public static void beforeClass() {
         threadPool = new TestThreadPool("TransportBulkActionTookTests");
     }
 
+    /*
     @AfterClass
     public static void afterClass() {
         ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
@@ -87,12 +88,13 @@ public class TransportBulkActionTookTests extends ESTestCase {
         super.tearDown();
         clusterService.close();
     }
-
+    */
+    
     private TransportBulkAction createAction(boolean controlled, AtomicLong expected) {
         CapturingTransport capturingTransport = new CapturingTransport();
-        TransportService transportService = new TransportService(clusterService.getSettings(), capturingTransport, threadPool,
+        TransportService transportService = new TransportService(clusterService().getSettings(), capturingTransport, threadPool,
                 TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            boundAddress -> clusterService.localNode(), null);
+            boundAddress -> clusterService().localNode(), null);
         transportService.start();
         transportService.acceptIncomingRequests();
         IndexNameExpressionResolver resolver = new Resolver(Settings.EMPTY);
@@ -101,7 +103,7 @@ public class TransportBulkActionTookTests extends ESTestCase {
         TransportCreateIndexAction createIndexAction = new TransportCreateIndexAction(
                 Settings.EMPTY,
                 transportService,
-                clusterService,
+                clusterService(),
                 threadPool,
                 null,
                 actionFilters,
@@ -113,7 +115,7 @@ public class TransportBulkActionTookTests extends ESTestCase {
                     Settings.EMPTY,
                     threadPool,
                     transportService,
-                    clusterService,
+                    clusterService(),
                     null,
                     createIndexAction,
                     actionFilters,
@@ -138,7 +140,7 @@ public class TransportBulkActionTookTests extends ESTestCase {
                     Settings.EMPTY,
                     threadPool,
                     transportService,
-                    clusterService,
+                    clusterService(),
                     null,
                     createIndexAction,
                     actionFilters,

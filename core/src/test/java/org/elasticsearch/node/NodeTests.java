@@ -96,6 +96,7 @@ public class NodeTests extends ESTestCase {
         }
     }
 
+    /*
     public void testLoadPluginBootstrapChecks() throws IOException {
         final Path tempDir = createTempDir();
         final String name = randomBoolean() ? randomAlphaOfLength(10) : null;
@@ -123,7 +124,8 @@ public class NodeTests extends ESTestCase {
             assertTrue(executed.get());
         }
     }
-
+    */
+    
     public void testWarnIfPreRelease() {
         final Logger logger = mock(Logger.class);
 

@@ -56,20 +56,20 @@
   <logger name="org.apache.cassandra.service.CassandraDaemon" level="DEBUG" />
   <logger name="org.apache.cassandra.service.ElassandraDaemon" level="TRACE" />
 
-  <!--
-  <logger name="org.elassandra.index" level="WARN" />
+  <logger name="org.elassandra.index" level="TRACE" />
+  <logger name="org.elassandra.search" level="TRACE" />
   <logger name="org.elassandra.cluster" level="TRACE" />
-  
+  <!--
   <logger name="org.elassandra.index.shard" level="DEBUG" />
   <logger name="org.elassandra.shard" level="DEBUG" />
   <logger name="org.elassandra.cluster.routing" level="DEBUG" />
 
-  <logger name="org.elasticsearch" level="WARN" />
+  <logger name="org.elasticsearch" level="TRACE" />
   <logger name="org.elasticsearch.http" level="WARN"/>
   <logger name="org.elasticsearch.transport" level="WARN"/>
     -->
-    
-  <root level="TRACE">
+
+  <root level="WARN">
     <appender-ref ref="FILE" />
     <!--<appender-ref ref="STDOUT" />-->
   </root>

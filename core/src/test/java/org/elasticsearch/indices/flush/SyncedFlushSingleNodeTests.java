@@ -57,7 +57,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
         assertEquals("exactly one active shard", 1, activeShards.size());
         Map<String, Engine.CommitId> commitIds = SyncedFlushUtil.sendPreSyncRequests(flushService, activeShards, state, shardId);
         assertEquals("exactly one commit id", 1, commitIds.size());
-        client().prepareIndex("test", "test", "2").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "2").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         String syncId = UUIDs.base64UUID();
         SyncedFlushUtil.LatchedListener<ShardsSyncedFlushResult> listener = new SyncedFlushUtil.LatchedListener<>();
         flushService.sendSyncRequests(syncId, activeShards, state, commitIds, shardId, shardRoutingTable.size(), listener);

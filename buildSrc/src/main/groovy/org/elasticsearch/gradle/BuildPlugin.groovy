@@ -495,7 +495,7 @@ class BuildPlugin implements Plugin<Project> {
     static Closure commonTestConfig(Project project) {
         return {
             jvm "${project.javaHome}/bin/java"
-            parallelism System.getProperty('tests.jvms', 'auto')
+            parallelism System.getProperty('tests.jvms', '1')
             ifNoTests 'fail'
             onNonEmptyWorkDirectory 'wipe'
             leaveTemporary true
@@ -526,7 +526,7 @@ class BuildPlugin implements Plugin<Project> {
             // default test sysprop values
             systemProperty 'tests.ifNoTests', 'fail'
             // TODO: remove setting logging level via system property
-            systemProperty 'tests.logger.level', 'WARN'
+            systemProperty 'tests.logger.level', 'TRACE'
             for (Map.Entry<String, String> property : System.properties.entrySet()) {
                 if (property.getKey().startsWith('tests.') ||
                     property.getKey().startsWith('es.')) {
@@ -546,6 +546,7 @@ class BuildPlugin implements Plugin<Project> {
             systemProperty 'cassandra.storagedir', "${project.buildDir}/testrun/test/J0"
             systemProperty 'es.synchronous_refresh', 'true'
             systemProperty 'es.drop_on_delete_index', 'true'
+            systemProperty 'tests.maven', 'true'
             
             boolean assertionsEnabled = Boolean.parseBoolean(System.getProperty('tests.asserts', 'true'))
             enableSystemAssertions assertionsEnabled
@@ -597,6 +598,7 @@ class BuildPlugin implements Plugin<Project> {
             exclude '**/MockNodeTests.class'
             exclude '**/MockTcpTransportTests.class'
             exclude '**/InternalTestCluster.class'
+            exclude '**/InternalTestClusterTests.class'
             exclude '**/discovery/*.class'
         }
 

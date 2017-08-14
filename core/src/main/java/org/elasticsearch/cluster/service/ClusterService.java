@@ -115,8 +115,6 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.logging.Loggers;
-import org.elasticsearch.common.lucene.uid.VersionsResolver;
-import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
@@ -131,6 +129,7 @@ import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.VersionConflictEngineException;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.BaseGeoPointFieldMapper;
+import org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.LegacyGeoPointFieldType;
 import org.elasticsearch.index.mapper.CompletionFieldMapper;
 import org.elasticsearch.index.mapper.DocumentFieldMappers;
 import org.elasticsearch.index.mapper.DocumentMapper;
@@ -138,7 +137,6 @@ import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.GeoShapeFieldMapper;
 import org.elasticsearch.index.mapper.IdFieldMapper;
-import org.elasticsearch.index.mapper.LegacyGeoPointFieldMapper;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.Mapper.CqlCollection;
@@ -158,14 +156,6 @@ import org.elasticsearch.index.mapper.TimestampFieldMapper;
 import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
-import org.elasticsearch.indices.cluster.IndicesClusterStateService;
-import org.elasticsearch.indices.flush.SyncedFlushService;
-import org.elasticsearch.indices.recovery.PeerRecoverySourceService;
-import org.elasticsearch.indices.recovery.PeerRecoveryTargetService;
-import org.elasticsearch.repositories.RepositoriesService;
-import org.elasticsearch.search.SearchService;
-import org.elasticsearch.snapshots.RestoreService;
-import org.elasticsearch.snapshots.SnapshotShardsService;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.IOException;
@@ -191,6 +181,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongConsumer;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -340,8 +331,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         }
     }
     public static Map<String, String> cqlMapping = new ImmutableMap.Builder<String,String>()
-            .put("text", "string")
-            .put("varchar", "string")
+            .put("text", "keyword")
+            .put("varchar", "keyword")
             .put("timestamp", "date")
             .put("int", "integer")
             .put("double", "double")
@@ -350,28 +341,10 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             .put("boolean", "boolean")
             .put("blob", "binary")
             .put("inet", "ip" )
-            .put("uuid", "string" )
-            .put("timeuuid", "string" )
+            .put("uuid", "keyword" )
+            .put("timeuuid", "keyword" )
             .build();
 
-    /*
-    public static Map<String,Class<? extends FieldMapper.Builder<?,?>>> cqlToMapperBuilder = new java.util.HashMap<String, Class<? extends FieldMapper.Builder<?,?>>>() {
-        {
-            put("text", StringFieldMapper.Builder.class);
-            put("ascii", StringFieldMapper.Builder.class);
-            put("timestamp", DateFieldMapper.Builder.class);
-            put("double", NumberFieldMapper.NumberType.DOUBLE::createFields);
-            put("float" , NumberFieldMapper.Builder.class);
-            put("int", NumberFieldMapper.Builder.class);
-            put("bigint", NumberFieldMapper.Builder.class);
-            put("smallint", NumberFieldMapper.Builder.class);
-            put("boolean", BooleanFieldMapper.Builder.class);
-            put("blob", BinaryFieldMapper.Builder.class);
-            put("inet", IpFieldMapper.Builder.class);
-        }
-    };
-    */
-    
     private MetaStateService metaStateService;
     private IndicesService indicesService;
     private CassandraDiscovery discovery;
@@ -567,7 +540,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     /**
      * Don't use QueryProcessor.executeInternal, we need to propagate this on all nodes.
      **/
-    
     public void createIndexKeyspace(final String ksname, final int replicationFactor) throws IOException {
         Keyspace ks = null;
         try {
@@ -645,8 +617,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         if (o instanceof ByteBuffer) {
             // encode byte[] as Base64 encoded string
             ByteBuffer bb = ByteBufferUtil.clone((ByteBuffer)o);
-            ByteBuffer encoded = Base64.getEncoder().encode(bb);
-            return encoded.toString();
+            return Base64.getEncoder().encodeToString(ByteBufferUtil.getArray((ByteBuffer)o));
         }
         if (o instanceof InetAddress)
             return InetAddresses.toAddrString((InetAddress)o);
@@ -658,7 +629,12 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     // wrap string values with quotes
     private static String stringify(Object o) throws IOException {
         Object v = toJsonValue(o);
-        return v instanceof String ?  "\""+jsonMapper.writeValueAsString(v)+"\"" : v.toString();
+        try {
+            return v instanceof String ? jsonMapper.writeValueAsString(v) : v.toString();
+        } catch (IOException e) {
+            Loggers.getLogger(ClusterService.class).error("Unexpected json encoding error", e);
+            throw new RuntimeException(e);
+        }
     }
     
     public static String stringify(Object[] cols, int length) {
@@ -673,8 +649,9 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             Object val = toJsonValue(cols[i]);
             if (val instanceof String) {
                 try {
-                    sb.append('"').append(jsonMapper.writeValueAsString(val)).append('"');
+                    sb.append(jsonMapper.writeValueAsString(val));
                 } catch (IOException e) {
+                    Loggers.getLogger(ClusterService.class).error("Unexpected json encoding error", e);
                     throw new RuntimeException(e);
                 }
             } else {
@@ -719,9 +696,9 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                if (mapper != null) {
                    if (mapper instanceof ObjectMapper) {
                        toXContent(builder, ((ObjectMapper)mapper).getMapper(subField), subField, subValue);
-                   } else if (mapper instanceof GeoPointFieldMapper) {
-                       GeoPointFieldMapper geoMapper = (GeoPointFieldMapper)mapper;
-                       if (geoMapper.fieldType().isLatLonEnabled()) {
+                   } else if (mapper instanceof BaseGeoPointFieldMapper) {
+                       BaseGeoPointFieldMapper geoMapper = (BaseGeoPointFieldMapper)mapper;
+                       if (geoMapper.fieldType() instanceof LegacyGeoPointFieldType && ((LegacyGeoPointFieldType)geoMapper.fieldType()).isLatLonEnabled()) {
                            Iterator<Mapper> it = geoMapper.iterator();
                            switch(subField) {
                            case org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LAT:
@@ -860,7 +837,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             Mapper mapper = it.next();
             if (mapper instanceof ObjectMapper) {
                 buildCql(ksName, cfName, mapper.simpleName(), (ObjectMapper) mapper);
-            } else if (mapper instanceof GeoPointFieldMapper) {
+            } else if (mapper instanceof BaseGeoPointFieldMapper) {
                 buildGeoPointType(ksName);
             } 
         }
@@ -946,7 +923,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                             .append(">");
                         if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
                             update.append(">");
-                    } else if (mapper instanceof GeoPointFieldMapper) {
+                    } else if (mapper instanceof BaseGeoPointFieldMapper) {
                         if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
                             update.append(mapper.cqlCollectionTag()).append("<");
                         update.append("frozen<")
@@ -995,11 +972,19 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         String query = String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" (input list<text>, contexts text, weight bigint)", ksName, COMPLETION_TYPE);
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
     }
-    
-    public TokenRangesService getTokenRangesService() {
-        return  this.tokenRangeService;
-    }
 
+    public int replicationFactor(String keyspace) {
+        if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
+            AbstractReplicationStrategy replicationStrategy = Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy();
+            int rf = replicationStrategy.getReplicationFactor();
+            if (replicationStrategy instanceof NetworkTopologyStrategy) {
+                rf = ((NetworkTopologyStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter());
+            } 
+            return rf;
+        } 
+        return 0;
+    }
+    
     public ClusterState updateNumberOfShards(ClusterState currentState) {
         int numberOfNodes = currentState.nodes().getSize();
         assert numberOfNodes > 0;
@@ -1008,17 +993,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             IndexMetaData indexMetaData = it.next();
             IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
             indexMetaDataBuilder.numberOfShards(numberOfNodes);
-            String keyspace = indexMetaData.keyspace();
-            if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
-                AbstractReplicationStrategy replicationStrategy = Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy();
-                int rf = replicationStrategy.getReplicationFactor();
-                if (replicationStrategy instanceof NetworkTopologyStrategy) {
-                    rf = ((NetworkTopologyStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter());
-                } 
-                indexMetaDataBuilder.numberOfReplicas( Math.max(0, rf - 1) );
-            } else {
-                indexMetaDataBuilder.numberOfReplicas( 0 );
-            }
+            int rf = replicationFactor(indexMetaData.keyspace());
+            indexMetaDataBuilder.numberOfReplicas( Math.max(0, rf - 1) );
             metaDataBuilder.put(indexMetaDataBuilder.build(), false);
         }
         return ClusterState.builder(currentState).metaData(metaDataBuilder.build()).build();
@@ -1106,7 +1082,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 boolean isStatic = false;
                 FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
                 if (fieldMapper != null) {
-                    if (fieldMapper instanceof GeoPointFieldMapper || fieldMapper instanceof LegacyGeoPointFieldMapper) {
+                    if (fieldMapper instanceof BaseGeoPointFieldMapper) {
                         ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
                         if (cdef != null && cdef.type instanceof UTF8Type) {
                             // index geohash stored as text in cassandra.
@@ -1219,11 +1195,16 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                             // TODO: do this check for collection
                             String existingCqlType = cdef.type.asCQL3Type().toString();
                             if (!cdef.type.isCollection()) {
-                                // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
-                                if (!existingCqlType.equals(cqlType) && 
-                                    !cqlType.equals("frozen<"+existingCqlType+">") &&
-                                    !(existingCqlType.endsWith("uuid") && cqlType.equals("text")) ) // #74 uuid is mapped as text
-                                    throw new IOException("Existing column "+column+" mismatch type "+cqlType);
+                                if (cqlType.equals("frozen<geo_point>")) {
+                                    if (!(existingCqlType.equals("text") || existingCqlType.equals("frozen<geo_point>"))) {
+                                        throw new IOException("geo_point cannot be mapped to column ["+column+"] with CQL type ["+cqlType+"]. ");
+                                    }
+                                } else 
+                                    // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
+                                    if (!existingCqlType.equals(cqlType) && 
+                                        !cqlType.equals("frozen<"+existingCqlType+">") &&
+                                        !(existingCqlType.endsWith("uuid") && cqlType.equals("text")) ) // #74 uuid is mapped as text
+                                        throw new IOException("Existing column ["+column+"] mismatch type "+cqlType);
                             }
                         }
                     }
@@ -1295,9 +1276,14 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         cassandraSecondaryIndicesApplier.recoverShard(index);
     }
     
-    private void publishAndApplyChanges(TaskInputs taskInputs, TaskOutputs taskOutputs) {
+    @Override
+    protected void publishAndApplyChanges(TaskInputs taskInputs, TaskOutputs taskOutputs) {
         ClusterState previousClusterState = taskOutputs.previousClusterState;
         ClusterState newClusterState = taskOutputs.newClusterState;
+
+        final Discovery.AckListener ackListener = newClusterState.nodes().isLocalNodeElectedMaster() ?
+            taskOutputs.createAckListener(threadPool, newClusterState) :
+            null;
 
         // try to update cluster state.
         long startTimeNS = System.nanoTime();
@@ -1305,7 +1291,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         try {
             String newClusterStateMetaDataString = MetaData.Builder.toXContent(newClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
             String previousClusterStateMetaDataString = MetaData.Builder.toXContent(previousClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
-            if (!newClusterStateMetaDataString.equals(previousClusterStateMetaDataString) && !newClusterState.blocks().disableStatePersistence()) {
+            if (!newClusterStateMetaDataString.equals(previousClusterStateMetaDataString) && !newClusterState.blocks().disableStatePersistence() && taskOutputs.doPersistMetadata) {
                 // update MeteData.version+cluster_uuid
                 newPertistedMetadata = true;
                 newClusterState = ClusterState.builder(newClusterState)
@@ -1336,19 +1322,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             }
         } catch (org.apache.cassandra.exceptions.UnavailableException e) {
             // Cassandra issue => ack with failure.
-            /*
-            for (UpdateTask<T> task : proccessedListeners) {
-                if (task.listener instanceof AckedClusterStateTaskListener) {
-                    //no need to wait for ack if nothing changed, the update can be counted as acknowledged
-                    try {
-                        ((AckedClusterStateTaskListener) task.listener).onFailure(source, e);
-                    } catch (Throwable t) {
-                        logger.debug("error while processing ack for master node [{}]", t, newClusterState.nodes().getLocalNode());
-                    }
-                }
-            }
-            */
-            logger.debug("Cassandra issue", e);
+            ackListener.onNodeAck(this.localNode(), e);
+            logger.debug("Unexpected Cassandra issue", e);
             return;
         } catch (Throwable e) {
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
@@ -1362,11 +1337,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             }
             return;
         }
-        
-        final Discovery.AckListener ackListener = newClusterState.nodes().isLocalNodeElectedMaster() ?
-                taskOutputs.createAckListener(threadPool, newClusterState) :
-                null;
-                
+
         try {
             if (newPertistedMetadata) {
                 // publish in gossip state the applied metadata.uuid and version
@@ -1409,20 +1380,17 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             final ClusterState newClusterState2 = newClusterState;
             // update the current cluster state 
             updateState(css -> newClusterState2);
-            Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
-                try {
-                    logger.trace("calling [{}] with change to version [{}]", listener, newClusterState2.version());
-                    listener.clusterChanged(clusterChangedEvent);
-                } catch (Exception ex) {
-                    logger.warn("failed to notify ClusterStateListener", ex);
-                }
-            });
-            
             if (logger.isTraceEnabled())
                 logger.trace("set local clusterState version={} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
             
+            if (!newPertistedMetadata) {
+                // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
+                publishX2(newClusterState);
+            }
+            
+            // notify highPriorityStateAppliers, including IndicesClusterStateService to start shards and update mapperServices.
             if (logger.isTraceEnabled())
-                logger.trace("highPriorityStateAppliers={}",highPriorityStateAppliers);
+                logger.trace("notfiy highPriorityStateAppliers={}",highPriorityStateAppliers);
             for (ClusterStateApplier applier : this.highPriorityStateAppliers) {
                 try {
                     applier.applyClusterState(clusterChangedEvent);
@@ -1431,10 +1399,15 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 }
             }
 
-            if (!newPertistedMetadata) {
-                // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
-                publishX2(newClusterState);
-            }
+            // notifiy listener, including ElasticSecondaryIndex instances.
+            Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
+                try {
+                    logger.trace("calling [{}] with change to version [{}]", listener, newClusterState2.version());
+                    listener.clusterChanged(clusterChangedEvent);
+                } catch (Exception ex) {
+                    logger.warn("failed to notify ClusterStateListener", ex);
+                }
+            });
             
             Throwable ackFailure = null;
             if (newPertistedMetadata) {
@@ -1453,24 +1426,22 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 }
             }
             
-            
             // update cluster state routing table
             // TODO: update the routing table only for updated indices.
             RoutingTable newRoutingTable = RoutingTable.build(this, newClusterState);
             final ClusterState newClusterState3 = ClusterState.builder(newClusterState).routingTable(newRoutingTable).build();
             updateState(css -> newClusterState3);
             
-            // notify 2i with the new cluster state, including new local started shard.
+            // notify normalPriorityStateAppliers with the new cluster state, including CassandraSecondaryIndicesApplier to create new C* 2i instances.
             if (logger.isTraceEnabled())
-                logger.trace("lowPriorityStateAppliers={}",lowPriorityStateAppliers);
-            for (ClusterStateApplier applier : lowPriorityStateAppliers) {
+                logger.trace("notifiy normalPriorityStateAppliers={} before acknowlegdging listeners",normalPriorityStateAppliers);
+            for (ClusterStateApplier applier : normalPriorityStateAppliers) {
                 try {
                     applier.applyClusterState(clusterChangedEvent);
                 } catch (Exception ex) {
                     logger.warn("failed to notify ClusterStateListener", ex);
                 }
             }
-            
             
             //manual ack only from the master at the end of the publish
             if (newClusterState.nodes().isLocalNodeElectedMaster()) {
@@ -1481,6 +1452,16 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     logger.debug(
                         (Supplier<?>) () -> new ParameterizedMessage("error while processing ack for master node [{}]", localNode),
                         e);
+                }
+            }
+            
+            if (logger.isTraceEnabled())
+                logger.trace("notify lowPriorityStateAppliers={} after acknowlegdging listeners", lowPriorityStateAppliers);
+            for (ClusterStateApplier applier : lowPriorityStateAppliers) {
+                try {
+                    applier.applyClusterState(clusterChangedEvent);
+                } catch (Exception ex) {
+                    logger.warn("failed to notify ClusterStateListener", ex);
                 }
             }
 
@@ -1495,18 +1476,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                         (Supplier<?>) () -> new ParameterizedMessage(
                             "exception thrown while notifying executor of new cluster state publication [{}]",
                             taskInputs.summary),
-                        e);
-                }
-            }
-
-            //manual ack only from the master at the end of the publish
-            if (newClusterState.nodes().isLocalNodeElectedMaster()) {
-                try {
-                    ackListener.onNodeAck(newClusterState.nodes().getLocalNode(), null);
-                } catch (Exception e) {
-                    final DiscoveryNode localNode = newClusterState.nodes().getLocalNode();
-                    logger.debug(
-                        (Supplier<?>) () -> new ParameterizedMessage("error while processing ack for master node [{}]", localNode),
                         e);
                 }
             }
@@ -1575,15 +1544,13 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 dropSecondaryIndex(cfMetaData);
         }
     }
-   
-    
+
     public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException  {
         CFMetaData cfMetaData = Schema.instance.getCFMetaData(ksName, cfName);
         if (cfMetaData != null)
             dropSecondaryIndex(cfMetaData);
     }
-    
-    
+
     public void dropSecondaryIndex(CFMetaData cfMetaData) throws RequestExecutionException  {
         for(IndexMetadata idx : cfMetaData.getIndexes()) {
             if (idx.isCustom()) {
@@ -1604,8 +1571,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             dropTable(ksName, cfName.value);
         }
     }
-    
-    
+
     public void dropTable(String ksName, String cfName) throws RequestExecutionException  {
         CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
         if (cfm != null) {
@@ -1707,7 +1673,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     /**
      * Fetch from the coordinator node.
      */
-    
     public UntypedResultSet fetchRow(final IndexService indexService, final String type, final String id, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException,
             RequestExecutionException, RequestValidationException, IOException {
         DocPrimaryKey docPk = parseElasticId(indexService, type, id);
@@ -1717,15 +1682,16 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     /**
      * Fetch from the coordinator node.
      */
-    
     public UntypedResultSet fetchRow(final IndexService indexService, final String type, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException,
             RequestExecutionException, RequestValidationException, IOException {
         return process(cl, ClientState.forInternalCalls(), buildFetchQuery(indexService, type, columns, docPk.isStaticDocument, columnDefs), docPk. values);
     }
     
-    public Engine.GetResult fetchSourceInternal(final IndexService indexService, String type, String id, Map<String,ColumnDefinition> columnDefs) throws IOException {
+    public Engine.GetResult fetchSourceInternal(final IndexService indexService, String type, String id, Map<String,ColumnDefinition> columnDefs, LongConsumer onRefresh) throws IOException {
+        long time = System.nanoTime();
         DocPrimaryKey docPk = parseElasticId(indexService, type, id);
         UntypedResultSet result = fetchRowInternal(indexService, type, docPk, columnDefs.keySet().toArray(new String[columnDefs.size()]), columnDefs);
+        onRefresh.accept(System.nanoTime() - time);
         if (!result.isEmpty()) {
             Map<String, Object> sourceMap = rowAsMap(indexService, type, result.one());
             BytesReference source = XContentFactory.contentBuilder(XContentType.JSON).map(sourceMap).bytes();
@@ -1737,24 +1703,21 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             if (sourceMap.get(TTLFieldMapper.NAME) != null) {
                 ttl = (Long) sourceMap.get(TTLFieldMapper.NAME);
             }
-            return new Engine.GetResult(null, new VersionsResolver.DocIdAndVersion(0, 1L, null));
+            // build termVector form the Cassandra doc.
+            return new Engine.GetResult(true, 1L, null, null); 
         }
         return Engine.GetResult.NOT_EXISTS;
     }
 
-    
-    
     public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String id, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
         DocPrimaryKey docPk = parseElasticId(indexService, cfName, id);
         return fetchRowInternal(indexService, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
     }
-    
-    
+
     public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final  DocPrimaryKey docPk, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
         return fetchRowInternal(indexService, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
     }
-    
-    
+
     public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String[] columns, final Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException, IndexNotFoundException  {
         return QueryProcessor.executeInternal(buildFetchQuery(indexService, cfName, columns, forStaticDocument, columnDefs), pkColumns);
     }
@@ -1887,7 +1850,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     
     public Object[] rowAsArray(final IndexService indexService, final String type, UntypedResultSet.Row row) throws IOException {
-        return rowAsArray(indexService, type, row, true);
+        return rowAsArray(indexService, type, row, false);
     }
     
     private Object value(FieldMapper fieldMapper, Object rowValue, boolean valueForSearch) {
@@ -1900,7 +1863,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
     
     // TODO: return raw values if no mapper found.
-    
     public Object[] rowAsArray(final IndexService indexService, final String type, UntypedResultSet.Row row, boolean valueForSearch) throws IOException {
         final Object values[] = new Object[row.getColumns().size()];
         final DocumentMapper documentMapper = indexService.mapperService().documentMapper(type);
@@ -1968,7 +1930,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     logger.warn("Ignoring unsupported counter {} for column {}", cql3Type, columnName);
                     break;
                 case INET:
-                    values[i] = value(fieldMapper, NetworkAddress.format(row.getInetAddress(columnName)), valueForSearch);
+                    values[i] = value(fieldMapper, row.getInetAddress(columnName), valueForSearch);
                     break;
                 default:
                     logger.error("Ignoring unsupported type {} for column {}", cql3Type, columnName);
@@ -2082,18 +2044,22 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
 
     
     public void blockingMappingUpdate(IndexService indexService, String type, String source) throws Exception {
+        TimeValue timeout = settings.getAsTime(SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT, TimeValue.timeValueSeconds(Integer.getInteger(SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT, 30)));
         BlockingActionListener mappingUpdateListener = new BlockingActionListener();
         MetaDataMappingService metaDataMappingService = ElassandraDaemon.injector().getInstance(MetaDataMappingService.class);
-        PutMappingClusterStateUpdateRequest putRequest = new PutMappingClusterStateUpdateRequest().type(type).source(source);
+        PutMappingClusterStateUpdateRequest putRequest = new PutMappingClusterStateUpdateRequest()
+                .indices(new org.elasticsearch.index.Index[] {indexService.index()})
+                .type(type)
+                .source(source)
+                .ackTimeout(timeout);
         metaDataMappingService.putMapping(putRequest, mappingUpdateListener);
-        mappingUpdateListener.waitForUpdate(settings.getAsTime(SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT, TimeValue.timeValueSeconds(Integer.getInteger(SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT, 30))));
+        mappingUpdateListener.waitForUpdate(timeout);
     }
     
     
     public void updateDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData) throws Exception {
         upsertDocument(indicesService, request, indexMetaData, true);
     }
-    
     
     public void insertDocument(final IndicesService indicesService, final IndexRequest request, final IndexMetaData indexMetaData) throws Exception {
         upsertDocument(indicesService, request, indexMetaData, false);
@@ -2225,7 +2191,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                             }
                         }
                     }
-                    
                     
                     map.put(field, serialize(request.index(), cfName, cd.type, field, fieldValue, mapper));
                 } catch (Exception e) {
@@ -2711,7 +2676,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             return;
         }
 
-        String metaDataString = MetaData.Builder.toXContent(newMetaData);
+        String metaDataString = MetaData.Builder.toXContent(newMetaData, MetaData.CASSANDRA_FORMAT_PARAMS);
         UUID owner = UUID.fromString(localNode().getId());
         boolean applied = processConditional(
                 this.metadataWriteCL,
@@ -2729,41 +2694,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         }
     }
 
-    /*
-    private static Object value(FieldMapper mapper, Object value) throws IOException {
-        if (mapper instanceof DateFieldMapper) {
-            // workaround because elasticsearch manage Date as Long
-            DateFieldMapper.DateFieldType dateFiledType = ((DateFieldMapper) mapper).fieldType();
-            return new Date( dateFiledType.parseStringValue( value.toString() ) );
-        } else if (mapper instanceof IpFieldMapper) {
-            // workaround because elasticsearch manage InetAddress as Long
-            Long ip = (Long) ((IpFieldMapper) mapper).fieldType().value(value);
-            return  com.google.common.net.InetAddresses.forString(IpFieldMapper.longToIp(ip));
-        } else if (mapper instanceof GeoShapeFieldMapper) {
-            return XContentFactory.jsonBuilder().map((Map)value).string();
-        } else if (mapper instanceof BinaryFieldMapper) {
-            BytesReference br = (BytesReference) ((BinaryFieldMapper)mapper).fieldType().value(value);
-            return ByteBuffer.wrap(br.array(), br.arrayOffset(), br.length());
-        } else if (mapper instanceof SourceFieldMapper) {
-            byte[] bytes = (byte[]) ((SourceFieldMapper)mapper).fieldType().value(value);
-            return ByteBuffer.wrap(bytes, 0, bytes.length);
-        } else if (value instanceof UUID) {
-            // workaround for #74
-            return value;
-        } else {
-            Object v = mapper.fieldType().value(value);
-            if (v instanceof Uid) {
-                // workaround because ParentFieldMapper.value() and UidFieldMapper.value() return an Uid (not a string).
-                return ((Uid)v).id();
-            } else {
-                return v;
-            }
-        }
-    }
-    */
-   
-    
-    
     public static Collection flattenCollection(Collection c) {
         List l = new ArrayList(c.size());
         for(Object o : c) {
@@ -2971,8 +2901,10 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
     
     public void publishGossipStates() {
-        this.discovery.publishX2(state());
-        this.discovery.publishX1(state());
+        if (this.discovery != null) {
+            this.discovery.publishX2(state());
+            this.discovery.publishX1(state());
+        }
     }
     
     
@@ -2980,25 +2912,29 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
      * Set index shard state in the gossip endpoint map (must be synchronized).
      */
     public void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
-        this.discovery.putShardRoutingState(index, shardRoutingState);
+        if (this.discovery != null)
+            this.discovery.putShardRoutingState(index, shardRoutingState);
     }
 
     public void removeIndexShardState(final String index) throws JsonGenerationException, JsonMappingException, IOException {
-        this.discovery.putShardRoutingState(index, null);
+        if (this.discovery != null)
+            this.discovery.putShardRoutingState(index, null);
     }
     
     /**
      * Publish cluster metadata uuid and version in gossip state.
      */
     public void publishX2(final ClusterState clusterState) {
-        this.discovery.publishX2(clusterState);
+        if (this.discovery != null)
+            this.discovery.publishX2(clusterState);
     }
     
     /**
      * Publish local routingShard state in gossip state.
      */
     public void publishX1(final ClusterState clusterState) {
-        this.discovery.publishX1(clusterState);
+        if (this.discovery != null)
+            this.discovery.publishX1(clusterState);
     }
 
     public boolean awaitMetaDataVersion(long version, TimeValue ackTimeout) throws Exception  {
@@ -3006,6 +2942,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
     
     public void connectToNodes() {
-        this.discovery.connectToNodes();
+        if (this.discovery != null)
+            this.discovery.connectToNodes();
     }
 }

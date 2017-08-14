@@ -35,6 +35,7 @@ import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.LocalTransportAddress;
 import org.elasticsearch.tasks.TaskManager;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -53,7 +54,7 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class TransportMultiSearchActionTests extends ESTestCase {
+public class TransportMultiSearchActionTests extends ESSingleNodeTestCase {
 
     public void testBatchExecute() throws Exception {
         // Initialize dependencies of TransportMultiSearchAction
@@ -71,8 +72,8 @@ public class TransportMultiSearchActionTests extends ESTestCase {
                 return taskManager;
             }
         };
-        ClusterService clusterService = mock(ClusterService.class);
-        when(clusterService.state()).thenReturn(ClusterState.builder(new ClusterName("test")).build());
+        ClusterService clusterService = clusterService();
+        //when(clusterService.state()).thenReturn(ClusterState.builder(new ClusterName("test")).build());
         IndexNameExpressionResolver resolver = new IndexNameExpressionResolver(Settings.EMPTY);
 
         // Keep track of the number of concurrent searches started by multi search api,

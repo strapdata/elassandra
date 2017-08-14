@@ -274,6 +274,11 @@ public class NumberFieldMapper extends FieldMapper {
             String cqlType() {
                 return "float";
             }
+            
+            @Override
+            Object cqlValue(Object value) {
+                return ((Number)value).floatValue();
+            }
         },
         FLOAT("float", NumericType.FLOAT) {
             @Override
@@ -375,6 +380,11 @@ public class NumberFieldMapper extends FieldMapper {
             String cqlType() {
                 return "float";
             }
+            
+            @Override
+            Object cqlValue(Object value) {
+                return ((Number)value).floatValue();
+            }
         },
         DOUBLE("double", NumericType.DOUBLE) {
             @Override
@@ -475,6 +485,11 @@ public class NumberFieldMapper extends FieldMapper {
             @Override
             String cqlType() {
                 return "double";
+            }
+            
+            @Override
+            Object cqlValue(Object value) {
+                return ((Number)value).doubleValue();
             }
         },
         BYTE("byte", NumericType.BYTE) {
@@ -609,6 +624,11 @@ public class NumberFieldMapper extends FieldMapper {
             @Override
             String cqlType() {
                 return "int";
+            }
+            
+            @Override
+            Object cqlValue(Object value) {
+                return (int)value;
             }
         },
         INTEGER("integer", NumericType.INT) {
@@ -745,6 +765,7 @@ public class NumberFieldMapper extends FieldMapper {
             String cqlType() {
                 return "int";
             }
+
         },
         LONG("long", NumericType.LONG) {
             @Override
@@ -880,6 +901,11 @@ public class NumberFieldMapper extends FieldMapper {
             String cqlType() {
                 return "bigint";
             }
+
+            @Override
+            Object cqlValue(Object value) {
+                return ((Number)value).longValue();
+            }
         };
 
         private final String name;
@@ -914,6 +940,10 @@ public class NumberFieldMapper extends FieldMapper {
         }
 
         abstract String cqlType();
+        
+        Object cqlValue(Object value) {
+            return ((Number)value).intValue();
+        }
         
         /**
          * Returns true if the object is a number and has a decimal part
@@ -1036,6 +1066,11 @@ public class NumberFieldMapper extends FieldMapper {
                 return new DocValueFormat.Decimal(format);
             }
         }
+        
+        @Override
+        public Object cqlValue(Object value) {
+            return type.cqlValue(value);
+        }
     }
 
     private Boolean includeInAll;
@@ -1131,6 +1166,8 @@ public class NumberFieldMapper extends FieldMapper {
 
     @Override
     public void createField(ParseContext context, Object value) throws IOException {
+        final boolean includeInAll = context.includeInAll(this.includeInAll, this);
+        
         if (value == null) {
             value = fieldType().nullValue();
         }

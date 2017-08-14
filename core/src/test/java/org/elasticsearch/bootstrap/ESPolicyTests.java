@@ -37,29 +37,31 @@ public class ESPolicyTests extends ESTestCase {
      * test restricting privileges to no permissions actually works
      */
     public void testRestrictPrivileges() {
-        assumeTrue("test requires security manager", System.getSecurityManager() != null);
-        try {
-            System.getProperty("user.home");
-        } catch (SecurityException e) {
-            fail("this test needs to be fixed: user.home not available by policy");
-        }
-
-        PermissionCollection noPermissions = new Permissions();
-        AccessControlContext noPermissionsAcc = new AccessControlContext(
-            new ProtectionDomain[] {
-                new ProtectionDomain(null, noPermissions)
+        if (Boolean.getBoolean("tests.security.manager")) {
+            assumeTrue("test requires security manager", System.getSecurityManager() != null);
+            try {
+                System.getProperty("user.home");
+            } catch (SecurityException e) {
+                fail("this test needs to be fixed: user.home not available by policy");
             }
-        );
-        try {
-            AccessController.doPrivileged(new PrivilegedAction<Void>() {
-                public Void run() {
-                    System.getProperty("user.home");
-                    fail("access should have been denied");
-                    return null;
+    
+            PermissionCollection noPermissions = new Permissions();
+            AccessControlContext noPermissionsAcc = new AccessControlContext(
+                new ProtectionDomain[] {
+                    new ProtectionDomain(null, noPermissions)
                 }
-            }, noPermissionsAcc);
-        } catch (SecurityException expected) {
-            // expected exception
+            );
+            try {
+                AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                    public Void run() {
+                        System.getProperty("user.home");
+                        fail("access should have been denied");
+                        return null;
+                    }
+                }, noPermissionsAcc);
+            } catch (SecurityException expected) {
+                // expected exception
+            }
         }
     }
 }

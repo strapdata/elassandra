@@ -61,7 +61,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"CREATE TABLE cmdb.server ( name text, ip inet, netmask int, prod boolean, primary key (name))");
         assertAcked(client().admin().indices().preparePutMapping("cmdb")
                 .setType("server")
-                .setSource("{ \"server\" : { \"discover\" : \".*\", \"properties\": { \"name\":{ \"type\":\"string\", \"index\":\"not_analyzed\" }}}}")
+                .setSource("{ \"server\" : { \"discover\" : \".*\", \"properties\": { \"name\":{ \"type\":\"keyword\" }}}}")
                 .get());
         
         process(ConsistencyLevel.ONE,"insert into cmdb.server (name,ip,netmask,prod) VALUES ('localhost','127.0.0.1',8,true)");
@@ -87,7 +87,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices()
                 .preparePutMapping("ks1")
                 .setType("natives")
-                .setSource("{ \"natives\" : { \"discover\" : \".*\", \"properties\": { \"c2\":{ \"type\":\"string\", \"index\":\"not_analyzed\" }}}}")
+                .setSource("{ \"natives\" : { \"discover\" : \".*\", \"properties\": { \"c2\":{ \"type\":\"keyword\" }}}}")
                 .get());
         
         // {"c2": "toto", "c3" : "2016-10-10", "c4": 1, "c5":44, "c6":1.0, "c7":2.22, "c8": true, "c9":"U29tZSBiaW5hcnkgYmxvYg==" }
@@ -110,9 +110,6 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(2L));
         
         fields = client().prepareSearch().setIndices("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("c5:45")).get().getHits().getHits()[0].getSource();
-        
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT);
-        sdf.setTimeZone(TimeZone.getTimeZone(System.getProperty("tests.timezone")));
         
         assertThat(fields.get("c2"), equalTo("titi"));
         //assertThat(fields.get("c3"), equalTo(new SimpleDateFormat("yyyy-MM-dd").parse("2016-11-11").toLocaleString()));
@@ -217,6 +214,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"create table test.geoloc (geohash text, id uuid, coord frozen<geo_point>, comment text, primary key ((geohash),id));");
         assertAcked(client().admin().indices().preparePutMapping("test").setType("geoloc")
                 .setSource("{ \"geoloc\" : { \"discover\":\"^((?!geohash).*)\", \"properties\": { \"geohash\": { \"type\": \"geo_point\", \"cql_collection\":\"singleton\",\"cql_partition_key\" : true,\"cql_primary_key_order\" : 0, \"index\" : \"not_analyzed\" } }}}").get());
+
         GeoPoint geo_point = new GeoPoint(-25.068403, 29.411767);
         ByteBuffer[] elements = new ByteBuffer[] {
                 ClusterService.serialize("test", "geoloc", DoubleType.instance, GeoPointFieldMapper.Names.LAT, -25.068403, null),
@@ -281,9 +279,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                             "{ \"strings_template\": { "+
                                 "\"match\": \"strings.*\", "+ 
                                 "\"mapping\": { "+
-                                    "\"type\": \"string\","+
-                                    "\"doc_values\": true,"+
-                                    "\"index\": \"not_analyzed\""+
+                                    "\"type\": \"text\"" +
                                 "}"+
                           "}}" +
                          "]"+
@@ -306,10 +302,9 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         XContentBuilder mapping = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
-                        .startObject("id").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("id").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
                         .startObject("status_code")
-                            .field("type", "string")
-                            .field("index", "not_analyzed")
+                            .field("type", "keyword")
                             .field("null_value", "NULL")
                         .endObject()
                     .endObject()

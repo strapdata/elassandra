@@ -80,7 +80,7 @@ public final class ShardRouting implements Writeable, ToXContent {
     }
 
     public ShardRouting(ShardId shardId, String currentNodeId, boolean primary, ShardRoutingState state, UnassignedInfo unassignedInfo, Collection<Range<Token>> tokenRanges) {
-        this(shardId, currentNodeId, null, primary, state, null, unassignedInfo, DUMMY_ALLOCATION_ID, UNAVAILABLE_EXPECTED_SHARD_SIZE,tokenRanges);
+        this(shardId, currentNodeId, null, primary, state, RecoverySource.LocalShardsRecoverySource.INSTANCE, unassignedInfo, DUMMY_ALLOCATION_ID, UNAVAILABLE_EXPECTED_SHARD_SIZE,tokenRanges);
     }
     public ShardRouting(ShardId shardId, String currentNodeId,
             String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,

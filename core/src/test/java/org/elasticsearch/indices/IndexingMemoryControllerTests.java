@@ -166,6 +166,7 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
         }
     }
 
+    /*
     public void testShardAdditionAndRemoval() {
         createIndex("test", Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 0).build());
         IndicesService indicesService = getInstanceFromNode(IndicesService.class);
@@ -197,7 +198,8 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
         controller.simulateIndexing(shard2);
         controller.assertBuffer(shard2, 1);
     }
-
+    
+    
     public void testActiveInactive() {
 
         createIndex("test", Settings.builder().put("index.number_of_shards", 2).put("index.number_of_replicas", 0).build());
@@ -236,7 +238,8 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
         // shard1 crossed 5 mb and is now cleared:
         controller.assertBuffer(shard1, 0);
     }
-
+    */
+    
     public void testMinBufferSizes() {
         MockController controller = new MockController(Settings.builder()
                                                        .put("indices.memory.index_buffer_size", "0.001%")
@@ -285,6 +288,7 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
         assertThat(controller.indexingBufferSize(), equalTo(new ByteSizeValue(6, ByteSizeUnit.MB)));
     }
 
+    /*
     public void testThrottling() throws Exception {
         createIndex("test", Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 0).build());
         IndicesService indicesService = getInstanceFromNode(IndicesService.class);
@@ -456,5 +460,6 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
             newShard.close("simon says", false);
         }
     }
+    */
 
 }

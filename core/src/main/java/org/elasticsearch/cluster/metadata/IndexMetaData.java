@@ -322,31 +322,31 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
     
     public static final String SETTING_INDEX_ON_COMPACTION = "index."+ClusterService.INDEX_ON_COMPACTION; 
     public static final Setting<Boolean> INDEX_INDEX_ON_COMPACTION_SETTING =
-            Setting.boolSetting(SETTING_INDEX_ON_COMPACTION, false, Property.Final, Property.IndexScope);
+            Setting.boolSetting(SETTING_INDEX_ON_COMPACTION, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_ON_COMPACTION), Property.Dynamic, Property.IndexScope);
     
     public static final String SETTING_SYNCHRONOUS_REFRESH = "index."+ClusterService.SYNCHRONOUS_REFRESH; 
     public static final Setting<Boolean> INDEX_SYNCHRONOUS_REFRESH_SETTING =
-            Setting.boolSetting(SETTING_SYNCHRONOUS_REFRESH, false, Property.Final, Property.IndexScope);
+            Setting.boolSetting(SETTING_SYNCHRONOUS_REFRESH, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_SYNCHRONOUS_REFRESH), Property.Dynamic, Property.IndexScope);
     
     public static final String SETTING_DROP_ON_DELETE_INDEX = "index."+ClusterService.DROP_ON_DELETE_INDEX; 
     public static final Setting<Boolean> INDEX_DROP_ON_DELETE_INDEX_SETTING =
-            Setting.boolSetting(SETTING_DROP_ON_DELETE_INDEX, false, Property.Final, Property.IndexScope);
+            Setting.boolSetting(SETTING_DROP_ON_DELETE_INDEX, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_DROP_ON_DELETE_INDEX), Property.Dynamic, Property.IndexScope);
     
     public static final String SETTING_SNAPSHOT_WITH_SSTABLE = "index."+ClusterService.SNAPSHOT_WITH_SSTABLE; 
     public static final Setting<Boolean> INDEX_SNAPSHOT_WITH_SSTABLE_SETTING =
-            Setting.boolSetting(SETTING_SNAPSHOT_WITH_SSTABLE, false, Property.Final, Property.IndexScope);
+            Setting.boolSetting(SETTING_SNAPSHOT_WITH_SSTABLE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_SNAPSHOT_WITH_SSTABLE), Property.Dynamic, Property.IndexScope);
     
     public static final String SETTING_TOKEN_RANGES_BITSET_CACHE = "index."+ClusterService.TOKEN_RANGES_BITSET_CACHE; 
     public static final Setting<Boolean> INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING =
-            Setting.boolSetting(SETTING_TOKEN_RANGES_BITSET_CACHE, false, Property.Dynamic, Property.IndexScope);
+            Setting.boolSetting(SETTING_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE), Property.Dynamic, Property.IndexScope);
     
     public static final String SETTING_VERSION_LESS_ENGINE = "index."+ClusterService.VERSION_LESS_ENGINE; 
     public static final Setting<Boolean> INDEX_VERSION_LESS_ENGINE_SETTING =
-            Setting.boolSetting(SETTING_VERSION_LESS_ENGINE, false, Property.Final, Property.IndexScope);
+            Setting.boolSetting(SETTING_VERSION_LESS_ENGINE, true, Property.Final, Property.IndexScope);
     
-    public static final String SETTING_INDEX_STATIC_COLUMN = "index."+ClusterService.INDEX_STATIC_COLUMNS; 
-    public static final Setting<Boolean> INDEX_INDEX_STATIC_COLUMN_SETTING =
-            Setting.boolSetting(SETTING_INDEX_STATIC_COLUMN, false, Property.Dynamic, Property.IndexScope);
+    public static final String SETTING_INDEX_STATIC_COLUMNS = "index."+ClusterService.INDEX_STATIC_COLUMNS; 
+    public static final Setting<Boolean> INDEX_INDEX_STATIC_COLUMNS_SETTING =
+            Setting.boolSetting(SETTING_INDEX_STATIC_COLUMNS, false, Property.Dynamic, Property.IndexScope);
     
     public static final String SETTING_INDEX_STATIC_ONLY = "index."+ClusterService.INDEX_STATIC_ONLY; 
     public static final Setting<Boolean> INDEX_INDEX_STATIC_ONLY_SETTING =
@@ -392,7 +392,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
                           Version indexCreatedVersion, Version indexUpgradedVersion,
                           int routingNumShards, int routingPartitionSize, ActiveShardCount waitForActiveShards) {
         
-        Integer maybeNumberOfShards = settings.getAsInt(SETTING_NUMBER_OF_SHARDS, null);
+        Integer maybeNumberOfShards = settings.getAsInt(SETTING_NUMBER_OF_SHARDS, 1);
         if (maybeNumberOfShards == null) {
             throw new IllegalArgumentException("must specify numberOfShards for index [" + index + "]");
         }
@@ -401,7 +401,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
             throw new IllegalArgumentException("must specify positive number of shards for index [" + index + "]");
         }
 
-        Integer maybeNumberOfReplicas = settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, null);
+        Integer maybeNumberOfReplicas = settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0);
         if (maybeNumberOfReplicas == null) {
             throw new IllegalArgumentException("must specify numberOfReplicas for index [" + index + "]");
         }
@@ -956,7 +956,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
          * @return the provided value or -1 if it has not been set.
          */
         public int numberOfShards() {
-            return settings.getAsInt(SETTING_NUMBER_OF_SHARDS, -1);
+            return settings.getAsInt(SETTING_NUMBER_OF_SHARDS, 1);
         }
 
         public Builder numberOfReplicas(int numberOfReplicas) {
@@ -970,7 +970,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
          * @return the provided value or -1 if it has not been set.
          */
         public int numberOfReplicas() {
-            return settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, -1);
+            return settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0);
         }
 
         public Builder routingPartitionSize(int routingPartitionSize) {
@@ -1112,7 +1112,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
                 }
             }
 
-            Integer maybeNumberOfShards = settings.getAsInt(SETTING_NUMBER_OF_SHARDS, null);
+            Integer maybeNumberOfShards = settings.getAsInt(SETTING_NUMBER_OF_SHARDS, 1);
             if (maybeNumberOfShards == null) {
                 throw new IllegalArgumentException("must specify numberOfShards for index [" + index + "]");
             }
@@ -1121,7 +1121,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
                 throw new IllegalArgumentException("must specify positive number of shards for index [" + index + "]");
             }
 
-            Integer maybeNumberOfReplicas = settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, null);
+            Integer maybeNumberOfReplicas = settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0);
             if (maybeNumberOfReplicas == null) {
                 throw new IllegalArgumentException("must specify numberOfReplicas for index [" + index + "]");
             }
@@ -1200,7 +1200,9 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
             builder.startObject(indexMetaData.getIndex().getName());
 
             builder.field(KEY_VERSION, indexMetaData.getVersion());
-            builder.field(KEY_ROUTING_NUM_SHARDS, indexMetaData.getRoutingNumShards());
+            if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) {
+                builder.field(KEY_ROUTING_NUM_SHARDS, indexMetaData.getRoutingNumShards());
+            }
             builder.field(KEY_STATE, indexMetaData.getState().toString().toLowerCase(Locale.ENGLISH));
 
             boolean binary = params.paramAsBoolean("binary", false);
@@ -1209,12 +1211,12 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
             for (Map.Entry<String, String> entry : indexMetaData.getSettings().getAsMap().entrySet()) {
                 switch (entry.getKey()) {
                 case SETTING_NUMBER_OF_SHARDS:
-                    if (!params.paramAsBoolean(MetaData.CONTEXT_MODE_GATEWAY, false)) {
+                    if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) {
                         builder.field(SETTING_NUMBER_OF_SHARDS, indexMetaData.getNumberOfShards());
                     }
                     break;
                 case SETTING_NUMBER_OF_REPLICAS:
-                    if (!params.paramAsBoolean(MetaData.CONTEXT_MODE_GATEWAY, false)) {
+                    if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) {
                         builder.field(SETTING_NUMBER_OF_REPLICAS, indexMetaData.getNumberOfReplicas());
                     }
                     break;
@@ -1246,22 +1248,24 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
             }
             builder.endObject();
 
-            builder.startArray(KEY_PRIMARY_TERMS);
-            for (int i = 0; i < indexMetaData.getNumberOfShards(); i++) {
-                builder.value(indexMetaData.primaryTerm(i));
-            }
-            builder.endArray();
-
-            builder.startObject(KEY_IN_SYNC_ALLOCATIONS);
-            for (IntObjectCursor<Set<String>> cursor : indexMetaData.inSyncAllocationIds) {
-                builder.startArray(String.valueOf(cursor.key));
-                for (String allocationId : cursor.value) {
-                    builder.value(allocationId);
+            if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) {
+                builder.startArray(KEY_PRIMARY_TERMS);
+                for (int i = 0; i < indexMetaData.getNumberOfShards(); i++) {
+                    builder.value(indexMetaData.primaryTerm(i));
                 }
                 builder.endArray();
+    
+                builder.startObject(KEY_IN_SYNC_ALLOCATIONS);
+                for (IntObjectCursor<Set<String>> cursor : indexMetaData.inSyncAllocationIds) {
+                    builder.startArray(String.valueOf(cursor.key));
+                    for (String allocationId : cursor.value) {
+                        builder.value(allocationId);
+                    }
+                    builder.endArray();
+                }
+                builder.endObject();
             }
-            builder.endObject();
-
+            
             builder.endObject();
         }
 

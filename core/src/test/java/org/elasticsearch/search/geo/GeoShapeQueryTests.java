@@ -168,7 +168,18 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
                 .endObject().endObject()
                 .endObject().endObject().string();
         client().admin().indices().prepareCreate("test").addMapping("type1", mapping).execute().actionGet();
-        createIndex("shapes");
+        
+        // Elassandra requires to explicitly define geo_shape fields and to enable _source.
+        XContentBuilder shape_type_mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("shape_type")
+                      .startObject("_source").field("enabled", true).endObject()
+                      .startObject("properties")
+                        .startObject("shape").field("type", "geo_shape").endObject()
+                     .endObject()
+                    .endObject()
+                .endObject();
+        createIndex("shapes", Settings.EMPTY, "shape_type", shape_type_mapping);
         ensureGreen();
 
         ShapeBuilder shape = ShapeBuilders.newEnvelope(new Coordinate(-45, 45), new Coordinate(45, -45));
@@ -202,6 +213,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
         assertThat(searchResponse.getHits().getAt(0).id(), equalTo("1"));
     }
 
+    /*
     public void testIndexedShapeReferenceSourceDisabled() throws Exception {
         XContentBuilder mapping = XContentFactory.jsonBuilder().startObject()
                 .startObject("properties")
@@ -225,7 +237,8 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
         assertThat(e.getRootCause(), instanceOf(IllegalArgumentException.class));
         assertThat(e.getRootCause().getMessage(), containsString("source disabled"));
     }
-
+    */
+    
     public void testReusableBuilder() throws IOException {
         ShapeBuilder polygon = ShapeBuilders.newPolygon(new CoordinatesBuilder()
                 .coordinate(170, -10).coordinate(190, -10).coordinate(190, 10).coordinate(170, 10).close())
@@ -245,7 +258,8 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
     }
 
     public void testShapeFetchingPath() throws Exception {
-        createIndex("shapes");
+        client().admin().indices().prepareCreate("shapes").addMapping("type", "_source", "enabled=true").execute().actionGet();
+        
         client().admin().indices().prepareCreate("test").addMapping("type", "location", "type=geo_shape").execute().actionGet();
 
         String location = "\"location\" : {\"type\":\"polygon\", \"coordinates\":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]}";
@@ -373,7 +387,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
     }
 
     public void testShapeFilterWithDefinedGeoCollection() throws Exception {
-        createIndex("shapes");
+        client().admin().indices().prepareCreate("shapes").addMapping("type", "_source", "enabled=true").execute().actionGet();
         client().admin().indices().prepareCreate("test").addMapping("type", "location", "type=geo_shape,tree=quadtree")
                 .execute().actionGet();
 

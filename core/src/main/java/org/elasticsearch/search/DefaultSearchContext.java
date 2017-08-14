@@ -267,7 +267,7 @@ final class DefaultSearchContext extends SearchContext {
             !this.indexService.isTokenRangesBitsetCacheEnabled()) {
             if ( (this.request.tokenRanges() != null && this.request.tokenRanges().size() > 0) && 
                  (this.aggregations == null ||  this.aggregations.factories() == null || !this.aggregations.factories().hasTokenRangeAggregation()) ) {
-                tokenRangeQuery = this.clusterService().getTokenRangesService().getTokenRangesQuery(request.tokenRanges());
+                tokenRangeQuery = this.clusterService().tokenRangesService().getTokenRangesQuery(request.tokenRanges());
             }
         }
         if (tokenRangeQuery != null) {

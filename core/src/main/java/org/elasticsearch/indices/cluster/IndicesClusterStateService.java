@@ -416,6 +416,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
                 }
                 try {
                     indexService = indicesService.createIndex(indexMetaData, buildInIndexListener);
+                    indexService.updateMapping(indexMetaData);
                 } catch (Throwable e) {
                     if (logger.isWarnEnabled()) {
                         logger.warn("[{}][{}] failed to create index", indexMetaData.getIndex(),  indexMetaData.getIndexUUID());

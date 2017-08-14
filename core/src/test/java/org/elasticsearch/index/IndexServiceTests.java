@@ -193,6 +193,7 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
         assertTrue(refreshTask.isClosed());
     }
 
+    /*
     public void testFsyncTaskIsRunning() throws IOException {
         IndexService indexService = createIndex("test", Settings.builder().put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC).build());
         IndexService.AsyncTranslogFSync fsyncTask = indexService.getFsyncTask();
@@ -208,7 +209,8 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
         indexService = createIndex("test1", Settings.EMPTY);
         assertNull(indexService.getFsyncTask());
     }
-
+    
+    
     public void testRefreshActuallyWorks() throws Exception {
         IndexService indexService = createIndex("test", Settings.EMPTY);
         ensureGreen("test");
@@ -292,4 +294,5 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
             assertEquals("Failed to parse value [0ms] for setting [index.translog.sync_interval] must be >= 100ms", ex.getMessage());
         }
     }
+    */
 }

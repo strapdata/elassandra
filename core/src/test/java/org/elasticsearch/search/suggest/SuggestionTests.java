@@ -98,6 +98,7 @@ public class SuggestionTests extends ESTestCase {
         return suggestion;
     }
 
+    /*
     @SuppressWarnings({ "rawtypes" })
     public void testFromXContent() throws IOException {
         ToXContent.Params params = new ToXContent.MapParams(Collections.singletonMap(RestSearchAction.TYPED_KEYS_PARAM, "true"));
@@ -121,7 +122,8 @@ public class SuggestionTests extends ESTestCase {
             assertToXContentEquivalent(originalBytes, toXContent(parsed, xContentType, params, humanReadable), xContentType);
         }
     }
-
+    */
+    
     /**
      * test that we throw error if RestSearchAction.TYPED_KEYS_PARAM isn't set while rendering xContent
      */

@@ -35,6 +35,7 @@ import org.elasticsearch.common.io.PathUtils;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
@@ -62,10 +63,10 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         } 
     }
     
-    // lucene snapshotDir = data/<cluster_name>/nodes/0/snapshots/<index_name>/<snapshot_name>
-    public void restoreLucenceFiles(String dataLocation, String indexName, String snapshot) throws IOException {
-        Path sourceDir = PathUtils.get(dataLocation+"/"+DatabaseDescriptor.getClusterName()+"/nodes/0/snapshots/"+indexName+"/"+snapshot+"/");
-        Path targetDir = PathUtils.get(dataLocation+"/"+DatabaseDescriptor.getClusterName()+"/nodes/0/indices/"+indexName+"/0/index/");
+    // lucene snapshotDir = data/elasticsearch.data/nodes/0/snapshots/<index_uuid>/<snapshot_name>
+    public void restoreLucenceFiles(String dataLocation, Index srcIndex, Index dstIndex, String snapshot) throws IOException {
+        Path sourceDir = PathUtils.get(dataLocation+"/elasticsearch.data/nodes/0/snapshots/"+ srcIndex.getUUID() + "/"+snapshot+"/");
+        Path targetDir = PathUtils.get(dataLocation+"/elasticsearch.data/nodes/0/indices/"  + dstIndex.getUUID() + "/0/index/");
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(targetDir, "{_*.*,segments*}")) {
             for (Path segmentFile: stream)
                 Files.delete(segmentFile);
@@ -84,7 +85,8 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         XContentBuilder mapping = XContentFactory.jsonBuilder().startObject().startObject("t1").field("discover", ".*").endObject().endObject();
         createIndex("ks", Settings.builder().put("index.snapshot_with_sstable",true).build(),"t1", mapping);
         ensureGreen("ks");
-
+        Index initialIndex = resolveIndex("ks");
+        
         for(long i=0; i < 1000; i++)
            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));
         assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(1000L));
@@ -101,7 +103,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         
         String dataLocation = DatabaseDescriptor.getAllDataFileLocations()[0];
         restoreSSTable(dataLocation, "ks", "t1", Schema.instance.getCFMetaData("ks", "t1").cfId, "snap1");
-        restoreLucenceFiles(dataLocation, "ks", "snap1");
+        restoreLucenceFiles(dataLocation, initialIndex, initialIndex, "snap1");
         
         // refresh SSTables and repopen index
         StorageService.instance.loadNewSSTables("ks", "t1");
@@ -120,7 +122,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         XContentBuilder mapping = XContentFactory.jsonBuilder().startObject().startObject("t1").field("discover", ".*").endObject().endObject();
         createIndex("ks", Settings.builder().put("index.snapshot_with_sstable",true).build(),"t1", mapping);
         ensureGreen("ks");
-
+        Index index1 = resolveIndex("ks");
         
         for(long i=0; i < 1000; i++)
            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));
@@ -140,6 +142,8 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 ( name text, age int, primary key (name))");
         createIndex("ks", Settings.builder().put("index.snapshot_with_sstable",true).build(),"t1", mapping);
         ensureGreen("ks");
+        Index index2 = resolveIndex("ks");
+        
         assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(0L));
         
         // close index and restore SSTable+Lucene files
@@ -153,7 +157,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         stream.close();
         
         restoreSSTable(dataLocation, "ks", "t1", cfId, snap);
-        restoreLucenceFiles(dataLocation, "ks", snap);
+        restoreLucenceFiles(dataLocation, index1, index2, snap);
         
         // refresh SSTables and repopen index
         StorageService.instance.loadNewSSTables("ks", "t1");

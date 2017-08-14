@@ -127,7 +127,7 @@ class VagrantTestPlugin implements Plugin<Project> {
 
         UPGRADE_FROM_ARCHIVES.each {
             // The version of elasticsearch that we upgrade *from*
-            project.dependencies.add(BATS, "org.elasticsearch.distribution.${it}:elasticsearch:${upgradeFromVersion}@${it}")
+            project.dependencies.add(BATS, "com.strapdata.elasticsearch.distribution.${it}:elasticsearch:${upgradeFromVersion}@${it}")
         }
 
         project.extensions.esvagrant.testSeed = seed

@@ -975,6 +975,10 @@ public class ElasticsearchException extends RuntimeException implements ToXConte
             UNKNOWN_VERSION_ADDED),
         TYPE_MISSING_EXCEPTION(org.elasticsearch.indices.TypeMissingException.class,
                 org.elasticsearch.indices.TypeMissingException::new, 137, UNKNOWN_VERSION_ADDED),
+        // Added for elassandra to support cassandra partition delete
+        DELETE_BY_QUERY_FAILED_ENGINE_EXCEPTION(org.elasticsearch.index.engine.DeleteByQueryFailedEngineException.class,
+                org.elasticsearch.index.engine.DeleteByQueryFailedEngineException::new, 138, UNKNOWN_VERSION_ADDED),
+        
         FAILED_TO_COMMIT_CLUSTER_STATE_EXCEPTION(org.elasticsearch.discovery.Discovery.FailedToCommitClusterStateException.class,
                 org.elasticsearch.discovery.Discovery.FailedToCommitClusterStateException::new, 140, UNKNOWN_VERSION_ADDED),
         QUERY_SHARD_EXCEPTION(org.elasticsearch.index.query.QueryShardException.class,

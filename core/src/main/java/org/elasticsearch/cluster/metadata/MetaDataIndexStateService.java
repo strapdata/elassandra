@@ -205,7 +205,8 @@ public class MetaDataIndexStateService extends AbstractComponent {
                         ClusterState.builder(updatedState).routingTable(rtBuilder.build()).build(),
                         "indices opened [" + indicesAsString + "]");
                 */
-                return ClusterState.builder(updatedState).incrementVersion().build();
+                RoutingTable routingTable = RoutingTable.build(MetaDataIndexStateService.this.clusterService, updatedState);
+                return ClusterState.builder(updatedState).incrementVersion().routingTable(routingTable).build();
             }
         });
     }

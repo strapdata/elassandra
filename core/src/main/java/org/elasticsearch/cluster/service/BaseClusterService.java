@@ -23,6 +23,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
 import org.elassandra.ConcurrentMetaDataUpdateException;
+import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.cluster.AckedClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterChangedEvent;
@@ -159,7 +160,9 @@ public class BaseClusterService extends AbstractLifecycleComponent {
 
         localNodeMasterListeners = new LocalNodeMasterListeners(threadPool);
 
-        initialBlocks = ClusterBlocks.builder();
+        //initialBlocks = ClusterBlocks.builder();
+        // Add NO_CASSANDRA_RING_BLOCK to avoid to save metadata while cassandra ring not ready.
+        initialBlocks = ClusterBlocks.builder().addGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK);
     }
 
     private void setSlowTaskLoggingThreshold(TimeValue slowTaskLoggingThreshold) {
@@ -538,7 +541,7 @@ public class BaseClusterService extends AbstractLifecycleComponent {
                 if (className.equals(ClusterStateObserver.class.getName())) {
                     // people may start an observer from an applier
                     return true;
-                } else if (className.equals(ClusterService.class.getName())
+                } else if (className.equals(BaseClusterService.class.getName())
                     && methodName.equals("callClusterStateAppliers")) {
                     throw new AssertionError("should not be called by a cluster state applier. reason [" + reason + "]");
                 }
@@ -615,6 +618,7 @@ public class BaseClusterService extends AbstractLifecycleComponent {
         ClusterTasksResult<Object> clusterTasksResult = executeTasks(taskInputs, startTimeNS, previousClusterState);
         // extract those that are waiting for results
         List<ClusterServiceTaskBatcher.UpdateTask> nonFailedTasks = new ArrayList<>();
+        boolean doPersistState = false;
         for (ClusterServiceTaskBatcher.UpdateTask updateTask : taskInputs.updateTasks) {
             assert clusterTasksResult.executionResults.containsKey(updateTask.task) : "missing " + updateTask;
             final ClusterStateTaskExecutor.TaskResult taskResult =
@@ -626,7 +630,7 @@ public class BaseClusterService extends AbstractLifecycleComponent {
         ClusterState newClusterState = patchVersionsAndNoMasterBlocks(previousClusterState, clusterTasksResult);
 
         return new TaskOutputs(taskInputs, previousClusterState, newClusterState, nonFailedTasks,
-                                  clusterTasksResult.executionResults);
+                                  clusterTasksResult.executionResults, clusterTasksResult.doPresistMetaData);
     }
 
     private ClusterTasksResult<Object> executeTasks(TaskInputs taskInputs, long startTimeNS, ClusterState previousClusterState) {
@@ -717,7 +721,7 @@ public class BaseClusterService extends AbstractLifecycleComponent {
         return newClusterState;
     }
 
-    private void publishAndApplyChanges(TaskInputs taskInputs, TaskOutputs taskOutputs) {
+    protected void publishAndApplyChanges(TaskInputs taskInputs, TaskOutputs taskOutputs) {
         ClusterState previousClusterState = taskOutputs.previousClusterState;
         ClusterState newClusterState = taskOutputs.newClusterState;
 
@@ -855,15 +859,17 @@ public class BaseClusterService extends AbstractLifecycleComponent {
         public final ClusterState newClusterState;
         public final List<ClusterServiceTaskBatcher.UpdateTask> nonFailedTasks;
         public final Map<Object, ClusterStateTaskExecutor.TaskResult> executionResults;
+        public final boolean doPersistMetadata;
 
         TaskOutputs(TaskInputs taskInputs, ClusterState previousClusterState,
                            ClusterState newClusterState, List<ClusterServiceTaskBatcher.UpdateTask> nonFailedTasks,
-                           Map<Object, ClusterStateTaskExecutor.TaskResult> executionResults) {
+                           Map<Object, ClusterStateTaskExecutor.TaskResult> executionResults, boolean doPersistMetadata) {
             this.taskInputs = taskInputs;
             this.previousClusterState = previousClusterState;
             this.newClusterState = newClusterState;
             this.nonFailedTasks = nonFailedTasks;
             this.executionResults = executionResults;
+            this.doPersistMetadata = doPersistMetadata;
         }
 
         public void publishingFailed(Discovery.FailedToCommitClusterStateException t) {

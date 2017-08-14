@@ -25,6 +25,7 @@ import org.elasticsearch.cluster.LocalClusterUpdateTask;
 import org.elasticsearch.cluster.NodeConnectionsService;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.service.BaseClusterService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
@@ -83,11 +84,11 @@ public class ClusterServiceUtils {
         return clusterService;
     }
 
-    public static void setState(ClusterService clusterService, ClusterState.Builder clusterStateBuilder) {
+    public static void setState(BaseClusterService clusterService, ClusterState.Builder clusterStateBuilder) {
         setState(clusterService, clusterStateBuilder.build());
     }
 
-    public static void setState(ClusterService clusterService, ClusterState clusterState) {
+    public static void setState(BaseClusterService clusterService, ClusterState clusterState) {
         CountDownLatch latch = new CountDownLatch(1);
         clusterService.submitStateUpdateTask("test setting state", new LocalClusterUpdateTask() {
             @Override

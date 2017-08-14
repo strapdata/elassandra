@@ -35,6 +35,7 @@ import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -119,13 +120,12 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 if (!MapperService.DEFAULT_MAPPING.equals(type.value.type()))
                     unindexedTables.put(indexMetaData, ClusterService.typeToCfName(type.value.type()));
         }
-        /*
+        
         // add tombstones to the cluster state for each deleted index
         final IndexGraveyard currentGraveyard = graveyardBuilder.addTombstones(indices).build(settings);
         metaDataBuilder.indexGraveyard(currentGraveyard); // the new graveyard set on the metadata
         logger.trace("{} tombstones purged from the cluster state. Previous tombstone size: {}. Current tombstone size: {}.",
             graveyardBuilder.getNumPurged(), previousGraveyardSize, currentGraveyard.getTombstones().size());
-        */
         
         MetaData newMetaData = metaDataBuilder.build();
         ClusterBlocks blocks = clusterBlocksBuilder.build();
@@ -167,9 +167,9 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
             }
         }
         
-        /*
         // update snapshot restore entries
         ImmutableOpenMap<String, ClusterState.Custom> customs = currentState.getCustoms();
+        /*
         final RestoreInProgress restoreInProgress = currentState.custom(RestoreInProgress.TYPE);
         if (restoreInProgress != null) {
             RestoreInProgress updatedRestoreInProgress = RestoreService.updateRestoreStateWithDeletedIndices(restoreInProgress, indices);
@@ -181,7 +181,9 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
         }
         */
         
-        return ClusterState.builder(currentState).metaData(newMetaData).blocks(blocks).build();
+        // Update the routing table without deleted indices.
+        RoutingTable newRoutingTable = RoutingTable.build(this.clusterService, ClusterState.builder(currentState).metaData(newMetaData).blocks(blocks).customs(customs).build());
+        return ClusterState.builder(currentState).metaData(newMetaData).blocks(blocks).routingTable(newRoutingTable).customs(customs).build();
         /*
         return allocationService.reroute(
                 ClusterState.builder(currentState)

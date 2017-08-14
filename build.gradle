@@ -183,7 +183,7 @@ subprojects {
     to build elasticsearch plugins outside of the elasticsearch source tree. */
   ext.projectSubstitutions = [
     "com.strapdata.elasticsearch.gradle:build-tools:${version}": ':build-tools',
-    "com.strapdata.elasticsearch:rest-api-spec:${version}": ':rest-api-spec',
+    "org.elasticsearch:rest-api-spec:${version}": ':rest-api-spec',
     "com.strapdata.elasticsearch:elasticsearch:${version}": ':core',
     "com.strapdata.elasticsearch.client:rest:${version}": ':client:rest',
     "com.strapdata.elasticsearch.client:sniffer:${version}": ':client:sniffer',

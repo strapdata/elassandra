@@ -95,7 +95,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         GATEWAY,
 
         /* Custom metadata should be stored as part of a snapshot */
-        SNAPSHOT
+        SNAPSHOT,
     }
 
     /**
@@ -141,6 +141,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     public static final MetaData EMPTY_META_DATA = builder().build();
 
     public static final String CONTEXT_MODE_PARAM = "context_mode";
+    public static final String CONTEXT_CASSANDRA_PARAM = "cassandra_mode";
 
     public static final String CONTEXT_MODE_SNAPSHOT = XContentContext.SNAPSHOT.toString();
 
@@ -1102,7 +1103,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             }
             builder.endObject();
 
-            if (context == XContentContext.API && !metaData.indices().isEmpty()) {
+            if ((context == XContentContext.API || params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) && !metaData.indices().isEmpty()) {
                 builder.startObject("indices");
                 for (IndexMetaData indexMetaData : metaData) {
                     IndexMetaData.Builder.toXContent(indexMetaData, builder, params);
@@ -1214,7 +1215,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     static {
         Map<String, String> params = new HashMap<>(2);
         params.put("binary", "false");
-        params.put(MetaData.CONTEXT_MODE_PARAM, MetaData.CONTEXT_MODE_GATEWAY);
+        params.put(CONTEXT_CASSANDRA_PARAM, "true");
         CASSANDRA_FORMAT_PARAMS = new MapParams(params);
     }
     

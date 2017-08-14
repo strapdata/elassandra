@@ -25,6 +25,7 @@ import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
@@ -82,7 +83,8 @@ public class CassandraGatewayService extends GatewayService {
         });
     }
     
-    private void performStateRecovery() {
+    @Override
+    protected void performStateRecovery(boolean enforceRecoverAfterTime, String reason) {
         final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener();
         gateway().performStateRecovery(recoveryListener);
     }
@@ -92,7 +94,7 @@ public class CassandraGatewayService extends GatewayService {
         @Override
         public void onSuccess(final ClusterState recoveredState) {
             logger.trace("Successful state recovery, importing cluster state...");
-            clusterService.submitStateUpdateTask("local-gateway-elected-state", new ClusterStateUpdateTask() {
+            clusterService.submitStateUpdateTask("cassandra-gateway-recovery-state", new ClusterStateUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
                     assert currentState.metaData().indices().isEmpty();
@@ -122,8 +124,8 @@ public class CassandraGatewayService extends GatewayService {
                             .blocks(blocks)
                             .metaData(metaDataBuilder)
                             .build();
-
-                    return ClusterState.builder(updatedState).incrementVersion().build();
+                    RoutingTable newRoutingTable = RoutingTable.build(CassandraGatewayService.this.clusterService, updatedState);
+                    return ClusterState.builder(updatedState).incrementVersion().routingTable(newRoutingTable).build();
                 }
 
                 @Override

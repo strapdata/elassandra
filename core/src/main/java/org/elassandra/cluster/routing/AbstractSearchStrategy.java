@@ -29,6 +29,7 @@ import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.logging.log4j.Logger;
+import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
@@ -99,7 +100,7 @@ public abstract class AbstractSearchStrategy {
             this.localNode = clusterState.nodes().getLocalNode();
             this.shardStates = shardStates;
             
-            if (Keyspace.isInitialized() && StorageService.instance.isJoined()) {
+            if (isRoutable(clusterState)) {
                 // only available when keyspaces are initialized and node joined
                 //this.rangeToEndpointsMap = StorageService.instance.getRangeToAddressMapInLocalDC(ksName);
                 this.strategy = Keyspace.open(ksName).getReplicationStrategy();
@@ -146,7 +147,7 @@ public abstract class AbstractSearchStrategy {
                 }
                 
                 // redshards = unavailable node->token range bitset, 
-                if (orphanRange) {
+                if (orphanRange && isRoutable(clusterState)) {
                     isConsistent = false;
                     if (redShards == null) 
                         redShards = new HashMap<DiscoveryNode, BitSet>();
@@ -163,12 +164,14 @@ public abstract class AbstractSearchStrategy {
             }
             
             // yellow shards = unavailable nodes hosting token range available somewhere else in greenShards.
-            for(DiscoveryNode node : clusterState.nodes()) {
-                if (!this.greenShards.containsKey(node) && (this.redShards == null || !this.redShards.containsKey(node))) {
-                    if (this.yellowShards == null) {
-                        this.yellowShards  = new ArrayList<DiscoveryNode>();
+            if (isRoutable(clusterState)) {
+                for(DiscoveryNode node : clusterState.nodes()) {
+                    if (!this.greenShards.containsKey(node) && (this.redShards == null || !this.redShards.containsKey(node))) {
+                        if (this.yellowShards == null) {
+                            this.yellowShards  = new ArrayList<DiscoveryNode>();
+                        }
+                        this.yellowShards.add(node);
                     }
-                    this.yellowShards.add(node);
                 }
             }
             
@@ -180,6 +183,11 @@ public abstract class AbstractSearchStrategy {
 
         public boolean isConsistent() {
             return this.isConsistent;
+        }
+        
+        public boolean isRoutable(ClusterState state) {
+           // Keyspace.isInitialized() && StorageService.instance.isJoined();
+           return !state.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK);
         }
         
         public ShardRoutingState getShardRoutingState(DiscoveryNode node) {
@@ -235,9 +243,8 @@ public abstract class AbstractSearchStrategy {
                         List<ShardRouting> shards = new ArrayList<ShardRouting>(1+Router.this.yellowShards.size());
                         shards.add(primaryShardRouting);
                         for(DiscoveryNode node2 : Router.this.yellowShards) {
-                            UnassignedInfo info = null;
-                            if (ShardRoutingState.UNASSIGNED.equals(Router.this.getShardRoutingState(node2)))
-                                info = IndexRoutingTable.UNASSIGNED_INFO_UNAVAILABLE;
+                            // TODO: reflect local unassigned info form the local shard state (created or recovery).
+                            UnassignedInfo info = IndexRoutingTable.UNASSIGNED_INFO_UNAVAILABLE;
                             if (node2.status() != DiscoveryNodeStatus.ALIVE)
                                 info = IndexRoutingTable.UNASSIGNED_INFO_NODE_LEFT;
                             
@@ -258,9 +265,8 @@ public abstract class AbstractSearchStrategy {
                 if (Router.this.redShards != null) {
                     for(DiscoveryNode node : Router.this.redShards.keySet()) {
                         int  shardId = (localNode.getId().equals(node.getId())) ? 0 : i;
-                        UnassignedInfo info = null;
-                        if (ShardRoutingState.UNASSIGNED.equals(Router.this.getShardRoutingState(node)))
-                            info = IndexRoutingTable.UNASSIGNED_INFO_UNAVAILABLE;
+                        // TODO: reflect local unassigned info form the local shard state (created or recovery).
+                        UnassignedInfo info = IndexRoutingTable.UNASSIGNED_INFO_UNAVAILABLE;
                         if (node.status() != DiscoveryNodeStatus.ALIVE)
                             info = IndexRoutingTable.UNASSIGNED_INFO_NODE_LEFT;
                         

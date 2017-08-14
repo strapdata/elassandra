@@ -182,6 +182,9 @@ public class BooleanFieldMapper extends FieldMapper {
             if (value == null) {
                 return null;
             }
+            if (value instanceof Boolean) {
+                return (Boolean)value;
+            }
             switch(value.toString()) {
             case "F":
                 return false;

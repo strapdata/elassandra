@@ -919,7 +919,7 @@ public abstract class TransportReplicationAction<
      */
     protected boolean shouldExecuteReplication(IndexMetaData indexMetaData) {
         //return IndexMetaData.isIndexUsingShadowReplicas(indexMetaData.getSettings()) == false;
-        return true;
+        return false;
     }
 
     class PrimaryShardReference implements

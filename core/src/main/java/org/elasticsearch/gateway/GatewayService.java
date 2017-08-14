@@ -200,7 +200,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
         }
     }
 
-    private void performStateRecovery(boolean enforceRecoverAfterTime, String reason) {
+    protected void performStateRecovery(boolean enforceRecoverAfterTime, String reason) {
         final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener();
 
         if (enforceRecoverAfterTime && recoverAfterTime != null) {
@@ -287,7 +287,8 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
 
                     // now, reroute
                     updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder.build()).build();
-                    return allocationService.reroute(updatedState, "state recovered");
+                    return updatedState;
+                    //return allocationService.reroute(updatedState, "state recovered");
                 }
 
                 @Override

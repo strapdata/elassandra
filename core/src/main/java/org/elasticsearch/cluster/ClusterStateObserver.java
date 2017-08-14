@@ -21,6 +21,7 @@ package org.elasticsearch.cluster;
 
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.cluster.service.BaseClusterService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.unit.TimeValue;
@@ -42,7 +43,7 @@ public class ClusterStateObserver {
 
     private final Predicate<ClusterState> MATCH_ALL_CHANGES_PREDICATE = state -> true;
 
-    private final ClusterService clusterService;
+    private final BaseClusterService clusterService;
     private final ThreadContext contextHolder;
     volatile TimeValue timeOutValue;
 
@@ -55,7 +56,7 @@ public class ClusterStateObserver {
     volatile boolean timedOut;
 
 
-    public ClusterStateObserver(ClusterService clusterService, Logger logger, ThreadContext contextHolder) {
+    public ClusterStateObserver(BaseClusterService clusterService, Logger logger, ThreadContext contextHolder) {
         this(clusterService, new TimeValue(60000), logger, contextHolder);
     }
 
@@ -64,7 +65,7 @@ public class ClusterStateObserver {
      *                       will fail any existing or new #waitForNextChange calls. Set to null
      *                       to wait indefinitely
      */
-    public ClusterStateObserver(ClusterService clusterService, @Nullable TimeValue timeout, Logger logger, ThreadContext contextHolder) {
+    public ClusterStateObserver(BaseClusterService clusterService, @Nullable TimeValue timeout, Logger logger, ThreadContext contextHolder) {
         this(clusterService.state(), clusterService, timeout, logger, contextHolder);
     }
     /**
@@ -72,7 +73,7 @@ public class ClusterStateObserver {
      *                       will fail any existing or new #waitForNextChange calls. Set to null
      *                       to wait indefinitely
      */
-    public ClusterStateObserver(ClusterState initialState, ClusterService clusterService, @Nullable TimeValue timeout, Logger logger,
+    public ClusterStateObserver(ClusterState initialState, BaseClusterService clusterService, @Nullable TimeValue timeout, Logger logger,
                                 ThreadContext contextHolder) {
         this.clusterService = clusterService;
         this.lastObservedState = new AtomicReference<>(new StoredState(initialState));

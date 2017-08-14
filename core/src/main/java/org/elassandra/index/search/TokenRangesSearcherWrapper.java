@@ -47,9 +47,7 @@ public class TokenRangesSearcherWrapper extends IndexSearcherWrapper {
     private final TokenRangesBitsetFilterCache filterCache;
     private final TokenRangesService tokenRangesService;
 
-    @Inject
-    public TokenRangesSearcherWrapper(final ShardId shardId, final IndexSettings indexSettings, 
-            final IndexService indexService, TokenRangesBitsetFilterCache filterCache, TokenRangesService tokenRangeService) {
+    public TokenRangesSearcherWrapper(TokenRangesBitsetFilterCache filterCache, TokenRangesService tokenRangeService) {
         this.filterCache = filterCache;
         this.tokenRangesService = tokenRangeService;
     }
@@ -62,10 +60,6 @@ public class TokenRangesSearcherWrapper extends IndexSearcherWrapper {
             if (tokenRangeQuery != null) {
                 BooleanQuery.Builder qb = new BooleanQuery.Builder().add(tokenRangeQuery, Occur.FILTER);
                 Query query = query(qb);
-                /*
-                if (logger.isTraceEnabled())
-                    logger.trace("wrapping DirectoryReader with TokenRangesSearcherWrapper query={}", query);
-                    */
                 return new TokenRangesDirectoryReader(in, query, this.filterCache);
             }
         }
@@ -73,7 +67,6 @@ public class TokenRangesSearcherWrapper extends IndexSearcherWrapper {
     }
 
     public Query query(BooleanQuery.Builder qb) {
-        //qb.add(Queries.newMatchAllQuery(), Occur.MUST);
         return qb.build();
     }
 

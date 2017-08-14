@@ -19,8 +19,8 @@
 
 package org.elasticsearch.gateway;
 
+import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.common.inject.AbstractModule;
-import org.elasticsearch.common.settings.Settings;
 
 /**
  *
@@ -31,7 +31,7 @@ public class GatewayModule extends AbstractModule {
     @Override
     protected void configure() {
         //bind(DanglingIndicesState.class).asEagerSingleton();
-        bind(GatewayService.class).asEagerSingleton();
+        bind(CassandraGatewayService.class).asEagerSingleton();
         bind(TransportNodesListGatewayMetaState.class).asEagerSingleton();
         bind(GatewayMetaState.class).asEagerSingleton();
         bind(TransportNodesListGatewayStartedShards.class).asEagerSingleton();

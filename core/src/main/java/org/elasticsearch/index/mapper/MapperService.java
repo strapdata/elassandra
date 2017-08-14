@@ -196,9 +196,6 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
             String esType = ClusterService.cqlMapping.get(cql3type.toString());
             if (esType != null) {
                 mapping.put("type", esType);
-                if (esType.equals("string")) {
-                    mapping.put("index","not_analyzed");
-                }
             } else {
                 logger.error("CQL type "+cql3type.toString()+" not supported");
             }

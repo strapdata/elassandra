@@ -391,13 +391,13 @@ public class DateFieldMapper extends FieldMapper {
 
         @Override
         public Object valueForDisplay(Object value) {
-            Long val = (Long) value;
-            if (val == null) {
+            if (value == null) {
                 return null;
             }
             if (value instanceof Date) {
-                return ((Date) value).getTime();
+                return dateTimeFormatter().printer().print( ((Date) value).getTime() );
             }
+            Long val = (Long) value;
             return dateTimeFormatter().printer().print(val);
         }
 
@@ -548,6 +548,7 @@ public class DateFieldMapper extends FieldMapper {
         if (fieldType().stored()) {
             context.doc().add(new StoredField(fieldType().name(), value));
         }
+        super.createField(context, object);
     }
     
     @Override

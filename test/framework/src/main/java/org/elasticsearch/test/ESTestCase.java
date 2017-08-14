@@ -170,12 +170,16 @@ public abstract class ESTestCase extends LuceneTestCase {
         System.setProperty("log4j.skipJansi", "true"); // jython has this crazy shaded Jansi version that log4j2 tries to load
 
         // shutdown hook so that when the test JVM exits, logging is shutdown too
+        /*
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LoggerContext context = (LoggerContext) LogManager.getContext(false);
             Configurator.shutdown(context);
         }));
-
+        */
         BootstrapForTesting.ensureInitialized();
+        
+        // initialized Cassandra for test
+        ESSingleNodeTestCase.initElassandraDeamon(Settings.EMPTY, Collections.emptyList());
     }
 
     protected final Logger logger = Loggers.getLogger(getClass());

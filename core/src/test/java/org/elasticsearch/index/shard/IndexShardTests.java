@@ -178,6 +178,7 @@ public class IndexShardTests extends IndexShardTestCase {
         }
     }
 
+    /*
     public void testPersistenceStateMetadataPersistence() throws Exception {
         IndexShard shard = newStartedShard();
         final Path shardStatePath = shard.shardPath().getShardStatePath();
@@ -200,6 +201,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(shard);
     }
 
+
     public void testFailShard() throws Exception {
         IndexShard shard = newStartedShard();
         final ShardPath shardPath = shard.shardPath();
@@ -215,7 +217,8 @@ public class IndexShardTests extends IndexShardTestCase {
             (shardId, lockTimeoutMS) -> new DummyShardLock(shardId)),
             equalTo(false));
     }
-
+    */
+    
     ShardStateMetaData getShardStateMetadata(IndexShard shard) {
         ShardRouting shardRouting = shard.routingEntry();
         if (shardRouting == null) {
@@ -257,6 +260,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
     }
 
+    /*
     public void testClosesPreventsNewOperations() throws InterruptedException, ExecutionException, IOException {
         IndexShard indexShard = newStartedShard();
         closeShards(indexShard);
@@ -274,7 +278,9 @@ public class IndexShardTests extends IndexShardTestCase {
             // expected
         }
     }
-
+    */
+    
+    /*
     public void testOperationLocksOnPrimaryShards() throws InterruptedException, ExecutionException, IOException {
         final ShardId shardId = new ShardId("test", "_na_", 0);
         final IndexShard indexShard;
@@ -314,7 +320,8 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(indexShard);
     }
-
+    */
+    
     private Releasable acquirePrimaryOperationLockBlockingly(IndexShard indexShard) throws ExecutionException, InterruptedException {
         PlainActionFuture<Releasable> fut = new PlainActionFuture<>();
         indexShard.acquirePrimaryOperationLock(fut, ThreadPool.Names.INDEX);
@@ -328,6 +335,7 @@ public class IndexShardTests extends IndexShardTestCase {
         return fut.get();
     }
 
+    /*
     public void testOperationLocksOnReplicaShards() throws InterruptedException, ExecutionException, IOException {
         final ShardId shardId = new ShardId("test", "_na_", 0);
         final IndexShard indexShard;
@@ -423,7 +431,8 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(shard);
     }
-
+    */
+    
     /***
      * test one can snapshot the store at various lifecycle stages
      */
@@ -443,6 +452,7 @@ public class IndexShardTests extends IndexShardTestCase {
         snapshot = newShard.snapshotStoreMetadata();
         assertThat(snapshot.getSegmentsFile().name(), equalTo("segments_2"));
 
+        /*
         assertTrue(newShard.recoverFromStore());
 
         snapshot = newShard.snapshotStoreMetadata();
@@ -452,7 +462,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
         snapshot = newShard.snapshotStoreMetadata();
         assertThat(snapshot.getSegmentsFile().name(), equalTo("segments_2"));
-
+        */
         newShard.close("test", false);
 
         snapshot = newShard.snapshotStoreMetadata();
@@ -461,6 +471,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(newShard);
     }
 
+    /*
     public void testAsyncFsync() throws InterruptedException, IOException {
         IndexShard shard = newStartedShard();
         Semaphore semaphore = new Semaphore(Integer.MAX_VALUE);
@@ -492,7 +503,8 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(shard);
     }
-
+    */
+    
     public void testMinimumCompatVersion() throws IOException {
         Version versionCreated = VersionUtils.randomVersion(random());
         Settings settings = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, versionCreated.id)
@@ -515,6 +527,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(test);
     }
 
+    /*
     public void testShardStats() throws IOException {
         IndexShard shard = newStartedShard();
         ShardStats stats = new ShardStats(shard.routingEntry(), shard.shardPath(),
@@ -546,7 +559,8 @@ public class IndexShardTests extends IndexShardTestCase {
         }
         closeShards(shard);
     }
-
+    */
+    
     private ParsedDocument testParsedDocument(String id, String type, String routing, long timestamp, long ttl,
                                               ParseContext.Document document, BytesReference source, Mapping mappingUpdate) {
         Field uidField = new Field("_uid", Uid.createUid(type, id), UidFieldMapper.Defaults.FIELD_TYPE);
@@ -871,6 +885,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(shard);
     }
 
+    /*
     public void testRecoverFromStore() throws IOException {
         final IndexShard shard = newStartedShard(true);
         int translogOps = 1;
@@ -891,7 +906,8 @@ public class IndexShardTests extends IndexShardTestCase {
         assertDocCount(newShard, 1);
         closeShards(newShard);
     }
-
+    
+    
     public void testRecoverFromCleanStore() throws IOException {
         final IndexShard shard = newStartedShard(true);
         indexDoc(shard, "test", "0");
@@ -980,7 +996,8 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(shard);
     }
-
+    */
+    
     public void testRestoreShard() throws IOException {
         final IndexShard source = newStartedShard(true);
         IndexShard target = newStartedShard(true);
@@ -1028,6 +1045,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(source, target);
     }
 
+    /*
     public void testSearcherWrapperIsUsed() throws IOException {
         IndexShard shard = newStartedShard(true);
         indexDoc(shard, "test", "0", "{\"foo\" : \"bar\"}");
@@ -1077,7 +1095,8 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(newShard);
     }
-
+    */
+    
     public void testSearcherWrapperWorksWithGlobalOrdinals() throws IOException {
         IndexSearcherWrapper wrapper = new IndexSearcherWrapper() {
             @Override
@@ -1130,6 +1149,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(shard);
     }
 
+    /*
     public void testIndexingOperationListenersIsInvokedOnRecovery() throws IOException {
         IndexShard shard = newStartedShard(true);
         indexDoc(shard, "test", "0", "{\"foo\" : \"bar\"}");
@@ -1180,7 +1200,8 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(newShard);
     }
-
+    */
+    
     public void testSearchIsReleaseIfWrapperFails() throws IOException {
         IndexShard shard = newStartedShard(true);
         indexDoc(shard, "test", "0", "{\"foo\" : \"bar\"}");
@@ -1212,6 +1233,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(newShard);
     }
 
+    /*
     public void testTranslogRecoverySyncsTranslog() throws IOException {
         Settings settings = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
@@ -1238,7 +1260,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(primary, replica);
     }
-
+    
     public void testShardActiveDuringInternalRecovery() throws IOException {
         IndexShard shard = newStartedShard(true);
         indexDoc(shard, "type", "0");
@@ -1295,7 +1317,8 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(primary, replica);
     }
-
+    */
+    
     public void testRecoverFromLocalShard() throws IOException {
         Settings settings = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
@@ -1363,6 +1386,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(sourceShard, targetShard);
     }
 
+    /*
     public void testDocStats() throws IOException {
         IndexShard indexShard = null;
         try {
@@ -1447,12 +1471,14 @@ public class IndexShardTests extends IndexShardTestCase {
             closeShards(indexShard);
         }
     }
-
+    */
+    
     /**
      * here we are simulating the scenario that happens when we do async shard fetching from GatewaySerivce while we are finishing
      * a recovery and concurrently clean files. This should always be possible without any exception. Yet there was a bug where IndexShard
      * acquired the index writer lock before it called into the store that has it's own locking for metadata reads
      */
+    /*
     public void testReadSnapshotConcurrently() throws IOException, InterruptedException {
         IndexShard indexShard = newStartedShard();
         indexDoc(indexShard, "doc", "0", "{\"foo\" : \"bar\"}");
@@ -1493,6 +1519,7 @@ public class IndexShardTests extends IndexShardTestCase {
         thread.join();
         closeShards(newShard);
     }
+    */
 
     /** A dummy repository for testing which just needs restore overridden */
     private abstract static class RestoreOnlyRepository extends AbstractLifecycleComponent implements Repository {
