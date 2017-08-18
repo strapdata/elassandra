@@ -15,6 +15,10 @@
  */
 package org.elasticsearch.cluster.service;
 
+import ch.qos.logback.classic.jmx.JMXConfiguratorMBean;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.Appender;
+
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -71,6 +75,7 @@ import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
 import org.codehaus.jackson.JsonGenerationException;
@@ -157,8 +162,10 @@ import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -184,6 +191,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.LongConsumer;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+
+import javax.management.JMX;
+import javax.management.ObjectName;
 
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
@@ -2706,7 +2716,44 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return l;
     }
 
+    /**
+     * Duplicate code from org.apache.cassandra.service.StorageService.setLoggingLevel, allowing to set log level without StorageService.instance for tests.
+     * @param classQualifier
+     * @param rawLevel
+     * @throws Exception
+     */
+    public static void setLoggingLevel(String classQualifier, String rawLevel) throws Exception
+    {
+        ch.qos.logback.classic.Logger logBackLogger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(classQualifier);
 
+        // if both classQualifer and rawLevel are empty, reload from configuration
+        if (StringUtils.isBlank(classQualifier) && StringUtils.isBlank(rawLevel) )
+        {
+            JMXConfiguratorMBean jmxConfiguratorMBean = JMX.newMBeanProxy(ManagementFactory.getPlatformMBeanServer(),
+                    new ObjectName("ch.qos.logback.classic:Name=default,Type=ch.qos.logback.classic.jmx.JMXConfigurator"),
+                    JMXConfiguratorMBean.class);
+            jmxConfiguratorMBean.reloadDefaultConfiguration();
+            return;
+        }
+        // classQualifer is set, but blank level given
+        else if (StringUtils.isNotBlank(classQualifier) && StringUtils.isBlank(rawLevel) )
+        {
+            if (logBackLogger.getLevel() != null || hasAppenders(logBackLogger))
+                logBackLogger.setLevel(null);
+            return;
+        }
+
+        ch.qos.logback.classic.Level level = ch.qos.logback.classic.Level.toLevel(rawLevel);
+        logBackLogger.setLevel(level);
+        //logger.info("set log level to {} for classes under '{}' (if the level doesn't look like '{}' then the logger couldn't parse '{}')", level, classQualifier, rawLevel, rawLevel);
+    }
+
+    private static boolean hasAppenders(ch.qos.logback.classic.Logger logger)
+    {
+        Iterator<Appender<ILoggingEvent>> it = logger.iteratorForAppenders();
+        return it.hasNext();
+    }
+    
     /**
      * Serialize a cassandra typed object.
      */

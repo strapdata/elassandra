@@ -185,7 +185,7 @@ public final class ShardSearchStats implements SearchOperationListener {
         totalStats.scrollMetric.inc(System.nanoTime() - context.getOriginNanoTime());
     }
 
-    static final class StatsHolder {
+    public static final class StatsHolder {
         public final MeanMetric queryMetric = new MeanMetric();
         public final MeanMetric fetchMetric = new MeanMetric();
         public final MeanMetric scrollMetric = new MeanMetric();

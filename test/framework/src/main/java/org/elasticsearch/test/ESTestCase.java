@@ -177,9 +177,6 @@ public abstract class ESTestCase extends LuceneTestCase {
         }));
         */
         BootstrapForTesting.ensureInitialized();
-        
-        // initialized Cassandra for test
-        ESSingleNodeTestCase.initElassandraDeamon(Settings.EMPTY, Collections.emptyList());
     }
 
     protected final Logger logger = Loggers.getLogger(getClass());

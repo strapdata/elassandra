@@ -801,6 +801,10 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return searchStats.stats(groups);
     }
 
+    public ShardSearchStats shardShearchStats() {
+        return this.searchStats;
+    }
+    
     public GetStats getStats() {
         return getService.stats();
     }

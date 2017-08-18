@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index;
 
-import org.apache.cassandra.service.StorageService;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.logging.DeprecationLogger;
@@ -128,7 +128,7 @@ public final class IndexingSlowLog implements IndexingOperationListener {
     private void setLevel(SlowLogLevel level) {
         this.level = level;
         try {
-            StorageService.instance.setLoggingLevel(this.indexLogger.getName(), level.toString());
+            ClusterService.setLoggingLevel(this.indexLogger.getName(), level.toString());
         } catch (Exception e) {
         }
         //Loggers.setLevel(this.indexLogger, level.name());

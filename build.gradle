@@ -62,6 +62,33 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
   }
 }
 
+/*
+allprojects {
+    apply plugin: 'signing'
+    apply plugin: 'maven'
+
+    // Signature of artifacts
+    signing {
+        sign configurations.archives
+    }
+
+    // OSSRH publication
+    uploadArchives {
+        repositories {
+            mavenDeployer {
+                // POM signature
+                beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+                
+                // Target repository
+                repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                    authentication(userName: repoUsername, password: repoPassword)
+                }
+            }
+        }
+    }
+}
+*/
+
 // introspect all versions of ES that may be tested agains for backwards compatibility
 Version currentVersion = Version.fromString(VersionProperties.elasticsearch.minus('-SNAPSHOT'))
 File versionFile = file('core/src/main/java/org/elasticsearch/Version.java')
