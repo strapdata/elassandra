@@ -95,11 +95,22 @@ class VagrantTestPlugin implements Plugin<Project> {
         repos.ivy {
             artifactPattern "https://artifacts.elastic.co/downloads/elasticsearch/[module]-[revision].[ext]"
         }
+        /*
+        repos.ivy {
+            artifactPattern "https://packagecloud.io/elassandra/latest/packages/el/7/[module]-[revision]-1.noarch.[ext]/download"
+        }
+        repos.ivy {
+            artifactPattern "https://packagecloud.io/elassandra/latest/packages/debian/jessie/[module]_è[revision]-1_all.[ext]/download"
+        }
+        //*/
+
     }
 
     private static void createBatsConfiguration(Project project) {
         project.configurations.create(BATS)
 
+        //*
+        // Not implemented in elassandra qa yet cause it requires to host elassandra packages in an ivy-like repository
         final long seed
         final String formattedSeed
         String maybeTestsSeed = System.getProperty("tests.seed")
@@ -114,10 +125,12 @@ class VagrantTestPlugin implements Plugin<Project> {
             seed = new Random().nextLong()
             formattedSeed = String.format("%016X", seed)
         }
+        //*/
 
         String upgradeFromVersion = System.getProperty("tests.packaging.upgradeVersion");
         if (upgradeFromVersion == null) {
-            upgradeFromVersion = project.indexCompatVersions[new Random(seed).nextInt(project.indexCompatVersions.size())]
+            //upgradeFromVersion = project.indexCompatVersions[new Random(seed).nextInt(project.indexCompatVersions.size())]
+            upgradeFromVersion = '2.4.5.4'
         }
 
         DISTRIBUTION_ARCHIVES.each {
@@ -125,10 +138,13 @@ class VagrantTestPlugin implements Plugin<Project> {
             project.dependencies.add(BATS, project.dependencies.project(path: ":distribution:${it}", configuration: 'archives'))
         }
 
+        /*
         UPGRADE_FROM_ARCHIVES.each {
             // The version of elasticsearch that we upgrade *from*
-            project.dependencies.add(BATS, "com.strapdata.elasticsearch.distribution.${it}:elasticsearch:${upgradeFromVersion}@${it}")
+            // project.dependencies.add(BATS, "com.strapdata.elasticsearch.distribution.${it}:elasticsearch:${upgradeFromVersion}@${it}")
+            project.dependencies.add(BATS, "com.strapdata.elasticsearch.distribution.${it}:elassandra:${upgradeFromVersion}@${it}")
         }
+        //*/
 
         project.extensions.esvagrant.testSeed = seed
         project.extensions.esvagrant.formattedTestSeed = formattedSeed
