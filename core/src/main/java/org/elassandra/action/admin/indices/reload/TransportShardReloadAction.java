@@ -78,7 +78,7 @@ public class TransportShardReloadAction extends TransportReplicationAction<Shard
         for(int i=0; i < tables.size(); i++)
             StorageService.instance.loadNewSSTables(indexService.keyspace(), tables.get(i));
         
-        logger.trace("index=[{}] reload request executed on keyspace=[{}] tables={}", shardRequest.shardId().getIndex(), indexService.keyspace(), tables);
+        logger.info("index=[{}] reload request executed on keyspace=[{}] tables={}", shardRequest.shardId().getIndex(), indexService.keyspace(), tables);
         return new Tuple<>(new ActionWriteResponse(), shardRequest);
     }
 

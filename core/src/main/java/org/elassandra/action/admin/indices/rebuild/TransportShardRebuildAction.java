@@ -91,7 +91,7 @@ public class TransportShardRebuildAction extends TransportReplicationAction<Shar
         for(int i=0; i < tables.size(); i++)
             StorageService.instance.rebuildSecondaryIndex(shardRequest.getRequest().numThreads(), indexService.keyspace(), tables.get(i), indexes.get(i));
         
-        logger.trace("index=[{}] rebuild request executed on keyspace=[{}] tables={} with numThreads={}", shardRequest.shardId().getIndex(), indexService.keyspace(), tables, shardRequest.getRequest().numThreads());
+        logger.info("index=[{}] rebuild request executed on keyspace=[{}] tables={} with numThreads={}", shardRequest.shardId().getIndex(), indexService.keyspace(), tables, shardRequest.getRequest().numThreads());
         return new Tuple<>(new ActionWriteResponse(), shardRequest);
     }
 

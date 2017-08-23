@@ -78,7 +78,7 @@ public class TransportShardCleanupAction extends TransportReplicationAction<Shar
         for(int i=0; i < tables.size(); i++)
             StorageService.instance.forceKeyspaceCleanup(shardRequest.getRequest().jobs(), indexService.keyspace(), tables.toArray(new String[tables.size()]));
         
-        logger.trace("index=[{}] cleanup request executed on keyspace=[{}] tables={} with jobs={}", shardRequest.shardId().getIndex(), indexService.keyspace(), tables, shardRequest.getRequest().jobs());
+        logger.info("index=[{}] cleanup request executed on keyspace=[{}] tables={} with jobs={}", shardRequest.shardId().getIndex(), indexService.keyspace(), tables, shardRequest.getRequest().jobs());
         return new Tuple<>(new ActionWriteResponse(), shardRequest);
     }
 
