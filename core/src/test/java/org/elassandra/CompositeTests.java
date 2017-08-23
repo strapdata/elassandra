@@ -49,8 +49,13 @@ public class CompositeTests extends ESSingleNodeTestCase {
                     .startObject("name").field("type", "string").field("cql_collection", "singleton").field("index", "analyzed").field("cql_primary_key_order", 2).endObject()
                     .startObject("phonetic_name").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_static_column", true).endObject()
                     .startObject("nicks").field("type", "string").field("cql_collection", "list").field("index", "analyzed").endObject()
-                .endObject()
-            .endObject();
+                .endObject().startObject("_meta")
+                .field("index_static_document",true)
+            .endObject()
+            .startObject("_meta")
+                .field("index_static_document",true)
+            .endObject()
+          .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").setSettings(Settings.builder().put("index.token_ranges_bitset_cache",false).build()).addMapping("t2", mapping));
         ensureGreen("test");
         
@@ -64,7 +69,10 @@ public class CompositeTests extends ESSingleNodeTestCase {
     // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CompositeTests -Dtests.method="testCompositeTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testCompositeTest() throws Exception {
-        createIndex("composite", Settings.builder().put("index.token_ranges_bitset_cache", false).build());
+        createIndex("composite", Settings.builder()
+                .put("index.token_ranges_bitset_cache", false)
+                .put("index.index_static_document", true)
+                .build());
         ensureGreen("composite");
         
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite.t1 ( a text,b text,c bigint,f float,primary key ((a),b) )");
@@ -231,6 +239,9 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                             .endObject()
                         .endObject()
                     .endObject()
+                    .startObject("_meta")
+                        .field("index_static_document",true)
+                    .endObject()
                 .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("timeseries", mapping));
         ensureGreen("test");
@@ -259,6 +270,40 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         assertThat(hits.getTotalHits(), equalTo(1L));
         assertThat(source.get("m"), equalTo("server1-cpu"));
         assertThat(((Map)source.get("meta")).get("region"), equalTo("west"));
+    }
+    
+    @Test
+    public void testTimeserieEmptyTest() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("m").field("type", "string").field("cql_collection", "singleton").field("index", "not_analyzed").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("t").field("type", "date").field("cql_collection", "singleton").field("cql_primary_key_order", 1).endObject()
+                        .startObject("v").field("type", "double").field("cql_collection", "singleton").endObject()
+                        .startObject("meta").field("type", "nested").field("cql_collection", "singleton").field("cql_struct", "map").field("cql_static_column", true).field("include_in_parent", true)
+                            .startObject("properties")
+                                .startObject("region").field("type", "string").field("index", "analyzed").endObject()
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                    .startObject("_meta")
+                        .field("index_static_only",true) // and index_static_document=false by default => index nothing
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("timeseries", mapping));
+        ensureGreen("test");
+            
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:30', 10);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:31', 20);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:32', 15);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, meta) VALUES ('server1-cpu', { 'region':'west' } );");
+        
+        SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("timeseries")
+                .setQuery(QueryBuilders.matchAllQuery())
+                .setFetchSource(new String[] { "m",  "t", "v", "meta.region"}, null)
+                .get();
+        SearchHits hits = rsp.getHits();
+        assertThat(hits.getTotalHits(), equalTo(0L));
     }
     
     @Test
@@ -293,7 +338,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                 .get();
         SearchHits hits = rsp.getHits();
         Map<String, Object> source = hits.hits()[0].getSource();
-        assertThat(hits.getTotalHits(), equalTo(4L));
+        assertThat(hits.getTotalHits(), equalTo(3L));
         assertThat(source.get("m"), equalTo("server1-cpu"));
         assertThat(((Map)source.get("meta")).get("region"), equalTo("west"));
     }
@@ -313,6 +358,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                         .endObject()
                     .endObject()
                     .startObject("_meta")
+                        .field("index_static_document",true)
                         .field("index_static_only",true)
                     .endObject()
                 .endObject();

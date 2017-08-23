@@ -91,6 +91,7 @@ import org.apache.cassandra.index.transactions.IndexTransaction.Type;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
@@ -826,6 +827,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             final Map<String,Object> mapping;
             final boolean index_static_columns;
             final boolean index_static_only;
+            final boolean index_static_document;
             final boolean index_on_compaction;
             final boolean versionLessEngine;
             
@@ -850,6 +852,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 this.index_on_compaction = getMetaSettings(metadata.settings(), indexService.indexSettings(), metaMap, InternalCassandraClusterService.INDEX_ON_COMPACTION);
                 this.index_static_columns = getMetaSettings(metadata.settings(), indexService.indexSettings(), metaMap, InternalCassandraClusterService.INDEX_STATIC_COLUMNS);
                 this.index_static_only = getMetaSettings(metadata.settings(), indexService.indexSettings(), metaMap, InternalCassandraClusterService.INDEX_STATIC_ONLY);
+                this.index_static_document = getMetaSettings(metadata.settings(), indexService.indexSettings(), metaMap, InternalCassandraClusterService.INDEX_STATIC_DOCUMENT);
             }
 
             // get _meta, index, cluster or system settings.
@@ -1892,6 +1895,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 
                 private void index(ImmutableIndexInfo indexInfo, long startTime, long ttl) {
                     if (indexInfo.index_on_compaction || transactionType == IndexTransaction.Type.UPDATE) {
+                        if (isStatic() && !indexInfo.index_static_document)
+                            return; // ignore static document.
+                        if (!isStatic() && indexInfo.index_static_only)
+                            return; // ignore non-static document.
+                        
                         try {
                             Context context = buildContext(indexInfo, isStatic());
                             Field uid = context.uid();
