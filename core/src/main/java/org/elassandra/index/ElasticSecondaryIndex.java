@@ -1671,10 +1671,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     } else {
                         id = partitionKey;
                     }
-                    if (inRow != null)
-                        readCellValues(inRow, true);
+                    
+                    // order is important, remove before insert.
                     if (outRow != null)
                         readCellValues(outRow, false);
+                    if (inRow != null)
+                        readCellValues(inRow, true);
                 }
                 
                 public boolean hasLiveData(int nowInSec) {
@@ -1717,7 +1719,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 l.add(value);
                                 break;
                             case SET:
-                                value = InternalCassandraClusterService.deserialize(((SetType)cd.type).getElementsType(), cell.value() );
+                                value = InternalCassandraClusterService.deserialize(((SetType)cd.type).getElementsType(), cell.path().get(0) );
                                 if (logger.isTraceEnabled()) 
                                     logger.trace("set name={} kind={} type={} value={}", cellNameString, cd.kind, cd.type.asCQL3Type().toString(), value);
                                 Set s = (Set) values[idx];

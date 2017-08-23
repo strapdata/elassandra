@@ -328,4 +328,58 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
        
         assertThat(client().prepareSearch().setIndices("test").setTypes("my_type").setQuery(QueryBuilders.queryStringQuery("status_code:NULL")).get().getHits().getTotalHits(), equalTo(3L));
     }
+    
+    // #112 test
+    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testSets" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    @Test
+    public void testSets() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("items")
+                            .field("type", "object")
+                            .field("cql_collection", "set")
+                            .field("cql_udt_name", "item")
+                            .startObject("properties")
+                                .startObject("name")
+                                    .field("type", "string")
+                                    .field("index", "not_analyzed")
+                                    .field("cql_collection", "singleton")
+                                .endObject()
+                            .endObject()
+                         .endObject()
+                         .startObject("item")
+                            .field("type", "object")
+                            .field("cql_collection", "singleton")
+                            .field("cql_udt_name", "item")
+                            .startObject("properties")
+                                .startObject("name")
+                                    .field("type", "string")
+                                    .field("index", "not_analyzed")
+                                    .field("cql_collection", "singleton")
+                                 .endObject()
+                            .endObject()
+                         .endObject()
+                         .startObject("attrs")
+                             .field("type", "string")
+                             .field("index", "not_analyzed")
+                             .field("cql_collection", "set")
+                          .endObject()
+                   .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("tab_set", mapping));
+        ensureGreen("test");
+
+        process(ConsistencyLevel.ONE,"insert into test.tab_set (\"_id\",item,items,attrs) values ('1',{name:'hello'},{{name:'world'},{name:'heaven'}},{'blue','red'})");
+        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("items.name:world")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("red")).get().getHits().getTotalHits(), equalTo(1L));
+        
+        process(ConsistencyLevel.ONE,"insert into test.tab_set (\"_id\",item,items,attrs) values ('1',{name:'hello'},{{name:'heaven'}},{'blue'})");
+        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("items.name:world")).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("red")).get().getHits().getTotalHits(), equalTo(0L));
+        
+        process(ConsistencyLevel.ONE,"update test.tab_set set items = items + {{name:'world'}} where \"_id\" = '1'");
+        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("items.name:world")).get().getHits().getTotalHits(), equalTo(1L));
+        process(ConsistencyLevel.ONE,"update test.tab_set set attrs = attrs + {'yellow'} where \"_id\" = '1'");
+        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("yellow")).get().getHits().getTotalHits(), equalTo(1L));
+    }
 }
