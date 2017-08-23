@@ -280,7 +280,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         this.env = environment;
         org.elasticsearch.bootstrap.Bootstrap.initializeNatives(
                           env.tmpFile(),
-                          settings.getAsBoolean("bootstrap.mlockall", false),
+                          settings.getAsBoolean("bootstrap.mlockall", true),
                           settings.getAsBoolean("bootstrap.seccomp", true),
                           settings.getAsBoolean("bootstrap.ctrlhandler", true));
 
