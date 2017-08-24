@@ -18,6 +18,7 @@ package org.elasticsearch.cluster.service;
 import ch.qos.logback.classic.jmx.JMXConfiguratorMBean;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.Appender;
+import ch.qos.logback.core.joran.spi.JoranException;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.google.common.collect.ImmutableList;
@@ -193,6 +194,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import javax.management.JMX;
+import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
 
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
@@ -2722,18 +2724,22 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
      * @param rawLevel
      * @throws Exception
      */
-    public static void setLoggingLevel(String classQualifier, String rawLevel) throws Exception
+    public static void setLoggingLevel(String classQualifier, String rawLevel)
     {
         ch.qos.logback.classic.Logger logBackLogger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(classQualifier);
 
         // if both classQualifer and rawLevel are empty, reload from configuration
         if (StringUtils.isBlank(classQualifier) && StringUtils.isBlank(rawLevel) )
         {
-            JMXConfiguratorMBean jmxConfiguratorMBean = JMX.newMBeanProxy(ManagementFactory.getPlatformMBeanServer(),
-                    new ObjectName("ch.qos.logback.classic:Name=default,Type=ch.qos.logback.classic.jmx.JMXConfigurator"),
-                    JMXConfiguratorMBean.class);
-            jmxConfiguratorMBean.reloadDefaultConfiguration();
-            return;
+            try {
+                JMXConfiguratorMBean jmxConfiguratorMBean = JMX.newMBeanProxy(ManagementFactory.getPlatformMBeanServer(),
+                        new ObjectName("ch.qos.logback.classic:Name=default,Type=ch.qos.logback.classic.jmx.JMXConfigurator"),
+                        JMXConfiguratorMBean.class);
+                jmxConfiguratorMBean.reloadDefaultConfiguration();
+                return;
+            } catch (MalformedObjectNameException | JoranException e) {
+                throw new RuntimeException(e);
+            }
         }
         // classQualifer is set, but blank level given
         else if (StringUtils.isNotBlank(classQualifier) && StringUtils.isBlank(rawLevel) )

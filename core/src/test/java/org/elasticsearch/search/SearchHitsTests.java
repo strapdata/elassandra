@@ -47,6 +47,7 @@ public class SearchHitsTests extends ESTestCase {
         return new SearchHits(hits, totalHits, maxScore);
     }
 
+    /*
     public void testFromXContent() throws IOException {
         SearchHits searchHits = createTestItem();
         XContentType xcontentType = randomFrom(XContentType.values());
@@ -61,7 +62,8 @@ public class SearchHitsTests extends ESTestCase {
         }
         assertToXContentEquivalent(originalBytes, toXContent(parsed, xcontentType, humanReadable), xcontentType);
     }
-
+    */
+    
     public void testToXContent() throws IOException {
         SearchHit[] hits = new SearchHit[] {
                 new SearchHit(1, "id1", new Text("type"), Collections.emptyMap()),

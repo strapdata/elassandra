@@ -28,6 +28,7 @@ import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.Configurator;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.message.MessageFactory;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Classes;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.Index;
@@ -145,14 +146,19 @@ public class Loggers {
     }
 
     public static void setLevel(Logger logger, Level level) {
+        ClusterService.setLoggingLevel(logger.getName(), level.toString());
+        
+        /*
         if (!LogManager.ROOT_LOGGER_NAME.equals(logger.getName())) {
             Configurator.setLevel(logger.getName(), level);
         } else {
+            if (LoggerContext.getContext(false) instanceof )
             final LoggerContext ctx = LoggerContext.getContext(false);
             final Configuration config = ctx.getConfiguration();
             final LoggerConfig loggerConfig = config.getLoggerConfig(logger.getName());
             loggerConfig.setLevel(level);
             ctx.updateLoggers();
+            
         }
 
         // we have to descend the hierarchy
@@ -162,6 +168,7 @@ public class Loggers {
                 Configurator.setLevel(loggerConfig.getName(), level);
             }
         }
+        */
     }
 
     public static void addAppender(final Logger logger, final Appender appender) {
