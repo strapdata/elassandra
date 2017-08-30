@@ -204,8 +204,6 @@ launch_service()
     cassandra_parms="-Dlogback.configurationFile=$CASSANDRA_CONF/logback.xml"
     cassandra_parms="$cassandra_parms -Dcassandra.logdir=$CASSANDRA_LOGDIR"
     cassandra_parms="$cassandra_parms -Dcassandra.storagedir=$cassandra_storagedir"
-    cassandra_parms="$cassandra_parms -Des.default.path.data=$cassandra_storagedir/elasticsearch.data"
-
 
     # needed by elaticsearch for graphic computations
     JVM_OPTS="$JVM_OPTS -Djava.awt.headless=true"

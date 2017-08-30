@@ -314,7 +314,10 @@ public class ElassandraDaemon extends CassandraDaemon {
         // reloading could cause multiple prompts to the user for values if a system property was specified with a prompt
         // placeholder
         Settings nodeSettings = Settings.settingsBuilder()
+                 // overloadable settings from elasticsearch.yml
+                .put("path.data", getElasticsearchDataDir())
                 .put(settings)
+                // overloadable settings.
                 .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
                 .build();
         
@@ -369,14 +372,11 @@ public class ElassandraDaemon extends CassandraDaemon {
         return cassandra_conf;
     }
     
-    /*
+    // The default elasticsearch data directory if path.data is not set from elasticsearch.yml or system properties
     public static String getElasticsearchDataDir() {
-        String cassandra_storagedir =  System.getProperty("cassandra_storagedir");
-        if (cassandra_storagedir == null)
-            cassandra_storagedir = System.getProperty("path.data",getHomeDir()+"/data/elasticsearch.data");
-        return cassandra_storagedir + "/elasticsearch.data";
+        String cassandra_storage = System.getProperty("cassandra.storage", getHomeDir() + File.separator + "data");
+        return cassandra_storage + File.separator + "elasticsearch.data";
     }
-    */
     
     public static void main(String[] args) {
         try
@@ -427,7 +427,6 @@ public class ElassandraDaemon extends CassandraDaemon {
                         .put("node.name","node0")
                         .put("path.home",getHomeDir())
                         .put("path.conf",getConfigDir())
-                        //.put("path.data",getElasticsearchDataDir())
                         .build(),
                     foreground ? Terminal.DEFAULT : null);
             
