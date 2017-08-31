@@ -121,7 +121,7 @@ if (project == rootProject) {
 
 /*****************************************************************************
  *                           Normal project checks                           *
- *****************************************************************************/
+ *****************************************************exc************************/
 
 // this happens when included as a normal project in the build, which we do
 // to enforce precommit checks like forbidden apis, as well as setup publishing

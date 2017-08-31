@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 
-# Tests upgrading elasticsearch from a previous version with the deb or rpm
-# packages. Just uses a single node cluster on the current machine rather than
-# fancy rolling restarts.
+# This file is used to test the elasticsearch Systemd setup.
 
 # WARNING: This testing file must be executed as root and can
 # dramatically change your system. It should only be executed
@@ -38,40 +36,53 @@
 # Load test utilities
 load $BATS_UTILS/utils.bash
 load $BATS_UTILS/packages.bash
+load $BATS_UTILS/plugins.bash
 
 # Cleans everything for the 1st execution
 setup() {
     skip_not_dpkg_or_rpm
+    export_elasticsearch_paths
 }
 
-@test "[REINSTALL] install" {
+@test "[CASSANDRA] install elassandra" {
     clean_before_test
     install_package
 }
 
-@test "[REINSTALL] purge elasticsearch" {
-    purge_elasticsearch
+@test "[CASSANDRA] test nodetool command while elassandra is stopped" {
+    nodetool
+    run nodetool status
+    [ "$status" -eq 1 ]
+    [ "$output" = "nodetool: Failed to connect to '127.0.0.1:7199' - ConnectException: 'Connection refused (Connection refused)'." ]
+
+    # test with non-root user
+    sudo -u vagrant nodetool
 }
 
-@test "[REINSTALL] chown directories" {
-    # to simulate the loss of ownership
-    if [ -d /var/lib/cassandra ]; then
-      sudo chown -R root:root /var/lib/cassandra
-    fi
-    if [ -d "/var/log/cassandra" ]; then
-      sudo chown -R root:root /var/log/cassandra
-    fi
-    if [ -d /etc/cassandra ]; then
-      sudo chown -R root:root /etc/cassandra
-    fi
+@test "[CASSANDRA] test cqlsh works while elassandra is stopped" {
+  run cqlsh
+    [ "$status" -eq 1 ]
+    [ "$output" = "Connection error: ('Unable to connect to any servers', {'127.0.0.1': error(111, \"Tried connecting to [('127.0.0.1', 9042)]. Last error: Connection refused\")})" ]
 }
 
-@test "[REINSTALL] reinstall elasticsearch" {
-    install_package
+@test "[CASSANDRA] start elassandra" {
+    start_elasticsearch_service
 }
 
-@test "[REINSTALL] check ownership" {
-    assert_recursive_ownership /var/lib/cassandra cassandra cassandra
-    assert_recursive_ownership /var/log/cassandra cassandra cassandra
-    assert_recursive_ownership /etc/cassandra root cassandra
+@test "[CASSANDRA] test nodetool while elassandra is started" {
+    nodetool status | grep 127.0.0.1
+
+    sudo -u vagrant nodetool status | grep 127.0.0.1
+}
+
+@test "[CASSANDRA] test cqlsh while elassandra is started" {
+    cqlsh -e 'SHOW VERSION'
+    cqlsh -e 'SHOW VERSION' | grep Cassandra
+
+    sudo -u vagrant cqlsh -e 'SHOW VERSION'
+    sudo -u vagrant cqlsh -e 'SHOW VERSION' | grep Cassandra
+}
+
+@test "[CASSANDRA] stop elassandra" {
+    stop_elasticsearch_service
 }

@@ -71,9 +71,10 @@ if [[ "$BATS_TEST_FILENAME" =~ 25_tar_plugins.bats$ ]]; then
         install_archive
         verify_archive_installation
     }
-    export ESHOME=/tmp/elasticsearch
+    export ESHOME=/tmp/elassandra
     export_elasticsearch_paths
-    export ESPLUGIN_COMMAND_USER=elasticsearch
+    export ESPLUGIN_COMMAND_USER=cassandra
+    export ESPLUGIN_COMMAND=$ESHOME/bin/elasticsearch-plugin
 else
     load $BATS_UTILS/packages.bash
     if is_rpm; then
@@ -83,40 +84,43 @@ else
     fi
     export_elasticsearch_paths
     export ESPLUGIN_COMMAND_USER=root
+    export ESPLUGIN_COMMAND=elasticsearch-plugin
     install() {
         install_package
         verify_package_installation
     }
 fi
 
-@test "[$GROUP] install jvm-example plugin with a custom CONFIG_FILE and check failure" {
-    local relativePath=${1:-$(readlink -m jvm-example-*.zip)}
-    CONF_FILE="$ESCONFIG/elasticsearch.yml" run sudo -E -u $ESPLUGIN_COMMAND_USER "$ESHOME/bin/elasticsearch-plugin" install "file://$relativePath"
-    # this should fail because CONF_FILE is no longer supported
-    [ $status = 1 ]
-    CONF_FILE="$ESCONFIG/elasticsearch.yml" run sudo -E -u $ESPLUGIN_COMMAND_USER "$ESHOME/bin/elasticsearch-plugin" remove jvm-example
-    echo "status is $status"
-    [ $status = 1 ]
-}
+# No need for elassandra
+#@test "[$GROUP] install jvm-example plugin with a custom CONFIG_FILE and check failure" {
+#    local relativePath=${1:-$(readlink -m jvm-example-*.zip)}
+#    CONF_FILE="$ESCONFIG/elasticsearch.yml" run sudo -E -u $ESPLUGIN_COMMAND_USER "$ESPLUGIN_COMMAND" install "file://$relativePath"
+#    # this should fail because CONF_FILE is no longer supported
+#    [ $status = 1 ]
+#    CONF_FILE="$ESCONFIG/elasticsearch.yml" run sudo -E -u $ESPLUGIN_COMMAND_USER "$ESPLUGIN_COMMAND" remove jvm-example
+#    echo "status is $status"
+#    [ $status = 1 ]
+#}
 
-@test "[$GROUP] start elasticsearch with a custom CONFIG_FILE and check failure" {
-    local CONF_FILE="$ESCONFIG/elasticsearch.yml"
-
-    if is_dpkg; then
-        echo "CONF_FILE=$CONF_FILE" >> /etc/default/elasticsearch;
-    elif is_rpm; then
-        echo "CONF_FILE=$CONF_FILE" >> /etc/sysconfig/elasticsearch;
-    fi
-
-    run_elasticsearch_service 1 -Ees.default.config="$CONF_FILE"
-
-    # remove settings again otherwise cleaning up before next testrun will fail
-    if is_dpkg ; then
-        sudo sed -i '/CONF_FILE/d' /etc/default/elasticsearch
-    elif is_rpm; then
-        sudo sed -i '/CONF_FILE/d' /etc/sysconfig/elasticsearch
-    fi
-}
+# No need for elassandra
+#@test "[$GROUP] start elasticsearch with a custom CONFIG_FILE and check failure" {
+#    local CONF_FILE="$ESCONFIG/elasticsearch.yml"
+#
+#    if is_dpkg; then
+#        echo "CONF_FILE=$CONF_FILE" >> /etc/default/cassandra;
+#    elif is_rpm; then
+#        echo "CONF_FILE=$CONF_FILE" >> /etc/sysconfig/cassandra;
+#    fi
+#
+#    run_elasticsearch_service 1 -Ees.default.config="$CONF_FILE"
+#
+#    # remove settings again otherwise cleaning up before next testrun will fail
+#    if is_dpkg ; then
+#        sudo sed -i '/CONF_FILE/d' /etc/default/elasticsearch
+#    elif is_rpm; then
+#        sudo sed -i '/CONF_FILE/d' /etc/sysconfig/elasticsearch
+#    fi
+#}
 
 @test "[$GROUP] install jvm-example plugin with a symlinked plugins path" {
     # Clean up after the last time this test was run
@@ -125,7 +129,7 @@ fi
 
     rm -rf "$ESPLUGINS"
     local es_plugins=$(mktemp -d -t 'plugins.XXXX')
-    chown -R elasticsearch:elasticsearch "$es_plugins"
+    chown -R cassandra:cassandra "$es_plugins"
     ln -s "$es_plugins" "$ESPLUGINS"
 
     install_jvm_example
@@ -166,10 +170,13 @@ fi
 @test "[$GROUP] install jvm-example plugin to elasticsearch directory with a space" {
     [ "$GROUP" == "TAR PLUGINS" ] || skip "Test case only supported by TAR PLUGINS"
 
+    local save_esplugin_cmd="$ESPLUGIN_COMMAND"
     move_elasticsearch "/tmp/elastic search"
+    ESPLUGIN_COMMAND="$ESHOME/bin/elasticsearch-plugin"
 
     install_jvm_example
     remove_jvm_example
+    ESPLUGIN_COMMAND=$save_esplugin_cmd
 }
 
 @test "[$GROUP] fail if java executable is not found" {
@@ -177,8 +184,13 @@ fi
   local JAVA=$(which java)
 
   sudo chmod -x $JAVA
-  run "$ESHOME/bin/elasticsearch-plugin"
+  if [ -n "$JAVA_HOME" ]; then
+    save_java_home="$JAVA_HOME"
+    unset JAVA_HOME
+  fi
+  run "$ESPLUGIN_COMMAND"
   sudo chmod +x $JAVA
+  [ -n "$save_java_home" ] && export JAVA_HOME="$save_java_home"
 
   [ "$status" -eq 1 ]
   local expected="Could not find any executable java binary. Please install java in your PATH or set JAVA_HOME"
@@ -203,7 +215,7 @@ fi
 }
 
 @test "[$GROUP] install phonetic plugin" {
-    install_and_check_plugin analysis phonetic commons-codec-*.jar
+    install_and_check_plugin analysis phonetic
 }
 
 @test "[$GROUP] install smartcn plugin" {
@@ -293,7 +305,7 @@ fi
 }
 
 @test "[$GROUP] install repository-hdfs plugin" {
-    install_and_check_plugin repository hdfs hadoop-client-*.jar hadoop-common-*.jar hadoop-annotations-*.jar hadoop-auth-*.jar hadoop-hdfs-*.jar htrace-core-*.jar guava-*.jar protobuf-java-*.jar commons-logging-*.jar commons-cli-*.jar commons-collections-*.jar commons-configuration-*.jar commons-io-*.jar commons-lang-*.jar servlet-api-*.jar slf4j-api-*.jar
+    install_and_check_plugin repository hdfs hadoop-client-*.jar hadoop-common-*.jar hadoop-annotations-*.jar hadoop-auth-*.jar hadoop-hdfs-*.jar htrace-core-*.jar protobuf-java-*.jar  commons-collections-*.jar commons-configuration-*.jar commons-io-*.jar commons-lang-*.jar servlet-api-*.jar
 }
 
 @test "[$GROUP] install size mapper plugin" {
@@ -317,7 +329,7 @@ fi
 }
 
 @test "[$GROUP] check the installed plugins can be listed with 'plugins list' and result matches the list of plugins in plugins pom" {
-    "$ESHOME/bin/elasticsearch-plugin" list | cut -d'@' -f1 > /tmp/installed
+    "$ESPLUGIN_COMMAND" list | cut -d'@' -f1 > /tmp/installed
     compare_plugins_list "/tmp/installed" "'plugins list'"
 }
 
@@ -331,6 +343,7 @@ fi
 }
 
 @test "[$GROUP] stop elasticsearch" {
+    sleep 400
     stop_elasticsearch_service
 }
 
@@ -450,7 +463,9 @@ fi
 
 @test "[$GROUP] install jvm-example with different logging modes and check output" {
     local relativePath=${1:-$(readlink -m jvm-example-*.zip)}
-    sudo -E -u $ESPLUGIN_COMMAND_USER "$ESHOME/bin/elasticsearch-plugin" install "file://$relativePath" > /tmp/plugin-cli-output
+    # added a filter for '*DEBUG*' lines because of a temporary trick with the logger
+    sudo -E -u $ESPLUGIN_COMMAND_USER "$ESPLUGIN_COMMAND" install "file://$relativePath" | sed /DEBUG/d > /tmp/plugin-cli-output
+    test ${PIPESTATUS[0]} -eq 0
     # exclude progress line
     local loglines=$(cat /tmp/plugin-cli-output | grep -v "^[[:cntrl:]]" | wc -l)
     [ "$loglines" -eq "2" ] || {
@@ -461,7 +476,7 @@ fi
     remove_jvm_example
 
     local relativePath=${1:-$(readlink -m jvm-example-*.zip)}
-    sudo -E -u $ESPLUGIN_COMMAND_USER ES_JAVA_OPTS="-Des.logger.level=DEBUG" "$ESHOME/bin/elasticsearch-plugin" install "file://$relativePath" > /tmp/plugin-cli-output
+    sudo -E -u $ESPLUGIN_COMMAND_USER ES_JAVA_OPTS="-Des.logger.level=DEBUG" "$ESPLUGIN_COMMAND" install "file://$relativePath" > /tmp/plugin-cli-output
     local loglines=$(cat /tmp/plugin-cli-output | grep -v "^[[:cntrl:]]" | wc -l)
     [ "$loglines" -gt "2" ] || {
         echo "Expected more than 2 lines excluding progress bar but the output had $loglines lines and was:"
@@ -484,7 +499,7 @@ fi
 
     # this will fail if the elasticsearch-plugin script does not
     # properly handle JAVA_HOME with spaces
-    "$ESHOME/bin/elasticsearch-plugin" list
+    "$ESPLUGIN_COMMAND" list
 
     rm -rf "$temp"
 
@@ -498,7 +513,7 @@ fi
 
     export ES_JAVA_OPTS="-XX:+PrintFlagsFinal"
     # this will fail if ES_JAVA_OPTS is not passed through
-    "$ESHOME/bin/elasticsearch-plugin" list | grep MaxHeapSize
+    "$ESPLUGIN_COMMAND" list | grep MaxHeapSize
 
     # restore ES_JAVA_OPTS
     export ES_JAVA_OPTS=$es_java_opts

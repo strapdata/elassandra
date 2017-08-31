@@ -14,30 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if [ "x$CASSANDRA_HOME" = "x" ]; then
-    CASSANDRA_HOME="`dirname "$0"`/.."
+CASSANDRA_HOME=/usr/share/cassandra
+
+if [ -z "$CASSANDRA_CONF" ]; then
+  # The directory where Cassandra's configs live (required)
+  CASSANDRA_CONF=/etc/cassandra
 fi
 
-# The directory where Cassandra's configs live (required)
-if [ "x$CASSANDRA_CONF" = "x" ]; then
-    CASSANDRA_CONF="$CASSANDRA_HOME/conf"
-fi
+# the default location for commitlogs, sstables, and saved caches
+# if not set in cassandra.yaml
+# it is also the default location for elasticsearch data
+cassandra_storagedir=/var/lib/cassandra
 
-# This can be the path to a jar file, or a directory containing the 
+# This can be the path to a jar file, or a directory containing the
 # compiled classes. NOTE: This isn't needed by the startup script,
 # it's just used here in constructing the classpath.
 #cassandra_bin="$CASSANDRA_HOME/build/classes/main"
 #cassandra_bin="$cassandra_bin:$CASSANDRA_HOME/build/classes/thrift"
 #cassandra_bin="$CASSANDRA_HOME/build/cassandra.jar"
-
-# the default location for commitlogs, sstables, and saved caches
-# if not set in cassandra.yaml
-if [ "x$CASSANDRA_DATA" = "x" ]; then
-  cassandra_storagedir="$CASSANDRA_HOME/data"
-else
-    cassandra_storagedir="$CASSANDRA_DATA"
-fi
-
 
 # JAVA_HOME can optionally be set here
 #JAVA_HOME=/usr/local/jdk6

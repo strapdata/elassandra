@@ -39,15 +39,15 @@ install_plugin() {
     assert_file_exist "$path"
 
     if [ -z "$umask" ]; then
-      sudo -E -u $ESPLUGIN_COMMAND_USER "$ESHOME/bin/elasticsearch-plugin" install -batch "file://$path"
+      sudo -E -u $ESPLUGIN_COMMAND_USER "$ESPLUGIN_COMMAND" install -batch "file://$path"
     else
-      sudo -E -u $ESPLUGIN_COMMAND_USER bash -c "umask $umask && \"$ESHOME/bin/elasticsearch-plugin\" install -batch \"file://$path\""
+      sudo -E -u $ESPLUGIN_COMMAND_USER bash -c "umask $umask && \"$ESPLUGIN_COMMAND\" install -batch \"file://$path\""
     fi
 
     assert_file_exist "$ESPLUGINS/$name"
     assert_file_exist "$ESPLUGINS/$name/plugin-descriptor.properties"
     #check we did not accidentially create a log file as root as /usr/share/elasticsearch
-    assert_file_not_exist "/usr/share/elasticsearch/logs"
+    assert_file_not_exist "/usr/share/cassandra/logs"
 
     # At some point installing or removing plugins caused elasticsearch's logs
     # to be owned by root. This is bad so we want to make sure it doesn't
@@ -70,7 +70,7 @@ remove_plugin() {
     local name=$1
 
     echo "Removing $name...."
-    sudo -E -u $ESPLUGIN_COMMAND_USER "$ESHOME/bin/elasticsearch-plugin" remove $name
+    sudo -E -u $ESPLUGIN_COMMAND_USER "$ESPLUGIN_COMMAND" remove $name
 
     assert_file_not_exist "$ESPLUGINS/$name"
 
