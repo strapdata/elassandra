@@ -399,7 +399,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * Called by the cassandra gossiper thread from onChange().
      */
     public void checkMetaDataVersion() {
-        for(Iterator<MetaDataVersionAckListener> it = this.metaDataVersionListeners.iterator(); it.hasNext(); ) {
+        for(Iterator<MetaDataVersionAckListener> it = metaDataVersionListeners.iterator(); it.hasNext(); ) {
             MetaDataVersionAckListener listener = it.next();
             boolean versionReached = true;
             for(DiscoveryNode node : listener.clusterState.nodes()) {
@@ -425,9 +425,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 }
             }
             if (versionReached) {
-                logger.debug("MetaData.version = {} reached for all listerners={}", listener.version(), metaDataVersionListeners);
-                it.remove();
                 listener.release();
+                metaDataVersionListeners.remove(listener);
+                logger.debug("MetaData.version = {} reached, remaing listeners={}", listener.version(), metaDataVersionListeners);
             }
         }
     }
@@ -450,6 +450,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
         
         // called by the clusterService thread, block until remote nodes have applied a metadata younger than expectedVersion.
+        // unlocked be the C* gossiper thread calling checkMetaDataVersion().
         public boolean await(long timeout, TimeUnit unit) {
             boolean done = false;
             try {
@@ -463,36 +464,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
         public void release() {
             countDownLatch.countDown();
-        }
-    }
-    
-    public void connectToNodes() {
-        for(DiscoveryNode node : clusterGroup.members().values()) {
-            if (!localNode.getId().equals(node.getId()))
-                transportService.connectToNode(node);
-        }
-    }
-    
-    public void connectToNode(InetAddress arg0) {
-        DiscoveryNode node = this.nodes().findByInetAddress(arg0);
-        if (node != null) {
-            try {
-                transportService.connectToNode(node);
-            } catch (Throwable e) {
-                // the fault detection will detect it as failed as well
-                logger.warn("failed to connect to node [" + node + "]", e);
-            }
-        }
-    }
-    
-    public void disconnectFromNode(InetAddress arg0) {
-        DiscoveryNode node = this.nodes().findByInetAddress(arg0);
-        if (node != null) {
-            try {
-                transportService.disconnectFromNode(node);
-            } catch (Throwable e) {
-                logger.warn("failed to disconnect to node [" + node + "]", e);
-            }
         }
     }
     

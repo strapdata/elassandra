@@ -118,7 +118,7 @@ public class TokenRangesBitsetProducer implements BitSetProducer, Accountable {
               // visible docs = query result
               bitset = BitSet.of(it, reader.maxDoc());
               if (logger.isTraceEnabled())
-                  logger.trace("query={} coreCacheKey={} segment={} cardinality={}", query, key, reader, bitset.cardinality());
+                  logger.trace("no tombstone, query={} coreCacheKey={} segment={} cardinality={}", query, key, reader, bitset.cardinality());
           } else  {
               // visible docs = query result AND liveDocs.
               tombestones = reader.numDeletedDocs();
@@ -130,12 +130,12 @@ public class TokenRangesBitsetProducer implements BitSetProducer, Accountable {
               };
               bitset = BitSet.of(fit, reader.maxDoc());
               if (logger.isTraceEnabled())
-                  logger.trace("query={} coreCacheKey={} segment={} cardinality={}", query, key, reader, bitset.cardinality());
+                  logger.trace("has tombstones, query={} coreCacheKey={} segment={} cardinality={}", query, key, reader, bitset.cardinality());
           }
       } else {
            bitset = null; // no visible docs.
            if (logger.isTraceEnabled())
-              logger.trace("query={} coreCacheKey={} segment={} cardinality=0 ", query, key, reader);
+              logger.trace("no matching doc, query={} coreCacheKey={} segment={} cardinality=0 ", query, key, reader);
       }
       Value newValue = new Value(tombestones, bitset);
       Value oldValue = leafCache.put(key, newValue);

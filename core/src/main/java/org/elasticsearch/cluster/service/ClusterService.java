@@ -456,7 +456,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             try {
                 searchStrategy = clazz.newInstance();
             } catch (Exception e) {
-                logger.error("Cannot instanciate search strategy {}", e, clazz.getName());
+                logger.error((Supplier<?>) () -> new ParameterizedMessage("Cannot instanciate search strategy [{}]", clazz.getName()), e);
                 searchStrategy = new PrimaryFirstSearchStrategy();
             }
             strategies.putIfAbsent(clazz.getName(), searchStrategy);
@@ -1042,7 +1042,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
             @Override
             public void onFailure(String source, Exception t) {
-                logger.error("unexpected failure during [{}]", t, source);
+                logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected failure during [{}]", source), t);
             }
         });
     }
@@ -1061,7 +1061,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
             @Override
             public void onFailure(String source, Exception t) {
-                logger.error("unexpected failure during [{}]", t, source);
+                logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected failure during [{}]", source), t);
             }
         });
     }
@@ -1473,7 +1473,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                         }
                     } catch (Throwable e) {
                         ackFailure = e;
-                        logger.error("Interruped while waiting MetaData.version = {}",e, newClusterState.metaData().version() );
+                        final long version = newClusterState.metaData().version();
+                        logger.error((Supplier<?>) () -> new ParameterizedMessage("Interruped while waiting MetaData.version = {}", version), e);
                     }
                 }
             }
@@ -2557,7 +2558,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             logger.info(createKeyspace);
             process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createKeyspace);
         } catch (Exception e) {
-            logger.error("Failed to initialize keyspace {}", elasticAdminKeyspaceName, e);
+            logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to initialize keyspace {}", elasticAdminKeyspaceName), e);
             throw e;
         }
         return null;
@@ -2582,7 +2583,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 logger.info(query);
                 process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
             } catch (Throwable e) {
-                logger.error("Failed to alter keyspace [{}]", e, keyspaceName);
+                logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to alter keyspace [{}]",keyspaceName), e);
                 throw e;
             }
         } else {
@@ -2598,7 +2599,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             logger.info(createTable);
             process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createTable);
         } catch (Exception e) {
-            logger.error("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, e);
+            logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE), e);
             throw e;
         }
         return null;
@@ -2611,7 +2612,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), insertMetadataQuery,
                 DatabaseDescriptor.getClusterName(), UUID.fromString(StorageService.instance.getLocalHostId()), metadata.version(), metaDataString);
         } catch (Exception e) {
-            logger.error("Failed insert first row into table {}.{}",e, elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+            logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed insert first row into table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE), e);
             throw e;
         }
         return null;
@@ -2659,7 +2660,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     logger.error("Failed to write metadata as comment", e);
                 }
             } catch (Throwable e) {
-                logger.error("Failed to initialize table {}.{}",e, elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+                logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE),e);
             }
         } else {
             Map<String,String> replication = result.one().getFrozenTextMap("replication");
@@ -2681,7 +2682,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     logger.info(query);
                     process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
                 } catch (Throwable e) {
-                    logger.error("Failed to alter keyspace [{}]", e, this.elasticAdminKeyspaceName);
+                    logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to alter keyspace [{}]", elasticAdminKeyspaceName),e);
                     throw e;
                 }
             } else {
@@ -2995,11 +2996,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         if (this.discovery != null)
             this.discovery.publishShardRoutingState(index, shardRoutingState);
     }
-    
-    public void unpublishShardRoutingState(final String index) throws JsonGenerationException, JsonMappingException, IOException {
-        if (this.discovery != null)
-            this.discovery.publishShardRoutingState(index, null);
-    }
 
     /**
      * Publish cluster metadata uuid and version in gossip state.
@@ -3009,8 +3005,4 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             this.discovery.publishX2(clusterState);
     }
     
-    public void connectToNodes() {
-        if (this.discovery != null)
-            this.discovery.connectToNodes();
-    }
 }

@@ -38,7 +38,7 @@ public class TokenRangesLeafReader extends FilterLeafReader {
                 noBitMatch = new Bits.MatchNoBits(in.maxDoc());
             } else {
                 numDocs = mask.cardinality();
-                hasDeletions = numDocs < in.numDocs();
+                hasDeletions = numDocs < in.numDocs() || in.hasDeletions();
                 noBitMatch = null;
             }
         } catch (ExecutionException e) {

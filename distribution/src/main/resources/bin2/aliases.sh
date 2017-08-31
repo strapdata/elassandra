@@ -140,6 +140,7 @@ alias nodes='curl -XGET "http://$NODE:9200/_nodes?pretty"'
 alias settings='curl -XGET http://$NODE:9200/_cluster/settings?pretty'
 alias plugins='curl "http://$NODE:9200/_nodes?plugin=true&pretty"'
 alias tasks='curl http://$NODE:9200/_tasks?pretty'
+alias aliases='curl http://$NODE:9200/_cat/aliases?v'
 
 alias open='open'
 alias close='close'

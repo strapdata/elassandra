@@ -52,7 +52,7 @@ public class TokenRangesService extends AbstractComponent {
                 @Override
                 public void onRemoval(RemovalNotification<Collection<Range<Token>>, Query> notification) {
                     if (logger.isTraceEnabled())
-                        logger.trace("remove tokenRangeQuery={}, cause={}", notification, notification.getCause()+"]");
+                        logger.trace("remove tokenRangeQuery={}, cause={}", notification, notification.getCause());
                     for(TokenRangesQueryListener listener : tokenRangesQueryListeners)
                         listener.onRemoveQuery(notification.getValue());
                 }
@@ -75,6 +75,8 @@ public class TokenRangesService extends AbstractComponent {
                         tokenRangesQuery = newNumericRangesQuery(unique_range);
                         tokenRangesQueryCache.put(tokenRanges, tokenRangesQuery);
                     }
+                    if (logger.isTraceEnabled())
+                        logger.trace("tokenRangeQuery={}", tokenRangesQuery);
                     return tokenRangesQuery;
                 default:
                     tokenRangesQuery = tokenRangesQueryCache.getIfPresent(tokenRanges);
@@ -88,6 +90,8 @@ public class TokenRangesService extends AbstractComponent {
                         tokenRangesQuery = bq2.build();
                         tokenRangesQueryCache.put(tokenRanges, tokenRangesQuery);
                     }
+                    if (logger.isTraceEnabled())
+                        logger.trace("tokenRangeQuery={}", tokenRangesQuery);
                     return tokenRangesQuery;
             }
         }
