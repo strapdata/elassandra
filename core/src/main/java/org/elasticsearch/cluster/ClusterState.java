@@ -669,6 +669,10 @@ public class ClusterState implements ToXContent, Diffable<ClusterState> {
         return builder.build();
     }
 
+    public static Diff<ClusterState> diff(ClusterState before, ClusterState after) {
+        return new ClusterStateDiff(before, after);
+    }
+    
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         clusterName.writeTo(out);

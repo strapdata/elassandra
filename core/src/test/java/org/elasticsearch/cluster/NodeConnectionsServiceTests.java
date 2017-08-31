@@ -21,6 +21,7 @@ package org.elasticsearch.cluster;
 
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.CheckedBiConsumer;
 import org.elasticsearch.common.UUIDs;
@@ -70,7 +71,7 @@ public class NodeConnectionsServiceTests extends ESTestCase {
         for (int i = randomIntBetween(20, 50); i > 0; i--) {
             Set<DiscoveryNode.Role> roles = new HashSet<>(randomSubsetOf(Arrays.asList(DiscoveryNode.Role.values())));
             nodes.add(new DiscoveryNode("node_" + i, "" + i, LocalTransportAddress.buildUnique(), Collections.emptyMap(),
-                    roles, Version.CURRENT));
+                    roles, Version.CURRENT).status(DiscoveryNodeStatus.ALIVE));
         }
         return nodes;
     }

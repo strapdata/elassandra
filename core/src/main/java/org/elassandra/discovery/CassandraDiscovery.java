@@ -45,42 +45,36 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNode.Role;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.routing.IndexRoutingTable;
-import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
-import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.network.NetworkAddress;
-import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
-import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.discovery.DiscoveryStats;
+import org.elasticsearch.node.NodeClosedException;
 import org.elasticsearch.transport.TransportService;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Collection;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 
@@ -98,15 +92,28 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private final DiscoverySettings discoverySettings;
     private final NamedWriteableRegistry namedWriteableRegistry;
 
-    private final CopyOnWriteArrayList<MetaDataVersionListener> metaDataVersionListeners = new CopyOnWriteArrayList<>();
-
-    private static final ConcurrentMap<ClusterName, ClusterGroup> clusterGroups = ConcurrentCollections.newConcurrentMap();
+    private final CopyOnWriteArrayList<MetaDataVersionAckListener> metaDataVersionListeners = new CopyOnWriteArrayList<>();
 
     private final ClusterGroup clusterGroup;
 
     private final InetAddress localAddress;
     private final String localDc;
     private DiscoveryNode localNode;
+    
+    private final ConcurrentMap<String, ShardRoutingState> localShardStateMap = new ConcurrentHashMap<String, ShardRoutingState>();
+    private final ConcurrentMap<UUID, Map<String,ShardRoutingState>> remoteShardRoutingStateMap = new ConcurrentHashMap<UUID, Map<String,ShardRoutingState>>();
+    
+    /**
+     * When searchEnabled=true, local shards are visible for routing, otherwise, local shards are seen as UNASSIGNED.
+     * This allows to gracefully shutdown or start the node for maintenance like an offline repair or rebuild_index.
+     */
+    private final AtomicBoolean searchEnabled = new AtomicBoolean(false);
+    
+    /**
+     * If enableSearch=true, searchEnabled not automatically become true when node becomes ready to operate, otherwise, searchEnabled should be manually set to true.
+     */
+    private final AtomicBoolean autoEnableSearch = new AtomicBoolean(!Boolean.getBoolean("es.disable_auto_enable_search"));
+    
     
     public CassandraDiscovery(Settings settings, TransportService transportService, ClusterService clusterService, NamedWriteableRegistry namedWriteableRegistry) {
         super(settings);
@@ -120,21 +127,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         this.localAddress = FBUtilities.getBroadcastAddress();
         this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(localAddress);
         
-        /*
-        Map<String, String> attrs = Maps.newHashMap();
-        attrs.put("data_center", localDc);
-        attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(localAddress));
-
-        String localHostId = SystemKeyspace.getLocalHostId().toString();
-        localNode = new DiscoveryNode(buildNodeName(localAddress), localHostId, clusterService.state().nodes().getLocalNode().getEphemeralId(), new InetSocketTransportAddress(FBUtilities.getBroadcastAddress(), publishPort()), attrs, CASSANDRA_ROLES, version);
-        localNode.status(DiscoveryNodeStatus.ALIVE);
-        //this.transportService.setLocalNode(localNode);
-        */
         this.clusterGroup = new ClusterGroup();
-    }
-
-    public static String buildNodeName() {
-        return buildNodeName(FBUtilities.getLocalAddress());
     }
 
     public static String buildNodeName(InetAddress addr) {
@@ -152,7 +145,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         
         synchronized (clusterGroup) {
             logger.debug("Connected to cluster [{}]", clusterName.value());
-            clusterGroups.put(clusterName, clusterGroup);
             clusterGroup.put(this.localNode.getId(), this.localNode);
             logger.info("localNode name={} id={} localAddress={} publish_host={}", this.clusterService.localNode().getName(), this.clusterService.localNode().getId(), localAddress, this.clusterService.localNode().getAddress());
 
@@ -165,40 +157,50 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 String host_id = row.has("host_id") ? row.getUUID("host_id").toString() : null;
                 if ((!peer.equals(localAddress)) && (rpc_address != null) && (localDc.equals(datacenter))) {
                     Map<String, String> attrs = Maps.newHashMap();
-                    attrs.put("node.data", "true");
-                    attrs.put("node.master", "true");
-                    attrs.put("node.attr.dc", datacenter);
-                    if (row.has("node.attr.rack"))
+                    attrs.put("dc", datacenter);
+                    if (row.has("rack"))
                         attrs.put("rack", row.getString("rack"));
                     
                     DiscoveryNode dn = new DiscoveryNode(buildNodeName(peer), host_id, new InetSocketTransportAddress(peer, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
-                    EndpointState endpointState = Gossiper.instance.getEndpointStateForEndpoint(peer);
-                    if (endpointState == null) {
+                    EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(peer);
+                    if (state == null) {
                         dn.status( DiscoveryNodeStatus.UNKNOWN );
                     } else {
-                        dn.status((endpointState.isAlive()) ? DiscoveryNodeStatus.ALIVE : DiscoveryNodeStatus.DEAD);
+                        dn.status( isNormal(state) ? DiscoveryNodeStatus.ALIVE : DiscoveryNodeStatus.DEAD);
                     }
                     clusterGroup.put(dn.getId(), dn);
-                    logger.debug("node internal_ip={} host_id={} node_name={} ", NetworkAddress.format(peer), dn.getId(), dn.getName());
+                    logger.debug("node internal_ip={} host_id={} node_name={} status={}", NetworkAddress.format(peer), dn.getId(), dn.getName(), dn.status().toString());
                 }
             }
-
-            Gossiper.instance.register(this);
-            updateClusterGroupsFromGossiper();
-            updateRoutingTable("starting-cassandra-discovery");
         }
+        Gossiper.instance.register(this);
+        updateClusterGroupsFromGossiper();
+        
+        // Cassandra is usually in the NORMAL state when discovery start.
+        if (isNormal(Gossiper.instance.getEndpointStateForEndpoint(this.localAddress)) && isAutoEnableSearch()) {
+            try {
+                this.setSearchEnabled(true);
+            } catch (IOException e) {
+                logger.error("Failed to set searchEnabled",e);
+            }
+        }
+
+        publishX2(this.clusterService.state());
+        updateRoutingTable("starting-cassandra-discovery", true);
     }
 
     public DiscoveryNodes nodes() {
         return this.clusterGroup.nodes();
     }
     
-    private void updateMetadata(String source, MetaData newMetadata) {
-        final MetaData schemaMetaData = newMetadata;
+    private void updateMetadata(String source, final long version) {
         clusterService.submitStateUpdateTask(source, new ClusterStateUpdateTask() {
 
             @Override
             public ClusterState execute(ClusterState currentState) {
+                // read metadata from the clusterService thread to avoid freeze in gossip.
+                MetaData schemaMetaData = clusterService.checkForNewMetaData(version);
+                
                 ClusterState.Builder newStateBuilder = ClusterState.builder(currentState).nodes(nodes());
 
                 // update blocks
@@ -214,8 +216,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         blocks.updateBlocks(indexMetaData);
                 }
 
-                ClusterState newClusterState = clusterService.updateNumberOfShards( newStateBuilder.blocks(blocks).build() );
-                return ClusterState.builder(newClusterState).incrementVersion().build();
+                return clusterService.updateNumberOfShardsAndReplicas( newStateBuilder.blocks(blocks).build() );
             }
             
             @Override
@@ -231,12 +232,29 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         });
     }
     
-    private void updateRoutingTable(String source) {
+    private void updateRoutingTable(String source, boolean nodesUpdate) {
         clusterService.submitStateUpdateTask(source, new ClusterStateUpdateTask() {
 
             @Override
             public ClusterState execute(ClusterState currentState) {
-                return ClusterState.builder(currentState).incrementVersion().nodes(nodes()).build();
+                ClusterState.Builder clusterStateBuilder = ClusterState.builder(currentState);
+                
+                DiscoveryNodes discoverNodes = nodes();
+                if (nodesUpdate)
+                    clusterStateBuilder.nodes(discoverNodes);
+                
+                if (currentState.nodes().getSize() != discoverNodes.getSize()) {
+                    // update numberOfShards for all indices.
+                    MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
+                    for(Iterator<IndexMetaData> it = currentState.metaData().iterator(); it.hasNext(); ) {
+                        IndexMetaData indexMetaData = it.next();
+                        IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
+                        indexMetaDataBuilder.numberOfShards(discoverNodes.getSize());
+                        metaDataBuilder.put(indexMetaDataBuilder.build(), false);
+                    }
+                    clusterStateBuilder.metaData(metaDataBuilder.build());
+                }
+                return clusterStateBuilder.incrementVersion().build();
             }
 
             @Override
@@ -254,32 +272,32 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      */
     public void updateClusterGroupsFromGossiper() {
         for (Entry<InetAddress, EndpointState> entry : Gossiper.instance.getEndpointStates()) {
-            DiscoveryNodeStatus status = (entry.getValue().isAlive()) ? DiscoveryNode.DiscoveryNodeStatus.ALIVE : DiscoveryNode.DiscoveryNodeStatus.DEAD;
+            EndpointState state = entry.getValue();
+            InetAddress   endpoint = entry.getKey();
+            DiscoveryNodeStatus status = (isNormal(state)) ? DiscoveryNode.DiscoveryNodeStatus.ALIVE : DiscoveryNode.DiscoveryNodeStatus.DEAD;
 
-            if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(entry.getKey()).equals(localDc)) {
-                VersionedValue vv = entry.getValue().getApplicationState(ApplicationState.HOST_ID);
+            if (isLocal(endpoint)) {
+                VersionedValue vv = state.getApplicationState(ApplicationState.HOST_ID);
                 if (vv != null) {
                     String hostId = vv.value;
                     DiscoveryNode dn = clusterGroup.get(hostId);
                     if (dn == null) {
                         Map<String, String> attrs = Maps.newHashMap();
-                        attrs.put("node.data", "true");
-                        attrs.put("node.master", "true");
-                        attrs.put("node.attr.dc", localDc);
-                        attrs.put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(entry.getKey()));
+                        attrs.put("dc", localDc);
+                        attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
 
-                        InetAddress internal_address = com.google.common.net.InetAddresses.forString(entry.getValue().getApplicationState(ApplicationState.INTERNAL_IP).value);
-                        dn = new DiscoveryNode(buildNodeName(entry.getKey()), hostId.toString(), 
+                        InetAddress internal_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.INTERNAL_IP).value);
+                        dn = new DiscoveryNode(buildNodeName(internal_address), hostId.toString(), 
                                 new InetSocketTransportAddress(internal_address, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
                         dn.status(status);
 
-                        if (!localAddress.equals(entry.getKey())) {
-                            logger.debug("New node addr_ip={} node_name={} host_id={} status={} timestamp={}", 
-                                    NetworkAddress.format(entry.getKey()), dn.getId(), dn.getName(), entry.getValue().isAlive(), entry.getValue().getUpdateTimestamp());
+                        if (!localAddress.equals(endpoint)) {
+                            logger.debug("New node addr_ip={} node_name={} host_id={} up={} status={} timestamp={}", 
+                                    NetworkAddress.format(endpoint), dn.getId(), dn.getName(), state.isAlive(), state.getStatus(), state.getUpdateTimestamp());
                         }
                         clusterGroup.put(dn.getId(), dn);
-                        if (ElassandraDaemon.hasWorkloadColumn && (entry.getValue().getApplicationState(ApplicationState.X1) != null || entry.getValue().getApplicationState(ApplicationState.X2) !=null)) {
-                            SystemKeyspace.updatePeerInfo(entry.getKey(), "workload", "elasticsearch");
+                        if (ElassandraDaemon.hasWorkloadColumn && (state.getApplicationState(ApplicationState.X1) != null || state.getApplicationState(ApplicationState.X2) !=null)) {
+                            SystemKeyspace.updatePeerInfo(endpoint, "workload", "elasticsearch");
                         }
                     } else {
                         // may update DiscoveryNode status.
@@ -287,7 +305,23 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                             dn.status(status);
                         }
                     }
+                    
+                    // initialize the remoteShardRoutingStateMap from gossip states
+                    if (state.getApplicationState(ApplicationState.X1) != null) {
+                        VersionedValue x1 = state.getApplicationState(ApplicationState.X1);
+                        if (!endpoint.equals(this.localAddress)) {
+                            Map<String, ShardRoutingState> shardsStateMap;
+                            try {
+                                shardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
+                                this.remoteShardRoutingStateMap.put(Gossiper.instance.getHostId(endpoint), shardsStateMap);
+                            } catch (IOException e) {
+                                logger.error("Failed to parse X1 for node [{}]", dn.getId());
+                            }
+                        }
+                    }
                 }
+                
+               
             }
         }
     }
@@ -305,110 +339,126 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
     }
     
-    public void updateNode(InetAddress addr, EndpointState state) {
-        if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(addr).equals(localDc)) {
-            DiscoveryNodeStatus status = (state.isAlive()) ? DiscoveryNode.DiscoveryNodeStatus.ALIVE : DiscoveryNode.DiscoveryNodeStatus.DEAD;
+    public void updateNode(InetAddress endpoint, EndpointState state, DiscoveryNodeStatus newStatus) {
+        if (isLocal(endpoint)) {
             boolean updatedNode = false;
             String hostId = state.getApplicationState(ApplicationState.HOST_ID).value;
             DiscoveryNode dn = clusterGroup.get(hostId);
             if (dn == null) {
                 Map<String, String> attrs = Maps.newHashMap();
-                attrs.put("node.data", "true");
-                attrs.put("node.master", "true");
-                attrs.put("node.attr.dc", localDc);
-                attrs.put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(addr));
+                attrs.put("dc", localDc);
+                attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
 
                 InetAddress internal_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.INTERNAL_IP).value);
-                dn = new DiscoveryNode(buildNodeName(addr), 
+                dn = new DiscoveryNode(buildNodeName(internal_address), 
                         hostId.toString(), 
                         new InetSocketTransportAddress(internal_address, publishPort()), 
                         attrs, CASSANDRA_ROLES, Version.CURRENT);
-                dn.status(status);
+                dn.status(newStatus);
                 logger.debug("New node soure=updateNode internal_ip={} rpc_address={}, node_name={} host_id={} status={} timestamp={}", 
-                        NetworkAddress.format(addr), NetworkAddress.format(internal_address), dn.getId(), dn.getName(), status, state.getUpdateTimestamp());
+                        NetworkAddress.format(endpoint), NetworkAddress.format(internal_address), dn.getId(), dn.getName(), newStatus, state.getUpdateTimestamp());
                 clusterGroup.members.put(dn.getId(), dn);
+                
                 if (ElassandraDaemon.hasWorkloadColumn && (state.getApplicationState(ApplicationState.X1) != null || state.getApplicationState(ApplicationState.X2) !=null)) {
-                    SystemKeyspace.updatePeerInfo(addr, "workload", "elasticsearch");
+                    SystemKeyspace.updatePeerInfo(endpoint, "workload", "elasticsearch");
                 }
                 updatedNode = true;
             } else {
                 // may update DiscoveryNode status.
-                if (!dn.getStatus().equals(status)) {
-                    dn.status(status);
+                if (!dn.getStatus().equals(newStatus)) {
+                    dn.status(newStatus);
                     updatedNode = true;
                     logger.debug("node id={} new state={}",dn.getId(), dn.status().toString());
                 }
             }
-            if (updatedNode)
-                updateRoutingTable("update-node-" + NetworkAddress.format(addr));
-        }
-    }
+            
+            // update remote shard routing view.
+            switch(newStatus) {
+            case ALIVE:
+                VersionedValue x1 = state.getApplicationState(ApplicationState.X1);
+                if (x1 != null) {
+                    try {
+                        Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
+                        this.remoteShardRoutingStateMap.put(dn.uuid(), shardsStateMap);
+                    } catch (IOException e) {
+                        logger.error("Failed to parse X1 for node=[{}]", dn.getId());
+                    }
+                }
+                break;
+            default:
+                this.remoteShardRoutingStateMap.remove(dn.uuid());
+            }
 
-    public boolean awaitMetaDataVersion(long version, TimeValue timeout) throws InterruptedException {
-        MetaDataVersionListener listener = new MetaDataVersionListener(version);
-        return listener.await(timeout.millis(), TimeUnit.MILLISECONDS);
+            if (updatedNode)
+                updateRoutingTable("update-node-" + NetworkAddress.format(endpoint)+"-"+newStatus.toString(), true);
+        }
     }
     
     /**
-     * Release listeners who have reached the expected metadat version.
+     * Release listeners who have reached the expected metadata version.
+     * Called by the cassandra gossiper thread from onChange().
      */
     public void checkMetaDataVersion() {
-        for(Iterator<MetaDataVersionListener> it = this.metaDataVersionListeners.iterator(); it.hasNext(); ) {
-            MetaDataVersionListener listener = it.next();
+        for(Iterator<MetaDataVersionAckListener> it = this.metaDataVersionListeners.iterator(); it.hasNext(); ) {
+            MetaDataVersionAckListener listener = it.next();
             boolean versionReached = true;
-            for(InetAddress addr : Gossiper.instance.getLiveTokenOwners()) {
-                if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(addr).equals(localDc)) {
-                    EndpointState endPointState = Gossiper.instance.getEndpointStateForEndpoint(addr);
+            for(DiscoveryNode node : listener.clusterState.nodes()) {
+                if (node.getId().equals(this.localNode.getId())) {
+                    continue; // self node is acknowledged later in clusterSevrice.publishAndApplyChanges()
+                }
+                
+                EndpointState endPointState = Gossiper.instance.getEndpointStateForEndpoint(node.getInetAddress());
+                if (endPointState == null || !endPointState.isAlive() || !endPointState.getStatus().equals("NORMAL")) {
+                    // node was removed from the gossiper, down or leaving, acknowledge to avoid locking.
+                    listener.ackListener.onNodeAck(node, new NodeClosedException(node));
+                } else {
                     VersionedValue vv = endPointState.getApplicationState(ELASTIC_META_DATA);
                     if (vv != null && vv.value.lastIndexOf('/') > 0) { 
                         Long version = Long.valueOf(vv.value.substring(vv.value.lastIndexOf('/')+1));
                         if (version < listener.version()) {
                             versionReached = false;
-                            break;
+                        } else {
+                            // acknowledge nodes having the right metadata version number, except self (acked in clusterService.publishAndApplyChanges()).
+                            listener.ackListener.onNodeAck(node, null);
                         }
                     }
                 }
             }
             if (versionReached) {
-                logger.debug("MetaData.version = {} reached", listener.version());
+                logger.debug("MetaData.version = {} reached for all listerners={}", listener.version(), metaDataVersionListeners);
+                it.remove();
                 listener.release();
-                metaDataVersionListeners.remove(listener);
             }
         }
     }
     
-    public class MetaDataVersionListener  {
+    public class MetaDataVersionAckListener  {
         final long expectedVersion;
         final CountDownLatch countDownLatch = new CountDownLatch(1);
+        final Discovery.AckListener ackListener;
+        final ClusterState clusterState;
         
-        public MetaDataVersionListener(long version) {
-            expectedVersion = version;
+        public MetaDataVersionAckListener(long version, Discovery.AckListener ackListener, ClusterState clusterState) {
+            this.expectedVersion = version;
+            this.ackListener = ackListener;
+            this.clusterState = clusterState;
+            CassandraDiscovery.this.metaDataVersionListeners.add(this);
         }
 
         public long version() {
             return this.expectedVersion;
         }
         
-        public boolean await(long timeout, TimeUnit unit) throws InterruptedException {
-            CassandraDiscovery.this.metaDataVersionListeners.add(this);
-            Set<Entry<InetAddress,EndpointState>> currentStates = Gossiper.instance.getEndpointStates();
-            boolean versionReached = true;
-            for(Entry<InetAddress,EndpointState> entry : currentStates) {
-                if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(entry.getKey()).equals(localDc) && entry.getValue().isAlive()) {
-                    VersionedValue vv = entry.getValue().getApplicationState(ELASTIC_META_DATA);
-                    if (vv != null && vv.value.lastIndexOf('/') > 0) { 
-                        Long version = Long.valueOf(vv.value.substring(vv.value.lastIndexOf('/')+1));
-                        if (version < expectedVersion) {
-                            versionReached = false;
-                            break;
-                        }
-                    }
-                }
+        // called by the clusterService thread, block until remote nodes have applied a metadata younger than expectedVersion.
+        public boolean await(long timeout, TimeUnit unit) {
+            boolean done = false;
+            try {
+               done = countDownLatch.await(timeout, unit);
+            } catch (InterruptedException e) {
+                
             }
-            if (!versionReached) {
-                return countDownLatch.await(timeout, unit);
-            }
-           return true;
+            CassandraDiscovery.this.metaDataVersionListeners.remove(this);
+            return done;
         }
 
         public void release() {
@@ -416,53 +466,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
     }
     
-    @Override
-    public void beforeChange(InetAddress arg0, EndpointState arg1, ApplicationState arg2, VersionedValue arg3) {
-        //logger.warn("beforeChange({},{},{},{})",arg0,arg1,arg2,arg3);
-    }
-
-    @Override
-    public void onChange(InetAddress endpoint, ApplicationState state, VersionedValue versionValue) {
-        EndpointState epState = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
-        if (epState == null || Gossiper.instance.isDeadState(epState)) {
-            if (logger.isTraceEnabled()) 
-                logger.trace("Ignoring state change for dead or unknown endpoint: {}", endpoint);
-            return;
-        }
-        if (!this.localAddress.equals(endpoint)) {
-            if (state == ApplicationState.X1 && DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
-                // X1: update local shard state
-                if (logger.isTraceEnabled())
-                    logger.trace("Endpoint={} ApplicationState={} value={} => update routingTable", endpoint, state, versionValue.value);
-                updateRoutingTable("onChange-" + endpoint + "-" + state.toString()+" X1="+versionValue.value);
-                connectToNode(endpoint);
-            } else if (state == ApplicationState.X2 && clusterService.isDatacenterGroupMember(endpoint)) {
-                // X2 from datacenter.group: update metadata if metadata version is higher than our.
-                if (versionValue != null) {
-                    int i = versionValue.value.lastIndexOf('/');
-                    if (i > 0) {
-                        Long version = Long.valueOf(versionValue.value.substring(i+1));
-                        if (version > this.clusterService.state().metaData().version()) {
-                            MetaData metadata = clusterService.checkForNewMetaData(version);
-                            if (metadata != null) {
-                                if (logger.isTraceEnabled()) 
-                                    logger.trace("Endpoint={} ApplicationState={} value={} => update metaData {}/{}", 
-                                        endpoint, state, versionValue.value, metadata.clusterUUID(), metadata.version());
-                                updateMetadata("onChange-" + endpoint + "-" + state.toString()+" metadata="+metadata.clusterUUID()+"/"+metadata.version(), metadata);
-                            }
-                        }
-                    }
-                }
-                if (metaDataVersionListeners.size() > 0 && DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc)) {
-                    checkMetaDataVersion();
-                }
-            }
-        }
-    }
-
     public void connectToNodes() {
         for(DiscoveryNode node : clusterGroup.members().values()) {
-            if (!localNode().equals(node))
+            if (!localNode.getId().equals(node.getId()))
                 transportService.connectToNode(node);
         }
     }
@@ -490,40 +496,162 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
     }
     
-    @Override
-    public void onAlive(InetAddress arg0, EndpointState arg1) {
-        logger.debug("onAlive Endpoint={} ApplicationState={} isAlive={} => update node + connecting", arg0, arg1, arg1.isAlive());
-        updateNode(arg0, arg1);
-        connectToNode(arg0);
+    private boolean isLocal(InetAddress endpoint) {
+        return DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc);
+    }
+    
+    private boolean isMember(InetAddress endpoint) {
+        return !this.localAddress.equals(endpoint) && DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc);
+    }
+    
+    private boolean isNormal(EndpointState state) {
+        return state.isAlive() && state.getStatus().equals("NORMAL");
     }
     
     @Override
-    public void onDead(InetAddress arg0, EndpointState arg1) {
-        logger.debug("onDead Endpoint={}  ApplicationState={} isAlive={} => update node + disconnecting", arg0, arg1, arg1.isAlive());
-        updateNode(arg0, arg1);
-        //disconnectFromNode(arg0);
-    }
-    
-    @Override
-    public void onRestart(InetAddress arg0, EndpointState arg1) {
-        //logger.debug("onRestart Endpoint={}  ApplicationState={} isAlive={}", arg0, arg1, arg1.isAlive());
+    public void beforeChange(InetAddress endpoint, EndpointState state, ApplicationState appState, VersionedValue value) {
+        //logger.debug("beforeChange Endpoint={} EndpointState={}  ApplicationState={} value={}", endpoint, state, appState, value);
     }
 
     @Override
-    public void onJoin(InetAddress arg0, EndpointState arg1) {
-        //logger.debug("onAlive Endpoint={} ApplicationState={} isAlive={}", arg0, arg1, arg1.isAlive() );
+    public void onChange(InetAddress endpoint, ApplicationState state, VersionedValue versionValue) {
+        if (isMember(endpoint)) {
+            EndpointState epState = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
+            switch (state) {
+            case STATUS:
+                
+                if (isNormal(epState)) {
+                    if (logger.isTraceEnabled())
+                        logger.trace("onChange Endpoint={} ApplicationState={} value={}", endpoint, state, versionValue);
+                    
+                    updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
+                }
+                break;
+                
+            case X1:
+                try {
+                    // update the remoteShardRoutingStateMap to build ES routing table for joined-normal nodes only.
+                    if (clusterGroup.contains(epState.getApplicationState(ApplicationState.HOST_ID).value)) {
+                        if (logger.isTraceEnabled())
+                            logger.trace("Endpoint={} X1={} => updating routing table", endpoint, versionValue);
+                        
+                        Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(versionValue.value, indexShardStateTypeReference);
+                        this.remoteShardRoutingStateMap.put(Gossiper.instance.getHostId(endpoint), shardsStateMap);
+                        updateRoutingTable("X1-" + endpoint, false);
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to parse gossip index shard state", e);
+                }
+                break;
+            }
+        }
+        
+        // metadata version update from a datacenter sharing our cluster state.
+        if (state == ApplicationState.X2 && clusterService.isDatacenterGroupMember(endpoint)) {
+            // X2 from datacenter.group: update metadata if metadata version is higher than our.
+            int i = versionValue.value.lastIndexOf('/');
+            if (i > 0) {
+                final Long version = Long.valueOf(versionValue.value.substring(i+1));
+                if (version > this.clusterService.state().metaData().version()) {
+                    if (logger.isTraceEnabled()) 
+                        logger.trace("Endpoint={} X2={} => updating metaData", endpoint, state, versionValue.value);
+                    updateMetadata("X2-" + endpoint + "-" +versionValue.value, version);
+                }
+                if (metaDataVersionListeners.size() > 0) {
+                    checkMetaDataVersion();
+                }
+            }
+        }
+
+        // self status update.
+        if (this.localAddress.equals(endpoint)) {
+            switch (state) {
+            case STATUS:
+                if (logger.isTraceEnabled())
+                    logger.trace("Endpoint={} STATUS={} => may update searchEnable", endpoint, versionValue);
+                
+                // update searchEnabled according to the node status and autoEnableSearch.
+                if (isNormal(Gossiper.instance.getEndpointStateForEndpoint(endpoint))) {
+                    if (!this.searchEnabled.get() && this.autoEnableSearch.get()) {
+                        try {
+                            setSearchEnabled(true, true);
+                        } catch (IOException e) {
+                            logger.error("Failed to enable search",e);
+                        }
+                    }
+                    publishX2(this.clusterService.state(), true);
+                 } else {
+                    // node is leaving or whatever, disabling search.
+                    if (this.searchEnabled.get()) {
+                        try {
+                            setSearchEnabled(false, true);
+                        } catch (IOException e) {
+                            logger.error("Failed to disable search",e);
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    /**
+     * Warning: IEndpointStateChangeSubscriber.onXXXX should not block (on connection timeout or clusterState update) to avoid gossip issues.
+     */
+    
+    @Override
+    public void onAlive(InetAddress endpoint, EndpointState epState) {
+        if (isMember(endpoint)) {
+            logger.debug("onAlive Endpoint={} ApplicationState={} isAlive={} => update node + connecting", endpoint, epState, epState.isAlive());
+            if (isNormal(epState))
+                updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
+        }
+    }
+    
+    @Override
+    public void onDead(InetAddress endpoint, EndpointState epState) {
+        if (isMember(endpoint)) {
+            logger.debug("onDead Endpoint={}  ApplicationState={} isAlive={} => update node + disconnecting", endpoint, epState, epState.isAlive());
+            updateNode(endpoint, epState, DiscoveryNodeStatus.DEAD);
+        }
+    }
+    
+    @Override
+    public void onRestart(InetAddress endpoint, EndpointState epState) {
+        if (isMember(endpoint)) {
+            if (logger.isTraceEnabled())
+                logger.debug("onRestart Endpoint={}  ApplicationState={} isAlive={} status={}", endpoint, epState, epState.isAlive());
+            if (isNormal(epState))
+                updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
+        }
+    }
+
+    @Override
+    public void onJoin(InetAddress endpoint, EndpointState epState) {
+        if (isLocal(endpoint)) {
+            if (logger.isTraceEnabled())
+                logger.trace("onJoin Endpoint={} ApplicationState={} isAlive={} status={}", endpoint, epState, epState.isAlive(), epState.getStatus() );
+            if (isNormal(epState))
+                updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
+        }
     }
    
     @Override
     public void onRemove(InetAddress endpoint) {
-        DiscoveryNode removedNode = this.nodes().findByInetAddress(endpoint);
-        if (removedNode != null) {
-            logger.warn("Removing node ip={} node={}  => disconnecting", endpoint, removedNode);
-            this.clusterGroup.remove(removedNode.getId());
-            updateRoutingTable("node-removed-"+removedNode.getId());
-            disconnectFromNode(endpoint);
+        if (this.localAddress.equals(endpoint)) {
+            try {
+                setSearchEnabled(false);
+            } catch (IOException e) {
+            }
+        } else if (isMember(endpoint)) {
+            DiscoveryNode removedNode = this.nodes().findByInetAddress(endpoint);
+            if (removedNode != null) {
+                logger.warn("Removing node ip={} node={}  => disconnecting", endpoint, removedNode);
+                this.remoteShardRoutingStateMap.remove(removedNode.uuid());
+                this.clusterGroup.remove(removedNode.getId());
+                updateRoutingTable("node-removed-"+endpoint, true);
+            }
         }
-        
     }
 
     @Override
@@ -531,15 +659,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         Gossiper.instance.unregister(this);
         
         synchronized (clusterGroup) {
-            if (clusterGroup == null) {
-                logger.warn("Illegal state, should not have an empty cluster group when stopping, I should be there at teh very least...");
-                return;
-            }
-            if (clusterGroup.members().isEmpty()) {
-                // no more members, remove and return
-                clusterGroups.remove(clusterName);
-                return;
-            }
+            clusterGroup.members.clear();
         }
     }
 
@@ -548,100 +668,83 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private static final ObjectMapper jsonMapper = new ObjectMapper();
     private static final TypeReference<Map<String, ShardRoutingState>> indexShardStateTypeReference = new TypeReference<Map<String, ShardRoutingState>>() {};
 
-    public Map<UUID, ShardRoutingState> getShardRoutingStates(String index) {
-        Map<UUID, ShardRoutingState> shardsStates = new HashMap<UUID, ShardRoutingState>(this.clusterGroup.members.size());
-        for(Entry<InetAddress,EndpointState> entry :  Gossiper.instance.getEndpointStates()) {
-            InetAddress endpoint = entry.getKey();
-            EndpointState state = entry.getValue();
-            if (!endpoint.equals(this.localAddress) && 
-                DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(this.localDc) &&
-                state != null && 
-                state.isAlive()) {
-                VersionedValue value = state.getApplicationState(ELASTIC_SHARDS_STATES);
-                if (value != null) {
-                    try {
-                        Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(value.value, indexShardStateTypeReference);
-                        ShardRoutingState shardState = shardsStateMap.get(index);
-                        if (shardState != null) {
-                            shardsStates.put(Gossiper.instance.getHostId(endpoint), shardState);
-                        }
-                    } catch (Exception e) {
-                        logger.warn("Failed to parse gossip index shard state", e);
-                    }
-                }
-            }
-        }
-        return shardsStates;
+    public Map<String,ShardRoutingState> getShardRoutingState(UUID nodeUuid) {
+        return remoteShardRoutingStateMap.get(nodeUuid);
     }
     
-    /**
-     * add local index shard state to local application state.
-     * @param index
-     * @param shardRoutingState
-     * @throws JsonGenerationException
-     * @throws JsonMappingException
-     * @throws IOException
-     */
-    public synchronized void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
-        if (Gossiper.instance.isEnabled()) {
-            Map<String, ShardRoutingState> shardsStateMap = null;
-            EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(FBUtilities.getBroadcastAddress());
-            if (state != null) {
-                VersionedValue value = state.getApplicationState(ELASTIC_SHARDS_STATES);
-                if (value != null) {
-                    shardsStateMap = (Map<String, ShardRoutingState>) jsonMapper.readValue(value.value, indexShardStateTypeReference);
-                }
-            }
-            if (shardsStateMap == null) {
-                shardsStateMap = new HashMap<String, ShardRoutingState>();
-            }
-            if (shardRoutingState != null) {
-                shardsStateMap.put(index, shardRoutingState);
-            } else {
-                if (shardsStateMap.containsKey(index)) {
-                    shardsStateMap.remove(index);
-                }
-            }
-            String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(shardsStateMap);
-            Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
-        } else {
-            logger.trace("Cannot put X1 for index={}, gossip not enabled", index);
+    public void publishShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
+        ShardRoutingState prevShardRoutingState = localShardStateMap.put(index, shardRoutingState);
+        if (shardRoutingState != prevShardRoutingState)
+            publishX1();
+    }
+    
+    public ShardRoutingState getShardRoutingState(final String index) {
+        return this.localShardStateMap.get(index);
+    }
+    
+    public boolean isSearchEnabled() {
+        return this.searchEnabled.get();
+    }
+    
+    public boolean isAutoEnableSearch() {
+        return this.autoEnableSearch.get();
+    }
+    
+    public void setAutoEnableSearch(boolean newValue) {
+       this.autoEnableSearch.set(newValue);
+    }
+    
+    // warning: called from the gossiper.
+    public void setSearchEnabled(boolean ready) throws IOException {
+        setSearchEnabled(ready, false);
+    }
+    
+    public void setSearchEnabled(boolean ready, boolean forcePublishX1) throws IOException {
+        if (ready && !isNormal(Gossiper.instance.getEndpointStateForEndpoint(this.localAddress))) {
+            throw new IOException("Cassandra not ready for search");
+        }
+        if (searchEnabled.getAndSet(ready) != ready || forcePublishX1) {
+            logger.info("searchEnabled set to [{}]", ready);
+            publishX1(forcePublishX1);
         }
     }
 
-    public void publishX1(ClusterState clusterState) {
-        if (Gossiper.instance.isEnabled()) {
-            Map<String, ShardRoutingState> shardsStateMap = new HashMap<String, ShardRoutingState>();
-            for(IndexRoutingTable irt : clusterState.routingTable()) {
-                IndexShardRoutingTable isrt = irt.shard(0);
-                if (isrt != null) {
-                    ShardRouting shardRouting = isrt.getPrimaryShardRouting();
-                    if (shardRouting != null)
-                        shardsStateMap.put(irt.getIndex().getName(), shardRouting.state());
-                }
-            }
-            try {
-                String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(shardsStateMap);
+    
+    private void publishX1() throws JsonGenerationException, JsonMappingException, IOException {
+        publishX1(false);
+    }
+    
+    // Warning: on nodetool enablegossip, Gossiper.instance.isEnable() may be false while receiving a onChange event !
+    private void publishX1(boolean force) throws JsonGenerationException, JsonMappingException, IOException {
+        if (Gossiper.instance.isEnabled() || force) {
+            if (searchEnabled.get()) {
+                String newValue = jsonMapper.writerWithType(indexShardStateTypeReference).writeValueAsString(localShardStateMap);
                 Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter(newValue));
-            } catch (IOException e) {
-                logger.error("Unxepected error", e);
+            } else {
+                // publish an empty map, so other nodes will see local shards UNASSIGNED.
+                Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter("{}"));
             }
-        } else {
-            logger.trace("Cannot put X1 for cluster state, gossip not enabled");
         }
     }
     
     public void publishX2(ClusterState clusterState) {
-        if (Gossiper.instance.isEnabled()) {
+        publishX2(clusterState, false);
+    }
+    
+    public void publishX2(ClusterState clusterState, boolean force) {
+        if (Gossiper.instance.isEnabled() || force) {
             String clusterStateSting = clusterState.metaData().clusterUUID() + '/' + clusterState.metaData().version();
             Gossiper.instance.addLocalApplicationState(ELASTIC_META_DATA, StorageService.instance.valueFactory.datacenter(clusterStateSting));
+            if (logger.isTraceEnabled())
+                logger.trace("X2={} published in gossip state", clusterStateSting);
         } else {
-            logger.trace("Cannot put X2 for cluster state, gossip not enabled");
+            logger.warn("Cannot put X2 for cluster state, gossip not enabled");
         }
     }
 
     @Override
     protected void doClose()  {
+        Gossiper.instance.unregister(this);
     }
 
     @Override
@@ -658,7 +761,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     private class ClusterGroup {
 
-        private Map<String, DiscoveryNode> members = ConcurrentCollections.newConcurrentMap();
+        private ConcurrentMap<String, DiscoveryNode> members = new ConcurrentHashMap();
 
         Map<String, DiscoveryNode> members() {
             return members;
@@ -672,9 +775,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             members.remove(id);
         }
 
-
         public DiscoveryNode get(String id) {
             return members.get(id);
+        }
+        
+        public boolean contains(String id) {
+            return members.containsKey(id);
         }
         
         public Collection<DiscoveryNode> values() {

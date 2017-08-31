@@ -243,7 +243,7 @@ public final class IndexSettings {
         logger = Loggers.getLogger(getClass(), settings, index);
         nodeName = Node.NODE_NAME_SETTING.get(settings);
         this.indexMetaData = indexMetaData;
-        numberOfShards = settings.getAsInt(IndexMetaData.SETTING_NUMBER_OF_SHARDS, null);
+        numberOfShards = settings.getAsInt(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1);
         isShadowReplicaIndex = IndexMetaData.isIndexUsingShadowReplicas(settings);
 
         this.defaultField = DEFAULT_FIELD_SETTING.get(settings);
@@ -386,7 +386,7 @@ public final class IndexSettings {
     /**
      * Returns the number of replicas this index has.
      */
-    public int getNumberOfReplicas() { return settings.getAsInt(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, null); }
+    public int getNumberOfReplicas() { return settings.getAsInt(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1); }
 
     /**
      * Returns <code>true</code> iff this index uses shadow replicas.

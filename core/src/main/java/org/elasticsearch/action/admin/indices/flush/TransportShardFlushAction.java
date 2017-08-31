@@ -69,6 +69,6 @@ public class TransportShardFlushAction extends TransportReplicationAction<ShardF
 
     @Override
     protected boolean shouldExecuteReplication(IndexMetaData indexMetaData) {
-        return true;
+        return false;
     }
 }

@@ -126,10 +126,8 @@ import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.DocumentMapperParser;
 import org.elasticsearch.index.mapper.DynamicTemplate;
 import org.elasticsearch.index.mapper.FieldMapper;
-import org.elasticsearch.index.mapper.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.GeoShapeFieldMapper;
 import org.elasticsearch.index.mapper.IdFieldMapper;
-import org.elasticsearch.index.mapper.LatLonPointFieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
@@ -186,6 +184,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 
 /**
@@ -217,16 +216,24 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     protected final AtomicBoolean initialized = new AtomicBoolean(false);
     
     protected final ColumnFamilyStore baseCfs;
+    protected final String typeName;
+    protected final TermQuery typeTermQuery;
     protected final IndexMetadata indexMetadata;
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
+        this.typeName = ClusterService.cfNameToType(ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
+        this.typeTermQuery = new TermQuery(new Term(TypeFieldMapper.NAME, typeName));
         this.indexMetadata = indexDef;
         this.index_name = baseCfs.keyspace.getName()+"."+baseCfs.name;
         this.logger = Loggers.getLogger(this.getClass().getName()+"."+baseCfs.keyspace.getName()+"."+baseCfs.name);
         // clusterService must be started before creating 2i.
-        this.clusterService = ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class);
-        this.clusterService.addListener(this);
+        if (ElassandraDaemon.instance.node() != null) {
+            this.clusterService = ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class);
+            this.clusterService.addListener(this);
+        } else {
+            this.clusterService = null;
+        }
     }
     
     public static ElasticSecondaryIndex newElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
@@ -847,7 +854,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             }
             
             public IndexShard shard() {
-                final IndexShard indexShard = indexService.getShard(0);
+                final IndexShard indexShard = indexService.getShardOrNull(0);
                 if (indexShard == null) {
                     logger.debug("No such shard {}.0", name);
                     return null;
@@ -881,7 +888,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
                     DocumentMapper docMapper = indexService.mapperService().documentMapper(typeName);
                     BooleanQuery.Builder builder = new BooleanQuery.Builder();
-                    builder.add( new TermQuery(new Term(TypeFieldMapper.NAME, typeName)), Occur.FILTER);
+                    builder.add( typeTermQuery, Occur.FILTER);
                     
                     // build the primary key part of the delete by query
                     int i = 0;
@@ -1020,7 +1027,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         final boolean[] indexedPkColumns;   // bit mask of indexed PK columns.
         final long metadataVersion;
         final String nodeId;
-        final String typeName = ClusterService.cfNameToType(ElasticSecondaryIndex.this.baseCfs.name);
         final boolean indexOnCompaction;  // true if at least one index has index_on_compaction=true;
         
         ImmutableMappingInfo(final ClusterState state) {
@@ -1050,8 +1056,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 String index = indexMetaData.getIndex().getName();
                 MappingMetaData mappingMetaData; 
                 
-                if (indexMetaData.getState() != IndexMetaData.State.OPEN)
+                if (indexMetaData.getState() != IndexMetaData.State.OPEN) {
+                    if (logger.isDebugEnabled())
+                        logger.debug("ignore, index=[{}] not OPEN", index);
                     continue;
+                }
                 
                 ClusterBlockException clusterBlockException = state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, index);
                 if (clusterBlockException != null) {
@@ -1193,7 +1202,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 indexInfo.mappers = new Mapper[fields.length];
                 for(int i=0; i < fields.length; i++) {
                     DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(typeName);
-                    Mapper mapper = docMapper.mappers().smartNameFieldMapper(fields[i]);
+                    Mapper mapper = fields[i].startsWith(ParentFieldMapper.NAME) ?
+                            docMapper.parentFieldMapper() : docMapper.mappers().smartNameFieldMapper(fields[i]); // workaround for _parent#<join_type>
                     if (mapper != null) {
                         indexInfo.mappers[i] = mapper;
                     } else {
@@ -1464,11 +1474,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                     logger.error("Unexpected error", e);
                                 }
                         }
-                    }
-                    if (this.rowcument.hasLiveData(nowInSec)) {
-                       this.rowcument.index();
-                    } else {
-                       this.rowcument.delete();
+                        if (this.rowcument.hasLiveData(nowInSec)) {
+                            this.rowcument.index();
+                        } else {
+                            this.rowcument.delete();
+                        }
                     }
                 }
             }
@@ -1960,8 +1970,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void partitionDelete(DeletionTime deletionTime) {
+                if (deletionTime.isLive() || !deletionTime.deletes(System.currentTimeMillis())) {
+                    // ignore non-expired partition-tombestone. 
+                    return;
+                }
+                    
                 Long  token_long = (Long) key.getToken().getTokenValue();
-                String typeName = ClusterService.cfNameToType(ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
                 Query tokenRangeQuery = LongPoint.newRangeQuery(TokenFieldMapper.NAME, token_long, token_long);
                 
                 mappingInfoLock.readLock().lock();
@@ -1969,13 +1983,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     // Delete documents where _token = token_long + _type = typeName
                     for (ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices) {
                         if (logger.isTraceEnabled())
-                            logger.trace("deleting documents where _token={} from index.type={}.{} id={}", token_long, indexInfo.name, typeName);
-                        IndexShard indexShard = indexInfo.indexService.getShard(0);
+                            logger.trace("deleting documents where _token={} from index.type={}.{}", token_long, indexInfo.name, typeName);
+                        IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
                         if (indexShard != null) {
                             if (!indexInfo.updated)
                                 indexInfo.updated = true;
                             BooleanQuery.Builder builder = new BooleanQuery.Builder();
-                            builder.add( new TermQuery(new Term(TypeFieldMapper.NAME, typeName)), Occur.FILTER);
+                            builder.add(typeTermQuery, Occur.FILTER);
                             builder.add(tokenRangeQuery, Occur.FILTER);
                             DeleteByQuery deleteByQuery = new DeleteByQuery(builder.build(), null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
                             indexShard.getEngine().delete(deleteByQuery);
@@ -2018,12 +2032,16 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         return true;
     }
     
+    public String toString() {
+        return this.index_name;
+    }
+    
     public void initMapping() {
         mappingInfoLock.writeLock().lock();
         try {
            mappingInfo = new ImmutableMappingInfo(this.clusterService.state());
            logger.debug("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={}", 
-                   index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name));
+                   index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
         } catch(Exception e) {
              logger.error("Failed to update mapping index=[{}]",e ,index_name);
         } finally {
@@ -2035,14 +2053,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
         boolean updateMapping = false;
-        if (event.blocksChanged()) {
+        if (!event.state().blocks().isSame(event.previousState().blocks(), 
+                mappingInfo.indices == null ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
             updateMapping = true;
         } else {
             for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
                 IndexMetaData indexMetaData = cursor.value;
                 if (indexMetaData.keyspace().equals(this.baseCfs.metadata.ksName) && 
                     indexMetaData.mapping(ClusterService.cfNameToType(this.baseCfs.name)) != null &&
-                   (event.indexRoutingTableChanged(indexMetaData.getIndex().getName()) || !indexMetaData.equals(event.previousState().metaData().index(indexMetaData.getIndex())))) {
+                   !indexMetaData.equals(event.previousState().metaData().index(indexMetaData.getIndex().getName()))) {
                     updateMapping = true;
                     break;
                 }
@@ -2053,7 +2072,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             try {
                 mappingInfo = new ImmutableMappingInfo(event.state());
                 logger.debug("secondary index=[{}] metadata.version={} mappingInfo.indices={}",
-                        this.index_name, event.state().metaData().version(), mappingInfo.indices == null ? "" : Arrays.stream(mappingInfo.indices).map(i -> i.name));
+                        this.index_name, event.state().metaData().version(),
+                        mappingInfo.indices == null ? "" : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
             } catch(Exception e) {
                 logger.error("Failed to update mapping index=["+index_name+"]", e);
             } finally {
@@ -2130,7 +2150,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         return () -> {
              if (isIndexing()) {
                 for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : mappingInfo.indices) {
-                    IndexShard indexShard = indexInfo.indexService.getShard(0);
+                    IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
                     if (indexShard != null && indexInfo.snapshot) {
                         if (indexShard.state() == IndexShardState.STARTED)  {
                             // snapshotPath = data/elasticsearch.data/nodes/0/snapshots
@@ -2181,16 +2201,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             if (isIndexing()) {
                 for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : mappingInfo.indices) {
                     try {
-                        IndexShard indexShard = indexInfo.indexService.getShard(0);
+                        IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
                         if (indexShard != null) {
-                            DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(mappingInfo.typeName);
-                            Query query = new TermQuery(new Term(TypeFieldMapper.NAME, mappingInfo.typeName));
+                            DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(typeName);
                             if (logger.isDebugEnabled()) {
-                                logger.debug("truncating from ks.cf={}.{} query={} in elasticsearch index=[{}]", baseCfs.metadata.ksName, baseCfs.name, query, indexInfo.name);
+                                logger.debug("truncating from ks.cf={}.{} query={} in elasticsearch index=[{}]", baseCfs.metadata.ksName, baseCfs.name, typeTermQuery, indexInfo.name);
                             }
                             if (!indexInfo.updated)
                                 indexInfo.updated = true;
-                            DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), mappingInfo.typeName);
+                            DeleteByQuery deleteByQuery = new DeleteByQuery(typeTermQuery, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
                             indexShard.getEngine().delete(deleteByQuery);
                         }
                     } catch (ElasticsearchException e) {

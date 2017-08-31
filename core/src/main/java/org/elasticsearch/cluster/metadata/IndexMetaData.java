@@ -59,6 +59,7 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.common.xcontent.ToXContent.MapParams;
 import org.elasticsearch.gateway.MetaDataStateFormat;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.mapper.MapperService;
@@ -431,10 +432,11 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
         this.indexCreatedVersion = indexCreatedVersion;
         this.indexUpgradedVersion = indexUpgradedVersion;
         this.routingNumShards = routingNumShards;
-        this.routingFactor = routingNumShards / numberOfShards;
+        //this.routingFactor = routingNumShards / numberOfShards;
+        this.routingFactor = 1;
         this.routingPartitionSize = routingPartitionSize;
         this.waitForActiveShards = waitForActiveShards;
-        assert numberOfShards * routingFactor == routingNumShards :  routingNumShards + " must be a multiple of " + numberOfShards;
+        //assert numberOfShards * routingFactor == routingNumShards :  routingNumShards + " must be a multiple of " + numberOfShards;
     }
 
     public Index getIndex() {
@@ -1176,6 +1178,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
             Version indexCreatedVersion = Version.indexCreated(settings);
             Version indexUpgradedVersion = settings.getAsVersion(IndexMetaData.SETTING_VERSION_UPGRADED, indexCreatedVersion);
 
+            primaryTerms = null;
             if (primaryTerms == null) {
                 initializePrimaryTerms();
             } else if (primaryTerms.length != numberOfShards) {
@@ -1474,7 +1477,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
      * @see #getRoutingFactor(IndexMetaData, int) for details
      */
     public int getRoutingFactor() {
-        return routingFactor;
+        return 1;
     }
 
     /**

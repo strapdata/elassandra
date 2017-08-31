@@ -656,6 +656,8 @@ public abstract class StreamOutput extends OutputStream {
             type = ReadableInstant.class;
         } else if (value instanceof BytesReference) {
             type = BytesReference.class;
+        } else if (value instanceof Token) {
+            type = Token.class;
         } else {
             type = value.getClass();
         }

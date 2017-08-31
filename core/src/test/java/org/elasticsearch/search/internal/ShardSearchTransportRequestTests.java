@@ -173,6 +173,7 @@ public class ShardSearchTransportRequestTests extends AbstractSearchTestCase {
     }
 
     // BWC test for changes from #20916
+    /*
     public void testSerialize50Request() throws IOException {
         BytesArray requestBytes = new BytesArray(Base64.getDecoder()
             // this is a base64 encoded request generated with the same input
@@ -216,7 +217,7 @@ public class ShardSearchTransportRequestTests extends AbstractSearchTestCase {
             assertEquals(output.bytes().toBytesRef(), requestBytes.toBytesRef());
         }
     }
-
+    
     // BWC test for changes from #21393
     public void testSerialize50RequestForIndexBoost() throws IOException {
         BytesArray requestBytes = new BytesArray(Base64.getDecoder()
@@ -237,4 +238,5 @@ public class ShardSearchTransportRequestTests extends AbstractSearchTestCase {
             assertEquals(output.bytes().toBytesRef(), requestBytes.toBytesRef());
         }
     }
+    */
 }

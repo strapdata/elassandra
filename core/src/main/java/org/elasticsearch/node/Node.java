@@ -809,7 +809,7 @@ public class Node implements Closeable {
         clusterService().createOrUpdateElasticAdminKeyspace();
         
         // publish X1+X2 gossip states
-        clusterService().publishGossipStates();
+        //clusterService().publishGossipStates();
         
         // Cassandra started => release metadata update blocks.
         gatewayService().enableMetaDataPersictency();

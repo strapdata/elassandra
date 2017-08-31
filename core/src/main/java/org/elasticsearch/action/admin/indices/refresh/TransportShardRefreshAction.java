@@ -69,6 +69,6 @@ public class TransportShardRefreshAction
 
     @Override
     protected boolean shouldExecuteReplication(IndexMetaData indexMetaData) {
-        return true;
+        return false;
     }
 }

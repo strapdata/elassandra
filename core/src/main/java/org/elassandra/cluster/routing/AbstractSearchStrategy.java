@@ -54,6 +54,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 /**
  * Only support Murmur3 Long Token.
@@ -72,7 +73,7 @@ public abstract class AbstractSearchStrategy {
     public static final Token TOKEN_MAX = new LongToken(Long.MAX_VALUE);
     public static final Range<Token> FULL_RANGE_TOKEN = new Range<Token>(new LongToken(Long.MIN_VALUE), new LongToken(Long.MAX_VALUE));
 
-    public abstract Router newRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState);
+    public abstract Router newRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState);
     
     // per index router, updated on each cassandra ring change.
     public abstract class Router {
@@ -80,7 +81,7 @@ public abstract class AbstractSearchStrategy {
         final String ksName;
         final long version;
         final DiscoveryNode localNode;
-        final Map<UUID, ShardRoutingState> shardStates;
+        final BiFunction<Index, UUID, ShardRoutingState> shardsFunc;
         
         protected Multimap<Token,DiscoveryNode> tokenToNodes = ArrayListMultimap.create();
         protected Map<DiscoveryNode, BitSet> greenShards;            // available   node to bitset of ranges => started primary.
@@ -92,13 +93,13 @@ public abstract class AbstractSearchStrategy {
         protected final TokenMetadata metadata;
         protected final AbstractReplicationStrategy strategy;
         
-        public Router(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState, boolean includeReplica) 
+        public Router(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState, boolean includeReplica) 
         {
             this.index = index;
             this.ksName = ksName;
             this.version = clusterState.version();
             this.localNode = clusterState.nodes().getLocalNode();
-            this.shardStates = shardStates;
+            this.shardsFunc = shardsFunc;
             
             if (isRoutable(clusterState)) {
                 // only available when keyspaces are initialized and node joined
@@ -132,7 +133,7 @@ public abstract class AbstractSearchStrategy {
                     UUID uuid = StorageService.instance.getHostId(endpoint);
                     DiscoveryNode node =  (uuid == null) ? clusterState.nodes().findByInetAddress(endpoint) : clusterState.nodes().get(uuid.toString());
                     if (node != null && node.status() == DiscoveryNode.DiscoveryNodeStatus.ALIVE) {
-                        if (ShardRoutingState.STARTED.equals(shardStates.get(node.uuid()))) {
+                        if (ShardRoutingState.STARTED.equals( shardsFunc.apply(this.index, node.uuid() ))) {
                             orphanRange = false;
                             BitSet bs = greenShards.get(node);
                             if (bs == null) {
@@ -191,7 +192,7 @@ public abstract class AbstractSearchStrategy {
         }
         
         public ShardRoutingState getShardRoutingState(DiscoveryNode node) {
-            ShardRoutingState srs = this.shardStates.get(node.uuid());
+            ShardRoutingState srs = shardsFunc.apply(this.index, node.uuid());
             return (srs==null) ? ShardRoutingState.UNASSIGNED : srs;
         }
         
@@ -234,7 +235,8 @@ public abstract class AbstractSearchStrategy {
                     
                     // started primary shards (green)
                     ShardRouting primaryShardRouting = new ShardRouting(new ShardId(index, shardId), node.getId(), true, 
-                            ShardRoutingState.STARTED, null, 
+                            ShardRoutingState.STARTED, 
+                            null, 
                             Router.this.getTokenRanges(selectedShards().get(node)));
                     
                     if (todo && Router.this.yellowShards != null) {
@@ -250,7 +252,9 @@ public abstract class AbstractSearchStrategy {
                             
                             // unassigned secondary shards (yellow)
                             ShardRouting replicaShardRouting = new ShardRouting(new ShardId(index, shardId), node2.getId(), false, 
-                                    Router.this.getShardRoutingState(node2), info, EMPTY_RANGE_TOKEN_LIST);
+                                    Router.this.getShardRoutingState(node2), 
+                                    info, 
+                                    EMPTY_RANGE_TOKEN_LIST);
                             shards.add(replicaShardRouting);
                         }
                         isrt.add( new IndexShardRoutingTable(new ShardId(index,shardId), shards) );

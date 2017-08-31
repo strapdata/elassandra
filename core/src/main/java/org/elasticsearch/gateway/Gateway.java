@@ -63,7 +63,7 @@ public class Gateway extends AbstractComponent implements ClusterStateApplier {
             }
         }
 
-        listener.onSuccess( clusterService.updateNumberOfShards(builder.metaData(metadata).build()) );
+        listener.onSuccess( builder.metaData(metadata).build() );
     }
 
     private void logUnknownSetting(String settingType, Map.Entry<String, String> e) {

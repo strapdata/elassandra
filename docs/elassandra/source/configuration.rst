@@ -19,7 +19,7 @@ Elasticsearch paths are set according to the following environement variables an
 
 * ``path.home`` : **CASSANDRA_HOME** environement variable, cassandra.home system property, the current directory.
 * ``path.conf`` : **CASSANDRA_CONF** environement variable, path.conf or path.home.
-* ``path.data`` : **cassandra_storagedir**/data/elasticsearch.data, path.data system property or path.home/data/elasticsearch.data
+* ``path.data`` : **cassandra.storagedir**/data/elasticsearch.data, path.data system property or path.home/data/elasticsearch.data
 
 .. _elassandra_configuration:
 
@@ -30,19 +30,25 @@ Elasticsearch configuration rely on cassandra configuration file **conf/cassandr
 
 .. cssclass:: table-bordered
 
-+---------------------------+----------------------------+---------------------------------------------------------------------+
-| Cassandra                 | Elasticsearch              | Description                                                         |
-+===========================+============================+=====================================================================+
-| ``cluster.name``          | ``cluster_name``           | Elasticsearch cluster name is mapped to the cassandra cluster name. |
-+---------------------------+----------------------------+---------------------------------------------------------------------+
-| ``rpc_address``           | ``network.host``           | Elasticsearch network and transport bind addresses                  |
-|                           | ``transport.host``         | are set to the cassandra rpc listen addresses.                      |
-+---------------------------+----------------------------+---------------------------------------------------------------------+
-| ``broadcast_rpc_address`` | ``network.publish_host``   | Elasticsearch network and transport publish addresses               |
-|                           | ``transport.publish_host`` | is set to the cassandra broadcast rpc address.                      |
-+---------------------------+----------------------------+---------------------------------------------------------------------+
++---------------------------+----------------------------+---------------------------------------------------------------------------------------+
+| Cassandra                 | Elasticsearch              | Description                                                                           |
++===========================+============================+=======================================================================================+
+| ``cluster.name``          | ``cluster_name``           | Elasticsearch cluster name is mapped to the cassandra cluster name.                   |
++---------------------------+----------------------------+---------------------------------------------------------------------------------------+
+| ``rpc_address``           | ``network.host``           | Elasticsearch *network.host* is set to the cassandra *rpc_address*.                   |
++---------------------------+----------------------------+---------------------------------------------------------------------------------------+
+| ``broadcast_rpc_address`` | ``network.publish_host``   | Elasticsearch *network.publish_host* is set to the cassandra *broadcast_rpc_address*. |
++---------------------------+----------------------------+---------------------------------------------------------------------------------------+
+| ``listen_address``        | ``transport.host``         | Elasticsearch *transport_host* is set to the cassandra *listen_address*.              |
++---------------------------+----------------------------+---------------------------------------------------------------------------------------+
+| ``broadcast_address``     | ``transport.publish_host`` | Elasticsearch *transport.publish_host*  is set to the cassandra *broadcast_address*.  |
++---------------------------+----------------------------+---------------------------------------------------------------------------------------+
 
 Node role (master, primary, data) is automatically set by elassandra, standard configuration should only set **cluster_name**, **rpc_address** in the ``conf/cassandra.yaml``.
+
+By default, Elasticsearch HTTP is bound to Cassandra RPC addresses, while Elasticsearch transport protocol is bound to Cassandra internal addresses. 
+You can overload these default settings by defining Elasticsearch network settings in conf/elasticsearch.yaml (in order to bind Elasticsearch transport on 
+a public interface if you want to use the Elasticsearch transport client from your application).
 
 .. CAUTION::
    If you use the `GossipPropertyFile <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureSnitchGossipPF_c.html>`_ Snitch to configure your cassandra datacenter and rack properties in **conf/cassandra-rackdc.properties**, keep
@@ -169,11 +175,12 @@ Write performances
 * Use the optimized version less Lucene engine (the default) to reduce index size.
 * Disable ``index_on_compaction`` (Default is *false*) to avoid the Lucene segments merge overhead when compacting SSTables.
 * Index partitioning may increase write throughput by writing to several Elasticsearch indexes in parallel, but choose an efficient partition function implementation. For exemple, *String.format()* is much more faster that *Message.format()*.
+* Disable the ``_all`` field if you don't need it (Default is enabled).
 
 Search performances
 ...................
 
-* Use the smallest possible number of nodes or vnodes to reduce the complexity of the token_ranges filter.
+* Use few nodes or vnodes to reduce the complexity of the token_ranges filter (16 to 64 is recommended).
 * Use the random search strategy and increase the Cassandra replication factor to reduce the number of nodes requires for a search request.
 * Enable the ``token_ranges_bitset_cache``. This cache compute the token ranges filter once per Lucene segment. Check the token range bitset cache statistics to ensure this caching is efficient.
 * Enable Cassandra row caching to reduce the overhead introduce by fetching the requested fields from the underlying Cassandra table.

@@ -700,11 +700,12 @@ public class BaseClusterService extends AbstractLifecycleComponent {
                 builder.routingTable(RoutingTable.builder(ClusterService.this, newClusterState)
                     .version(newClusterState.routingTable().version() + 1).build());
             }
-            */
+            
             if (previousClusterState.metaData() != newClusterState.metaData()) {
                 builder.metaData(MetaData.builder(newClusterState.metaData()).version(newClusterState.metaData().version() + 1));
             }
-
+            */
+            
             // remove the no master block, if it exists
             if (newClusterState.blocks().hasGlobalBlock(discoverySettings.getNoMasterBlock().id())) {
                 builder.blocks(ClusterBlocks.builder().blocks(newClusterState.blocks())

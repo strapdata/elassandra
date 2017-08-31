@@ -28,6 +28,7 @@ import java.net.InetAddress;
 import java.util.BitSet;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 /**
  * return primary ranges of all nodes (and some replica for unreachable nodes).
@@ -37,15 +38,15 @@ import java.util.UUID;
  */
 public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
 
-    public Router newRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-        return new PrimaryFirstRouter(index, ksName, shardStates, clusterState);
+    public Router newRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState) {
+        return new PrimaryFirstRouter(index, ksName, shardsFunc, clusterState);
     }
     
     public class PrimaryFirstRouter extends Router {
         Route route;
         
-        public PrimaryFirstRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-            super(index, ksName, shardStates, clusterState, false);
+        public PrimaryFirstRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState) {
+            super(index, ksName, shardsFunc, clusterState, false);
             
             if (!StorageService.instance.isJoined() || !Keyspace.isInitialized()) {
                 // temporary fake routing table in order to start local shards before cassandra services.

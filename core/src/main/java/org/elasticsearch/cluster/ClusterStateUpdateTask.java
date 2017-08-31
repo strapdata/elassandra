@@ -43,14 +43,7 @@ public abstract class ClusterStateUpdateTask implements ClusterStateTaskConfig, 
     @Override
     public final ClusterTasksResult<ClusterStateUpdateTask> execute(ClusterState currentState, List<ClusterStateUpdateTask> tasks) throws Exception {
         ClusterState result = execute(currentState);
-        boolean doPeristMetadata = false;
-        for(ClusterStateUpdateTask task : tasks) {
-            if (task.doPresistMetaData()) {
-                doPeristMetadata = true;
-                break;
-            }
-        }
-        return ClusterTasksResult.<ClusterStateUpdateTask>builder().successes(tasks).build(result, doPeristMetadata);
+        return ClusterTasksResult.<ClusterStateUpdateTask>builder().successes(tasks).build(result, this.doPresistMetaData());
     }
 
     @Override

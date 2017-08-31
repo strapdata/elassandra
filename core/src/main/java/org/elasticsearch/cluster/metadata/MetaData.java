@@ -75,6 +75,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.UUID;
 
 import static java.util.Collections.unmodifiableSet;
 import static org.elasticsearch.common.settings.Settings.readSettingsFromStream;
@@ -815,7 +816,12 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         private final ImmutableOpenMap.Builder<String, Custom> customs;
 
         public Builder() {
-            clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            try {
+                clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            } catch (java.lang.AssertionError |java.lang.NoClassDefFoundError e) {
+                // for testing when Cassandra is nnot initialized.
+                clusterUUID = UUID.randomUUID().toString();
+            }
             indices = ImmutableOpenMap.builder();
             templates = ImmutableOpenMap.builder();
             customs = ImmutableOpenMap.builder();
@@ -1191,6 +1197,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     static {
         Map<String, String> params = new HashMap<>(2);
         params.put("binary", "true");
+        params.put(CONTEXT_CASSANDRA_PARAM, "true");
         params.put(MetaData.CONTEXT_MODE_PARAM, MetaData.CONTEXT_MODE_GATEWAY);
         FORMAT_PARAMS = new MapParams(params);
     }

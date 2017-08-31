@@ -250,9 +250,12 @@ public class ClusterChangedEvent {
      * elected that has never been part of the cluster before.
      */
     public boolean isNewCluster() {
+        return false;
+        /*
         final String prevClusterUUID = previousState.metaData().clusterUUID();
         final String currClusterUUID = state.metaData().clusterUUID();
         return prevClusterUUID.equals(currClusterUUID) == false;
+        */
     }
 
     // Get the deleted indices by comparing the index metadatas in the previous and new cluster states.

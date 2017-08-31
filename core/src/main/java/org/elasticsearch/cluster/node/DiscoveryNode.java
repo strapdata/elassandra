@@ -88,7 +88,7 @@ public class DiscoveryNode implements Writeable, ToXContent {
     private DiscoveryNodeStatus status = DiscoveryNodeStatus.UNKNOWN;
     
     public static enum DiscoveryNodeStatus {
-        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2), OFFSEARCH((byte) 3);
+        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2);
 
         private final byte status;
 
@@ -109,16 +109,15 @@ public class DiscoveryNode implements Writeable, ToXContent {
                 return "ALIVE";
             case DEAD:
                 return "DEAD";
-            case OFFSEARCH:
-                return "OFFSEARCH";
             default:
                 throw new IllegalArgumentException();
             }
         }
     }
 
-    public void status(DiscoveryNodeStatus status) {
+    public DiscoveryNode status(DiscoveryNodeStatus status) {
         this.status = status;
+        return this;
     }
     
     /**
@@ -152,7 +151,6 @@ public class DiscoveryNode implements Writeable, ToXContent {
         return null;
     }
 
-    
     /**
      * Creates a new {@link DiscoveryNode}
      * <p>
@@ -208,7 +206,7 @@ public class DiscoveryNode implements Writeable, ToXContent {
      */
     public DiscoveryNode(String nodeName, String nodeId, TransportAddress address,
                          Map<String, String> attributes, Set<Role> roles, Version version) {
-        this(nodeName, nodeId, UUIDs.randomBase64UUID(), address.getHost(), address.getAddress(), address, attributes, roles, version);
+        this(nodeName, nodeId, nodeId, address.getHost(), address.getAddress(), address, attributes, roles, version);
     }
 
     /**
@@ -452,6 +450,7 @@ public class DiscoveryNode implements Writeable, ToXContent {
         sb.append('{').append(ephemeralId).append('}');
         sb.append('{').append(hostName).append('}');
         sb.append('{').append(address).append('}');
+        sb.append('{').append(status.toString()).append('}');
         if (!attributes.isEmpty()) {
             sb.append(attributes);
         }

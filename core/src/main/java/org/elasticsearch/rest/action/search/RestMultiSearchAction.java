@@ -165,6 +165,10 @@ public class RestMultiSearchAction extends BaseRestHandler {
                             searchRequest.searchType(nodeStringValue(value, null));
                         } else if ("request_cache".equals(entry.getKey()) || "requestCache".equals(entry.getKey())) {
                             searchRequest.requestCache(lenientNodeBooleanValue(value, entry.getKey()));
+                        } else if ("token_ranges_bitset_cache".equals(entry.getKey()) || "tokenRangesBitsetCache".equals(entry.getKey())) {
+                            searchRequest.tokenRangesBitsetCache(lenientNodeBooleanValue(value, entry.getKey()));
+                        } else if ("token_ranges".equals(entry.getKey()) || "tokenRanges".equals(entry.getKey())) {
+                            searchRequest.tokenRanges(request.paramsAsTokenRanges(nodeStringValue(value, null)));
                         } else if ("preference".equals(entry.getKey())) {
                             searchRequest.preference(nodeStringValue(value, null));
                         } else if ("routing".equals(entry.getKey())) {

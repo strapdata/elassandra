@@ -627,3 +627,22 @@ Then:
 7. Restart all nodes
 8. Check the cluster name in the Elasticsearch cluster state and that you can update the mapping.
 
+Elassandra Upgrade
+__________________
+
+
+Minor Cassandra upgrade
+-----------------------
+
+Major Cassandra upgrade
+-----------------------
+
+Minor Elasticsearch upgrade
+---------------------------
+
+
+Major Elasticsearch upgrade
+---------------------------
+
+Major Elasticsearch upgrade invlove a full index rebuild and a down time for Elasticsearch  
+

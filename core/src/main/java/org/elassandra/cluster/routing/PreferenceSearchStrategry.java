@@ -22,8 +22,8 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.Index;
 
-import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 /**
  * Search strategy 
@@ -37,8 +37,8 @@ public class PreferenceSearchStrategry extends CachedRandomSearchStrategy {
     }
     
     public class SearchKeyRouter extends CachedRandomRouter {
-        public SearchKeyRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-            super(index, ksName, shardStates, clusterState);
+        public SearchKeyRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState) {
+            super(index, ksName, shardsFunc, clusterState);
         }
         
         public Key getKey(TransportAddress src, @Nullable String searchKey, @Nullable String preference) {
@@ -47,7 +47,7 @@ public class PreferenceSearchStrategry extends CachedRandomSearchStrategy {
     }
     
     @Override
-    public Router newRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-        return new SearchKeyRouter(index, ksName, shardStates, clusterState);
+    public Router newRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState) {
+        return new SearchKeyRouter(index, ksName, shardsFunc, clusterState);
     }
 }
