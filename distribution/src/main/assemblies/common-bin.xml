@@ -29,7 +29,7 @@
         
         <!-- conf directory -->
         <fileSet>
-            <directory>../src/main/resources/config</directory>
+            <directory>../src/main/resources/conf</directory>
             <outputDirectory>conf</outputDirectory>
             <fileMode>0755</fileMode>
             <directoryMode>0755</directoryMode>

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -74,8 +74,8 @@ import org.slf4j.LoggerFactory;
  * metadata from cassandra schema DiscoveryService discover ring topology and
  * build routing table await that Cassandra start() (Complet cassandra
  * bootstrap) ElasticSearch start() (Open Elastic http service)
- * 
- * 
+ *
+ *
  * @author vroyer
  *
  */
@@ -140,7 +140,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
         
         
-        instance.setup(addShutdownHook, settings, env, pluginList); 
+        instance.setup(addShutdownHook, settings, env, pluginList);
         
         //enable indexing in cassandra.
         ElasticSecondaryIndex.runsElassandra = true;
@@ -168,7 +168,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             logger.error("Failed to set the workload to elasticsearch.",e1);
         }
         
-        super.setup(); // start bootstrap CassandraDaemon 
+        super.setup(); // start bootstrap CassandraDaemon
         super.start(); // start Thrift+RPC service
 
         if (instance.node != null) {
@@ -245,7 +245,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void stop() {
         super.stop();
-        if (node != null) 
+        if (node != null)
             node.close();
     }
 
@@ -314,7 +314,10 @@ public class ElassandraDaemon extends CassandraDaemon {
         // reloading could cause multiple prompts to the user for values if a system property was specified with a prompt
         // placeholder
         Settings nodeSettings = Settings.settingsBuilder()
+                 // overloadable settings from elasticsearch.yml
+                .put("path.data", getElasticsearchDataDir())
                 .put(settings)
+                // overloadable settings.
                 .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
                 .build();
         
@@ -369,11 +372,10 @@ public class ElassandraDaemon extends CassandraDaemon {
         return cassandra_conf;
     }
     
+    // The default elasticsearch data directory if path.data is not set from elasticsearch.yml or system properties
     public static String getElasticsearchDataDir() {
-        String cassandra_storagedir =  System.getProperty("cassandra_storagedir");
-        if (cassandra_storagedir == null)
-            cassandra_storagedir = System.getProperty("path.data",getHomeDir()+"/data/elasticsearch.data");
-        return cassandra_storagedir + "/elasticsearch.data";
+        String cassandra_storage = System.getProperty("cassandra.storage", getHomeDir() + File.separator + "data");
+        return cassandra_storage + File.separator + "elasticsearch.data";
     }
     
     public static void main(String[] args) {
@@ -425,8 +427,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                         .put("node.name","node0")
                         .put("path.home",getHomeDir())
                         .put("path.conf",getConfigDir())
-                        .put("path.data",getElasticsearchDataDir())
-                        .build(), 
+                        .build(),
                     foreground ? Terminal.DEFAULT : null);
             
             instance.activate(true, env.settings(), env,  Collections.<Class<? extends Plugin>>emptyList());
