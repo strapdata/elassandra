@@ -37,6 +37,8 @@ import org.elasticsearch.cluster.routing.RecoverySource.LocalShardsRecoverySourc
 import org.elasticsearch.cluster.routing.RecoverySource.PeerRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.StoreRecoverySource;
+import org.elasticsearch.cluster.routing.UnassignedInfo.AllocationStatus;
+import org.elasticsearch.cluster.routing.UnassignedInfo.Reason;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Randomness;
@@ -76,8 +78,9 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
     private final Index index;
     private final ShardShuffler shuffler;
 
-    final public static  UnassignedInfo UNASSIGNED_INFO_NODE_LEFT = new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "cassandra node left");
-    final public static  UnassignedInfo UNASSIGNED_INFO_UNAVAILABLE = new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "shard or keyspace unavailable");
+    // TODO: set time of outage for unassigned shards.
+    final public static  UnassignedInfo UNASSIGNED_INFO_NODE_LEFT = new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "cassandra node left", null, 1, 0, 0, false, AllocationStatus.DECIDERS_NO);
+    final public static  UnassignedInfo UNASSIGNED_INFO_UNAVAILABLE = new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "shard or keyspace unavailable", null, 1, 0, 0, false, AllocationStatus.DECIDERS_NO);
     final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_CREATED = new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null);
     final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_REOPEN = new UnassignedInfo(UnassignedInfo.Reason.INDEX_REOPENED, null);
 

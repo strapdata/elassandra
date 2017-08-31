@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 /**
  * For each newRoute(), returns all local ranges and randomly pickup ranges from available nodes (may be unbalanced).
@@ -44,46 +45,55 @@ public class RandomSearchStrategy extends AbstractSearchStrategy {
     public class RandomRouter extends Router {
         Random rnd = new Random();
         
-        public RandomRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-            super(index, ksName, shardStates, clusterState, true);
+        public RandomRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState) {
+            super(index, ksName, shardsFunc, clusterState, true);
         }
         
         @Override
         public Route newRoute(@Nullable String preference, TransportAddress src) {
-            DiscoveryNode pivotNode = localNode;
-            if (this.greenShards.get(pivotNode) == null && greenShards.size() > 0) {
-                pivotNode = greenShards.keySet().iterator().next();
-            }
-            BitSet pivotBitset = this.greenShards.get(pivotNode);
             final Map<DiscoveryNode, BitSet> selectedShards = new HashMap<DiscoveryNode, BitSet>();
-            selectedShards.put(pivotNode, pivotBitset);
+            DiscoveryNode pivotNode = localNode;
             
-            List<DiscoveryNode> randomAvailableNodes = Lists.newArrayList(greenShards.keySet());
-            randomAvailableNodes.remove(pivotNode);
-            Collections.shuffle(randomAvailableNodes, rnd);
-            
-            
-            BitSet coverBitmap = (BitSet)pivotBitset.clone();
-            int i = 0;
-            while (coverBitmap.cardinality() != tokens.size() && i < tokens.size()) {
-                int x = coverBitmap.nextClearBit(i);
-                DiscoveryNode choice = null;
-                for(Iterator<DiscoveryNode> it = randomAvailableNodes.iterator(); it.hasNext(); ) {
-                    DiscoveryNode node = it.next();
-                    if (this.greenShards.get(node).get(x)) {
-                        // choose the first (could choose the wider token_range, or the one having the less dropped mutations)
-                        if (choice == null)
-                            choice = node;
-                        it.remove();
-                    }
+            // check that localNode is green, or take another one.
+            if (this.greenShards.get(pivotNode) == null) {
+                if (greenShards.size() > 0) {
+                    pivotNode = greenShards.keySet().iterator().next();
+                } else {
+                    pivotNode = null;
                 }
-                if (choice != null) {
-                    BitSet choiceBitset = this.greenShards.get(choice);
-                    choiceBitset.andNot(coverBitmap);
-                    selectedShards.put(choice, choiceBitset);
-                    coverBitmap.or(choiceBitset);
-                } 
-                i++;
+            }
+            
+            if (pivotNode != null) {
+                BitSet pivotBitset = this.greenShards.get(pivotNode);
+                selectedShards.put(pivotNode, pivotBitset);
+                
+                List<DiscoveryNode> randomAvailableNodes = Lists.newArrayList(greenShards.keySet());
+                randomAvailableNodes.remove(pivotNode);
+                Collections.shuffle(randomAvailableNodes, rnd);
+                
+                
+                BitSet coverBitmap = (BitSet)pivotBitset.clone();
+                int i = 0;
+                while (coverBitmap.cardinality() != tokens.size() && i < tokens.size()) {
+                    int x = coverBitmap.nextClearBit(i);
+                    DiscoveryNode choice = null;
+                    for(Iterator<DiscoveryNode> it = randomAvailableNodes.iterator(); it.hasNext(); ) {
+                        DiscoveryNode node = it.next();
+                        if (this.greenShards.get(node).get(x)) {
+                            // choose the first (could choose the wider token_range, or the one having the less dropped mutations)
+                            if (choice == null)
+                                choice = node;
+                            it.remove();
+                        }
+                    }
+                    if (choice != null) {
+                        BitSet choiceBitset = this.greenShards.get(choice);
+                        choiceBitset.andNot(coverBitmap);
+                        selectedShards.put(choice, choiceBitset);
+                        coverBitmap.or(choiceBitset);
+                    } 
+                    i++;
+                }
             }
         
             return new Route()  {
@@ -97,8 +107,8 @@ public class RandomSearchStrategy extends AbstractSearchStrategy {
     }
 
     @Override
-    public Router newRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-        return new RandomRouter(index, ksName, shardStates, clusterState);
+    public Router newRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState) {
+        return new RandomRouter(index, ksName, shardsFunc, clusterState);
     }
     
 }

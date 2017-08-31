@@ -80,7 +80,11 @@ public final class ShardRouting implements Writeable, ToXContent {
     }
 
     public ShardRouting(ShardId shardId, String currentNodeId, boolean primary, ShardRoutingState state, UnassignedInfo unassignedInfo, Collection<Range<Token>> tokenRanges) {
-        this(shardId, currentNodeId, null, primary, state, RecoverySource.LocalShardsRecoverySource.INSTANCE, unassignedInfo, DUMMY_ALLOCATION_ID, UNAVAILABLE_EXPECTED_SHARD_SIZE,tokenRanges);
+        this(shardId, currentNodeId, null, primary, state, 
+                (!primary) ? PeerRecoverySource.INSTANCE : ((state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) ? RecoverySource.LocalShardsRecoverySource.INSTANCE : null), 
+                (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) ? unassignedInfo : null, 
+                (state == ShardRoutingState.STARTED || state == ShardRoutingState.INITIALIZING) ? DUMMY_ALLOCATION_ID : null, 
+                UNAVAILABLE_EXPECTED_SHARD_SIZE, tokenRanges);
     }
     public ShardRouting(ShardId shardId, String currentNodeId,
             String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
@@ -110,7 +114,7 @@ public final class ShardRouting implements Writeable, ToXContent {
         assert expectedShardSize == UNAVAILABLE_EXPECTED_SHARD_SIZE || state == ShardRoutingState.INITIALIZING || state == ShardRoutingState.RELOCATING : expectedShardSize + " state: " + state;
         assert expectedShardSize >= 0 || state != ShardRoutingState.INITIALIZING || state != ShardRoutingState.RELOCATING : expectedShardSize + " state: " + state;
         assert !(state == ShardRoutingState.UNASSIGNED && unassignedInfo == null) : "unassigned shard must be created with meta";
-        //assert (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) == (recoverySource != null) : "recovery source only available on unassigned or initializing shard but was " + state;
+        assert (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) == (recoverySource != null) : "recovery source only available on unassigned or initializing shard but was " + state;
         assert recoverySource == null || recoverySource == PeerRecoverySource.INSTANCE || primary : "replica shards always recover from primary";
         
         this.tokenRanges = tokenRanges;

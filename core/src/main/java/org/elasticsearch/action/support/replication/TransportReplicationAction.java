@@ -662,12 +662,15 @@ public abstract class TransportReplicationAction<
             // resolve all derived request fields, so we can route and apply it
             resolveRequest(state.metaData(), indexMetaData, request);
             //assert request.shardId() != null : "request shardId must be set in resolveRequest";
-            assert request.waitForActiveShards() != ActiveShardCount.DEFAULT : "request waitForActiveShards must be set in resolveRequest";
+            //assert request.waitForActiveShards() != ActiveShardCount.DEFAULT : "request waitForActiveShards must be set in resolveRequest";
 
             final ShardRouting primary = primary(state);
+            /* No need for retry in ELassandra.
             if (retryIfUnavailable(state, primary)) {
                 return;
             }
+            */
+            
             final DiscoveryNode node = state.nodes().get(primary.currentNodeId());
             if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                 performLocalAction(state, primary, node);
@@ -687,6 +690,7 @@ public abstract class TransportReplicationAction<
         }
 
         private void performRemoteAction(ClusterState state, ShardRouting primary, DiscoveryNode node) {
+            /*
             if (state.version() < request.routedBasedOnClusterVersion()) {
                 logger.trace("failed to find primary [{}] for request [{}] despite sender thinking it would be here. Local cluster state "
                         + "version [{}]] is older than on sending node (version [{}]), scheduling a retry...", request.shardId(), request,
@@ -700,6 +704,8 @@ public abstract class TransportReplicationAction<
                 // target is not aware that it is the active primary shard already.
                 request.routedBasedOnClusterVersion(state.version());
             }
+            */
+            request.routedBasedOnClusterVersion(state.version());
             if (logger.isTraceEnabled()) {
                 logger.trace("send action [{}] on primary [{}] for request [{}] with cluster state version [{}] to [{}]", actionName,
                     request.shardId(), request, state.version(), primary.currentNodeId());
@@ -764,6 +770,9 @@ public abstract class TransportReplicationAction<
 
         private void performAction(final DiscoveryNode node, final String action, final boolean isPrimaryAction,
                                    final TransportRequest requestToPerform) {
+            // remote shard is always 0 in elassandra
+            request.setShardId(new ShardId(request.shardId().getIndex(), 0));
+            
             transportService.sendRequest(node, action, requestToPerform, transportOptions, new TransportResponseHandler<Response>() {
 
                 @Override

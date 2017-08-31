@@ -43,6 +43,7 @@ import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.Index;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -196,7 +197,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
             
             @Override
             public ClusterState execute(ClusterState currentState) {
-                RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, currentState);
+                //RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, currentState);
                 MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
 
                 // allow to change any settings to a close index, and only allow dynamic settings to be changed
@@ -234,9 +235,16 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                     // we do *not* update the in sync allocation ids as they will be removed upon the first index
                     // operation which make these copies stale
                     // TODO: update the list once the data is deleted by the node?
-                    routingTableBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
+                    //routingTableBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
                     metaDataBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
                     logger.info("updating number_of_replicas to [{}] for indices {}", updatedNumberOfReplicas, actualIndices);
+                    for (String index : actualIndices) {
+                        final IndexMetaData indexMetaData = currentState.metaData().index(index);
+                        if (indexMetaData == null) {
+                            throw new IndexNotFoundException(index);
+                        }
+                        clusterService.alterKeyspaceReplicationFactor(indexMetaData.keyspace(), updatedNumberOfReplicas+1);
+                    }
                 }
 
                 ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
@@ -275,7 +283,11 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                 }
 
 
-                ClusterState updatedState = ClusterState.builder(currentState).metaData(metaDataBuilder).routingTable(routingTableBuilder.build()).blocks(blocks).build();
+                ClusterState updatedState = ClusterState.builder(currentState)
+                        .metaData(metaDataBuilder)
+                        //.routingTable(routingTableBuilder.build())
+                        .blocks(blocks)
+                        .build();
 
                 /*
                 // now, reroute in case things change that require it (like number of replicas)

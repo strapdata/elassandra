@@ -80,7 +80,7 @@ To get the same behavior as Elasticsearch, just add a dummy field in your mappin
 Nested or Object types cannot be empty
 --------------------------------------
 
-Because Elasticsearch nested and object types are backed by a Cassandra User Defined Type, it requires at least one sub-field.
+Because Elasticsearch nested and object types are backed by a Cassandra User Defined Type, it requires at least one sub-field in the mapping.
 
 Document version is meaningless
 -------------------------------
@@ -128,6 +128,7 @@ Elasticsearch unsupported feature
 * Tribe node allows to query multiple Elasticsearch clusters. This feature is not currently supported by Elassandra.
 * Elasticsearch snapshot and restore operations are disabled (See Elassandra backup and restore in operations).
 * Elasticsearch Ingest node is not supported (Use the cassandra driver to safely ingest your data).
+* Elasticsearch shrink API is not supported.
 
 Cassandra limitations
 ---------------------

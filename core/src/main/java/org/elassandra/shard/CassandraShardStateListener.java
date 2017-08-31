@@ -33,6 +33,9 @@ import org.elasticsearch.index.shard.ShardId;
  */
 import java.io.IOException;
 
+/**
+ * Publish local ShardRouting state in the gossip state X1.
+ */
 public class CassandraShardStateListener extends AbstractComponent implements IndexEventListener {
     
     private final ClusterService clusterService;
@@ -43,6 +46,7 @@ public class CassandraShardStateListener extends AbstractComponent implements In
         this.clusterService = clusterService;
     }
     
+    /*
     @Override
     public void beforeIndexShardCreated(ShardId shardId, Settings indexSettings) {
         try {
@@ -51,6 +55,7 @@ public class CassandraShardStateListener extends AbstractComponent implements In
             logger.error("Unexpected error", e);
         }
     }
+    */
     
     /**
      * Called after the index shard has been started.
@@ -58,7 +63,7 @@ public class CassandraShardStateListener extends AbstractComponent implements In
     @Override
     public void afterIndexShardStarted(IndexShard indexShard) {
         try {
-            clusterService.putShardRoutingState(indexShard.shardId().getIndexName(), ShardRoutingState.STARTED);
+            clusterService.publishShardRoutingState(indexShard.shardId().getIndexName(), ShardRoutingState.STARTED);
             clusterService.submitStateUpdateTask("shard-started-update-routing", new ClusterStateUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
@@ -84,7 +89,7 @@ public class CassandraShardStateListener extends AbstractComponent implements In
     @Override
     public void beforeIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
         try {
-            clusterService.putShardRoutingState(indexShard.shardId().getIndexName(), ShardRoutingState.UNASSIGNED);
+            clusterService.publishShardRoutingState(shardId.getIndexName(), ShardRoutingState.UNASSIGNED);
         } catch (IOException e) {
             logger.error("Unexpected error", e);
         }

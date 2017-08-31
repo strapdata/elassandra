@@ -467,12 +467,12 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     public PrimaryFirstSearchStrategy.PrimaryFirstRouter updateRouter(IndexMetaData indexMetaData, ClusterState state) {
         // update and returns a PrimaryFirstRouter for the build table.
-        PrimaryFirstSearchStrategy.PrimaryFirstRouter router = (PrimaryFirstSearchStrategy.PrimaryFirstRouter)this.primaryFirstSearchStrategy.newRouter(indexMetaData.getIndex(), indexMetaData.keyspace(), getShardRoutingStates(indexMetaData.getIndex()), state);
+        PrimaryFirstSearchStrategy.PrimaryFirstRouter router = (PrimaryFirstSearchStrategy.PrimaryFirstRouter)this.primaryFirstSearchStrategy.newRouter(indexMetaData.getIndex(), indexMetaData.keyspace(), this::getShardRoutingStates, state);
         
         // update the router cache with the effective router
         AbstractSearchStrategy effectiveSearchStrategy = searchStrategyInstance(searchStrategyClass(indexMetaData, state));
         if (! effectiveSearchStrategy.equals(PrimaryFirstSearchStrategy.class) ) {
-            AbstractSearchStrategy.Router router2 = effectiveSearchStrategy.newRouter(indexMetaData.getIndex(), indexMetaData.keyspace(), getShardRoutingStates(indexMetaData.getIndex()), state);
+            AbstractSearchStrategy.Router router2 = effectiveSearchStrategy.newRouter(indexMetaData.getIndex(), indexMetaData.keyspace(), this::getShardRoutingStates, state);
             this.routers.put(indexMetaData.getIndex().getName(), router2);
         } else {
             this.routers.put(indexMetaData.getIndex().getName(), router);
@@ -985,7 +985,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
     }
 
-    public int replicationFactor(String keyspace) {
+    public static int replicationFactor(String keyspace) {
         if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
             AbstractReplicationStrategy replicationStrategy = Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy();
             int rf = replicationStrategy.getReplicationFactor();
@@ -997,9 +997,25 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return 0;
     }
     
-    public ClusterState updateNumberOfShards(ClusterState currentState) {
+    
+    public ClusterState updateNumberOfReplica(ClusterState currentState) {
+        MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
+        for(Iterator<IndexMetaData> it = currentState.metaData().iterator(); it.hasNext(); ) {
+            IndexMetaData indexMetaData = it.next();
+            IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
+            int rf = replicationFactor(indexMetaData.keyspace());
+            indexMetaDataBuilder.numberOfReplicas( Math.max(0, rf - 1) );
+            metaDataBuilder.put(indexMetaDataBuilder.build(), false);
+        }
+        return ClusterState.builder(currentState).metaData(metaDataBuilder.build()).build();
+    }
+    
+    public ClusterState updateNumberOfShardsAndReplicas(ClusterState currentState) {
         int numberOfNodes = currentState.nodes().getSize();
-        assert numberOfNodes > 0;
+        
+        if (numberOfNodes == 0)
+            return currentState; // for testing purposes.
+        
         MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
         for(Iterator<IndexMetaData> it = currentState.metaData().iterator(); it.hasNext(); ) {
             IndexMetaData indexMetaData = it.next();
@@ -1012,14 +1028,11 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return ClusterState.builder(currentState).metaData(metaDataBuilder.build()).build();
     }
     
-    /**
-     * Submit an updateTask to update numberOfShard and numberOfReplica of all indices in clusterState.
-     */
-    public void submitNumberOfShardsUpdate() {
-        submitStateUpdateTask("Update numberOfShard and numberOfReplica of all indices" , new ClusterStateUpdateTask() {
+    public void submitNumberOfShardsAndReplicasUpdate(String source) {
+        submitStateUpdateTask(source, new ClusterStateUpdateTask() {
             @Override
             public ClusterState execute(ClusterState currentState) {
-                return updateNumberOfShards(currentState);
+                return updateNumberOfShardsAndReplicas(currentState);
             }
     
             @Override
@@ -1033,7 +1046,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             }
         });
     }
-
     
     public void updateRoutingTable() {
         submitStateUpdateTask("Update-routing-table" , new ClusterStateUpdateTask() {
@@ -1299,13 +1311,13 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
 
         // try to update cluster state.
         long startTimeNS = System.nanoTime();
-        boolean newPertistedMetadata = false;
+        boolean presistedMetadata = false;
         try {
             String newClusterStateMetaDataString = MetaData.Builder.toXContent(newClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
             String previousClusterStateMetaDataString = MetaData.Builder.toXContent(previousClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
             if (!newClusterStateMetaDataString.equals(previousClusterStateMetaDataString) && !newClusterState.blocks().disableStatePersistence() && taskOutputs.doPersistMetadata) {
                 // update MeteData.version+cluster_uuid
-                newPertistedMetadata = true;
+                presistedMetadata = true;
                 newClusterState = ClusterState.builder(newClusterState)
                                     .metaData(MetaData.builder(newClusterState.metaData()).incrementVersion().build())
                                     .incrementVersion()
@@ -1335,8 +1347,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         } catch (org.apache.cassandra.exceptions.UnavailableException e) {
             // Cassandra issue => ack with failure.
             ackListener.onNodeAck(this.localNode(), e);
-            logger.debug("Unexpected Cassandra issue", e);
-            return;
+            logger.error("Cassandra issue:", e);
+            throw e;
         } catch (Throwable e) {
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
             if (logger.isTraceEnabled()) {
@@ -1351,8 +1363,12 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         }
 
         try {
-            if (newPertistedMetadata) {
-                // publish in gossip state the applied metadata.uuid and version
+            CassandraDiscovery.MetaDataVersionAckListener metaDataVersionAckListerner = null;
+            if (presistedMetadata) {
+                // register the X2 listener before publishing to avoid dead locks !
+                metaDataVersionAckListerner = this.discovery.new MetaDataVersionAckListener(newClusterState.metaData().version(), ackListener, newClusterState);
+                
+                // On the coordinator only, publish in gossip state the persisted metadata.uuid and version
                 publishX2(newClusterState);
             }
 
@@ -1364,6 +1380,9 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 logger.debug("cluster state updated, version [{}], source [{}]", newClusterState.version(), taskInputs.summary);
             }
 
+            // update routing table.
+            newClusterState = ClusterState.builder(newClusterState).routingTable(RoutingTable.build(this, newClusterState)).build();
+            
             ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(taskInputs.summary, newClusterState, previousClusterState);
             // new cluster state, notify all listeners
             final DiscoveryNodes.Delta nodesDelta = clusterChangedEvent.nodesDelta();
@@ -1389,16 +1408,14 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             
             nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
             
-            final ClusterState newClusterState2 = newClusterState;
+            
             // update the current cluster state 
+            final ClusterState newClusterState2 = newClusterState;
             updateState(css -> newClusterState2);
             if (logger.isTraceEnabled())
                 logger.trace("set local clusterState version={} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
             
-            if (!newPertistedMetadata) {
-                // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
-                publishX2(newClusterState);
-            }
+            
             
             // notify highPriorityStateAppliers, including IndicesClusterStateService to start shards and update mapperServices.
             if (logger.isTraceEnabled())
@@ -1414,34 +1431,17 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             // notifiy listener, including ElasticSecondaryIndex instances.
             Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
                 try {
-                    logger.trace("calling [{}] with change to version [{}]", listener, newClusterState2.version());
+                    logger.trace("calling [{}] with change to version [{}] metadata.version=[{}]", listener, newClusterState2.version(), newClusterState2.metaData().version());
                     listener.clusterChanged(clusterChangedEvent);
                 } catch (Exception ex) {
                     logger.warn("failed to notify ClusterStateListener", ex);
                 }
             });
             
-            Throwable ackFailure = null;
-            if (newPertistedMetadata) {
-                // for the coordinator node, wait for acknowledgment from all nodes
-                if (newClusterState.nodes().getSize() > 1) {
-                    try {
-                        if (logger.isInfoEnabled())
-                            logger.info("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
-                        if (!awaitMetaDataVersion(newClusterState.metaData().version(), new TimeValue(30, TimeUnit.SECONDS))) {
-                            logger.warn("Timeout waiting metadata version = {}", newClusterState.metaData().version());
-                        }
-                    } catch (Throwable e) {
-                        ackFailure = e;
-                        logger.error("Interruped while waiting MetaData.version = {}",e, newClusterState.metaData().version() );
-                    }
-                }
-            }
-            
             // update cluster state routing table
             // TODO: update the routing table only for updated indices.
-            RoutingTable newRoutingTable = RoutingTable.build(this, newClusterState);
-            final ClusterState newClusterState3 = ClusterState.builder(newClusterState).routingTable(newRoutingTable).build();
+            newClusterState = ClusterState.builder(newClusterState).routingTable(RoutingTable.build(this, newClusterState)).build();
+            final ClusterState newClusterState3 = newClusterState;
             updateState(css -> newClusterState3);
             
             // notify normalPriorityStateAppliers with the new cluster state, including CassandraSecondaryIndicesApplier to create new C* 2i instances.
@@ -1452,6 +1452,29 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     applier.applyClusterState(clusterChangedEvent);
                 } catch (Exception ex) {
                     logger.warn("failed to notify ClusterStateListener", ex);
+                }
+            }
+            
+            if (!presistedMetadata && newClusterState.metaData().version() > previousClusterState.metaData().version()) {
+                // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
+                // after mapping change have been applied to secondary index in normalPriorityStateAppliers
+                publishX2(newClusterState);
+            }
+            
+            Throwable ackFailure = null;
+            if (presistedMetadata && metaDataVersionAckListerner != null) {
+                // for the coordinator node, wait for acknowledgment from all nodes
+                if (newClusterState.nodes().getSize() > 1) {
+                    try {
+                        if (logger.isInfoEnabled())
+                            logger.info("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
+                        if (!metaDataVersionAckListerner.await(30L, TimeUnit.SECONDS)) {
+                            logger.warn("Timeout waiting MetaData.version = {}", newClusterState.metaData().version());
+                        }
+                    } catch (Throwable e) {
+                        ackFailure = e;
+                        logger.error("Interruped while waiting MetaData.version = {}",e, newClusterState.metaData().version() );
+                    }
                 }
             }
             
@@ -1497,7 +1520,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             }
             
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
-            logger.debug("processing [{}]: took {} done applying updated cluster_state (version: {}, uuid: {})", taskInputs.summary, executionTime, newClusterState.version(), newClusterState.stateUUID());
+            logger.debug("processed [{}]: took {} done applying updated cluster_state (version: {}, uuid: {}, metadata.version: {})", taskInputs.summary, executionTime, newClusterState.version(), newClusterState.stateUUID(), newClusterState.metaData().version());
             warnAboutSlowTaskIfNeeded(executionTime, taskInputs.summary);
         } catch (Throwable t) {
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
@@ -2144,7 +2167,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         }
         
         for (String field : sourceMap.keySet()) {
-            FieldMapper fieldMapper = fieldMappers.getMapper(field);
+            FieldMapper fieldMapper = field.startsWith(ParentFieldMapper.NAME) ? // workaround for _parent#<join_type>
+                    docMapper.parentFieldMapper() : fieldMappers.getMapper( field );
             Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMappers.get(field);
             ByteBuffer colName;
             if (mapper == null) {
@@ -2425,6 +2449,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException {
         // Issue #91, update C* schema asynchronously to avoid inter-locking with map column as nested object.
+        // TODO: batch update every X seconds max in a dedicated thread.
         Runnable task = new Runnable() {
             @Override 
             public void run() { 
@@ -2538,31 +2563,30 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return null;
     }
 
+
     // Modify keyspace replication
-    void alterElasticAdminKeyspaceReplication(Map<String,String> replication) {
-        logger.debug("keyspace={} replication={}", elasticAdminKeyspaceName, replication);
+    public void alterKeyspaceReplicationFactor(String keyspaceName, int rf) {
+        ReplicationParams replication = Schema.instance.getKSMetaData(keyspaceName).params.replication;
+        
+        if (!NetworkTopologyStrategy.class.getName().equals(replication.klass))
+            throw new ConfigurationException("Keyspace ["+keyspaceName+"] should use "+NetworkTopologyStrategy.class.getName()+" replication strategy");
 
-        if (!NetworkTopologyStrategy.class.getName().equals(replication.get("class")))
-            throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+NetworkTopologyStrategy.class.getName()+" replication strategy");
-
-        int currentRF = -1;
-        if (replication.get(DatabaseDescriptor.getLocalDataCenter()) != null) {
-            currentRF = Integer.valueOf(replication.get(DatabaseDescriptor.getLocalDataCenter()).toString());
-        }
-        int targetRF = getLocalDataCenterSize();
-        if (targetRF != currentRF) {
-            replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(targetRF));
+        Map<String, String> repMap = replication.asMap();
+        
+        if (!repMap.containsKey(DatabaseDescriptor.getLocalDataCenter()) || !Integer.toString(rf).equals(repMap.get(DatabaseDescriptor.getLocalDataCenter()))) {
+            repMap.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(rf));
+            logger.debug("Updating keyspace={} replication={}", keyspaceName, repMap);
             try {
                 String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s",
-                    elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
+                        keyspaceName, FBUtilities.json(repMap).replaceAll("\"", "'"));
                 logger.info(query);
                 process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
             } catch (Throwable e) {
-                logger.error("Failed to alter keyspace [{}]", e, this.elasticAdminKeyspaceName);
+                logger.error("Failed to alter keyspace [{}]", e, keyspaceName);
                 throw e;
             }
         } else {
-            logger.info("Keep unchanged keyspace={} datacenter={} RF={}", elasticAdminKeyspaceName, DatabaseDescriptor.getLocalDataCenter(), targetRF);
+            logger.info("Keep unchanged keyspace={} datacenter={} RF={}", keyspaceName, DatabaseDescriptor.getLocalDataCenter(), rf);
         }
     }
 
@@ -2573,7 +2597,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metaDataString);
             logger.info(createTable);
             process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createTable);
-
         } catch (Exception e) {
             logger.error("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, e);
             throw e;
@@ -2722,7 +2745,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
      * Duplicate code from org.apache.cassandra.service.StorageService.setLoggingLevel, allowing to set log level without StorageService.instance for tests.
      * @param classQualifier
      * @param rawLevel
-     * @throws Exception
      */
     public static void setLoggingLevel(String classQualifier, String rawLevel)
     {
@@ -2942,56 +2964,49 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     /**
      * Return a set of started shards according t the gossip state map and the local shard state.
      */
-    public Map<UUID, ShardRoutingState> getShardRoutingStates(org.elasticsearch.index.Index index) {
-        Map<UUID, ShardRoutingState> shards = this.discovery.getShardRoutingStates(index.getName());
-        try {
-            IndexShard localIndexShard = indexServiceSafe(index).getShardOrNull(0);
-            if (localIndexShard != null && localIndexShard.routingEntry() != null)
-                shards.put(this.localNode().uuid(), localIndexShard.routingEntry().state());
-        } catch (IndexNotFoundException e) {
+    public ShardRoutingState getShardRoutingStates(org.elasticsearch.index.Index index, UUID nodeUuid) {
+        if (nodeUuid.equals(this.localNode().uuid())) {
+            if (this.discovery.isSearchEnabled()) {
+                try {
+                    IndexShard localIndexShard = indexServiceSafe(index).getShardOrNull(0);
+                    if (localIndexShard != null && localIndexShard.routingEntry() != null)
+                        return localIndexShard.routingEntry().state();
+                } catch (IndexNotFoundException e) {
+                }
+            }
+            return ShardRoutingState.UNASSIGNED;
         }
-        return shards;
-    }
-    
-    public void publishGossipStates() {
-        if (this.discovery != null) {
-            this.discovery.publishX2(state());
-            this.discovery.publishX1(state());
+        
+        // read-only map.
+        Map<String, ShardRoutingState> shards = (this.discovery).getShardRoutingState(nodeUuid);
+        if (shards == null) {
+            if (logger.isDebugEnabled())
+                logger.debug("No ShardRoutingState for node=[{}]",nodeUuid.toString());
+            return ShardRoutingState.UNASSIGNED;
         }
+        return shards.get(index.getName());
     }
     
     
     /**
      * Set index shard state in the gossip endpoint map (must be synchronized).
      */
-    public void putShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
+    public void publishShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
         if (this.discovery != null)
-            this.discovery.putShardRoutingState(index, shardRoutingState);
-    }
-
-    public void removeIndexShardState(final String index) throws JsonGenerationException, JsonMappingException, IOException {
-        if (this.discovery != null)
-            this.discovery.putShardRoutingState(index, null);
+            this.discovery.publishShardRoutingState(index, shardRoutingState);
     }
     
+    public void unpublishShardRoutingState(final String index) throws JsonGenerationException, JsonMappingException, IOException {
+        if (this.discovery != null)
+            this.discovery.publishShardRoutingState(index, null);
+    }
+
     /**
      * Publish cluster metadata uuid and version in gossip state.
      */
     public void publishX2(final ClusterState clusterState) {
         if (this.discovery != null)
             this.discovery.publishX2(clusterState);
-    }
-    
-    /**
-     * Publish local routingShard state in gossip state.
-     */
-    public void publishX1(final ClusterState clusterState) {
-        if (this.discovery != null)
-            this.discovery.publishX1(clusterState);
-    }
-
-    public boolean awaitMetaDataVersion(long version, TimeValue ackTimeout) throws Exception  {
-        return this.discovery.awaitMetaDataVersion(version, ackTimeout);
     }
     
     public void connectToNodes() {

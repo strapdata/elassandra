@@ -24,10 +24,10 @@ import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.IndicesRequest;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchShardIterator;
 import org.elasticsearch.action.search.SearchTask;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.action.support.IndicesOptions;
-import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -64,6 +64,14 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
         this.originalIndices = originalIndices;
     }
 
+    // for test only
+    public ShardSearchTransportRequest(OriginalIndices originalIndices, SearchRequest searchRequest, SearchShardIterator shardIt, int numberOfShards,
+            AliasFilter aliasFilter, float indexBoost, long nowInMillis) {
+        this.shardSearchLocalRequest = new ShardSearchLocalRequest(searchRequest, shardIt, numberOfShards, aliasFilter, indexBoost,
+                nowInMillis);
+        this.originalIndices = originalIndices;
+    }
+    
     public void searchType(SearchType searchType) {
         shardSearchLocalRequest.setSearchType(searchType);
     }

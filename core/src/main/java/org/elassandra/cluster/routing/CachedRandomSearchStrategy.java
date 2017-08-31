@@ -24,10 +24,10 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.Index;
 
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.function.BiFunction;
 
 /**
  * For each newRoute(), returns all local ranges and randomly pickup ranges from available nodes (may be unbalanced).
@@ -81,8 +81,8 @@ public abstract class CachedRandomSearchStrategy extends RandomSearchStrategy {
             }
         }
         
-        public CachedRandomRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-            super(index, ksName, shardStates, clusterState);
+        public CachedRandomRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState) {
+            super(index, ksName, shardsFunc, clusterState);
             lruCache = CacheBuilder.from(CachedRandomSearchStrategy.this.spec).build();
         }
         
@@ -106,8 +106,8 @@ public abstract class CachedRandomSearchStrategy extends RandomSearchStrategy {
     
 
     @Override
-    public Router newRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-        return new CachedRandomRouter(index, ksName, shardStates, clusterState);
+    public Router newRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardsFunc, final ClusterState clusterState) {
+        return new CachedRandomRouter(index, ksName, shardsFunc, clusterState);
     }
     
     

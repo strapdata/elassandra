@@ -15,10 +15,7 @@
  */
 package org.apache.cassandra.service;
 
-import com.google.common.collect.Maps;
-
 import org.apache.cassandra.config.CFMetaData;
-
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.QueryProcessor;
@@ -27,6 +24,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.WindowsTimer;
 import org.apache.logging.log4j.Logger;
 import org.elassandra.NoPersistedMetaDataException;
+import org.elassandra.discovery.CassandraDiscovery;
 import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
@@ -56,7 +54,6 @@ import java.lang.management.ManagementFactory;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
@@ -90,7 +87,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     protected volatile Node node = null;
     protected Environment env;
     
-    private boolean boostraped = false;
+    private boolean bootstrapping = false;
     private MetaData systemMetadata = null;
 
     public ElassandraDaemon() {
@@ -204,8 +201,10 @@ public class ElassandraDaemon extends CassandraDaemon {
         super.setup(); // start bootstrap CassandraDaemon 
         super.start(); // start Thrift+RPC service
 
-        if (node != null) {
-            this.node.clusterService().submitNumberOfShardsUpdate();
+        if (this.bootstrapping)
+            this.node.clusterService().submitNumberOfShardsAndReplicasUpdate("user-keyspaces-bootstraped");
+        
+        if (this.node != null) {
             try {
                 this.node.start();
             } catch (NodeValidationException e) {
@@ -220,16 +219,18 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void systemKeyspaceInitialized() {
         if (node != null) {
-            this.node.activate();
             try {
                 systemMetadata = this.node.clusterService().readMetaDataAsComment();
                 if (systemMetadata != null) {
+                    this.node.activate();
                     logger.debug("Starting Elasticsearch shards before open user keyspaces...");
                     node.clusterService().addShardStartedBarrier();
                     node.clusterService().blockUntilShardsStarted();
+                    logger.debug("Shards started, ready to recover user keyspaces.");
                 }
             } catch(NoPersistedMetaDataException e) {
-                logger.debug("Start Elasticsearch later, no mapping available");
+                this.bootstrapping = true;
+                logger.debug("Elasticsearch activation delayed after boostraping, no mapping available");
             } catch(Throwable e) {
                 logger.warn("Unexpected error",e);
             }
@@ -239,35 +240,36 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void userKeyspaceInitialized() {
         ElasticSecondaryIndex.userKeyspaceInitialized = true;
-        
-        if (node != null) {
-            final ClusterService clusterService = node.clusterService();
-            clusterService.submitStateUpdateTask("user-keyspaces-initialized",new ClusterStateUpdateTask() {
-                @Override
-                public ClusterState execute(ClusterState currentState) {
-                    ClusterState newClusterState = clusterService.updateNumberOfShards( currentState );
-                    return ClusterState.builder(newClusterState).incrementVersion().build();
-                }
-    
-                @Override
-                public void onFailure(String source, Exception t) {
-                    logger.error("unexpected failure during [{}]", t, source);
-                }
-            });
+        if (node != null && !bootstrapping) {
+            node.clusterService().submitNumberOfShardsAndReplicasUpdate("user-keyspaces-initialized");
         }
     }
     
     @Override
     public void beforeBootstrap() {
-        boostraped = true;
-    }
-    
-    @Override
-    public void ringReady() {
-        if (node != null)
-            node.activate();
+        if (node != null && this.bootstrapping) {
+            try {
+                // retry to load mapping jsut before boostrapping C*
+                systemMetadata = this.node.clusterService().readMetaDataAsComment();
+                logger.debug("Activating Elasticsearch and start shards before cassandra boostrap.");
+                node.activate();
+                node.clusterService().addShardStartedBarrier();
+                node.clusterService().blockUntilShardsStarted();
+                logger.debug("Shards started, ready for bootstrap.");
+            } catch(Throwable e) {
+                logger.error("Failed to load Elasticsearch mapping from CQL schema after bootstrap:",e);
+            }
+        }
     }
 
+    public void ringReady() {
+        // for first boot of first node, no shards to start.
+        if (node != null) {
+            logger.debug("Activating Elasticsearch for first time, no shard to start");
+            node.activate();
+        }
+    }
+    
     /**
      * hook for JSVC
      */
@@ -331,17 +333,20 @@ public class ElassandraDaemon extends CassandraDaemon {
     
     public Settings nodeSettings(Settings settings) {
         return Settings.builder()
+                 // overloadable settings from elasticsearch.yml
+                 // by default, HTTP is bound to C* rpc address, Transport is bound to C* internal listen address.
+                .put("network.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
+                .put("network.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
+                .put("transport.bind_host", FBUtilities.getLocalAddress().getHostAddress())
+                .put("transport.publish_host", FBUtilities.getBroadcastAddress().getHostAddress())
                 .put(settings)
+                 // not overloadable settings.
                 .put("discovery.type","cassandra")
                 .put("node.data",true)
                 .put("node.master",true)
-                .put("node.name", SystemKeyspace.getLocalHostId().toString())
+                .put("node.name", CassandraDiscovery.buildNodeName(DatabaseDescriptor.getListenAddress()))
                 .put("node.attr.dc", DatabaseDescriptor.getLocalDataCenter())
                 .put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastAddress()))
-                .put("network.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
-                .put("network.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
-                .put("transport.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
-                .put("transport.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
                 .put("cluster.name", getElasticsearchClusterName())
                 .build();
     }
@@ -386,7 +391,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     public static String getElasticsearchDataDir() {
-        String cassandra_storagedir =  System.getProperty("cassandra_storagedir");
+        String cassandra_storagedir =  System.getProperty("cassandra.storagedir");
         if (cassandra_storagedir == null)
             cassandra_storagedir = System.getProperty("path.data",getHomeDir()+"/data/elasticsearch.data");
         return cassandra_storagedir + File.separatorChar + "elasticsearch.data";

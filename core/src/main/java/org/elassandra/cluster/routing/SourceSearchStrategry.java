@@ -21,8 +21,8 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.Index;
 
-import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 public class SourceSearchStrategry extends CachedRandomSearchStrategy {
     
@@ -31,8 +31,8 @@ public class SourceSearchStrategry extends CachedRandomSearchStrategy {
     }
     
     public class SourceAddressRouter extends CachedRandomRouter {
-        public SourceAddressRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-            super(index, ksName, shardStates, clusterState);
+        public SourceAddressRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardFunc, final ClusterState clusterState) {
+            super(index, ksName, shardFunc, clusterState);
         }
         
         public Key getKey(TransportAddress src, @Nullable String searchKey, @Nullable String preference) {
@@ -41,7 +41,7 @@ public class SourceSearchStrategry extends CachedRandomSearchStrategy {
     }
     
     @Override
-    public Router newRouter(final Index index, final String ksName, final Map<UUID, ShardRoutingState> shardStates, final ClusterState clusterState) {
-        return new SourceAddressRouter(index, ksName, shardStates, clusterState);
+    public Router newRouter(final Index index, final String ksName, BiFunction<Index, UUID, ShardRoutingState> shardFunc, final ClusterState clusterState) {
+        return new SourceAddressRouter(index, ksName, shardFunc, clusterState);
     }
 }

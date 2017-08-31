@@ -21,9 +21,14 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.join.ParentJoinPlugin;
 import org.elasticsearch.join.query.HasChildQueryBuilder;
 import org.elasticsearch.join.query.HasParentQueryBuilder;
+import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.ESSingleNodeTestCase;
+
+import java.util.Collection;
+import java.util.Collections;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -34,6 +39,11 @@ import static org.hamcrest.Matchers.equalTo;
  *
  */
 public class ParentChildTests extends ESSingleNodeTestCase {
+    
+    @Override
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+        return Collections.singletonList(ParentJoinPlugin.class);
+    }
     
     public void testESParentChildTest() throws Exception {
         assertAcked(client().admin().indices().prepareCreate("company")

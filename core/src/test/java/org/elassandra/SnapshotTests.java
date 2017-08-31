@@ -48,22 +48,25 @@ import org.junit.Test;
 //mvn test -Pdev -pl om.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.SnapshotTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
 public class SnapshotTests extends ESSingleNodeTestCase {
 
-    // SSTable snapshotDir = data/data/<keyspace>/<table>/snapshots/<snapshot_name>/
-    public void restoreSSTable(String dataLocation, String keyspaceName, String cfName, UUID cfId, String snapshotName) throws IOException {
-        String id = cfId.toString().replaceAll("\\-", "");
-        Path sourceDir = PathUtils.get(dataLocation+"/"+keyspaceName+"/"+cfName+"-"+id+"/snapshots/"+snapshotName);
-        Path targetDir = PathUtils.get(dataLocation+"/"+keyspaceName+"/"+cfName+"-"+id+"/");
+    // SSTable snapshotDir = data/<keyspace>/<table>/snapshots/<snapshot_name>/
+    public void restoreSSTable(String dataLocation, String keyspaceName, String cfName, UUID srcId, UUID dstId, String snapshotName) throws IOException {
+        Path sourceDir = PathUtils.get(dataLocation+"/"+keyspaceName+"/"+cfName+"-"+srcId.toString().replaceAll("\\-", "")+"/snapshots/"+snapshotName);
+        Path targetDir = PathUtils.get(dataLocation+"/"+keyspaceName+"/"+cfName+"-"+dstId.toString().replaceAll("\\-", "")+"/");
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(targetDir, "{*.db}")) {
             for (Path dbFile: stream)
                 Files.delete(dbFile);
         }
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(sourceDir)) {
-            for (Path f: stream)
+            for (Path f: stream) {
+                System.out.println("cp "+f+" "+targetDir.toString());
                 Files.copy(f, PathUtils.get(targetDir.toString(), f.getFileName().toString()) , StandardCopyOption.COPY_ATTRIBUTES);
-        } 
+            }
+        }
+        System.out.println();
     }
     
     // lucene snapshotDir = data/elasticsearch.data/nodes/0/snapshots/<index_uuid>/<snapshot_name>
+    // index dir = data/elasticsearch.data/nodes/0/indices/<index_uuid>/0/index/
     public void restoreLucenceFiles(String dataLocation, Index srcIndex, Index dstIndex, String snapshot) throws IOException {
         Path sourceDir = PathUtils.get(dataLocation+"/elasticsearch.data/nodes/0/snapshots/"+ srcIndex.getUUID() + "/"+snapshot+"/");
         Path targetDir = PathUtils.get(dataLocation+"/elasticsearch.data/nodes/0/indices/"  + dstIndex.getUUID() + "/0/index/");
@@ -72,8 +75,10 @@ public class SnapshotTests extends ESSingleNodeTestCase {
                 Files.delete(segmentFile);
         }
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(sourceDir, "{_*.*,segments*}")) {
-            for (Path f: stream)
+            for (Path f: stream) {
+                System.out.println("cp "+f+" "+targetDir.toString());
                 Files.copy(f, PathUtils.get(targetDir.toString(), f.getFileName().toString()) , StandardCopyOption.COPY_ATTRIBUTES);
+            }
         } 
     }
     
@@ -86,6 +91,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         createIndex("ks", Settings.builder().put("index.snapshot_with_sstable",true).build(),"t1", mapping);
         ensureGreen("ks");
         Index initialIndex = resolveIndex("ks");
+        UUID srcCfId = Schema.instance.getCFMetaData("ks", "t1").cfId;
         
         for(long i=0; i < 1000; i++)
            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));
@@ -102,7 +108,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareClose("ks").get());
         
         String dataLocation = DatabaseDescriptor.getAllDataFileLocations()[0];
-        restoreSSTable(dataLocation, "ks", "t1", Schema.instance.getCFMetaData("ks", "t1").cfId, "snap1");
+        restoreSSTable(dataLocation, "ks", "t1", srcCfId, Schema.instance.getCFMetaData("ks", "t1").cfId, "snap1");
         restoreLucenceFiles(dataLocation, initialIndex, initialIndex, "snap1");
         
         // refresh SSTables and repopen index
@@ -156,7 +162,8 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         System.out.println("snapshot name="+snap);
         stream.close();
         
-        restoreSSTable(dataLocation, "ks", "t1", cfId, snap);
+        UUID cfId2 = Schema.instance.getCFMetaData("ks","t1").cfId;
+        restoreSSTable(dataLocation, "ks", "t1", cfId, cfId2, snap);
         restoreLucenceFiles(dataLocation, index1, index2, snap);
         
         // refresh SSTables and repopen index
@@ -164,6 +171,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareOpen("ks").get());
         ensureGreen("ks");
         
+        Thread.sleep(3000);
         assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(1000L));
     }
 }
