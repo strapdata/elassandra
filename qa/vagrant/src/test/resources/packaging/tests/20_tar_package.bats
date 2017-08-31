@@ -40,8 +40,13 @@ load $BATS_UTILS/plugins.bash
 
 setup() {
     skip_not_tar_gz
-    export ESHOME=/tmp/elasticsearch
+    export ESHOME=/tmp/elassandra
     export_elasticsearch_paths
+}
+
+
+@test "[TAR] dummy test to cleanup" {
+    rm -rf "/tmp/elassandra"
 }
 
 ##################################
@@ -55,20 +60,21 @@ setup() {
 }
 
 @test "[TAR] archive is available" {
-    count=$(find . -type f -name 'elasticsearch*.tar.gz' | wc -l)
+    count=$(find . -type f -name 'elassandra*.tar.gz' | wc -l)
     [ "$count" -eq 1 ]
 }
 
 @test "[TAR] archive is not installed" {
-    count=$(find /tmp -type d -name 'elasticsearch*' | wc -l)
+    count=$(find /tmp -type d -name 'elassandra*' | wc -l)
     [ "$count" -eq 0 ]
 }
 
 @test "[TAR] install archive" {
+
     # Install the archive
     install_archive
 
-    count=$(find /tmp -type d -name 'elasticsearch*' | wc -l)
+    count=$(find /tmp -type d -name 'elassandra*' | wc -l)
     [ "$count" -eq 1 ]
 
     # Its simpler to check that the install was correct in this test rather
@@ -86,14 +92,17 @@ setup() {
 }
 
 @test "[TAR] elasticsearch fails if java executable is not found" {
-  local JAVA=$(which java)
+  local JAVA="$(which java)"
 
   sudo chmod -x $JAVA
-  run "$ESHOME/bin/elasticsearch"
+  [ -n "$JAVA_HOME" ] && SAVE_JAVA_HOME="$JAVA_HOME"
+  unset JAVA_HOME
+  run "$ESHOME/bin/cassandra"
+  [ -n "$SAVE_JAVA_HOME" ] && export JAVA_HOME="$SAVE_JAVA_HOME"
   sudo chmod +x $JAVA
 
   [ "$status" -eq 1 ]
-  local expected="Could not find any executable java binary. Please install java in your PATH or set JAVA_HOME"
+  local expected="Cassandra 3.0 and later require Java 8u40 or later."
   [[ "$output" == *"$expected"* ]] || {
     echo "Expected error message [$expected] but found: $output"
     false
@@ -109,54 +118,54 @@ setup() {
     # them.
     install_elasticsearch_test_scripts
     start_elasticsearch_service
-    run_elasticsearch_tests
+    #run_elasticsearch_tests
     stop_elasticsearch_service
 }
 
 @test "[TAR] start Elasticsearch with custom JVM options" {
     local es_java_opts=$ES_JAVA_OPTS
-    local es_jvm_options=$ES_JVM_OPTIONS
-    local temp=`mktemp -d`
-    touch "$temp/jvm.options"
-    chown -R elasticsearch:elasticsearch "$temp"
-    echo "-Xms512m" >> "$temp/jvm.options"
-    echo "-Xmx512m" >> "$temp/jvm.options"
+    ls -l $ESHOME/conf
+    cp $ESHOME/conf/jvm.options $ESHOME/conf/jvm.options.bak
+    chown cassandra:cassandra "$ESHOME/conf/jvm.options.bak"
+    echo "-Xms1024m" >> "$ESHOME/conf/jvm.options"
+    echo "-Xmx1024m" >> "$ESHOME/conf/jvm.options"
     # we have to disable Log4j from using JMX lest it will hit a security
     # manager exception before we have configured logging; this will fail
     # startup since we detect usages of logging before it is configured
-    echo "-Dlog4j2.disable.jmx=true" >> "$temp/jvm.options"
-    export ES_JVM_OPTIONS="$temp/jvm.options"
+    echo "-Dlog4j2.disable.jmx=true" >> "$ESHOME/conf/jvm.options"
     export ES_JAVA_OPTS="-XX:-UseCompressedOops"
     start_elasticsearch_service
-    curl -s -XGET localhost:9200/_nodes | fgrep '"heap_init_in_bytes":536870912'
+    curl -s -XGET localhost:9200/_nodes
+    curl -s -XGET localhost:9200/_nodes | fgrep '"heap_init_in_bytes":1073741824'
     curl -s -XGET localhost:9200/_nodes | fgrep '"using_compressed_ordinary_object_pointers":"false"'
     stop_elasticsearch_service
-    export ES_JVM_OPTIONS=$es_jvm_options
     export ES_JAVA_OPTS=$es_java_opts
+    mv $ESHOME/conf/jvm.options.bak $ESHOME/conf/jvm.options
 }
 
-@test "[TAR] start Elasticsearch with unquoted JSON option" {
-    local es_java_opts=$ES_JAVA_OPTS
-    local es_jvm_options=$ES_JVM_OPTIONS
-    local temp=`mktemp -d`
-    touch "$temp/jvm.options"
-    chown -R elasticsearch:elasticsearch "$temp"
-    echo "-Delasticsearch.json.allow_unquoted_field_names=true" >> "$temp/jvm.options"
-    # we have to disable Log4j from using JMX lest it will hit a security
-    # manager exception before we have configured logging; this will fail
-    # startup since we detect usages of logging before it is configured
-    echo "-Dlog4j2.disable.jmx=true" >> "$temp/jvm.options"
-    export ES_JVM_OPTIONS="$temp/jvm.options"
-    start_elasticsearch_service
-    # unquoted field name
-    curl -s -XPOST localhost:9200/i/d/1 -d'{foo: "bar"}'
-    [ "$?" -eq 0 ]
-    curl -s -XDELETE localhost:9200/i
-    stop_elasticsearch_service
-    export ES_JVM_OPTIONS=$es_jvm_options
-    export ES_JAVA_OPTS=$es_java_opts
-}
+# Unquoted JSON option is deprecated
+#@test "[TAR] start Elasticsearch with unquoted JSON option" {
+#    local es_java_opts=$ES_JAVA_OPTS
+#    local es_jvm_options=$ES_JVM_OPTIONS
+#    local temp=`mktemp -d`
+#    touch "$temp/jvm.options"
+#    chown -R elasticsearch:elasticsearch "$temp"
+#    echo "-Delasticsearch.json.allow_unquoted_field_names=true" >> "$temp/jvm.options"
+#    # we have to disable Log4j from using JMX lest it will hit a security
+#    # manager exception before we have configured logging; this will fail
+#    # startup since we detect usages of logging before it is configured
+#    echo "-Dlog4j2.disable.jmx=true" >> "$temp/jvm.options"
+#    export ES_JVM_OPTIONS="$temp/jvm.options"
+#    start_elasticsearch_service
+#    # unquoted field name
+#    curl -s -XPOST localhost:9200/i/d/1 -d'{foo: "bar"}'
+#    [ "$?" -eq 0 ]
+#    curl -s -XDELETE localhost:9200/i
+#    stop_elasticsearch_service
+#    export ES_JVM_OPTIONS=$es_jvm_options
+#    export ES_JAVA_OPTS=$es_java_opts
+#}
 
 @test "[TAR] remove tar" {
-    rm -rf "/tmp/elasticsearch"
+    rm -rf "/tmp/elassandra"
 }

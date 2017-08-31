@@ -48,8 +48,8 @@ load $BATS_UTILS/utils.bash
 @test "[BAD data.path] setup funny path.data in package install" {
     skip_not_dpkg_or_rpm
     local temp=`mktemp -d`
-    chown elasticsearch:elasticsearch "$temp"
-    echo "path.data: [$temp]" > "/etc/elasticsearch/elasticsearch.yml"
+    chown cassandra:cassandra "$temp"
+    echo "path.data: [$temp]" > "/etc/cassandra/elasticsearch.yml"
 }
 
 @test "[BAD data.path] start installed from package" {
@@ -59,7 +59,7 @@ load $BATS_UTILS/utils.bash
 
 @test "[BAD data.path] check for bad dir after starting from package" {
     skip_not_dpkg_or_rpm
-    assert_file_not_exist /var/lib/elasticsearch/nodes
+    assert_file_not_exist /var/lib/cassandra/elasticsearch.data/nodes
 }
 
 @test "[BAD data.path] install tar" {
@@ -69,14 +69,14 @@ load $BATS_UTILS/utils.bash
 
 @test "[BAD data.path] setup funny path.data in tar install" {
     local temp=`mktemp -d`
-    chown elasticsearch:elasticsearch "$temp"
-    echo "path.data: [$temp]" > "/tmp/elasticsearch/config/elasticsearch.yml"
+    chown cassandra:cassandra "$temp"
+    echo "path.data: [$temp]" > "/tmp/elassandra/conf/elasticsearch.yml"
 }
 
 @test "[BAD data.path] start installed from tar" {
-    start_elasticsearch_service green "" "-Edefault.path.data=/tmp/elasticsearch/data"
+    start_elasticsearch_service green
 }
 
 @test "[BAD data.path] check for bad dir after starting from tar" {
-    assert_file_not_exist "/tmp/elasticsearch/data/nodes"
+    assert_file_not_exist "/tmp/elassandra/data/elasticsearch.data/nodes"
 }

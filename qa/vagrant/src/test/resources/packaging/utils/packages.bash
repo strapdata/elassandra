@@ -33,19 +33,19 @@
 
 # Export some useful paths.
 export_elasticsearch_paths() {
-    export ESHOME="/usr/share/elasticsearch"
+    export ESHOME="/usr/share/cassandra"
     export ESPLUGINS="$ESHOME/plugins"
     export ESMODULES="$ESHOME/modules"
-    export ESCONFIG="/etc/elasticsearch"
+    export ESCONFIG="/etc/cassandra"
     export ESSCRIPTS="$ESCONFIG/scripts"
-    export ESDATA="/var/lib/elasticsearch"
-    export ESLOG="/var/log/elasticsearch"
-    export ESPIDDIR="/var/run/elasticsearch"
+    export ESDATA="/var/lib/cassandra"
+    export ESLOG="/var/log/cassandra"
+    export ESPIDDIR="/var/run/cassandra"
     if is_dpkg; then
-        export ESENVFILE="/etc/default/elasticsearch"
+        export ESENVFILE="/etc/default/cassandra"
     fi
     if is_rpm; then
-        export ESENVFILE="/etc/sysconfig/elasticsearch"
+        export ESENVFILE="/etc/sysconfig/cassandra"
     fi
 }
 
@@ -70,9 +70,9 @@ install_package() {
         esac
     done
     if is_rpm; then
-        rpm $rpmCommand elasticsearch-$version.rpm
+        rpm $rpmCommand elassandra-$version.rpm
     elif is_dpkg; then
-        dpkg $dpkgCommand -i elasticsearch-$version.deb
+        dpkg $dpkgCommand -i elassandra-$version.deb
     else
         skip "Only rpm or deb supported"
     fi
@@ -81,64 +81,97 @@ install_package() {
 # Checks that all directories & files are correctly installed after a deb or
 # rpm install.
 verify_package_installation() {
-    id elasticsearch
+    id cassandra
 
-    getent group elasticsearch
+    getent group cassandra
 
+    BINDIR=/usr/bin
     assert_file "$ESHOME" d root root 755
-    assert_file "$ESHOME/bin" d root root 755
-    assert_file "$ESHOME/bin/elasticsearch" f root root 755
-    assert_file "$ESHOME/bin/elasticsearch-plugin" f root root 755
-    assert_file "$ESHOME/bin/elasticsearch-translog" f root root 755
+    assert_file "$BINDIR/cassandra" f root root 755
+    assert_file "$BINDIR/nodetool" f root root 755
+    assert_file "$BINDIR/cqlsh" f root root 755
+    assert_file "$BINDIR/cqlsh.py" f root root 755
+    assert_file "$BINDIR/elasticsearch-plugin" f root root 755
+    assert_file_not_exist "$BINDIR/aliases.sh"
+    assert_file_not_exist "$BINDIR/cassandra.in.sh"
+    assert_file "$ESHOME/cassandra.in.sh" f root root 755
+    assert_file "$ESHOME/aliases.sh" f root root 755
+    #assert_file "$BINDIR/elasticsearch-translog" f root root 755
     assert_file "$ESHOME/lib" d root root 755
-    assert_file "$ESCONFIG" d root elasticsearch 750
-    assert_file "$ESCONFIG/elasticsearch.yml" f root elasticsearch 660
-    assert_file "$ESCONFIG/jvm.options" f root elasticsearch 660
-    assert_file "$ESCONFIG/log4j2.properties" f root elasticsearch 660
-    assert_file "$ESSCRIPTS" d root elasticsearch 750
-    assert_file "$ESDATA" d elasticsearch elasticsearch 750
-    assert_file "$ESLOG" d elasticsearch elasticsearch 750
+    assert_file "$ESCONFIG" d root cassandra 755
+    assert_file "$ESCONFIG/elasticsearch.yml" f root cassandra 664
+    assert_file "$ESCONFIG/cassandra.yaml" f root cassandra 664
+    assert_file "$ESCONFIG/cassandra-env.sh" f root cassandra 664
+    assert_file "$ESCONFIG/elasticsearch.yml" f root cassandra 664
+    assert_file "$ESCONFIG/jvm.options" f root cassandra 664
+    assert_file "$ESCONFIG/logback.xml" f root cassandra 664
+    assert_file "$ESCONFIG/logback-tools.xml" f root cassandra 664
+    assert_file "$ESCONFIG/cassandra-jaas.config" f root cassandra 664
+    assert_file "$ESCONFIG/cassandra-rackdc.properties" f root cassandra 664
+    assert_file "$ESCONFIG/cassandra-topology.properties" f root cassandra 664
+    assert_file "$ESCONFIG/cqlshrc.sample" f root cassandra 664
+    assert_file "$ESCONFIG/metrics-reporter-config-sample.yaml" f root cassandra 664
+    assert_file "$ESCONFIG/triggers/" d root cassandra 750
+
+    #assert_file "$ESCONFIG/log4j2.properties" f root cassandra 660
+    assert_file "$ESSCRIPTS" d root cassandra 750
+    assert_file "$ESDATA" d cassandra cassandra 750
+    assert_file "$ESLOG" d cassandra cassandra 750
     assert_file "$ESPLUGINS" d root root 755
     assert_file "$ESMODULES" d root root 755
-    assert_file "$ESPIDDIR" d elasticsearch elasticsearch 755
+    assert_file "$ESPIDDIR" d cassandra cassandra 755
     assert_file "$ESHOME/NOTICE.txt" f root root 644
+    assert_file "$ESHOME/bin" d root root 755
     assert_file "$ESHOME/README.textile" f root root 644
+
+    # python cassandra-driver for cqlsh.py
+    assert_file "$ESHOME/lib/cassandra-driver-internal-only-3.7.0.post0-2481531.zip" f root root 644
 
     if is_dpkg; then
         # Env file
-        assert_file "/etc/default/elasticsearch" f root root 660
+        assert_file "/etc/default/cassandra" f root root 664
 
         # Doc files
-        assert_file "/usr/share/doc/elasticsearch" d root root 755
-        assert_file "/usr/share/doc/elasticsearch/copyright" f root root 644
+        assert_file "/usr/share/doc/cassandra" d root root 755
+        assert_file "/usr/share/doc/cassandra/copyright" f root root 644
+
+        # Pylib files
+        assert_file "/usr/lib/python2.7/dist-packages/cqlshlib" d root root 755
+        assert_file "/usr/lib/python2.7/dist-packages/cassandra_pylib-0.0.0.egg-info" f root root 644
+        assert_file "/usr/lib/python2.7/dist-packages/cqlshlib/__init__.py" f root root 644
     fi
 
     if is_rpm; then
         # Env file
-        assert_file "/etc/sysconfig/elasticsearch" f root root 660
+        assert_file "/etc/sysconfig/cassandra" f root root 664
         # License file
-        assert_file "/usr/share/elasticsearch/LICENSE.txt" f root root 644
+        assert_file "/usr/share/cassandra/LICENSE.txt" f root root 644
+
+        # Pylib files
+        assert_file "/usr/lib/python2.7/site-packages/cqlshlib" d root root 755
+        assert_file "/usr/lib/python2.7/site-packages/cassandra_pylib-0.0.0.egg-info" f root root 664
+        assert_file "/usr/lib/python2.7/site-packages/cqlshlib/__init__.py" f root root 664
     fi
 
     if is_systemd; then
-        assert_file "/usr/lib/systemd/system/elasticsearch.service" f root root 644
-        assert_file "/usr/lib/tmpfiles.d/elasticsearch.conf" f root root 644
-        assert_file "/usr/lib/sysctl.d/elasticsearch.conf" f root root 644
+        assert_file "/usr/lib/systemd/system/cassandra.service" f root root 644
+        assert_file "/usr/lib/tmpfiles.d/cassandra.conf" f root root 644
+        assert_file "/usr/lib/sysctl.d/cassandra.conf" f root root 644
         if is_rpm; then
-            [[ $(/usr/sbin/sysctl vm.max_map_count) =~ "vm.max_map_count = 262144" ]]
+            [[ $(/usr/sbin/sysctl vm.max_map_count) =~ "vm.max_map_count = 1048575" ]]
         else
-            [[ $(/sbin/sysctl vm.max_map_count) =~ "vm.max_map_count = 262144" ]]
+            [[ $(/sbin/sysctl vm.max_map_count) =~ "vm.max_map_count = 1048575" ]]
         fi
     fi
 
     if is_sysvinit; then
-        assert_file "/etc/init.d/elasticsearch" f root root 750
+        assert_file "/etc/init.d/cassandra" f root root 750
     fi
 
-    run sudo -E -u vagrant LANG="en_US.UTF-8" cat "$ESCONFIG/elasticsearch.yml"
-    [ $status = 1 ]
-    [[ "$output" == *"Permission denied"* ]] || {
-        echo "Expected permission denied but found $output:"
-        false
-    }
+#    run sudo -E -u vagrant LANG="en_US.UTF-8" cat "$ESCONFIG/cassandra.yml"
+#    [ $status = 1 ]
+#    [[ "$output" == *"Permission denied"* ]] || {
+#        echo "Expected permission denied but found $output:"
+#        false
+#    }
 }

@@ -18,7 +18,7 @@
  */
 
 task buildTar(type: Tar) {
-  dependsOn createPluginsDir
+  dependsOn createPluginsDir, createDataDir, createLogDir
   baseName = 'elassandra'
   extension = 'tar.gz'
   with archivesFiles

@@ -58,14 +58,14 @@ setup() {
     # Rather than restart the VM we just ask systemd if it plans on starting
     # elasticsearch on restart. Not as strong as a restart but much much
     # faster.
-    run systemctl is-enabled elasticsearch.service
+    run systemctl is-enabled cassandra.service
     [ "$output" = "disabled" ]
 }
 
 @test "[SYSTEMD] enable" {
-    systemctl enable elasticsearch.service
+    systemctl enable cassandra.service
 
-    systemctl is-enabled elasticsearch.service
+    systemctl is-enabled cassandra.service
 }
 
 @test "[SYSTEMD] start" {
@@ -100,10 +100,10 @@ setup() {
         fi
     fi
 
-    systemctl start elasticsearch.service
+    systemctl start cassandra.service
     wait_for_elasticsearch_status
-    assert_file_exist "/var/run/elasticsearch/elasticsearch.pid"
-    assert_file_exist "/var/log/elasticsearch/elasticsearch.log"
+    assert_file_exist "/var/run/cassandra/cassandra.pid"
+    assert_file_exist "/var/log/cassandra/system.log"
 
     # Converts the epoch back in a human readable format
     run date --date=@$epoch "+%Y-%m-%d %H:%M:%S"
@@ -111,26 +111,26 @@ setup() {
 
     # Verifies that no new entries in journald have been added
     # since the last start
-    result="$(journalctl _SYSTEMD_UNIT=elasticsearch.service --since "$since" --output cat | wc -l)"
+    result="$(journalctl _SYSTEMD_UNIT=cassandra.service -p warning --since "$since" --output cat | wc -l)"
     [ "$result" -eq "0" ] || {
             echo "Expected no entries in journalctl for the Elasticsearch service but found:"
-            journalctl _SYSTEMD_UNIT=elasticsearch.service --since "$since"
+            journalctl _SYSTEMD_UNIT=cassandra.service --since "$since"
             false
         }
 }
 
 @test "[SYSTEMD] start (running)" {
-    systemctl start elasticsearch.service
+    systemctl start cassandra.service
 }
 
 @test "[SYSTEMD] is active (running)" {
-    run systemctl is-active elasticsearch.service
+    run systemctl is-active cassandra.service
     [ "$status" -eq 0 ]
     [ "$output" = "active" ]
 }
 
 @test "[SYSTEMD] status (running)" {
-    systemctl status elasticsearch.service
+    systemctl status cassandra.service
 }
 
 ##################################
@@ -141,19 +141,19 @@ setup() {
 }
 
 @test "[SYSTEMD] restart" {
-    systemctl restart elasticsearch.service
+    systemctl restart cassandra.service
 
     wait_for_elasticsearch_status
 
-    service elasticsearch status
+    service cassandra status
 }
 
 @test "[SYSTEMD] stop (running)" {
-    systemctl stop elasticsearch.service
+    systemctl stop cassandra.service
 }
 
 @test "[SYSTEMD] status (stopping)" {
-    run systemctl status elasticsearch.service
+    run systemctl status cassandra.service
     # I'm not sure why suse exits 0 here, but it does
     if [ ! -e /etc/SuSE-release ]; then
         [ "$status" -eq 3 ] || "Expected exit code 3 meaning stopped but got $status"
@@ -162,11 +162,11 @@ setup() {
 }
 
 @test "[SYSTEMD] stop (stopped)" {
-    systemctl stop elasticsearch.service
+    systemctl stop cassandra.service
 }
 
 @test "[SYSTEMD] status (stopped)" {
-    run systemctl status elasticsearch.service
+    run systemctl status cassandra.service
     # I'm not sure why suse exits 0 here, but it does
     if [ ! -e /etc/SuSE-release ]; then
         [ "$status" -eq 3 ] || "Expected exit code 3 meaning stopped but got $status"
@@ -179,15 +179,15 @@ setup() {
 # but it should not block ES from starting
 # see https://github.com/elastic/elasticsearch/issues/11594
 @test "[SYSTEMD] delete PID_DIR and restart" {
-    rm -rf /var/run/elasticsearch
+    rm -rf /var/run/cassandra
 
     systemd-tmpfiles --create
 
-    systemctl start elasticsearch.service
+    systemctl start cassandra.service
 
     wait_for_elasticsearch_status
 
-    assert_file_exist "/var/run/elasticsearch/elasticsearch.pid"
+    assert_file_exist "/var/run/cassandra/cassandra.pid"
 
-    systemctl stop elasticsearch.service
+    systemctl stop cassandra.service
 }

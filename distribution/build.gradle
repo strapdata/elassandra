@@ -71,7 +71,8 @@ ext.restTestExpansions = [
 // we create the buildModules task above so the distribution subprojects can
 // depend on it, but we don't actually configure it until here so we can do a single
 // loop over modules to also setup cross task dependencies and increment our modules counter
-project.rootProject.subprojects.findAll { it.path.startsWith(':modules:') }.each { Project module ->
+// Elassandra adds: skip module reindex which conflicts with libthrift
+project.rootProject.subprojects.findAll { it.path.startsWith(':modules:') /*&& !it.path.contentEquals(":modules:reindex")*/}.each { Project module ->
   buildFullNotice {
     def defaultLicensesDir = new File(module.projectDir, 'licenses')
     if (defaultLicensesDir.exists()) {
@@ -166,6 +167,13 @@ configure(distributions) {
       // delay add tools using closures, since they have not yet been configured, so no jar task exists yet
       from { project(':distribution:tools:java-version-checker').jar }
       from { project(':distribution:tools:plugin-cli').jar }
+
+      // Important files used to ship some cqlsh.py python dependencies if not already installed on host.
+      // This prevents the need to run 'pip install cassandra driver'
+      with copySpec {
+        from '../../core/cassandra/lib'
+        include '*.zip'
+      }
     }
 
     modulesFiles = copySpec {
@@ -184,28 +192,35 @@ configure(distributions) {
     }
 
     binFiles = copySpec {
-      // everything except windows files
       from '../src/main/resources/bin2'
-      exclude '*.bat'
-      exclude '*.exe'
+      eachFile { it.setMode(0755) }
+      MavenFilteringHack.filter(it, expansions)
+    }
+
+    homebinFiles = copySpec {
+      from '../src/main/packaging/homebin'
       eachFile { it.setMode(0755) }
       MavenFilteringHack.filter(it, expansions)
     }
 
     pylibFiles = copySpec {
-      // everything except windows files
       from '../../core/cassandra/pylib'
-      eachFile { it.setMode(0755) }
       MavenFilteringHack.filter(it, expansions)
     }
-    
+
     sigarFiles = copySpec {
-      // everything except windows files
       from '../../core/cassandra/lib/sigar-bin'
       eachFile { it.setMode(0755) }
       MavenFilteringHack.filter(it, expansions)
     }
-    
+
+    toolsFiles = copySpec {
+      from '../../core/cassandra/tools'
+      exclude 'stress/**'
+      eachFile { it.setMode(0755) }
+      MavenFilteringHack.filter(it, expansions)
+    }
+
     commonFiles = copySpec {
       from rootProject.projectDir
       include 'LICENSE.txt'
@@ -249,7 +264,7 @@ configure(distributions.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.n
     dirMode 0755
   }
   File logs = new File(buildDir, 'logs-hack/logs')
-  task createLogsDir(type: EmptyDirTask) {
+  task createLogDir(type: EmptyDirTask) {
     dir "${logs}"
     dirMode 0755
   }
@@ -286,16 +301,15 @@ configure(distributions.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.n
         }
       }
       into('pylib') {
-        with copySpec {
-           with pylibFiles
-        }
+        with pylibFiles
       }
       into('lib') {
          into('sigar-bin') {
-           with copySpec {
-              with sigarFiles
-           }
+            with sigarFiles
          }
+      }
+      into('tools') {
+        with toolsFiles
       }
       with commonFiles
       with noticeFile
@@ -351,39 +365,90 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
   }
 
   task createEtc(type: EmptyDirTask) {
-    dir "${packagingFiles}/etc/elasticsearch"
+    dir "${packagingFiles}/etc/cassandra"
     dirMode 0750
   }
 
   task createEtcScripts(type: EmptyDirTask) {
     dependsOn createEtc
-    dir "${packagingFiles}/etc/elasticsearch/scripts"
+    dir "${packagingFiles}/etc/cassandra/scripts"
+    dirMode 0750
+  }
+
+  task createEtcTriggers(type: EmptyDirTask) {
+    dependsOn createEtc
+    dir "${packagingFiles}/etc/cassandra/triggers"
     dirMode 0750
   }
 
   task fillEtc(type: Copy) {
-    dependsOn createEtc, createEtcScripts
-    with configFiles
-    into "${packagingFiles}/etc/elasticsearch"
+    dependsOn createEtc, createEtcScripts, createEtcTriggers
+    with copySpec {
+      with configFiles
+      exclude '*.gcloud'
+      exclude '*.ps1'
+    }
+    into "${packagingFiles}/etc/cassandra"
     /* Explicitly declare the output files so this task doesn't consider itself
       up to date when the directory is created, which it would by default. And
       that'll happen when createEtc runs. */
-    outputs.file "${packagingFiles}/etc/elasticsearch/elasticsearch.yml"
-    outputs.file "${packagingFiles}/etc/elasticsearch/jvm.options"
-    outputs.file "${packagingFiles}/etc/elasticsearch/log4j2.properties"
+    outputs.file "${packagingFiles}/etc/cassandra/cassandra-env.sh"
+    outputs.file "${packagingFiles}/etc/cassandra/cassandra-jaas.config"
+    outputs.file "${packagingFiles}/etc/cassandra/cassandra-rackdc.properties"
+    outputs.file "${packagingFiles}/etc/cassandra/cassandra-topology.properties"
+    outputs.file "${packagingFiles}/etc/cassandra/cassandra.yaml"
+    outputs.file "${packagingFiles}/etc/cassandra/commitlog_archiving.properties"
+    outputs.file "${packagingFiles}/etc/cassandra/cqlshrc.sample"
+    outputs.file "${packagingFiles}/etc/cassandra/elasticsearch.yml"
+    outputs.file "${packagingFiles}/etc/cassandra/jvm.options"
+    outputs.file "${packagingFiles}/etc/cassandra/logback-tools.xml"
+    outputs.file "${packagingFiles}/etc/cassandra/logback.xml"
+    outputs.file "${packagingFiles}/etc/cassandra/metrics-reporter-config-sample.yaml"
+    outputs.file "${packagingFiles}/etc/cassandra/README.txt"
+    // jar hell caused by triggers/README.txt
+    // outputs.file "${packagingFiles}/etc/cassandra/triggers/README.txt"
   }
 
   task createPidDir(type: EmptyDirTask) {
-    dir "${packagingFiles}/var/run/elasticsearch"
+    dir "${packagingFiles}/var/run/cassandra"
   }
   task createLogDir(type: EmptyDirTask) {
-    dir "${packagingFiles}/var/log/elasticsearch"
+    dir "${packagingFiles}/var/log/cassandra"
   }
   task createDataDir(type: EmptyDirTask) {
-    dir "${packagingFiles}/var/lib/elasticsearch"
+    dir "${packagingFiles}/var/lib/cassandra"
   }
   task createPluginsDir(type: EmptyDirTask) {
-    dir "${packagingFiles}/usr/share/elasticsearch/plugins"
+    dir "${packagingFiles}/usr/share/cassandra/plugins"
+  }
+  task createPluginsBinDir(type: EmptyDirTask) {
+    dir "${packagingFiles}/usr/share/cassandra/bin"
+  }
+
+  task createTmpPylibDir(type: EmptyDirTask) {
+    dir "${packagingFiles}/pylib"
+  }
+  task fillTmpPylibDir(type: Copy) {
+    dependsOn createTmpPylibDir
+    with pylibFiles
+    into "${packagingFiles}/pylib"
+  }
+
+  task setupPylib(type: Exec) {
+    dependsOn fillTmpPylibDir
+    workingDir "${packagingFiles}/pylib"
+    if (project.name == "rpm") {
+      commandLine "python2", "setup.py", "install", "--no-compile",
+                  "--root", "${packagingFiles}",
+                  "--install-lib", "/usr/lib/python2.7/site-packages"
+      outputs.dir "${packagingFiles}/usr/lib/python2.7/site-packages"
+    }
+    else if (project.name == "deb") {
+      commandLine "python2", "setup.py", "install", "--no-compile",
+              "--root", "${packagingFiles}",
+              "--install-layout", "deb"
+      outputs.dir "${packagingFiles}/usr/lib/python2.7/dist-packages"
+    }
   }
 
   /**
@@ -393,21 +458,20 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
    */
   task preparePackagingFiles {
     dependsOn processPackagingFiles, fillEtc, createPidDir, createLogDir,
-        createDataDir, createPluginsDir
+        createDataDir, createPluginsDir, createPluginsBinDir, setupPylib
   }
 
   apply plugin: 'nebula.ospackage-base'
   ospackage {
-    packageName 'elasticsearch'
-    maintainer 'Elasticsearch Team <info@elastic.co>'
+    packageName 'elassandra'
+    maintainer 'Strapdata <contact@strapdata.com>'
     summary '''
-      Elasticsearch is a distributed RESTful search engine built for the cloud.
-      Reference documentation can be found at
-      https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html
-      and the 'Elasticsearch: The Definitive Guide' book can be found at
-      https://www.elastic.co/guide/en/elasticsearch/guide/current/index.html
+      Elassandra is a fork of Elasticsearch modified to run as a plugin for Apache Cassandra \
+      in a scalable and resilient peer-to-peer architecture.
+      Elasticsearch code is embedded in Cassanda nodes providing advanced search features \
+      on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
       '''.stripIndent().replace('\n', ' ').trim()
-    url 'https://www.elastic.co/'
+    url 'http://www.elassandra.io/'
 
     // signing setup
     if (project.hasProperty('signing.password') && System.getProperty('build.snapshot', 'true') == 'false') {
@@ -426,65 +490,113 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
 
     if (project.name == 'rpm') {
       requires('/bin/bash')
+      requires('python', '2.7', GREATER | EQUAL)
+      recommends('ntp')
+      conflicts('cassandra')
     } else if (project.name == 'deb') {
       requires('bash')
+      requires('python', '2.7', GREATER | EQUAL)
+      recommends('ntp')
+      conflicts('cassandra')
     }
 
-    into '/usr/share/elasticsearch'
-    fileMode 0644
-    dirMode 0755
-    user 'root'
-    permissionGroup 'root'
-    with libFiles
-    with modulesFiles
-    into('bin') {
-      with binFiles
+    into('/usr/share/cassandra') {
+      dirMode 0755
+      fileMode 0644
+      user 'root'
+      permissionGroup 'root'
+      with libFiles
+      with modulesFiles
+      with copySpec {
+        with commonFiles
+        if (project.name == 'deb') {
+          // Deb gets a copyright file instead.
+          exclude 'LICENSE.txt'
+        }
+      }
+      with homebinFiles
+      into('lib/sigar-bin') {
+        with copySpec {
+          with sigarFiles
+          exclude '*.dll'
+        }
+      }
+      into('tools') {
+        with copySpec {
+          with toolsFiles
+          exclude 'bin/*.bat'
+          exclude 'bin/*.exe'
+          exclude 'bin/*.ps1'
+        }
+      }
+      with noticeFile
     }
-    with copySpec {
-      with commonFiles
-      if (project.name == 'deb') {
-        // Deb gets a copyright file instead.
-        exclude 'LICENSE.txt'
+
+    configurationFile '/etc/cassandra/cassandra-env.sh'
+    configurationFile '/etc/cassandra/cassandra-jaas.config'
+    configurationFile '/etc/cassandra/cassandra-rackdc.properties'
+    configurationFile '/etc/cassandra/cassandra-topology.properties'
+    configurationFile '/etc/cassandra/cassandra.yaml'
+    configurationFile '/etc/cassandra/commitlog_archiving.properties'
+    configurationFile '/etc/cassandra/cqlshrc.sample'
+    configurationFile '/etc/cassandra/elasticsearch.yml'
+    configurationFile '/etc/cassandra/jvm.options'
+    configurationFile '/etc/cassandra/logback-tools.xml'
+    configurationFile '/etc/cassandra/logback.xml'
+    configurationFile '/etc/cassandra/metrics-reporter-config-sample.yaml'
+    configurationFile '/etc/cassandra/README.txt'
+    // configurationFile '/etc/cassandra/triggers/README.txt'
+
+    into('/usr/bin') {
+      fileMode 0755
+      user 'root'
+      permissionGroup 'root'
+      with copySpec {
+        with binFiles
+        exclude '*.bat'
+        exclude '*.exe'
+        exclude '*.ps1'
+        exclude 'aliases.sh'
+        exclude 'cassandra.in.sh'
       }
     }
-    with noticeFile
 
-    configurationFile '/etc/elasticsearch/elasticsearch.yml'
-    configurationFile '/etc/elasticsearch/jvm.options'
-    configurationFile '/etc/elasticsearch/log4j2.properties'
-    into('/etc/elasticsearch') {
-      dirMode 0750
-      fileMode 0660
-      permissionGroup 'elasticsearch'
+    into('/etc/cassandra') {
+      dirMode 0755
+      fileMode 0664
+      permissionGroup 'cassandra'
       includeEmptyDirs true
       createDirectoryEntry true
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/etc/elasticsearch"
+      from "${packagingFiles}/etc/cassandra"
     }
 
     into('/usr/lib/tmpfiles.d') {
-      from "${packagingFiles}/systemd/elasticsearch.conf"
+      fileMode 0644
+      from "${packagingFiles}/systemd/cassandra.conf"
     }
-    configurationFile '/usr/lib/systemd/system/elasticsearch.service'
+    configurationFile '/usr/lib/systemd/system/cassandra.service'
     into('/usr/lib/systemd/system') {
+      fileMode 0644
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/systemd/elasticsearch.service"
+      from "${packagingFiles}/systemd/cassandra.service"
     }
     into('/usr/lib/sysctl.d') {
+      fileMode 0644
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/systemd/sysctl/elasticsearch.conf"
+      from "${packagingFiles}/systemd/sysctl/cassandra.conf"
     }
-    configurationFile '/etc/init.d/elasticsearch'
+    configurationFile '/etc/init.d/cassandra'
     into('/etc/init.d') {
       fileMode 0750
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/init.d/elasticsearch"
+      from "${packagingFiles}/init.d/cassandra"
     }
     configurationFile project.expansions['path.env']
     into(new File(project.expansions['path.env']).getParent()) {
       fileType CONFIG | NOREPLACE
-      fileMode 0660
-      from "${project.packagingFiles}/env/elasticsearch"
+      fileMode 0664
+      from "${project.packagingFiles}/env/cassandra"
     }
 
     /**
@@ -501,10 +613,27 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
         fileMode mode
       }
     }
-    suckUpEmptyDirectories('/var/run', 'elasticsearch', 'elasticsearch', 0755)
-    suckUpEmptyDirectories('/var/log', 'elasticsearch', 'elasticsearch', 0750)
-    suckUpEmptyDirectories('/var/lib', 'elasticsearch', 'elasticsearch', 0750)
-    suckUpEmptyDirectories('/usr/share/elasticsearch', 'root', 'root', 0755)
+    suckUpEmptyDirectories('/var/run', 'cassandra', 'cassandra', 0755)
+    suckUpEmptyDirectories('/var/log', 'cassandra', 'cassandra', 0750)
+    suckUpEmptyDirectories('/var/lib', 'cassandra', 'cassandra', 0750)
+    suckUpEmptyDirectories('/usr/share/cassandra', 'root', 'root', 0755)
+
+    if (project.name == 'rpm') {
+      // suckUpEmptyDirectories('/usr/lib/python2.7/site-packages/cqlshlib', 'root', 'root', 0755)
+      into('/usr/lib/python2.7/site-packages') {
+        from "${packagingFiles}/usr/lib/python2.7/site-packages"
+        fileMode 0664
+      }
+      directory("/usr/lib/python2.7/site-packages/cqlshlib", 0755)
+    }
+    else if (project.name == 'deb') {
+      //suckUpEmptyDirectories('/usr/lib/python2.7/dist-packages/cqlshlib', 'root', 'root', 0755)
+      into('/usr/lib/python2.7/dist-packages') {
+        from "${packagingFiles}/usr/lib/python2.7/dist-packages"
+        fileMode 0664
+      }
+      directory("/usr/lib/python2.7/dist-packages/cqlshlib", 0755)
+    }
   }
 }
 
@@ -514,7 +643,7 @@ task run(type: RunTask) {
 
 /**
  * Build some variables that are replaced in the packages. This includes both
- * scripts like bin/elasticsearch and bin/elasticsearch-plugin that a user might run and also
+ * scripts like bin/elasticsearch and bin/elasticsearchcreateLogDir-plugin that a user might run and also
  * scripts like postinst which are run as part of the installation.
  *
  * <dl>
@@ -543,7 +672,7 @@ task run(type: RunTask) {
  * </dl>
  */
 Map<String, String> expansionsForDistribution(distributionType) {
-  final String defaultHeapSize = "2g"
+  final String defaultHeapSize = "2g" // not used by elassandra
 
   String footer = "# Built for ${project.name}-${project.version} " +
       "(${distributionType})"
@@ -552,17 +681,24 @@ Map<String, String> expansionsForDistribution(distributionType) {
     'project.version': version,
 
     'path.conf': [
-      'tar': '$ES_HOME/config',
-      'zip': '$ES_HOME/config',
-      'integ-test-zip': '$ES_HOME/config',
-      'def': '/etc/elasticsearch',
+      'tar': '$CASSANDRA_HOME/conf',
+      'zip': '$CASSANDRA_HOME/conf',
+      'integ-test-zip': '$CASSANDRA_HOME/conf',
+      'def': '/etc/cassandra',
     ],
     'path.env': [
-      'deb': '/etc/default/elasticsearch',
-      'rpm': '/etc/sysconfig/elasticsearch',
+      'deb': '/etc/default/cassandra',
+      'rpm': '/etc/sysconfig/cassandra',
       /* There isn't one of these files for tar or zip but its important to
         make an empty string here so the script can properly skip it. */
       'def': '',
+    ],
+
+    /* Elassandra hack in order to make elasticsearch-plugin works */
+    'path.plugin_eshome': [
+      'deb': '/usr/share/cassandra',
+      'rpm': '/usr/share/cassandra',
+      'def': '`dirname "$SCRIPT"`/..'
     ],
 
     'heap.min': defaultHeapSize,
