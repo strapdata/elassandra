@@ -1493,11 +1493,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                     logger.error("Unexpected error", e);
                                 }
                         }
-                    }
-                    if (this.rowcument.hasLiveData(nowInSec)) {
-                       this.rowcument.index();
-                    } else {
-                       this.rowcument.delete();
+                        if (this.rowcument.hasLiveData(nowInSec)) {
+                           this.rowcument.index();
+                        } else {
+                          this.rowcument.delete();
+                        }
                     }
                 }
             }
