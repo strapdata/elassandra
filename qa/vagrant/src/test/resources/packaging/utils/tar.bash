@@ -33,32 +33,32 @@
 
 # Install the tar.gz archive
 install_archive() {
-    export ESHOME=${1:-/tmp/elasticsearch}
+    export ESHOME=${1:-/tmp/elassandra}
 
     echo "Unpacking tarball to $ESHOME"
     rm -rf /tmp/untar
     mkdir -p /tmp/untar
-    tar -xzpf elasticsearch*.tar.gz -C /tmp/untar
+    tar -xzpf elassandra*.tar.gz -C /tmp/untar
 
-    find /tmp/untar -depth -type d -name 'elasticsearch*' -exec mv {} "$ESHOME" \; > /dev/null
+    find /tmp/untar -depth -type d -name 'elassandra*' -exec mv {} "$ESHOME" \; > /dev/null
 
     # ES cannot run as root so create elasticsearch user & group if needed
-    if ! getent group "elasticsearch" > /dev/null 2>&1 ; then
+    if ! getent group "cassandra" > /dev/null 2>&1 ; then
         if is_dpkg; then
-            addgroup --system "elasticsearch"
+            addgroup --system "cassandra"
         else
-            groupadd -r "elasticsearch"
+            groupadd -r "cassandra"
         fi
     fi
-    if ! id "elasticsearch" > /dev/null 2>&1 ; then
+    if ! id "cassandra" > /dev/null 2>&1 ; then
         if is_dpkg; then
-            adduser --quiet --system --no-create-home --ingroup "elasticsearch" --disabled-password --shell /bin/false "elasticsearch"
+            adduser --quiet --system --no-create-home --ingroup "cassandra" --disabled-password --shell /bin/false "cassandra"
         else
-            useradd --system -M --gid "elasticsearch" --shell /sbin/nologin --comment "elasticsearch user" "elasticsearch"
+            useradd --system -M --gid "cassandra" --shell /sbin/nologin --comment "elasticsearch user" "cassandra"
         fi
     fi
 
-    chown -R elasticsearch:elasticsearch "$ESHOME"
+    chown -R cassandra:cassandra "$ESHOME"
     export_elasticsearch_paths
 }
 
@@ -75,28 +75,35 @@ move_elasticsearch() {
 export_elasticsearch_paths() {
     export ESMODULES="$ESHOME/modules"
     export ESPLUGINS="$ESHOME/plugins"
-    export ESCONFIG="$ESHOME/config"
+    export ESCONFIG="$ESHOME/conf"
     export ESSCRIPTS="$ESCONFIG/scripts"
     export ESDATA="$ESHOME/data"
     export ESLOG="$ESHOME/logs"
+
+    export CASSANDRA_HOME="$ESHOME"
+    export CASSANDRA_CONF="$ESCONFIG"
 }
 
 # Checks that all directories & files are correctly installed
 # after a archive (tar.gz/zip) install
 verify_archive_installation() {
-    assert_file "$ESHOME" d elasticsearch elasticsearch 755
-    assert_file "$ESHOME/bin" d elasticsearch elasticsearch 755
-    assert_file "$ESHOME/bin/elasticsearch" f elasticsearch elasticsearch 755
-    assert_file "$ESHOME/bin/elasticsearch.in.sh" f elasticsearch elasticsearch 755
-    assert_file "$ESHOME/bin/elasticsearch-plugin" f elasticsearch elasticsearch 755
-    assert_file "$ESHOME/bin/elasticsearch-translog" f elasticsearch elasticsearch 755
-    assert_file "$ESCONFIG" d elasticsearch elasticsearch 755
-    assert_file "$ESCONFIG/elasticsearch.yml" f elasticsearch elasticsearch 660
-    assert_file "$ESCONFIG/jvm.options" f elasticsearch elasticsearch 660
-    assert_file "$ESCONFIG/log4j2.properties" f elasticsearch elasticsearch 660
-    assert_file "$ESPLUGINS" d elasticsearch elasticsearch 755
-    assert_file "$ESHOME/lib" d elasticsearch elasticsearch 755
-    assert_file "$ESHOME/NOTICE.txt" f elasticsearch elasticsearch 644
-    assert_file "$ESHOME/LICENSE.txt" f elasticsearch elasticsearch 644
-    assert_file "$ESHOME/README.textile" f elasticsearch elasticsearch 644
+    assert_file "$ESHOME" d cassandra cassandra 755
+    assert_file "$ESHOME/bin" d cassandra cassandra 755
+    assert_file "$ESHOME/bin/cassandra" f cassandra cassandra 755
+    assert_file "$ESHOME/bin/aliases.sh" f cassandra cassandra 755
+    assert_file "$ESHOME/bin/elasticsearch-plugin" f cassandra cassandra 755
+    assert_file "$ESHOME/bin/nodetool" f cassandra cassandra 755
+    assert_file "$ESHOME/bin/cqlsh" f cassandra cassandra 755
+
+    assert_file "$ESCONFIG" d cassandra cassandra 755
+    assert_file "$ESCONFIG/elasticsearch.yml" f cassandra cassandra 660
+    assert_file "$ESCONFIG/jvm.options" f cassandra cassandra 660
+    assert_file "$ESCONFIG/cassandra.yaml" f cassandra cassandra 660
+    assert_file "$ESCONFIG/cassandra-env.sh" f cassandra cassandra 660
+    #assert_file "$ESCONFIG/log4j2.properties" f cassandra cassandra 660
+    assert_file "$ESPLUGINS" d cassandra cassandra 755
+    assert_file "$ESHOME/lib" d cassandra cassandra 755
+    assert_file "$ESHOME/NOTICE.txt" f cassandra cassandra 644
+    assert_file "$ESHOME/LICENSE.txt" f cassandra cassandra 644
+    assert_file "$ESHOME/README.textile" f cassandra cassandra 644
 }

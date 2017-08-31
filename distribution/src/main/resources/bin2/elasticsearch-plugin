@@ -1,5 +1,4 @@
-#!/bin/sh
-
+#!/bin/bash
 
 CDPATH=""
 SCRIPT="$0"
@@ -17,7 +16,7 @@ while [ -h "$SCRIPT" ] ; do
 done
 
 # determine elasticsearch home
-ES_HOME=`dirname "$SCRIPT"`/..
+ES_HOME=${path.plugin_eshome}
 
 # make ELASTICSEARCH_HOME absolute
 ES_HOME=`cd "$ES_HOME"; pwd`
@@ -25,12 +24,12 @@ ES_HOME=`cd "$ES_HOME"; pwd`
 
 # Sets the default values for elasticsearch variables used in this script
 if [ -z "$CONF_DIR" ]; then
-  CONF_DIR="${packaging.plugin.default.config.dir}"
+  CONF_DIR="${path.conf}"
 fi
 
 # The default env file is defined at building/packaging time.
-# For a ${packaging.type} package, the value is "${packaging.env.file}".
-ES_ENV_FILE="${packaging.env.file}"
+# For a ${project.name} package, the value is "${path.env}".
+ES_ENV_FILE="${path.env}"
 
 # If an include is specified with the ES_INCLUDE environment variable, use it
 if [ -n "$ES_INCLUDE" ]; then
@@ -52,6 +51,9 @@ if [ -n "$ES_ENV_FILE" ]; then
       exit 1
   fi
 fi
+
+# elassandra mapping between cassandra and elasticsearch variables
+[ -n "$CASSANRA_CONF" ] && CONF_DIR="$CASSANDRA_CONF"
 
 # don't let JAVA_TOOL_OPTIONS slip in (e.g. crazy agents in ubuntu)
 # works around https://bugs.launchpad.net/ubuntu/+source/jayatana/+bug/1441487
@@ -77,37 +79,16 @@ if [ ! -x "$JAVA" ]; then
     exit 1
 fi
 
-# real getopt cannot be used because we need to hand options over to the PluginManager
-while [ $# -gt 0 ]; do
-  case $1 in
-    -D*=*)
-      properties="$properties \"$1\""
-      ;;
-    -D*)
-      var=$1
-      shift
-      properties="$properties \"$var\"=\"$1\""
-      ;;
-    *)
-      args="$args \"$1\""
-  esac
-  shift
-done
-
-# check if properties already has a config file or config dir
-if [ -e "$CONF_DIR" ]; then
-  case "$properties" in
-    *-Des.default.path.conf=*|*-Des.path.conf=*)
-    ;;
-    *)
-      properties="$properties -Des.default.path.conf=\"$CONF_DIR\""
-    ;;
-  esac
-fi
-
 # full hostname passed through cut for portability on systems that do not support hostname -s
 # export on separate line for shells that do not support combining definition and export
 HOSTNAME=`hostname | cut -d. -f1`
 export HOSTNAME
 
-eval "$JAVA" -client -Delasticsearch -Des.path.home="\"$ES_HOME\"" $properties -cp "\"$ES_HOME/lib/*\"" org.elasticsearch.plugins.PluginManagerCliParser $args
+declare -a args=("$@")
+path_props=(-Des.path.home="$ES_HOME")
+
+if [ -e "$CONF_DIR" ]; then
+  path_props=("${path_props[@]}" -Des.path.conf="$CONF_DIR")
+fi
+
+exec "$JAVA" $ES_JAVA_OPTS -Delasticsearch "${path_props[@]}" -cp "$ES_HOME/lib/*" org.elasticsearch.plugins.PluginCli "${args[@]}"

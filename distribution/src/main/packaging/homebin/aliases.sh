@@ -14,12 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Elassandra useful aliases
+# Elassandra useful aliases (packaged version)
 #
 
-if [ "x$CASSANDRA_HOME" = "x" ]; then
-    export CASSANDRA_HOME="`dirname "$0"`/.."
-fi
+CASSANDRA_HOME=/usr/share/cassandra
 
 #
 # Please set the following variable in your environnement (multihoming support)
@@ -34,9 +32,12 @@ echo "NODETOOL_JMX_PORT=$NODETOOL_JMX_PORT"
 export JVM_DEBUG_PORT="4242"
 export JVM_DEBUG_WAIT="n"
 
-export CASSANDRA_CONF=$CASSANDRA_HOME/conf
-export CASSANDRA_DATA=$CASSANDRA_HOME/data
-export CASSANDRA_LOGS=$CASSANDRA_HOME/logs
+export CASSANDRA_CONF=/etc/cassandra
+export CASSANDRA_DATA=/var/lib/cassandra
+export CASSANDRA_LOGS=/var/log/cassandra
+
+export CASSANDRA_EXEC=cassandra
+export NODETOOL_EXEC=nodetool
 
 # Kill cassandra process
 function ckill() {
@@ -111,16 +112,16 @@ function refresh() {
 }
 
 # Cassandra aliases
-alias cstart='$CASSANDRA_HOME/bin/cassandra'
-alias cdebug='$CASSANDRA_HOME/bin/cassandra -d'
-alias cstop='$CASSANDRA_HOME/bin/nodetool -p $NODETOOL_JMX_PORT -h $NODE stopdaemon'
+alias cstart='cassandra'
+alias cdebug='cassandra -d'
+alias cstop='nodetool -p $NODETOOL_JMX_PORT -h $NODE stopdaemon'
 alias clog='less $CASSANDRA_LOGS/system.log'
-alias cqlsh='$CASSANDRA_HOME/bin/cqlsh $NODE'
-alias nodetool='$CASSANDRA_HOME/bin/nodetool -p $NODETOOL_JMX_PORT'
+alias cqlsh='cqlsh $NODE'
+alias nodetool='nodetool -p $NODETOOL_JMX_PORT'
 
 # Start Elassandra
-alias elstart='$CASSANDRA_HOME/bin/cassandra -e'
-alias eldebug='$CASSANDRA_HOME/bin/cassandra -d -e'
+alias elstart='cassandra -e'
+alias eldebug='cassandra -d -e'
 
 # Elasticsearch aliases
 alias health='curl -XGET http://$NODE:9200/_cluster/health/?pretty=true'
@@ -140,7 +141,8 @@ alias nodes='curl -XGET "http://$NODE:9200/_nodes?pretty"'
 alias settings='curl -XGET http://$NODE:9200/_cluster/settings?pretty'
 alias plugins='curl "http://$NODE:9200/_nodes?plugin=true&pretty"'
 alias tasks='curl http://$NODE:9200/_tasks?pretty'
-alias aliases='curl http://$NODE:9200/_cat/aliases?v'
+
+alias nodes='curl -XGET "http://$NODE:9200/_nodes?pretty"'
 
 alias open='open'
 alias close='close'

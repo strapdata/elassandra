@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -70,8 +70,8 @@ import static com.google.common.collect.Sets.newHashSet;
  * metadata from cassandra schema DiscoveryService discover ring topology and
  * build routing table await that Cassandra start() (Complet cassandra
  * bootstrap) ElasticSearch start() (Open Elastic http service)
- * 
- * 
+ *
+ *
  * @author vroyer
  *
  */
@@ -140,7 +140,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
          */
         
-        //setup(addShutdownHook, settings, env, pluginList); 
+        //setup(addShutdownHook, settings, env, pluginList);
         org.elasticsearch.bootstrap.Bootstrap.initializeNatives(
                 env.tmpFile(),
                 settings.getAsBoolean("bootstrap.memory_lock", true),
@@ -198,7 +198,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             logger.error("Failed to set the workload to elasticsearch.",e1);
         }
         
-        super.setup(); // start bootstrap CassandraDaemon 
+        super.setup(); // start bootstrap CassandraDaemon
         super.start(); // start Thrift+RPC service
 
         if (this.bootstrapping)
@@ -284,7 +284,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void stop() {
         super.stop();
-        if (node != null) 
+        if (node != null)
             node.stop();
     }
 
@@ -339,6 +339,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                 .put("network.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
                 .put("transport.bind_host", FBUtilities.getLocalAddress().getHostAddress())
                 .put("transport.publish_host", FBUtilities.getBroadcastAddress().getHostAddress())
+                .put("path.data",getElasticsearchDataDir())
                 .put(settings)
                  // not overloadable settings.
                 .put("discovery.type","cassandra")
@@ -391,10 +392,8 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     public static String getElasticsearchDataDir() {
-        String cassandra_storagedir =  System.getProperty("cassandra.storagedir");
-        if (cassandra_storagedir == null)
-            cassandra_storagedir = System.getProperty("path.data",getHomeDir()+"/data/elasticsearch.data");
-        return cassandra_storagedir + File.separatorChar + "elasticsearch.data";
+        String cassandra_storage = System.getProperty("cassandra.storage", getHomeDir() + File.separator + "data");
+        return cassandra_storage + File.separator + "elasticsearch.data";
     }
     
     public static void main(String[] args) {
@@ -443,8 +442,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                         .put("node.name","node0")
                         .put("path.home",getHomeDir())
                         .put("path.conf",getConfigDir())
-                        .put("path.data",getElasticsearchDataDir())
-                        .build(), 
+                        .build(),
                     foreground ? Terminal.DEFAULT : null);
             
             instance.activate(true, true, instance.env.settings(), instance.env,  Collections.<Class<? extends Plugin>>emptyList());

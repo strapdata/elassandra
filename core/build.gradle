@@ -37,7 +37,6 @@ publishing {
 archivesBaseName = 'elasticsearch'
 
 dependencies {
-
   // lucene
   compile "org.apache.lucene:lucene-core:${versions.lucene}"
   compile "org.apache.lucene:lucene-analyzers-common:${versions.lucene}"
@@ -102,8 +101,22 @@ dependencies {
   // Elassandra add-ons
   compile("com.strapdata.cassandra:cassandra-all:3.11.0") {
     exclude group:'net.java.dev.jna', module:'jna'
-    exclude group:'io.netty'
+    //exclude group:'io.netty'
   }
+
+  // Usually when gradle detect a version conflict, it takes the newest version.
+  // Unfortunately this mechanism doesn't work with deps in elasticsearch modules.
+  // When gradle is collecting the jars to be packaged within a module, it excludes any jar that
+  // is already included in the core library folder, with the exactly same version number.
+  // This way, if a version conflict occurs between core and a module, the jar will be shipped in the module,
+  // resulting in a jar hell at runtime. The solution here is to explicitly declare these conflicting deps
+  // at the top-level, with same version numbers as in the modules.
+  compile "org.apache.httpcomponents:httpclient:${versions.httpclient}"
+  compile "org.apache.httpcomponents:httpcore:${versions.httpcore}"
+  compile "commons-codec:commons-codec:${versions.commonscodec}"
+  compile "commons-logging:commons-logging:${versions.commonslogging}"
+
+
   // Elasticsearch require netty 4.1
   // https://github.com/netty/netty/issues/6855
   compile "io.netty:netty-all:4.1.12.Final"

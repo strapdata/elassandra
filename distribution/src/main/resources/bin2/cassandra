@@ -214,9 +214,11 @@ launch_service()
 
     echo "Starting cassandra with $class"
 
-    # Problem with ElassandraDaemon if CASSANDRA_HOME is not in environment
-    # We have to export explicitly CASSANDRA_HOME
+    # Problem with ElassandraDaemon if CASSANDRA_HOME and CASSANDRA_CONF are not in environment
+    # We have to export explicitly CASSANDRA_HOME and CASSANDRA_CONF
     [ -n "$CASSANDRA_HOME" ] && export CASSANDRA_HOME
+    [ -n "$CASSANDRA_CONF" ] && export CASSANDRA_CONF
+
 
     # The cassandra-foreground option will tell CassandraDaemon not
     # to close stdout/stderr, but it's up to us not to background.

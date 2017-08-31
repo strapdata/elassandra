@@ -45,14 +45,14 @@ case "$1" in
     ;;
 esac
 
-# Sets the default values for elasticsearch variables used in this script
-ES_USER="elasticsearch"
-ES_GROUP="elasticsearch"
-LOG_DIR="/var/log/elasticsearch"
-PLUGINS_DIR="/usr/share/elasticsearch/plugins"
-PID_DIR="/var/run/elasticsearch"
-DATA_DIR="/var/lib/elasticsearch"
-CONF_DIR="/etc/elasticsearch"
+# Sets the default values for cassandra variables used in this script
+ES_USER="cassandra"
+ES_GROUP="cassandra"
+LOG_DIR="/var/log/cassandra"
+PLUGINS_DIR="/usr/share/cassandra/plugins"
+PID_DIR="/var/run/cassandra"
+DATA_DIR="/var/lib/cassandra"
+CONF_DIR="/etc/cassandra"
 
 # Source the default env file
 if [ "$SOURCE_ENV_FILE" = "true" ]; then

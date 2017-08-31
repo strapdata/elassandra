@@ -40,7 +40,8 @@ load $BATS_UTILS/plugins.bash
 
 # Cleans everything for the 1st execution
 setup() {
-    skip_not_sysvinit
+    #skip_not_sysvinit
+    SERVICE="sudo service --skip-redirect"
     skip_not_dpkg_or_rpm
     export_elasticsearch_paths
 }
@@ -53,8 +54,8 @@ setup() {
     # $ sudo update-rc.d elasticsearch disable
     # here because that'd prevent elasticsearch from installing the symlinks
     # that cause it to be started on restart.
-    sudo update-rc.d -f elasticsearch remove || true
-    sudo chkconfig elasticsearch off || true
+    sudo update-rc.d -f cassandra remove || true
+    sudo chkconfig cassandra off || true
 }
 
 @test "[INIT.D] install elasticsearch" {
@@ -63,21 +64,22 @@ setup() {
 }
 
 @test "[INIT.D] elasticsearch fails if startup script is not executable" {
-    local INIT="/etc/init.d/elasticsearch"
-    local DAEMON="$ESHOME/bin/elasticsearch"
+    local INIT="/etc/init.d/cassandra"
+    local DAEMON="/usr/bin/cassandra"
 
     sudo chmod -x "$DAEMON"
     run "$INIT"
     sudo chmod +x "$DAEMON"
 
     [ "$status" -eq 1 ]
-    [[ "$output" == *"The elasticsearch startup script does not exists or it is not executable, tried: $DAEMON"* ]]
+    echo $output
+    [[ "$output" == *"The cassandra startup script does not exists or it is not executable, tried: $DAEMON"* ]]
 }
 
 @test "[INIT.D] daemon isn't enabled on restart" {
     # Rather than restart the VM which would be slow we check for the symlinks
     # that init.d uses to restart the application on startup.
-    ! find /etc/rc[0123456].d | grep elasticsearch
+    ! find /etc/rc[0123456].d | grep cassandra
     # Note that we don't use -iname above because that'd have to look like:
     # [ $(find /etc/rc[0123456].d -iname "elasticsearch*" | wc -l) -eq 0 ]
     # Which isn't really clearer than what we do use.
@@ -88,13 +90,13 @@ setup() {
     # starting Elasticsearch so we don't have to wait for elasticsearch to scan for
     # them.
     install_elasticsearch_test_scripts
-    service elasticsearch start
+    $SERVICE cassandra start
     wait_for_elasticsearch_status
-    assert_file_exist "/var/run/elasticsearch/elasticsearch.pid"
+    assert_file_exist "/var/run/cassandra/cassandra.pid"
 }
 
 @test "[INIT.D] status (running)" {
-    service elasticsearch status
+    $SERVICE cassandra status
 }
 
 ##################################
@@ -105,43 +107,44 @@ setup() {
 }
 
 @test "[INIT.D] restart" {
-    service elasticsearch restart
+    $SERVICE cassandra restart
 
     wait_for_elasticsearch_status
 
-    service elasticsearch status
+    $SERVICE cassandra status
 }
 
 @test "[INIT.D] stop (running)" {
-    service elasticsearch stop
+    $SERVICE cassandra stop
 }
 
 @test "[INIT.D] status (stopped)" {
-    run service elasticsearch status
+    run $SERVICE cassandra status
     # precise returns 4, trusty 3
     [ "$status" -eq 3 ] || [ "$status" -eq 4 ]
 }
 
-@test "[INIT.D] don't mkdir when it contains a comma" {
-    # Remove these just in case they exist beforehand
-    rm -rf /tmp/aoeu,/tmp/asdf
-    rm -rf /tmp/aoeu,
-    # set DATA_DIR to DATA_DIR=/tmp/aoeu,/tmp/asdf
-    sed -i 's/DATA_DIR=.*/DATA_DIR=\/tmp\/aoeu,\/tmp\/asdf/' /etc/init.d/elasticsearch
-    cat /etc/init.d/elasticsearch | grep "DATA_DIR"
-    run service elasticsearch start
-    if [ "$status" -ne 0 ]; then
-      cat /var/log/elasticsearch/*
-      fail
-    fi
-    wait_for_elasticsearch_status
-    assert_file_not_exist /tmp/aoeu,/tmp/asdf
-    assert_file_not_exist /tmp/aoeu,
-    service elasticsearch stop
-    run service elasticsearch status
-    # precise returns 4, trusty 3
-    [ "$status" -eq 3 ] || [ "$status" -eq 4 ]
-}
+# Not used for elassandra
+#@test "[INIT.D] don't mkdir when it contains a comma" {
+#    # Remove these just in case they exist beforehand
+#    rm -rf /tmp/aoeu,/tmp/asdf
+#    rm -rf /tmp/aoeu,
+#    # set DATA_DIR to DATA_DIR=/tmp/aoeu,/tmp/asdf
+#    sed -i 's/DATA_DIR=.*/DATA_DIR=\/tmp\/aoeu,\/tmp\/asdf/' /etc/init.d/elasticsearch
+#    cat /etc/init.d/elasticsearch | grep "DATA_DIR"
+#    run $SERVICE elasticsearch start
+#    if [ "$status" -ne 0 ]; then
+#      cat /var/log/elasticsearch/*
+#      fail
+#    fi
+#    wait_for_elasticsearch_status
+#    assert_file_not_exist /tmp/aoeu,/tmp/asdf
+#    assert_file_not_exist /tmp/aoeu,
+#    $SERVICE elasticsearch stop
+#    run $SERVICE elasticsearch status
+#    # precise returns 4, trusty 3
+#    [ "$status" -eq 3 ] || [ "$status" -eq 4 ]
+#}
 
 @test "[INIT.D] start Elasticsearch with custom JVM options" {
     assert_file_exist $ESENVFILE
@@ -149,36 +152,39 @@ setup() {
     local es_jvm_options=$ES_JVM_OPTIONS
     local temp=`mktemp -d`
     touch "$temp/jvm.options"
-    chown -R elasticsearch:elasticsearch "$temp"
-    echo "-Xms512m" >> "$temp/jvm.options"
-    echo "-Xmx512m" >> "$temp/jvm.options"
+    chown -R cassandra:cassandra "$temp"
+    echo "-Xms1024m" >> "$temp/jvm.options"
+    echo "-Xmx1024m" >> "$temp/jvm.options"
     # we have to disable Log4j from using JMX lest it will hit a security
     # manager exception before we have configured logging; this will fail
     # startup since we detect usages of logging before it is configured
     echo "-Dlog4j2.disable.jmx=true" >> "$temp/jvm.options"
-    cp $ESENVFILE "$temp/elasticsearch"
-    echo "ES_JVM_OPTIONS=\"$temp/jvm.options\"" >> $ESENVFILE
-    echo "ES_JAVA_OPTS=\"-XX:-UseCompressedOops\"" >> $ESENVFILE
-    service elasticsearch start
+    cp $ESENVFILE "$temp/cassandra"
+    cp "/etc/cassandra/jvm.options" "$temp/jvm.options.bak"
+    cp "$temp/jvm.options" /etc/cassandra/jvm.options
+    echo "ES_JVM_OPTS=\"$temp/jvm.options\"" >> $ESENVFILE
+    echo "JVM_OPTS=\"-XX:-UseCompressedOops\"" >> $ESENVFILE
+    $SERVICE cassandra start
     wait_for_elasticsearch_status
-    curl -s -XGET localhost:9200/_nodes | fgrep '"heap_init_in_bytes":536870912'
+    curl -s -XGET localhost:9200/_nodes | fgrep '"heap_init_in_bytes":1073741824'
     curl -s -XGET localhost:9200/_nodes | fgrep '"using_compressed_ordinary_object_pointers":"false"'
-    service elasticsearch stop
-    cp "$temp/elasticsearch" $ESENVFILE
+    $SERVICE cassandra stop
+    cp "$temp/cassandra" $ESENVFILE
+    cp "$temp/jvm.options.bak" /etc/cassandra/jvm.options
 }
 
-# Simulates the behavior of a system restart:
-# the PID directory is deleted by the operating system
-# but it should not block ES from starting
-# see https://github.com/elastic/elasticsearch/issues/11594
+## Simulates the behavior of a system restart:
+## the PID directory is deleted by the operating system
+## but it should not block ES from starting
+## see https://github.com/elastic/elasticsearch/issues/11594
 @test "[INIT.D] delete PID_DIR and restart" {
-    rm -rf /var/run/elasticsearch
+    rm -rf /var/run/cassandra
 
-    service elasticsearch start
+    $SERVICE cassandra start
 
     wait_for_elasticsearch_status
 
-    assert_file_exist "/var/run/elasticsearch/elasticsearch.pid"
+    assert_file_exist "/var/run/cassandra/cassandra.pid"
 
-    service elasticsearch stop
+    $SERVICE cassandra stop
 }

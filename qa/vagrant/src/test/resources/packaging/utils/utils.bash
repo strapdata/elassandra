@@ -240,33 +240,37 @@ assert_recursive_ownership() {
 clean_before_test() {
 
     # List of files to be deleted
-    ELASTICSEARCH_TEST_FILES=("/usr/share/elasticsearch" \
-                            "/etc/elasticsearch" \
-                            "/var/lib/elasticsearch" \
-                            "/var/log/elasticsearch" \
-                            "/tmp/elasticsearch" \
-                            "/etc/default/elasticsearch" \
-                            "/etc/sysconfig/elasticsearch"  \
-                            "/var/run/elasticsearch"  \
-                            "/usr/share/doc/elasticsearch" \
-                            "/tmp/elasticsearch" \
-                            "/usr/lib/systemd/system/elasticsearch.conf" \
-                            "/usr/lib/tmpfiles.d/elasticsearch.conf" \
-                            "/usr/lib/sysctl.d/elasticsearch.conf")
+    ELASTICSEARCH_TEST_FILES=("/usr/share/cassandra" \
+                            "/etc/cassandra" \
+                            "/var/lib/cassandra" \
+                            "/var/log/cassandra" \
+                            "/tmp/elassandra" \
+                            "/etc/default/cassandra" \
+                            "/etc/sysconfig/cassandra"  \
+                            "/var/run/cassandra"  \
+                            "/usr/share/doc/cassandra" \
+                            "/usr/lib/systemd/system/cassandra.service" \
+                            "/usr/lib/tmpfiles.d/cassandra.conf" \
+                            "/usr/lib/sysctl.d/cassandra.conf" \
+                            "/usr/lib/python2.7/site-packages/cqlshlib" \
+                            "/usr/lib/python2.7/dist-packages/cqlshlib" \
+                            "/usr/lib/python2.7/site-packages/cqlshlib" \
+                            "/usr/lib/python2.7/dist-packages/cassandra*" \
+                            "/usr/lib/python2.7/site-packages/cassandra*" )
 
     # Kills all processes of user elasticsearch
-    if id elasticsearch > /dev/null 2>&1; then
-        pkill -u elasticsearch 2>/dev/null || true
+    if id cassandra > /dev/null 2>&1; then
+        pkill -u cassandra 2>/dev/null || true
     fi
 
     # Kills all running Elasticsearch processes
-    ps aux | grep -i "org.elasticsearch.bootstrap.Elasticsearch" | awk {'print $2'} | xargs kill -9 > /dev/null 2>&1 || true
+    ps aux | grep -i "org.apache.cassandra.service" | awk {'print $2'} | xargs kill -9 > /dev/null 2>&1 || true
 
     purge_elasticsearch
 
     # Removes user & group
-    userdel elasticsearch > /dev/null 2>&1 || true
-    groupdel elasticsearch > /dev/null 2>&1 || true
+    userdel cassandra > /dev/null 2>&1 || true
+    groupdel cassandra > /dev/null 2>&1 || true
 
 
     # Removes all files
@@ -280,20 +284,20 @@ clean_before_test() {
 purge_elasticsearch() {
     # Removes RPM package
     if is_rpm; then
-        rpm --quiet -e elasticsearch > /dev/null 2>&1 || true
+        rpm --quiet -e elassandra > /dev/null 2>&1 || true
     fi
 
     if [ -x "`which yum 2>/dev/null`" ]; then
-        yum remove -y elasticsearch > /dev/null 2>&1 || true
+        yum remove -y elassandra > /dev/null 2>&1 || true
     fi
 
     # Removes DEB package
     if is_dpkg; then
-        dpkg --purge elasticsearch > /dev/null 2>&1 || true
+        dpkg --purge elassandra > /dev/null 2>&1 || true
     fi
 
     if [ -x "`which apt-get 2>/dev/null`" ]; then
-        apt-get --quiet --yes purge elasticsearch > /dev/null 2>&1 || true
+        apt-get --quiet --yes purge elassandra > /dev/null 2>&1 || true
     fi
 }
 
@@ -308,20 +312,20 @@ start_elasticsearch_service() {
 
     wait_for_elasticsearch_status $desiredStatus $index
 
-    if [ -r "/tmp/elasticsearch/elasticsearch.pid" ]; then
-        pid=$(cat /tmp/elasticsearch/elasticsearch.pid)
+    if [ -r "/tmp/elassandra/elasticsearch.pid" ]; then
+        pid=$(cat /tmp/elassandra/elasticsearch.pid)
         [ "x$pid" != "x" ] && [ "$pid" -gt 0 ]
         echo "Looking for elasticsearch pid...."
         ps $pid
     elif is_systemd; then
-        run systemctl is-active elasticsearch.service
+        run systemctl is-active cassandra.service
         [ "$status" -eq 0 ]
 
-        run systemctl status elasticsearch.service
+        run systemctl status cassandra.service
         [ "$status" -eq 0 ]
 
     elif is_sysvinit; then
-        run service elasticsearch status
+        run service cassandra status
         [ "$status" -eq 0 ]
     fi
 }
@@ -335,15 +339,15 @@ run_elasticsearch_service() {
     # Set the CONF_DIR setting in case we start as a service
     if [ ! -z "$CONF_DIR" ] ; then
         if is_dpkg ; then
-            echo "CONF_DIR=$CONF_DIR" >> /etc/default/elasticsearch;
-            echo "ES_JVM_OPTIONS=$ES_JVM_OPTIONS" >> /etc/default/elasticsearch;
+            echo "CASSANDRA_CONF=$CONF_DIR" >> /etc/default/cassandra;
+            echo "JVM_OPTS=$ES_JAVA_OPTS" >> /etc/default/cassandra;
         elif is_rpm; then
-            echo "CONF_DIR=$CONF_DIR" >> /etc/sysconfig/elasticsearch;
-            echo "ES_JVM_OPTIONS=$ES_JVM_OPTIONS" >> /etc/sysconfig/elasticsearch
+            echo "CASSANDRA_CONF=$CONF_DIR" >> /etc/sysconfig/cassandra;
+            echo "JVM_OPTS=$ES_JAVA_OPTS" >> /etc/sysconfig/cassandra
         fi
     fi
 
-    if [ -f "/tmp/elasticsearch/bin/elasticsearch" ]; then
+    if [ -f "/tmp/elassandra/bin/cassandra" ]; then
         if [ -z "$CONF_DIR" ]; then
             local CONF_DIR=""
             local ES_PATH_CONF=""
@@ -351,66 +355,74 @@ run_elasticsearch_service() {
             local ES_PATH_CONF="-Epath.conf=$CONF_DIR"
         fi
         # we must capture the exit code to compare so we don't want to start as background process in case we expect something other than 0
-        local background=""
+        local background="-f"
         local timeoutCommand=""
         if [ "$expectedStatus" = 0 ]; then
-            background="-d"
+            background=""
         else
             timeoutCommand="timeout 60s "
         fi
+
         # su and the Elasticsearch init script work together to break bats.
         # sudo isolates bats enough from the init script so everything continues
         # to tick along
-        run sudo -u elasticsearch bash <<BASH
+        run sudo -u cassandra bash <<BASH
 # If jayatana is installed then we try to use it. Elasticsearch should ignore it even when we try.
 # If it doesn't ignore it then Elasticsearch will fail to start because of security errors.
 # This line is attempting to emulate the on login behavior of /usr/share/upstart/sessions/jayatana.conf
 [ -f /usr/share/java/jayatanaag.jar ] && export JAVA_TOOL_OPTIONS="-javaagent:/usr/share/java/jayatanaag.jar"
 # And now we can start Elasticsearch normally, in the background (-d) and with a pidfile (-p).
-export ES_JVM_OPTIONS=$ES_JVM_OPTIONS
-export ES_JAVA_OPTS=$ES_JAVA_OPTS
-$timeoutCommand/tmp/elasticsearch/bin/elasticsearch $background -p /tmp/elasticsearch/elasticsearch.pid $ES_PATH_CONF $commandLineArgs
+export JVM_OPTS=$ES_JAVA_OPTS
+[ -n "$CONF_DIR" ] && export CASSANDRA_CONF="$CONF_DIR"
+export CASSANDRA_HOME="$ESHOME"
+$timeoutCommand/tmp/elassandra/bin/cassandra -e $background -p /tmp/elassandra/elasticsearch.pid $commandLineArgs
 BASH
         [ "$status" -eq "$expectedStatus" ]
     elif is_systemd; then
         run systemctl daemon-reload
         [ "$status" -eq 0 ]
 
-        run systemctl enable elasticsearch.service
+        run systemctl enable cassandra.service
         [ "$status" -eq 0 ]
 
-        run systemctl is-enabled elasticsearch.service
+        run systemctl is-enabled cassandra.service
         [ "$status" -eq 0 ]
 
-        run systemctl start elasticsearch.service
+        run systemctl start cassandra.service
         [ "$status" -eq "$expectedStatus" ]
 
     elif is_sysvinit; then
-        run service elasticsearch start
+        run service cassandra start
         [ "$status" -eq "$expectedStatus" ]
     fi
 }
 
 stop_elasticsearch_service() {
-    if [ -r "/tmp/elasticsearch/elasticsearch.pid" ]; then
-        pid=$(cat /tmp/elasticsearch/elasticsearch.pid)
+    if [ -r "/tmp/elassandra/elasticsearch.pid" ]; then
+        pid=$(cat /tmp/elassandra/elasticsearch.pid)
         [ "x$pid" != "x" ] && [ "$pid" -gt 0 ]
 
         kill -SIGTERM $pid
+
+        run kill -SIGTERM $pid
+        while [ "$status" -eq 0 ]; do
+            run kill -SIGTERM $pid
+        done
+
     elif is_systemd; then
-        run systemctl stop elasticsearch.service
+        run systemctl stop cassandra.service
         [ "$status" -eq 0 ]
 
-        run systemctl is-active elasticsearch.service
+        run systemctl is-active cassandra.service
         [ "$status" -eq 3 ]
 
         echo "$output" | grep -E 'inactive|failed'
 
     elif is_sysvinit; then
-        run service elasticsearch stop
+        run service cassandra stop
         [ "$status" -eq 0 ]
 
-        run service elasticsearch status
+        run service cassandra status
         [ "$status" -ne 0 ]
     fi
 }
@@ -424,8 +436,8 @@ wait_for_elasticsearch_status() {
     echo "Making sure elasticsearch is up..."
     wget -O - --retry-connrefused --waitretry=1 --timeout=60 --tries 60 http://localhost:9200/_cluster/health || {
           echo "Looks like elasticsearch never started. Here is its log:"
-          if [ -e "$ESLOG/elasticsearch.log" ]; then
-              cat "$ESLOG/elasticsearch.log"
+          if [ -e "$ESLOG/system.log" ]; then
+              cat "$ESLOG/system.log"
           else
               echo "The elasticsearch log doesn't exist. Maybe /var/log/messages has something:"
               tail -n20 /var/log/messages
@@ -477,6 +489,7 @@ run_elasticsearch_tests() {
       "title": "Elasticsearch - The Definitive Guide"
     }'
 
+    curl -s -XGET 'http://localhost:9200/_count?pretty'
     curl -s -XGET 'http://localhost:9200/_count?pretty' |
       grep \"count\"\ :\ 1
 
@@ -502,14 +515,17 @@ run_elasticsearch_tests() {
 move_config() {
     local oldConfig="$ESCONFIG"
     export ESCONFIG="${1:-$(mktemp -d -t 'config.XXXX')}"
+    export CASSANDRA_CONF="$ESCONFIG"
     echo "Moving configuration directory from $oldConfig to $ESCONFIG"
 
     # Move configuration files to the new configuration directory
     mv "$oldConfig"/* "$ESCONFIG"
-    chown -R elasticsearch:elasticsearch "$ESCONFIG"
+    chown -R cassandra:cassandra "$ESCONFIG"
     assert_file_exist "$ESCONFIG/elasticsearch.yml"
     assert_file_exist "$ESCONFIG/jvm.options"
-    assert_file_exist "$ESCONFIG/log4j2.properties"
+    assert_file_exist "$ESCONFIG/cassandra.yaml"
+    assert_file_exist "$ESCONFIG/cassandra-env.sh"
+    assert_file_exist "$ESCONFIG/logback-tools.xml"
 }
 
 # Copies a script into the Elasticsearch install.
