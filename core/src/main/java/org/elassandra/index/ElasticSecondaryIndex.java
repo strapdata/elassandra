@@ -1993,6 +1993,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void partitionDelete(DeletionTime deletionTime) {
+                if (deletionTime.isLive() || !deletionTime.deletes(System.currentTimeMillis())) {
+                    // ignore non-expired partition-tombestone. 
+                    return;
+                }
+
                 Long  token_long = (Long) key.getToken().getTokenValue();
                 String typeName = InternalCassandraClusterService.cfNameToType(ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
                 NumericRangeQuery<Long> tokenRangeQuery = NumericRangeQuery.newLongRange(TokenFieldMapper.NAME, InternalCassandraClusterService.defaultPrecisionStep, token_long, token_long, true, true);
