@@ -46,6 +46,7 @@ import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.BigArrays;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.env.Environment;
@@ -87,12 +88,6 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
  * tests are serialized using a semaphore to avoid C*-level naming conflicts.
  */
 public abstract class ESSingleNodeTestCase extends ESTestCase {
-
-    
-    public interface ActionRequestBuilderHelper {
-        public void addHeader(ActionRequestBuilder builder);
-    }
-    public static ActionRequestBuilderHelper actionRequestHelper = null;
 
     private static final Semaphore testMutex = new Semaphore(1);
     
@@ -169,7 +164,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     static void cleanup(boolean resetNode) {
         if (ElassandraDaemon.instance.node() != null) {
             DeleteIndexRequestBuilder builder = ElassandraDaemon.instance.node().client().admin().indices().prepareDelete("*");
-            expand(builder);
             assertAcked(builder.get());
             if (resetNode) {
                 reset();
@@ -178,11 +172,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     }
     public static String encodeBasicHeader(final String username, final String password) {
         return new String(DatatypeConverter.printBase64Binary((username + ":" + Objects.requireNonNull(password)).getBytes(StandardCharsets.UTF_8)));
-    }
-
-    public static void expand(ActionRequestBuilder builder) {
-        if (actionRequestHelper != null)
-            actionRequestHelper.addHeader(builder);
     }
     
     private Node newNode() {
@@ -205,7 +194,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         // SERVICE_UNAVAILABLE/1/state not recovered / initialized block
         ClusterAdminClient clusterAdminClient = client().admin().cluster();
         ClusterHealthRequestBuilder builder = clusterAdminClient.prepareHealth();
-        expand(builder);
         ClusterHealthResponse clusterHealthResponse = builder.setWaitForGreenStatus().get();
         assertFalse(clusterHealthResponse.isTimedOut());
     }
@@ -240,7 +228,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         super.tearDown();
         
         DeleteIndexRequestBuilder builder = ElassandraDaemon.instance.node().client().admin().indices().prepareDelete("*");
-        expand(builder);
         assertAcked(builder.get());
         
         MetaData metaData = client().admin().cluster().prepareState().get().getState().getMetaData();
@@ -369,12 +356,10 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     }
 
     protected IndexService createIndex(String index, CreateIndexRequestBuilder createIndexRequestBuilder) {
-        expand(createIndexRequestBuilder);
         assertAcked(createIndexRequestBuilder.get());
         // Wait for the index to be allocated so that cluster state updates don't override
         // changes that would have been done locally
         ClusterHealthRequestBuilder builder = client().admin().cluster().prepareHealth(index);
-        expand(builder);
         builder.setWaitForYellowStatus()
             .setWaitForEvents(Priority.LANGUID)
             .setWaitForNoRelocatingShards(true);
@@ -425,7 +410,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
      */
     public ClusterHealthStatus ensureGreen(TimeValue timeout, String... indices) {
         ClusterHealthRequestBuilder builder = client().admin().cluster().prepareHealth(indices);
-        expand(builder);
         builder.setTimeout(timeout)
             .setWaitForGreenStatus()
             .setWaitForEvents(Priority.LANGUID)
