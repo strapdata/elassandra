@@ -15,6 +15,9 @@
  */
 package org.apache.cassandra.service;
 
+import io.netty.handler.ssl.OpenSsl;
+import io.netty.util.internal.PlatformDependent;
+
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -51,6 +54,8 @@ import org.elasticsearch.plugins.Plugin;
 import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Locale;
@@ -348,17 +353,8 @@ public class ElassandraDaemon extends CassandraDaemon {
                 .put("node.name", CassandraDiscovery.buildNodeName(DatabaseDescriptor.getListenAddress()))
                 .put("node.attr.dc", DatabaseDescriptor.getLocalDataCenter())
                 .put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastAddress()))
-                .put("cluster.name", getElasticsearchClusterName())
+                .put("cluster.name", ClusterService.getElasticsearchClusterName(env.settings()))
                 .build();
-    }
-    
-    public String getElasticsearchClusterName() {
-        String clusterName = DatabaseDescriptor.getClusterName();
-        String datacenterGroup = env.settings().get(ClusterService.SETTING_CLUSTER_DATACENTER_GROUP);
-        if (datacenterGroup != null) {
-            clusterName = DatabaseDescriptor.getClusterName() + "@" + datacenterGroup.trim();
-        }
-        return clusterName;
     }
     
     public static Client client() {
@@ -428,7 +424,16 @@ public class ElassandraDaemon extends CassandraDaemon {
             Logger logger = Loggers.getLogger(Bootstrap.class);
             logger.warn("jvm uses the client vm, make sure to run `java` with the server vm for best performance by adding `-server` to the command line");
         }
-
+        
+        // disable netty setAvailableProcessors by Elasticsearch (set by Cassandra).
+        AccessController.doPrivileged(new PrivilegedAction<Object>() {
+            @Override
+            public Object run() {
+                System.setProperty("es.set.netty.runtime.available.processors", "false");
+                return null;
+            }
+        });
+        
         String stage = "Initialization";
 
         try {
