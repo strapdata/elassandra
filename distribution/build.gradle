@@ -72,7 +72,7 @@ ext.restTestExpansions = [
 // depend on it, but we don't actually configure it until here so we can do a single
 // loop over modules to also setup cross task dependencies and increment our modules counter
 // Elassandra adds: skip module reindex which conflicts with libthrift
-project.rootProject.subprojects.findAll { it.path.startsWith(':modules:') /*&& !it.path.contentEquals(":modules:reindex")*/}.each { Project module ->
+project.rootProject.subprojects.findAll { it.path.startsWith(':modules:') && !it.path.startsWith(":modules:reindex") }.each { Project module ->
   buildFullNotice {
     def defaultLicensesDir = new File(module.projectDir, 'licenses')
     if (defaultLicensesDir.exists()) {
