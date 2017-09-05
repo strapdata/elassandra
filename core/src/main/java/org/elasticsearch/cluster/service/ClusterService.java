@@ -2535,6 +2535,14 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         throw new NoPersistedMetaDataException("Unexpected error");
     }
     
+    public static String getElasticsearchClusterName(Settings settings) {
+        String clusterName = DatabaseDescriptor.getClusterName();
+        String datacenterGroup = settings.get(ClusterService.SETTING_CLUSTER_DATACENTER_GROUP);
+        if (datacenterGroup != null) {
+            clusterName = DatabaseDescriptor.getClusterName() + "@" + datacenterGroup.trim();
+        }
+        return clusterName;
+    }
     
     public int getLocalDataCenterSize() {
         int count = 1; 
