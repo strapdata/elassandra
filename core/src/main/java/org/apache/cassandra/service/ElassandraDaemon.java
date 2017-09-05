@@ -317,7 +317,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                  // overloadable settings from elasticsearch.yml
                 .put("path.data", getElasticsearchDataDir())
                 .put(settings)
-                // overloadable settings.
+                // not overloadable settings.
                 .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
                 .build();
         
@@ -374,7 +374,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     
     // The default elasticsearch data directory if path.data is not set from elasticsearch.yml or system properties
     public static String getElasticsearchDataDir() {
-        String cassandra_storage = System.getProperty("cassandra.storage", getHomeDir() + File.separator + "data");
+        String cassandra_storage = System.getProperty("cassandra.storagedir", getHomeDir() + File.separator + "data");
         return cassandra_storage + File.separator + "elasticsearch.data";
     }
     

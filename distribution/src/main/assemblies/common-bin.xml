@@ -46,6 +46,7 @@
                 <include>cassandra.yaml</include>
                 <include>cassandra-rackdc.properties</include>
                 <include>logback.xml</include>
+                <include>cassandra-env.sh</include>
             </includes>
         </fileSet>
         <fileSet>
@@ -58,6 +59,7 @@
                 <exclude>cassandra.yaml</exclude>
                 <exclude>cassandra-rackdc.properties</exclude>
                 <exclude>logback.xml</exclude>
+                <exclude>cassandra-env.sh</exclude>
             </excludes>
             
         </fileSet>

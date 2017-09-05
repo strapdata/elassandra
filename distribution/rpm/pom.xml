@@ -67,6 +67,7 @@
                                     <excludes>
                                         <exclude>conf/cassandra-env.ps1</exclude>
                                         <exclude>conf/cassandra.yaml</exclude>
+                                        <exclude>conf/cassandra-env.sh</exclude>
                                     </excludes>
                                     <includes>
                                         <include>conf/**/*</include>
@@ -111,6 +112,7 @@
                                         <include>bin/plugin</include>
                                         <include>bin/aliases.sh</include>
                                         <include>conf/cassandra.yaml</include>
+                                        <include>conf/cassandra-env.sh</include>
                                         <include>conf/cassandra-rackdc.properties</include>
                                         <include>conf/cassandra-topology.properties</include>
                                         <include>conf/elasticsearch.yml</include>
@@ -229,7 +231,7 @@
                                    that creates the conf.dir.-->
                               <directory>${packaging.elassandra.conf.dir}</directory>
                               <configuration>noreplace</configuration>
-                              <groupname>${packaging.elasssandra.group}</groupname>
+                              <groupname>${packaging.elassandra.group}</groupname>
                               <filemode>755</filemode>
                           </mapping>
                           <mapping>
