@@ -1785,60 +1785,61 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
         String regularColumn = null;
         StringBuilder query = new StringBuilder();
-        query.append("SELECT ");
-        if (requiredColumns.length == 0) {
-            query.append("\"_id\"");
-        } else {
-            for (String c : requiredColumns) {
-                switch(c){
-                case TokenFieldMapper.NAME: 
-                    query.append(query.length() > 7 ? ',':' ')
-                        .append("token(")
-                        .append(cqlFragment.ptCols)
-                        .append(") as \"_token\""); 
-                    break;
-                case RoutingFieldMapper.NAME:
-                    query.append(query.length() > 7 ? ',':' ')
-                        .append( (metadata.partitionKeyColumns().size() > 1) ? "toJsonArray(" : "toString(" )
-                        .append(cqlFragment.ptCols)
-                        .append(") as \"_routing\"");
-                    break;
-                case TTLFieldMapper.NAME: 
-                    if (regularColumn == null) 
-                        regularColumn = regularColumn(indexService, cfName);
-                    if (regularColumn != null)
-                        query.append(query.length() > 7 ? ',':' ').append("TTL(").append(regularColumn).append(") as \"_ttl\""); 
-                    break;
-                case TimestampFieldMapper.NAME: 
-                    if (regularColumn == null) 
-                        regularColumn = regularColumn(indexService, cfName);
-                    if (regularColumn != null)
-                        query.append(query.length() > 7 ? ',':' ').append("WRITETIME(").append(regularColumn).append(") as \"_timestamp\"");
-                    break;
-                case ParentFieldMapper.NAME:
-                    ParentFieldMapper parentMapper = docMapper.parentFieldMapper();
-                    if (parentMapper.active()) {
-                        query.append(query.length() > 7 ? ',':' ');
-                        if  (parentMapper.pkColumns() == null) {
-                            // default column name for _parent should be string.
-                            query.append("\"_parent\"");
-                        } else {
-                            query.append( (parentMapper.pkColumns().indexOf(',') > 0) ? "toJsonArray(" : "toString(")
-                                 .append(parentMapper.pkColumns())
-                                 .append(") as \"_parent\"");
-                        }
-                    }
-                    break;
-                case NodeFieldMapper.NAME:
-                    // nothing to add.
-                    break;
-                default:
-                    ColumnDefinition cd = columnDefs.get(c);
-                    if (cd != null && (cd.isPartitionKey() || cd.isStatic() || !forStaticDocument)) {
-                       query.append(query.length() > 7 ? ',':' ').append("\"").append(c).append("\"");
+        final String SELECT_ = "SELECT ";
+        query.append(SELECT_);
+        for (String c : requiredColumns) {
+            switch(c){
+            case TokenFieldMapper.NAME: 
+                query.append(query.length() > 7 ? ',':' ')
+                    .append("token(")
+                    .append(cqlFragment.ptCols)
+                    .append(") as \"_token\""); 
+                break;
+            case RoutingFieldMapper.NAME:
+                query.append(query.length() > 7 ? ',':' ')
+                    .append( (metadata.partitionKeyColumns().size() > 1) ? "toJsonArray(" : "toString(" )
+                    .append(cqlFragment.ptCols)
+                    .append(") as \"_routing\"");
+                break;
+            case TTLFieldMapper.NAME: 
+                if (regularColumn == null) 
+                    regularColumn = regularColumn(indexService, cfName);
+                if (regularColumn != null)
+                    query.append(query.length() > 7 ? ',':' ').append("TTL(").append(regularColumn).append(") as \"_ttl\""); 
+                break;
+            case TimestampFieldMapper.NAME: 
+                if (regularColumn == null) 
+                    regularColumn = regularColumn(indexService, cfName);
+                if (regularColumn != null)
+                    query.append(query.length() > 7 ? ',':' ').append("WRITETIME(").append(regularColumn).append(") as \"_timestamp\"");
+                break;
+            case ParentFieldMapper.NAME:
+                ParentFieldMapper parentMapper = docMapper.parentFieldMapper();
+                if (parentMapper.active()) {
+                    query.append(query.length() > 7 ? ',':' ');
+                    if  (parentMapper.pkColumns() == null) {
+                        // default column name for _parent should be string.
+                        query.append("\"_parent\"");
+                    } else {
+                        query.append( (parentMapper.pkColumns().indexOf(',') > 0) ? "toJsonArray(" : "toString(")
+                             .append(parentMapper.pkColumns())
+                             .append(") as \"_parent\"");
                     }
                 }
+                break;
+            case NodeFieldMapper.NAME:
+                // nothing to add.
+                break;
+            default:
+                ColumnDefinition cd = columnDefs.get(c);
+                if (cd != null && (cd.isPartitionKey() || cd.isStatic() || !forStaticDocument)) {
+                   query.append(query.length() > SELECT_.length() ? ',':' ').append("\"").append(c).append("\"");
+                }
             }
+        }
+        if (query.length() == SELECT_.length()) {
+            // no column match or requiredColumn is empty, add _id to avoid CQL syntax error...
+            query.append("\"_id\"");
         }
         query.append(" FROM \"").append(indexService.keyspace()).append("\".\"").append(cfName)
              .append("\" WHERE ").append((forStaticDocument) ? cqlFragment.ptWhere : cqlFragment.pkWhere )
