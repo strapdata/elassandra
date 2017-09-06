@@ -144,9 +144,11 @@ When a settings is dynamic, it's relevant only for index and cluster setting lev
 +-------------------------------+---------+------------------------------+------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+-+-+-+-+
 | ``token_precision_step``      | static  | system                       | **6**                              | Set the lucene numeric precision step, see `Lucene Numeric Range QUery <https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html#precisionStepDesc>`_.        | | | | | |
 +-------------------------------+---------+------------------------------+------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+-+-+-+-+
-| ``index_static_columns``      | static  | type, index                  | **false**                          | If true, indexes static columns in the elasticsearch documents, otherwise, ignore static columns.                                                                                              | | | | | |
+| ``index_static_document``     | static  | type, index                  | **false**                          | If true, indexes static documents (elasticsearch documents containing only static and partition key columns).                                                                                  | | | | | |
 +-------------------------------+---------+------------------------------+------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+-+-+-+-+
-| ``index_static_only``         | static  | type, index                  | **false**                          | If true, indexes only static and primary key columns in the elasticsearch documents                                                                                                            | | | | | |
+| ``index_static_only``         | static  | type, index                  | **false**                          | If true and index_static_document is true, indexes a document containg only the static and partition key columns.                                                                              | | | | | |
++-------------------------------+---------+------------------------------+------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+-+-+-+-+
+| ``index_static_columns``      | static  | type, index                  | **false**                          | If true and index_static_only is false, indexes static columns in the elasticsearch documents, otherwise, ignore static columns.                                                               | | | | | |
 +-------------------------------+---------+------------------------------+------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+-+-+-+-+
 
 Sizing and tunning
@@ -165,7 +167,7 @@ System recommendations :
 * Turn swapping off.
 * Configure less than half the total memory of your server and up to 30.5Gb. Minimum recommended DRAM for production deployments is 32Gb. If you are not aggregating on analyzed string fields, you can probably use less memory to improve file system cache used by Doc Values (See this `excelent blog <https://www.elastic.co/fr/blog/support-in-the-wild-my-biggest-elasticsearch-problem-at-scale>`_ post by Chris Earle).
 * Set -Xms to the same value as -Xmx.
-* Ensure JNA and jemalloc are correctly installed.
+* Ensure JNA and jemalloc are correctly installed and enabled.
 
 Write performances
 ..................
@@ -180,8 +182,8 @@ Write performances
 Search performances
 ...................
 
-* Use few nodes or vnodes to reduce the complexity of the token_ranges filter (16 to 64 is recommended).
-* Use the random search strategy and increase the Cassandra replication factor to reduce the number of nodes requires for a search request.
+* Use few no* Use 16 to 64 vnodes per node to reduce the complexity of the token_ranges filter.
+ndom search strategy and increase the Cassandra replication factor to reduce the number of nodes requires for a search request.
 * Enable the ``token_ranges_bitset_cache``. This cache compute the token ranges filter once per Lucene segment. Check the token range bitset cache statistics to ensure this caching is efficient.
 * Enable Cassandra row caching to reduce the overhead introduce by fetching the requested fields from the underlying Cassandra table.
 * Enable Cassandra off-heap row caching in your Cassandra configuration.
