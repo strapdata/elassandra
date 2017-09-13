@@ -129,6 +129,8 @@ Elasticsearch unsupported feature
 * Elasticsearch snapshot and restore operations are disabled (See Elassandra backup and restore in operations).
 * Elasticsearch Ingest node is not supported (Use the cassandra driver to safely ingest your data).
 * Elasticsearch shrink API is not supported.
+* copy_to is not supported.
+* range field is not supported.
 
 Cassandra limitations
 ---------------------
@@ -138,4 +140,3 @@ Cassandra limitations
 * Elassandra synchronously indexes rows into Elasticsearch. This may increases the write duration, particulary when indexing complex document like `GeoShape <https://www.elastic.co/guide/en/elasticsearch/reference/current/geo-shape.html>`_, so Cassandra ``write_request_timeout_in_ms`` is set to 5 seconds (Cassandra default is 2000ms, see `Cassandra config <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configCassandra_yaml_r.html>`_)
 * In order to avoid concurrent mapping or persistent cluster settings updates, Elassandra plays a PAXOS transaction that require QUORUM available nodes for the keyspace *elastic_admin* to succeed. So it is recommended to have at least 3 nodes in 3 distinct racks (A 2 nodes datacenter won't accept any mapping update when a node is unavailable).
 * CQL3 **TRUNCATE** on a Cassandra table deletes all associated Elasticsearch documents by playing a delete_by_query where *_type = <table_name>*. Of course, such a delete_by_query comes with a performance cost.
-* Elasticsearch copy_to is not supported.
