@@ -155,7 +155,6 @@ setup() {
       assert_file_not_exist "/usr/bin/$bin"
     done
 
-    assert_file_not_exist "/usr/share/cassandra/aliases.sh"
     assert_file_not_exist "/usr/share/cassandra/cassandra.in.sh"
 }
 

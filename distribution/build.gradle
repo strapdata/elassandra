@@ -375,14 +375,8 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
     dirMode 0750
   }
 
-  task createEtcTriggers(type: EmptyDirTask) {
-    dependsOn createEtc
-    dir "${packagingFiles}/etc/cassandra/triggers"
-    dirMode 0750
-  }
-
   task fillEtc(type: Copy) {
-    dependsOn createEtc, createEtcScripts, createEtcTriggers
+    dependsOn createEtc, createEtcScripts
     with copySpec {
       with configFiles
       exclude '*.gcloud'
@@ -405,8 +399,7 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
     outputs.file "${packagingFiles}/etc/cassandra/logback.xml"
     outputs.file "${packagingFiles}/etc/cassandra/metrics-reporter-config-sample.yaml"
     outputs.file "${packagingFiles}/etc/cassandra/README.txt"
-    // jar hell caused by triggers/README.txt
-    // outputs.file "${packagingFiles}/etc/cassandra/triggers/README.txt"
+    outputs.file "${packagingFiles}/etc/cassandra/triggers/README.txt"
   }
 
   task createPidDir(type: EmptyDirTask) {
@@ -545,7 +538,6 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
     configurationFile '/etc/cassandra/logback.xml'
     configurationFile '/etc/cassandra/metrics-reporter-config-sample.yaml'
     configurationFile '/etc/cassandra/README.txt'
-    // configurationFile '/etc/cassandra/triggers/README.txt'
 
     into('/usr/bin') {
       fileMode 0755
@@ -569,6 +561,19 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
       createDirectoryEntry true
       fileType CONFIG | NOREPLACE
       from "${packagingFiles}/etc/cassandra"
+
+      exclude "**/triggers"
+      exclude "**/triggers/README.txt"
+    }
+
+    into('/etc/cassandra/triggers') {
+      dirMode 0750
+      fileMode 0664
+      permissionGroup 'cassandra'
+      includeEmptyDirs true
+      createDirectoryEntry true
+      fileType CONFIG | NOREPLACE
+      from "${packagingFiles}/etc/cassandra/triggers"
     }
 
     into('/usr/lib/tmpfiles.d') {
