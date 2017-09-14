@@ -19,7 +19,10 @@
 
 package org.elasticsearch.gateway;
 
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.Keyspace;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.apache.logging.log4j.util.Supplier;
 import org.elassandra.NoPersistedMetaDataException;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.cluster.ClusterChangedEvent;
@@ -29,11 +32,8 @@ import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.discovery.Discovery;
-import org.elasticsearch.indices.IndicesService;
 
 import java.util.Map;
-import java.util.function.Supplier;
 
 public class Gateway extends AbstractComponent implements ClusterStateApplier {
 
@@ -46,17 +46,22 @@ public class Gateway extends AbstractComponent implements ClusterStateApplier {
     }
 
     public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
-        logger.debug("performing metadata recovery from cassandra");
         ClusterState.Builder builder = ClusterState.builder(clusterService.state());
-
+        
+        final boolean userKeyspaceAvailable = Keyspace.isInitialized();
+        logger.debug("performing recovery from metadata %s",userKeyspaceAvailable ? "table":"schema");
+        
         MetaData metadata;
         try {
-            /*
-             * Recovery performed from comment because elatic_admin keyspace won't be available before replaying commmit logs.
-             */
-            metadata = clusterService.readMetaDataAsComment();
+            if (userKeyspaceAvailable) {
+                // recover from elastic_admin.metadata
+                metadata = clusterService.readMetaDataAsRow(ConsistencyLevel.ONE);
+            } else {
+                // recover from CQL schema
+                metadata = clusterService.readMetaDataAsComment();
+            }
         } catch (NoPersistedMetaDataException |ActionRequestValidationException e) {
-            logger.trace("Cannot read metadata from table comment", e);
+            logger.trace((Supplier<?>) () -> new ParameterizedMessage("Cannot read metadata from metadata %s", userKeyspaceAvailable ? "table":"schema"), e);
             metadata = clusterService.state().metaData();
             if (metadata.clusterUUID().equals("_na_")) {
                 metadata = MetaData.builder(metadata).clusterUUID(clusterService.localNode().getId()).build();

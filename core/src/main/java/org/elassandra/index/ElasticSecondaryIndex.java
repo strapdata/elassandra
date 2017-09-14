@@ -33,6 +33,7 @@ import org.apache.cassandra.db.ClusteringBound;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
+import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.PartitionColumns;
 import org.apache.cassandra.db.RangeTombstone;
 import org.apache.cassandra.db.ReadCommand;
@@ -204,7 +205,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     public static final Pattern TARGET_REGEX = Pattern.compile("^(keys|entries|values|full)\\((.+)\\)$");
     
     public static boolean runsElassandra = false;
-    public static boolean userKeyspaceInitialized = false;
     
     final String index_name;             // keyspace_name.table_name
     final Logger logger;
@@ -2090,7 +2090,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 initMapping();
                 
                 // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
-                if (userKeyspaceInitialized)
+                if (Keyspace.isInitialized())
                     baseCfs.indexManager.buildIndexBlocking(this);
             }
             return null;
