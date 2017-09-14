@@ -99,9 +99,8 @@ dependencies {
   compile 'com.google.guava:guava:19.0'
 
   // Elassandra add-ons
-  compile("com.strapdata.cassandra:cassandra-all:3.11.0") {
+  compile("com.strapdata.cassandra:cassandra-all:3.11.0.1") {
     exclude group:'net.java.dev.jna', module:'jna'
-    //exclude group:'io.netty'
   }
 
   // Usually when gradle detect a version conflict, it takes the newest version.

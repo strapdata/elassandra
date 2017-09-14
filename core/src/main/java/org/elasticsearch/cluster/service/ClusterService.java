@@ -38,6 +38,7 @@ import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.cql3.statements.IndexTarget;
 import org.apache.cassandra.cql3.statements.ParsedStatement;
+import org.apache.cassandra.cql3.statements.TableAttributes;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.SystemKeyspace;
@@ -63,12 +64,14 @@ import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.schema.ReplicationParams;
+import org.apache.cassandra.schema.TableParams;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MapSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.UUIDSerializer;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.ProtocolVersion;
@@ -188,7 +191,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.LongConsumer;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -363,6 +368,10 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     private final TokenRangesService tokenRangeService;
     private final CassandraSecondaryIndicesApplier cassandraSecondaryIndicesApplier;
+    
+    // manage asynchronous CQL schema update
+    protected final AtomicReference<MetadataSchemaUpdate> lastMetadataToSave = new AtomicReference<MetadataSchemaUpdate>(null);
+    protected final Semaphore metadataToSaveSemaphore = new Semaphore(0);
     
     protected final MappingUpdatedAction mappingUpdatedAction;
     
@@ -1028,18 +1037,32 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return ClusterState.builder(currentState).metaData(metaDataBuilder.build()).build();
     }
     
-    public void submitNumberOfShardsAndReplicasUpdate(String source) {
+    /**
+     * Reload cluster metadata from elastic_admin.metadatatable row.
+     * Should only be called when user keyspaces are initialized.
+     */
+    public void submitRefreshMetaData(final MetaData metaData, final String source) {
+        submitStateUpdateTask(source, new ClusterStateUpdateTask() {
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+                return ClusterState.builder(currentState).metaData(metaData).build();
+            }
+
+            @Override
+            public void onFailure(String source, Exception t) {
+                logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected failure during [{}]", source), t);
+            }
+        });
+        
+    }
+    
+    public void submitNumberOfShardsAndReplicasUpdate(final String source) {
         submitStateUpdateTask(source, new ClusterStateUpdateTask() {
             @Override
             public ClusterState execute(ClusterState currentState) {
                 return updateNumberOfShardsAndReplicas(currentState);
             }
-    
-            @Override
-            public boolean doPresistMetaData() {
-                return false;
-            }
-    
+
             @Override
             public void onFailure(String source, Exception t) {
                 logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected failure during [{}]", source), t);
@@ -1290,6 +1313,39 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         super.doStart();
         // add post-applied because 2i shoukd be created/deleted after that cassandra indices have taken the new mapping.
         this.addStateApplier(cassandraSecondaryIndicesApplier);
+        
+        // start a thread for asynchronous CQL schema update, always the last update if not overwritten by 
+        Runnable task = new Runnable() {
+            @Override 
+            public void run() { 
+                while (true) {
+                    try{
+                        ClusterService.this.metadataToSaveSemaphore.acquire();
+                        MetadataSchemaUpdate metadataSchemaUpdate = ClusterService.this.lastMetadataToSave.getAndSet(null);
+                        if (metadataSchemaUpdate != null) {
+                            if (metadataSchemaUpdate.version < state().metaData().version()) {
+                                logger.trace("Giveup {}.{}.comment obsolete update of metadata.version={} timestamp={}",
+                                        ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE,
+                                        metadataSchemaUpdate.version, metadataSchemaUpdate.timestamp);
+                            } else {
+                                logger.trace("Applying {}.{}.comment update with metadata.version={} timestamp={}",
+                                        ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE,
+                                        metadataSchemaUpdate.version, metadataSchemaUpdate.timestamp);
+                                CFMetaData cfm = getCFMetaData(ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE).copy();
+                                TableAttributes attrs = new TableAttributes();
+                                attrs.addProperty(TableParams.Option.COMMENT.toString(), metadataSchemaUpdate.metaDataString);
+                                cfm.params( attrs.asAlteredTableParams(cfm.params) );
+                                MigrationManager.announceColumnFamilyUpdate(cfm, false, metadataSchemaUpdate.timestamp);
+                                //QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'", elasticAdminKeyspaceName,  ELASTIC_ADMIN_METADATA_TABLE, metaDataString));
+                            }
+                        }
+                    } catch(Exception e) {
+                        logger.warn("Failed to update CQL schema",e);
+                    }
+                }
+            } 
+        };
+        new Thread(task, "metadataSchemaUpdater").start();
     }
     
     public void updateMapping(String ksName, MappingMetaData mapping) {
@@ -2079,7 +2135,13 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         }
     }
 
-    
+    /**
+     * CQL schema update must be asynchronous when triggered by a new dynamic field (see #91) 
+     * @param indexService
+     * @param type
+     * @param source
+     * @throws Exception
+     */
     public void blockingMappingUpdate(IndexService indexService, String type, String source) throws Exception {
         TimeValue timeout = settings.getAsTime(SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT, TimeValue.timeValueSeconds(Integer.getInteger(SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT, 30)));
         BlockingActionListener mappingUpdateListener = new BlockingActionListener();
@@ -2447,22 +2509,28 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return false;
     }
     
-
     
-    public void writeMetaDataAsComment(String metaDataString) throws ConfigurationException, IOException {
+    public class MetadataSchemaUpdate {
+        long version;
+        long timestamp;
+        String metaDataString;
+        
+        MetadataSchemaUpdate(String metaDataString, long version) {
+            this.metaDataString = metaDataString;
+            this.version = version;
+            this.timestamp = FBUtilities.timestampMicros();
+        }
+    }
+    
+    public void writeMetaDataAsComment(MetaData metaData) throws ConfigurationException, IOException {
+        writeMetaDataAsComment( MetaData.Builder.toXContent(metaData, MetaData.CASSANDRA_FORMAT_PARAMS), metaData.version());
+    }
+        
+    public void writeMetaDataAsComment(String metaDataString, long version) throws ConfigurationException, IOException {
         // Issue #91, update C* schema asynchronously to avoid inter-locking with map column as nested object.
-        // TODO: batch update every X seconds max in a dedicated thread.
-        Runnable task = new Runnable() {
-            @Override 
-            public void run() { 
-                try { 
-                    QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'", elasticAdminKeyspaceName,  ELASTIC_ADMIN_METADATA_TABLE, metaDataString));
-                } catch (Exception ex) { 
-                    logger.error("Failed to persist Elasticsearch mapping in the Cassandra schema:", ex);
-                } 
-            } 
-        }; 
-        new Thread(task, "ServiceThread").start();
+        logger.trace("Submit asynchronous CQL schema update for metadata={}", metaDataString);
+        this.lastMetadataToSave.set(new MetadataSchemaUpdate(metaDataString, version));
+        this.metadataToSaveSemaphore.release();
     }
 
     /**
@@ -2664,7 +2732,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 retry(() -> insertFirstMetaRow(metadata, metaDataString), "write first row to metadata table");
                 logger.info("Succefully initialize {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metaDataString);
                 try {
-                    writeMetaDataAsComment(metaDataString);
+                    writeMetaDataAsComment(metaDataString, metadata.version());
                 } catch (IOException e) {
                     logger.error("Failed to write metadata as comment", e);
                 }
@@ -2730,7 +2798,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 new Object[] { owner, newMetaData.version(), metaDataString, DatabaseDescriptor.getClusterName(), newMetaData.version() });
         if (applied) {
             logger.debug("PAXOS Succefully update metadata source={} newMetaData={} in cluster {}", source, metaDataString, DatabaseDescriptor.getClusterName());
-            writeMetaDataAsComment(metaDataString);
+            writeMetaDataAsComment(metaDataString, newMetaData.version());
             return;
         } else {
             logger.warn("PAXOS Failed to update metadata oldMetadata={}/{} currentMetaData={}/{} in cluster {}", 

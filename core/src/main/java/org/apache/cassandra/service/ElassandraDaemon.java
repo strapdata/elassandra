@@ -22,7 +22,9 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.WindowsTimer;
 import org.apache.logging.log4j.Logger;
@@ -246,6 +248,26 @@ public class ElassandraDaemon extends CassandraDaemon {
     public void userKeyspaceInitialized() {
         ElasticSecondaryIndex.userKeyspaceInitialized = true;
         if (node != null && !bootstrapping) {
+            // In case we have not receives any newer X2 notification, 
+            // try to read a newer metadata from the elastic_admin.metadata table.
+            MetaData metaData = this.node.clusterService().readMetaDataAsRow(ConsistencyLevel.LOCAL_ONE);
+            if (metaData.version() > systemMetadata.version()) {
+                try {
+                    logger.warn("Refreshing newer metadata found in {}.{} metaData uuid={} version={}", 
+                            ClusterService.ELASTIC_ADMIN_KEYSPACE, ClusterService.ELASTIC_ADMIN_METADATA_TABLE,
+                            metaData.clusterUUID(), metaData.version());
+                    node.clusterService().submitRefreshMetaData(metaData, "metadatarefresh");
+                    
+                    if (metaData.clusterUUID() == this.node.clusterService().localNode().getId()) {
+                        logger.warn("Saving the new metadata metaData.uuid={} version={} in the CQL schema",
+                                metaData.clusterUUID(), metaData.version());
+                        node.clusterService().writeMetaDataAsComment(metaData);
+                    }
+                } catch (Exception e) {
+                    logger.error("Unexpected error",e);
+                }
+            }
+            
             node.clusterService().submitNumberOfShardsAndReplicasUpdate("user-keyspaces-initialized");
         }
     }
