@@ -225,7 +225,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     @Override
     public void tearDown() throws Exception {
         logger.info("[{}#{}]: cleaning up after test", getTestClass().getSimpleName(), getTestName());
-        super.tearDown();
         
         DeleteIndexRequestBuilder builder = ElassandraDaemon.instance.node().client().admin().indices().prepareDelete("*");
         assertAcked(builder.get());
@@ -239,7 +238,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         testMutex.release();
         logger.info("[{}#{}]: semaphore released={}", getTestClass().getSimpleName(), getTestName(), testMutex.getQueueLength());
         
-       
+        super.tearDown();
     }
 
     @BeforeClass
