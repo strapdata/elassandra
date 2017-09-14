@@ -95,7 +95,6 @@ verify_package_installation() {
     assert_file_not_exist "$BINDIR/aliases.sh"
     assert_file_not_exist "$BINDIR/cassandra.in.sh"
     assert_file "$ESHOME/cassandra.in.sh" f root root 755
-    assert_file "$ESHOME/aliases.sh" f root root 755
     #assert_file "$BINDIR/elasticsearch-translog" f root root 755
     assert_file "$ESHOME/lib" d root root 755
     assert_file "$ESCONFIG" d root cassandra 755

@@ -105,8 +105,8 @@ chown -R $CASSANDRA_USER:$CASSANDRA_GROUP /var/lib/cassandra
 chown -R $CASSANDRA_USER:$CASSANDRA_GROUP /var/log/cassandra
 chown -R root:$CASSANDRA_GROUP /etc/cassandra
 chmod 0755 /etc/cassandra
-chmod 0750 /etc/cassandra/scripts
 chmod 0750 /etc/cassandra/triggers
+chmod 0750 /etc/cassandra/scripts
 chmod 0664 "${path.env}"
 
 ${scripts.footer}

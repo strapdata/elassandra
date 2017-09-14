@@ -410,7 +410,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     public static String getElasticsearchDataDir() {
-        String cassandra_storage = System.getProperty("cassandra.storage", getHomeDir() + File.separator + "data");
+        String cassandra_storage = System.getProperty("cassandra.storagedir", getHomeDir() + File.separator + "data");
         return cassandra_storage + File.separator + "elasticsearch.data";
     }
     

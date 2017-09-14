@@ -85,12 +85,6 @@ if [ "$REMOVE_SERVICE" = "true" ]; then
     if [ -d "$SCRIPTS_DIR" ]; then
         rmdir --ignore-fail-on-non-empty "$SCRIPTS_DIR"
     fi
-
-    TRIGGERS_DIR="/etc/cassandra/triggers"
-    # delete the triggers directory if and only if empty
-    if [ -d "$TRIGGERS_DIR" ]; then
-        rmdir --ignore-fail-on-non-empty "$TRIGGERS_DIR"
-    fi
 fi
 
 

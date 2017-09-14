@@ -87,6 +87,12 @@ if [ "$REMOVE_DIRS" = "true" ]; then
         rmdir --ignore-fail-on-non-empty "$DATA_DIR"
     fi
 
+    TRIGGERS_DIR="/etc/cassandra/triggers"
+    # delete the triggers directory if and only if empty
+    if [ -d "$TRIGGERS_DIR" ]; then
+        rmdir --ignore-fail-on-non-empty "$TRIGGERS_DIR"
+    fi
+
     # delete the conf directory if and only if empty
     if [ -d "$CONF_DIR" ]; then
         rmdir --ignore-fail-on-non-empty "$CONF_DIR"
