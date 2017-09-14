@@ -514,6 +514,11 @@ class BuildPlugin implements Plugin<Project> {
             argLine System.getProperty('tests.jvm.argline')
 
             // we use './temp' since this is per JVM and tests are forbidden from writing to CWD
+            systemProperty 'cassandra.jmx.local.port', "7199"
+            systemProperty 'cassandra.jmx.remote.port', "7199"
+            systemProperty 'com.sun.management.jmxremote.ssl', "false"
+            systemProperty 'com.sun.management.jmxremote.authenticate', "false"
+            
             systemProperty 'java.io.tmpdir', './temp'
             systemProperty 'java.awt.headless', 'true'
             systemProperty 'tests.gradle', 'true'
