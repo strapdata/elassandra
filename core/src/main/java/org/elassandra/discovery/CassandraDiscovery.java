@@ -71,10 +71,10 @@ import java.util.Map.Entry;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 
@@ -92,7 +92,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private final DiscoverySettings discoverySettings;
     private final NamedWriteableRegistry namedWriteableRegistry;
 
-    private final CopyOnWriteArrayList<MetaDataVersionAckListener> metaDataVersionListeners = new CopyOnWriteArrayList<>();
+    private final AtomicReference<MetaDataVersionAckListener> metaDataVersionAckListener = new AtomicReference<>(null);
 
     private final ClusterGroup clusterGroup;
 
@@ -110,9 +110,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private final AtomicBoolean searchEnabled = new AtomicBoolean(false);
     
     /**
-     * If enableSearch=true, searchEnabled not automatically become true when node becomes ready to operate, otherwise, searchEnabled should be manually set to true.
+     * If autoEnableSearch=true, search is automatically enabled when the node becomes ready to operate, otherwise, searchEnabled should be manually set to true.
      */
-    private final AtomicBoolean autoEnableSearch = new AtomicBoolean(!Boolean.getBoolean("es.disable_auto_enable_search"));
+    private final AtomicBoolean autoEnableSearch = new AtomicBoolean(System.getProperty("es.auto_enable_search") == null || Boolean.getBoolean("es.auto_enable_search"));
     
     
     public CassandraDiscovery(Settings settings, TransportService transportService, ClusterService clusterService, NamedWriteableRegistry namedWriteableRegistry) {
@@ -266,6 +266,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * This should trigger re-sharding of index for new nodes (when token distribution change).
      */
     public void updateClusterGroupsFromGossiper() {
+        long highestVersionSeen = this.clusterService.state().metaData().version();
+        
         for (Entry<InetAddress, EndpointState> entry : Gossiper.instance.getEndpointStates()) {
             EndpointState state = entry.getValue();
             InetAddress   endpoint = entry.getKey();
@@ -315,12 +317,28 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         }
                     }
                 }
-                
-               
+            }
+            if (isMember(endpoint)) {
+                if (state.getApplicationState(ApplicationState.X2) != null) {
+                    highestVersionSeen = Long.max(highestVersionSeen, getMetadataVersion(state.getApplicationState(ApplicationState.X2)));
+                }
             }
         }
+        updateMetadata("discovery-refresh", highestVersionSeen);
     }
 
+    private long getMetadataVersion(VersionedValue versionValue) {
+        int i = versionValue.value.indexOf('/');
+        if (i > 0) {
+            try {
+                return Long.valueOf(versionValue.value.substring(i+1));
+            } catch (NumberFormatException e) {
+                logger.error("Unexpected gossip.X2 value "+versionValue.value, e);
+            }
+        }
+        return -1;
+    }
+    
     private int publishPort() {
         try {
             return settings.getAsInt("transport.netty.publish_port", settings.getAsInt("transport.publish_port",settings.getAsInt("transport.tcp.port", 9300)));
@@ -354,9 +372,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         NetworkAddress.format(endpoint), NetworkAddress.format(internal_address), dn.getId(), dn.getName(), newStatus, state.getUpdateTimestamp());
                 clusterGroup.members.put(dn.getId(), dn);
                 
+                /* TODO: should do this only once per node
                 if (ElassandraDaemon.hasWorkloadColumn && (state.getApplicationState(ApplicationState.X1) != null || state.getApplicationState(ApplicationState.X2) !=null)) {
                     SystemKeyspace.updatePeerInfo(endpoint, "workload", "elasticsearch");
                 }
+                */
                 updatedNode = true;
             } else {
                 // may update DiscoveryNode status.
@@ -390,54 +410,55 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
     
     /**
-     * Release listeners who have reached the expected metadata version.
-     * Called by the cassandra gossiper thread from onChange().
+     * Release the listener when all attendees have reached the expected version or become down.
+     * Called by the cassandra gossiper thread from onChange() or onDead() or onRemove().
      */
-    public void checkMetaDataVersion() {
-        for(Iterator<MetaDataVersionAckListener> it = metaDataVersionListeners.iterator(); it.hasNext(); ) {
-            MetaDataVersionAckListener listener = it.next();
-            boolean versionReached = true;
-            for(DiscoveryNode node : listener.clusterState.nodes()) {
-                if (node.getId().equals(this.localNode.getId())) {
-                    continue; // self node is acknowledged later in clusterSevrice.publishAndApplyChanges()
-                }
-                
-                EndpointState endPointState = Gossiper.instance.getEndpointStateForEndpoint(node.getInetAddress());
-                if (endPointState == null || !endPointState.isAlive() || !endPointState.getStatus().equals("NORMAL")) {
-                    // node was removed from the gossiper, down or leaving, acknowledge to avoid locking.
-                    listener.ackListener.onNodeAck(node, new NodeClosedException(node));
-                } else {
-                    VersionedValue vv = endPointState.getApplicationState(ELASTIC_META_DATA);
-                    if (vv != null && vv.value.lastIndexOf('/') > 0) { 
-                        Long version = Long.valueOf(vv.value.substring(vv.value.lastIndexOf('/')+1));
-                        if (version < listener.version()) {
-                            versionReached = false;
-                        } else {
-                            // acknowledge nodes having the right metadata version number, except self (acked in clusterService.publishAndApplyChanges()).
-                            listener.ackListener.onNodeAck(node, null);
-                        }
-                    }
-                }
+    public void notifyMetaDataVersionAckListener(EndpointState endPointState) {
+        MetaDataVersionAckListener listener = this.metaDataVersionAckListener.get();
+        if (listener == null)
+            return;
+        
+        String hostId = endPointState.getApplicationState(ApplicationState.HOST_ID).value;
+        if (hostId == null || this.localNode.getId().equals(hostId) || !listener.attendees.containsKey(hostId))
+            return;
+        
+        if (!endPointState.isAlive() || !endPointState.getStatus().equals("NORMAL")) {
+            // node was removed from the gossiper, down or leaving, acknowledge to avoid locking.
+            DiscoveryNode node = listener.attendees.remove(hostId);
+            if (node != null) {
+                listener.ackListener.onNodeAck(node, new NodeClosedException(node));
+                listener.countDownLatch.countDown();
             }
-            if (versionReached) {
-                listener.release();
-                metaDataVersionListeners.remove(listener);
-                logger.debug("MetaData.version = {} reached, remaing listeners={}", listener.version(), metaDataVersionListeners);
+        } else {
+            VersionedValue vv = endPointState.getApplicationState(ApplicationState.X2);
+            if (vv != null && getMetadataVersion(vv) >= listener.version()) {
+                DiscoveryNode node = listener.attendees.remove(hostId);
+                if (node != null) {
+                    // acknowledge node having the right metadata version number.
+                    listener.ackListener.onNodeAck(node, null);
+                    listener.countDownLatch.countDown();
+                } 
             }
         }
     }
     
+    
     public class MetaDataVersionAckListener  {
         final long expectedVersion;
-        final CountDownLatch countDownLatch = new CountDownLatch(1);
         final Discovery.AckListener ackListener;
         final ClusterState clusterState;
+        final CountDownLatch countDownLatch;
+        final ConcurrentMap<String, DiscoveryNode> attendees;
         
         public MetaDataVersionAckListener(long version, Discovery.AckListener ackListener, ClusterState clusterState) {
             this.expectedVersion = version;
             this.ackListener = ackListener;
             this.clusterState = clusterState;
-            CassandraDiscovery.this.metaDataVersionListeners.add(this);
+            this.attendees = new ConcurrentHashMap<String, DiscoveryNode>(clusterState.nodes().getSize());
+            clusterState.nodes().forEach((n) -> { if (!localNode.getId().equals(n.getId())) attendees.put(n.getId(), n); });
+            MetaDataVersionAckListener prevListener = CassandraDiscovery.this.metaDataVersionAckListener.getAndSet(this);
+            assert prevListener == null : "metaDataVersionAckListener should be null";
+            this.countDownLatch = new CountDownLatch(this.attendees.size());
         }
 
         public long version() {
@@ -453,12 +474,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             } catch (InterruptedException e) {
                 
             }
-            CassandraDiscovery.this.metaDataVersionListeners.remove(this);
+            CassandraDiscovery.this.metaDataVersionAckListener.set(null);
             return done;
-        }
-
-        public void release() {
-            countDownLatch.countDown();
         }
     }
     
@@ -485,12 +502,15 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             EndpointState epState = Gossiper.instance.getEndpointStateForEndpoint(endpoint);
             switch (state) {
             case STATUS:
-                
+                if (logger.isTraceEnabled())
+                    logger.trace("onChange Endpoint={} ApplicationState={} value={}", endpoint, state, versionValue);
                 if (isNormal(epState)) {
-                    if (logger.isTraceEnabled())
-                        logger.trace("onChange Endpoint={} ApplicationState={} value={}", endpoint, state, versionValue);
-                    
                     updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
+                } else {
+                    // node probably down, notify metaDataVersionAckListener..
+                    if (this.metaDataVersionAckListener.get() != null) {
+                        notifyMetaDataVersionAckListener(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
+                    }
                 }
                 break;
                 
@@ -513,7 +533,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
         
         // metadata version update from a datacenter sharing our cluster state.
-        if (state == ApplicationState.X2 && clusterService.isDatacenterGroupMember(endpoint)) {
+        if (state == ApplicationState.X2 && !this.localAddress.equals(endpoint) && clusterService.isDatacenterGroupMember(endpoint)) {
             // X2 from datacenter.group: update metadata if metadata version is higher than our.
             int i = versionValue.value.lastIndexOf('/');
             if (i > 0) {
@@ -523,8 +543,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         logger.trace("Endpoint={} X2={} => updating metaData", endpoint, state, versionValue.value);
                     updateMetadata("X2-" + endpoint + "-" +versionValue.value, version);
                 }
-                if (metaDataVersionListeners.size() > 0) {
-                    checkMetaDataVersion();
+                if (this.metaDataVersionAckListener.get() != null) {
+                    notifyMetaDataVersionAckListener(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
                 }
             }
         }
@@ -534,7 +554,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             switch (state) {
             case STATUS:
                 if (logger.isTraceEnabled())
-                    logger.trace("Endpoint={} STATUS={} => may update searchEnable", endpoint, versionValue);
+                    logger.trace("Endpoint={} STATUS={} => may update searchEnabled", endpoint, versionValue);
                 
                 // update searchEnabled according to the node status and autoEnableSearch.
                 if (isNormal(Gossiper.instance.getEndpointStateForEndpoint(endpoint))) {
@@ -578,6 +598,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     public void onDead(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
             logger.debug("onDead Endpoint={}  ApplicationState={} isAlive={} => update node + disconnecting", endpoint, epState, epState.isAlive());
+            if (this.metaDataVersionAckListener.get() != null) {
+                notifyMetaDataVersionAckListener(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
+            }
             updateNode(endpoint, epState, DiscoveryNodeStatus.DEAD);
         }
     }
@@ -613,6 +636,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             DiscoveryNode removedNode = this.nodes().findByInetAddress(endpoint);
             if (removedNode != null) {
                 logger.warn("Removing node ip={} node={}  => disconnecting", endpoint, removedNode);
+                if (this.metaDataVersionAckListener.get() != null) {
+                    notifyMetaDataVersionAckListener(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
+                }
                 this.remoteShardRoutingStateMap.remove(removedNode.uuid());
                 this.clusterGroup.remove(removedNode.getId());
                 updateRoutingTable("node-removed-"+endpoint, true);

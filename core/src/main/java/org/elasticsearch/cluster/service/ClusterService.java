@@ -1464,15 +1464,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             
             nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
             
-            
-            // update the current cluster state 
-            final ClusterState newClusterState2 = newClusterState;
-            updateState(css -> newClusterState2);
-            if (logger.isTraceEnabled())
-                logger.trace("set local clusterState version={} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
-            
-            
-            
             // notify highPriorityStateAppliers, including IndicesClusterStateService to start shards and update mapperServices.
             if (logger.isTraceEnabled())
                 logger.trace("notfiy highPriorityStateAppliers={}",highPriorityStateAppliers);
@@ -1484,6 +1475,12 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 }
             }
 
+            // update the current cluster state 
+            final ClusterState newClusterState2 = newClusterState;
+            updateState(css -> newClusterState2);
+            if (logger.isTraceEnabled())
+                logger.trace("set local clusterState version={} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
+            
             // notifiy listener, including ElasticSecondaryIndex instances.
             Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
                 try {
