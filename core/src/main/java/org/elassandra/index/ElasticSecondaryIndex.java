@@ -2052,7 +2052,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
         boolean updateMapping = false;
-        if (!event.state().blocks().isSame(event.previousState().blocks(), 
+        if (event.previousState() != null && !event.state().blocks().isSame(
+                event.previousState().blocks(), 
                 mappingInfo.indices == null ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
             updateMapping = true;
         } else {
