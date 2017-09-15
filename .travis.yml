@@ -19,9 +19,9 @@ cache:
 before_install:
   - mkdir -p ${MVN_SHARED_CACHE}
   
-install: gradle assemble 
+install: gradle assemble -Dbuild.snapshot=false
 
-script: gradle core:test
+script: gradle core:test -Dbuild.snapshot=false
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
