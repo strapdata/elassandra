@@ -45,18 +45,7 @@ public class CassandraShardStateListener extends AbstractComponent implements In
         super(settings);
         this.clusterService = clusterService;
     }
-    
-    /*
-    @Override
-    public void beforeIndexShardCreated(ShardId shardId, Settings indexSettings) {
-        try {
-            clusterService.putShardRoutingState(shardId.getIndexName(), ShardRoutingState.INITIALIZING);
-        } catch (IOException e) {
-            logger.error("Unexpected error", e);
-        }
-    }
-    */
-    
+
     /**
      * Called after the index shard has been started.
      */
@@ -83,7 +72,6 @@ public class CassandraShardStateListener extends AbstractComponent implements In
     
     /**
      * Called before the index shard gets closed.
-     *
      * @param indexShard The index shard
      */
     @Override

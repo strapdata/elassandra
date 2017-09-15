@@ -197,7 +197,6 @@ import java.util.stream.Collectors;
  */
 public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
-    //private final static SourceToParse EMPTY_SOURCE_TO_PARSE= SourceToParse.source((XContentParser)null);
     private final static Field DEFAULT_INTERNAL_VERSION = new NumericDocValuesField(VersionFieldMapper.NAME, -1L);
     private final static Field DEFAULT_EXTERNAL_VERSION = new NumericDocValuesField(VersionFieldMapper.NAME, 1L);
 
@@ -206,7 +205,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     public static boolean runsElassandra = false;
     
-    final String index_name;             // keyspace_name.table_name
+    final String index_name;
     final Logger logger;
     final ClusterService clusterService;
     

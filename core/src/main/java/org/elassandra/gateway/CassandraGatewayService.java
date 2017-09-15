@@ -15,9 +15,6 @@
  */
 package org.elassandra.gateway;
 
-import java.util.EnumSet;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.block.ClusterBlock;
@@ -30,14 +27,13 @@ import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.gateway.Gateway;
-import org.elasticsearch.gateway.GatewayMetaState;
 import org.elasticsearch.gateway.GatewayService;
-import org.elasticsearch.gateway.TransportNodesListGatewayMetaState;
-import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.threadpool.ThreadPool;
+
+import java.util.EnumSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CassandraGatewayService extends GatewayService {
 
@@ -117,7 +113,6 @@ public class CassandraGatewayService extends GatewayService {
                         metaDataBuilder.put(indexMetaData, false);
                         blocks.addBlocks(indexMetaData);
                     }
-                    
 
                     // update the state to reflect the new metadata and routing
                     ClusterState updatedState = ClusterState.builder(currentState)

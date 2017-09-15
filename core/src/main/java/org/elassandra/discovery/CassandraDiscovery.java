@@ -122,8 +122,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         this.namedWriteableRegistry = namedWriteableRegistry;
         this.transportService = transportService;
         this.clusterName = clusterService.getClusterName();
-        
-        
+
         this.localAddress = FBUtilities.getBroadcastAddress();
         this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(localAddress);
         
@@ -189,10 +188,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         updateRoutingTable("starting-cassandra-discovery", true);
     }
 
-    public DiscoveryNodes nodes() {
-        return this.clusterGroup.nodes();
-    }
-    
     private void updateMetadata(String source, final long version) {
         clusterService.submitStateUpdateTask(source, new ClusterStateUpdateTask() {
 
@@ -728,8 +723,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     public String nodeDescription() {
         return clusterName.value() + "/" + this.localNode.getId();
     }
-
-
+ 
+    public DiscoveryNodes nodes() {
+        return this.clusterGroup.nodes();
+    }
+    
     private class ClusterGroup {
 
         private ConcurrentMap<String, DiscoveryNode> members = new ConcurrentHashMap();

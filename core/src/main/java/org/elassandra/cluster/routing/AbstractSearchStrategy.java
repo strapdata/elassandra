@@ -103,7 +103,6 @@ public abstract class AbstractSearchStrategy {
             
             if (isRoutable(clusterState)) {
                 // only available when keyspaces are initialized and node joined
-                //this.rangeToEndpointsMap = StorageService.instance.getRangeToAddressMapInLocalDC(ksName);
                 this.strategy = Keyspace.open(ksName).getReplicationStrategy();
                 this.metadata = StorageService.instance.getTokenMetadata().cloneOnlyTokenMap();
                 for(DiscoveryNode node : clusterState.nodes()) {
@@ -187,7 +186,6 @@ public abstract class AbstractSearchStrategy {
         }
         
         public boolean isRoutable(ClusterState state) {
-           // Keyspace.isInitialized() && StorageService.instance.isJoined();
            return !state.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK);
         }
         

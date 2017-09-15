@@ -67,27 +67,7 @@ public class CassandraSecondaryIndicesApplier extends AbstractComponent implemen
     // called on post-applied phase (when shards are started on all nodes)
     @Override
     public void applyClusterState(ClusterChangedEvent event) {
-        /*
-        // recover initializing shards
-        DiscoveryNode localNode = event.state().nodes().getLocalNode();
-        RoutingTable routingTable = event.state().routingTable();
-        for(String index : initilizingShards) {
-            IndexMetaData indexMetaData = event.state().metaData().index(index);
-            IndexService indexService = this.clusterService.getIndicesService().indexService(indexMetaData.getIndex());
-            IndexShard indexShard = indexService.getShard(0);
-            ShardRouting shardRouting = indexShard.routingEntry();
-            if (indexMetaData.getState() == IndexMetaData.State.OPEN && shardRouting != null) {
-                if (logger.isDebugEnabled())
-                    logger.debug("[{}][{}] state=[{}], recovering", shardRouting.index(), shardRouting.shardId().getId(), shardRouting.state());
-                
-                // try to recover if index was existing but has no shards.
-                
-                indexShard.recoverFromStore();
-            }
-        }
-        if (initilizingShards.size() > 0)
-            initilizingShards.clear();
-        */
+        
         // create cassandra 2i on coordinator node only.
         for(Pair<String,MappingMetaData> mapping : updatedMapping) {
             String index = mapping.left;
@@ -108,5 +88,4 @@ public class CassandraSecondaryIndicesApplier extends AbstractComponent implemen
             updatedMapping.clear();
     }
 
-    
 }
