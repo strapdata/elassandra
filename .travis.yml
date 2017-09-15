@@ -19,9 +19,9 @@ cache:
 before_install:
   - mkdir -p ${MVN_SHARED_CACHE}
   
-install: gradle assemble -x :distribution:bwc:buildBwcVersion
+install: gradle assemble 
 
-build: gradle core:test
+script: gradle core:test
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
