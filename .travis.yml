@@ -24,10 +24,10 @@ install: gradle assemble
 script: gradle core:test
 
 before_deploy:
-  - export TARBALL=$(ls distribution/tar/target/releases/elassandra-*.tar.gz)
-  - export ZIPBALL=$(ls distribution/zip/target/releases/elassandra-*.zip)
-  - export DEBPKG=$(ls distribution/deb/target/releases/elassandra_*.deb)
-  - export RPMPKG=$(ls distribution/rpm/target/releases/elassandra-*.rpm)
+  - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
+  - export ZIPBALL=$(ls distribution/zip/build/distributions/elassandra-*.zip)
+  - export DEBPKG=$(ls distribution/deb/build/distributions/elassandra_*.deb)
+  - export RPMPKG=$(ls distribution/rpm/build/distributions/elassandra-*.rpm)
 
 deploy:
   - provider: releases
