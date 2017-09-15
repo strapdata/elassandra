@@ -249,7 +249,8 @@ public class ElassandraDaemon extends CassandraDaemon {
         if (node != null && !bootstrapping) {
             // In case we have not receives any newer X2 notification, 
             // try to read a newer metadata from the elastic_admin.metadata table.
-            MetaData metaData = this.node.clusterService().readMetaDataAsRow(ConsistencyLevel.LOCAL_ONE);
+            
+            MetaData metaData = this.node.clusterService().readInternalMetaDataAsRow();
             if (metaData.version() > systemMetadata.version()) {
                 try {
                     logger.warn("Refreshing newer metadata found in {}.{} metaData uuid={} version={}", 

@@ -2015,7 +2015,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
 
     public boolean isIndexing() {
-        if (!runsElassandra) 
+        if (!runsElassandra || !this.initialized.get()) 
             return false;
         
         if (mappingInfo == null) {
@@ -2036,9 +2036,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
     
     public void initMapping() {
+        initMapping(this.clusterService.state());
+    }
+    
+    public void initMapping(ClusterState clusterState) {
         mappingInfoLock.writeLock().lock();
         try {
-           mappingInfo = new ImmutableMappingInfo(this.clusterService.state());
+           mappingInfo = new ImmutableMappingInfo(clusterState);
            logger.debug("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={}", 
                    index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
         } catch(Exception e) {
@@ -2051,9 +2055,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     // TODO: notify 2i only for udated indices (not all)
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
+        if (!this.initialized.get())
+            return;
+        
         boolean updateMapping = false;
-        if (event.previousState() != null && !event.state().blocks().isSame(
-                event.previousState().blocks(), 
+        if (!event.state().blocks().isSame(event.previousState().blocks(), 
                 mappingInfo.indices == null ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
             updateMapping = true;
         } else {

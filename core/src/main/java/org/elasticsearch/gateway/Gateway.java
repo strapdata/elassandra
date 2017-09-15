@@ -21,6 +21,7 @@ package org.elasticsearch.gateway;
 
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.service.StorageService;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
 import org.elassandra.NoPersistedMetaDataException;
@@ -49,13 +50,17 @@ public class Gateway extends AbstractComponent implements ClusterStateApplier {
         ClusterState.Builder builder = ClusterState.builder(clusterService.state());
         
         final boolean userKeyspaceAvailable = Keyspace.isInitialized();
-        logger.debug("performing recovery from metadata %s",userKeyspaceAvailable ? "table":"schema");
+        logger.debug("performing recovery from metadata %s", userKeyspaceAvailable ? "table":"schema");
         
         MetaData metadata;
         try {
             if (userKeyspaceAvailable) {
                 // recover from elastic_admin.metadata
-                metadata = clusterService.readMetaDataAsRow(ConsistencyLevel.ONE);
+                if (StorageService.instance.isJoined()) {
+                    metadata = clusterService.readMetaDataAsRow(ConsistencyLevel.ONE);
+                } else {
+                    metadata = clusterService.readInternalMetaDataAsRow();
+                }
             } else {
                 // recover from CQL schema
                 metadata = clusterService.readMetaDataAsComment();

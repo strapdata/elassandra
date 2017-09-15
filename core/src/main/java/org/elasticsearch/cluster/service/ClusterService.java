@@ -1314,7 +1314,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         // add post-applied because 2i shoukd be created/deleted after that cassandra indices have taken the new mapping.
         this.addStateApplier(cassandraSecondaryIndicesApplier);
         
-        // start a thread for asynchronous CQL schema update, always the last update if not overwritten by 
+        // start a thread for asynchronous CQL schema update, always the last update.
         Runnable task = new Runnable() {
             @Override 
             public void run() { 
@@ -2587,11 +2587,22 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
     
     
+    public MetaData readInternalMetaDataAsRow() throws NoPersistedMetaDataException {
+        try {
+            Row row = QueryProcessor.executeInternal(selectMetadataQuery, DatabaseDescriptor.getClusterName()).one();
+            if (row != null && row.has("metadata")) {
+                return parseMetaDataString(row.getString("metadata"));
+            }
+        } catch (Exception e) {
+            logger.warn("Cannot read metadata locally",e);
+        }
+        return null;
+    }
+    
     public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException {
         UntypedResultSet result;
         try {
-            result = process(cl, ClientState.forInternalCalls(), selectMetadataQuery, DatabaseDescriptor.getClusterName());
-            Row row = result.one();
+            Row row = process(cl, ClientState.forInternalCalls(), selectMetadataQuery, DatabaseDescriptor.getClusterName()).one();
             if (row != null && row.has("metadata")) {
                 return parseMetaDataString(row.getString("metadata"));
             }
