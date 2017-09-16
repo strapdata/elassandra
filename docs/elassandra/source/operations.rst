@@ -353,6 +353,15 @@ with the default mapping, and the *message* is explicitly mapped with a custom m
        }
    }'
 
+.. TIP::
+
+   By default, as the standard elasticsearch, index creation only returns a response to the client when all primary shards have been started, or the request times out (default is 30 seconds).
+   To emulate the elasticsearch routing table, shards hosted by dead nodes are primary or not according to the underlying Cassandra replication factor.
+   So, when there are some dead nodes, if the number of dead nodes is lower than the number of replicas in your create index request, index creation succeed immediately with shards_acknowledged=true and index status is yellow, 
+   otherwise, index creation timeouts, shards_acknowledged=false and the index status is red, meaning that search requests will be inconsistent. Finally, 
+   the elasticsearch parameter `wait_for_active_shards <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#index-wait-for-active-shards>`_ is useless in elassandra, because Cassandra ensure write consistency.
+   
+
 Deleting an Elasticsearch index does not remove any Cassandra data, it keeps the underlying Cassandra tables but remove Elasticsearch index files.
 
 .. code::
@@ -377,7 +386,7 @@ Alternatively, you can use the built-in rebuild action to rebuild index on **all
 
 Re-index existing data rely on the Cassandra compaction manager. You can trigger a `Cassandra compaction <http://docs.datastax.com/en/cassandra/2.0/cassandra/operations/ops_configure_compaction_t.html>`_ when :
 
-* Creating the first Elasticsearch index on a Cassandra table with existing data,
+* Creating the first Elasticsearch index on a Cassandra table with existing data automatically involves an index rebuild executed by the compaction manager,
 * Running a `nodetool rebuild_index <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRebuildIndex.html>`_  command,
 * Running a `nodetool repair <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRepair.html>`_ on a keyspace having indexed tables (a repair actually creates new SSTables triggering index build).
 
@@ -391,7 +400,7 @@ If the compaction manager is busy, secondary index rebuild is added as a pending
    052c70f0-8690-11e6-aa56-674c194215f6   Secondary index build     lastfm   playlist    66347424   330228366   bytes     20,09%
    Active compaction remaining time :   0h00m00s
 
-To stop a compaction task (including a rebuild index task), you can either use a **nodetool stop** or use the JMX management operation  **stopCompactionById**  (on MBean org.apache.cassandra.db.CompactionManager).
+To stop a compaction task (including a rebuild index task), you can either use a **nodetool stop --compaction-id <uuid>** or use the JMX management operation  **stopCompactionById**  (on MBean org.apache.cassandra.db.CompactionManager).
 
 Open, close, index
 __________________
