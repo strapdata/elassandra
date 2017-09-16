@@ -41,6 +41,7 @@ import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.cassandra.cql3.statements.TableAttributes;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.KeyspaceNotDefinedException;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.BytesType;
@@ -108,7 +109,10 @@ import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateApplier;
 import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.ClusterStateTaskConfig;
+import org.elasticsearch.cluster.ClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.ack.ClusterStateUpdateRequest;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -120,6 +124,7 @@ import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
+import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -389,6 +394,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     private final String elasticAdminKeyspaceName;
     private final String selectMetadataQuery;
+    private final String selectVersionMetadataQuery;
     private final String insertMetadataQuery;
     private final String updateMetaDataQuery;
     
@@ -409,6 +415,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             elasticAdminKeyspaceName = ELASTIC_ADMIN_KEYSPACE;
         }
         selectMetadataQuery = String.format(Locale.ROOT, "SELECT metadata,version,owner FROM \"%s\".\"%s\" WHERE cluster_name = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        selectVersionMetadataQuery = String.format(Locale.ROOT, "SELECT version FROM \"%s\".\"%s\" WHERE cluster_name = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         insertMetadataQuery = String.format(Locale.ROOT, "INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version,metadata) VALUES (?,?,?,?) IF NOT EXISTS", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         updateMetaDataQuery = String.format(Locale.ROOT, "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE cluster_name = ? IF version < ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
     }
@@ -1086,11 +1093,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             }
     
             @Override
-            public boolean doPresistMetaData() {
-                return false;
-            }
-    
-            @Override
             public void onFailure(String source, Exception t) {
                 logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected failure during [{}]", source), t);
             }
@@ -1339,12 +1341,17 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                                 logger.trace("Applying {}.{}.comment update with metadata.version={} timestamp={}",
                                         ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE,
                                         metadataSchemaUpdate.version, metadataSchemaUpdate.timestamp);
+                                // delayed CQL schema update with timestamp = time of cluster state update
                                 CFMetaData cfm = getCFMetaData(ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE).copy();
                                 TableAttributes attrs = new TableAttributes();
                                 attrs.addProperty(TableParams.Option.COMMENT.toString(), metadataSchemaUpdate.metaDataString);
                                 cfm.params( attrs.asAlteredTableParams(cfm.params) );
+                                MigrationManager.announceColumnFamilyUpdate(cfm, false);
                                 MigrationManager.announceColumnFamilyUpdate(cfm, false, metadataSchemaUpdate.timestamp);
-                                //QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'", elasticAdminKeyspaceName,  ELASTIC_ADMIN_METADATA_TABLE, metaDataString));
+                                /*
+                                QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'", 
+                                        elasticAdminKeyspaceName,  ELASTIC_ADMIN_METADATA_TABLE, metadataSchemaUpdate.metaDataString));
+                                */
                             }
                         }
                     } catch(Exception e) {
@@ -1376,35 +1383,62 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         // try to update cluster state.
         long startTimeNS = System.nanoTime();
         boolean presistedMetadata = false;
+        CassandraDiscovery.MetaDataVersionAckListener metaDataVersionAckListerner = null;
         try {
             String newClusterStateMetaDataString = MetaData.Builder.toXContent(newClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
             String previousClusterStateMetaDataString = MetaData.Builder.toXContent(previousClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
             if (!newClusterStateMetaDataString.equals(previousClusterStateMetaDataString) && !newClusterState.blocks().disableStatePersistence() && taskOutputs.doPersistMetadata) {
                 // update MeteData.version+cluster_uuid
                 presistedMetadata = true;
+                
                 newClusterState = ClusterState.builder(newClusterState)
                                     .metaData(MetaData.builder(newClusterState.metaData()).incrementVersion().build())
                                     .incrementVersion()
                                     .build();
+                
                 // try to persist new metadata in cassandra.
+                if (presistedMetadata && newClusterState.nodes().getSize() > 1) {
+                    // register the X2 listener before publishing to avoid dead locks !
+                    metaDataVersionAckListerner = this.discovery.new MetaDataVersionAckListener(newClusterState.metaData().version(), ackListener, newClusterState);
+                }
                 try {
                     persistMetaData(previousClusterState.metaData(), newClusterState.metaData(), taskInputs.summary);
+                    publishX2(newClusterState);
                 } catch (ConcurrentMetaDataUpdateException e) {
+                    if (metaDataVersionAckListerner != null)
+                        metaDataVersionAckListerner.abort();
                     // should replay the task later when current cluster state will match the expected metadata uuid and version
                     logger.warn("Cannot overwrite persistent metadata, will resubmit task when metadata.version > {}", previousClusterState.metaData().version());
+                    final long resubmitTimeMillis = System.currentTimeMillis();
                     ClusterService.this.addListener(new ClusterStateListener() {
                         @Override
                         public void clusterChanged(ClusterChangedEvent event) {
                             if (event.metaDataChanged()) {
-                                logger.warn("metadata.version={} => resubmit delayed update source={} tasks={}",ClusterService.this.state().metaData().version(), taskInputs.summary, taskInputs.updateTasks);
-                                // TODO: resubmit tasks after the next cluster state update.
+                                final long lostTimeMillis = System.currentTimeMillis() - resubmitTimeMillis;
+                                Priority priority = Priority.URGENT;
+                                TimeValue timeout = TimeValue.timeValueSeconds(30*1000 - lostTimeMillis);
+                                ClusterStateTaskConfig config;
+                                Map<Object, ClusterStateTaskListener> map = new HashMap<Object, ClusterStateTaskListener>();
                                 for (final ClusterServiceTaskBatcher.UpdateTask updateTask : taskInputs.updateTasks) {
-                                    ClusterService.this.submitStateUpdateTask(taskInputs.summary, (ClusterStateUpdateTask) updateTask.task);
+                                    map.put( updateTask.task, updateTask.listener);
+                                    priority = updateTask.priority();
+                                    if (updateTask.task instanceof ClusterStateUpdateTask) {
+                                        timeout = TimeValue.timeValueMillis( ((ClusterStateUpdateTask)updateTask.task).timeout().getMillis() - lostTimeMillis);
+                                    } else if (updateTask.task instanceof ClusterStateUpdateRequest) {
+                                        timeout = TimeValue.timeValueMillis( ((ClusterStateUpdateRequest)updateTask.task).masterNodeTimeout().getMillis() - lostTimeMillis);
+                                    }
                                 }
+                                logger.warn("metadata.version={} => resubmit delayed update source={} tasks={} priority={} remaing timeout={}",
+                                        ClusterService.this.state().metaData().version(), taskInputs.summary, taskInputs.updateTasks, priority, timeout);
+                                ClusterService.this.submitStateUpdateTasks(taskInputs.summary, map, ClusterStateTaskConfig.build(priority, timeout), taskInputs.executor);
                                 ClusterService.this.removeListener(this); // replay only once.
                             }
                         }
                     });
+                    long currentVersion = readMetaDataVersion(ConsistencyLevel.LOCAL_QUORUM);
+                    if (currentVersion > previousClusterState.metaData().version())
+                        // trigger a metadat update from metadata table if not yet triggered by a gossip change.
+                        this.discovery.updateMetadata("refresh-metadata", currentVersion);
                     return;
                 }
             }
@@ -1422,21 +1456,12 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             } else {
                 logger.error("Cassandra issue:", e);
             }
+            if (metaDataVersionAckListerner != null)
+                metaDataVersionAckListerner.abort();
             return;
         }
 
         try {
-            CassandraDiscovery.MetaDataVersionAckListener metaDataVersionAckListerner = null;
-            if (presistedMetadata) {
-                if (newClusterState.nodes().getSize() > 1) {
-                    // register the X2 listener before publishing to avoid dead locks !
-                    metaDataVersionAckListerner = this.discovery.new MetaDataVersionAckListener(newClusterState.metaData().version(), ackListener, newClusterState);
-                }
-                
-                // On the coordinator only, publish in gossip state the persisted metadata.uuid and version
-                publishX2(newClusterState);
-            }
-
             if (logger.isTraceEnabled()) {
                 StringBuilder sb = new StringBuilder("cluster state updated, source [").append(taskInputs.summary).append("]\n");
                 sb.append(newClusterState.toString());
@@ -1527,11 +1552,11 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             if (presistedMetadata && metaDataVersionAckListerner != null && newClusterState.nodes().getSize() > 1) {
                 try {
                     if (logger.isInfoEnabled())
-                        logger.info("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
+                        logger.debug("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
                     if (!metaDataVersionAckListerner.await(30L, TimeUnit.SECONDS)) {
                         logger.warn("Timeout waiting MetaData.version={}", newClusterState.metaData().version());
                     } else {
-                        logger.trace("Metadata.version={} applied by all alive nodes", newClusterState.metaData().version());
+                        logger.debug("Metadata.version={} applied by all alive nodes", newClusterState.metaData().version());
                     }
                 } catch (Throwable e) {
                     ackFailure = e;
@@ -2605,7 +2630,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
     
     public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException {
-        UntypedResultSet result;
         try {
             Row row = process(cl, ClientState.forInternalCalls(), selectMetadataQuery, DatabaseDescriptor.getClusterName()).one();
             if (row != null && row.has("metadata")) {
@@ -2614,12 +2638,25 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         } catch (UnavailableException e) {
             logger.warn("Cannot read metadata with consistency="+cl,e);
             return null;
+        } catch (KeyspaceNotDefinedException e) {
+            logger.warn("Keyspace {} not yet defined", ELASTIC_ADMIN_KEYSPACE);
+            return null;
         } catch (Exception e) {
             throw new NoPersistedMetaDataException("Unexpected error",e);
         }
         throw new NoPersistedMetaDataException("Unexpected error");
     }
     
+    public Long readMetaDataVersion(ConsistencyLevel cl) throws NoPersistedMetaDataException {
+        try {
+            Row row = process(cl, ClientState.forInternalCalls(), selectVersionMetadataQuery, DatabaseDescriptor.getClusterName()).one();
+            if (row.has("version"))
+                return row.getLong("version");
+        } catch (Exception e) {
+            logger.warn("unexpected error", e);
+        }
+        return -1L;
+    }
     public static String getElasticsearchClusterName(Settings settings) {
         String clusterName = DatabaseDescriptor.getClusterName();
         String datacenterGroup = settings.get(ClusterService.SETTING_CLUSTER_DATACENTER_GROUP);

@@ -74,6 +74,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
@@ -93,7 +94,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private final NamedWriteableRegistry namedWriteableRegistry;
 
     private final AtomicReference<MetaDataVersionAckListener> metaDataVersionAckListener = new AtomicReference<>(null);
-
+    private final AtomicLong maxMetaDataVersion = new AtomicLong(-1);
+    
     private final ClusterGroup clusterGroup;
 
     private final InetAddress localAddress;
@@ -188,43 +190,46 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         updateRoutingTable("starting-cassandra-discovery", true);
     }
 
-    private void updateMetadata(String source, final long version) {
-        clusterService.submitStateUpdateTask(source, new ClusterStateUpdateTask() {
+    
+    
+    public void updateMetadata(String source, final long version) {
+        
+        long maxVersion = maxMetaDataVersion.get();
+        if (version <= maxVersion){
+            return;
+        }
 
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                // read metadata from the clusterService thread to avoid freeze in gossip.
-                MetaData schemaMetaData = clusterService.checkForNewMetaData(version);
-                
-                ClusterState.Builder newStateBuilder = ClusterState.builder(currentState).nodes(nodes());
-
-                // update blocks
-                ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                if (schemaMetaData.settings().getAsBoolean("cluster.blocks.read_only", false))
-                    blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
-                
-                if (schemaMetaData != null) {
-                    newStateBuilder.metaData(schemaMetaData);
+        if (maxMetaDataVersion.compareAndSet(maxVersion, version)){
+            clusterService.submitStateUpdateTask(source, new ClusterStateUpdateTask() {
+                @Override
+                public ClusterState execute(ClusterState currentState) {
+                    // read metadata from the clusterService thread to avoid freeze in gossip.
+                    MetaData schemaMetaData = clusterService.checkForNewMetaData(version);
                     
-                    // update indices block.
-                    for (IndexMetaData indexMetaData : schemaMetaData)
-                        blocks.updateBlocks(indexMetaData);
+                    ClusterState.Builder newStateBuilder = ClusterState.builder(currentState).nodes(nodes());
+
+                    // update blocks
+                    ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
+                    if (schemaMetaData.settings().getAsBoolean("cluster.blocks.read_only", false))
+                        blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
+                    
+                    if (schemaMetaData != null) {
+                        newStateBuilder.metaData(schemaMetaData);
+                        
+                        // update indices block.
+                        for (IndexMetaData indexMetaData : schemaMetaData)
+                            blocks.updateBlocks(indexMetaData);
+                    }
+
+                    return clusterService.updateNumberOfShardsAndReplicas( newStateBuilder.blocks(blocks).build() );
                 }
-
-                return clusterService.updateNumberOfShardsAndReplicas( newStateBuilder.blocks(blocks).build() );
-            }
-            
-            @Override
-            public boolean doPresistMetaData() {
-                return false;
-            }
-            
-            @Override
-            public void onFailure(String source, Exception t) {
-                logger.error("unexpected failure during [{}]", t, source);
-            }
-
-        });
+                
+                @Override
+                public void onFailure(String source, Exception t) {
+                    logger.error("unexpected failure during [{}]", t, source);
+                }
+            });
+        }
     }
     
     private void updateRoutingTable(String source, boolean nodesUpdate) {
@@ -487,6 +492,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             CassandraDiscovery.this.metaDataVersionAckListener.set(null);
             return done;
         }
+        
+        public void abort() {
+            CassandraDiscovery.this.metaDataVersionAckListener.set(null);
+        }
     }
     
     private boolean isLocal(InetAddress endpoint) {
@@ -734,13 +743,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
     
     public void publishX2(ClusterState clusterState, boolean force) {
+        String clusterStateSting = clusterState.metaData().clusterUUID() + '/' + clusterState.metaData().version();
         if (Gossiper.instance.isEnabled() || force) {
-            String clusterStateSting = clusterState.metaData().clusterUUID() + '/' + clusterState.metaData().version();
             Gossiper.instance.addLocalApplicationState(ELASTIC_META_DATA, StorageService.instance.valueFactory.datacenter(clusterStateSting));
             if (logger.isTraceEnabled())
                 logger.trace("X2={} published in gossip state", clusterStateSting);
         } else {
-            logger.warn("Cannot put X2 for cluster state, gossip not enabled");
+            Gossiper.instance.injectApplicationState(FBUtilities.getBroadcastAddress(), ELASTIC_META_DATA, StorageService.instance.valueFactory.datacenter(clusterStateSting));
+            logger.warn("Gossip not enabled, injecting X2 metadata.version={}", clusterState.metaData().version());
         }
     }
 

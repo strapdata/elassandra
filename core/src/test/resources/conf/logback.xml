@@ -49,18 +49,19 @@
   <logger name="org.apache" level="WARN" />
   
   <logger name="org.apache.cassandra" level="WARN" />
-  <logger name="org.apache.cassandra.service" level="TRACE" />
+  <logger name="org.apache.cassandra.service" level="WARN" />
   <logger name="org.apache.cassandra.db.commitlog" level="WARN" />
   <logger name="org.apache.cassandra.db.compaction" level="WARN" />
-  <logger name="org.apache.cassandra.index" level="TRACE" />
   <logger name="org.apache.cassandra.config.DatabaseDescriptor" level="WARN" />
   <logger name="org.apache.cassandra.service.CassandraDaemon" level="DEBUG" />
   <logger name="org.apache.cassandra.service.ElassandraDaemon" level="TRACE" />
   
-  <logger name="org.elassandra.discovery" level="TRACE" />
-  <logger name="org.elassandra.cluster.service" level="DEBUG" />
+  <logger name="org.elasticsearch.cluster.service" level="DEBUG" />
+  <logger name="org.elasticsearch.indices.cluster" level="DEBUG" />
+  <logger name="org.elassandra.index" level="DEBUG" />
 
   <!--
+  <logger name="org.elassandra.discovery" level="TRACE" />
   <logger name="org.elassandra.index" level="TRACE" />
   <logger name="org.elassandra.search" level="TRACE" />
   <logger name="org.elassandra.cluster.routing" level="WARN" />

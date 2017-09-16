@@ -49,31 +49,42 @@ public class Gateway extends AbstractComponent implements ClusterStateApplier {
     public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
         ClusterState.Builder builder = ClusterState.builder(clusterService.state());
         
-        final boolean userKeyspaceAvailable = Keyspace.isInitialized();
-        logger.debug("performing recovery from metadata %s", userKeyspaceAvailable ? "table":"schema");
-        
-        MetaData metadata;
-        try {
-            if (userKeyspaceAvailable) {
-                // recover from elastic_admin.metadata
+        MetaData metadata = null;
+        if (Keyspace.isInitialized()) {
+            // try recover from elastic_admin.metadata
+            try {
                 if (StorageService.instance.isJoined()) {
                     metadata = clusterService.readMetaDataAsRow(ConsistencyLevel.ONE);
+                    if (metadata != null) {
+                        logger.debug("Successfull recovery from metadata table version={}", metadata.version());
+                        listener.onSuccess( builder.metaData(metadata).build() );
+                        return;
+                    }
                 } else {
-                    metadata = clusterService.readInternalMetaDataAsRow();
+                    if (metadata != null) {
+                        logger.debug("Successfull recovery from internal metadata table version={}", metadata.version());
+                        listener.onSuccess( builder.metaData(metadata).build() );
+                        return;
+                    }
                 }
-            } else {
-                // recover from CQL schema
-                metadata = clusterService.readMetaDataAsComment();
+            } catch (Exception e) {
             }
-        } catch (NoPersistedMetaDataException |ActionRequestValidationException e) {
-            logger.trace((Supplier<?>) () -> new ParameterizedMessage("Cannot read metadata from metadata %s", userKeyspaceAvailable ? "table":"schema"), e);
+        }
+        
+        // fallback to CQL schema
+        try {
+            metadata = clusterService.readMetaDataAsComment();
+            logger.debug("Successfull recovery from CQL schema version={}", metadata.version());
+            listener.onSuccess( builder.metaData(metadata).build() );
+            return;
+        } catch (Exception e) {
+            logger.trace((Supplier<?>) () -> new ParameterizedMessage("Cannot read metadata from CQL schema"), e);
             metadata = clusterService.state().metaData();
             if (metadata.clusterUUID().equals("_na_")) {
                 metadata = MetaData.builder(metadata).clusterUUID(clusterService.localNode().getId()).build();
             }
+            listener.onSuccess( builder.metaData(metadata).build() );
         }
-
-        listener.onSuccess( builder.metaData(metadata).build() );
     }
 
     private void logUnknownSetting(String settingType, Map.Entry<String, String> e) {

@@ -40,6 +40,7 @@ import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.db.ReadExecutionController;
 import org.apache.cassandra.db.SinglePartitionReadCommand;
 import org.apache.cassandra.db.Slice;
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.filter.RowFilter;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CollectionType;
@@ -68,6 +69,8 @@ import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.apache.logging.log4j.util.Supplier;
 import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.DoublePoint;
 import org.apache.lucene.document.Field;
@@ -207,17 +210,17 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     final String index_name;
     final Logger logger;
-    final ClusterService clusterService;
+    ClusterService clusterService;
     
     // updated when create/open/close/remove an ES index.
     protected final ReadWriteLock mappingInfoLock = new ReentrantReadWriteLock();
     protected volatile ImmutableMappingInfo mappingInfo;
-    protected final AtomicBoolean initialized = new AtomicBoolean(false);
     
     protected final ColumnFamilyStore baseCfs;
     protected final String typeName;
     protected final TermQuery typeTermQuery;
     protected final IndexMetadata indexMetadata;
+    int initCounter = 0;
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
@@ -226,13 +229,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         this.indexMetadata = indexDef;
         this.index_name = baseCfs.keyspace.getName()+"."+baseCfs.name;
         this.logger = Loggers.getLogger(this.getClass().getName()+"."+baseCfs.keyspace.getName()+"."+baseCfs.name);
-        // clusterService must be started before creating 2i.
-        if (ElassandraDaemon.instance.node() != null) {
-            this.clusterService = ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class);
-            this.clusterService.addListener(this);
-        } else {
-            this.clusterService = null;
-        }
     }
     
     public static ElasticSecondaryIndex newElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
@@ -1178,8 +1174,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             this.fieldsToRead = new BitSet(fields.length);
             this.staticColumns = (baseCfs.metadata.hasStaticColumns()) ? new BitSet(fields.length) : null;
             for(int i=0; i < fields.length; i++) {
-                ColumnIdentifier colId = new ColumnIdentifier(fields[i],true);
+                ColumnIdentifier colId = new ColumnIdentifier(fields[i], true);
                 ColumnDefinition colDef = baseCfs.metadata.getColumnDefinition(colId);
+                assert colDef != null : "Column "+colId+" not found in " + baseCfs.name;
                 this.fieldsToRead.set(i, fieldsMap.get(fields[i]) && !colDef.isPrimaryKeyColumn());
                 if (staticColumns != null)
                     this.staticColumns.set(i,colDef.isStatic());
@@ -1241,7 +1238,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 } else {
                     if (logger.isDebugEnabled())
                         logger.debug("No target index=[{}] found for partition function name=[{}] pattern=[{}] indices={}", 
-                                indexName, func.name, func.pattern, Arrays.stream(mappingInfo.indices).map(i -> i.name));
+                                indexName, func.name, func.pattern, 
+                                Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
                 }
             }
             if (logger.isTraceEnabled()) 
@@ -1262,7 +1260,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 } else {
                     if (logger.isWarnEnabled())
                         logger.warn("No target index=[{}] found, function name=[{}] pattern=[{}], return all indices={}", 
-                                indexName, func.name, func.pattern, Arrays.stream(mappingInfo.indices).map(i -> i.name));
+                                indexName, func.name, func.pattern, 
+                                Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
                     for(String index : func.indices) {
                         int i = this.indexToIdx.getOrDefault(index, -1);
                         if (i >= 0)
@@ -2015,7 +2014,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
 
     public boolean isIndexing() {
-        if (!runsElassandra || !this.initialized.get()) 
+        if (!runsElassandra) 
             return false;
         
         if (mappingInfo == null) {
@@ -2046,7 +2045,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
            logger.debug("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={}", 
                    index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
         } catch(Exception e) {
-             logger.error("Failed to update mapping index=[{}]",e ,index_name);
+             logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to update mapping index=[{}]", index_name), e);
         } finally {
             mappingInfoLock.writeLock().unlock();
         }
@@ -2054,10 +2053,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     // TODO: notify 2i only for udated indices (not all)
     @Override
-    public void clusterChanged(ClusterChangedEvent event) {
-        if (!this.initialized.get())
-            return;
-        
+    public void clusterChanged(ClusterChangedEvent event) 
+    {
         boolean updateMapping = false;
         if (!event.state().blocks().isSame(event.previousState().blocks(), 
                 mappingInfo.indices == null ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
@@ -2091,17 +2088,31 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     public Callable<?> getInitializationTask() 
     {
         return () -> {
-            if (this.initialized.compareAndSet(false, true)) {
-                logger.debug("Initializing elastic secondary index [{}]", index_name);
+            initCounter++;
+            assert initCounter == 1 : "index initialized more than once";
+            if (ElassandraDaemon.instance.node() != null) {
+                logger.debug("Initializing elastic secondary index=[{}] hashCode={} initCounter={}", index_name, hashCode(), initCounter);
+                // 2i index can be recycled by cassandra, while ES node restarted during tests, so update clusterService reference.
+                clusterService = ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class);
+                clusterService.addListener(this);
+                
                 initMapping();
                 
                 // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
-                if (Keyspace.isInitialized())
+                if (Keyspace.isInitialized() && !baseCfs.isEmpty() && !isBuilt())
                     baseCfs.indexManager.buildIndexBlocking(this);
+            } else {
+                clusterService = null;
             }
             return null;
         };
     }
+    
+    private boolean isBuilt()
+    {
+        return SystemKeyspace.isIndexBuilt(baseCfs.keyspace.getName(), this.indexMetadata.name);
+    }
+
 
     public Callable<?> getMetadataReloadTask(IndexMetadata indexMetadata) {
         return null;
