@@ -247,9 +247,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     @Override
     public void userKeyspaceInitialized() {
         if (node != null && !bootstrapping) {
-            // In case we have not receives any newer X2 notification, 
-            // try to read a newer metadata from the elastic_admin.metadata table.
-            
+            // try to read a newer metadata from the local elastic_admin.metadata table.
             MetaData metaData = this.node.clusterService().readInternalMetaDataAsRow();
             if (metaData.version() > systemMetadata.version()) {
                 try {
