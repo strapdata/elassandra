@@ -58,6 +58,7 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.exceptions.UnavailableException;
+import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.NetworkTopologyStrategy;
@@ -115,6 +116,7 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
@@ -537,20 +539,26 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
 
    
-    public boolean processConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, final String query, Object... values) 
+    public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, final String query, Object... values) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         try {
             UntypedResultSet result = process(cl, serialCl, query, values);
-            if (serialCl != null) {
-                if (!result.isEmpty()) {
-                    Row row = result.one();
-                    if (row.has("[applied]")) {
-                         return row.getBoolean("[applied]");
-                    }
+            if (serialCl == null)
+                return true;
+            
+             if (!result.isEmpty()) {
+                Row row = result.one();
+                if (row.has("[applied]")) {
+                     return row.getBoolean("[applied]");
                 }
-                return false;
-            } 
-            return true;
+            }
+            return false;
+        } catch (WriteTimeoutException e) {
+            logger.warn("PAXOS phase failed query=" + query + " values=" + Arrays.toString(values), e);
+            return false;
+        } catch (UnavailableException e) {
+            logger.warn("PAXOS commit failed query=" + query + " values=" + Arrays.toString(values), e);
+            return false;
         } catch (Exception e) {
             logger.error("Failed to process query=" + query + " values=" + Arrays.toString(values), e);
             throw e;
@@ -1383,12 +1391,12 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     persistMetaData(previousClusterState.metaData(), newClusterState.metaData(), taskInputs.summary);
                 } catch (ConcurrentMetaDataUpdateException e) {
                     // should replay the task later when current cluster state will match the expected metadata uuid and version
-                    logger.debug("Cannot overwrite persistent metadata, will resubmit task when metadata.version > {}", previousClusterState.metaData().version());
+                    logger.warn("Cannot overwrite persistent metadata, will resubmit task when metadata.version > {}", previousClusterState.metaData().version());
                     ClusterService.this.addListener(new ClusterStateListener() {
                         @Override
                         public void clusterChanged(ClusterChangedEvent event) {
                             if (event.metaDataChanged()) {
-                                logger.debug("metadata.version={} => resubmit delayed update source={} tasks={}",ClusterService.this.state().metaData().version(), taskInputs.summary, taskInputs.updateTasks);
+                                logger.warn("metadata.version={} => resubmit delayed update source={} tasks={}",ClusterService.this.state().metaData().version(), taskInputs.summary, taskInputs.updateTasks);
                                 // TODO: resubmit tasks after the next cluster state update.
                                 for (final ClusterServiceTaskBatcher.UpdateTask updateTask : taskInputs.updateTasks) {
                                     ClusterService.this.submitStateUpdateTask(taskInputs.summary, (ClusterStateUpdateTask) updateTask.task);
@@ -1400,12 +1408,9 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     return;
                 }
             }
-        } catch (org.apache.cassandra.exceptions.UnavailableException e) {
-            // Cassandra issue => ack with failure.
+        } catch (Exception e) {
+            // Unexpected issue => ack with failure.
             ackListener.onNodeAck(this.localNode(), e);
-            logger.error("Cassandra issue:", e);
-            throw e;
-        } catch (Throwable e) {
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
             if (logger.isTraceEnabled()) {
                 StringBuilder sb = new StringBuilder("failed to execute cluster state update in ").append(executionTime)
@@ -1414,6 +1419,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                         append("], source [").append(taskInputs.summary).append("]\n");
                 logger.warn(sb.toString(), e);
                 // TODO resubmit task on next cluster state change
+            } else {
+                logger.error("Cassandra issue:", e);
             }
             return;
         }
@@ -1421,8 +1428,10 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         try {
             CassandraDiscovery.MetaDataVersionAckListener metaDataVersionAckListerner = null;
             if (presistedMetadata) {
-                // register the X2 listener before publishing to avoid dead locks !
-                metaDataVersionAckListerner = this.discovery.new MetaDataVersionAckListener(newClusterState.metaData().version(), ackListener, newClusterState);
+                if (newClusterState.nodes().getSize() > 1) {
+                    // register the X2 listener before publishing to avoid dead locks !
+                    metaDataVersionAckListerner = this.discovery.new MetaDataVersionAckListener(newClusterState.metaData().version(), ackListener, newClusterState);
+                }
                 
                 // On the coordinator only, publish in gossip state the persisted metadata.uuid and version
                 publishX2(newClusterState);
@@ -1515,20 +1524,19 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             }
             
             Throwable ackFailure = null;
-            if (presistedMetadata && metaDataVersionAckListerner != null) {
-                // for the coordinator node, wait for acknowledgment from all nodes
-                if (newClusterState.nodes().getSize() > 1) {
-                    try {
-                        if (logger.isInfoEnabled())
-                            logger.info("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
-                        if (!metaDataVersionAckListerner.await(30L, TimeUnit.SECONDS)) {
-                            logger.warn("Timeout waiting MetaData.version = {}", newClusterState.metaData().version());
-                        }
-                    } catch (Throwable e) {
-                        ackFailure = e;
-                        final long version = newClusterState.metaData().version();
-                        logger.error((Supplier<?>) () -> new ParameterizedMessage("Interruped while waiting MetaData.version = {}", version), e);
+            if (presistedMetadata && metaDataVersionAckListerner != null && newClusterState.nodes().getSize() > 1) {
+                try {
+                    if (logger.isInfoEnabled())
+                        logger.info("Waiting MetaData.version = {} for all other alive nodes", newClusterState.metaData().version() );
+                    if (!metaDataVersionAckListerner.await(30L, TimeUnit.SECONDS)) {
+                        logger.warn("Timeout waiting MetaData.version={}", newClusterState.metaData().version());
+                    } else {
+                        logger.trace("Metadata.version={} applied by all alive nodes", newClusterState.metaData().version());
                     }
+                } catch (Throwable e) {
+                    ackFailure = e;
+                    final long version = newClusterState.metaData().version();
+                    logger.error((Supplier<?>) () -> new ParameterizedMessage("Interruped while waiting MetaData.version = {}", version), e);
                 }
             }
             
@@ -2306,7 +2314,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     (request.ttl() != null) ? request.ttl().getSeconds() : null, // ttl
                     timestamp,
                     values, 0);
-            final boolean applied = processConditional(request.waitForActiveShards().toCassandraConsistencyLevel(), ConsistencyLevel.LOCAL_SERIAL, query, (Object[])values);
+            final boolean applied = processWriteConditional(request.waitForActiveShards().toCassandraConsistencyLevel(), ConsistencyLevel.LOCAL_SERIAL, query, (Object[])values);
             if (!applied)
                 throw new VersionConflictEngineException(indexShard.shardId(), cfName, request.id(), "PAXOS insert failed, document already exists");
         } else {
@@ -2799,7 +2807,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
 
         String metaDataString = MetaData.Builder.toXContent(newMetaData, MetaData.CASSANDRA_FORMAT_PARAMS);
         UUID owner = UUID.fromString(localNode().getId());
-        boolean applied = processConditional(
+        boolean applied = processWriteConditional(
                 this.metadataWriteCL,
                 this.metadataSerialCL,
                 updateMetaDataQuery,
@@ -3066,8 +3074,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         // read-only map.
         Map<String, ShardRoutingState> shards = (this.discovery).getShardRoutingState(nodeUuid);
         if (shards == null) {
-            if (logger.isDebugEnabled())
-                logger.debug("No ShardRoutingState for node=[{}]",nodeUuid.toString());
+            if (logger.isDebugEnabled() && state().nodes().get(nodeUuid.toString()).status().equals(DiscoveryNodeStatus.ALIVE))
+                logger.debug("No ShardRoutingState for alive node=[{}]",nodeUuid.toString());
             return ShardRoutingState.UNASSIGNED;
         }
         return shards.get(index.getName());

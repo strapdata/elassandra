@@ -57,7 +57,9 @@
   <logger name="org.apache.cassandra.service.CassandraDaemon" level="DEBUG" />
   <logger name="org.apache.cassandra.service.ElassandraDaemon" level="TRACE" />
   
-  <logger name="org.elassandra.cluster" level="TRACE" />
+  <logger name="org.elassandra.discovery" level="TRACE" />
+  <logger name="org.elassandra.cluster.service" level="DEBUG" />
+
   <!--
   <logger name="org.elassandra.index" level="TRACE" />
   <logger name="org.elassandra.search" level="TRACE" />

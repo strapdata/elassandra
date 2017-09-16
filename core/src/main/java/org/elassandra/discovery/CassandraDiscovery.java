@@ -426,8 +426,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             // node was removed from the gossiper, down or leaving, acknowledge to avoid locking.
             DiscoveryNode node = listener.attendees.remove(hostId);
             if (node != null) {
+                logger.debug("nack node={} version={} remaining attendees={}", node.getId(), listener.version(), listener.attendees.keySet());
                 listener.ackListener.onNodeAck(node, new NodeClosedException(node));
-                listener.countDownLatch.countDown();
             }
         } else {
             VersionedValue vv = endPointState.getApplicationState(ApplicationState.X2);
@@ -435,11 +435,13 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 DiscoveryNode node = listener.attendees.remove(hostId);
                 if (node != null) {
                     // acknowledge node having the right metadata version number.
+                    logger.debug("ack node={} version={} remaining attendees={}", node.getId(), listener.version(), listener.attendees.keySet());
                     listener.ackListener.onNodeAck(node, null);
-                    listener.countDownLatch.countDown();
-                } 
+                }
             }
         }
+        if (listener.attendees.size() == 0)
+            listener.countDownLatch.countDown();
     }
     
     
@@ -447,7 +449,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         final long expectedVersion;
         final Discovery.AckListener ackListener;
         final ClusterState clusterState;
-        final CountDownLatch countDownLatch;
+        final CountDownLatch countDownLatch = new CountDownLatch(1);
         final ConcurrentMap<String, DiscoveryNode> attendees;
         
         public MetaDataVersionAckListener(long version, Discovery.AckListener ackListener, ClusterState clusterState) {
@@ -455,10 +457,17 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             this.ackListener = ackListener;
             this.clusterState = clusterState;
             this.attendees = new ConcurrentHashMap<String, DiscoveryNode>(clusterState.nodes().getSize());
-            clusterState.nodes().forEach((n) -> { if (!localNode.getId().equals(n.getId())) attendees.put(n.getId(), n); });
             MetaDataVersionAckListener prevListener = CassandraDiscovery.this.metaDataVersionAckListener.getAndSet(this);
             assert prevListener == null : "metaDataVersionAckListener should be null";
-            this.countDownLatch = new CountDownLatch(this.attendees.size());
+            clusterState.nodes().forEach((n) -> { 
+                if (!localNode.getId().equals(n.getId()) && 
+                    n.status() == DiscoveryNodeStatus.ALIVE &&
+                    isNormal(Gossiper.instance.getEndpointStateForEndpoint(n.getInetAddress()))) 
+                    attendees.put(n.getId(), n); 
+                });
+            logger.debug("new MetaDataVersionAckListener version={} attendees={}", expectedVersion, this.attendees.keySet());
+            if (attendees.size() == 0)
+                countDownLatch.countDown();
         }
 
         public long version() {
@@ -474,6 +483,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             } catch (InterruptedException e) {
                 
             }
+            logger.debug("MetaDataVersionAckListener version={} await={}", expectedVersion, done);
             CassandraDiscovery.this.metaDataVersionAckListener.set(null);
             return done;
         }
