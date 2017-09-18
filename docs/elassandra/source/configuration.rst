@@ -180,8 +180,8 @@ Write performances
 Search performances
 ...................
 
-* Use few no* Use 16 to 64 vnodes per node to reduce the complexity of the token_ranges filter.
-ndom search strategy and increase the Cassandra replication factor to reduce the number of nodes requires for a search request.
+* Use 16 to 64 vnodes per node to reduce the complexity of the token_ranges filter.
+* Use the *RandomSearchStrategy* and increase the Cassandra Replication Factor to reduce the number of nodes requires for a search request.
 * Enable the ``token_ranges_bitset_cache``. This cache compute the token ranges filter once per Lucene segment. Check the token range bitset cache statistics to ensure this caching is efficient.
 * Enable Cassandra row caching to reduce the overhead introduce by fetching the requested fields from the underlying Cassandra table.
 * Enable Cassandra off-heap row caching in your Cassandra configuration.
