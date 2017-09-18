@@ -1,5 +1,6 @@
 5.5.0.0-beta1 - 2017-09-18
   * Upgrade to Elasticsearch 5.5.0 + Cassandra 3.11.0
+  * Improved support for concurrent mapping update.
 
 2.4.5.5 - 2017-08-23
   * Fix #112 Don't search over SETS
