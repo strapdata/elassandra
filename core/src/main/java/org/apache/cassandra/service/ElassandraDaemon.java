@@ -270,6 +270,12 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
     }
     
+    public void completeSetup() {
+        super.completeSetup();
+        if (this.node != null && this.node.clusterService() != null)
+            this.node.clusterService().publishGossipStates();
+    }
+    
     @Override
     public void beforeBootstrap() {
         if (node != null && this.bootstrapping) {

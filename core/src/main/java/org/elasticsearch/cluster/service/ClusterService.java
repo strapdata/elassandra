@@ -3135,4 +3135,17 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             this.discovery.publishX2(clusterState);
     }
     
+    /**
+     * publish gossip states when setup completed.
+     */
+    public void publishGossipStates() {
+        if (this.discovery != null) {
+            this.discovery.publishX2(state());
+            try {
+                this.discovery.publishX1();
+            } catch (IOException e) {
+                logger.error("Unexpected error", e);
+            }
+        }
+    }
 }

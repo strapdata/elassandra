@@ -575,6 +575,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 if (logger.isTraceEnabled())
                     logger.trace("Endpoint={} STATUS={} => may update searchEnabled", endpoint, versionValue);
                 
+                
                 // update searchEnabled according to the node status and autoEnableSearch.
                 if (isNormal(Gossiper.instance.getEndpointStateForEndpoint(endpoint))) {
                     if (!this.searchEnabled.get() && this.autoEnableSearch.get()) {
@@ -721,7 +722,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
 
     
-    private void publishX1() throws JsonGenerationException, JsonMappingException, IOException {
+    public void publishX1() throws JsonGenerationException, JsonMappingException, IOException {
         publishX1(false);
     }
     
@@ -748,9 +749,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             Gossiper.instance.addLocalApplicationState(ELASTIC_META_DATA, StorageService.instance.valueFactory.datacenter(clusterStateSting));
             if (logger.isTraceEnabled())
                 logger.trace("X2={} published in gossip state", clusterStateSting);
-        } else {
-            Gossiper.instance.injectApplicationState(FBUtilities.getBroadcastAddress(), ELASTIC_META_DATA, StorageService.instance.valueFactory.datacenter(clusterStateSting));
-            logger.warn("Gossip not enabled, injecting X2 metadata.version={}", clusterState.metaData().version());
         }
     }
 

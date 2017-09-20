@@ -790,6 +790,12 @@ public class Node implements Closeable {
         }
         */
         
+        // create elastic_admin if not exists after joining the ring and before allowing metadata update.
+        clusterService().createOrUpdateElasticAdminKeyspace();
+        
+        // Cassandra started => release metadata update blocks.
+        gatewayService().enableMetaDataPersictency();
+        
         transportService.acceptIncomingRequests();
 
         if (NetworkModule.HTTP_ENABLED.get(settings)) {
@@ -805,15 +811,6 @@ public class Node implements Closeable {
             writePortsFile("transport", transport.boundAddress());
         }
 
-        // create elastic_admin if not exists after joining the ring and before allowing metadata update.
-        clusterService().createOrUpdateElasticAdminKeyspace();
-        
-        // publish X1+X2 gossip states
-        //clusterService().publishGossipStates();
-        
-        // Cassandra started => release metadata update blocks.
-        gatewayService().enableMetaDataPersictency();
-        
         logger.info("Elasticsearch started state={}", clusterService.state().toString());
         
         // Added for esrally when started in foreground.
