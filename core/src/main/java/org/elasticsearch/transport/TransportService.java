@@ -299,7 +299,19 @@ public class TransportService extends AbstractLifecycleComponent {
         return new TransportStats(
             transport.serverOpen(), adapter.rxMetric.count(), adapter.rxMetric.sum(), adapter.txMetric.count(), adapter.txMetric.sum());
     }
+    
+    public MeanMetric getRxMetric() {
+        return this.adapter.rxMetric;
+    }
 
+    public MeanMetric getTxMetric() {
+        return this.adapter.txMetric;
+    }
+    
+    public long getOpenConnections() {
+        return transport.serverOpen();
+    }
+    
     public BoundTransportAddress boundAddress() {
         return transport.boundAddress();
     }

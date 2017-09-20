@@ -121,9 +121,26 @@ public class NodeService extends AbstractComponent implements Closeable {
         return ingestService;
     }
 
+    public ThreadPool getThreadPool() {
+        return this.threadPool;
+    }
+    
+    public TransportService getTransportService() {
+        return this.transportService;
+    }
+    
+    
     @Override
     public void close() throws IOException {
         indicesService.close();
+    }
+
+    public HttpServerTransport getHttpServerTransport() {
+        return httpServerTransport;
+    }
+
+    public ScriptService getScriptService() {
+        return scriptService;
     }
 
 }
