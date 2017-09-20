@@ -13,9 +13,13 @@ Here is the mapping from Elasticsearch field basic types to CQL3 types :
 +----------------------+--------------------------+--------------------------------+
 | Elasticearch Types   | CQL Types                | Comment                        |
 +======================+==========================+================================+
-| string               | text                     |                                |
+| keyword              | text                     | Not analyzed text              |
 +----------------------+--------------------------+--------------------------------+
-| integer, short, byte | timestamp                |                                |
+| text                 | text                     | Analyzed text                  |
++----------------------+--------------------------+--------------------------------+
+| date                 | timestamp                |                                |
++----------------------+--------------------------+--------------------------------+
+| integer, short, byte | int                      |                                |
 +----------------------+--------------------------+--------------------------------+
 | long                 | bigint                   |                                |
 +----------------------+--------------------------+--------------------------------+
@@ -119,7 +123,7 @@ Meta-Fields
 * ``_ttl``  and ``_timestamp`` are mapped to the cassandra `TTL <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ttl_t.html>`_ and `WRITIME <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_writetime.html>`_. The returned ``_ttl``  and ``_timestamp`` for a document will be the one of a regular cassandra columns if there is one in the underlying table. Moreover, when indexing a document throught the Elasticearch API, all cassandra cells carry the same WRITETIME and TTL, but this could be different when upserting some cells using CQL.
 * ``_parent`` is string representation of the parent document primary key. If the parent document primary key is composite, this is string representation of columns defined by ``cql_parent_pk`` in the mapping. See `Parent-Child Relationship`_.
 * ``_token`` is a meta-field introduced by Elassandra, valued with **token(<partition_key>)**.
-* ``_node`` is a meta-field introduced by Elassandra, valued with the cassandra host id, allowing to check the datacenter consistency.
+* ``_node`` is an optional meta-field introduced by Elassandra, valued with the cassandra host id, allowing to check the datacenter consistency.
 
 Mapping change with zero downtime
 ---------------------------------
@@ -149,7 +153,7 @@ For example, you can create a new index **twitter2** mapped to the cassandra key
       }
    }
 
-You can set a specific mapping for **twitter2** and re-index existing data on each cassandra node with the following command (indices are named **elastic_<tablename>**).
+You can set a specific mapping for **twitter2** and re-index existing data on each cassandra node with the following command (indices are named **elastic_<tablename>_idx**).
 
 .. code::
 
