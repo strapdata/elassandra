@@ -105,5 +105,5 @@ verify_archive_installation() {
     assert_file "$ESHOME/lib" d cassandra cassandra 755
     assert_file "$ESHOME/NOTICE.txt" f cassandra cassandra 644
     assert_file "$ESHOME/LICENSE.txt" f cassandra cassandra 644
-    assert_file "$ESHOME/README.textile" f cassandra cassandra 644
+    #assert_file "$ESHOME/README.textile" f cassandra cassandra 644
 }

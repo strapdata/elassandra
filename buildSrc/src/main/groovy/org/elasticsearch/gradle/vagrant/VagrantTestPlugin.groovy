@@ -232,6 +232,12 @@ class VagrantTestPlugin implements Plugin<Project> {
             contents project.version
         }
 
+        Task createFullElassVersionFile = project.tasks.create('createFullElassVersionFile', FileContentsTask) {
+            dependsOn createBatsDirsTask
+            file "${batsDir}/archives/full_elass_version"
+            contents project.fullElassVersion
+        }
+
         Task createUpgradeFromFile = project.tasks.create('createUpgradeFromFile', FileContentsTask) {
             dependsOn createBatsDirsTask
             file "${batsDir}/archives/upgrade_from_version"
@@ -240,7 +246,7 @@ class VagrantTestPlugin implements Plugin<Project> {
 
         Task vagrantSetUpTask = project.tasks.create('setupBats')
         vagrantSetUpTask.dependsOn 'vagrantCheckVersion'
-        vagrantSetUpTask.dependsOn copyBatsTests, copyBatsUtils, copyBatsArchives, createVersionFile, createUpgradeFromFile
+        vagrantSetUpTask.dependsOn copyBatsTests, copyBatsUtils, copyBatsArchives, createVersionFile, createFullElassVersionFile, createUpgradeFromFile
     }
 
     private static void createCheckVagrantVersionTask(Project project) {

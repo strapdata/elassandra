@@ -136,6 +136,17 @@ allprojects {
     // for backcompat testing
     indexCompatVersions = versions
     wireCompatVersions = versions.subList(firstMajorIndex, versions.size())
+
+    // elassandra adds a 4th digit to the version number
+    elassVersion = VersionProperties.elassandra
+    // full version number including the elassandra added digit, and taking care of eventual "-SNAPSHOT" suffix
+
+    if (version.endsWith("-SNAPSHOT")) {
+      fullElassVersion = "${version.minus('-SNAPSHOT')}.${elassVersion}-SNAPSHOT"
+    }
+    else {
+      fullElassVersion = "${version}.${elassVersion}"
+    }
   }
 }
 

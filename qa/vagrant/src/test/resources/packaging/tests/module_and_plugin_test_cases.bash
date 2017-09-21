@@ -300,9 +300,10 @@ fi
     install_and_check_plugin mapper murmur3
 }
 
-@test "[$GROUP] check reindex module" {
-    check_module reindex
-}
+# disabled in elassandra
+#@test "[$GROUP] check reindex module" {
+#    check_module reindex
+#}
 
 @test "[$GROUP] install repository-hdfs plugin" {
     install_and_check_plugin repository hdfs hadoop-client-*.jar hadoop-common-*.jar hadoop-annotations-*.jar hadoop-auth-*.jar hadoop-hdfs-*.jar htrace-core-*.jar protobuf-java-*.jar  commons-collections-*.jar commons-configuration-*.jar commons-io-*.jar commons-lang-*.jar servlet-api-*.jar
