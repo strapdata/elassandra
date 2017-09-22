@@ -269,13 +269,14 @@ Then, in the fetch phases, the coordinator fetches the required fields by issuin
 
 .. image:: images/search-path.png
 
-Adding a token_ranges filter to the original Elasticsearch query introduce an overhead in the query phase, and the more you have vnodes, the more this overhead increase with many OR clauses. To mitigates this overhead,
-Elassandra provides a random search strategy requesting the minimum of nodes to cover the whole Cassandra ring. For example, if you have a datacenter with four nodes and a replication factor of two, it will request only two nodes
+Elassandra provides a random search strategy requesting the minimum of nodes to cover the whole Cassandra ring. 
+For example, if you have a datacenter with four nodes and a replication factor of two, it will request only two nodes
 with simplified token_ranges filters (adjacent token ranges are automatically merged).
 
-Additionnaly, as these token_ranges filters only change when the datacenter topology change (for example when a node is down or when adding a new node), Elassandra introduces a token_range bitset cache for each lucene segment.
-With this cache, out of range documents are seen as deleted documents at the lucene segment layer for subsequent queries using the same token_range filter.
-This drastically improves search performances.
+Additionnaly, as these token_ranges filters only change when the datacenter topology change (for example when a node is down or when adding a new node), 
+Elassandra introduces a token_range bitset cache for each lucene segment.
+With this cache, out of range documents are seen as deleted documents at the lucene segment layer for subsequent 
+queries using the same token_range filter. This drastically improves search performances.
 
 Finally, the CQL fetch overhead can be mitigated by using keys and rows Cassandra caching, eventually using the off-heap caching features of Cassandra.
 

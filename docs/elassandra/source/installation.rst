@@ -74,7 +74,7 @@ On a production environment, it's better to modify some system settings like dis
 On linux, consider installing `jemalloc <http://jemalloc.net/>`_.
 
 DEB package
-----------------
+-----------
 
 .. include:: install_deb.rst
 
@@ -91,27 +91,31 @@ Docker image
 .. _source:
 
 Build from source
---------------------
+-----------------
 
 Requirements:
   - Oracle JDK 1.8 or OpenJDK 8
-  - maven >= 3.5
+  - gradle >= 3.5
 
 Clone Elassandra repository and Cassandra sub-module::
 
-   git clone --recursive git@github.com:strapdata/elassandra.git
+.. code::
+   git clone --recursive git@github.com:strapdata/elassandra.git
    cd elassandra
 
-Elassandra uses `Maven <http://maven.apache.org>`_ for its build system. Simply run::
+Elassandra 5.5+ uses `Gradle <https://gradle.org/>`_ for its build system. Simply run::
 
-    mvn clean package -DskipTests
+.. code::
+   gradle assemble
 
-It's gonna take a while, you might go for a cup of tea.
+or to build only the tgz tarball for a release version : 
 
-If everything succeed, tarballs will be built in:
+.. code::
+   gradle assemble distribution:tar:assemble -Dbuild.snapshot=false
+
+It's gonna take a while, you might go for a cup of tea. If everything succeed, tarballs will be built in:
 
 .. parsed-literal::
-  distribution/tar/target/release/elasandra-|version|-SNAPSHOT.tar.gz
-  distribution/zip/target/release/elasandra-|version|-SNAPSHOT.zip
+  distribution/(tar|zip|rpm|deb)/build/distributions/
 
 Then follow the instructions for `tarball`_ installation.

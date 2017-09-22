@@ -242,7 +242,7 @@ Optimizing search requests
 The search strategy
 ...................
 
-Elassandra supports various search strategies to distribute a search request over the Elasticsearch cluster. A search strategy is configured at index-level with the ``index.search_strategy_class`` parameter.
+Elassandra supports various search strategies to distribute a search request over the Elasticsearch cluster. A search strategy is configured at index-level with the ``index.search_strategy_class`` dynamic parameter. 
 
 +-----------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
 | Strategy                                                                    | Description                                                                                                                        |
@@ -254,7 +254,7 @@ Elassandra supports various search strategies to distribute a search request ove
 |                                                                             | For example, if your underlying keyspace replication factor is N, a search only invloves 1/N of the nodes.                         |
 +-----------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
 
-You can create an index with the ``RandomSearchStrategy`` as shown below.
+You can create an index with the ``RandomSearchStrategy`` as shown below (or change it dynamically).
 
 .. code::
 
@@ -271,8 +271,7 @@ You can create an index with the ``RandomSearchStrategy`` as shown below.
 Caching features
 ----------------
 
-Compared to Elasticsearch, Elassandra introduces a search overhead by adding to each query a token ranges filter and by fetching fields through a CQL request at the Cassandra layer. These overheads can
-be both mitigated by using caching features.
+Compared to Elasticsearch, Elassandra adds to each query a token ranges filter and by fetching fields through a CQL request at the Cassandra layer.
 
 Token Ranges Query Cache
 ........................

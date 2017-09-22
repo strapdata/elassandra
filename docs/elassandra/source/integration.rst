@@ -4,8 +4,10 @@ Integration
 Integration with an existing cassandra cluster
 ----------------------------------------------
 
-Elassandra include a modified version of cassandra 2.2, so **all nodes of a cluster should run elassandra binaries**. However, you can start a node with or without the elasticsearch support. 
-Obviously, all nodes of a datacenter should run cassandra only or cassandra with elasticsearch.
+Elassandra include a modified version of cassandra, available at `strapdata-cassandra repro <https://github.com/strapdata/cassandra>`_, 
+so **all nodes of a cluster should run elassandra binaries**. However, you can start a node with or without 
+the elasticsearch support.  Obviously, all nodes of a datacenter should run cassandra only or cassandra with 
+elasticsearch.
 
 Rolling upgrade to elassandra
 .............................
@@ -21,7 +23,7 @@ Before starting any elassandra node with elasticsearch enable, do a rolling repl
 Create a new elassandra datacenter
 ..................................
 
-The overall procedure is similar the cassandra one describe on https://docs.datastax.com/en/cassandra/2.1/cassandra/operations/ops_add_dc_to_cluster_t.html.
+The overall procedure is similar the cassandra one describe on `Adding a datacenter to a cluster <https://docs.datastax.com/en/cassandra/3.0/cassandra/operations/opsAddDCToCluster.html#opsAddDCToCluster>`_.
 
 For earch nodes in your new datacenter :
 
@@ -62,7 +64,7 @@ After rebuild on all your new nodes, you should see the same number of document 
 Installing an Elasticsearch plugins
 -----------------------------------
 
-Elasticsearch plugin installation remains unchanged, see elasticsearch `plugin installation <https://www.elastic.co/guide/en/elasticsearch/plugins/2.4/installation.html>`_.
+Elasticsearch plugin installation remains unchanged, see elasticsearch `plugin installation <https://www.elastic.co/guide/en/elasticsearch/plugins/5.5/installation.html>`_.
 
 * bin/plugin install <url>
 
@@ -70,7 +72,7 @@ Elasticsearch plugin installation remains unchanged, see elasticsearch `plugin i
 Running Kibana with Elassandra
 ------------------------------
 
-`Kibana <https://www.elastic.co/guide/en/kibana/4.6/introduction.html>`_ version 4.6 can run with Elassandra, providing a visualization tool for cassandra and elasticsearch data.
+`Kibana <https://www.elastic.co/guide/en/kibana/5.5/introduction.html>`_ can run with Elassandra, providing a visualization tool for cassandra and elasticsearch data.
 
 * If you want to load sample data from the `Kibana Getting started <https://www.elastic.co/guide/en/kibana/current/getting-started.html>`_, apply the following changes to logstash.jsonl with a sed command.
 
@@ -124,7 +126,7 @@ The `Elasticsearch JDBC driver <https://github.com/Anchormen/sql4es>`_. can be u
 Running Spark with Elassandra
 -----------------------------
 
-A modified version of the `elasticsearch-hadoop <https://github.com/elastic/elasticsearch-hadoop>`_ connector is available for elassandra at `https://github.com/vroyer/elasticsearch-hadoop`_. 
+A modified version of the `elasticsearch-hadoop <https://github.com/elastic/elasticsearch-hadoop>`_ connector is available for elassandra at `https://github.com/strapdata/elasticsearch-hadoop`_. 
 This connector works with spark as describe in the elasticsearch documentation available at `https://www.elastic.co/guide/en/elasticsearch/hadoop/current/index.html`.
 
 For example, in order to submit a spark job in client mode.
