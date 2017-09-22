@@ -1,3 +1,6 @@
+5.5.0.1 - 2017-09-22
+  * Fix NPE on startup
+
 5.5.0.0-beta1 - 2017-09-18
   * Upgrade to Elasticsearch 5.5.0 + Cassandra 3.11.0
   * Improved support for concurrent mapping update.
