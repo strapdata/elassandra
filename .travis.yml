@@ -3,16 +3,15 @@ language: java
 jdk:
   - oraclejdk8
 
-env:
-  global:
-  - MVN_SHARED_CACHE=$HOME/.m2
+before_cache:
+  - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
+  - rm -fr $HOME/.gradle/caches/*/plugin-resolution/
+
 cache:
   directories:
-    - "${MVN_SHARED_CACHE}"
+    - $HOME/.gradle/caches/
+    - $HOME/.gradle/wrapper/
 
-before_install:
-  - mkdir -p ${MVN_SHARED_CACHE}
-  
 install: gradle assemble -Dbuild.snapshot=false
 
 script: gradle core:test -Dbuild.snapshot=false
