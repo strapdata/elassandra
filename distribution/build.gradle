@@ -438,9 +438,8 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
     }
     else if (project.name == "deb") {
       commandLine "python2", "setup.py", "install", "--no-compile",
-              "--root", "${packagingFiles}"
-     // require python-distutils, but does not work on centos...
-     //         ,"--install-layout", "deb"
+                  "--root", "${packagingFiles}",
+                  "--install-lib", "/usr/lib/python2.7/dist-packages"
       outputs.dir "${packagingFiles}/usr/lib/python2.7/dist-packages"
     }
   }

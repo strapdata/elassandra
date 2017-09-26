@@ -136,8 +136,8 @@ verify_package_installation() {
 
         # Pylib files
         assert_file "/usr/lib/python2.7/dist-packages/cqlshlib" d root root 755
-        assert_file "/usr/lib/python2.7/dist-packages/cassandra_pylib-0.0.0.egg-info" f root root 644
-        assert_file "/usr/lib/python2.7/dist-packages/cqlshlib/__init__.py" f root root 644
+        assert_file "/usr/lib/python2.7/dist-packages/cassandra_pylib-0.0.0.egg-info" f root root 664
+        assert_file "/usr/lib/python2.7/dist-packages/cqlshlib/__init__.py" f root root 664
     fi
 
     if is_rpm; then

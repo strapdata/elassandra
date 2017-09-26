@@ -40,8 +40,8 @@ load $BATS_UTILS/plugins.bash
 
 # Cleans everything for the 1st execution
 setup() {
-    #skip_not_sysvinit
-    SERVICE="sudo service --skip-redirect"
+    skip_not_sysvinit
+    SERVICE="sudo service"
     skip_not_dpkg_or_rpm
     export_elasticsearch_paths
 }
