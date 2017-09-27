@@ -33,6 +33,7 @@ deploy:
       - "$TARBALL"
       - "$ZIPBALL"
       - "$RPMPKG"
+      - "$DEBPKG"
     skip_cleanup: true
     on:
       tags: true
@@ -47,6 +48,7 @@ deploy:
       - "$TARBALL"
       - "$ZIPBALL"
       - "$RPMPKG"
+      - "$DEBPKG"
     skip_cleanup: true
     on:
       tags: true
