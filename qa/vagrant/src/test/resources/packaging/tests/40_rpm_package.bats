@@ -45,7 +45,7 @@ setup() {
 }
 
 @test "[RPM] package depends on bash" {
-    rpm -qpR elassandra-$(cat version).rpm | grep '/bin/bash'
+    rpm -qpR elassandra-$(cat full_elass_version).rpm | grep '/bin/bash'
 }
 
 ##################################
@@ -57,7 +57,7 @@ setup() {
 }
 
 @test "[RPM] package is available" {
-    count=$(ls elassandra-$(cat version).rpm | wc -l)
+    count=$(ls elassandra-$(cat full_elass_version).rpm | wc -l)
     [ "$count" -eq 1 ]
 }
 
@@ -67,7 +67,7 @@ setup() {
 }
 
 @test "[RPM] install package" {
-    rpm -i elassandra-$(cat version).rpm
+    rpm -i elassandra-$(cat full_elass_version).rpm
 }
 
 @test "[RPM] package is installed" {
@@ -159,7 +159,7 @@ setup() {
 }
 
 @test "[RPM] reinstall package" {
-    rpm -i elassandra-$(cat version).rpm
+    rpm -i elassandra-$(cat full_elass_version).rpm
 }
 
 @test "[RPM] package is installed by reinstall" {

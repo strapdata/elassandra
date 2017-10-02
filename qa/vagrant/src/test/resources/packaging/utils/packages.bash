@@ -53,7 +53,7 @@ export_elasticsearch_paths() {
 # -u upgrade rather than install. This only matters for rpm.
 # -v the version to upgrade to. Defaults to the version under test.
 install_package() {
-    local version=$(cat version)
+    local version=$(cat full_elass_version)
     local rpmCommand='-i'
     while getopts ":uv:" opt; do
         case $opt in
@@ -121,10 +121,10 @@ verify_package_installation() {
     assert_file "$ESPIDDIR" d cassandra cassandra 755
     assert_file "$ESHOME/NOTICE.txt" f root root 644
     assert_file "$ESHOME/bin" d root root 755
-    assert_file "$ESHOME/README.textile" f root root 644
+    #assert_file "$ESHOME/README.textile" f root root 644
 
     # python cassandra-driver for cqlsh.py
-    assert_file "$ESHOME/lib/cassandra-driver-internal-only-3.7.0.post0-2481531.zip" f root root 644
+    assert_file $ESHOME/lib/cassandra-driver-internal-only-*.zip f root root 644
 
     if is_dpkg; then
         # Env file
@@ -136,8 +136,8 @@ verify_package_installation() {
 
         # Pylib files
         assert_file "/usr/lib/python2.7/dist-packages/cqlshlib" d root root 755
-        assert_file "/usr/lib/python2.7/dist-packages/cassandra_pylib-0.0.0.egg-info" f root root 644
-        assert_file "/usr/lib/python2.7/dist-packages/cqlshlib/__init__.py" f root root 644
+        assert_file "/usr/lib/python2.7/dist-packages/cassandra_pylib-0.0.0.egg-info" f root root 664
+        assert_file "/usr/lib/python2.7/dist-packages/cqlshlib/__init__.py" f root root 664
     fi
 
     if is_rpm; then

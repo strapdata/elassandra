@@ -100,7 +100,7 @@ class VagrantTestPlugin implements Plugin<Project> {
             artifactPattern "https://packagecloud.io/elassandra/latest/packages/el/7/[module]-[revision]-1.noarch.[ext]/download"
         }
         repos.ivy {
-            artifactPattern "https://packagecloud.io/elassandra/latest/packages/debian/jessie/[module]_è[revision]-1_all.[ext]/download"
+            artifactPattern "https://packagecloud.io/elassandra/latest/packages/debian/jessie/[module]_[revision]-1_all.[ext]/download"
         }
         //*/
 
@@ -130,7 +130,7 @@ class VagrantTestPlugin implements Plugin<Project> {
         String upgradeFromVersion = System.getProperty("tests.packaging.upgradeVersion");
         if (upgradeFromVersion == null) {
             //upgradeFromVersion = project.indexCompatVersions[new Random(seed).nextInt(project.indexCompatVersions.size())]
-            upgradeFromVersion = '2.4.5.4'
+            upgradeFromVersion = '5.5.0.0-SNAPSHOT'
         }
 
         DISTRIBUTION_ARCHIVES.each {
@@ -138,13 +138,15 @@ class VagrantTestPlugin implements Plugin<Project> {
             project.dependencies.add(BATS, project.dependencies.project(path: ":distribution:${it}", configuration: 'archives'))
         }
 
+
         /*
         UPGRADE_FROM_ARCHIVES.each {
             // The version of elasticsearch that we upgrade *from*
             // project.dependencies.add(BATS, "com.strapdata.elasticsearch.distribution.${it}:elasticsearch:${upgradeFromVersion}@${it}")
             project.dependencies.add(BATS, "com.strapdata.elasticsearch.distribution.${it}:elassandra:${upgradeFromVersion}@${it}")
         }
-        //*/
+        */
+
 
         project.extensions.esvagrant.testSeed = seed
         project.extensions.esvagrant.formattedTestSeed = formattedSeed
@@ -232,6 +234,12 @@ class VagrantTestPlugin implements Plugin<Project> {
             contents project.version
         }
 
+        Task createFullElassVersionFile = project.tasks.create('createFullElassVersionFile', FileContentsTask) {
+            dependsOn createBatsDirsTask
+            file "${batsDir}/archives/full_elass_version"
+            contents project.fullElassVersion
+        }
+
         Task createUpgradeFromFile = project.tasks.create('createUpgradeFromFile', FileContentsTask) {
             dependsOn createBatsDirsTask
             file "${batsDir}/archives/upgrade_from_version"
@@ -240,7 +248,7 @@ class VagrantTestPlugin implements Plugin<Project> {
 
         Task vagrantSetUpTask = project.tasks.create('setupBats')
         vagrantSetUpTask.dependsOn 'vagrantCheckVersion'
-        vagrantSetUpTask.dependsOn copyBatsTests, copyBatsUtils, copyBatsArchives, createVersionFile, createUpgradeFromFile
+        vagrantSetUpTask.dependsOn copyBatsTests, copyBatsUtils, copyBatsArchives, createVersionFile, createFullElassVersionFile, createUpgradeFromFile
     }
 
     private static void createCheckVagrantVersionTask(Project project) {

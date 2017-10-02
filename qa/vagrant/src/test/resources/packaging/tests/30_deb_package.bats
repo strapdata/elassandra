@@ -46,7 +46,7 @@ setup() {
 }
 
 @test "[DEB] package depends on bash" {
-    dpkg -I elasticsearch-$(cat version).deb | grep "Depends:.*bash.*"
+    dpkg -I elassandra-$(cat full_elass_version).deb | grep "Depends:.*bash.*"
 }
 
 ##################################
@@ -58,21 +58,21 @@ setup() {
 }
 
 @test "[DEB] package is available" {
-    count=$(ls elasticsearch-$(cat version).deb | wc -l)
+    count=$(ls elassandra-$(cat full_elass_version).deb | wc -l)
     [ "$count" -eq 1 ]
 }
 
 @test "[DEB] package is not installed" {
-    run dpkg -s 'elasticsearch'
+    run dpkg -s 'elassandra'
     [ "$status" -eq 1 ]
 }
 
 @test "[DEB] install package" {
-    dpkg -i elasticsearch-$(cat version).deb
+    dpkg -i elassandra-$(cat full_elass_version).deb
 }
 
 @test "[DEB] package is installed" {
-    dpkg -s 'elasticsearch'
+    dpkg -s 'elassandra'
 }
 
 @test "[DEB] verify package installation" {
@@ -80,7 +80,7 @@ setup() {
 }
 
 @test "[DEB] verify elasticsearch-plugin list runs without any plugins installed" {
-    local plugins_list=`$ESHOME/bin/elasticsearch-plugin list`
+    local plugins_list=`/usr/bin/elasticsearch-plugin list`
     [[ -z $plugins_list ]]
 }
 
@@ -88,7 +88,7 @@ setup() {
     # Wait a second to give Elasticsearch a change to start if it is going to.
     # This isn't perfect by any means but its something.
     sleep 1
-    ! ps aux | grep elasticsearch | grep java
+    ! ps aux | grep cassandra | grep java
     # You might be tempted to use jps instead of the above but that'd have to
     # look like:
     # ! sudo -u elasticsearch jps | grep -i elasticsearch
@@ -113,95 +113,92 @@ setup() {
 # Uninstall DEB package
 ##################################
 @test "[DEB] remove package" {
-    dpkg -r 'elasticsearch'
+    dpkg -r 'elassandra'
 }
 
 @test "[DEB] package has been removed" {
-    run dpkg -s 'elasticsearch'
+    run dpkg -s 'elassandra'
     [ "$status" -eq 0 ]
     echo "$output" | grep -i "status" | grep -i "deinstall ok"
 }
 
 @test "[DEB] verify package removal" {
     # The removal must stop the service
-    count=$(ps | grep Elasticsearch | wc -l)
+    count=$(ps | grep cassandra | wc -l)
     [ "$count" -eq 0 ]
 
     # The removal must disable the service
     # see prerm file
     if is_systemd; then
         # Debian systemd distros usually returns exit code 3
-        run systemctl status elasticsearch.service
+        run systemctl status cassandra.service
         [ "$status" -eq 3 ]
 
-        run systemctl is-enabled elasticsearch.service
+        run systemctl is-enabled cassandra.service
         [ "$status" -eq 1 ]
     fi
 
     # Those directories are deleted when removing the package
     # see postrm file
-    assert_file_not_exist "/var/log/elasticsearch"
-    assert_file_not_exist "/usr/share/elasticsearch/plugins"
-    assert_file_not_exist "/usr/share/elasticsearch/modules"
-    assert_file_not_exist "/var/run/elasticsearch"
+    assert_file_not_exist "/var/log/cassandra"
+    assert_file_not_exist "/usr/share/cassandra/plugins"
+    assert_file_not_exist "/usr/share/cassandra/modules"
+    assert_file_not_exist "/var/run/cassandra"
 
     # Those directories are removed by the package manager
-    assert_file_not_exist "/usr/share/elasticsearch/bin"
-    assert_file_not_exist "/usr/share/elasticsearch/lib"
-    assert_file_not_exist "/usr/share/elasticsearch/modules"
-    assert_file_not_exist "/usr/share/elasticsearch/modules/lang-painless"
+    assert_file_not_exist "/usr/share/cassandra/bin"
+    assert_file_not_exist "/usr/share/cassandra/lib"
+    assert_file_not_exist "/usr/share/cassandra/modules"
+    assert_file_not_exist "/usr/share/cassandra/modules/lang-painless"
+    assert_file_not_exist "/usr/share/cassandra/tools"
 
     # The configuration files are still here
-    assert_file_exist "/etc/elasticsearch"
-    assert_file_exist "/etc/elasticsearch/scripts"
-    assert_file_exist "/etc/elasticsearch/elasticsearch.yml"
-    assert_file_exist "/etc/elasticsearch/jvm.options"
-    assert_file_exist "/etc/elasticsearch/log4j2.properties"
+    assert_file_exist "/etc/cassandra"
+    assert_file_exist "/etc/cassandra/scripts"
+    assert_file_exist "/etc/cassandra/elasticsearch.yml"
+    assert_file_exist "/etc/cassandra/jvm.options"
+    assert_file_exist "/etc/cassandra/logback.xml"
 
     # The env file is still here
-    assert_file_exist "/etc/default/elasticsearch"
+    assert_file_exist "/etc/default/cassandra"
 
     # The service files are still here
-    assert_file_exist "/etc/init.d/elasticsearch"
-    assert_file_exist "/usr/lib/systemd/system/elasticsearch.service"
+    assert_file_exist "/etc/init.d/cassandra"
+    assert_file_exist "/usr/lib/systemd/system/cassandra.service"
 }
 
 @test "[DEB] purge package" {
     # User installed scripts aren't removed so we'll just get them ourselves
     rm -rf $ESSCRIPTS
-    dpkg --purge 'elasticsearch'
+    dpkg --purge 'elassandra'
 }
 
 @test "[DEB] verify package purge" {
     # all remaining files are deleted by the purge
-    assert_file_not_exist "/etc/elasticsearch"
-    assert_file_not_exist "/etc/elasticsearch/scripts"
-    assert_file_not_exist "/etc/elasticsearch/elasticsearch.yml"
-    assert_file_not_exist "/etc/elasticsearch/jvm.options"
-    assert_file_not_exist "/etc/elasticsearch/log4j2.properties"
+    assert_file_not_exist "/etc/cassandra"
 
-    assert_file_not_exist "/etc/default/elasticsearch"
+    assert_file_not_exist "/etc/default/cassandra"
 
-    assert_file_not_exist "/etc/init.d/elasticsearch"
-    assert_file_not_exist "/usr/lib/systemd/system/elasticsearch.service"
+    assert_file_not_exist "/etc/init.d/cassandra"
+    assert_file_not_exist "/usr/lib/systemd/system/cassandra.service"
 
-    assert_file_not_exist "/usr/share/elasticsearch"
+    assert_file_not_exist "/usr/share/cassandra"
 
     assert_file_not_exist "/usr/share/doc/elasticsearch"
     assert_file_not_exist "/usr/share/doc/elasticsearch/copyright"
 }
 
 @test "[DEB] package has been completly removed" {
-    run dpkg -s 'elasticsearch'
+    run dpkg -s 'elassandra'
     [ "$status" -eq 1 ]
 }
 
 @test "[DEB] reinstall package" {
-    dpkg -i elasticsearch-$(cat version).deb
+    dpkg -i elassandra-$(cat full_elass_version).deb
 }
 
 @test "[DEB] package is installed by reinstall" {
-    dpkg -s 'elasticsearch'
+    dpkg -s 'elassandra'
 }
 
 @test "[DEB] verify package reinstallation" {
@@ -209,10 +206,10 @@ setup() {
 }
 
 @test "[DEB] repurge package" {
-    dpkg --purge 'elasticsearch'
+    dpkg --purge 'elassandra'
 }
 
 @test "[DEB] package has been completly removed again" {
-    run dpkg -s 'elasticsearch'
+    run dpkg -s 'elassandra'
     [ "$status" -eq 1 ]
 }

@@ -21,11 +21,11 @@ task buildRpm(type: Rpm) {
   dependsOn preparePackagingFiles
   baseName 'elassandra' // this is what pom generation uses for artifactId
   // Follow elasticsearch's rpm file naming convention
-  archiveName "${packageName}-${project.version}.rpm"
+  archiveName "${packageName}-${project.fullElassVersion}.rpm"
   packageGroup 'Application/Internet'
   prefix '/usr'
   packager 'root'
-  version = project.version.replace('-', '_')
+  version = project.fullElassVersion.replace('-', '_')
   release = '1'
   arch 'NOARCH'
   os 'LINUX'

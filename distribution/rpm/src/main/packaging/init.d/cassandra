@@ -51,7 +51,7 @@ if [ -f "$ES_ENV_FILE" ]; then
     . "$ES_ENV_FILE"
 fi
 
-# Export some variables needed if defined in ${path.env}
+# Export some variables if defined in ${path.env}
 export CASSANDRA_LOGDIR
 [ -n "$EXTRA_CLASSPATH" ] && export EXTRA_CLASSPATH
 [ -n "$CASSANDRA_DAEMON" ] && export CASSANDRA_DAEMON
@@ -59,10 +59,6 @@ export CASSANDRA_LOGDIR
 [ -n "$JAVA_HOME" ] && export JAVA_HOME
 [ -n "$CASSANDRA_CONF" ] && export CASSANDRA_CONF
 
-
-if [ "$CASSANDRA_USER" != "cassandra" ] || [ "$CASSANDRA_GROUP" != "cassandra" ]; then
-    echo "WARNING: CASSANDRA_USER and CASSANDRA_GROUP are deprecated and will be removed in the next major version of Elassandra, got: [$CASSANDRA_USER:$CASSANDRA_GROUP]"
-fi
 
 # CONF_FILE setting was removed
 if [ ! -z "$CONF_FILE" ]; then

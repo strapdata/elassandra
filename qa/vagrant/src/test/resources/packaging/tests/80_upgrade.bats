@@ -41,6 +41,7 @@ load $BATS_UTILS/packages.bash
 
 # Cleans everything for the 1st execution
 setup() {
+    skip
     skip_not_dpkg_or_rpm
 }
 
@@ -54,7 +55,7 @@ setup() {
 }
 
 @test "[UPGRADE] check elasticsearch version is old version" {
-    curl -s localhost:9200 | grep \"number\"\ :\ \"$(cat upgrade_from_version)\" || {
+    curl -s localhost:9200 | grep \"number\"\ :\ \"$(cat upgrade_from_version | grep -oP '^(\d)*\.(\d)*\.(\d)*')\" || {
         echo "Installed an unexpected version:"
         curl -s localhost:9200
         false
