@@ -818,7 +818,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         public Builder() {
             try {
                 clusterUUID = SystemKeyspace.getLocalHostId().toString();
-            } catch (java.lang.AssertionError |java.lang.NoClassDefFoundError e) {
+            } catch (java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException |java.lang.NoClassDefFoundError e) {
                 // for testing when Cassandra is nnot initialized.
                 clusterUUID = UUID.randomUUID().toString();
             }
