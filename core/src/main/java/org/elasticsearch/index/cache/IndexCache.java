@@ -67,12 +67,14 @@ public class IndexCache extends AbstractIndexComponent implements Closeable {
 
     @Override
     public void close() throws IOException {
-        IOUtils.close(queryCache, bitsetFilterCache);
+        IOUtils.close(queryCache, bitsetFilterCache, tokenRangeBitsetFilterCache);
     }
 
     public void clear(String reason) {
         queryCache.clear(reason);
         bitsetFilterCache.clear(reason);
+        if (tokenRangeBitsetFilterCache != null)
+            tokenRangeBitsetFilterCache.clear(reason);
     }
 
 }
