@@ -198,6 +198,8 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                 mapping.put("type", esType);
             } else {
                 logger.error("CQL type "+cql3type.toString()+" not supported");
+                // #122 better error handling
+                throw new IOException("CQL type "+cql3type.toString()+" not supported");
             }
         } else if (cql3type instanceof CQL3Type.UserDefined) {
             UserType userType = (UserType)type;
