@@ -70,7 +70,6 @@ import org.apache.cassandra.schema.TableParams;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MapSerializer;
 import org.apache.cassandra.serializers.MarshalException;
-import org.apache.cassandra.serializers.UUIDSerializer;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.service.MigrationManager;
@@ -81,6 +80,7 @@ import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
+import org.apache.cassandra.utils.UUIDGen;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
@@ -147,6 +147,7 @@ import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.BaseGeoPointFieldMapper;
 import org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.LegacyGeoPointFieldType;
 import org.elasticsearch.index.mapper.CompletionFieldMapper;
+import org.elasticsearch.index.mapper.DateFieldMapper;
 import org.elasticsearch.index.mapper.DocumentFieldMappers;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.FieldMapper;
@@ -358,6 +359,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             .put("text", "keyword")
             .put("varchar", "keyword")
             .put("timestamp", "date")
+            .put("date", "date")
+            .put("time", "long")
             .put("int", "integer")
             .put("double", "double")
             .put("float", "float")
@@ -1260,8 +1263,12 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                                     // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
                                     if (!existingCqlType.equals(cqlType) && 
                                         !cqlType.equals("frozen<"+existingCqlType+">") &&
-                                        !(existingCqlType.endsWith("uuid") && cqlType.equals("text")) ) // #74 uuid is mapped as text
-                                        throw new IOException("Existing column ["+column+"] mismatch type "+cqlType);
+                                        !(existingCqlType.endsWith("uuid") && cqlType.equals("text")) && // #74 uuid is mapped as keyword
+                                        !(existingCqlType.equals("timeuuid") && (cqlType.equals("timestamp") || cqlType.equals("text"))) && 
+                                        !(existingCqlType.equals("date") && cqlType.equals("timestamp")) &&
+                                        !(existingCqlType.equals("time") && cqlType.equals("bigint"))
+                                        ) // timeuuid can be mapped to date
+                                    throw new IOException("Existing column ["+column+"] type ["+existingCqlType+"] mismatch with inferred type ["+cqlType+"]");
                             }
                         }
                     }
@@ -2017,11 +2024,24 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     }
                     break;
                 case TIMEUUID:
+                    if (fieldMapper instanceof DateFieldMapper) {
+                        // Timeuuid can be mapped to date rather than keyword.
+                        values[i] = UUIDGen.unixTimestamp(row.getUUID(columnName));
+                        break;
+                    }
+                    values[i] = row.getUUID(columnName).toString();
+                    break;
                 case UUID:
                     values[i] = row.getUUID(columnName).toString();
                     break;
                 case TIMESTAMP:
                     values[i] = value(fieldMapper, row.getTimestamp(columnName).getTime(), valueForSearch);
+                    break;
+                case DATE:
+                    values[i] = value(fieldMapper, row.getInt(columnName)*86400L*1000L, valueForSearch);
+                    break;
+                case TIME:
+                    values[i] = value(fieldMapper, row.getLong(columnName), valueForSearch);
                     break;
                 case INT:
                     values[i] = value(fieldMapper, row.getInt(columnName), valueForSearch);
@@ -2989,14 +3009,11 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 ByteBuffer bb = serialize(ksName, cfName, elementType, name, value, mapper);
                 return CollectionSerializer.pack(ImmutableList.of(bb), 1, ProtocolVersion.CURRENT);
             } 
-        } else if (type.getSerializer() instanceof UUIDSerializer) {
-            // #74 workaround
-            return type.decompose( (value instanceof UUID) ? value : UUID.fromString((String)value));
         } else {
             // Native cassandra type, encoded with mapper if available.
             if (mapper != null) {
                 if (mapper instanceof FieldMapper) {
-                    return type.decompose( ((FieldMapper) mapper).fieldType().cqlValue(value) );
+                    return type.decompose( ((FieldMapper) mapper).fieldType().cqlValue(value, type) );
                 } else if (mapper instanceof ObjectMapper && !((ObjectMapper)mapper).isEnabled()) {
                     // enabled=false => store field as json text
                     if (value instanceof Map) {

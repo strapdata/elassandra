@@ -65,6 +65,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.utils.Pair;
+import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.apache.commons.lang3.StringUtils;
@@ -126,6 +127,7 @@ import org.elasticsearch.index.engine.Engine.IndexResult;
 import org.elasticsearch.index.engine.Engine.Operation;
 import org.elasticsearch.index.mapper.BaseGeoPointFieldMapper;
 import org.elasticsearch.index.mapper.ContentPath;
+import org.elasticsearch.index.mapper.DateFieldMapper;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.DocumentMapperParser;
 import org.elasticsearch.index.mapper.DynamicTemplate;
@@ -182,7 +184,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
@@ -403,10 +404,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 }
                 geoPointFieldMapper.parse(this, geoPoint, null);
             }  else if (mapper instanceof FieldMapper) {
-                FieldMapper fieldMapper = (FieldMapper)mapper;
-                if (value instanceof UUID)
-                    value = value.toString();   // #74 uuid stored as string
-                fieldMapper.createField(this, value);
+                ((FieldMapper)mapper).createField(this, value);
             } else if (mapper instanceof ObjectMapper) {
                 final ObjectMapper objectMapper = (ObjectMapper)mapper;
                 final ObjectMapper.Nested nested = objectMapper.nested();

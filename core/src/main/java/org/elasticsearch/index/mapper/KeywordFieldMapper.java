@@ -19,6 +19,9 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.TimeUUIDType;
+import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.document.Field;
@@ -28,7 +31,6 @@ import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.Version;
-import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -39,7 +41,6 @@ import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.fielddata.plain.DocValuesIndexFieldData;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -262,6 +263,18 @@ public final class KeywordFieldMapper extends FieldMapper {
         }
 
         @Override
+        public Object cqlValue(Object value, AbstractType atype) {
+            if (value == null) {
+                return null;
+            }
+            if (atype instanceof UUIDType || atype instanceof TimeUUIDType) {
+                // #74 workaround
+                return UUID.fromString(value.toString()); 
+            }
+            return value.toString();
+        }
+        
+        @Override
         public Object cqlValue(Object value) {
             if (value == null) {
                 return null;
@@ -327,7 +340,7 @@ public final class KeywordFieldMapper extends FieldMapper {
     
     @Override
     public void createField(ParseContext context, Object object) throws IOException {
-        String value = (String) object;
+        String value = (object instanceof UUID) ? object.toString() : (String) object; // #74 uuid stored as string
         if (value == null)
             value = fieldType().nullValueAsString();
         

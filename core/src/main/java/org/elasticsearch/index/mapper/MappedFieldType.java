@@ -19,15 +19,16 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.index.PrefixCodedTerms;
+import org.apache.lucene.index.PrefixCodedTerms.TermIterator;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.PrefixCodedTerms.TermIterator;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.BoostQuery;
@@ -44,6 +45,8 @@ import org.elasticsearch.common.lucene.all.AllTermQuery;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.fielddata.IndexFieldData;
+import org.elasticsearch.index.mapper.Mapper.CqlCollection;
+import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.query.QueryRewriteContext;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.QueryShardException;
@@ -54,9 +57,6 @@ import org.joda.time.DateTimeZone;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
-
-import org.elasticsearch.index.mapper.Mapper.CqlCollection;
-import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 
 /**
  * This defines the core properties and functions to operate on a field.
@@ -391,6 +391,10 @@ public abstract class MappedFieldType extends FieldType {
      *  format it back to a string in this method. */
     public Object valueForDisplay(Object value) {
         return value;
+    }
+    
+    public Object cqlValue(Object value, AbstractType atype) {
+        return cqlValue(value);
     }
 
     public Object cqlValue(Object value) {

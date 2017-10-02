@@ -19,6 +19,9 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.SimpleDateType;
+import org.apache.cassandra.utils.UUIDGen;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.StoredField;
@@ -58,6 +61,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseDateTimeFormatter;
 
@@ -402,6 +406,15 @@ public class DateFieldMapper extends FieldMapper {
         }
 
         @Override
+        public Object cqlValue(Object value, AbstractType atype) {
+            Date date = (Date)cqlValue(value);
+            if (atype instanceof SimpleDateType) {
+                return (int)(date.getTime()/1000L);
+            }
+            return date;
+        }
+        
+        @Override
         public Object cqlValue(Object value) {
             if (value == null) {
                 return null;
@@ -528,6 +541,12 @@ public class DateFieldMapper extends FieldMapper {
         } else {
             if (object instanceof Date) {
                 value = ((Date)object).getTime();
+            } else if (object instanceof Integer) {
+                // CQL date stored as integer, number of day since epoche
+                value = ((Integer)object).longValue()*86400L*1000L;
+            } else if (object instanceof UUID) {
+                // CQL timeuuid
+                value = UUIDGen.unixTimestamp((UUID)object);
             } else {
                 value = (Long)object;
             }

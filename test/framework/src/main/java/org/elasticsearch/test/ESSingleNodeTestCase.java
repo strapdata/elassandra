@@ -28,8 +28,8 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.service.StorageService;
 import org.apache.lucene.util.IOUtils;
-import org.elasticsearch.action.ActionRequestBuilder;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequestBuilder;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
@@ -46,7 +46,6 @@ import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.BigArrays;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.env.Environment;
@@ -101,7 +100,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             System.out.println("cassandra-rackdc.properties="+System.getProperty("cassandra-rackdc.properties"));
             System.out.println("cassandra.storagedir="+System.getProperty("cassandra.storagedir"));
             System.out.println("logback.configurationFile="+System.getProperty("logback.configurationFile"));
-    
+            
             DatabaseDescriptor.daemonInitialization();
             DatabaseDescriptor.createAllDirectories();
     
@@ -123,7 +122,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
                     //.put(EsExecutors.PROCESSORS, 1) // limit the number of threads created
                     .put(NetworkModule.TRANSPORT_TYPE_KEY, NetworkModule.LOCAL_TRANSPORT)
                     .put(NetworkModule.HTTP_ENABLED.getKey(), false)
-                    .put("discovery.type", "cassandra")
                     .put("client.type", "node")
                     //.put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
                     

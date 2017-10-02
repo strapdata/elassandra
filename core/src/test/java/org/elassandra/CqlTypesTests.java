@@ -40,8 +40,8 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TimeZone;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -319,5 +319,25 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareIndex("test", "my_type", "5").setSource("{\"status_code\": \"NULL\" }").get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
        
         assertThat(client().prepareSearch().setIndices("test").setTypes("my_type").setQuery(QueryBuilders.queryStringQuery("status_code:NULL")).get().getHits().getTotalHits(), equalTo(3L));
+    }
+    
+    // test CQL timeuuid, date and time mapping.
+    @Test
+    public void testTimes() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, start timeuuid, end timeuuid, day date, hour time, PRIMARY KEY (id));");
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test")
+                .setSource("{ \"event_test\" : { \"discover\" : \"^((?!end).*)\", \"properties\":{ \"end\":{\"type\":\"date\",\"cql_collection\":\"singleton\"}}}}").get());
+        
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        Date d = sdf.parse("2010-10-10");
+        long daysSinceEpoch = TimeUnit.MILLISECONDS.toDays(d.getTime());
+        System.out.println("d="+d+" daysSinceEpoch="+daysSinceEpoch);
+        
+        process(ConsistencyLevel.ONE,"INSERT INTO test.event_test (id , start , end, day, hour) VALUES (?,now(),now(),?,?)", "1", (int)daysSinceEpoch, 10*3600*1000000000L);
+        SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("day:2010-10-10")).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
     }
 }

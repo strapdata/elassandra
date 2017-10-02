@@ -1,3 +1,6 @@
+5.5.0.2 - 2017-10-01
+  * Add support for CQL timeuuid, date and time.
+  
 5.5.0.1 - 2017-09-22
   * Fix NPE on startup
 
