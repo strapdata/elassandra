@@ -88,10 +88,10 @@ public class PreBuiltTransportClient extends TransportClient {
     private static final Collection<Class<? extends Plugin>> PRE_INSTALLED_PLUGINS =
         Collections.unmodifiableList(
             Arrays.asList(
-                Netty3Plugin.class,
+                //Netty3Plugin.class,
                 Netty4Plugin.class,
-                ReindexPlugin.class,
-                PercolatorPlugin.class,
+                //ReindexPlugin.class,
+                //PercolatorPlugin.class,
                 MustachePlugin.class,
                 ParentJoinPlugin.class));
 
