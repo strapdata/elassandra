@@ -226,6 +226,7 @@ public class Node implements Closeable {
     private final NodeClient client;
     private final Collection<LifecycleComponent> pluginLifecycleComponents;
     private final LocalNodeFactory localNodeFactory;
+    private final NamedXContentRegistry xContentRegistry;
     
     private final ClusterService clusterService;
     private TransportService transportService;
@@ -400,7 +401,7 @@ public class Node implements Closeable {
                 ClusterModule.getNamedWriteables().stream())
                 .flatMap(Function.identity()).collect(Collectors.toList());
             final NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(namedWriteables);
-            NamedXContentRegistry xContentRegistry = new NamedXContentRegistry(Stream.of(
+            this.xContentRegistry = new NamedXContentRegistry(Stream.of(
                 NetworkModule.getNamedXContents().stream(),
                 searchModule.getNamedXContents().stream(),
                 pluginsService.filterPlugins(Plugin.class).stream()
@@ -1005,7 +1006,7 @@ public class Node implements Closeable {
     /**
      * The {@link PluginsService} used to build this node's components.
      */
-    protected PluginsService getPluginsService() {
+    public PluginsService getPluginsService() {
         return pluginsService;
     }
 
@@ -1096,5 +1097,9 @@ public class Node implements Closeable {
             assert localNode.get() != null;
             return localNode.get();
         }
+    }
+
+    public NamedXContentRegistry getNamedXContentRegistry() {
+        return xContentRegistry;
     }
 }
