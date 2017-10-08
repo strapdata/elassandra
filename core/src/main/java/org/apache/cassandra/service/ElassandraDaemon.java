@@ -249,7 +249,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         if (node != null && !bootstrapping) {
             // try to read a newer metadata from the local elastic_admin.metadata table.
             MetaData metaData = this.node.clusterService().readInternalMetaDataAsRow();
-            if (metaData.version() > systemMetadata.version()) {
+            if (metaData != null && metaData.version() > systemMetadata.version()) {
                 try {
                     logger.warn("Refreshing newer metadata found in {}.{} metaData uuid={} version={}", 
                             ClusterService.ELASTIC_ADMIN_KEYSPACE, ClusterService.ELASTIC_ADMIN_METADATA_TABLE,

@@ -2639,9 +2639,11 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     public MetaData readInternalMetaDataAsRow() throws NoPersistedMetaDataException {
         try {
-            Row row = QueryProcessor.executeInternal(selectMetadataQuery, DatabaseDescriptor.getClusterName()).one();
-            if (row != null && row.has("metadata")) {
-                return parseMetaDataString(row.getString("metadata"));
+            UntypedResultSet rs = QueryProcessor.executeInternal(selectMetadataQuery, DatabaseDescriptor.getClusterName());
+            if (rs != null && !rs.isEmpty()) {
+                Row row = rs.one();
+                if (row.has("metadata"))
+                    return parseMetaDataString(row.getString("metadata"));
             }
         } catch (Exception e) {
             logger.warn("Cannot read metadata locally",e);
@@ -2651,9 +2653,11 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException {
         try {
-            Row row = process(cl, ClientState.forInternalCalls(), selectMetadataQuery, DatabaseDescriptor.getClusterName()).one();
-            if (row != null && row.has("metadata")) {
-                return parseMetaDataString(row.getString("metadata"));
+            UntypedResultSet rs = process(cl, ClientState.forInternalCalls(), selectMetadataQuery, DatabaseDescriptor.getClusterName());
+            if (rs != null && !rs.isEmpty()) {
+                Row row = rs.one();
+                if (row.has("metadata"))
+                    return parseMetaDataString(row.getString("metadata"));
             }
         } catch (UnavailableException e) {
             logger.warn("Cannot read metadata with consistency="+cl,e);
@@ -2669,9 +2673,12 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     public Long readMetaDataVersion(ConsistencyLevel cl) throws NoPersistedMetaDataException {
         try {
-            Row row = process(cl, ClientState.forInternalCalls(), selectVersionMetadataQuery, DatabaseDescriptor.getClusterName()).one();
-            if (row.has("version"))
-                return row.getLong("version");
+            UntypedResultSet rs = process(cl, ClientState.forInternalCalls(), selectVersionMetadataQuery, DatabaseDescriptor.getClusterName());
+            if (rs != null && !rs.isEmpty()) {
+                Row row = rs.one();
+                if (row.has("version"))
+                    return row.getLong("version");
+            }
         } catch (Exception e) {
             logger.warn("unexpected error", e);
         }
