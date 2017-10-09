@@ -5,80 +5,44 @@ We provide an `image on docker hub <https://hub.docker.com/r/strapdata/elassandr
 
 This image is based on the `official Cassandra image <https://hub.docker.com/_/cassandra/>`_ whose the `documentation <https://github.com/docker-library/docs/tree/master/cassandra>`_ is valid as well for Elassandra.
 
+The source code is on github at `strapdata/docker-elassandra <https://github.com/strapdata/docker-elassandra>`_.
 
 Start an elassandra server instance
 ...................................
 
 Starting an Elassandra instance is simple::
 
-  docker run --name some-elassandra -d strapdata/elassandra
+  docker run --name some-elassandra -d strapdata/elassandra:tag
 
 ...where ``some-cassandra`` is the name you want to assign to your container and ``tag`` is the tag specifying the Elassandra version you want. Default is ``latest``.
+
+Run nodetool and cqlsh::
+
+  docker exec -it some-elassandra nodetool status
+  docker exec -it some-elassandra cqlsh
+
 
 Connect to Cassandra from an application in another Docker container
 ....................................................................
 
-This image exposes the standard Cassandra ports and the HTTP ElasticSearch port (9200),
+This image exposes the standard Cassandra and ElasticSearch ports,
 so container linking makes the Elassandra instance available to other application containers.
 Start your application container like this in order to link it to the Elassandra container::
 
   docker run --name some-app --link some-elassandra:elassandra -d app-that-uses-elassandra
 
-Make a cluster
-..............
+For instance, consuming the elasticsearch API from another container can be done like this::
 
-Using the environment variables documented below, there are two cluster
-scenarios: instances on the same machine and instances on separate
-machines. For the same machine, start the instance as described above.
-To start other instances, just tell each new node where the first is.
+  docker run --link some-elassandra:elassandra -it strapdata/elassandra curl http//elassandra:9200
 
-.. code:: console
 
-    docker run --name some-elassandra2 -d -e CASSANDRA_SEEDS="$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' some-elassandra)" elassandra
+... where ``strapdata/elassandra`` could be any image with ``curl`` installed.
 
-... where ``some-elassandra`` is the name of your original Elassandra container,
-taking advantage of ``docker inspect`` to get the IP address of the other container.
-
-Or you may use the ``docker run --link`` option to tell the new node where
-the first is::
-
-    docker run --name some-elassandra2 -d --link some-elassandra:elassandra elassandra
-
-For separate machines (ie, two VMs on a cloud provider), you need to
-tell Elassandra what IP address to advertise to the other nodes (since
-the address of the container is behind the docker bridge).
-
-Assuming the first machine's IP address is ``10.42.42.42`` and the
-second's is ``10.43.43.43``, start the first with exposed gossip port::
-
-    docker run --name some-elassandra -d -e CASSANDRA_BROADCAST_ADDRESS=10.42.42.42 -p 7000:7000 elassandra
-
-Then start an Elassandra container on the second machine, with the exposed
-gossip port and seed pointing to the first machine::
-
-    docker run --name some-elassandra -d -e CASSANDRA_BROADCAST_ADDRESS=10.43.43.43 -p 7000:7000 -e CASSANDRA_SEEDS=10.42.42.42 elassandra
-
-Container shell access and viewing Cassandra logs
-.................................................
-
-The ``docker exec`` command allows you to run commands inside a Docker
-container. The following command line will give you a bash shell inside
-your ``elassandra`` container:
-
-.. code:: console
-
-    $ docker exec -it some-elassandra bash
-
-The Cassandra Server log is available through Docker's container log:
-
-.. code:: console
-
-    $ docker logs some-elassandra
 
 Environment Variables
 .....................
 
-When you start the Elassandra image, you can adjust the configuration of the Elassandra instance by passing one or more environment variables on the docker run command line. We already have seen some of them.
+When you start the Elassandra image, you can adjust the configuration of the Elassandra instance by passing one or more environment variables on the docker run command line.
 
 
 +-----------------------------+------------------------------------------------------------------------------------------------------------+
@@ -121,3 +85,34 @@ When you start the Elassandra image, you can adjust the configuration of the Ela
 | CASSANDRA_DAEMON            | The Cassandra entry-point class: ``org.apache.cassandra.service.ElassandraDaemon`` to start                |
 |                             | with ElasticSearch enabled (default), ``org.apache.cassandra.service.ElassandraDaemon`` otherwise.         |
 +-----------------------------+------------------------------------------------------------------------------------------------------------+
+
+Files locations
+...............
+
+- ``/opt/elassandra-|release|``: elassandra installation
+- ``/var/lib/cassandra``: data (sstables, lucene segment, commitlogs, ...)
+- ``var/log/cassandra``: logs files.
+
+``/var/lib/cassandra`` is automatically managed as a docker volume. But it's a good target to bind mount from the host filesystem.
+
+Exposed ports
+.............
+
+- 7000: intra-node communication
+- 7001: TLS intra-node communication
+- 7199: JMX
+- 9042: CQL
+- 9160: thrift service
+- 9200: ElasticSearch HTTP
+- 9300: ElasticSearch transport
+
+Make a cluster
+..............
+
+In the case there is only one elassandra instance per docker host, the easiest way is to start the container with ``--net=host``.
+
+When using the host network is not an option, you could just map the necessary ports with ``-p 9042:9042``,  ``-p 9200:9200`` and so on... but you should be aware
+that docker default network will considerably slow down performances.
+
+Also, elassandra cluster can be fully managed over a swarm cluster. But this will basically require some more customization.
+Feel free to open an issue on our github repository to discuss about this.

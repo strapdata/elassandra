@@ -1,7 +1,7 @@
 Installation
 ============
 
-There are a number of ways to install Elassandra: from the tarball_, with the `deb package`_ or `rpm package`_, with a `docker image`_, or even from :ref:`source <source>`.
+There are a number of ways to install Elassandra: from the tarball_, with the `deb`_ or `rpm`_ package, with a `docker image`_, or even from :ref:`source <source>`.
 
 Elassandra is based on Cassandra and ElasticSearch, thus it will be easier if you're already familiar with one on these technologies.
 
@@ -19,35 +19,36 @@ You can check which version is installed on your computer::
 Once java is correctly installed, download the Elassandra tarball:
 
 .. parsed-literal::
-    wget \https://github.com/strapdata/elassandra/releases/download/|release|/elassandra-|version|.tar.gz
+
+    wget |tgz_url|
 
 Then extract its content:
 
 .. parsed-literal::
-  tar -xzf elassandra-|version|.tar.gz
+  tar -xzf elassandra-|release|.tar.gz
 
 Go to the extracted directory:
 
 .. parsed-literal::
-  cd elassandra-|version|
+  cd elassandra-|release|
 
-If you need, configure ``conf/cassandra.yaml`` (cluster name, listen address, snitch, ...), then start elassandra::
+Configure ``conf/cassandra.yaml`` if necessary, then run::
 
-  bin/cassandra -f -e
+  bin/cassandra -e
 
-This starts an Elassandra instance in foreground, with ElasticSearch enabled. Afterwards your node is reachable on localhost on port 9042 (CQL) and 9200 (HTTP). Keep this terminal open and launch a new one.
+This has started cassandra with elasticsearch enabled (according to the ``-e`` option).
 
-To use cqlsh, we first need to install the Cassandra driver for python. Ensure python and pip are installed, then::
+Get the node status::
 
-    sudo pip install cassandra-driver
+  bin/nodetool status
 
 Now connect to the node with cqlsh::
 
   bin/cqlsh
 
-Then you must be able to type CQL commands. See the `CQL reference <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/cqlReferenceTOC.html>`_.
+You're now able to type CQL commands. See the `CQL reference <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/cqlReferenceTOC.html>`_.
 
-Also, we started Elassandra with ElasticSearch enabled (according to the ``-e`` option), so let's request the REST API::
+Check the elasticsearch API::
 
   curl -X GET http://localhost:9200/
 
@@ -68,20 +69,21 @@ You should get something like:
     "tagline" : "You Know, for Search"
   }
 
-You're ready for playing with Elassandra. For instance, try to index a document with the ElasticSearch API, then from cqlsh look for the keyspace/table/row automatically created. Cassandra now benefits from dynamic mapping !
+You're done !
 
 On a production environment, it's better to modify some system settings like disabling swap. This `guide <http://docs.datastax.com/en/landing_page/doc/landing_page/recommendedSettings.html>`_ shows you how to.
 On linux, consider installing `jemalloc <http://jemalloc.net/>`_.
 
-DEB package
+
+deb
 -----------
 
-.. include:: install_deb.rst
+.. include:: adhoc_deb.rst
 
-RPM package
+rpm
 -----------
 
-.. include:: install_rpm.rst
+.. include:: adhoc_rpm.rst
 
 Docker image
 ------------
