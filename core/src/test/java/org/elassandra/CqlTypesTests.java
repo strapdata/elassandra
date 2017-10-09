@@ -36,7 +36,7 @@ import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Map;
@@ -331,12 +331,10 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test")
                 .setSource("{ \"event_test\" : { \"discover\" : \"^((?!end).*)\", \"properties\":{ \"end\":{\"type\":\"date\",\"cql_collection\":\"singleton\"}}}}").get());
         
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-        Date d = sdf.parse("2010-10-10");
-        long daysSinceEpoch = TimeUnit.MILLISECONDS.toDays(d.getTime());
-        System.out.println("d="+d+" daysSinceEpoch="+daysSinceEpoch);
+        LocalDate localDate = LocalDate.parse("2010-10-10");
+        System.out.println("localDate="+localDate+ "epochDay="+Math.toIntExact(localDate.toEpochDay()));
         
-        process(ConsistencyLevel.ONE,"INSERT INTO test.event_test (id , start , end, day, hour) VALUES (?,now(),now(),?,?)", "1", (int)daysSinceEpoch, 10*3600*1000000000L);
+        process(ConsistencyLevel.ONE,"INSERT INTO test.event_test (id , start , end, day, hour) VALUES (?,now(),now(),?,?)", "1", Math.toIntExact(localDate.toEpochDay()), 10*3600*1000000000L);
         SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("day:2010-10-10")).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(1L));
     }
