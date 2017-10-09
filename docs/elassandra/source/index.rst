@@ -19,6 +19,7 @@ Contents:
    configuration
    mapping
    operations
+   enterprise
    integration
    testing
    limitations
@@ -32,3 +33,4 @@ Indices and tables
 
 .. _Cassandra: http://cassandra.apache.org/
 .. _Elasticsearch: https://www.elastic.co/products/elasticsearch
+

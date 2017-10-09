@@ -9,7 +9,7 @@ Testing environnement
 
 By default, JUnit creates one instance of each test class and executes each *@Test* method in parallel in many threads. Because Cassandra use many static variables,
 concurrent testing is not possible, so each test is executed sequentially (using a semaphore to serialize tests) on a single node Elassandra cluster listening on localhost, 
-see ![ESSingleNodeTestCase](https://github.com/strapdata/elassandra/blob/master/test/framework/src/main/java/org/elasticsearch/test/ESSingleNodeTestCase.java).
+see `ESSingleNodeTestCase] <https://github.com/strapdata/elassandra/blob/v5.5.0-strapdata/test/framework/src/main/java/org/elasticsearch/test/ESSingleNodeTestCase.java>`_).
 Test configuration is located in **core/src/test/resources/conf**, data and logs are generated in **core/build/testrun/test/J0**.
 
 Between each test, all indices (and underlying keyspaces and tables) are removed to have idempotent testings and avoid conflicts on index names.

@@ -16,6 +16,8 @@ from recommonmark.parser import CommonMarkParser
 import sys
 import os
 
+import sphinx_rtd_theme
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -29,9 +31,7 @@ import os
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = [
-    'sphinxjp.themes.basicstrap'
-]
+#extensions = [ 'sphinxjp.themes.basicstrap' ]
 
 pdf_documents = [
 ('index', u'Elassandra Documentation', u'Elassandra Documentation', u'Strapdata'),
@@ -65,9 +65,9 @@ author = u'Strapdata'
 # built documents.
 #
 # The short X.Y version.
-version = u'2.4.2'
+version = u'5.5.0'
 # The full version, including alpha/beta/rc tags.
-release = u'v2.4.2-10'
+release = u'5.5.0.3'
 
 # RST subsitutions.
 rst_epilog = """
@@ -125,12 +125,14 @@ todo_include_todos = False
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'basicstrap'
+#html_theme = 'basicstrap'
+html_theme = 'sphinx_rtd_theme'
+html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
-html_theme_options = {
-  'header_inverse': True,
-  'relbar_inverse': True,
-}
+#html_theme_options = {
+#  'header_inverse': True,
+#  'relbar_inverse': True,
+#}
 
 
 # Theme options are theme-specific and customize the look and feel of a theme

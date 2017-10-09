@@ -97,20 +97,23 @@ Requirements:
   - Oracle JDK 1.8 or OpenJDK 8
   - gradle >= 3.5
 
-Clone Elassandra repository and Cassandra sub-module::
+Clone Elassandra repository and Cassandra sub-module:
 
 .. code::
+
    git clone --recursive git@github.com:strapdata/elassandra.git
    cd elassandra
 
-Elassandra 5.5+ uses `Gradle <https://gradle.org/>`_ for its build system. Simply run::
+Elassandra 5.5+ uses `Gradle <https://gradle.org/>`_ for its build system. Simply run:
 
 .. code::
+
    gradle assemble
 
 or to build only the tgz tarball for a release version : 
 
 .. code::
+
    gradle assemble distribution:tar:assemble -Dbuild.snapshot=false
 
 It's gonna take a while, you might go for a cup of tea. If everything succeed, tarballs will be built in:

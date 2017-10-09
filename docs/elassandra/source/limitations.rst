@@ -122,8 +122,8 @@ Null values
 To be able to search for null values, Elasticsearch can replace null by a default value (see `<https://www.elastic.co/guide/en/elasticsearch/reference/2.4/null-value.html>`_ ).
 In Elasticsearch, an empty array is not a null value,  wheras in Cassandra, an empty array is stored as null and replaced by the default null value at index time.
 
-Elasticsearch unsupported feature
----------------------------------
+Elasticsearch unsupported features
+----------------------------------
 
 * Tribe node allows to query multiple Elasticsearch clusters. This feature is not currently supported by Elassandra.
 * Elasticsearch snapshot and restore operations are disabled (See Elassandra backup and restore in operations).
