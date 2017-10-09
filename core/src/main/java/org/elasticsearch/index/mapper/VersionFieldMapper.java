@@ -105,7 +105,7 @@ public class VersionFieldMapper extends MetadataFieldMapper {
     public void createField(ParseContext context, Object value) throws IOException {
         //final Field version = new NumericDocValuesField(NAME, -1L);
         context.version(DEFAULT_VERSION);
-        context.doc().add(DEFAULT_VERSION);
+        //context.doc().add(DEFAULT_VERSION);
     }
 
     
