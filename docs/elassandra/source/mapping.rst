@@ -167,7 +167,7 @@ You can set a specific mapping for **twitter2** and re-index existing data on ea
    nodetool rebuild_index [--threads <N>] twitter tweet elastic_tweet_idx
 
 By default, **rebuild_index** use only one thread, but Elassandra supports multi-threaded index rebuild with the new parameter **--threads**.
-Index name is <elastic>_<table_name>_<column_name>_idx where *column_name* is any indexed column name.
+Index name is <elastic>_<table_name>_idx where *column_name* is any indexed column name.
 Once your **twitter2** index is ready, set an alias **twitter** for **twitter2** to switch from the old mapping to the new one, and delete the old **twitter** index.
 
 .. code::
@@ -221,9 +221,6 @@ All those indices will be mapped to the keyspace **logs**, and all columns of th
          "mylog" : { "discover" : ".*" }
      }
    }'
-
-.. TIP::
-   When creating the first Elasticsearch index for a Cassandra table, Elassandra may create some Cassandra secondary indices. Only the first created secondary index trigger a compaction to index the existing data. So, if you create a partitioned index on a table having some data, the index rebuild may start before all partition are created, and some rows could be ignored if matching a not yet created partitioned index. To avoid this situation, create partitioned indices before injecting data or rebuild the secondary index entirely. 
 
 .. TIP::
    Partition function is executed for each indexed document, so if write throughput is a concern, you should choose an efficient implementation class.

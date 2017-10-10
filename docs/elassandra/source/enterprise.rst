@@ -2,14 +2,14 @@
 Enterprise
 ==========
 
-Elassandra Enterprise Plugin provide advanced features to monitor, manage and secure Elassandra. 
+Elassandra Enterprise plugin provides advanced features to monitor, manage and secure Elassandra.
 See `strapdata <http://www.strapdata.com/products>`_ for more details.
 
 Installation
 ------------
 
-You must install the Enterprise Plugin on ALL nodes of Elasticsearch enabled datacenters in your Cassandra cluster, and
-the Enterprise plugin must match the version of Elassandra you are running. Installation require a full restart of each datacenters, 
+You must install the Enterprise plugin on ALL nodes of Elasticsearch enabled datacenters in your Cassandra cluster, and
+the Enterprise plugin version must match the version of Elassandra you are running. Installation require a full restart, 
 usally a rolling restart of nodes.
 
 1. Install the Enterprise Bundle :
@@ -60,8 +60,8 @@ To uninstall the Enterprise plugin :
 License management
 ------------------
 
-Enterprise plugin require a valid license. You can request strapdata for a free 30 day trail license or purchase a souscription
-including technical support for Elassandra. If your licence expire, the enterprise bundle operates in a restricted mode until a valid
+Enterprise plugin require a valid license. You can request  for a free 30 days trail license or purchase a souscription
+including technical support for Elassandra. If your license expires, the enterprise plugin operates in a restricted mode until a valid
 license is installed.
 
 .. cssclass:: table-bordered
@@ -96,11 +96,11 @@ Checking your license
 .....................
 
 You can use the REST license API to check the currenly active license. If your current configuration require SSL encryption and user authentication,
-you must provide a valid login, pasword and root CA certificate.
+you must provide a valid login, password and root CA certificate.
 
 .. code::
 
-   $ curl --user <username>:<password> --cacert /opt/elassandra-5.5.0/conf/cacert.pem -XGET "https://localhost:9200/_license?pretty"
+   $ curl --user <username>:<password> --cacert conf/cacert.pem -XGET "https://localhost:9200/_license?pretty"
    {
      "id" : "bbbef903-bbea-401d-838d-faf696e53547",
      "issuer" : "Strapdata",
@@ -163,8 +163,7 @@ Then reload the license with a POST REST request as shown below. If you have sev
 
 .. TIP::
 
-   If you have several Elasticsearch clusters in your Cassandra cluster, reload the license on each cluster.
-
+   If you have several Elasticsearch clusters in your Cassandra cluster, reload the license on each datacenter.
 
 JMX Managment & Monitoring
 --------------------------
@@ -208,7 +207,7 @@ These metrcis can be pulled, or pushed to various tools (`graphite <http://graph
 `ganglia <http://ganglia.info/>`_ or `influxdb <https://www.influxdata.com/>`_) using the popular `Metrics Library <http://metrics.dropwizard.io/3.2.3/getting-started.html>`_ embedded in Apache Cassandra.
 
 Here is a sample configuration located in **conf/influxdb-reporting.yaml** sending JMX metrics to an influxdb database named *elassandra*. To enable this configuration,
-just add *JVM_OPTS="$JVM_OPTS -Dcassandra.metricsReporterConfigFile=influxdb-reporting.yaml"* to your **conf/cassandra-env.sh**.
+just add *JVM_OPTS="$JVM_OPTS -Dcassandra.metricsReporterConfigFile=influxdb-reporting.yaml"* in your **conf/cassandra-env.sh**.
 
 .. code::
 
@@ -256,12 +255,12 @@ To set ``SearchEnabled`` on command line, just use **jmxterm** as in the followi
 
 .. code::
 
-   echo "set -b org.elasticsearch.node:type=node SearchEnabled false" | java -jar jmxterm-1.0.0.-uber.jar -l localhost:7199
+   echo "set -b org.elasticsearch.node:type=node SearchEnabled false" | java -jar jmxterm-1.0.0-uber.jar -l localhost:7199
 
 SSL Network Encryption
 ----------------------
 
-The SSL Feature provides traffic encryption for both HTTP and Elasticsearch transport connections. 
+The SSL Feature provides trafic encryption for both HTTP and Elasticsearch transport connections.
 
 .. note::
 
@@ -326,7 +325,7 @@ Here an SSL configuration in your **conf/cassandra.yaml** file :
 
 .. CAUTION::
 
-      If paths to keystores are relative, you could faced an issue when starting elassandra from another directory than the install directory. You should use absolute store paths to avoid such issues.
+      If paths to keystores are relative, you could faced an issue when starting elassandra from another directory than the install directory. You should use absolute keystore paths to avoid such issues.
 
 
 
@@ -505,41 +504,42 @@ Cassandra permissions associated to a role are mapped to Elasticserach Document 
 
 .. cssclass:: table-bordered
 
-+---------------------+----------+---------------------------------------------------+-----------------------------------+--------------------------+
-| Cassandra privilege | Resource | Cassandra Permissions                             | Elasticsearch Action              | Elasticsearch API        |
-+=====================+==========+===================================================+===================================+==========================+
-| CREATE              | KEYSPACE | CREATE KEYSPACE and CREATE TABLE in any keyspace. | indices:admin/create              | Create Index             |
-+---------------------+----------+---------------------------------------------------+-----------------------------------+--------------------------+
-| ALTER               | KEYSPACE | ALTER KEYSPACE and ALTER TABLE in any keyspace.   | indices:admin/mapping             | Put Mapping              |
-|                     |          |                                                   | indices:admin/alias               | Index Alias              |
-|                     |          |                                                   | indices:admin/template            | Index Templates          |
-|                     |          |                                                   | indices:admin/settings/update     | Update Indices Settings  |
-+---------------------+----------+---------------------------------------------------+-----------------------------------+--------------------------+
-| DROP                | KEYSPACE | DROP KEYSPACE and DROP TABLE in any keyspace.     | indices:admin/delete              | Delete Index             |
-+---------------------+----------+---------------------------------------------------+-----------------------------------+--------------------------+
-| EXECUTE             | KEYSPACE | Execute operations on any elasticsearch indices   | indices:admin/refresh             | Refresh                  |
-|                     |          | associated to the granted keyspaces.              | indices:admin/flush               | Flush                    |
-|                     |          |                                                   | indices:admin/optimize            | Force Merge              |
-|                     |          |                                                   | indices:admin/open                | Open Index               |
-|                     |          |                                                   | indices:admin/close               | Close Index              |
-|                     |          |                                                   | indices:admin/cache/clear         | Clear Cache              |
-|                     |          |                                                   | indices:admin/analyze             | Analyze                  |
-+---------------------+----------+---------------------------------------------------+-----------------------------------+--------------------------+
-| DESCRIBE            | KEYSPACE | Retrieve stats about elasticsearch indices        | indices:monitor/stats             | Indices Stats            |
-|                     |          | associated to the granted mbeans.                 | indices:monitor/segments          | Indices Segments         |
-+---------------------+----------+---------------------------------------------------+-----------------------------------+--------------------------+
-| SELECT              | KEYSPACE | SELECT on any table.                              | indices:data/read/*               | All document reading API |
-|                     |          |                                                   | indices:admin/get                 | Get Index                |
-|                     |          |                                                   | indices:admin/exists              | Indices Exists           |
-|                     |          |                                                   | indices:admin/types/exists        | Type Exists              |
-|                     |          |                                                   | indices:admin/mapping             | Get Mapping              |
-|                     |          |                                                   | indices:admin/mappings/fields/get | Get Field Mapping        |
-+---------------------+----------+---------------------------------------------------+-----------------------------------+--------------------------+
-| MODIFY              | KEYSPACE | .                                                 | indices:data/write/*              | All document writing API |
-+---------------------+----------+---------------------------------------------------+-----------------------------------+--------------------------+
++---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
+| Cassandra privilege | Cassandra Permissions                             | Elasticsearch Action              | Elasticsearch API        |
++=====================+===================================================+===================================+==========================+
+| CREATE              | CREATE KEYSPACE and CREATE TABLE in any keyspace. | indices:admin/create              | Create Index             |
++---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
+| ALTER               | ALTER KEYSPACE and ALTER TABLE in any keyspace.   | indices:admin/mapping             | Put Mapping              |
+|                     |                                                   | indices:admin/alias               | Index Alias              |
+|                     |                                                   | indices:admin/template            | Index Templates          |
+|                     |                                                   | indices:admin/settings/update     | Update Indices Settings  |
++---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
+| DROP                | DROP KEYSPACE and DROP TABLE in any keyspace.     | indices:admin/delete              | Delete Index             |
++---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
+| EXECUTE             | Execute operations on any elasticsearch indices   | indices:admin/refresh             | Refresh                  |
+|                     | associated to the granted keyspaces.              | indices:admin/flush               | Flush                    |
+|                     |                                                   | indices:admin/optimize            | Force Merge              |
+|                     |                                                   | indices:admin/open                | Open Index               |
+|                     |                                                   | indices:admin/close               | Close Index              |
+|                     |                                                   | indices:admin/cache/clear         | Clear Cache              |
+|                     |                                                   | indices:admin/analyze             | Analyze                  |
++---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
+| DESCRIBE            | Retrieve stats about elasticsearch indices        | indices:monitor/stats             | Indices Stats            |
+|                     | associated to the granted mbeans.                 | indices:monitor/segments          | Indices Segments         |
++---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
+| SELECT              | SELECT on any table.                              | indices:data/read/*               | All document reading API |
+|                     |                                                   | indices:admin/get                 | Get Index                |
+|                     |                                                   | indices:admin/exists              | Indices Exists           |
+|                     |                                                   | indices:admin/types/exists        | Type Exists              |
+|                     |                                                   | indices:admin/mapping             | Get Mapping              |
+|                     |                                                   | indices:admin/mappings/fields/get | Get Field Mapping        |
++---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
+| MODIFY              | INSERT, UPDATE, DELETE on any table.              | indices:data/write/*              | All document writing API |
++---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
+
 
 Privilege caching
------------------
+.................
 
 For performance reasons, the elasticsearch privilege table is cached into memory, according the the following settings in **conf/elasticsearch.yml** :
 
@@ -557,7 +557,7 @@ When changing a privilege in ``elastic_admin.privileges``, you should clear the 
 
 .. code::
 
-   curl -XPOST "http://localhost:9200/_aaa_clear_privilege_cache?pretty"
+   curl -XPOST --user admin:admin --cacert conf/cacert.pem "https://localhost:9200/_aaa_clear_privilege_cache?pretty"
    {
      "_nodes" : {
        "total" : 2,
@@ -585,23 +585,44 @@ If you just want to invalidate the privilege cache for some roles, you can speci
 
    If you are running multiple Elasticsearch cluster in your Cassandra cluster, you should clear privilege cache on each Elasticsearch cluster.
 
+
 Multi-user Kibana configuration
--------------------------------
+...............................
 
-Kibana needs a dedicated user account to manage kibana configuration, with the CREATE, ALTER, DROP, MODIFY, SELECT permissions, and monitor
-indices.
+Kibana needs a dedicated kibana account to manage kibana configuration, with the CREATE, ALTER, MODIFY, SELECT cassandra permissions.
 
-.. cssclass:: table-bordered
+.. code::
 
-+--------+--------------------+---------+--------+-------+
-| role   | actions            | indices | fields | query |
-+--------+--------------------+---------+--------+-------+
-| kibana | cluster:monitor/.* | .*      | null   | null  |
-+--------+--------------------+---------+--------+-------+
+   cassandra@cqlsh> CREATE ROLE kibana WITH PASSWORD = '*****' AND LOGIN = true;
+   cassandra@cqlsh> CREATE KEYSPACE "_kibana" WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1':'1'};
+   cassandra@cqlsh> GRANT CREATE ON KEYSPACE "_kibana" TO kibana;
+   cassandra@cqlsh> GRANT ALTER ON KEYSPACE "_kibana" TO kibana;
+   cassandra@cqlsh> GRANT SELECT ON KEYSPACE "_kibana" TO kibana;
+   cassandra@cqlsh> GRANT MODIFY ON KEYSPACE "_kibana" TO kibana;
+   cassandra@cqlsh> LIST ALL PERMISSIONS OF kibana;
+   
+    role   | username | resource           | permission
+   --------+----------+--------------------+------------
+    kibana |   kibana | <keyspace _kibana> |     CREATE
+    kibana |   kibana | <keyspace _kibana> |      ALTER
+    kibana |   kibana | <keyspace _kibana> |     SELECT
+    kibana |   kibana | <keyspace _kibana> |     MODIFY
 
-Finally, the user account must have :
-* the SELECT and MODIFY permissions on the kibana index (usually .kibana) to store its configuration,
-* the SELECT permission on vizualized indices.
+Add cluster monitoring access rights to the *kibana* user.
+
+.. code::
+
+   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('kibana','cluster:monitor/.*','.*');
+   cassandra@cqlsh> SELECT * FROM elastic_admin.privileges ;
+   
+    role   | actions            | indices | fields | query
+   --------+--------------------+---------+--------+-------
+    kibana | cluster:monitor/.* |      .* |   null |  null
+
+Finally, user accounts must have :
+
+* the SELECT and MODIFY permissions on the kibana keyspace to store its configuration.
+* the SELECT permission on vizualized indices, especially on your default kibana index.
 
 Secured Transport Client
 ........................
@@ -780,7 +801,7 @@ You can index with elasticsearch the ``elastic_audit.events`` table with the fol
 
 .. code::
 
-   curl -XPUT "http://localhost:9200/elastic_audit/" -d'
+   curl -XPUT --user admin:admin --cacert conf/cacert.pem "https://localhost:9200/elastic_audit/" -d'
    { 
       "mappings":{ 
          "events":{

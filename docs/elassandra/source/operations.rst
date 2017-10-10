@@ -4,7 +4,7 @@ Operations
 Indexing
 ________
 
-Let's try and index some *twitter* like information (demo from `Elasticsearch <https://github.com/elastic/elasticsearch/blob/master/README.textile>`_)).
+Let's try and index some *twitter* like information (demo from `Elasticsearch <https://github.com/elastic/elasticsearch/blob/master/README.textile>`_).
 First, let's create a twitter user, and add some tweets (the *twitter* index will be created automatically, see automatic index and mapping creation in Elasticsearch documentation):
 
 .. code::
@@ -376,12 +376,6 @@ To re-index your existing data, for example after a mapping change to index a ne
 .. TIP::
    By default, rebuild index runs on a single thread. In order to improve re-indexing performance, Elassandra comes with a multi-threaded rebuild_index implementation. The **--threads** parameter allows to specify the number of threads dedicated to re-index a Cassandra table.
    Number of indexing threads should be tuned carefully to avoid CPU exhaustion. Moreover, indexing throughput is limited by locking at the lucene level, but this limit can be exceeded by using a partitioned index invloving many independant shards. 
-
-Alternatively, you can use the built-in rebuild action to rebuild index on **all** your Elasticsearch cluster at the same time. The *num_thread* parameter is optional, default is one, but you should care about the load of your cluster in a production environnement.
-
-.. code::
-
-   curl -XGET 'http://localhost:9200/twitter_index/_rebuild?num_threads=4'
 
 Re-index existing data rely on the Cassandra compaction manager. You can trigger a `Cassandra compaction <http://docs.datastax.com/en/cassandra/2.0/cassandra/operations/ops_configure_compaction_t.html>`_ when :
 
