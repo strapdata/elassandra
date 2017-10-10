@@ -20,9 +20,6 @@ import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
-import org.elasticsearch.Version;
-import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.mapper.EnabledAttributeMapper;
@@ -60,10 +57,7 @@ public class TokenFieldMapper extends MetadataFieldMapper {
             TOKEN_FIELD_TYPE.setTokenized(false);
             TOKEN_FIELD_TYPE.setOmitNorms(true);
             TOKEN_FIELD_TYPE.setHasDocValues(true);
-            TOKEN_FIELD_TYPE.setDocValuesType(DocValuesType.NUMERIC);
-            TOKEN_FIELD_TYPE.setNumericPrecisionStep(ClusterService.defaultPrecisionStep);
-            TOKEN_FIELD_TYPE.setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
-            TOKEN_FIELD_TYPE.setSearchAnalyzer(Lucene.KEYWORD_ANALYZER);
+            TOKEN_FIELD_TYPE.setDocValuesType(DocValuesType.SORTED_NUMERIC);
             TOKEN_FIELD_TYPE.setName(NAME);
             TOKEN_FIELD_TYPE.freeze();
         }
@@ -74,7 +68,6 @@ public class TokenFieldMapper extends MetadataFieldMapper {
     public static class Builder extends MetadataFieldMapper.Builder<Builder, TokenFieldMapper> {
 
         private EnabledAttributeMapper enabledState = EnabledAttributeMapper.UNSET_DISABLED;
-        private long defaultTTL = Defaults.DEFAULT;
 
         public Builder() {
             super(Defaults.NAME, Defaults.TOKEN_FIELD_TYPE, Defaults.TOKEN_FIELD_TYPE);
