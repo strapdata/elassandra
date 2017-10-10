@@ -208,6 +208,12 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
     public void postParse(ParseContext context) throws IOException {
         super.parse(context);
     }
+    
+    @Override
+    public void postCreate(ParseContext context) throws IOException {
+        createField(context, null);
+        super.parse(context);
+    }
 
     @Override
     public Mapper parse(ParseContext context) throws IOException {

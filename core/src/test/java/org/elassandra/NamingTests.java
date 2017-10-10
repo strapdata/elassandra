@@ -100,4 +100,12 @@ public class NamingTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"create table test.testudt (id uuid, name frozen<fullname>, primary key (id));");
         assertAcked(client().admin().indices().preparePutMapping("test").setType("testudt").setSource("{ \"testudt\" : { \"discover\" : \".*\" }}").get());
     }
+    
+    @Test
+    public void testExists() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        assertThat(client().prepareIndex("test","type1","1").setSource("{\"top\":\"secret\"}").get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareSearch("test").setTypes("type1").setQuery(QueryBuilders.existsQuery("top")).get().getHits().getTotalHits(), equalTo(1L));
+    }
 }
