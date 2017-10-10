@@ -109,7 +109,7 @@ Exposed ports
 Make a cluster
 ..............
 
-In the case there is only one elassandra instance per docker host, the easiest way is to start the container with ``--net=host``.
+In case there is only one elassandra instance per docker host, the easiest way is to start the container with ``--net=host``.
 
 When using the host network is not an option, you could just map the necessary ports with ``-p 9042:9042``,  ``-p 9200:9200`` and so on... but you should be aware
 that docker default network will considerably slow down performances.
