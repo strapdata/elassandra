@@ -635,7 +635,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return index(engine, index);
     }
 
-    private Engine.IndexResult index(Engine engine, Engine.Index index) throws IOException {
+    public Engine.IndexResult index(Engine engine, Engine.Index index) throws IOException {
         active.set(true);
         final Engine.IndexResult result;
         index = indexingOperationListeners.preIndex(shardId, index);

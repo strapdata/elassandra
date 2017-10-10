@@ -324,7 +324,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         private final ContentPath path = new ContentPath(0);
         private DocumentMapper docMapper;
         private Document document;
-        private StringBuilder stringBuilder = new StringBuilder();
         private String id;
         private String parent;
         private Field version, uid;
@@ -395,14 +394,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 BaseGeoPointFieldMapper geoPointFieldMapper = (BaseGeoPointFieldMapper) mapper;
                 GeoPoint geoPoint;
                 if (value instanceof String) {
-                    // geo_point stored as text
+                    // geo_point stored as geohash text
                     geoPoint = new GeoPoint((String)value);
+                    geoPointFieldMapper.parse(this, geoPoint, (String)value);
                 } else {
                     // geo_point stored in UDT.
                     Map<String, Double> geo_point =  (Map<String, Double>) value;
                     geoPoint = new GeoPoint(geo_point.get(BaseGeoPointFieldMapper.Names.LAT), geo_point.get(BaseGeoPointFieldMapper.Names.LON));
+                    geoPointFieldMapper.parse(this, geoPoint, null);
                 }
-                geoPointFieldMapper.parse(this, geoPoint, null);
             }  else if (mapper instanceof FieldMapper) {
                 ((FieldMapper)mapper).createField(this, value);
             } else if (mapper instanceof ObjectMapper) {
@@ -1618,10 +1618,18 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 final BitSet fieldsNotNull = new BitSet(fieldsToIdx.size());     // regular or static columns only
                 final BitSet tombstoneColumns = new BitSet(fieldsToIdx.size());  // regular or static columns only
                 int   docTtl = Integer.MAX_VALUE;
+                int   inRowDataSize;
                 final boolean isStatic;
                 final boolean hasLiveData;
                 
+                /**
+                 * 
+                 * @param inRow  = inserted data
+                 * @param outRow = removed data
+                 * @throws IOException
+                 */
                 public Rowcument(Row inRow, Row outRow) throws IOException {
+                    inRowDataSize =  inRow != null ? inRow.dataSize() : 0;
                     Row row = inRow != null ? inRow : outRow;
                     this.isStatic = row.isStatic();
                     this.hasLiveData = inRow != null && inRow.hasLiveData(nowInSec);
@@ -1906,9 +1914,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                         VersionType.INTERNAL, 
                                         Engine.Operation.Origin.PRIMARY, 
                                         startTime, 
-                                        startTime, false);
+                                        startTime, false) {
+                                    @Override
+                                    public int estimatedSizeInBytes() {
+                                        return (id.length() + context.docMapper.type().length()) * 2 + inRowDataSize + 12;
+                                    }
+                                };
                                 
-                                IndexResult result = indexShard.getEngine().index(operation);
+                                IndexResult result = indexShard.index(indexShard.getEngine(), operation);
                                 
                                 if (logger.isDebugEnabled()) {
                                     logger.debug("document CF={}.{} index={} type={} id={} version={} created={} static={} ttl={} refresh={} ", 

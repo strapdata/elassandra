@@ -529,9 +529,9 @@ public class VersionLessInternalEngine extends Engine {
                 }
                 if (indexResult.hasFailure() == false &&
                     index.origin() != Operation.Origin.LOCAL_TRANSLOG_RECOVERY) {
-                    Translog.Location location =
-                        translog.add(new Translog.Index(index, indexResult));
-                    indexResult.setTranslogLocation(location);
+                    //Translog.Location location = translog.add(new Translog.Index(index, indexResult));
+                    // increment pseudo-translog size to trigger later flush
+                    indexResult.setTranslogLocation( translog.add(index.estimatedSizeInBytes()) );
                 }
                 indexResult.setTook(System.nanoTime() - index.startTime());
                 indexResult.freeze();
@@ -788,9 +788,8 @@ public class VersionLessInternalEngine extends Engine {
             }
             if (!deleteResult.hasFailure() &&
                 delete.origin() != Operation.Origin.LOCAL_TRANSLOG_RECOVERY) {
-                Translog.Location location =
-                    translog.add(new Translog.Delete(delete, deleteResult));
-                deleteResult.setTranslogLocation(location);
+                //Translog.Location location = translog.add(new Translog.Delete(delete, deleteResult));
+                deleteResult.setTranslogLocation( translog.add( delete.estimatedSizeInBytes() ));
             }
             deleteResult.setTook(System.nanoTime() - delete.startTime());
             deleteResult.freeze();
@@ -1759,7 +1758,7 @@ public class VersionLessInternalEngine extends Engine {
             }
 
             indexWriter.deleteDocuments(query);
-            //translog.add(new Translog.DeleteByQuery(delete));
+            translog.add(20L);  // arbitrary delete sizeInBytes=20 
         } catch (Exception t) {
             maybeFailEngine("delete_by_query", t);
             throw new DeleteByQueryFailedEngineException(shardId, delete, t);

@@ -108,6 +108,9 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
 
     static final Pattern PARSE_STRICT_ID_PATTERN = Pattern.compile("^" + TRANSLOG_FILE_PREFIX + "(\\d+)(\\.tlog)$");
 
+    int totalOperationCount = 0;
+    long totalSizeInBytes = 0;
+    
     /**
      * Creates a new Translog instance. This method will create a new transaction log unless the given {@link TranslogConfig} has
      * a non-null {@link org.elasticsearch.index.translog.Translog.TranslogGeneration}. If the generation is null this method
@@ -186,28 +189,28 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
      * Returns the number of operations in the transaction files that aren't committed to lucene..
      */
     public int totalOperations() {
-        return 0;
+        return this.totalOperationCount;
     }
 
     /**
      * Returns the size in bytes of the translog files that aren't committed to lucene.
      */
     public long sizeInBytes() {
-        return 0;
+        return this.totalSizeInBytes;
     }
 
     /**
      * Returns the number of operations in the transaction files that aren't committed to lucene..
      */
     private int totalOperations(long minGeneration) {
-        return 0;
+        return this.totalOperationCount;
     }
 
     /**
      * Returns the size in bytes of the translog files that aren't committed to lucene.
      */
     private long sizeInBytes(long minGeneration) {
-        return 0;
+        return this.totalSizeInBytes;
     }
 
 
@@ -226,6 +229,16 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
         return DUMMY_LOCATION;
     }
 
+    public Location add(long sizeInBytes) throws IOException {
+        return add(sizeInBytes, 1);
+     }
+    
+    public Location add(long sizeInBytes, int operationCount) throws IOException {
+        this.totalSizeInBytes += sizeInBytes;
+        this.totalOperationCount += operationCount;
+        return DUMMY_LOCATION;
+    }
+    
     /**
      * The a {@linkplain Location} that will sort after the {@linkplain Location} returned by the last write but before any locations which
      * can be returned by the next write.
@@ -258,10 +271,12 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
      * Sync's the translog.
      */
     public void sync() throws IOException {
+        this.totalOperationCount = 0;
+        this.totalSizeInBytes = 0;
     }
 
     public boolean syncNeeded() {
-        return false;
+        return totalOperationCount > 0;
     }
 
     /** package private for testing */
