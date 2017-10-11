@@ -1,5 +1,6 @@
 # Changelog
 
+* **2017-10-10 Release 5.5.0.3 Elasticsearch 5.5.0 + Cassandra 3.11.0.1**
 * **2017-10-03 Release 5.5.0.2 Elasticsearch 5.5.0 + Cassandra 3.11.0.1**
   * Debian packaging
   * CQL types date and time support  
