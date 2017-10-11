@@ -163,7 +163,7 @@ Then reload the license with a POST REST request as shown below. If you have sev
 
 .. TIP::
 
-   If you have several Elasticsearch clusters in your Cassandra cluster, reload the license on each datacenter.
+   If you have several Elasticsearch clusters in your Cassandra cluster, reload the license on each datacenter where Elasticsearch is enabled.
 
 JMX Managment & Monitoring
 --------------------------
@@ -251,7 +251,7 @@ setting the following attributes on the JMX Bean ``org.elasticsearch.node:type=n
 |                      |               | requests, you can set ``AutoEnableSearch`` to **false** with the system property ``es.auto_enable_search``. |
 +----------------------+---------------+-------------------------------------------------------------------------------------------------------------+
 
-To set ``SearchEnabled`` on command line, just use **jmxterm** as in the following exemple :
+To set ``SearchEnabled`` on command line, just use **jmxterm** as in the following exemple.
 
 .. code::
 
@@ -579,11 +579,11 @@ If you just want to invalidate the privilege cache for some roles, you can speci
 
 .. code::
 
-   POST _aaa_clear_privilege_cache?pretty&role=sales,kibana"
+   POST _aaa_clear_privilege_cache?pretty&roles=sales,kibana"
 
 .. TIP::
 
-   If you are running multiple Elasticsearch cluster in your Cassandra cluster, you should clear privilege cache on each Elasticsearch cluster.
+   If you are running multiple Elasticsearch cluster in your Cassandra cluster, you should clear privilege cache on each datacenter where Elasticsearch is enabled.
 
 
 Multi-user Kibana configuration
@@ -621,9 +621,14 @@ Add cluster monitoring access rights to the *kibana* user.
 
 Finally, user accounts must have :
 
-* the SELECT and MODIFY permissions on the kibana keyspace to store its configuration.
 * the SELECT permission on vizualized indices, especially on your default kibana index.
+* the SELECT permission on the kibana keyspace to read kibana configuration.
+* the MODIFY permission on the kibana keyspace to store kibana configuration if authorized to create/update kibana objects.
 
+.. TIP::
+
+   Once a user if authenticated by kibana, kibana keeps this information in a cookie. In order to logout, remove cookies associated to your kibana.
+   
 Secured Transport Client
 ........................
 
