@@ -27,7 +27,7 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.transport.messages.ResultMessage;
-import org.apache.cassandra.utils.Pair;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.ReaderUtil;
 import org.apache.lucene.search.DocIdSetIterator;
@@ -372,7 +372,6 @@ public class FetchPhase implements SearchPhase {
             throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + docId + "]", e);
         }
         
-        
         // load field from cassandra
         IndexService indexService = searchContext.indexShard().indexService();
         try {
@@ -381,10 +380,9 @@ public class FetchPhase implements SearchPhase {
             if (docPk.isStaticDocument) 
                 typeKey += "_static";
             
-            NavigableSet<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
-            Pair<String, Set<String>> statementKey = Pair.<String, Set<String>>create(typeKey,requiredColumns);
-            ParsedStatement.Prepared cqlStatement = searchContext.indexShard().getCqlPreparedStatement( statementKey );
+            ParsedStatement.Prepared cqlStatement = searchContext.getCqlPreparedStatement( typeKey );
             if (cqlStatement == null) {
+                NavigableSet<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
                 if (requiredColumns.size() > 0) {
                     IndexMetaData indexMetaData = clusterService.state().metaData().index(searchContext.request().shardId().getIndexName());
                     if (requiredColumns.contains(NodeFieldMapper.NAME)) {
@@ -399,8 +397,11 @@ public class FetchPhase implements SearchPhase {
                         String query = clusterService.buildFetchQuery(
                                 indexService, fieldVisitor.uid().type(),
                                 requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument, docMapper.getColumnDefinitions());
+                        Logger logger = Loggers.getLogger(FetchPhase.class);
+                        if (logger.isTraceEnabled())
+                            logger.trace("new statement={}",query);
                         cqlStatement = QueryProcessor.prepareInternal(query);
-                        searchContext.indexShard().putCqlPreparedStatement(statementKey, cqlStatement);
+                        searchContext.putCqlPreparedStatement(typeKey, cqlStatement);
                     }
                 }
             }

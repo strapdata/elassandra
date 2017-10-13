@@ -19,6 +19,7 @@
 package org.elasticsearch.search.internal;
 
 
+import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.Query;
@@ -69,6 +70,8 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -102,6 +105,7 @@ public abstract class SearchContext extends AbstractRefCounted implements Releas
     protected ClusterState clusterState = null;
     protected SearchProcessor processor = null;
     protected boolean includeNode;
+    protected ConcurrentMap<String, ParsedStatement.Prepared> cqlStatementCache = new ConcurrentHashMap<String, ParsedStatement.Prepared>();
     
     @Override
     public final void close() {
@@ -154,6 +158,15 @@ public abstract class SearchContext extends AbstractRefCounted implements Releas
     
     public SearchProcessor searchProcessor() {
         return processor;
+    }
+    
+
+    public ParsedStatement.Prepared getCqlPreparedStatement(String key) {
+        return cqlStatementCache.get(key);
+    }
+
+    public void putCqlPreparedStatement(String key, ParsedStatement.Prepared query) {
+        cqlStatementCache.put(key, query);
     }
     
     /** Automatically apply all required filters to the given query such as

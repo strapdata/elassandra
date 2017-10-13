@@ -72,9 +72,7 @@ public class FieldsVisitor extends StoredFieldVisitor {
     protected BytesReference source;
     protected String type, id;
     protected Map<String, List<Object>> fieldsValues;
-    
-    protected NavigableSet<String> requiredColumns = null;
-             
+            
     public FieldsVisitor(boolean loadSource) {
         this.loadSource = loadSource;
         requiredFields = new HashSet<>();
@@ -97,29 +95,25 @@ public class FieldsVisitor extends StoredFieldVisitor {
         return ImmutableSet.of();
     }
     
-    // cache the cassandra required columns and return the static+partition columns
     public NavigableSet<String> requiredColumns(ClusterService clusterService, SearchContext searchContext) throws IOException {
-        if (this.requiredColumns == null) {
-            List<String> requiredColumns =  new ArrayList<String>();
-            if (requestedFields() != null) {
-                for(String fieldExp : requestedFields()) {
-                    for(String field : searchContext.mapperService().simpleMatchToIndexNames(fieldExp)) {
-                        int i = field.indexOf('.');
-                        String columnName = (i > 0) ? field.substring(0, i) : field;
-                        // TODO: eliminate non-existant columns or (non-static or non-partition-key) for static docs.
-                        if (this.filtredFields == null || this.filtredFields.contains(columnName))
-                            requiredColumns.add(columnName);
-                    }
+        List<String> requiredColumns =  new ArrayList<String>();
+        if (requestedFields() != null) {
+            for(String fieldExp : requestedFields()) {
+                for(String field : searchContext.mapperService().simpleMatchToIndexNames(fieldExp)) {
+                    int i = field.indexOf('.');
+                    String columnName = (i > 0) ? field.substring(0, i) : field;
+                    // TODO: eliminate non-existant columns or (non-static or non-partition-key) for static docs.
+                    if (this.filtredFields == null || this.filtredFields.contains(columnName))
+                        requiredColumns.add(columnName);
                 }
             }
-            if (loadSource()) {
-                for(String columnName : searchContext.mapperService().documentMapper(type).getColumnDefinitions().keySet()) 
-                    if (this.filtredFields == null || this.filtredFields.contains(columnName))
-                        requiredColumns.add( columnName );
-            }
-            this.requiredColumns = new TreeSet<String>(requiredColumns);
         }
-        return this.requiredColumns;
+        if (loadSource()) {
+            for(String columnName : searchContext.mapperService().documentMapper(type).getColumnDefinitions().keySet()) 
+                if (this.filtredFields == null || this.filtredFields.contains(columnName))
+                    requiredColumns.add( columnName );
+        }
+        return new TreeSet<String>(requiredColumns);
     }
     
     public void filtredColumns(Collection<String> fields) {

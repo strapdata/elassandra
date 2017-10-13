@@ -233,10 +233,6 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
      */
     @Nullable
     private final RefreshListeners refreshListeners;
-
-    private ConcurrentMap<Pair<String, Set<String>>, ParsedStatement.Prepared> cqlStatementCache = 
-            //new ConcurrentHashMap<Pair<String, Set<String>>, ParsedStatement.Prepared>();
-            new ConcurrentReferenceHashMap<Pair<String, Set<String>>, ParsedStatement.Prepared>(4, 0.9f, 1, ReferenceType.WEAK);
     
     public IndexShard(ShardRouting shardRouting, IndexSettings indexSettings, ShardPath path, Store store, IndexCache indexCache,
             MapperService mapperService, SimilarityService similarityService, IndexFieldDataService indexFieldDataService,
@@ -338,15 +334,6 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     public ShardBitsetFilterCache tokenRangesBitsetFilterCache() {
         return tokenRangesBitsetFilterCache;
-    }
-
-
-    public ParsedStatement.Prepared getCqlPreparedStatement(Pair<String, Set<String>> key) {
-        return cqlStatementCache.get(key);
-    }
-
-    public void putCqlPreparedStatement(Pair<String, Set<String>> key, ParsedStatement.Prepared query) {
-        cqlStatementCache.put(key, query);
     }
     
     public IndexFieldDataService indexFieldDataService() {

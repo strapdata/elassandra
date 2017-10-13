@@ -338,4 +338,18 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("day:2010-10-10")).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(1L));
     }
+    
+    // see issue #128
+    @Test
+    public void testFetchMultipleTypes() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        
+        assertThat(client().prepareIndex("test", "typeA", "1").setSource("{ \"a\":\"1\", \"x\":\"aaa\" }").get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "typeB", "2").setSource("{ \"b\":\"1\", \"x\":\"aaa\" }").get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "typeC", "3").setSource("{ \"c\":\"1\", \"x\":\"aaa\" }").get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.queryStringQuery("q=aaa")).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(3L));
+    }
 }
+
