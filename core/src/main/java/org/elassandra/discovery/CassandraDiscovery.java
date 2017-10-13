@@ -17,6 +17,8 @@ package org.elassandra.discovery;
 
 import com.google.common.collect.Maps;
 
+import org.apache.cassandra.concurrent.Stage;
+import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.SystemKeyspace;
@@ -299,7 +301,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         }
                         clusterGroup.put(dn.getId(), dn);
                         if (ElassandraDaemon.hasWorkloadColumn && (state.getApplicationState(ApplicationState.X1) != null || state.getApplicationState(ApplicationState.X2) !=null)) {
-                            SystemKeyspace.updatePeerInfo(endpoint, "workload", "elasticsearch");
+                            SystemKeyspace.updatePeerInfo(endpoint, "workload", "elasticsearch", StageManager.getStage(Stage.MUTATION));
                         }
                     } else {
                         // may update DiscoveryNode status.

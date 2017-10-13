@@ -1309,9 +1309,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 try {
                     if (logger.isTraceEnabled()) {
                         if (inRow != null)
-                            logger.trace("indexer={} newRowData={} clustering={} static={} hasLiveData={}", WideRowcumentIndexer.this.hashCode(), inRow, inRow.clustering(), inRow.isStatic(), inRow.hasLiveData(nowInSec)); 
+                            logger.trace("indexer={} newRowData={} clustering={} static={} hasLiveData={}", WideRowcumentIndexer.this.hashCode(), inRow, inRow.clustering(), inRow.isStatic(), inRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness())); 
                         if (outRow != null)
-                            logger.trace("indexer={} oldRowData={} clustering={} static={} hasLiveData={}", WideRowcumentIndexer.this.hashCode(), outRow, outRow.clustering(), outRow.isStatic(), outRow.hasLiveData(nowInSec)); 
+                            logger.trace("indexer={} oldRowData={} clustering={} static={} hasLiveData={}", WideRowcumentIndexer.this.hashCode(), outRow, outRow.clustering(), outRow.isStatic(), outRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness())); 
                     }
                     
                     if (inRow.isStatic()) {
@@ -1629,7 +1629,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     inRowDataSize =  inRow != null ? inRow.dataSize() : 0;
                     Row row = inRow != null ? inRow : outRow;
                     this.isStatic = row.isStatic();
-                    this.hasLiveData = inRow != null && inRow.hasLiveData(nowInSec);
+                    this.hasLiveData = inRow != null && inRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness());
                     //if (inRow != null && inRow.isStatic())
                     //   logger.error("indexer={} inRow static hasLive={} inRow.timestamp={}", RowcumentIndexer.this.hashCode(), hasLiveData, inRow.primaryKeyLivenessInfo().timestamp());
                     

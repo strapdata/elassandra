@@ -1372,8 +1372,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                                 TableAttributes attrs = new TableAttributes();
                                 attrs.addProperty(TableParams.Option.COMMENT.toString(), metadataSchemaUpdate.metaDataString);
                                 cfm.params( attrs.asAlteredTableParams(cfm.params) );
-                                MigrationManager.announceColumnFamilyUpdate(cfm, false);
-                                MigrationManager.announceColumnFamilyUpdate(cfm, false, metadataSchemaUpdate.timestamp);
+                                MigrationManager.announceColumnFamilyUpdate(cfm, null, false, metadataSchemaUpdate.timestamp);
                                 /*
                                 QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'", 
                                         elasticAdminKeyspaceName,  ELASTIC_ADMIN_METADATA_TABLE, metadataSchemaUpdate.metaDataString));
