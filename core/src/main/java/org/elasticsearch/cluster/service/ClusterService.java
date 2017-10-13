@@ -507,26 +507,39 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return router;
     }
     
-    public UntypedResultSet process(final ConsistencyLevel cl, final ClientState clientState, final String query) 
+    public UntypedResultSet process(final ConsistencyLevel cl, final String query) 
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return process(cl, null, query, new Long(0), new Object[] {});
+    }
+    
+    public UntypedResultSet process(final ConsistencyLevel cl, ClientState clientState, final String query) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return process(cl, null, clientState, query, new Long(0), new Object[] {});
     }
 
-    public UntypedResultSet process(final ConsistencyLevel cl, final ClientState clientState, final String query, Object... values) 
+    public UntypedResultSet process(final ConsistencyLevel cl, ClientState clientState, final String query, Object... values) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return process(cl, null, clientState, query, new Long(0), values);
+    }
+    
+    public UntypedResultSet process(final ConsistencyLevel cl, final String query, Object... values) 
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+        return process(cl, null, query, new Long(0), values);
     }
    
     public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, final Object... values) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return process(cl, serialConsistencyLevel, ClientState.forInternalCalls(), query, new Long(0), values);
+        return process(cl, serialConsistencyLevel, query, new Long(0), values);
     }
 
     public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, Long writetime, final Object... values) {
-        return process(cl, serialConsistencyLevel, ClientState.forInternalCalls(), query, writetime, values);
+        ClientState clientState = this.threadPool.getThreadContext().getTransient("_client_state");
+        if (clientState == null)
+            clientState = ClientState.forInternalCalls();
+        return process(cl, serialConsistencyLevel, clientState, query, writetime, values);
     }
     
-    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final ClientState clientState, final String query, Long writetime, final Object... values)
+    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, ClientState clientState, final String query, Long writetime, final Object... values)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         if (logger.isDebugEnabled()) 
             logger.debug("processing CL={} SERIAL_CL={} query={}", cl, serialConsistencyLevel, query);
@@ -548,11 +561,17 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             return null;
     }
 
-   
-    public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, final String query, Object... values) 
+    public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, final String query, Object... values) {
+        ClientState clientState = this.threadPool.getThreadContext().getTransient("_client_state");
+        if (clientState == null)
+            clientState = ClientState.forInternalCalls();
+        return processWriteConditional(cl, serialCl, clientState, query, values);
+    }
+    
+    public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, ClientState clientState, final String query, Object... values) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         try {
-            UntypedResultSet result = process(cl, serialCl, query, values);
+            UntypedResultSet result = process(cl, serialCl, clientState, query, new Long(0), values);
             if (serialCl == null)
                 return true;
             
@@ -1790,7 +1809,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     public boolean rowExists(final IndexService indexService, final String type, final String id) 
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
         DocPrimaryKey docPk = parseElasticId(indexService, type, id);
-        return process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), buildExistsQuery(indexService.mapperService().documentMapper(type), indexService.keyspace(), typeToCfName(type), id), docPk.values).size() > 0;
+        return process(ConsistencyLevel.LOCAL_ONE, buildExistsQuery(indexService.mapperService().documentMapper(type), indexService.keyspace(), typeToCfName(type), id), docPk.values).size() > 0;
     }
     
     
@@ -1813,7 +1832,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
      */
     public UntypedResultSet fetchRow(final IndexService indexService, final String type, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException,
             RequestExecutionException, RequestValidationException, IOException {
-        return process(cl, ClientState.forInternalCalls(), buildFetchQuery(indexService, type, columns, docPk.isStaticDocument, columnDefs), docPk. values);
+        return process(cl, buildFetchQuery(indexService, type, columns, docPk.isStaticDocument, columnDefs), docPk. values);
     }
     
     public Engine.GetResult fetchSourceInternal(final IndexService indexService, String type, String id, Map<String,ColumnDefinition> columnDefs, LongConsumer onRefresh) throws IOException {
@@ -1953,7 +1972,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             IOException {
         String cfName = typeToCfName(type);
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
-        process(cl, ClientState.forInternalCalls(), buildDeleteQuery(docMapper, indexService.keyspace(), cfName, id), parseElasticId(indexService, type, id).values);
+        process(cl, buildDeleteQuery(docMapper, indexService.keyspace(), cfName, id), parseElasticId(indexService, type, id).values);
     }
     
     
@@ -2379,7 +2398,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     (request.ttl() != null) ? request.ttl().getSeconds() : null,
                     timestamp,
                     values, 0);
-            process(request.waitForActiveShards().toCassandraConsistencyLevel(), ClientState.forInternalCalls(), query, (Object[])values);
+            process(request.waitForActiveShards().toCassandraConsistencyLevel(), query, (Object[])values);
         }
     }
 
@@ -2874,6 +2893,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         boolean applied = processWriteConditional(
                 this.metadataWriteCL,
                 this.metadataSerialCL,
+                ClientState.forInternalCalls(),
                 updateMetaDataQuery,
                 new Object[] { owner, newMetaData.version(), metaDataString, DatabaseDescriptor.getClusterName(), newMetaData.version() });
         if (applied) {

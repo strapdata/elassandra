@@ -293,7 +293,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     }
     
     public UntypedResultSet process(ConsistencyLevel cl, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return clusterService().process(cl, ClientState.forInternalCalls(), query);
+        return clusterService().process(cl, query);
     }
     
     public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
@@ -301,7 +301,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     }
     
     public UntypedResultSet process(ConsistencyLevel cl, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return clusterService().process(cl, ClientState.forInternalCalls(), query, values);
+        return clusterService().process(cl, query, values);
     }
     
     public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
