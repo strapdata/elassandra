@@ -1,3 +1,8 @@
+5.5.0.4 - 2017-10-16
+  * Upgrade to Cassandra 3.11.1
+  * Fix #128 fetch multiple CQL types
+  * Fix dependencies for Cassandra UDF
+
 5.5.0.3 - 2017-10-11
   * Improve performances on GET operations.
   * Fix startup when metadata is empty.
