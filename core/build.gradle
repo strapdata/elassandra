@@ -103,6 +103,9 @@ dependencies {
     exclude group:'net.java.dev.jna', module:'jna'
   }
 
+  // See CASSANDRA-11193 Missing binary dependencies for running Cassandra in embedded mode
+  compile("org.ow2.asm:asm-debug-all:5.1")
+
   // Usually when gradle detect a version conflict, it takes the newest version.
   // Unfortunately this mechanism doesn't work with deps in elasticsearch modules.
   // When gradle is collecting the jars to be packaged within a module, it excludes any jar that
