@@ -154,10 +154,11 @@ class VagrantTestPlugin implements Plugin<Project> {
     }
 
     private static void createCleanTask(Project project) {
-        project.tasks.create('clean', Delete.class) {
+        project.tasks.create('cleanCustom', Delete.class) {
             description 'Clean the project build directory'
             group 'Build'
             delete project.buildDir
+            dependsOn 'clean'
         }
     }
 

@@ -33,49 +33,42 @@ subprojects {
   description = "Elasticsearch subproject ${project.path}"
 }
 
+ext.enableArtifactSigning = !version.endsWith("SNAPSHOT") && project.hasProperty("repoUsername")
+ext.repoUsername = { project.hasProperty("repoUsername") ? getProperty("repoUsername") : "" }
+ext.repoPassword = { project.hasProperty("repoPassword") ? getProperty("repoPassword") : "" }
+
 Path rootPath = rootDir.toPath()
 // setup pom license info, but only for artifacts that are part of elasticsearch
-configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
-
+configure(subprojects.findAll { it.projectDir.toPath().endsWith('core') }) {
+    apply plugin: 'maven'
+    apply plugin: 'signing'
+       
   // we only use maven publish to add tasks for pom generation
   plugins.withType(MavenPublishPlugin).whenPluginAdded {
     publishing {
       publications {
-        // add license information to generated poms
-        all {
-          pom.withXml { XmlProvider xml ->
-            Node node = xml.asNode()
-            node.appendNode('inceptionYear', '2015')
-
-            Node license = node.appendNode('licenses').appendNode('license')
-            license.appendNode('name', 'The Apache Software License, Version 2.0')
-            license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
-            license.appendNode('distribution', 'repo')
-
-            Node developer = node.appendNode('developers').appendNode('developer')
-            developer.appendNode('name', 'Elastic & Strapdata')
-            developer.appendNode('url', 'http://www.strapdata.com')
-          }
-        }
+         maven(MavenPublication) {
+            from components.java
+            artifacts { 
+                archives sourcesJar 
+                archives javadocJar
+            }
+         }
       }
     }
-  }
-}
-
-/*
-allprojects {
-    apply plugin: 'signing'
-    apply plugin: 'maven'
-
-    // Signature of artifacts
-    signing {
-        sign configurations.archives
+    
+    if (enableArtifactSigning) {
+       signing {
+         sign configurations.archives
+       }
     }
 
     // OSSRH publication
     uploadArchives {
         repositories {
             mavenDeployer {
+                uploadDescriptor = true
+                
                 // POM signature
                 beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
                 
@@ -83,11 +76,39 @@ allprojects {
                 repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
                     authentication(userName: repoUsername, password: repoPassword)
                 }
+
+                // SNAPSHOT repository
+                snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
+                    authentication(userName: repoUsername, password: repoPassword)
+                }
+                
+                pom.withXml { XmlProvider xml ->
+                    Node node = xml.asNode()
+                    node.appendNode('name',it.name)
+                    node.appendNode('description',"Elasticsearch subproject")
+                    node.appendNode('url', 'http://github.com/strapdata/elassandra')
+                    node.appendNode('inceptionYear', '2015')
+        
+                    Node license = node.appendNode('licenses').appendNode('license')
+                    license.appendNode('name', 'The Apache Software License, Version 2.0')
+                    license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
+                    license.appendNode('distribution', 'repo')
+                    
+                    def scm = node.appendNode('scm')
+                    scm.appendNode('url', 'http://github.com/strapdata/elassandra')
+                    scm.appendNode('connection', 'scm:git:git@github.com:strapdata/elassandra.git')
+                    scm.appendNode('developerConnection', 'scm:git:git@github.com:strapdata/elassandra.git')
+                    
+                    Node developer = node.appendNode('developers').appendNode('developer')
+                    developer.appendNode('name', 'Elastic and Strapdata')
+                    developer.appendNode('url', 'https://github.com/strapdata/elassandra')
+                    developer.appendNode('organizationUrl', '//http://www.strapdata.com/')
+                }
             }
         }
     }
+  }
 }
-*/
 
 // introspect all versions of ES that may be tested agains for backwards compatibility
 Version currentVersion = Version.fromString(VersionProperties.elasticsearch.minus('-SNAPSHOT'))
