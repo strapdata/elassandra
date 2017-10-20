@@ -12,7 +12,7 @@ You must install the Enterprise plugin on ALL nodes of Elasticsearch enabled dat
 the Enterprise plugin version must match the version of Elassandra you are running. Installation require a full restart, 
 usally a rolling restart of nodes.
 
-1. Install the Enterprise Bundle :
+1. Install the Enterprise Plugin :
 
 .. code::
 
@@ -73,15 +73,19 @@ license is installed.
 +---------+----------------------------------------------+---------------------------------------------------------------------------------+
 | SSL     | SSL encryption of Elasticsearch connections  |                                                                                 |
 +---------+----------------------------------------------+---------------------------------------------------------------------------------+
-| AAA     | User Authentication, Authorization and Audit | Node restart required to reload users'privileges, no more audit.                |
+| AAA     | User Authentication, Authorization and Audit | Node restart required to reload users'privileges, no more audit trails.         |
 +---------+----------------------------------------------+---------------------------------------------------------------------------------+
 | CBS     | Content-Based Security rules                 | Node restart required to reload users'privileges.                               |
 +---------+----------------------------------------------+---------------------------------------------------------------------------------+
 
+.. CAUTION::
+
+   If the number of nodes of licensed datacenters becomes greater than your license maximum number of nodes, the license becomes invalid on all your nodes.
+   
 License installation
 ....................
 
-Licenses are stored in a Cassandra table ``elastic_admin.licenses``. You can also put a **conf/license.json** file, this file is automatically loaded at boot time.
+Licenses are stored in a Cassandra table ``elastic_admin.licenses``. You can also put a **conf/license.json** file, this file is automatically loaded at boot time if ``elastic_admin.licenses`` is empty.
 
 .. code::
 
@@ -136,7 +140,7 @@ You can update your licence by inserting additional license row in the Cassandra
 
    cassandra@cqlsh> INSERT INTO elastic_admin.licenses JSON '{"id":"bb0a181c-dbc6-4255-8d69-67b6e1d276ce","issuer":"Strapdata","company":"thecorp","email":"contact@thecorp","type":"TRIAL","features":["JMX","SSL","AAA"],"production":false,"generated":"2017-09-26 09:10:15.604Z","start":"2017-09-25 22:00:00.000Z","expire":"2018-09-25 22:00:00.000Z","clustername":"TestCluster","datacenters":["DC1"],"maxnodes":1,"signature":"0x302d02140b49e8c00b3606c66fe22378acb1ab781410460d02150092b666041dd97887b7d624fd6a12bbd434a955ed"}';
 
-Then reload the license with a POST REST request as shown below. If you have several licenses in ``elastic_admin.licenses``, the **most recenlty generated valid** license is used.
+Then reload the license with a POST REST request as shown below, each nodes returns its active license If you have several licenses in ``elastic_admin.licenses``, the **most recenlty generated valid** license is used.
 
 .. code::
 
@@ -201,13 +205,11 @@ JMXTerm example :
    SuggestTimeInMillis = 0;
    SuggestCurrent = 0;
    $>
-   
 
 These metrcis can be pulled, or pushed to various tools (`graphite <http://graphite.readthedocs.io/en/latest/>`_, 
 `ganglia <http://ganglia.info/>`_ or `influxdb <https://www.influxdata.com/>`_) using the popular `Metrics Library <http://metrics.dropwizard.io/3.2.3/getting-started.html>`_ embedded in Apache Cassandra.
 
-Here is a sample configuration located in **conf/influxdb-reporting.yaml** sending JMX metrics to an influxdb database named *elassandra*. To enable this configuration,
-just add *JVM_OPTS="$JVM_OPTS -Dcassandra.metricsReporterConfigFile=influxdb-reporting.yaml"* in your **conf/cassandra-env.sh**.
+Here is a sample configuration located in **conf/influxdb-reporting.yaml** sending JMX metrics to an influxdb database named *elassandra*. 
 
 .. code::
 
@@ -226,6 +228,17 @@ just add *JVM_OPTS="$JVM_OPTS -Dcassandra.metricsReporterConfigFile=influxdb-rep
      period: 60
      prefix: ''
      groupGauges: true
+
+To enable this configuration :
+
+* add the following jars files to your elassandra **lib** directory :
+
+  * `reporter-config-base-3.0.4.jar <https://github.com/strapdata/metrics-reporter-config/releases/download/v3.0.4-strapdata/reporter-config-base-3.0.4.jar>`_
+  * `reporter-config3-3.0.4.jar <https://github.com/strapdata/metrics-reporter-config/releases/download/v3.0.4-strapdata/reporter-config3-3.0.4.jar>`_
+  * `metrics-influxdb-1.1.10-SNAPSHOT.jar <https://github.com/strapdata/dropwizard-metrics-influxdb/releases/download/v1.1.10-SNAPSHOT-strapdata/metrics-influxdb-1.1.10-SNAPSHOT.jar>`_
+  * `dropwizard-metrics-influxdb-1.1.10-SNAPSHOT.jar <https://github.com/strapdata/dropwizard-metrics-influxdb/releases/download/v1.1.10-SNAPSHOT-strapdata/dropwizard-metrics-influxdb-1.1.10-SNAPSHOT.jar>`_
+
+* add *JVM_OPTS="$JVM_OPTS -Dcassandra.metricsReporterConfigFile=influxdb-reporting.yaml"* in your **conf/cassandra-env.sh**
 
 Then configure Grafana to build your Elassandra dashboard.
 
@@ -585,50 +598,9 @@ If you just want to invalidate the privilege cache for some roles, you can speci
 
    If you are running multiple Elasticsearch cluster in your Cassandra cluster, you should clear privilege cache on each datacenter where Elasticsearch is enabled.
 
+Integration
+-----------
 
-Multi-user Kibana configuration
-...............................
-
-Kibana needs a dedicated kibana account to manage kibana configuration, with the CREATE, ALTER, MODIFY, SELECT cassandra permissions.
-
-.. code::
-
-   cassandra@cqlsh> CREATE ROLE kibana WITH PASSWORD = '*****' AND LOGIN = true;
-   cassandra@cqlsh> CREATE KEYSPACE "_kibana" WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1':'1'};
-   cassandra@cqlsh> GRANT CREATE ON KEYSPACE "_kibana" TO kibana;
-   cassandra@cqlsh> GRANT ALTER ON KEYSPACE "_kibana" TO kibana;
-   cassandra@cqlsh> GRANT SELECT ON KEYSPACE "_kibana" TO kibana;
-   cassandra@cqlsh> GRANT MODIFY ON KEYSPACE "_kibana" TO kibana;
-   cassandra@cqlsh> LIST ALL PERMISSIONS OF kibana;
-   
-    role   | username | resource           | permission
-   --------+----------+--------------------+------------
-    kibana |   kibana | <keyspace _kibana> |     CREATE
-    kibana |   kibana | <keyspace _kibana> |      ALTER
-    kibana |   kibana | <keyspace _kibana> |     SELECT
-    kibana |   kibana | <keyspace _kibana> |     MODIFY
-
-Add cluster monitoring access rights to the *kibana* user.
-
-.. code::
-
-   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('kibana','cluster:monitor/.*','.*');
-   cassandra@cqlsh> SELECT * FROM elastic_admin.privileges ;
-   
-    role   | actions            | indices | fields | query
-   --------+--------------------+---------+--------+-------
-    kibana | cluster:monitor/.* |      .* |   null |  null
-
-Finally, user accounts must have :
-
-* the SELECT permission on vizualized indices, especially on your default kibana index.
-* the SELECT permission on the kibana keyspace to read kibana configuration.
-* the MODIFY permission on the kibana keyspace to store kibana configuration if authorized to create/update kibana objects.
-
-.. TIP::
-
-   Once a user if authenticated by kibana, kibana keeps this information in a cookie. In order to logout, remove cookies associated to your kibana.
-   
 Secured Transport Client
 ........................
 
@@ -690,6 +662,97 @@ Available security settings for the secured transport client for Elassandra :
 | ssl.require_endpoint_verification | **false**            | Enable server hostname verification.                        |
 +-----------------------------------+----------------------+-------------------------------------------------------------+
 
+
+Multi-user Kibana configuration
+...............................
+
+Kibana needs a dedicated kibana account to manage kibana configuration, with the CREATE, ALTER, MODIFY, SELECT cassandra permissions.
+
+.. code::
+
+   cassandra@cqlsh> CREATE ROLE kibana WITH PASSWORD = '*****' AND LOGIN = true;
+   cassandra@cqlsh> CREATE KEYSPACE "_kibana" WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1':'1'};
+   cassandra@cqlsh> GRANT CREATE ON KEYSPACE "_kibana" TO kibana;
+   cassandra@cqlsh> GRANT ALTER ON KEYSPACE "_kibana" TO kibana;
+   cassandra@cqlsh> GRANT SELECT ON KEYSPACE "_kibana" TO kibana;
+   cassandra@cqlsh> GRANT MODIFY ON KEYSPACE "_kibana" TO kibana;
+   cassandra@cqlsh> LIST ALL PERMISSIONS OF kibana;
+   
+    role   | username | resource           | permission
+   --------+----------+--------------------+------------
+    kibana |   kibana | <keyspace _kibana> |     CREATE
+    kibana |   kibana | <keyspace _kibana> |      ALTER
+    kibana |   kibana | <keyspace _kibana> |     SELECT
+    kibana |   kibana | <keyspace _kibana> |     MODIFY
+
+Add cluster monitoring access rights to the *kibana* user.
+
+.. code::
+
+   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('kibana','cluster:monitor/.*','.*');
+   cassandra@cqlsh> SELECT * FROM elastic_admin.privileges ;
+   
+    role   | actions            | indices | fields | query
+   --------+--------------------+---------+--------+-------
+    kibana | cluster:monitor/.* |      .* |   null |  null
+
+Finally, user accounts must have :
+
+* the SELECT permission on vizualized indices, especially on your default kibana index.
+* the SELECT permission on the kibana keyspace to read kibana configuration.
+* the MODIFY permission on the kibana keyspace to store kibana configuration if authorized to create/update kibana objects.
+
+.. TIP::
+
+   Once a user if authenticated by kibana, kibana keeps this information. In order to logout from your browser, clear cookies and data associated to your kibana server.
+   
+Elasticsearch Spark connector
+.............................
+
+The `elasticsearch-hadoop <https://github.com/strapdata/elasticsearch-hadoop>`_ connector can access a secured Elassandra cluster by providing the 
+sames SSL/TLS and Username/Pasword authentication parameters as the orginal `elasticsearch-hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/security.html>`_ connector.
+Here is an exaple with the spark-submit.
+
+.. code::
+
+   ES_OPTS="$ES_OPTS --conf spark.es.nodes=127.0.0.1"
+   ES_OPTS="$ES_OPTS --conf spark.es.nodes.wan.only=true"
+   ES_OPTS="$ES_OPTS --conf spark.es.net.ssl=true"
+   ES_OPTS="$ES_OPTS --conf spark.es.net.ssl.truststore.location=file:///path/to/truststore.jks"
+   ES_OPTS="$ES_OPTS --conf spark.es.net.ssl.truststore.pass=*******"
+   ES_OPTS="$ES_OPTS --conf spark.es.net.http.auth.user=john"
+   ES_OPTS="$ES_OPTS --conf spark.es.net.http.auth.pass=*******"
+   
+   bin/spark-shell --driver-class-path path/to/elasticsearch-hadoop-5.5.0.jar $ES_OPTS
+
+In order to works, the elasticsearch spark connector requires privileges to monitor your cluster and request for availables shards for search. 
+You can associate these privileges to a dedicated cassandra role *spark*, and grant this role to the account used in your spark application.
+The *spark* role have no cassandra permission, but user *john* inherits its privileges from the ``elastic_admin.privileges`` table.
+
+.. code::
+
+   cassandra@cqlsh> CREATE ROLE spark;
+   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('spark','cluster:monitor/.*','.*');
+   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('spark','indices:admin/shards/search_shards','.*');
+   cassandra@cqlsh> SELECT * FROM elastic_admin.privileges WHERE role='spark';
+   
+    role   | actions                            | indices | fields | query
+   --------+------------------------------------+---------+--------+-------
+     spark |                 cluster:monitor/.* |      .* |   null |  null
+     spark | indices:admin/shards/search_shards |      .* |   null |  null
+   
+   (2 rows)
+   cassandra@cqlsh> GRANT spark TO john;
+   cassandra@cqlsh> LIST ROLES of john;
+   
+    role  | super | login | options
+   -------+-------+-------+---------
+    spark | False | False |        {}
+     john | False |  True |        {}
+   
+   (2 rows)
+
+
 Elasticsearch Auditing
 ----------------------
 
@@ -697,21 +760,23 @@ Elasticsearch auditing tracks security events with the following fields :
 
 .. cssclass:: table-bordered
 
-+--------+---------------------------------------------------------------+
-| Field  | Description                                                   |
-+========+===============================================================+
-| status | GRANTED(200), UNAUTHORIZED(401), FORBIDDEN(403), BLOCKED(409) |
-+--------+---------------------------------------------------------------+
-| type   | PRIVILEGE, PERMISSION, UNAUTHORIZED, UNSUPPORTED, TAMPERED    |
-+--------+---------------------------------------------------------------+
-| login  | User login                                                    |
-+--------+---------------------------------------------------------------+
-| role   | Cassandra role                                                |
-+--------+---------------------------------------------------------------+
-| source | Source IP of the elasticsearch request                        |
-+--------+---------------------------------------------------------------+
-| action | Elasticsearch action                                          |
-+--------+---------------------------------------------------------------+
++---------+---------------------------------------------------------------+
+| Field   | Description                                                   |
++=========+===============================================================+
+| status  | GRANTED(200), UNAUTHORIZED(401), FORBIDDEN(403), BLOCKED(409) |
++---------+---------------------------------------------------------------+
+| type    | PRIVILEGE, PERMISSION, UNAUTHORIZED, UNSUPPORTED, TAMPERED    |
++---------+---------------------------------------------------------------+
+| login   | User login                                                    |
++---------+---------------------------------------------------------------+
+| role    | Cassandra role                                                |
++---------+---------------------------------------------------------------+
+| source  | Source IP of the elasticsearch request                        |
++---------+---------------------------------------------------------------+
+| action  | Elasticsearch action                                          |
++---------+---------------------------------------------------------------+
+| indices | Requested indices                                             |
++---------+---------------------------------------------------------------+
 
 Audits events are recorded in a Cassandra table or in a log file configured as an appender in your **conf/logback.xml** file.
 
@@ -765,15 +830,16 @@ Here an exemple of audit logs :
 
 .. code::
 
-   2017-09-22 19:44:06,187 200,PERMISSION,sales,roles/sales,/10.0.1.5,indices:data/read/search,
-   2017-09-22 19:44:06,454 200,PERMISSION,sales,roles/sales,/10.0.1.5,indices:admin/mappings/fields/get
-   2017-09-22 19:44:06,731 200,PERMISSION,sales,roles/sales,/10.0.1.5,indices:data/read/mget
-   2017-09-22 19:44:07,372 200,PERMISSION,sales,roles/sales,/10.0.1.5,indices:data/read/mget
-   2017-09-22 19:44:07,666 200,PERMISSION,sales,roles/sales,/10.0.1.5,indices:data/read/mget
-   2017-09-22 19:44:08,030 200,PERMISSION,sales,roles/sales,/10.0.1.5,indices:data/read/msearch
-   2017-09-22 20:01:43,451 403,PERMISSION,vince,roles/vince,/10.0.1.5,indices:data/read/get
-   2017-09-22 20:05:21,114 403,PERMISSION,vince,roles/vince,/10.0.1.5,indices:data/read/get
-   2017-09-22 20:05:30,965 403,PERMISSION,vince,roles/vince,/10.0.1.5,indices:data/read/searchl
+   2017-10-20 14:11:49,854 200,PERMISSION,sales,roles/sales,/10.0.1.5,indices:data/read/search,[sales_*]
+   2017-10-20 14:11:51,607 200,PERMISSION,sales,roles/sales,/10.0.1.5,indices:data/read/search,[.kibana]
+   2017-10-20 14:11:52,377 200,PRIVILEGE,kibana,roles/kibana,/10.0.1.5,cluster:monitor/main,null
+   2017-10-20 14:11:52,501 200,PRIVILEGE,kibana,roles/kibana,/10.0.1.5,cluster:monitor/nodes/info,null
+   2017-10-20 14:11:52,627 200,PRIVILEGE,kibana,roles/kibana,/10.0.1.5,cluster:monitor/nodes/info,null
+   2017-10-20 14:11:52,679 200,PERMISSION,sales,roles/sales,/10.0.1.5,indices:data/read/mget[shard],[.kibana]
+   2017-10-20 14:11:52,751 200,PERMISSION,kibana,roles/kibana,/10.0.1.5,indices:data/read/mget[shard],[.kibana]
+   2017-10-20 14:11:52,868 200,PRIVILEGE,kibana,roles/kibana,/10.0.1.5,cluster:monitor/health,[.kibana]
+   2017-10-20 14:11:52,990 200,PERMISSION,kibana,roles/kibana,/10.0.1.5,indices:data/read/search,[.kibana]
+
 
 CQL Audit
 .........
@@ -784,11 +850,13 @@ When using the **cql** appender for audit, audit events are recorded in the cass
 
    cassandra@cqlsh> select * from elastic_audit.events ;
    
-    node      | event                                | action                   | level      | login     | role            | source    | status
-   -----------+--------------------------------------+--------------------------+------------+-----------+-----------------+-----------+--------
-    127.0.0.1 | ae54b260-a498-11e7-80a2-d3620f899c0c |     indices:admin/create | PERMISSION | cassandra | roles/cassandra | 127.0.0.1 |    200
-    127.0.0.1 | 71a96a20-a495-11e7-a8e1-8954bd08d6ff |    cluster:monitor/state | PERMISSION | cassandra | roles/cassandra | 127.0.0.1 |    200
-    127.0.0.1 | 284aa2b0-a6b9-11e7-ab86-194aef7919ff |    cluster:monitor/state | PERMISSION | cassandra | roles/cassandra | 127.0.0.1 |    200
+    node     | event                                | action                        | indices     | level      | login  | role         | source   | status
+   ----------+--------------------------------------+-------------------------------+-------------+------------+--------+--------------+----------+--------
+    10.0.0.4 | cf74fed0-b5a2-11e7-9508-157b11ac2561 |          cluster:monitor/main |        null |  PRIVILEGE | kibana | roles/kibana | 10.0.1.5 |    200
+    10.0.0.4 | d2026070-b5a2-11e7-9508-157b11ac2561 |         cluster:monitor/state |        null |  PRIVILEGE | kibana | roles/kibana | 10.0.1.5 |    200
+    10.0.0.4 | da709470-b5a2-11e7-9508-157b11ac2561 |      indices:data/read/search | ['sales_*'] | PERMISSION |  sales |  roles/sales | 10.0.1.5 |    200
+    10.0.0.4 | d8025390-b5a2-11e7-9508-157b11ac2561 |        cluster:monitor/health | ['.kibana'] |  PRIVILEGE | kibana | roles/kibana | 10.0.1.5 |    200
+    10.0.0.4 | cf9de390-b5a2-11e7-9508-157b11ac2561 |    cluster:monitor/nodes/info |        null |  PRIVILEGE | kibana | roles/kibana | 10.0.1.5 |    200
 
 If you want to have multiple copies of audit events in your cluster, you can alter the following default settings :
 
@@ -821,7 +889,15 @@ You can index with elasticsearch the ``elastic_audit.events`` table with the fol
       }
    }'
 
+Then you can build you audit trail kibana report.
 
+.. image:: images/elastic_audit_events_kibana_report.png
+
+.. TIP::
+
+   Keep in mind that CQL audit trail involves a network overhead because each node send some events to all other nodes. For better performances, 
+   you should use the Logback audit and collect events with Beat+Logstash into a dedicated elassandra cluster. 
+   
 Limitations
 -----------
 
@@ -839,6 +915,6 @@ If you try to insert an unsupported query in ``elastic_admin.privileges.query``,
 
 .. code::
 
-   cassandra@cqlsh> insert into elastic_admin."privileges" (role,actions,indices,query) VALUES ('blogger','indices:data/read/.*','blog','{"query":{ "has_parent":{"parent_type":"blog","query":{"term":{"tag" : "something"}}}}}');
+   cassandra@cqlsh> insert into elastic_admin."privileges" (role,actions,indices,query) VALUES ('blogger','indices:data/read/.*','blog','{"query":{ "has_parent":{"parent_type":"blog","query":{"term":{"tag":"something"}}}}}');
    SyntaxException: Unsupported query for content-based filtering
    
