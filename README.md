@@ -1,4 +1,6 @@
-# Elassandra [![Build Status](https://travis-ci.org/strapdata/elassandra.svg?branch=v2.4.5-strapdata)](https://travis-ci.org/strapdata/elassandra) [![Doc Status](https://readthedocs.org/projects/elassandra/badge/?version=latest)](http://doc.elassandra.io)
+# Elassandra [![Build Status](https://travis-ci.org/strapdata/elassandra.svg)](https://travis-ci.org/strapdata/elassandra) [![Doc Status](https://readthedocs.org/projects/elassandra/badge/?version=latest)](http://doc.elassandra.io)
+
+![Elassandra Logo](elassandra-logo.png)
 
 Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run as a plugin for [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
@@ -105,7 +107,8 @@ And here is a sample response :
 
 ## Support
 
- * Support available via [elassandra google groups](https://groups.google.com/forum/#!forum/elassandra).
+ * Commercial support is available through [Strapdata](http://www.strapdata.com/).
+ * Community support available via [elassandra google groups](https://groups.google.com/forum/#!forum/elassandra).
  * Post feature requests and bugs on https://github.com/strapdata/elassandra/issues
 
 ## License
@@ -132,3 +135,4 @@ the License.
 
 * Elasticsearch and Kibana are trademarks of Elasticsearch BV, registered in the U.S. and in other countries.
 * Apache Cassandra, Apache Lucene, Apache, Lucene and Cassandra are trademarks of the Apache Software Foundation.
+* Elassandra is a trademark of Strapdata SAS.
