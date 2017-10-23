@@ -67,7 +67,7 @@ author = u'Strapdata'
 # The short X.Y version.
 version = u'5.5.0'
 # The full version, including alpha/beta/rc tags.
-release = u'5.5.0.3'
+release = u'5.5.0.4'
 
 tgz_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.tar.gz".format(release)
 deb_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.deb".format(release)
@@ -262,7 +262,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'Elassandra.tex', u'Elassandra Documentation',
-     u'Vincent Royer', 'manual'),
+     u'Strapdata', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of

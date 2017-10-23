@@ -102,7 +102,7 @@ configure(subprojects.findAll { it.projectDir.toPath().endsWith('core') }) {
                     Node developer = node.appendNode('developers').appendNode('developer')
                     developer.appendNode('name', 'Elastic and Strapdata')
                     developer.appendNode('url', 'https://github.com/strapdata/elassandra')
-                    developer.appendNode('organizationUrl', '//http://www.strapdata.com/')
+                    developer.appendNode('organizationUrl', 'http://www.strapdata.com/')
                 }
             }
         }
