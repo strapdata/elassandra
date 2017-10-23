@@ -447,10 +447,10 @@ Elasticsearch authentication settings are defined in **conf/elasticsearch.yml** 
 | ``aaa.anonymous_user`` |                                             | Defines the cassandra user's name used to execute unauthenticated request.                                             |
 |                        |                                             | If undefined, unauthenticated requests are rejected.                                                                   |
 +------------------------+---------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
-| ``aaa.cbs.enabled``    | **false**                                   | Enable or disable content based security.                                                                              |
-+------------------------+---------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
 | ``aaa.shared_secret``  | **Base64 encoded cluster name**             | Shared secret used to tag authorized requests on the coordinator node.                                                 |
 |                        |                                             | This should be a confidential per datacenter secret.                                                                   |
++------------------------+---------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
+| ``cbs.enabled``        | **false**                                   | Enable or disable Content-Based Security.                                                                              |
 +------------------------+---------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
 
 .. TIP::
@@ -826,7 +826,7 @@ And add a logger named **LogbackAuditor** with additiviy set to **false** :
         <appender-ref ref="AUDIT" />
    </logger>
 
-Here an exemple of audit logs :
+Here an exemple of audit logs in the **logs/audit.log** file :
 
 .. code::
 
@@ -906,6 +906,7 @@ Content-Based Security Limitations
 
 * The request cache is disabled for search requests.
 * The following queries are not supported for document-level filtering :
+
    * **Has Parent**, **Has Child** queries.
    * **Terms** queries with lookups.
    * **Geo Shape** queries without inline shape definition.
