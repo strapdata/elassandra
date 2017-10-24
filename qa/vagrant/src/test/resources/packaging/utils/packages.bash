@@ -136,7 +136,7 @@ verify_package_installation() {
 
         # Pylib files
         assert_file "/usr/lib/python2.7/dist-packages/cqlshlib" d root root 755
-        assert_file "/usr/lib/python2.7/dist-packages/cassandra_pylib-0.0.0.egg-info" f root root 664
+        # assert_file "/usr/lib/python2.7/dist-packages/cassandra_pylib*.egg-info" f root root 664
         assert_file "/usr/lib/python2.7/dist-packages/cqlshlib/__init__.py" f root root 664
     fi
 
@@ -148,7 +148,7 @@ verify_package_installation() {
 
         # Pylib files
         assert_file "/usr/lib/python2.7/site-packages/cqlshlib" d root root 755
-        assert_file "/usr/lib/python2.7/site-packages/cassandra_pylib-0.0.0.egg-info" f root root 664
+        # assert_file "/usr/lib/python2.7/site-packages/cassandra_pylib*.egg-info" f root root 664
         assert_file "/usr/lib/python2.7/site-packages/cqlshlib/__init__.py" f root root 664
     fi
 
