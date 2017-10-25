@@ -117,9 +117,10 @@ project.rootProject.subprojects.findAll { it.path.startsWith(':modules:transport
 
 // make sure we have a clean task since we aren't a java project, but we have tasks that
 // put stuff in the build dir
-task clean(type: Delete) {
+task customClean(type: Delete) {
     delete 'build'
 }
+clean.dependsOn customClean
 
 configure(distributions) {
   /*****************************************************************************

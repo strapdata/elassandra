@@ -60,3 +60,5 @@ modules/percolator/bin/
 private/
 test/framework/bin/
 
+
+docs/.pydevproject
