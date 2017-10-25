@@ -421,12 +421,11 @@ Once authentication is enabled, create a new Cassandra superuser to avoid issue 
    cqlsh> ALTER ROLE cassandra WITH PASSWORD='******';
    
 Then configure the replication factor for the *system_auth* keyspace according to your cluster configuration (see `Configure Native Authentication <https://docs.datastax.com/en/cassandra/3.0/cassandra/configuration/secureConfigNativeAuth.html>`_).
-Finally, adjust roles and credential cache settings and disable JMX configuration of authentifcation and authorization cache.
+Finally, adjust roles and credential cache settings and disable JMX configuration of authentifcation and authorization cachElasticsearch Authentication, Authorization and Content-Based Security
+.................................................................................................................................................................................................
 
-Elasticsearch Authentication, Authorization and Content-Based Security
-......................................................................
-
-Elasticsearch authentication settings are defined in **conf/elasticsearch.yml** :
+Elasticsearch authentication settings are defined in **conf/elasticsearch.yml**. 
+To be effective, these settings must be the same on all nodes of a Cassandra datacenter.
 
 .. cssclass:: table-bordered
 
@@ -455,7 +454,8 @@ Elasticsearch authentication settings are defined in **conf/elasticsearch.yml** 
 
 .. TIP::
 
-   Elasticsearch user **authentication requires HTTPS**. (User authentication without HTTPS is not supported).
+   Elasticsearch **user authentication requires HTTPS**. (User authentication without HTTPS is not supported).
+
 
 In order to grant an Elasticsearch request, Elassandra checks two levels of access rights :
 
