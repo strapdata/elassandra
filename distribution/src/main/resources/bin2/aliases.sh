@@ -82,18 +82,18 @@ function delete() {
 }
 
 function close() {
-   curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_close"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_close?pretty"
 }
 
 function open() {
-   curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_open"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_open?pretty"
 }
 
 function forcemerge() {
    if [ "x$2" == "x" ]; then
-      curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_forcemerge"
+    curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_forcemerge?pretty"
    else
-      curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_forcemerge?max_num_segments=$2"
+    curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_forcemerge?max_num_segments=$2&pretty"
    fi
 }
 
@@ -106,15 +106,15 @@ function rebuild() {
 }
 
 function clearcache() {
-   curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_cache/clear"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_cache/clear?pretty"
 }
 
 function flush() {
-   curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_flush"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_flush?pretty"
 }
 
 function refresh() {
-   curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_refresh"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_refresh?pretty"
 }
 
 # Cassandra aliases
