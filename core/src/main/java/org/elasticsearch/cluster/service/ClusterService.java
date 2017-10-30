@@ -1556,24 +1556,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             final ClusterState newClusterState3 = newClusterState;
             updateState(css -> newClusterState3);
             
-            // notify normalPriorityStateAppliers with the new cluster state, including CassandraSecondaryIndicesApplier to create new C* 2i instances.
-            if (logger.isTraceEnabled())
-                logger.trace("notifiy normalPriorityStateAppliers={} before acknowlegdging listeners",normalPriorityStateAppliers);
-            for (ClusterStateApplier applier : normalPriorityStateAppliers) {
-                try {
-                    applier.applyClusterState(clusterChangedEvent);
-                } catch (Exception ex) {
-                    logger.warn("failed to notify ClusterStateListener", ex);
-                }
-            }
-            
-            if (!presistedMetadata && newClusterState.metaData().version() > previousClusterState.metaData().version()) {
-                // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
-                // after mapping change have been applied to secondary index in normalPriorityStateAppliers
-                publishX2(newClusterState);
-            }
-            
-            Throwable ackFailure = null;
+            // coordinator node
             if (presistedMetadata && metaDataVersionAckListerner != null && newClusterState.nodes().getSize() > 1) {
                 try {
                     if (logger.isInfoEnabled())
@@ -1584,10 +1567,28 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                         logger.debug("Metadata.version={} applied by all alive nodes", newClusterState.metaData().version());
                     }
                 } catch (Throwable e) {
-                    ackFailure = e;
                     final long version = newClusterState.metaData().version();
                     logger.error((Supplier<?>) () -> new ParameterizedMessage("Interruped while waiting MetaData.version = {}", version), e);
                 }
+            }
+            
+            // notify normalPriorityStateAppliers with the new cluster state, 
+            // including CassandraSecondaryIndicesApplier to create new C* 2i instances when newClusterState is applied by all nodes.
+            if (logger.isTraceEnabled())
+                logger.trace("notifiy normalPriorityStateAppliers={} before acknowlegdging listeners",normalPriorityStateAppliers);
+            for (ClusterStateApplier applier : normalPriorityStateAppliers) {
+                try {
+                    applier.applyClusterState(clusterChangedEvent);
+                } catch (Exception ex) {
+                    logger.warn("failed to notify ClusterStateListener", ex);
+                }
+            }
+            
+            // non-coordinator node
+            if (!presistedMetadata && newClusterState.metaData().version() > previousClusterState.metaData().version()) {
+                // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
+                // after mapping change have been applied to secondary index in normalPriorityStateAppliers
+                publishX2(newClusterState);
             }
             
             //manual ack only from the master at the end of the publish
