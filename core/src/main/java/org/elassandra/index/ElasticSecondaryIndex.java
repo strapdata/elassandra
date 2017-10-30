@@ -1041,10 +1041,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             Map<String, ImmutablePartitionFunction> partFuncs = null;
             List<ImmutableIndexInfo> indexList = new ArrayList<ImmutableIndexInfo>();
             
-            for(Iterator<IndexMetaData> indexMetaDataIterator = state.metaData().iterator(); indexMetaDataIterator.hasNext(); ) {
-                IndexMetaData indexMetaData = indexMetaDataIterator.next();
+            for(IndexMetaData indexMetaData:state.metaData()) {
+                if (!ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace()))
+                   continue;
+                
                 String index = indexMetaData.getIndex().getName();
-                MappingMetaData mappingMetaData; 
+                MappingMetaData mappingMetaData = indexMetaData.mapping(typeName);
+                
+                if (mappingMetaData == null)
+                    continue;
                 
                 if (indexMetaData.getState() != IndexMetaData.State.OPEN) {
                     if (logger.isDebugEnabled())
@@ -1058,60 +1063,58 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         logger.info("ignore, index=[{}] blocked blocks={}", index, clusterBlockException.blocks());
                     continue;
                 }
-
-                if (ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace()) && (mappingMetaData = indexMetaData.mapping(typeName)) != null) {
-                    try {
-                        Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
-                        if (mappingMap.get("properties") != null) {
-                            IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
-                            IndexService indexService = indicesService.indexService(indexMetaData.getIndex());
-                            if (indexService == null) {
-                                logger.error("indexService not available for [{}], ignoring" , index);
-                                continue;
-                            }
-                            ImmutableIndexInfo indexInfo = new ImmutableIndexInfo(index, indexService, mappingMetaData, state.metaData(), IndexMetaData.isIndexUsingVersionLessEngine(indexMetaData.getSettings()));
-                            indexList.add(indexInfo);
-                            
-                            Map<String,Object> props = (Map<String,Object>)mappingMap.get("properties");
-                            for(String fieldName : props.keySet() ) {
-                                Map<String,Object> fieldMap = (Map<String,Object>)props.get(fieldName);
-                                if (fieldMap.get("enabled") == null || XContentMapValues.nodeBooleanValue(fieldMap.get("enabled"))) {
-                                    boolean mandartory = (fieldMap.get(TypeParsers.CQL_MANDATORY) == null || XContentMapValues.nodeBooleanValue(fieldMap.get(TypeParsers.CQL_MANDATORY)));
-                                    if (fieldsMap.get(fieldName) != null) {
-                                        mandartory = mandartory || fieldsMap.get(fieldName);
-                                    }
-                                    fieldsMap.put(fieldName, mandartory);
+                
+                try {
+                    Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
+                    if (mappingMap.get("properties") != null) {
+                        IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
+                        IndexService indexService = indicesService.indexService(indexMetaData.getIndex());
+                        if (indexService == null) {
+                            logger.error("indexService not available for [{}], ignoring" , index);
+                            continue;
+                        }
+                        ImmutableIndexInfo indexInfo = new ImmutableIndexInfo(index, indexService, mappingMetaData, state.metaData(), IndexMetaData.isIndexUsingVersionLessEngine(indexMetaData.getSettings()));
+                        indexList.add(indexInfo);
+                        
+                        Map<String,Object> props = (Map<String,Object>)mappingMap.get("properties");
+                        for(String fieldName : props.keySet() ) {
+                            Map<String,Object> fieldMap = (Map<String,Object>)props.get(fieldName);
+                            if (fieldMap.get("enabled") == null || XContentMapValues.nodeBooleanValue(fieldMap.get("enabled"))) {
+                                boolean mandartory = (fieldMap.get(TypeParsers.CQL_MANDATORY) == null || XContentMapValues.nodeBooleanValue(fieldMap.get(TypeParsers.CQL_MANDATORY)));
+                                if (fieldsMap.get(fieldName) != null) {
+                                    mandartory = mandartory || fieldsMap.get(fieldName);
                                 }
-                            }
-                            if (mappingMetaData.hasParentField()) {
-                                Map<String,Object> parentsProps = (Map<String,Object>)mappingMap.get(ParentFieldMapper.NAME);
-                                String pkColumns = (String)parentsProps.get(ParentFieldMapper.CQL_PARENT_PK);
-                                if (pkColumns == null) {
-                                    fieldsMap.put(ParentFieldMapper.NAME,true);
-                                } else {
-                                    for(String colName : pkColumns.split(","))
-                                        fieldsMap.put(colName, true);
-                                }
-                            }
-                            
-                            String[] pf = indexMetaData.partitionFunction();
-                            if (pf != null) {
-                                if (partFuncs == null) 
-                                    partFuncs = new HashMap<String, ImmutablePartitionFunction>();
-                                ImmutablePartitionFunction func = partFuncs.get(pf[0]);
-                                if (func == null) {
-                                    func = new ImmutablePartitionFunction(pf, indexMetaData.partitionFunctionClass());
-                                    partFuncs.put(func.name, func);
-                                }
-                                if (!func.pattern.equals(pf[1])) {
-                                    logger.error("Partition function [{}] is defined with two different partterns [{}] and [{}]", pf[0], func.pattern, pf[1]);
-                                }
-                                func.indices.add(index);
+                                fieldsMap.put(fieldName, mandartory);
                             }
                         }
-                    } catch (IOException e) {
-                        logger.error("Unexpected error index=[{}]", e, index);
+                        if (mappingMetaData.hasParentField()) {
+                            Map<String,Object> parentsProps = (Map<String,Object>)mappingMap.get(ParentFieldMapper.NAME);
+                            String pkColumns = (String)parentsProps.get(ParentFieldMapper.CQL_PARENT_PK);
+                            if (pkColumns == null) {
+                                fieldsMap.put(ParentFieldMapper.NAME,true);
+                            } else {
+                                for(String colName : pkColumns.split(","))
+                                    fieldsMap.put(colName, true);
+                            }
+                        }
+                        
+                        String[] pf = indexMetaData.partitionFunction();
+                        if (pf != null) {
+                            if (partFuncs == null) 
+                                partFuncs = new HashMap<String, ImmutablePartitionFunction>();
+                            ImmutablePartitionFunction func = partFuncs.get(pf[0]);
+                            if (func == null) {
+                                func = new ImmutablePartitionFunction(pf, indexMetaData.partitionFunctionClass());
+                                partFuncs.put(func.name, func);
+                            }
+                            if (!func.pattern.equals(pf[1])) {
+                                logger.error("Partition function [{}] is defined with two different partterns [{}] and [{}]", pf[0], func.pattern, pf[1]);
+                            }
+                            func.indices.add(index);
+                        }
                     }
+                } catch (IOException e) {
+                    logger.error("Unexpected error index=[{}]", e, index);
                 }
             }
             
@@ -2065,7 +2068,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
                 IndexMetaData indexMetaData = cursor.value;
                 if (indexMetaData.keyspace().equals(this.baseCfs.metadata.ksName) && 
-                    indexMetaData.mapping(ClusterService.cfNameToType(this.baseCfs.name)) != null &&
+                    indexMetaData.mapping(this.typeName) != null &&
                    !indexMetaData.equals(event.previousState().metaData().index(indexMetaData.getIndex().getName()))) {
                     updateMapping = true;
                     break;
@@ -2092,13 +2095,16 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         return () -> {
             initCounter++;
             assert initCounter == 1 : "index initialized more than once";
-            if (ElassandraDaemon.instance.node() != null) {
-                logger.debug("Initializing elastic secondary index=[{}] hashCode={} initCounter={}", index_name, hashCode(), initCounter);
+            if (ElassandraDaemon.instance !=null && ElassandraDaemon.instance.node() != null) {
                 // 2i index can be recycled by cassandra, while ES node restarted during tests, so update clusterService reference.
                 clusterService = ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class);
                 clusterService.addListener(this);
                 
-                initMapping();
+                ClusterState state = clusterService.state();
+                logger.debug("Initializing elastic secondary index=[{}] hashCode={} initCounter={} metadata.version={} indices={}", 
+                        index_name, hashCode(), initCounter, state.metaData().version(), state.metaData().indices());
+                
+                initMapping(state);
                 
                 // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
                 if (Keyspace.isInitialized() && !baseCfs.isEmpty() && !isBuilt())
@@ -2116,7 +2122,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
 
 
-    public Callable<?> getMetadataReloadTask(IndexMetadata indexMetadata) {
+    public Callable<?> getMetadataReloadTask(IndexMetadata indexMetadata) 
+    {
         return null;
     }
 
