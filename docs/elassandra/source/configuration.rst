@@ -171,7 +171,7 @@ Write performances
 ..................
 
 * By default, Elasticsearch analyzes the input data of all fields in a special **_all** field. If you don't need it, disable it.
-* By default, Elasticsearch all fields names in a special **_field_names** field. If you don't need it, disable it.
+* By default, Elasticsearch all fields names in a special **_field_names** field. If you don't need it, disable it (elasticsearch-hadoop requires **_field_names** to be enabled).
 * By default, Elasticsearch shards are refreshed every second, making new document visible for search within a second. If you don't need it, increase the refresh interval to more than a second, or even turn if off temporarily by setting the refresh interval to -1.
 * Use the optimized version less Lucene engine (the default) to reduce index size.
 * Disable ``index_on_compaction`` (Default is *false*) to avoid the Lucene segments merge overhead when compacting SSTables.
