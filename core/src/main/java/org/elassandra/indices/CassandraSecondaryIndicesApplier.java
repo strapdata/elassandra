@@ -37,7 +37,7 @@ import java.io.IOException;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
- * Post-applied ClusterState listener to manage
+ * normalPriorityStateAppliers listener to manage
  * - Start INITIALIZING local shards
  * - Cassandra 2i creation when associated local shard is started (on coordinator node only).
  * @author vroyer
@@ -72,11 +72,12 @@ public class CassandraSecondaryIndicesApplier extends AbstractComponent implemen
         for(Pair<String,MappingMetaData> mapping : updatedMapping) {
             String index = mapping.left;
             IndexMetaData indexMetaData = event.state().metaData().index(index);
-            if (indexMetaData != null) {
+            if (indexMetaData != null && indexMetaData.mapping(mapping.right.type()) != null) {
                 try {
                     String clazz = indexMetaData.getSettings().get(IndexMetaData.SETTING_SECONDARY_INDEX_CLASS, event.state().metaData().settings().get(ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS, ClusterService.defaultSecondaryIndexClass.getName()));
                     logger.debug("Creating secondary indices for table={}.{} with class={}", indexMetaData.keyspace(), mapping.right.type(),clazz);
                     this.clusterService.createSecondaryIndex(indexMetaData.keyspace(), mapping.right, clazz);
+                    updatedMapping.remove(mapping);
                 } catch (IOException e) {
                     logger.error("Failed to create secondary indices for table={}.{}", e, indexMetaData.keyspace(), mapping.right.type());
                 }
@@ -84,8 +85,6 @@ public class CassandraSecondaryIndicesApplier extends AbstractComponent implemen
                 logger.warn("Index [{}] not found in new state metadata version={}", index, event.state().metaData().version());
             }
         }
-        if (updatedMapping.size() > 0)
-            updatedMapping.clear();
     }
 
 }
