@@ -99,7 +99,7 @@ dependencies {
   compile 'com.google.guava:guava:19.0'
 
   // Elassandra add-ons
-  compile("com.strapdata.cassandra:cassandra-all:3.11.1") {
+  compile("com.strapdata.cassandra:cassandra-all:3.11.1.0") {
     exclude group:'net.java.dev.jna', module:'jna'
   }
 
