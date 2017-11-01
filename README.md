@@ -22,13 +22,14 @@ For Cassandra users, elassandra provides Elasticsearch features :
 * Numerous Elasticsearch plugins and products like [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html).
 
 For Elasticsearch users, elassandra provides useful features :
-* Change the mapping and re-index your data from Cassandra with zero downtime.
+* Elassandra is masterless, cluster state is managed through a [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
+* Elassandra is a sharded multi-master database, where Elasticsearch is sharded master-slave, Thus, Elassandra has no Single Point Of Write, helping to achieve high availability.
+* Elassandra inherits Cassandra data repair mechanisms (hinted handoff, read repair and nodetool repair) allowing to support cross datacenter replication.
+* When adding a node to an Elassandra cluster, only data pulled from existing nodes are re-indexed in Elasticsearch.
 * Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Source documents are now stored in Cassandra, reducing disk space if you need a NoSQL database and Elasticsearch.
-* In elassandra, Elasticsearch is masterless and split-brain resistant because cluster state is now managed within a [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
 * Write operations are not more restricted to one primary shards, but distributed on all Cassandra nodes in a virtual datacenter. Number of shards does not limit your write throughput, just add some elassandra nodes to increase both read and write throughput.
 * Elasticsearch indices can be replicated between many Cassandra datacenters, allowing to write to the closest datacenter and search globally.
-* The [cassandra driver](http://www.planetcassandra.org/client-drivers-tools/) is Datacenter and Token aware, providing automatic load-balancing.
-* Cassandra supports partial update and [distributed counters](http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_counter_t.html).
+* The [cassandra driver](http://www.planetcassandra.org/client-drivers-tools/) is Datacenter and Token aware, providing automatic load-balancing and failover.
 
 ## Quick start
 
