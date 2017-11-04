@@ -52,7 +52,7 @@ Try indexing a document on a non-existing index:
 curl -XPUT 'http://localhost:9200/twitter/doc/1?pretty' -H 'Content-Type: application/json' -d '
 {
     "user": "Poulpy",
-    "post_date": "2017-10-4T13:12:00",
+    "post_date": 1509209701000,
     "message": "Elassandra adds dynamic mapping to Cassandra"
 }'
 ```
@@ -95,7 +95,7 @@ And here is a sample response :
         "_id" : "2",
         "_score" : 0.9808292,
         "_source" : {
-          "post_date" : "2017-10-04T13:20:00",
+          "post_date" : 1509209701000,
           "message" : "New data is indexed automatically",
           "user" : "Jimmy"
         }
