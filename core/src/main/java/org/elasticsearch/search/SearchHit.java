@@ -19,6 +19,10 @@
 
 package org.elasticsearch.search;
 
+import org.apache.cassandra.db.BufferDecoratedKey;
+import org.apache.cassandra.db.Clustering;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.dht.Murmur3Partitioner.LongToken;
 import org.apache.lucene.search.Explanation;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.action.OriginalIndices;
@@ -49,6 +53,7 @@ import org.elasticsearch.search.lookup.SourceLookup;
 import org.elasticsearch.search.suggest.completion.CompletionSuggestion;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -109,6 +114,8 @@ public class SearchHit implements Streamable, ToXContentObject, Iterable<SearchH
 
     private Map<String, SearchHits> innerHits;
 
+    private List<ByteBuffer> values;
+    
     private SearchHit() {
 
     }
@@ -905,6 +912,13 @@ public class SearchHit implements Streamable, ToXContentObject, Iterable<SearchH
                 innerHits.put(key, value);
             }
         }
+        
+        if (in.readBoolean()) {
+            int rowSize = in.readVInt();
+            this.values = new ArrayList<ByteBuffer>(rowSize);
+            for(int i=0; i < rowSize; i++)
+                values.add(in.readByteBuffer());
+        }
     }
 
     @Override
@@ -956,6 +970,15 @@ public class SearchHit implements Streamable, ToXContentObject, Iterable<SearchH
                 out.writeString(entry.getKey());
                 entry.getValue().writeTo(out);
             }
+        }
+        
+        if (this.values != null) {
+            out.writeBoolean(true);
+            out.writeVInt(values.size());
+            for(ByteBuffer bb : values)
+               out.writeByteBuffer(bb);
+        } else {
+            out.writeBoolean(false);
         }
     }
 
@@ -1074,5 +1097,13 @@ public class SearchHit implements Streamable, ToXContentObject, Iterable<SearchH
         public int hashCode() {
             return Objects.hash(field, offset, child);
         }
+    }
+
+    public List<ByteBuffer> getValues() {
+        return values;
+    }
+
+    public void setValues(List<ByteBuffer> row) {
+        this.values = row;
     }
 }

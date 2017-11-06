@@ -104,8 +104,7 @@ public class BaseClusterService extends AbstractLifecycleComponent {
 
     private BiConsumer<ClusterChangedEvent, Discovery.AckListener> clusterStatePublisher;
 
-    private final OperationRouting operationRouting;
-
+    
     protected final ClusterSettings clusterSettings;
 
     private TimeValue slowTaskLoggingThreshold;
@@ -142,7 +141,6 @@ public class BaseClusterService extends AbstractLifecycleComponent {
                           ClusterSettings clusterSettings, ThreadPool threadPool, Supplier<DiscoveryNode> localNodeSupplier) {
         super(settings);
         this.localNodeSupplier = localNodeSupplier;
-        this.operationRouting = new OperationRouting(settings, clusterSettings);
         this.threadPool = threadPool;
         this.clusterSettings = clusterSettings;
         this.clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);
@@ -291,10 +289,6 @@ public class BaseClusterService extends AbstractLifecycleComponent {
             throw new IllegalStateException("No local node found. Is the node started?");
         }
         return localNode;
-    }
-
-    public OperationRouting operationRouting() {
-        return operationRouting;
     }
 
     /**

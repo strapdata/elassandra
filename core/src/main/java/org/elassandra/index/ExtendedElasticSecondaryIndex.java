@@ -135,22 +135,22 @@ public class ExtendedElasticSecondaryIndex implements Index {
 
     @Override
     public boolean supportsExpression(ColumnDefinition column, Operator operator) {
-        return false;
+        return elasticSecondaryIndex.supportsExpression(column, operator);
     }
 
     @Override
     public AbstractType<?> customExpressionValueType() {
-       return null;
+       return elasticSecondaryIndex.customExpressionValueType();
     }
 
     @Override
     public RowFilter getPostIndexQueryFilter(RowFilter filter) {
-        return null;
+        return elasticSecondaryIndex.getPostIndexQueryFilter(filter);
     }
 
     @Override
     public long getEstimatedResultRows() {
-        return 0;
+        return elasticSecondaryIndex.getEstimatedResultRows();
     }
 
     @Override
@@ -166,12 +166,12 @@ public class ExtendedElasticSecondaryIndex implements Index {
     
     @Override
     public Searcher searcherFor(ReadCommand command) {
-        return null;
+        return elasticSecondaryIndex.searcherFor(command);
     }
 
     @Override
     public BiFunction<PartitionIterator, ReadCommand, PartitionIterator> postProcessorFor(ReadCommand command) {
-        return null;
+        return elasticSecondaryIndex.postProcessorFor(command);
     }
     
     @Override

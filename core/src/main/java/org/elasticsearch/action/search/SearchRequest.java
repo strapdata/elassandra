@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -86,6 +87,7 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
     
     private Boolean tokenRangesBitsetCache;
     private Collection<Range<Token>> tokenRanges;
+    private Map<String,Object> extraParams;
     
     public SearchRequest() {
     }
@@ -131,6 +133,15 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
         return this.tokenRangesBitsetCache;
     }
 
+    public Map<String, Object> extraParams() {
+        return extraParams;
+    }
+
+    public void extraParams(Map<String, Object> extraParams) {
+        this.extraParams = extraParams;
+    }
+
+    
     @Override
     public ActionRequestValidationException validate() {
         return null;
@@ -387,6 +398,9 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
                 this.tokenRanges.add(range);
             }
         }
+        
+        if (in.available() > 0 && in.readBoolean())
+            extraParams = in.readMap();
     }
 
     @Override
@@ -407,7 +421,6 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
         if (out.getVersion().onOrAfter(Version.V_5_4_0)) {
             out.writeVInt(batchedReduceSize);
         }
-        
 
         out.writeOptionalBoolean(tokenRangesBitsetCache);
         
@@ -421,6 +434,10 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
             }
             out.writeGenericValue(tokens);
         }
+        
+        out.writeBoolean(this.extraParams != null);
+        if (this.extraParams != null)
+            out.writeMap(this.extraParams);
     }
 
     @Override

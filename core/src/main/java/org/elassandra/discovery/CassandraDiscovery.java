@@ -720,6 +720,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         if (searchEnabled.getAndSet(ready) != ready || forcePublishX1) {
             logger.info("searchEnabled set to [{}]", ready);
             publishX1(forcePublishX1);
+            updateRoutingTable("searchEnabled changed to "+ready, false);
         }
     }
 

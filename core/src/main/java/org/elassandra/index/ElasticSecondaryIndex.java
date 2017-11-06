@@ -48,6 +48,7 @@ import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.db.marshal.ListType;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.marshal.SetType;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.db.rows.Cell;
@@ -64,6 +65,7 @@ import org.apache.cassandra.index.transactions.IndexTransaction.Type;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
@@ -198,6 +200,11 @@ import java.util.stream.Collectors;
  */
 public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
+    public final static String ES_QUERY = "es_query";
+    public final static ByteBuffer ES_QUERY_BYTE_BUFFER = ByteBufferUtil.bytes(ES_QUERY);
+    public final static String ES_OPTIONS = "es_options";
+    public final static ByteBuffer ES_OPTIONS_BYTE_BUFFER = ByteBufferUtil.bytes(ES_OPTIONS);
+
     private final static Field DEFAULT_INTERNAL_VERSION = new NumericDocValuesField(VersionFieldMapper.NAME, -1L);
     private final static Field DEFAULT_EXTERNAL_VERSION = new NumericDocValuesField(VersionFieldMapper.NAME, 1L);
 
@@ -2253,18 +2260,17 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
 
 
     public long getEstimatedResultRows() {
-        // TODO Auto-generated method stub
         return 0;
     }
 
 
     public void validate(PartitionUpdate update) throws InvalidRequestException {
-        // TODO Auto-generated method stub
-        
     }
 
     public boolean dependsOn(ColumnDefinition column) {
-        return this.mappingInfo != null && this.mappingInfo.fieldsToIdx.containsKey(column.name.toString());
+        return ES_QUERY_BYTE_BUFFER.equals(column.name.bytes) || 
+               ES_OPTIONS_BYTE_BUFFER.equals(column.name.bytes) || 
+               (this.mappingInfo != null && this.mappingInfo.fieldsToIdx.containsKey(column.name.toString()));
     }
 
     @Override
@@ -2284,30 +2290,31 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
 
     @Override
     public boolean supportsExpression(ColumnDefinition column, Operator operator) {
-        return false;
+        return operator.equals(Operator.EQ) && (ES_QUERY_BYTE_BUFFER.equals(column.name.bytes) || ES_OPTIONS_BYTE_BUFFER.equals(column.name.bytes));
     }
 
     @Override
     public AbstractType<?> customExpressionValueType() {
-        return null;
+        return UTF8Type.instance;
     }
 
     @Override
     public RowFilter getPostIndexQueryFilter(RowFilter filter) {
-        // TODO Auto-generated method stub
         return null;
     }
 
     @Override
     public BiFunction<PartitionIterator, ReadCommand, PartitionIterator> postProcessorFor(ReadCommand command) {
-        // TODO Auto-generated method stub
-        return null;
+        return (partitionIterator, readCommand) -> {
+            return partitionIterator;
+        };
     }
 
     @Override
     public Searcher searcherFor(ReadCommand command) {
-        // TODO Auto-generated method stub
-        return null;
+        return (group) -> {
+            throw new IllegalStateException("CQL query not supported.");
+        };
     }
     
     public Indexer indexerFor(DecoratedKey key, PartitionColumns columns, int nowInSec, Group opGroup, Type transactionType) {

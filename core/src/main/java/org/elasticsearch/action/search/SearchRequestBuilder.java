@@ -43,6 +43,7 @@ import org.elasticsearch.search.suggest.SuggestBuilder;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A search action request builder.
@@ -122,6 +123,11 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
 
     public SearchRequestBuilder setTokenRanges(Collection<Range<Token>> tokenRanges) {
         request.tokenRanges(tokenRanges);
+        return this;
+    }
+    
+    public SearchRequestBuilder setExtraParams(Map<String, Object> extraParams) {
+        request.extraParams(extraParams);
         return this;
     }
     

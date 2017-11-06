@@ -39,6 +39,7 @@ import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -152,4 +153,8 @@ public interface ShardSearchRequest {
      * Returns the token range for this request
      */
     Collection<Range<Token>> tokenRanges();
+    
+    default Map<String,Object> extraParams() {
+        return null;
+    }
 }

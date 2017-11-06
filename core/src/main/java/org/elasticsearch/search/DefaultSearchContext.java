@@ -831,5 +831,10 @@ final class DefaultSearchContext extends SearchContext {
     public ClusterService clusterService() {
         return indexService.clusterService();
     }
+    
+    @Override
+    public IndexService indexService() {
+        return indexService;
+    }
 
 }

@@ -42,6 +42,7 @@ import org.elasticsearch.transport.TransportRequest;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Map;
 
 /**
  * Shard level search request that represents an actual search sent from the coordinating node to the nodes holding
@@ -201,5 +202,10 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
     @Override
     public Boolean tokenRangesBitsetCache() {
         return shardSearchLocalRequest.tokenRangesBitsetCache();
+    }
+
+    @Override
+    public Map<String,Object> extraParams() {
+        return shardSearchLocalRequest.extraParams();
     }
 }

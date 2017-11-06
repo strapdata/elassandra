@@ -32,6 +32,7 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Objects;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
@@ -39,7 +40,8 @@ import static org.elasticsearch.action.ValidateActions.addValidationError;
 public class SearchScrollRequest extends ActionRequest implements ToXContentObject {
     private String scrollId;
     private Scroll scroll;
-
+    private Map<String,Object> extraParams;
+    
     public SearchScrollRequest() {
     }
 
@@ -97,11 +99,19 @@ public class SearchScrollRequest extends ActionRequest implements ToXContentObje
         return scroll(new Scroll(TimeValue.parseTimeValue(keepAlive, null, getClass().getSimpleName() + ".keepAlive")));
     }
 
+    public SearchScrollRequest setExtraParams(Map<String, Object> extraParams) {
+        this.extraParams = extraParams;
+        return this;
+    }
+    
     @Override
     public void readFrom(StreamInput in) throws IOException {
         super.readFrom(in);
         scrollId = in.readString();
         scroll = in.readOptionalWriteable(Scroll::new);
+        
+        if (in.available() > 0 && in.readBoolean())
+            extraParams = in.readMap();
     }
 
     @Override
@@ -109,6 +119,10 @@ public class SearchScrollRequest extends ActionRequest implements ToXContentObje
         super.writeTo(out);
         out.writeString(scrollId);
         out.writeOptionalWriteable(scroll);
+        
+        out.writeBoolean(this.extraParams != null);
+        if (this.extraParams != null)
+            out.writeMap(this.extraParams);
     }
 
     @Override

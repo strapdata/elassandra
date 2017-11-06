@@ -271,7 +271,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             concreteIndices[i] = indices[i].getName();
         }
         GroupShardsIterator<ShardIterator> localShardsIterator = clusterService.operationRouting().searchShards(clusterState,
-            concreteIndices, routingMap, searchRequest.preference());
+            concreteIndices, searchRequest.types(), routingMap, searchRequest.preference(), searchRequest.tokenRanges(), searchRequest.remoteAddress());
         GroupShardsIterator<SearchShardIterator> shardIterators = mergeShardsIterators(localShardsIterator, localIndices,
             remoteShardIterators);
 

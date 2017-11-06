@@ -52,6 +52,7 @@ import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.node.InternalSettingsPreparer;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeValidationException;
 import org.elasticsearch.plugins.Plugin;
@@ -105,17 +106,20 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             DatabaseDescriptor.createAllDirectories();
     
             CountDownLatch startLatch = new CountDownLatch(1);
-            ElassandraDaemon.instance = new ElassandraDaemon() {
+            ElassandraDaemon.instance = new ElassandraDaemon(InternalSettingsPreparer.prepareEnvironment(Settings.builder()
+                    .put(Environment.PATH_HOME_SETTING.getKey(), System.getProperty("cassandra.home"))
+                    .put(Environment.PATH_CONF_SETTING.getKey(), System.getProperty("cassandra.config.dir"))
+                    .build(), null)) {
                 @Override
                 public Settings nodeSettings(Settings settings) {
                     return Settings.builder()
-                    .put("path.home", System.getProperty("cassandra.home"))
-                    .put("path.conf", System.getProperty("cassandra.config.dir"))
-                    .put("path.data", DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
+                    .put(Environment.PATH_HOME_SETTING.getKey(), System.getProperty("cassandra.home"))
+                    .put(Environment.PATH_CONF_SETTING.getKey(), System.getProperty("cassandra.config.dir"))
+                    .put(Environment.PATH_DATA_SETTING.getKey(), DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
                     
                     // TODO: use a consistent data path for custom paths
                     // This needs to tie into the ESIntegTestCase#indexSettings() method
-                    .put("path.shared_data", DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
+                    .put(Environment.PATH_SHARED_DATA_SETTING.getKey(), DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
                     //.put("node.name", "node_s_0")
                     //.put("script.inline", "on")
                     //.put("script.indexed", "on")

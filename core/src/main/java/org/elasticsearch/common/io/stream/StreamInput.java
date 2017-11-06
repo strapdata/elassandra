@@ -683,6 +683,23 @@ public abstract class StreamInput extends InputStream {
         readBytes(bytes, 0, bytes.length);
         return bytes;
     }
+    
+    public ByteBuffer readByteBuffer() throws IOException {
+        final int arraySize = readVInt();
+        if (arraySize > ArrayUtil.MAX_ARRAY_LENGTH) {
+            throw new IllegalStateException("array length must be <= to " + ArrayUtil.MAX_ARRAY_LENGTH  + " but was: " + arraySize);
+        }
+        if (arraySize < 0) {
+            return null;
+        }
+        // lets do a sanity check that if we are reading an array size that is bigger that the remaining bytes we can safely
+        // throw an exception instead of allocating the array based on the size. A simple corrutpted byte can make a node go OOM
+        // if the size is large and for perf reasons we allocate arrays ahead of time
+        ensureCanReadBytes(arraySize);
+        final byte[] bytes = new byte[arraySize];
+        readBytes(bytes, 0, bytes.length);
+        return ByteBuffer.wrap(bytes);
+    }
 
     public <T> T[] readArray(Writeable.Reader<T> reader, IntFunction<T[]> arraySupplier) throws IOException {
         int length = readArraySize();

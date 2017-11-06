@@ -39,6 +39,7 @@ import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.cql3.statements.IndexTarget;
 import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.cassandra.cql3.statements.TableAttributes;
+import org.apache.cassandra.db.CBuilder;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.KeyspaceNotDefinedException;
@@ -53,6 +54,7 @@ import org.apache.cassandra.db.marshal.TupleType;
 import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.marshal.UserType;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
@@ -122,6 +124,7 @@ import org.elasticsearch.cluster.metadata.MetaDataMappingService;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.Priority;
@@ -355,6 +358,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             return boundValues;
         }
     }
+    
+    
     public static Map<String, String> cqlMapping = new ImmutableMap.Builder<String,String>()
             .put("text", "keyword")
             .put("varchar", "keyword")
@@ -402,13 +407,15 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     private final String updateMetaDataQuery;
     
     private volatile CassandraShardStartedBarrier shardStartedBarrier;
-    
+    private final OperationRouting operationRouting;
+
     @Inject
     public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool, Supplier<DiscoveryNode> localNodeSupplier) {
         super(settings, clusterSettings, threadPool, localNodeSupplier);
         this.mappingUpdatedAction = null;
         this.tokenRangeService = new TokenRangesService(settings);
         this.cassandraSecondaryIndicesApplier = new CassandraSecondaryIndicesApplier(settings, this);
+        this.operationRouting = new OperationRouting(settings, clusterSettings, this);
         
         String datacenterGroup = settings.get(SETTING_CLUSTER_DATACENTER_GROUP);
         if (datacenterGroup != null && datacenterGroup.length() > 0) {
@@ -423,6 +430,10 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         updateMetaDataQuery = String.format(Locale.ROOT, "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, metadata = ? WHERE cluster_name = ? IF version < ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
     }
     
+    public OperationRouting operationRouting() {
+        return operationRouting;
+    }
+
     public void setMetaStateService(MetaStateService metaStateService) {
         this.metaStateService = metaStateService;
     }
@@ -503,7 +514,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
     
     public AbstractSearchStrategy.Router getRouter(IndexMetaData indexMetaData, ClusterState state) {
-        AbstractSearchStrategy.Router router = this.routers.get(indexMetaData.getIndex());
+        AbstractSearchStrategy.Router router = this.routers.get(indexMetaData.getIndex().getName());
         return router;
     }
     
@@ -544,21 +555,23 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         if (logger.isDebugEnabled()) 
             logger.debug("processing CL={} SERIAL_CL={} query={}", cl, serialConsistencyLevel, query);
         
-        ParsedStatement.Prepared prepared = QueryProcessor.getStatement(query, clientState);
+        // retreive prepared
+        QueryState queryState = new QueryState(clientState);
+        ResultMessage.Prepared prepared = ClientState.getCQLQueryHandler().prepare(query, queryState, Collections.EMPTY_MAP);
+        
+        // bind
         List<ByteBuffer> boundValues = new ArrayList<ByteBuffer>(values.length);
         for (int i = 0; i < values.length; i++) {
             Object v = values[i];
-            AbstractType type = prepared.boundNames.get(i).type;
+            AbstractType type = prepared.metadata.names.get(i).type;
             boundValues.add(v instanceof ByteBuffer || v == null ? (ByteBuffer) v : type.decompose(v));
         }
-        QueryState queryState = new QueryState(clientState);
+        
+        // execute
         QueryOptions queryOptions = QueryOptions.forInternalCalls(cl, serialConsistencyLevel, boundValues);
-        ResultMessage result = QueryProcessor.instance.process(query, queryState, queryOptions, System.nanoTime());
+        ResultMessage result = ClientState.getCQLQueryHandler().process(query, queryState, queryOptions, Collections.EMPTY_MAP, System.nanoTime());
         writetime = queryState.getTimestamp();
-        if (result instanceof ResultMessage.Rows)
-            return UntypedResultSet.create(((ResultMessage.Rows) result).result);
-        else
-            return null;
+        return (result instanceof ResultMessage.Rows) ? UntypedResultSet.create(((ResultMessage.Rows) result).result) : null;
     }
 
     public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, final String query, Object... values) {
@@ -1888,6 +1901,22 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return null;
     }
     
+    public String buildFetchQuery(final IndexService indexService, final String type, String cqlProjection, boolean forStaticDocument) 
+            throws IndexNotFoundException, IOException 
+    {
+        DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
+        String cfName = typeToCfName(type);
+        DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
+        StringBuilder query = new StringBuilder();
+        final String SELECT_ = "SELECT ";
+        query.append("SELECT ")
+            .append(cqlProjection)
+            .append(" FROM \"").append(indexService.keyspace()).append("\".\"").append(cfName)
+            .append("\" WHERE ").append((forStaticDocument) ? cqlFragment.ptWhere : cqlFragment.pkWhere )
+            .append(" LIMIT 1");
+        return query.toString();
+    }
+    
     public String buildFetchQuery(final IndexService indexService, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs) 
             throws IndexNotFoundException, IOException 
     {
@@ -2532,6 +2561,23 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         }
     }
     
+    public Token getToken(final IndexService indexService, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
+        DocPrimaryKey pk = parseElasticRouting(indexService, type, routing);
+        CFMetaData cfm = getCFMetaData(indexService.keyspace(), type);
+        CBuilder builder = CBuilder.create(cfm.getKeyValidatorAsClusteringComparator());
+        for (int i = 0; i < cfm.partitionKeyColumns().size(); i++)
+            builder.add(pk.values[i]);
+        return cfm.partitioner.getToken(CFMetaData.serializePartitionKey(builder.build()));
+    }
+    
+    public Set<Token> getTokens(final IndexService indexService, final String[] types, final String routing) throws JsonParseException, JsonMappingException, IOException {
+        Set<Token> tokens = new HashSet<Token>();
+        if (types != null && types.length > 0) {
+            for(String type : types)
+                tokens.add(getToken(indexService, type, routing));
+        }
+        return tokens;
+    }
     
     public boolean isStaticDocument(final IndexService indexService, Uid uid) throws JsonParseException, JsonMappingException, IOException {
         CFMetaData metadata = getCFMetaData(indexService.keyspace(), typeToCfName(uid.type()));

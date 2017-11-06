@@ -20,6 +20,7 @@ package org.elasticsearch.index.fieldvisitor;
 
 import com.google.common.collect.ImmutableSet;
 
+import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.StoredFieldVisitor;
 import org.apache.lucene.util.BytesRef;
@@ -39,6 +40,7 @@ import org.elasticsearch.index.mapper.UidFieldMapper;
 import org.elasticsearch.search.internal.SearchContext;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -72,7 +74,8 @@ public class FieldsVisitor extends StoredFieldVisitor {
     protected BytesReference source;
     protected String type, id;
     protected Map<String, List<Object>> fieldsValues;
-            
+    protected List<ByteBuffer> values;
+    
     public FieldsVisitor(boolean loadSource) {
         this.loadSource = loadSource;
         requiredFields = new HashSet<>();
@@ -257,5 +260,13 @@ public class FieldsVisitor extends StoredFieldVisitor {
             fieldsValues = new HashMap<>();
         }
         this.fieldsValues.put(name, values);
+    }
+
+    public List<ByteBuffer> getValues() {
+        return values;
+    }
+
+    public void setValues(List<ByteBuffer> values) {
+        this.values = values;
     }
 }

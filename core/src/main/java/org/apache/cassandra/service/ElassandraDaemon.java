@@ -60,8 +60,10 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 
 import javax.management.MBeanServer;
@@ -96,9 +98,11 @@ public class ElassandraDaemon extends CassandraDaemon {
     
     private boolean bootstrapping = false;
     private MetaData systemMetadata = null;
-
-    public ElassandraDaemon() {
+    private List<SetupListener> setupListeners = new CopyOnWriteArrayList();
+    
+    public ElassandraDaemon(Environment env) {
         super(true);
+        this.env = env;
     }
     
     public Node node() {
@@ -270,10 +274,21 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
     }
     
+    public interface SetupListener {
+        public void onComplete();
+    }
+    
+    public void register(SetupListener listener) {
+        setupListeners.add(listener);
+    }
+    
     public void completeSetup() {
         super.completeSetup();
-        if (this.node != null && this.node.clusterService() != null)
+        if (this.node != null && this.node.clusterService() != null) 
             this.node.clusterService().publishGossipStates();
+        
+        for(SetupListener listener : setupListeners)
+            listener.onComplete();
     }
     
     @Override
@@ -466,15 +481,13 @@ public class ElassandraDaemon extends CassandraDaemon {
             if (!foreground) {
                 System.out.close();
             }
-            instance = new ElassandraDaemon();
-            // read conf/elasticsearch.yml
-            instance.env = InternalSettingsPreparer.prepareEnvironment(
+            instance = new ElassandraDaemon(InternalSettingsPreparer.prepareEnvironment(
                     Settings.builder()
-                        .put("node.name","node0")
-                        .put("path.home",getHomeDir())
-                        .put("path.conf",getConfigDir())
-                        .build(),
-                    foreground ? Terminal.DEFAULT : null);
+                    .put("node.name","node0")
+                    .put("path.home",getHomeDir())
+                    .put("path.conf",getConfigDir())
+                    .build(),
+                foreground ? Terminal.DEFAULT : null));
             
             instance.activate(true, true, instance.env.settings(), instance.env,  Collections.<Class<? extends Plugin>>emptyList());
             if (!foreground) {

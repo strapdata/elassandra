@@ -70,6 +70,10 @@ public class TokenRangesService extends AbstractComponent {
                         // full search range, so don't add any filter.
                         return null;
                     
+                    if (unique_range.left.equals(unique_range.right)) {
+                        // partition key search, not cached.
+                        return NumberFieldMapper.NumberType.LONG.termQuery(TokenFieldMapper.NAME,unique_range.left);
+                    }
                     tokenRangesQuery = tokenRangesQueryCache.getIfPresent(tokenRanges);
                     if (tokenRangesQuery == null) {
                         tokenRangesQuery = newNumericRangesQuery(unique_range);
@@ -82,13 +86,16 @@ public class TokenRangesService extends AbstractComponent {
                     tokenRangesQuery = tokenRangesQueryCache.getIfPresent(tokenRanges);
                     if (tokenRangesQuery == null) {
                         BooleanQuery.Builder bq2 = new BooleanQuery.Builder();
+                        boolean hasSingleton = false;
                         for (Range<Token> range : tokenRanges) {
-                            // TODO: check the best precisionStep (6 by default), see https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html
                             bq2.add(newNumericRangesQuery(range), Occur.SHOULD);
+                            if (range.left.equals(range.right))
+                                hasSingleton = true;
                         }
                         bq2.setMinimumNumberShouldMatch(1);
                         tokenRangesQuery = bq2.build();
-                        tokenRangesQueryCache.put(tokenRanges, tokenRangesQuery);
+                        if (!hasSingleton)
+                            tokenRangesQueryCache.put(tokenRanges, tokenRangesQuery);
                     }
                     if (logger.isTraceEnabled())
                         logger.trace("tokenRangeQuery={}", tokenRangesQuery);
@@ -101,13 +108,18 @@ public class TokenRangesService extends AbstractComponent {
     Query newNumericRangesQuery(Range<Token> range) {
         Long left =  (Long) range.left.getTokenValue();
         Long right = (Long) range.right.getTokenValue();
-        return NumberFieldMapper.NumberType.LONG.rangeQuery(TokenFieldMapper.NAME, 
-                left == Long.MIN_VALUE ? null : left+1, 
-                right == Long.MAX_VALUE ? null : right, 
-                true, true, true);
+        return (left.equals(right)) ?
+            NumberFieldMapper.NumberType.LONG.termQuery(TokenFieldMapper.NAME,left) :
+            NumberFieldMapper.NumberType.LONG.rangeQuery(TokenFieldMapper.NAME, 
+                left == Long.MIN_VALUE ? null : left,
+                right == Long.MAX_VALUE ? null : right,
+                false, true, true);
     }
     
-    public boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Collection<Range<Token>> requestTokenRange) {
+    public static boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Range<Token> requestTokenRange) {
+        if (requestTokenRange.left.equals(requestTokenRange.right))
+            return tokenRangesContains(shardTokenRanges, requestTokenRange.left);
+        
         for(Range<Token> shardRange : shardTokenRanges) {
             if (shardRange.intersects(requestTokenRange)) 
                 return true;
@@ -115,7 +127,16 @@ public class TokenRangesService extends AbstractComponent {
         return false;
     }
     
-    public boolean tokenRangesContains(Collection<Range<Token>> shardTokenRanges, Token token) {
+    // requestTokenRanges may contains singleton
+    public static boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Collection<Range<Token>> requestTokenRanges) {
+        for(Range<Token> requestTokenRange : requestTokenRanges) {
+            if (tokenRangesIntersec(shardTokenRanges, requestTokenRange)) 
+                return true;
+        }
+        return false;
+    }
+    
+    public static boolean tokenRangesContains(Collection<Range<Token>> shardTokenRanges, Token token) {
         for(Range<Token> shardRange : shardTokenRanges) {
             if (shardRange.contains(token)) 
                 return true;

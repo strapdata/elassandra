@@ -19,6 +19,8 @@
 
 package org.elasticsearch.common.io.stream;
 
+import net.jpountz.util.ByteBufferUtils;
+
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
@@ -140,6 +142,17 @@ public abstract class StreamOutput extends OutputStream {
     public void writeByteArray(byte[] b) throws IOException {
         writeVInt(b.length);
         writeBytes(b, 0, b.length);
+    }
+
+    public void writeByteBuffer(ByteBuffer bb) throws IOException {
+        if (bb == null) {
+            writeVInt(-1);
+        } else {
+            ByteBuffer duplicate = bb.duplicate();
+            byte[] bytes = new byte[duplicate.remaining()];
+            duplicate.get(bytes);
+            writeByteArray(bytes);
+        }
     }
 
     /**

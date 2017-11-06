@@ -40,6 +40,7 @@ import org.elasticsearch.search.builder.SearchSourceBuilder;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -79,7 +80,8 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
     
     private Boolean tokenRangesBitsetCache;
     private Collection<Range<Token>> tokenRanges = null;
-
+    private Map<String, Object> extraParams;
+    
     ShardSearchLocalRequest() {
     }
 
@@ -90,7 +92,8 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
             // set token ranges from original request is not null, or from the shard.
             searchRequest.tokenRanges(), 
             numberOfShards, searchRequest.searchType(),
-            searchRequest.source(), searchRequest.types(), searchRequest.requestCache(), searchRequest.tokenRangesBitsetCache(), aliasFilter, indexBoost);
+            searchRequest.source(), searchRequest.types(), searchRequest.requestCache(), 
+            searchRequest.tokenRangesBitsetCache(), searchRequest.extraParams(), aliasFilter, indexBoost);
     }
     
     ShardSearchLocalRequest(SearchRequest searchRequest,  SearchShardIterator shardIt, int numberOfShards,
@@ -99,7 +102,8 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
                 // set token ranges from original request is not null, or from the shard.
                 searchRequest.tokenRanges() != null ? searchRequest.tokenRanges() : (shardIt.getShardRoutings().size() == 0 ? null : shardIt.getShardRoutings().iterator().next().tokenRanges()), 
                 numberOfShards, searchRequest.searchType(),
-                searchRequest.source(), searchRequest.types(), searchRequest.requestCache(), searchRequest.tokenRangesBitsetCache(), aliasFilter, indexBoost);
+                searchRequest.source(), searchRequest.types(), searchRequest.requestCache(), 
+                searchRequest.tokenRangesBitsetCache(), searchRequest.extraParams(), aliasFilter, indexBoost);
         this.scroll = searchRequest.scroll();
         this.nowInMillis = nowInMillis;
     }
@@ -114,7 +118,7 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
 
     public ShardSearchLocalRequest(ShardId shardId, Collection<Range<Token>> tokenRanges, int numberOfShards, 
             SearchType searchType, SearchSourceBuilder source, String[] types,
-            Boolean requestCache, Boolean tokenRangesBitsetCache, AliasFilter aliasFilter, float indexBoost) {
+            Boolean requestCache, Boolean tokenRangesBitsetCache, Map<String, Object> extraParms, AliasFilter aliasFilter, float indexBoost) {
         this.shardId = shardId;
         this.numberOfShards = numberOfShards;
         this.searchType = searchType;
@@ -127,6 +131,7 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         // Use the user provided token_range of the shardRouting one.
         this.tokenRanges = tokenRanges;
         this.tokenRangesBitsetCache = tokenRangesBitsetCache;
+        this.extraParams = extraParms;
     }
 
 
@@ -232,6 +237,9 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
             Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
             this.tokenRanges.add(range);
         }
+        
+        if (in.readBoolean())
+            extraParams = in.readMap();
     }
 
     protected void innerWriteTo(StreamOutput out, boolean asKey) throws IOException {
@@ -265,6 +273,10 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         } else {
             out.writeGenericValue(new Token[0]);
         }
+        
+        out.writeBoolean(extraParams != null);
+        if (extraParams != null)
+            out.writeMap(extraParams);
     }
 
     @Override
@@ -296,5 +308,10 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
     @Override
     public Collection<Range<Token>> tokenRanges() {
         return this.tokenRanges;
+    }
+    
+    @Override
+    public Map<String,Object> extraParams() {
+        return this.extraParams;
     }
 }

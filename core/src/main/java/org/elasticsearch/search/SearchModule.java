@@ -20,6 +20,7 @@
 package org.elasticsearch.search;
 
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.util.SetOnce;
 import org.elassandra.search.aggregations.bucket.token.InternalTokenRange;
 import org.elassandra.search.aggregations.bucket.token.TokenRangeAggregationBuilder;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -34,7 +35,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.ParseFieldRegistry;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.BoostingQueryBuilder;
 import org.elasticsearch.index.query.CommonTermsQueryBuilder;
@@ -258,6 +258,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -279,7 +280,8 @@ public class SearchModule {
             "moving_avg_model");
 
     private final List<FetchSubPhase> fetchSubPhases = new ArrayList<>();
-
+    private final SetOnce<BiFunction<List<FetchSubPhase>, ClusterService, FetchPhase>> fetchPhaseSupplier = new SetOnce<>();
+    
     private final Settings settings;
     private final ClusterService clusterService;
     private final List<NamedWriteableRegistry.Entry> namedWriteables = new ArrayList<>();
@@ -305,8 +307,20 @@ public class SearchModule {
         registerAggregations(plugins);
         registerPipelineAggregations(plugins);
         registerFetchSubPhases(plugins);
+        registerFetchPhase(plugins);
         registerSearchExts(plugins);
         registerShapes();
+    }
+    
+    public void registerFetchPhase(List<SearchPlugin> plugins) {
+        for(SearchPlugin p : plugins) {
+            if (p.getFetchPhaseSupplier() != null) {
+                fetchPhaseSupplier.set((subPhases, clusterService) -> p.getFetchPhaseSupplier().create(subPhases, clusterService));
+            }
+        }
+        if (fetchPhaseSupplier.get() == null) {
+            fetchPhaseSupplier.set((subPhases, clusterService) -> new FetchPhase(subPhases, clusterService));
+        }
     }
 
     public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
@@ -778,6 +792,6 @@ public class SearchModule {
     }
 
     public FetchPhase getFetchPhase() {
-        return new FetchPhase(fetchSubPhases, clusterService);
+        return fetchPhaseSupplier.get().apply(fetchSubPhases, clusterService);
     }
 }

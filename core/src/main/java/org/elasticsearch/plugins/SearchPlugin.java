@@ -22,6 +22,7 @@ package org.elasticsearch.plugins;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.io.stream.NamedWriteable;
@@ -46,6 +47,7 @@ import org.elasticsearch.search.aggregations.bucket.significant.heuristics.Signi
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
 import org.elasticsearch.search.aggregations.pipeline.movavg.MovAvgPipelineAggregator;
 import org.elasticsearch.search.aggregations.pipeline.movavg.models.MovAvgModel;
+import org.elasticsearch.search.fetch.FetchPhase;
 import org.elasticsearch.search.fetch.FetchSubPhase;
 import org.elasticsearch.search.fetch.subphase.highlight.Highlighter;
 import org.elasticsearch.search.suggest.Suggester;
@@ -56,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
+import java.util.function.Supplier;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
@@ -84,12 +87,26 @@ public interface SearchPlugin {
     default List<SearchExtensionSpec<MovAvgModel, MovAvgModel.AbstractModelParser>> getMovingAverageModels() {
         return emptyList();
     }
+    
     /**
      * The new {@link FetchSubPhase}s defined by this plugin.
      */
     default List<FetchSubPhase> getFetchSubPhases(FetchPhaseConstructionContext context) {
         return emptyList();
     }
+    
+    @FunctionalInterface
+    public interface FetchPhaseSupplier {
+        FetchPhase create(List<FetchSubPhase> subPhases, ClusterService clusterService);
+    }
+    
+    /**
+     * The new {@link FetchSubPhase}s defined by this plugin.
+     */
+    default FetchPhaseSupplier getFetchPhaseSupplier() {
+        return null;
+    }
+    
     /**
      * The new {@link SearchExtBuilder}s defined by this plugin.
      */

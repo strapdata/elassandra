@@ -21,7 +21,9 @@ package org.elasticsearch.search.fetch;
 
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.ResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.service.ClientState;
@@ -85,8 +87,8 @@ import static org.elasticsearch.common.xcontent.XContentFactory.contentBuilder;
  */
 public class FetchPhase implements SearchPhase {
 
-    private final FetchSubPhase[] fetchSubPhases;
-    private final ClusterService clusterService;
+    protected final FetchSubPhase[] fetchSubPhases;
+    protected final ClusterService clusterService;
     
     public FetchPhase(List<FetchSubPhase> fetchSubPhases) {
         this(fetchSubPhases, null);
@@ -202,7 +204,7 @@ public class FetchPhase implements SearchPhase {
         return -1;
     }
 
-    private SearchHit createSearchHit(SearchContext context, FieldsVisitor fieldsVisitor, int docId, int subDocId, LeafReaderContext subReaderContext) {
+    protected SearchHit createSearchHit(SearchContext context, FieldsVisitor fieldsVisitor, int docId, int subDocId, LeafReaderContext subReaderContext) {
         if (fieldsVisitor == null) {
             return new SearchHit(docId);
         }
@@ -225,6 +227,7 @@ public class FetchPhase implements SearchPhase {
             typeText = documentMapper.typeText();
         }
         SearchHit searchHit = new SearchHit(docId, fieldsVisitor.uid().id(), typeText, searchFields);
+        
         // Set _source if requested.
         SourceLookup sourceLookup = context.lookup().source();
         sourceLookup.setSegmentAndDocument(subReaderContext, subDocId);
@@ -364,6 +367,58 @@ public class FetchPhase implements SearchPhase {
         return nestedIdentity;
     }
 
+    protected ParsedStatement.Prepared getCqlPreparedStatement(SearchContext searchContext, IndexService indexService, FieldsVisitor fieldVisitor, String typeKey, boolean staticDocument) throws IOException {
+        ParsedStatement.Prepared cqlStatement = searchContext.getCqlPreparedStatement( typeKey );
+        if (cqlStatement == null) {
+            // fetch from requested stored_fields.
+            NavigableSet<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
+            if (requiredColumns.size() > 0) {
+                IndexMetaData indexMetaData = clusterService.state().metaData().index(searchContext.request().shardId().getIndexName());
+                if (requiredColumns.contains(NodeFieldMapper.NAME)) {
+                    searchContext.includeNode(indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE_ID, clusterService.settings().getAsBoolean(ClusterService.SETTING_CLUSTER_INCLUDE_NODE_ID, false)));
+                    requiredColumns.remove(NodeFieldMapper.NAME);
+                }
+                DocumentMapper docMapper = searchContext.mapperService().documentMapper(fieldVisitor.uid().type());
+                if (fieldVisitor.loadSource() && docMapper.sourceMapper().enabled()) {
+                    requiredColumns.add(SourceFieldMapper.NAME);
+                }
+                if (requiredColumns.size() > 0) {
+                    String query = clusterService.buildFetchQuery(
+                            indexService, fieldVisitor.uid().type(),
+                            requiredColumns.toArray(new String[requiredColumns.size()]), staticDocument, docMapper.getColumnDefinitions());
+                    Logger logger = Loggers.getLogger(FetchPhase.class);
+                    if (logger.isTraceEnabled())
+                        logger.trace("new statement={}",query);
+                    cqlStatement = QueryProcessor.prepareInternal(query);
+                    searchContext.putCqlPreparedStatement(typeKey, cqlStatement);
+                }
+            }
+        }
+        return cqlStatement;
+    }
+    
+    protected void processCqlResultSet(SearchContext searchContext, IndexService indexService, FieldsVisitor fieldVisitor, ResultSet resultSet) throws IOException {
+        UntypedResultSet rs = UntypedResultSet.create(resultSet);
+        if (!rs.isEmpty()) {
+            Row row = rs.one();
+            Map<String, Object> mapObject = clusterService.rowAsMap(indexService, fieldVisitor.uid().type(), row);
+            if (searchContext.includeNode()) {
+                mapObject.put(NodeFieldMapper.NAME, clusterService.state().nodes().getLocalNodeId());
+            }
+            if (fieldVisitor.requestedFields() != null && fieldVisitor.requestedFields().size() > 0) {
+                Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
+                clusterService.flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);
+                for (String field :  fieldVisitor.requestedFields()) {
+                    if (flatMap.get(field) != null && field != IdFieldMapper.NAME) 
+                        fieldVisitor.setValues(field, flatMap.get(field));
+                }
+            }
+            if (fieldVisitor.loadSource()) {
+                fieldVisitor.source( clusterService.source(indexService, searchContext.mapperService().documentMapper(fieldVisitor.uid().type()), mapObject, fieldVisitor.uid()) );
+            }
+        }
+    }
+    
     private void loadStoredFields(SearchContext searchContext, LeafReaderContext readerContext, FieldsVisitor fieldVisitor, int docId) {
         fieldVisitor.reset();
         try {
@@ -380,53 +435,11 @@ public class FetchPhase implements SearchPhase {
             if (docPk.isStaticDocument) 
                 typeKey += "_static";
             
-            ParsedStatement.Prepared cqlStatement = searchContext.getCqlPreparedStatement( typeKey );
-            if (cqlStatement == null) {
-                NavigableSet<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
-                if (requiredColumns.size() > 0) {
-                    IndexMetaData indexMetaData = clusterService.state().metaData().index(searchContext.request().shardId().getIndexName());
-                    if (requiredColumns.contains(NodeFieldMapper.NAME)) {
-                        searchContext.includeNode(indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE_ID, clusterService.settings().getAsBoolean(ClusterService.SETTING_CLUSTER_INCLUDE_NODE_ID, false)));
-                        requiredColumns.remove(NodeFieldMapper.NAME);
-                    }
-                    DocumentMapper docMapper = searchContext.mapperService().documentMapper(fieldVisitor.uid().type());
-                    if (fieldVisitor.loadSource() && docMapper.sourceMapper().enabled()) {
-                        requiredColumns.add(SourceFieldMapper.NAME);
-                    }
-                    if (requiredColumns.size() > 0) {
-                        String query = clusterService.buildFetchQuery(
-                                indexService, fieldVisitor.uid().type(),
-                                requiredColumns.toArray(new String[requiredColumns.size()]), docPk.isStaticDocument, docMapper.getColumnDefinitions());
-                        Logger logger = Loggers.getLogger(FetchPhase.class);
-                        if (logger.isTraceEnabled())
-                            logger.trace("new statement={}",query);
-                        cqlStatement = QueryProcessor.prepareInternal(query);
-                        searchContext.putCqlPreparedStatement(typeKey, cqlStatement);
-                    }
-                }
-            }
-            
+            ParsedStatement.Prepared cqlStatement = getCqlPreparedStatement(searchContext, indexService, fieldVisitor, typeKey, docPk.isStaticDocument);
             if (cqlStatement != null) {
                 ResultMessage result = cqlStatement.statement.executeInternal(new QueryState(ClientState.forInternalCalls()), QueryOptions.forInternalCalls(ConsistencyLevel.ONE, docPk.serialize(cqlStatement)));
                 if (result instanceof ResultMessage.Rows) {
-                    UntypedResultSet rs = UntypedResultSet.create(((ResultMessage.Rows)result).result);
-                    if (!rs.isEmpty()) {
-                        Map<String, Object> mapObject = clusterService.rowAsMap(indexService, fieldVisitor.uid().type(), rs.one());
-                        if (searchContext.includeNode()) {
-                            mapObject.put(NodeFieldMapper.NAME, clusterService.state().nodes().getLocalNodeId());
-                        }
-                        if (fieldVisitor.requestedFields() != null && fieldVisitor.requestedFields().size() > 0) {
-                            Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
-                            clusterService.flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);
-                            for (String field :  fieldVisitor.requestedFields()) {
-                                if (flatMap.get(field) != null && field != IdFieldMapper.NAME) 
-                                    fieldVisitor.setValues(field, flatMap.get(field));
-                            }
-                        }
-                        if (fieldVisitor.loadSource()) {
-                            fieldVisitor.source( clusterService.source(indexService, searchContext.mapperService().documentMapper(fieldVisitor.uid().type()), mapObject, fieldVisitor.uid()) );
-                        }
-                    }
+                    processCqlResultSet(searchContext, indexService, fieldVisitor, ((ResultMessage.Rows)result).result);
                 }
             } else {
                 // when only requesting for field _node
