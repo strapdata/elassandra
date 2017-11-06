@@ -1,3 +1,8 @@
+5.5.0.6 - 2017-11-10
+  * Upgrade to Cassandra 3.11.1.2
+  * Improve README #133
+  * Improve search query routing
+
 5.5.0.5 - 2017-11-01
   * Upgrade to Cassandra 3.11.1.0 to fix #132
   * Fix index build race condition when creating an index on existing cassandra data.
