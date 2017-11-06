@@ -2,6 +2,8 @@
 
 ![Elassandra Logo](elassandra-logo.png)
 
+## [http://www.strapdata.com/](http://www.strapdata.com/)
+
 Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run as a plugin for [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
 ![Elassandra architecture](/docs/elassandra/source/images/elassandra1.jpg)
@@ -52,7 +54,7 @@ Try indexing a document on a non-existing index:
 curl -XPUT 'http://localhost:9200/twitter/doc/1?pretty' -H 'Content-Type: application/json' -d '
 {
     "user": "Poulpy",
-    "post_date": "2017-10-4T13:12:00",
+    "post_date": "2017/10/4 13:12:00",
     "message": "Elassandra adds dynamic mapping to Cassandra"
 }'
 ```
@@ -66,8 +68,7 @@ Behind the scene, Elassandra has created a new Keyspace `twitter` and table `doc
 Now, insert a row with CQL :
 ```CQL
 INSERT INTO twitter.doc ("_id", user, post_date, message)
-VALUES ( '2', ['Jimmy'], [dateof(now())],
-              ['New data is indexed automatically']);
+VALUES ( '2', ['Jimmy'], [dateof(now())], ['New data is indexed automatically']);
 ```
 
 Then search for it with the Elasticsearch API:
@@ -95,7 +96,7 @@ And here is a sample response :
         "_id" : "2",
         "_score" : 0.9808292,
         "_source" : {
-          "post_date" : "2017-10-04T13:20:00",
+          "post_date" : "2017/10/04 13:20:00",
           "message" : "New data is indexed automatically",
           "user" : "Jimmy"
         }
