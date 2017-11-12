@@ -274,7 +274,9 @@ public class BooleanFieldMapper extends FieldMapper {
             }
             value = fieldType().nullValue();
         }
-        context.doc().add(new Field(fieldType().name(), value ? "T" : "F", fieldType()));
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            context.doc().add(new Field(fieldType().name(), value ? "T" : "F", fieldType()));
+        }
         if (fieldType().hasDocValues()) {
             context.doc().add(new SortedNumericDocValuesField(fieldType().name(), value ? 1 : 0));
         }
