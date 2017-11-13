@@ -1,7 +1,8 @@
-5.5.0.6 - 2017-11-10
-  * Upgrade to Cassandra 3.11.1.2
+5.5.0.6 - 2017-11-13
+  * Fix Error while writing unindexed boolean #135
   * Improve README #133
-  * Improve search query routing
+  * Upgrade to Cassandra 3.11.1.2
+  * Improve search query routing for spark support
 
 5.5.0.5 - 2017-11-01
   * Upgrade to Cassandra 3.11.1.0 to fix #132
