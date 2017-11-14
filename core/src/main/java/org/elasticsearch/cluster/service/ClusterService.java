@@ -475,14 +475,19 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return cqlMapping.keySet().contains(cqlType) && !cqlType.startsWith("geo_");
     }
     
-    public Class<AbstractSearchStrategy> searchStrategyClass(IndexMetaData indexMetaData, ClusterState state) {
-        return AbstractSearchStrategy.getSearchStrategyClass( 
-                indexMetaData.getSettings().get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS, 
-                state.metaData().settings().get(ClusterService.SETTING_CLUSTER_SEARCH_STRATEGY_CLASS,PrimaryFirstSearchStrategy.class.getName()))
-                );
+    public Class<? extends AbstractSearchStrategy> searchStrategyClass(IndexMetaData indexMetaData, ClusterState state) {
+        try {
+            return AbstractSearchStrategy.getSearchStrategyClass( 
+                    indexMetaData.getSettings().get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS, 
+                    state.metaData().settings().get(ClusterService.SETTING_CLUSTER_SEARCH_STRATEGY_CLASS,PrimaryFirstSearchStrategy.class.getName()))
+                    );
+        } catch(ConfigurationException e) {
+            logger.error((Supplier<?>) () -> new ParameterizedMessage("Bad search strategy class, fallback to [{}]", PrimaryFirstSearchStrategy.class.getName()), e);
+            return PrimaryFirstSearchStrategy.class;
+        }
     }
     
-    private AbstractSearchStrategy searchStrategyInstance(Class<AbstractSearchStrategy> clazz) {
+    private AbstractSearchStrategy searchStrategyInstance(Class<? extends AbstractSearchStrategy> clazz) {
         AbstractSearchStrategy searchStrategy = strategies.get(clazz.getName());
         if (searchStrategy == null) {
             try {

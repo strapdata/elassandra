@@ -291,10 +291,10 @@ public abstract class AbstractSearchStrategy {
         }
     };
 
-    public static Class<AbstractSearchStrategy> getSearchStrategyClass(String cls) throws ConfigurationException
+    public static Class<? extends AbstractSearchStrategy> getSearchStrategyClass(String cls) throws ConfigurationException
     {
         String className = cls.contains(".") ? cls : "org.elassandra.cluster.routing." + cls;
-        Class<AbstractSearchStrategy> searchClass = FBUtilities.classForName(className, "search strategy");
+        Class<? extends AbstractSearchStrategy> searchClass = FBUtilities.classForName(className, "search strategy");
         if (!AbstractSearchStrategy.class.isAssignableFrom(searchClass))
         {
             throw new ConfigurationException(String.format((Locale)null, "Specified search strategy class (%s) is not derived from AbstractSearchStrategy", className));

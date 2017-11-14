@@ -19,6 +19,8 @@
 package org.elasticsearch.common.settings;
 
 import org.apache.logging.log4j.Logger;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.action.support.ToXContentToBytes;
@@ -1007,6 +1009,10 @@ public class Setting<T> extends ToXContentToBytes {
         return timeSetting(key, defaultValue, TimeValue.timeValueMillis(0), properties);
     }
 
+    public static Setting<Class<? extends AbstractSearchStrategy>> searchStrategy(String key, String defaultValue, Property... properties) {
+        return new Setting<>(key, (s) -> PrimaryFirstSearchStrategy.class.getName(), (s) -> AbstractSearchStrategy.getSearchStrategyClass(s), properties);
+    }
+    
     public static Setting<Double> doubleSetting(String key, double defaultValue, double minValue, Property... properties) {
         return new Setting<>(key, (s) -> Double.toString(defaultValue), (s) -> {
             final double d = Double.parseDouble(s);

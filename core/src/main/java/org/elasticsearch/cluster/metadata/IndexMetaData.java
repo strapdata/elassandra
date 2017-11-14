@@ -26,6 +26,7 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
 import org.apache.cassandra.utils.FBUtilities;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
 import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elassandra.index.ExtendedElasticSecondaryIndex;
 import org.elassandra.index.MessageFormatPartitionFunction;
@@ -59,7 +60,6 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.common.xcontent.ToXContent.MapParams;
 import org.elasticsearch.gateway.MetaDataStateFormat;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.mapper.MapperService;
@@ -306,8 +306,8 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
             Setting.simpleString(SETTING_SECONDARY_INDEX_CLASS, ExtendedElasticSecondaryIndex.class.getName(), Property.Final, Property.IndexScope);
     
     public static final String SETTING_SEARCH_STRATEGY_CLASS = "index."+ClusterService.SEARCH_STRATEGY_CLASS; 
-    public static final Setting<String> INDEX_SEARCH_STRATEGY_CLASS_SETTING =
-            Setting.simpleString(SETTING_SEARCH_STRATEGY_CLASS, PrimaryFirstSearchStrategy.class.getName(), Property.Dynamic, Property.IndexScope);
+    public static final Setting<Class<? extends AbstractSearchStrategy>> INDEX_SEARCH_STRATEGY_CLASS_SETTING =
+            Setting.searchStrategy(SETTING_SEARCH_STRATEGY_CLASS, PrimaryFirstSearchStrategy.class.getName(), Property.Dynamic, Property.IndexScope);
     
     public static final String SETTING_PARTITION_FUNCTION = "index.partition_function";
     public static final Setting<String> INDEX_PARTITION_FUNCTION_SETTING =
