@@ -942,7 +942,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
                         create.append(mapper.cqlCollectionTag()).append("<");
                     create.append("frozen<")
-                        .append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_'))
+                        .append(ColumnIdentifier.maybeQuote(cfName+'_'+((ObjectMapper) mapper).fullPath().replace('.', '_')))
                         .append(">");
                     if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                         create.append(">");
