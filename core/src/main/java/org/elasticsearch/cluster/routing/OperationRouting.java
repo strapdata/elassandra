@@ -73,20 +73,15 @@ public class OperationRouting extends AbstractComponent {
     }
     
     public ShardIterator indexShards(ClusterState clusterState, String index, String id, @Nullable String routing) {
-        Index idx = clusterState.metaData().index(index).getIndex();
-        return shard(idx);
-        //return shards(clusterState, index, type, id, routing).shardsIt();
+        return shard(clusterState.metaData().index(index).getIndex());
     }
 
     public ShardIterator getShards(ClusterState clusterState, String index, String id, @Nullable String routing, @Nullable String preference) {
-        Index idx = clusterState.metaData().index(index).getIndex();
-        return shard(idx);
-        //return preferenceActiveShardIterator(shards(clusterState, index, id, routing), clusterState.nodes().getLocalNodeId(), clusterState.nodes(), preference);
+        return shard(clusterState.metaData().index(index).getIndex());
     }
     
     public ShardIterator getShards(ClusterState clusterState, String index, int shardId, @Nullable String preference) {
-        final IndexShardRoutingTable indexShard = clusterState.getRoutingTable().shardRoutingTable(index, shardId);
-        return preferenceActiveShardIterator(indexShard, clusterState.nodes().getLocalNodeId(), clusterState.nodes(), preference);
+        return shard(clusterState.metaData().index(index).getIndex());
     }
 
     public GroupShardsIterator<ShardIterator> searchShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference) {
