@@ -549,10 +549,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
 
     public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, Long writetime, final Object... values) {
-        ClientState clientState = this.threadPool.getThreadContext().getTransient("_client_state");
-        if (clientState == null)
-            clientState = ClientState.forInternalCalls();
-        return process(cl, serialConsistencyLevel, clientState, query, writetime, values);
+        return process(cl, serialConsistencyLevel, ClientState.forInternalCalls(), query, writetime, values);
     }
     
     public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, ClientState clientState, final String query, Long writetime, final Object... values)
@@ -580,10 +577,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
 
     public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, final String query, Object... values) {
-        ClientState clientState = this.threadPool.getThreadContext().getTransient("_client_state");
-        if (clientState == null)
-            clientState = ClientState.forInternalCalls();
-        return processWriteConditional(cl, serialCl, clientState, query, values);
+        return processWriteConditional(cl, serialCl, ClientState.forInternalCalls(), query, values);
     }
     
     public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, ClientState clientState, final String query, Object... values) 
