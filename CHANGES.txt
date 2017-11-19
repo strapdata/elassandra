@@ -1,3 +1,6 @@
+5.5.0.7 - 2017-11-20
+  * Fix case-sensitive nested object name
+
 5.5.0.6 - 2017-11-13
   * Fix Error while writing unindexed boolean #135
   * Improve README #133
