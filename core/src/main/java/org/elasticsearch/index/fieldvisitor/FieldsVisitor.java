@@ -20,11 +20,9 @@ package org.elasticsearch.index.fieldvisitor;
 
 import com.google.common.collect.ImmutableSet;
 
-import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.StoredFieldVisitor;
 import org.apache.lucene.util.BytesRef;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.index.mapper.IdFieldMapper;
@@ -70,7 +68,6 @@ public class FieldsVisitor extends StoredFieldVisitor {
 
     private final boolean loadSource;
     private final Set<String> requiredFields;
-    private Collection<String> filtredFields = null;
     protected BytesReference source;
     protected String type, id;
     protected Map<String, List<Object>> fieldsValues;
@@ -98,29 +95,22 @@ public class FieldsVisitor extends StoredFieldVisitor {
         return ImmutableSet.of();
     }
     
-    public NavigableSet<String> requiredColumns(ClusterService clusterService, SearchContext searchContext) throws IOException {
+    public NavigableSet<String> requiredColumns(SearchContext searchContext) throws IOException {
         List<String> requiredColumns =  new ArrayList<String>();
         if (requestedFields() != null) {
             for(String fieldExp : requestedFields()) {
                 for(String field : searchContext.mapperService().simpleMatchToIndexNames(fieldExp)) {
                     int i = field.indexOf('.');
                     String columnName = (i > 0) ? field.substring(0, i) : field;
-                    // TODO: eliminate non-existant columns or (non-static or non-partition-key) for static docs.
-                    if (this.filtredFields == null || this.filtredFields.contains(columnName))
-                        requiredColumns.add(columnName);
+                    requiredColumns.add(columnName);
                 }
             }
         }
         if (loadSource()) {
             for(String columnName : searchContext.mapperService().documentMapper(type).getColumnDefinitions().keySet()) 
-                if (this.filtredFields == null || this.filtredFields.contains(columnName))
-                    requiredColumns.add( columnName );
+                requiredColumns.add( columnName );
         }
         return new TreeSet<String>(requiredColumns);
-    }
-    
-    public void filtredColumns(Collection<String> fields) {
-        this.filtredFields = fields;
     }
     
     public boolean loadSource() {

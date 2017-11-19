@@ -366,12 +366,16 @@ public class FetchPhase implements SearchPhase {
         } while (current != null);
         return nestedIdentity;
     }
+    
+    protected NavigableSet<String> requiredColumns(SearchContext searchContext, FieldsVisitor fieldVisitor) throws IOException {
+        return fieldVisitor.requiredColumns(searchContext);
+    }
 
     protected ParsedStatement.Prepared getCqlPreparedStatement(SearchContext searchContext, IndexService indexService, FieldsVisitor fieldVisitor, String typeKey, boolean staticDocument) throws IOException {
         ParsedStatement.Prepared cqlStatement = searchContext.getCqlPreparedStatement( typeKey );
         if (cqlStatement == null) {
             // fetch from requested stored_fields.
-            NavigableSet<String> requiredColumns = fieldVisitor.requiredColumns(clusterService, searchContext);
+            NavigableSet<String> requiredColumns = requiredColumns(searchContext, fieldVisitor);
             if (requiredColumns.size() > 0) {
                 IndexMetaData indexMetaData = clusterService.state().metaData().index(searchContext.request().shardId().getIndexName());
                 if (requiredColumns.contains(NodeFieldMapper.NAME)) {
