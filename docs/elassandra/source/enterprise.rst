@@ -2,60 +2,15 @@
 Enterprise
 ==========
 
-Elassandra Enterprise plugin provides advanced features to monitor, manage and secure Elassandra.
+Elassandra Enterprise plugin provides advanced features:
+
+* Elasticsearch query through CQL.
+* Elasticserach JMX management and monitoring.
+* SSL encryption for Elasticsearch connections.
+* Authentication, Authorization and Accounting for Elasticsearch.
+* Elasticsearch Content-Based security.
+
 See `strapdata <http://www.strapdata.com/products>`_ for more details.
-
-Installation
-------------
-
-You must install the Enterprise plugin on ALL nodes of Elasticsearch enabled datacenters in your Cassandra cluster, and
-the Enterprise plugin version must match the version of Elassandra you are running. Installation require a full restart, 
-usally a rolling restart of nodes.
-
-1. Install the Enterprise Plugin :
-
-.. code::
-
-   bin/plugin install file:///path/to/enterprise-<version>.zip
-   
-2. Create a symbolic link from the **conf/triggers** directory to **plugins/enterprise/enterprise-<version>.jar**
-
-.. code::
-
-   (cd conf/triggers/ && ln -s ../../plugins/enterprise/enterprise-<version>.jar)
-   
-3. Restart your Elassandra node.
-4. Check for installed plugins :
-
-.. code::
-
-   $curl -XGET "http://localhost:9200/_nodes?pretty"
-   ...
-   "plugins" : [
-        {
-          "name" : "enterprise",
-          "version" : "5.5.0",
-          "description" : "Elassandra enterprise plugin.",
-          "classname" : "com.strapdata.elasticsearch.plugin.EnterprisePlugin",
-          "has_native_controller" : false
-        },
-     ...
-
-To uninstall the Enterprise plugin :
-
-1. Remove the symbolic link from the **conf/triggers** directory.
-
-.. code::
-
-   rm conf/triggers/enterprise-<version>.jar
-   
-2. Uninstalling the Enterprise plugin :
-
-.. code::
-
-   bin/plugin remove enterprise
-   
-3. Restart your Elassandra node.
 
 License management
 ------------------
@@ -66,17 +21,19 @@ license is installed.
 
 .. cssclass:: table-bordered
 
-+---------+----------------------------------------------+---------------------------------------------------------------------------------+
-| Feature | Description                                  | Restricted mode                                                                 |
-+=========+==============================================+=================================================================================+
-| JMX     | JMX monotoring of Elasticsearch indices      | Node restart required to see new index metrics, JMX attributes become read-only |
-+---------+----------------------------------------------+---------------------------------------------------------------------------------+
-| SSL     | SSL encryption of Elasticsearch connections  |                                                                                 |
-+---------+----------------------------------------------+---------------------------------------------------------------------------------+
-| AAA     | User Authentication, Authorization and Audit | Node restart required to reload users'privileges, no more audit trails.         |
-+---------+----------------------------------------------+---------------------------------------------------------------------------------+
-| CBS     | Content-Based Security rules                 | Node restart required to reload users'privileges.                               |
-+---------+----------------------------------------------+---------------------------------------------------------------------------------+
++---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
+| Feature | Description                                                        | Restricted mode                                                                 |
++=========+====================================================================+=================================================================================+
+| CQL     | Elasticsearch query through CQL directly from the cassandra driver | Disabled on restart following license expiration.                               |
++---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
+| JMX     | JMX monotoring of Elasticsearch indices                            | Node restart required to see new index metrics, JMX attributes become read-only |
++---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
+| SSL     | SSL encryption of Elasticsearch connections                        |                                                                                 |
++---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
+| AAA     | User Authentication, Authorization and Audit                       | Node restart required to reload users'privileges, no more audit trails.         |
++---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
+| CBS     | Content-Based Security rules                                       | Node restart required to reload users'privileges.                               |
++---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
 
 .. CAUTION::
 
@@ -144,7 +101,7 @@ Then reload the license with a POST REST request as shown below, each nodes retu
 
 .. code::
 
-   $ curl --user <username>:<password> --cacert /opt/elassandra-5.5.0/conf/cacert.pe -XPOST "https://localhost:9200/_license?pretty"
+   $ curl --user <username>:<password> --cacert <path/to/cacert.pem> -XPOST "https://localhost:9200/_license?pretty"
    {
      "_nodes" : {
        "total" : 2,
@@ -168,6 +125,323 @@ Then reload the license with a POST REST request as shown below, each nodes retu
 .. TIP::
 
    If you have several Elasticsearch clusters in your Cassandra cluster, reload the license on each datacenter where Elasticsearch is enabled.
+
+Search through CQL
+------------------
+
+To enable Elasticsearch query over CQL:
+
+* Add a dummy column ``es_query`` to your cassandra table.
+* Add a dummy column ``es_options`` to your cassandra table if you need to specify some specific options like target index names.
+
+.. code::
+   
+   ALTER TABLE twitter.tweet ADD es_query text;
+   ALTER TABLE twitter.tweet ADD es_options text;
+
+Then you can query the associated Elasticsearch index directly in a CQL SELECT request like this (document *_type* is the cassandra table name).
+
+.. code::
+
+   cassandra@cqlsh> SELECT "_id",foo FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}';
+   
+    _id | foo
+   -----+-------
+      2 |  bar2
+     20 | bar20
+     22 | bar22
+     23 | bar23
+     24 | bar24
+     28 | bar28
+     21 | bar21
+     25 | bar25
+     26 | bar26
+     27 | bar27
+   
+   (10 rows)
+
+By default, an elasticsearch query returns the first 10 results, but you can request more or less results with the LIMIT clause.
+
+.. code::
+
+   cassandra@cqlsh> SELECT "_id",foo FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}' LIMIT 3;
+   
+    _id | foo
+   -----+-------
+      2 |  bar2
+     20 | bar20
+     22 | bar22
+   
+   (3 rows)
+
+If `paging <https://docs.datastax.com/en/developer/java-driver/3.3/manual/paging/>`_ is enabled on your Cassandra driver and you request more 
+results than your page size, Elassandra use an elasticsearch scrolled search request to retreive all results. Default scoll timeout is 60 seconds.
+
+If all partition key columns are set in the where clause, elasticsearch query is directed sent to a node hosting the data (no fan out).
+
+.. code::
+
+   cassandra@cqlsh> SELECT "_id", foo FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}' AND "_id"='2';
+   
+    _id | foo  
+   -----+------
+      2 | bar2
+   
+   (1 rows)
+
+Cassandra functions and User Defined Functions can be used in the CQL projection clause.
+
+.. code::
+
+   cassandra@cqlsh> SELECT "_id",foo,token("_id"),writetime(foo) FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}';
+   
+    _id | foo   | system.token(_id)    | writetime(foo)
+   -----+-------+----------------------+------------------
+      2 |  bar2 |  5293579765126103566 | 1509275059354000
+     20 | bar20 |  4866192165766252016 | 1509275059572000
+     22 | bar22 |  5315788262387249245 | 1509275059591000
+     23 | bar23 |  5502885531913083742 | 1509275059600000
+     24 | bar24 |  5568379873904613205 | 1509275059614000
+     28 | bar28 |  3168262793124788288 | 1509275059663000
+     21 | bar21 | -3201810799627846645 | 1509275059580000
+     25 | bar25 |  2509205981756244107 | 1509275059625000
+     26 | bar26 | -6132418777949225301 | 1509275059633000
+     27 | bar27 |  9060526884622895268 | 1509275059645000
+   
+   (10 rows)
+
+If your target index does not have the same name as the underlying keyspace, you can specify targeted indices names in ``es_options``.
+
+.. code::
+
+   cassandra@cqlsh> SELECT "_id",foo FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}' AND es_options='indices=twitter*';
+
+Elasticsearch aggregations through CQL
+......................................
+
+Elassandra supports elasticsearch aggregation through CQL query. In this case :
+
+* Returned columns are named with aggregations names.
+* CQL function are not supported.
+* CQL projection clause, limit and pagination are ignored. This implies that aggregation results must fit into the available memory.
+
+.. code::
+
+   cassandra@cqlsh> SELECT * FROM twitter2.doc WHERE es_query='{"aggs":{"sales_per_month":{"date_histogram":{"field":"post_date","interval":"day"},"aggs":{"sales":{"sum":{"field":"price"}}}}}}';
+   
+    sales_per_month.key             | sales_per_month.count | sales_per_month.sales.sum
+   ---------------------------------+-----------------------+---------------------------
+    2017-10-04 00:00:00.000000+0000 |                     3 |                        30
+    2017-10-05 00:00:00.000000+0000 |                     1 |                        10
+    2017-10-06 00:00:00.000000+0000 |                     1 |                        10
+    2017-10-07 00:00:00.000000+0000 |                     3 |                        30
+   
+   (4 rows)
+
+When requesting multiple sibling aggregations, the tree result is flattened. 
+In the following example, there is two top level aggregations named *sales_per_month* and *sum_monthly_sales*.
+
+.. code::
+
+   cassandra@cqlsh> SELECT * FROM twitter2.doc WHERE es_query='{"size":0,
+         "aggs":{"sales_per_month":{"date_histogram":{"field":"post_date","interval":"day"},"aggs":{"sales":{"sum":{"field":"price"}}}},
+         "sum_monthly_sales":{"sum_bucket":{"buckets_path":"sales_per_month>sales"}}}}';
+
+    sales_per_month.key             | sales_per_month.count | sales_per_month.sales.sum | sum_monthly_sales.value
+   
+   ---------------------------------+-----------------------+---------------------------+-------------------------
+    2017-10-04 00:00:00.000000+0000 |                     3 |                        30 |                    null
+    2017-10-05 00:00:00.000000+0000 |                     1 |                        10 |                    null
+    2017-10-06 00:00:00.000000+0000 |                     1 |                        10 |                    null
+    2017-10-07 00:00:00.000000+0000 |                     3 |                        30 |                    null
+                               null |                  null |                      null |                      80
+   
+   (5 rows)
+
+.. TIP::
+
+   In order to use Elasticsearch aggregation capabilities from Apache Spark, you must request Elassandra with a projection clause having the same CQL types
+   as the returned aggregation results. Columns names don't matters, you can reuse an existing column having the right CQL type or create a dummy one.
+
+CQL Driver integration
+......................
+
+For better performances, you can use a CQL prepared statement to submit Elasticsearch queries as shown bellow in java. 
+You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total** and **_shards.failed** 
+from the result `custom payload <https://docs.datastax.com/en/developer/java-driver/3.2/manual/custom_payloads/>`_.
+
+.. code-block:: java
+
+   public static class IncomingPayload {
+        public final long hitTotal;
+        public final float hitMaxScore;
+        public final int shardTotal;
+        public final int shardFailed;
+        public IncomingPayload(Map<String,ByteBuffer> payload) {
+            hitTotal = payload.get("hits.total").getLong();
+            hitMaxScore = payload.get("hits.max_score").getFloat();
+            shardTotal = payload.get("_shards.total").getInt();
+            shardFailed = payload.get("_shards.failed").getInt();
+        }
+   }
+   
+   String esQuery = "{\"query\":{\"match_all\":{}}}";
+   ResultSet rs = session.execute("SELECT * FROM ks.table WHERE es_query=?", esQuery);
+   IncomingPayload payload = new IncomingPayload(rs.getExecutionInfo().getIncomingPayload());
+   System.out.println("hits.total="+payload.hitTotal);
+
+CQL Tracing
+...........
+
+Elasticsearch search request may invlove CQL requests to requested fields from the underlying Cassandra table. When searching through CQL,
+you can use `Cassandra tracing <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/cqlshTracing.html>`_ capabilities to troubleshoot Cassandra performance problems.
+
+.. code::
+
+   cassandra@cqlsh> tracing on;
+   Now Tracing is enabled
+   cassandra@cqlsh> SELECT * FROM twitter2.doc WHERE es_query='{"query":{"match_all":{}}}';
+   
+    _id | es_options | es_query | message                                          | post_date                           | price | user
+   -----+------------+----------+--------------------------------------------------+-------------------------------------+-------+------------
+      2 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-04 14:12:00.000000+0000'] |  [10] | ['Poulpy']
+      3 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-04 15:12:00.000000+0000'] |  [10] | ['Poulpy']
+      5 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-06 13:12:00.000000+0000'] |  [10] | ['Poulpy']
+      8 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-07 18:12:00.000000+0000'] |  [10] | ['Poulpy']
+      1 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-04 13:12:00.000000+0000'] |  [10] | ['Poulpy']
+      4 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-05 13:12:00.000000+0000'] |  [10] | ['Poulpy']
+      6 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-07 13:12:00.000000+0000'] |  [10] | ['Poulpy']
+      7 |       null |     null | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-07 15:12:00.000000+0000'] |  [10] | ['Poulpy']
+   
+   (8 rows)
+   
+   Tracing session: 817762d0-c6d8-11e7-80c9-cf9ea31c7788
+   
+    activity                                                                                                           | timestamp                  | source    | source_elapsed | client
+   --------------------------------------------------------------------------------------------------------------------+----------------------------+-----------+----------------+-----------
+                                                                                                   Elasticsearch query | 2017-11-11 13:04:44.544000 | 127.0.0.1 |              0 | 127.0.0.1
+         Parsing SELECT * FROM twitter2.doc WHERE es_query='{"query":{"match_all":{}}}'; [Native-Transport-Requests-1] | 2017-11-11 13:04:44.541000 | 127.0.0.1 |            192 | 127.0.0.1
+                                                                     Preparing statement [Native-Transport-Requests-1] | 2017-11-11 13:04:44.541000 | 127.0.0.1 |            382 | 127.0.0.1
+                                                               Executing single-partition query on roles [ReadStage-2] | 2017-11-11 13:04:44.542000 | 127.0.0.1 |           1048 | 127.0.0.1
+                                                                            Acquiring sstable references [ReadStage-2] | 2017-11-11 13:04:44.542000 | 127.0.0.1 |           1145 | 127.0.0.1
+                               Skipped 0/1 non-slice-intersecting sstables, included 0 due to tombstones [ReadStage-2] | 2017-11-11 13:04:44.542000 | 127.0.0.1 |           1327 | 127.0.0.1
+                                                                             Key cache hit for sstable 1 [ReadStage-2] | 2017-11-11 13:04:44.542000 | 127.0.0.1 |           1475 | 127.0.0.1
+                                                               Merged data from memtables and 1 sstables [ReadStage-2] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           1724 | 127.0.0.1
+                                                                       Read 1 live and 0 tombstone cells [ReadStage-2] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           1830 | 127.0.0.1
+                                                               Executing single-partition query on roles [ReadStage-4] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           2279 | 127.0.0.1
+                                                                            Acquiring sstable references [ReadStage-4] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           2360 | 127.0.0.1
+                               Skipped 0/1 non-slice-intersecting sstables, included 0 due to tombstones [ReadStage-4] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           2432 | 127.0.0.1
+                                                                             Key cache hit for sstable 1 [ReadStage-4] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           2509 | 127.0.0.1
+                                                               Merged data from memtables and 1 sstables [ReadStage-4] | 2017-11-11 13:04:44.544000 | 127.0.0.1 |           2736 | 127.0.0.1
+                                                                       Read 1 live and 0 tombstone cells [ReadStage-4] | 2017-11-11 13:04:44.544000 | 127.0.0.1 |           2801 | 127.0.0.1
+                                       Executing single-partition query on doc [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.552000 | 127.0.0.1 |            143 | 127.0.0.1
+                                                  Acquiring sstable references [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.552000 | 127.0.0.1 |            311 | 127.0.0.1
+                                                   Key cache hit for sstable 5 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.552000 | 127.0.0.1 |            438 | 127.0.0.1
+                                                   Key cache hit for sstable 6 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |            553 | 127.0.0.1
+     Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |            624 | 127.0.0.1
+                                     Merged data from memtables and 2 sstables [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |            953 | 127.0.0.1
+                                             Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |           1031 | 127.0.0.1
+                                       Executing single-partition query on doc [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |           1280 | 127.0.0.1
+                                                  Acquiring sstable references [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |           1335 | 127.0.0.1
+                                                   Key cache hit for sstable 5 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553001 | 127.0.0.1 |           1423 | 127.0.0.1
+                                                   Key cache hit for sstable 6 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           1515 | 127.0.0.1
+     Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           1593 | 127.0.0.1
+                                     Merged data from memtables and 2 sstables [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           1853 | 127.0.0.1
+                                             Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           1921 | 127.0.0.1
+                                       Executing single-partition query on doc [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           2091 | 127.0.0.1
+                                                  Acquiring sstable references [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           2136 | 127.0.0.1
+                                                   Key cache hit for sstable 5 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554001 | 127.0.0.1 |           2253 | 127.0.0.1
+                                                   Key cache hit for sstable 6 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554001 | 127.0.0.1 |           2346 | 127.0.0.1
+     Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554001 | 127.0.0.1 |           2408 | 127.0.0.1
+                                     Merged data from memtables and 2 sstables [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           2654 | 127.0.0.1
+                                      Executing single-partition query on doc [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.555000 | 127.0.0.2 |            116 | 127.0.0.1
+                                             Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           2733 | 127.0.0.1
+                                                 Acquiring sstable references [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.555000 | 127.0.0.2 |            303 | 127.0.0.1
+                                       Executing single-partition query on doc [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           2950 | 127.0.0.1
+                                                  Acquiring sstable references [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           3002 | 127.0.0.1
+                                                   Key cache hit for sstable 5 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           3095 | 127.0.0.1
+                                                   Key cache hit for sstable 6 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           3191 | 127.0.0.1
+     Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555001 | 127.0.0.1 |           3253 | 127.0.0.1
+                                     Merged data from memtables and 2 sstables [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.556000 | 127.0.0.1 |           3549 | 127.0.0.1
+                                                  Key cache hit for sstable 5 [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |            480 | 127.0.0.1
+                                             Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.556000 | 127.0.0.1 |           3656 | 127.0.0.1
+                                                  Key cache hit for sstable 6 [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |            650 | 127.0.0.1
+    Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |            747 | 127.0.0.1
+                                    Merged data from memtables and 2 sstables [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |           1245 | 127.0.0.1
+                                            Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |           1362 | 127.0.0.1
+                                                                                                      Request complete | 2017-11-11 13:04:44.563745 | 127.0.0.1 |          19745 | 127.0.0.1
+
+You can then retreive tracing information stored in the system_traces keyspace for 24 hours like this.
+
+.. code::
+
+   cassandra@cqlsh> select * from system_traces.sessions;
+
+    session_id                           | client    | command | coordinator | duration | parameters                                                                                                                                                                   | request             | started_at
+   --------------------------------------+-----------+---------+-------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+---------------------+---------------------------------
+    817762d0-c6d8-11e7-80c9-cf9ea31c7788 | 127.0.0.1 |   QUERY |   127.0.0.1 |    19745 | {'consistency_level': 'ONE', 'page_size': '100', 'query': 'SELECT * FROM twitter2.doc WHERE es_query=''{"query":{"match_all":{}}}'';', 'serial_consistency_level': 'SERIAL'} | Elasticsearch query | 2017-11-11 12:04:44.544000+0000
+    7c49dae0-c6d8-11e7-80c9-cf9ea31c7788 | 127.0.0.1 |   QUERY |   127.0.0.1 |    20002 | {'consistency_level': 'ONE', 'page_size': '100', 'query': 'SELECT * FROM twitter2.doc WHERE es_query=''{"query":{"match_all":{}}}'';', 'serial_consistency_level': 'SERIAL'} | Elasticsearch query | 2017-11-11 12:04:35.856000+0000
+    6786c2d0-c6d8-11e7-80c9-cf9ea31c7788 | 127.0.0.1 |   QUERY |   127.0.0.1 |    16426 |                                              {'consistency_level': 'ONE', 'page_size': '100', 'query': 'SELECT * FROM twitter2.doc ;', 'serial_consistency_level': 'SERIAL'} |  Execute CQL3 query | 2017-11-11 12:04:01.021000+0000
+    6b49e550-c6d8-11e7-80c9-cf9ea31c7788 | 127.0.0.1 |   QUERY |   127.0.0.1 |    14129 |                                               {'consistency_level': 'ONE', 'page_size': '100', 'query': 'SELECT * FROM twitter2.doc;', 'serial_consistency_level': 'SERIAL'} |  Execute CQL3 query | 2017-11-11 12:04:07.333000+0000
+   
+   (4 rows)
+   cassandra@cqlsh> SHOW SESSION 817762d0-c6d8-11e7-80c9-cf9ea31c7788;
+
+   Tracing session: 817762d0-c6d8-11e7-80c9-cf9ea31c7788
+   
+    activity                                                                                                           | timestamp                  | source    | source_elapsed | client
+   --------------------------------------------------------------------------------------------------------------------+----------------------------+-----------+----------------+-----------
+                                                                                                   Elasticsearch query | 2017-11-11 13:04:44.544000 | 127.0.0.1 |              0 | 127.0.0.1
+         Parsing SELECT * FROM twitter2.doc WHERE es_query='{"query":{"match_all":{}}}'; [Native-Transport-Requests-1] | 2017-11-11 13:04:44.541000 | 127.0.0.1 |            192 | 127.0.0.1
+                                                                     Preparing statement [Native-Transport-Requests-1] | 2017-11-11 13:04:44.541000 | 127.0.0.1 |            382 | 127.0.0.1
+                                                               Executing single-partition query on roles [ReadStage-2] | 2017-11-11 13:04:44.542000 | 127.0.0.1 |           1048 | 127.0.0.1
+                                                                            Acquiring sstable references [ReadStage-2] | 2017-11-11 13:04:44.542000 | 127.0.0.1 |           1145 | 127.0.0.1
+                               Skipped 0/1 non-slice-intersecting sstables, included 0 due to tombstones [ReadStage-2] | 2017-11-11 13:04:44.542000 | 127.0.0.1 |           1327 | 127.0.0.1
+                                                                             Key cache hit for sstable 1 [ReadStage-2] | 2017-11-11 13:04:44.542000 | 127.0.0.1 |           1475 | 127.0.0.1
+                                                               Merged data from memtables and 1 sstables [ReadStage-2] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           1724 | 127.0.0.1
+                                                                       Read 1 live and 0 tombstone cells [ReadStage-2] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           1830 | 127.0.0.1
+                                                               Executing single-partition query on roles [ReadStage-4] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           2279 | 127.0.0.1
+                                                                            Acquiring sstable references [ReadStage-4] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           2360 | 127.0.0.1
+                               Skipped 0/1 non-slice-intersecting sstables, included 0 due to tombstones [ReadStage-4] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           2432 | 127.0.0.1
+                                                                             Key cache hit for sstable 1 [ReadStage-4] | 2017-11-11 13:04:44.543000 | 127.0.0.1 |           2509 | 127.0.0.1
+                                                               Merged data from memtables and 1 sstables [ReadStage-4] | 2017-11-11 13:04:44.544000 | 127.0.0.1 |           2736 | 127.0.0.1
+                                                                       Read 1 live and 0 tombstone cells [ReadStage-4] | 2017-11-11 13:04:44.544000 | 127.0.0.1 |           2801 | 127.0.0.1
+                                       Executing single-partition query on doc [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.552000 | 127.0.0.1 |            143 | 127.0.0.1
+                                                  Acquiring sstable references [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.552000 | 127.0.0.1 |            311 | 127.0.0.1
+                                                   Key cache hit for sstable 5 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.552000 | 127.0.0.1 |            438 | 127.0.0.1
+                                                   Key cache hit for sstable 6 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |            553 | 127.0.0.1
+     Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |            624 | 127.0.0.1
+                                     Merged data from memtables and 2 sstables [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |            953 | 127.0.0.1
+                                             Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |           1031 | 127.0.0.1
+                                       Executing single-partition query on doc [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |           1280 | 127.0.0.1
+                                                  Acquiring sstable references [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553000 | 127.0.0.1 |           1335 | 127.0.0.1
+                                                   Key cache hit for sstable 5 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.553001 | 127.0.0.1 |           1423 | 127.0.0.1
+                                                   Key cache hit for sstable 6 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           1515 | 127.0.0.1
+     Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           1593 | 127.0.0.1
+                                     Merged data from memtables and 2 sstables [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           1853 | 127.0.0.1
+                                             Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           1921 | 127.0.0.1
+                                       Executing single-partition query on doc [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           2091 | 127.0.0.1
+                                                  Acquiring sstable references [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554000 | 127.0.0.1 |           2136 | 127.0.0.1
+                                                   Key cache hit for sstable 5 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554001 | 127.0.0.1 |           2253 | 127.0.0.1
+                                                   Key cache hit for sstable 6 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554001 | 127.0.0.1 |           2346 | 127.0.0.1
+     Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.554001 | 127.0.0.1 |           2408 | 127.0.0.1
+                                     Merged data from memtables and 2 sstables [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           2654 | 127.0.0.1
+                                      Executing single-partition query on doc [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.555000 | 127.0.0.2 |            116 | 127.0.0.1
+                                             Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           2733 | 127.0.0.1
+                                                 Acquiring sstable references [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.555000 | 127.0.0.2 |            303 | 127.0.0.1
+                                       Executing single-partition query on doc [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           2950 | 127.0.0.1
+                                                  Acquiring sstable references [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           3002 | 127.0.0.1
+                                                   Key cache hit for sstable 5 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           3095 | 127.0.0.1
+                                                   Key cache hit for sstable 6 [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555000 | 127.0.0.1 |           3191 | 127.0.0.1
+     Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.555001 | 127.0.0.1 |           3253 | 127.0.0.1
+                                     Merged data from memtables and 2 sstables [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.556000 | 127.0.0.1 |           3549 | 127.0.0.1
+                                                  Key cache hit for sstable 5 [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |            480 | 127.0.0.1
+                                             Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.1][search][T#2]] | 2017-11-11 13:04:44.556000 | 127.0.0.1 |           3656 | 127.0.0.1
+                                                  Key cache hit for sstable 6 [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |            650 | 127.0.0.1
+    Skipped 0/2 non-slice-intersecting sstables, included 0 due to tombstones [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |            747 | 127.0.0.1
+                                    Merged data from memtables and 2 sstables [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |           1245 | 127.0.0.1
+                                            Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |           1362 | 127.0.0.1
+                                                                                                      Request complete | 2017-11-11 13:04:44.563745 | 127.0.0.1 |          19745 | 127.0.0.1
 
 JMX Managment & Monitoring
 --------------------------
@@ -421,8 +695,10 @@ Once authentication is enabled, create a new Cassandra superuser to avoid issue 
    cqlsh> ALTER ROLE cassandra WITH PASSWORD='******';
    
 Then configure the replication factor for the *system_auth* keyspace according to your cluster configuration (see `Configure Native Authentication <https://docs.datastax.com/en/cassandra/3.0/cassandra/configuration/secureConfigNativeAuth.html>`_).
-Finally, adjust roles and credential cache settings and disable JMX configuration of authentifcation and authorization cachElasticsearch Authentication, Authorization and Content-Based Security
-.................................................................................................................................................................................................
+Finally, adjust roles and credential cache settings and disable JMX configuration of authentifcation and authorization cache.
+
+Elasticsearch Authentication, Authorization and Content-Based Security
+......................................................................
 
 Elasticsearch authentication settings are defined in **conf/elasticsearch.yml**. 
 To be effective, these settings must be the same on all nodes of a Cassandra datacenter.
@@ -609,8 +885,18 @@ Strapdata provides a SSL transport client to work with a secured Elassandra clus
 
 #. If your Elassandra cluster requires user authentification, check that your user have access to the cluster topology with the *Nodes Info API* (action **cluster:monitor/nodes/info**).
 #. Add the **ssl-transport-client.jar** and its dependencies in your CLASSPATH.
-#. Add the desired configuration to your client settings, as shown in the following exemple.
-#. Add an **Authorization** header to your client containing your based-64 encoded login and password.
+#. Add the desired configuration to your client settings, including SSL settings as shown in the following exemple.
+#. Add an ``ssl.transport_client_credential`` containing *username*:*password* to monitor the cluster state. This account must be authorized to do 
+``cluster:monitor/state`` and ``cluster:monitor/nodes/liveness`` in the ``elastic_admin.privileges`` table.
+
+.. code ::
+
+   cassandra@cqlsh> CREATE ROLE monitor WITH PASSWORD = 'monitor' AND LOGIN = true;
+   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role, actions,indices) VALUES('monitor','cluster:monitor/state','.*');
+   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role, actions,indices) VALUES('monitor','cluster:monitor/nodes/liveness','.*');
+
+#. Add an **Authorization** header to your client containing your based-64 encoded login and password. This account must have 
+appropriate `Cassandra permissions <https://docs.datastax.com/en/cql/3.3/cql/cql_using/useSecurePermission.html>`_ or privileges in the ``elastic_admin.privileges`` table.
 
 .. code::
    
@@ -619,49 +905,52 @@ Strapdata provides a SSL transport client to work with a secured Elassandra clus
    
    TransportClient client = new PreBuiltSslTransportClient(Settings.builder()
         .put("cluster.name", "myClusterName")
+        .put("client.transport.sniff",true)
         .put("ssl.transport.enabled", true)
         .put("ssl.truststore.path", "/path/to/truststore.jks")
         .put("ssl.truststore.password", "******")
+        .put("ssl.transport_client_credential", "monitor:password")   // Add credential to monitor Elasticsearch
         ...
         .build())
     .build()
     .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("localhost"), 9300))
     
-    client.filterWithHeader(Collections.singletonMap("Authorization", PreBuiltSslTransportClient.encodeBasicHeader("bob","password")))
-      .prepareSearch().get();
+    // Add user credential to request elasticsearch
+    client.filterWithHeader(Collections.singletonMap("Authorization", PreBuiltSslTransportClient.encodeBasicHeader("bob","password")));
     
 Available security settings for the secured transport client for Elassandra :
 
 .. cssclass:: table-bordered
 
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| Setting                           | Default              | Description                                                 |
-+===================================+======================+=============================================================+
-| ssl.transport.enabled             | **false**            | Enable SSL on transport connections.                        |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.algorithm                     | **SunX509**          | Algorithm used to manage keys and certificates.             |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.storetype                     | **JKS**              | Crytptographic stores file format.                          |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.trust_all_cert                | **false**            | Trust all certificates                                      |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.truststore.path               | **conf/.truststore** | Path to your truststore.                                    |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.truststore.password           | **cassandra**        | Truststore password.                                        |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.protocol                      | **TLSv1.2**          | Secure protocol.                                            |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.ciphers                       | **JCE default**      | SSL Cipher suite                                            |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.require_client_auth           | **false**            | Enable SSL client authentication.                           |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.keystore.path                 | **conf/.truststore** | Path to your keystore when using SSL client authentication. |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.keystore.password             | **cassandra**        | Truststore password when using SSL client authentication.   |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-| ssl.require_endpoint_verification | **false**            | Enable server hostname verification.                        |
-+-----------------------------------+----------------------+-------------------------------------------------------------+
-
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| Setting                           | Default              | Description                                                         |
++===================================+======================+=====================================================================+
+| ssl.transport.enabled             | **false**            | Enable SSL on transport connections.                                |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.algorithm                     | **SunX509**          | Algorithm used to manage keys and certificates.                     |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.storetype                     | **JKS**              | Crytptographic stores file format.                                  |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.trust_all_cert                | **false**            | Trust all certificates                                              |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.truststore.path               | **conf/.truststore** | Path to your truststore.                                            |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.truststore.password           | **cassandra**        | Truststore password.                                                |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.protocol                      | **TLSv1.2**          | Secure protocol.                                                    |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.ciphers                       | **JCE default**      | SSL Cipher suite                                                    |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.require_client_auth           | **false**            | Enable SSL client authentication.                                   |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.keystore.path                 | **conf/.truststore** | Path to your keystore when using SSL client authentication.         |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.keystore.password             | **cassandra**        | Truststore password when using SSL client authentication.           |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.require_endpoint_verification | **false**            | Enable server hostname verification.                                |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
+| ssl.transport_client_credential   |                      | *login*:*password* used to monitor the Elasticsearch cluster state. |
++-----------------------------------+----------------------+---------------------------------------------------------------------+
 
 Multi-user Kibana configuration
 ...............................
@@ -711,12 +1000,11 @@ Elasticsearch Spark connector
 
 The `elasticsearch-hadoop <https://github.com/strapdata/elasticsearch-hadoop>`_ connector can access a secured Elassandra cluster by providing the 
 sames SSL/TLS and Username/Pasword authentication parameters as the orginal `elasticsearch-hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/security.html>`_ connector.
-Here is an exaple with the spark-submit.
+Here is an example with a spark-shell.
 
 .. code::
 
    ES_OPTS="$ES_OPTS --conf spark.es.nodes=127.0.0.1"
-   ES_OPTS="$ES_OPTS --conf spark.es.nodes.wan.only=true"
    ES_OPTS="$ES_OPTS --conf spark.es.net.ssl=true"
    ES_OPTS="$ES_OPTS --conf spark.es.net.ssl.truststore.location=file:///path/to/truststore.jks"
    ES_OPTS="$ES_OPTS --conf spark.es.net.ssl.truststore.pass=*******"
@@ -751,6 +1039,12 @@ The *spark* role have no cassandra permission, but user *john* inherits its priv
      john | False |  True |        {}
    
    (2 rows)
+
+Cassandra Spark Connector
+.........................
+
+The `cassandra-spark-connector <https://github.com/datastax/spark-cassandra-connector>`_ can request both Cassandra and Elasticsearch through the CQL driver.
+
 
 
 Elasticsearch Auditing
@@ -818,8 +1112,6 @@ When using the **log** appender for audit, you should configure a dedicated logb
    
 And add a logger named **LogbackAuditor** with additiviy set to **false** :
 
-
-
 .. code::
 
    <logger name="LogbackAuditor" level="DEBUG" additivity="false" >
@@ -839,7 +1131,6 @@ Here an exemple of audit logs in the **logs/audit.log** file :
    2017-10-20 14:11:52,751 200,PERMISSION,kibana,roles/kibana,/10.0.1.5,indices:data/read/mget[shard],[.kibana]
    2017-10-20 14:11:52,868 200,PRIVILEGE,kibana,roles/kibana,/10.0.1.5,cluster:monitor/health,[.kibana]
    2017-10-20 14:11:52,990 200,PERMISSION,kibana,roles/kibana,/10.0.1.5,indices:data/read/search,[.kibana]
-
 
 CQL Audit
 .........
