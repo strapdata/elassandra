@@ -124,7 +124,22 @@ Meta-Fields
 
 * ``_index`` is the index name mapped to the underlying cassandra keyspace name (dash [-] and dot[.] are automatically replaced by underscore [_]).
 * ``_type`` is the document type name mapped to the underlying cassandra table name (dash [-] and dot[.] are automatically replaced by underscore [_]).
-* ``_id`` is the document ID is a string representation of the primary key of the underlying cassandra table. Single field primary key is converted to a string, compound primary key is converted to a JSON array.
+* ``_id`` is the document ID is a string representation of the primary key of the underlying cassandra table. Single field primary key is converted to a string, compound primary key is converted to a JSON array converted to a string. For example, if your primary key is a string and a number, you would have ``_id`` = [\"003011FAEF2E\",1493502420000]. To get such a document by its ``_id``, you need to properly escape brackets and double-quotes like this.
+   
+.. code::
+
+   get 'twitter/tweet/\["003011FAEF2E",1493502420000\]?pretty'
+   {
+     "_index" : "twitter",
+     "_type" : "tweet",
+     "_id" : "[\"003011FAEF2E\",1493502420000]",
+     "_version" : 1,
+     "found" : true,
+     "_source" : {
+       ...
+     }
+   }
+       
 * ``_source`` is the indexed JSON document. By default, *_source* is disabled in ELassandra, meaning that *_source* is rebuild from the underlying cassandra columns. If *_source* is enabled (see `Mapping _source field <https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-source-field.html>`_) ELassandra stores documents indexed by with the Elasticsearch API in a dedicated Cassandra text column named *_source*. This allows to retreive the orginal JSON document for `GeoShape Query<https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-geo-shape-query.html>`_.
 * ``_routing`` is valued with a string representation of the partition key of the underlying cassandra table. Single partition key is converted to a string, compound partition key is converted to a JSON array. Specifying ``_routing`` on get, index or delete operations is useless, since the partition key is included in ``_id``. On search operations, Elassandra compute the cassandra token associated to ``_routing`` for the search type, and reduce the search only to a cassandra node hosting this token. (WARNING: Without any search types, Elassandra cannot compute the cassandra token and returns an error **all shards failed**).
 * ``_ttl``  and ``_timestamp`` are mapped to the cassandra `TTL <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ttl_t.html>`_ and `WRITIME <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_writetime.html>`_. The returned ``_ttl``  and ``_timestamp`` for a document will be the one of a regular cassandra columns if there is one in the underlying table. Moreover, when indexing a document throught the Elasticearch API, all cassandra cells carry the same WRITETIME and TTL, but this could be different when upserting some cells using CQL.
