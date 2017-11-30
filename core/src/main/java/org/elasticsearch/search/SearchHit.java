@@ -913,7 +913,7 @@ public class SearchHit implements Streamable, ToXContentObject, Iterable<SearchH
             }
         }
         
-        if (in.readBoolean()) {
+        if (this.version == Long.MIN_VALUE && in.readBoolean()) {
             int rowSize = in.readVInt();
             this.values = new ArrayList<ByteBuffer>(rowSize);
             for(int i=0; i < rowSize; i++)
@@ -977,8 +977,6 @@ public class SearchHit implements Streamable, ToXContentObject, Iterable<SearchH
             out.writeVInt(values.size());
             for(ByteBuffer bb : values)
                out.writeByteBuffer(bb);
-        } else {
-            out.writeBoolean(false);
         }
     }
 
