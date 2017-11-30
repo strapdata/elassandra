@@ -48,14 +48,16 @@
   <logger name="com.thinkaurelius.thrift" level="ERROR"/>
   <logger name="org.apache" level="WARN" />
   <logger name="org.apache.cassandra" level="INFO" />
+  <!-- 
   <logger name="org.apache.cassandra.db.commitlog" level="DEBUG" />
   <logger name="org.apache.cassandra.db.compaction" level="WARN" />
   <logger name="org.apache.cassandra.config.DatabaseDescriptor" level="WARN" />
   <logger name="org.apache.cassandra.service.CassandraDaemon" level="WARN" />
   <logger name="org.apache.cassandra.service.ElassandraDaemon" level="DEBUG" />
-  
-  <logger name="org.elassandra.shard" level="DEBUG" />
-  <logger name="org.elassandra.indices" level="DEBUG" />
+   -->
+   
+  <logger name="org.elassandra.shard" level="INFO" />
+  <logger name="org.elassandra.indices" level="INFO" />
   <logger name="org.elasticsearch" level="WARN" />
 
 <!-- 
@@ -65,7 +67,7 @@
 
   <root level="INFO">
     <appender-ref ref="FILE" />
-    <!-- <appender-ref ref="STDOUT" /> -->
+    <appender-ref ref="STDOUT" />
   </root>
   
 </configuration>
