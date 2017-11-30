@@ -1900,22 +1900,6 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return null;
     }
     
-    public String buildFetchQuery(final IndexService indexService, final String type, String cqlProjection, boolean forStaticDocument) 
-            throws IndexNotFoundException, IOException 
-    {
-        DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
-        String cfName = typeToCfName(type);
-        DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
-        StringBuilder query = new StringBuilder();
-        final String SELECT_ = "SELECT ";
-        query.append("SELECT ")
-            .append(cqlProjection)
-            .append(" FROM \"").append(indexService.keyspace()).append("\".\"").append(cfName)
-            .append("\" WHERE ").append((forStaticDocument) ? cqlFragment.ptWhere : cqlFragment.pkWhere )
-            .append(" LIMIT 1");
-        return query.toString();
-    }
-    
     public String buildFetchQuery(final IndexService indexService, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs) 
             throws IndexNotFoundException, IOException 
     {
@@ -1925,8 +1909,9 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
         String regularColumn = null;
         StringBuilder query = new StringBuilder();
-        final String SELECT_ = "SELECT ";
-        query.append(SELECT_);
+        query.append("SELECT ");
+        int prefixLength = query.length();
+        
         for (String c : requiredColumns) {
             switch(c){
             case TokenFieldMapper.NAME: 
@@ -1973,11 +1958,11 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             default:
                 ColumnDefinition cd = columnDefs.get(c);
                 if (cd != null && (cd.isPartitionKey() || cd.isStatic() || !forStaticDocument)) {
-                   query.append(query.length() > SELECT_.length() ? ',':' ').append("\"").append(c).append("\"");
+                   query.append(query.length() > prefixLength ? ',':' ').append("\"").append(c).append("\"");
                 }
             }
         }
-        if (query.length() == SELECT_.length()) {
+        if (query.length() == prefixLength) {
             // no column match or requiredColumn is empty, add _id to avoid CQL syntax error...
             query.append("\"_id\"");
         }
