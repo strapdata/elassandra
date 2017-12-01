@@ -1,3 +1,8 @@
+5.5.0.8 - 2017-12-01
+  * Fix #142 nested date object
+  * Fix #141 issue with native elasticsearch transport client
+  * Enable STDOUT logging by default for docker
+
 5.5.0.7 - 2017-11-20
   * Fix case-sensitive nested object name
 
