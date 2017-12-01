@@ -351,5 +351,48 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.queryStringQuery("q=aaa")).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(3L));
     }
+    
+    // see issue #142
+    @Test
+    public void testNestedDate() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("id").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("event_timestamp")
+                            .field("type", "date")
+                            .field("format", "strict_date_hour_minute_second||epoch_millis")
+                            .field("cql_collection", "singleton")
+                        .endObject()
+                        .startObject("event_info")
+                            .field("type", "nested")
+                            .field("cql_collection", "singleton")
+                            .field("cql_udt_name", "event_info_udt")
+                            .field("dynamic", "false")
+                            .startObject("properties")
+                               .startObject("event_timestamp")
+                                .field("type", "date")
+                                .field("format", "strict_date_hour_minute_second||epoch_millis")
+                                .field("cql_collection", "singleton")
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("my_type", mapping));
+        ensureGreen("test");
+        
+        
+        assertThat(client().prepareIndex("test", "my_type", "1")
+                .setSource("{\"event_info\": {},\"event_timestamp\": \"2017-11-21T16:30:00\"}")
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "my_type", "2")
+                .setSource("{\"event_info\": {\"event_timestamp\": \"2017-11-21T16:30:00\"},\"event_timestamp\": \"2017-11-21T16:30:00\"}")
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
+        SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(2L));
+        assertThat(resp.getFailedShards(), equalTo(0));
+    }
 }
 

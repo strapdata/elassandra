@@ -401,8 +401,11 @@ public class DateFieldMapper extends FieldMapper {
             if (value instanceof Date) {
                 return dateTimeFormatter().printer().print( ((Date) value).getTime() );
             }
-            Long val = (Long) value;
-            return dateTimeFormatter().printer().print(val);
+            if (value instanceof Long) {
+                Long val = (Long) value;
+                return dateTimeFormatter().printer().print(val);
+            }
+            return value;
         }
 
         @Override
