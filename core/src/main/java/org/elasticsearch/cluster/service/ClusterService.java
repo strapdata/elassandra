@@ -875,17 +875,17 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return index.replaceAll("\\.", "_").replaceAll("\\-", "_");
     }
     
-    
     public String buildCql(final String ksName, final String cfName, final String name, final ObjectMapper objectMapper) throws RequestExecutionException {
-        if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
+        if (objectMapper.cqlStruct().equals(CqlStruct.UDT) && objectMapper.iterator().hasNext()) {
             return buildUDT(ksName, cfName, name, objectMapper);
-        } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
+        } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP) && objectMapper.iterator().hasNext()) {
             if (objectMapper.iterator().hasNext()) {
                 Mapper childMapper = objectMapper.iterator().next();
                 if (childMapper instanceof FieldMapper) {
                     return "map<text,"+childMapper.cqlType()+">";
                 } else if (childMapper instanceof ObjectMapper) {
-                    return "map<text,frozen<"+buildCql(ksName,cfName,childMapper.simpleName(),(ObjectMapper)childMapper)+">>";
+                    String subType = buildCql(ksName,cfName,childMapper.simpleName(),(ObjectMapper)childMapper);
+                    return (subType==null) ? null : "map<text,frozen<"+subType+">>";
                 }
             } else {
                 // default map prototype, no mapper to determine the value type.
@@ -899,7 +899,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         String typeName = (objectMapper.cqlUdtName() == null) ? cfName + "_" + objectMapper.fullPath().replace('.', '_') : objectMapper.cqlUdtName();
 
         if (!objectMapper.iterator().hasNext()) {
-            throw new InvalidRequestException("Cannot create an empty nested type (not supported)");
+            // cannot create UDT with no sub-field.
+            return null;
         }
         
         // create sub-type first
@@ -919,6 +920,9 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             boolean first = true;
             for (Iterator<Mapper> it = objectMapper.iterator(); it.hasNext(); ) {
                 Mapper mapper = it.next();
+                if (mapper instanceof ObjectMapper && ((ObjectMapper) mapper).isEnabled() && !((ObjectMapper) mapper).iterator().hasNext()) {
+                    continue;   // ignore object with no sub-field #146
+                }
                 if (first)
                     first = false;
                 else
@@ -970,14 +974,22 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 }
             }
             create.append(" )");
-            if (logger.isDebugEnabled())
-                logger.debug("create UDT:"+ create.toString());
-            
-            QueryProcessor.process(create.toString(), ConsistencyLevel.LOCAL_ONE);
+            if (!first) {
+                if (logger.isDebugEnabled())
+                    logger.debug("create UDT:"+ create.toString());
+                QueryProcessor.process(create.toString(), ConsistencyLevel.LOCAL_ONE);
+                return typeName;
+            } else {
+                // UDT not created because it has no sub-fields #146
+                return null;
+            }
         } else {
             // update existing UDT
             for (Iterator<Mapper> it = objectMapper.iterator(); it.hasNext(); ) {
                 Mapper mapper = it.next();
+                if (mapper instanceof ObjectMapper && ((ObjectMapper) mapper).isEnabled() && !((ObjectMapper) mapper).iterator().hasNext()) {
+                    continue;   // ignore object with no sub-field #146
+                }
                 int lastDotIndex = mapper.name().lastIndexOf('.');
                 String shortName = (lastDotIndex > 0) ? mapper.name().substring(lastDotIndex+1) :  mapper.name();
                 if (isReservedKeyword(shortName))
@@ -1225,8 +1237,12 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 } else {
                     ObjectMapper objectMapper = docMapper.objectMappers().get(column);
                     if (objectMapper == null) {
-                       logger.warn("Cannot infer CQL type from object mapping for field [{}]", column);
+                       logger.warn("Cannot infer CQL type from object mapping for field [{}], ignoring", column);
                        continue;
+                    }
+                    if (objectMapper.isEnabled() && !objectMapper.iterator().hasNext()) {
+                        logger.warn("Ignoring enabled object with no sub-fields", column);
+                        continue;
                     }
                     columnsMap.put(column,  objectMapper.cqlPartialUpdate());
                     if (objectMapper.cqlPrimaryKeyOrder() >= 0) {
@@ -1246,13 +1262,25 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
                         // TODO: check columnName exists and is map<text,?>
                         cqlType = buildCql(ksName, cfName, column, objectMapper);
+                        if (cqlType == null) {
+                            // no sub-field, ignore it #146
+                            continue;
+                        }
                         if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
                             cqlType = objectMapper.cqlCollectionTag()+"<"+cqlType+">";
                         }
                         //logger.debug("Expecting column [{}] to be a map<text,?>", column);
                     } else  if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
-                        // enabled=false => opaque json object
-                        cqlType = (objectMapper.isEnabled()) ? "frozen<" + ColumnIdentifier.maybeQuote(buildCql(ksName, cfName, column, objectMapper)) + ">" : "text";
+                        
+                        if (!objectMapper.isEnabled()) {
+                            cqlType = "text";   // opaque json object stored as text
+                        } else {
+                            String subType = buildCql(ksName, cfName, column, objectMapper);
+                            if (subType == null) {
+                                continue;       // no sub-field, ignore it #146
+                            }
+                            cqlType = "frozen<" + ColumnIdentifier.maybeQuote(subType) + ">";
+                        }
                         if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON) && !(cfName.equals(PERCOLATOR_TABLE) && column.equals("query"))) {
                             cqlType = objectMapper.cqlCollectionTag()+"<"+cqlType+">";
                         }
