@@ -898,8 +898,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     public String buildUDT(final String ksName, final String cfName, final String name, final ObjectMapper objectMapper) throws RequestExecutionException {
         String typeName = (objectMapper.cqlUdtName() == null) ? cfName + "_" + objectMapper.fullPath().replace('.', '_') : objectMapper.cqlUdtName();
 
-        if (!objectMapper.iterator().hasNext()) {
-            // cannot create UDT with no sub-field.
+        if (!objectMapper.hasField()) {
+            // delay UDT creation for object with no sub-field #146
             return null;
         }
         
@@ -920,7 +920,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             boolean first = true;
             for (Iterator<Mapper> it = objectMapper.iterator(); it.hasNext(); ) {
                 Mapper mapper = it.next();
-                if (mapper instanceof ObjectMapper && ((ObjectMapper) mapper).isEnabled() && !((ObjectMapper) mapper).iterator().hasNext()) {
+                if (mapper instanceof ObjectMapper && ((ObjectMapper) mapper).isEnabled() && !mapper.hasField()) {
                     continue;   // ignore object with no sub-field #146
                 }
                 if (first)

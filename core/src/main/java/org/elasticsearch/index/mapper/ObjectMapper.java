@@ -477,6 +477,15 @@ public class ObjectMapper extends Mapper implements Cloneable {
         return this.enabled;
     }
 
+    // recursively return true if mapper have at least one field leaf.
+    public boolean hasField() {
+        for(Mapper mapper : mappers.values()) {
+            if (mapper.hasField())
+                return true;
+        }
+        return false;
+    }
+    
     public Mapper getMapper(String field) {
         return mappers.get(field);
     }
