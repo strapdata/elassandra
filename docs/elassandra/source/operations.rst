@@ -339,7 +339,7 @@ with the default mapping, and the *message* is explicitly mapped with a custom m
 
 .. code::
 
-   curl -XGET 'http://localhost:9200/twitter_index' -d '{
+   curl -XPUT 'http://localhost:9200/twitter_index' -d '{
        "settings": { "keyspace":"twitter" }
        "mappings": { 
            "tweet" : {
@@ -352,6 +352,11 @@ with the default mapping, and the *message* is explicitly mapped with a custom m
        }
    }'
 
+.. CAUTION::
+
+   Elassandra requires keyspaces configured with the *NetworkTopologyStrategy* in order to map the elasticsearch *index.number_of_replicas* to the cassandra replication factor minus one. You
+   can change your cassandra replication factor as explained `here <https://docs.datastax.com/en/cassandra/3.0/cassandra/operations/opsChangeKSStrategy.html>`_.
+
 .. TIP::
 
    By default, as the standard elasticsearch, index creation only returns a response to the client when all primary shards have been started, or the request times out (default is 30 seconds).
@@ -359,7 +364,6 @@ with the default mapping, and the *message* is explicitly mapped with a custom m
    So, when there are some dead nodes, if the number of dead nodes is lower than the number of replicas in your create index request, index creation succeed immediately with shards_acknowledged=true and index status is yellow, 
    otherwise, index creation timeouts, shards_acknowledged=false and the index status is red, meaning that search requests will be inconsistent. Finally, 
    the elasticsearch parameter `wait_for_active_shards <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#index-wait-for-active-shards>`_ is useless in elassandra, because Cassandra ensure write consistency.
-   
 
 Deleting an Elasticsearch index does not remove any Cassandra data, it keeps the underlying Cassandra tables but remove Elasticsearch index files.
 
