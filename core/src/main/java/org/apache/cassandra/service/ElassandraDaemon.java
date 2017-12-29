@@ -194,6 +194,13 @@ public class ElassandraDaemon extends CassandraDaemon {
             // Allow the server to start even if the bean can't be registered
         }
         
+        if (FBUtilities.isWindows)
+        {
+            // We need to adjust the system timer on windows from the default 15ms down to the minimum of 1ms as this
+            // impacts timer intervals, thread scheduling, driver interrupts, etc.
+            WindowsTimer.startTimerPeriod(DatabaseDescriptor.getWindowsTimerInterval());
+        }
+        
         // Set workload it to "elasticsearch" if column workload exists.
         try {
             ColumnIdentifier workload = new ColumnIdentifier("workload",false);
