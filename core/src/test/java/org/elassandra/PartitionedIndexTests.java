@@ -90,4 +90,41 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         for(long i=20; i < 30; i++)
             assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(i));
     }
+    
+    @Test
+    public void multipleMappingTest() throws Exception {
+        process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE fb WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
+        process(ConsistencyLevel.ONE,"CREATE TABLE fb.messages ( conversation text, num int, author text, content text, date timestamp, recipients list<text>, PRIMARY KEY (conversation, num))");
+        
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("messages")
+                        .field("discover", ".*")
+                    .endObject()
+                .endObject();
+        createIndex("fb", Settings.builder().put("index.keyspace","fb").build(),"messages", mapping);
+        ensureGreen("fb");
+        
+        XContentBuilder mapping2 = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("messages")
+                        .startObject("properties")
+                            .startObject("content").field("type", "text").field("cql_collection","singleton").endObject()
+                            .startObject("date").field("type", "date").field("cql_collection","singleton").endObject()
+                            .startObject("recipients").field("type", "text").field("cql_collection","list").endObject()
+                            .startObject("conversation").field("type", "text").field("cql_collection","singleton").endObject()
+                            .startObject("author").field("type", "text").field("cql_collection","singleton").endObject()
+                         .endObject()
+                    .endObject()
+                .endObject();
+        createIndex("fb2", Settings.builder().put("index.keyspace","fb").build(),"messages", mapping2);
+        ensureGreen("fb2");
+        
+        client().prepareIndex("fb", "messages").setId("\"Lisa%20Revol\",201]")
+        .setSource("{\"content\": \"ouais\", \"num\": 201, \"conversation\": \"Lisa\", \"author\": \"Barth\", \"date\": 1469968740000, \"recipients\": [\"Lisa\"]}")
+        .get();
+
+        assertThat(client().prepareSearch().setIndices("fb").setTypes("messages").get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("fb2").setTypes("messages").get().getHits().getTotalHits(), equalTo(1L));
+    }
 }
