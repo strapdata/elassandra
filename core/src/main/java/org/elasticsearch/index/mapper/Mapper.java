@@ -225,6 +225,8 @@ public abstract class Mapper implements ToXContent, Iterable<Mapper> {
     
     public abstract int cqlPrimaryKeyOrder();
     
+    public abstract boolean hasField();
+    
     public String cqlType() {
         return null;
     }

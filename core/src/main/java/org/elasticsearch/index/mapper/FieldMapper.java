@@ -787,4 +787,8 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
     public int cqlPrimaryKeyOrder() {
         return this.fieldType().cqlPrimaryKeyOrder();
     }
+    
+    public boolean hasField() {
+        return true;
+    }
 }

@@ -1181,8 +1181,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             for(int i=0; i < fields.length; i++) {
                 ColumnIdentifier colId = new ColumnIdentifier(fields[i], true);
                 ColumnDefinition colDef = baseCfs.metadata.getColumnDefinition(colId);
-                assert colDef != null : "Column "+colId+" not found in " + baseCfs.name;
-                this.fieldsToRead.set(i, fieldsMap.get(fields[i]) && !colDef.isPrimaryKeyColumn());
+                // colDef may be null when mapping an object with no sub-field (and no underlying column, see #144)
+                this.fieldsToRead.set(i, colDef == null ? false : fieldsMap.get(fields[i]) && !colDef.isPrimaryKeyColumn());
                 if (staticColumns != null)
                     this.staticColumns.set(i,colDef.isStatic());
             }
@@ -2068,8 +2068,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     public void clusterChanged(ClusterChangedEvent event) 
     {
         boolean updateMapping = false;
-        if (!event.state().blocks().isSame(event.previousState().blocks(), 
-                (mappingInfo == null || mappingInfo.indices == null) ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
+        if ( mappingInfo==null || !event.state().blocks().isSame(event.previousState().blocks(), 
+                mappingInfo.indices == null ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
             updateMapping = true;
         } else {
             for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
