@@ -511,6 +511,39 @@ Otherwise, when the number of node and the token ranges from the source and desi
 (see https://docs.datastax.com/en/cassandra/2.0/cassandra/tools/toolsBulkloader_t.html ). This approach is much time-and-io-consuming because all rows
 are read from the sstables and injected into the Cassandra cluster, causing an full Elasticsearch index rebuild.
 
+Data migration
+______________
+
+Migrating from Cassandra to Elassandra
+--------------------------------------
+
+Because Elassandra is Cassandra, you can upgrade an exiting Cassandra cluster or just a datacenter to Elassandra, as soon as your Cassandra version is compatible with the Elassandra one :
+
+* Stop you cassandra nodes.
+* Start Elassandra with your existing data directory (containing data, commitlog, saved_caches).
+
+Before creating your first Elasticsearch index, deploy the following classes in a jar on all your Cassandra-only nodes to avoid a ClassNotFoundException. 
+You can extract these classes from *lib/elasticsearch-<version>.jar* :
+
+* org/elassandra/index/ExtendedElasticSecondaryIndex$DummySecondaryIndex.class
+* org/elassandra/index/ExtendedElasticSecondaryIndex.class
+
+You can move back to standard Cassandra by restarting on cassandra binaries or just start Cassandra from your Elassandra installation:
+
+* For tarball installation, run bin/cassandra (don't use the *-e* flag to enable elasticsearch)
+* For APT installation, set CASSANDRA_DAEMON in /etc/default/cassandra
+* For RPM installation, set CASSANDRA_DAEMON in /etc/sysconfig/cassandra
+
+Cassandra automatically build new secondary indices with one thread. If you want to rebuild faster, stop the on-going rebuild on each nodes 
+and restart it with the desired number of threads.
+
+Migrating from Elasticsearch to Elassandra
+------------------------------------------
+
+Because of data distribution and because Elassandra store the _source document in Cassandra SSTablen, restoring an Elasticsearch snapshot won't work. In order
+to import data from an existing Elasticsearch cluster to Elassandra, you can use the `logstash elasticsearch input plugin <https://www.elastic.co/guide/en/logstash/5.5/plugins-inputs-elasticsearch.html>`_ 
+and the `cassandra output plugin <https://github.com/PerimeterX/logstash-output-cassandra>`_. 
+
 How to change the elassandra cluster name
 _________________________________________
 
