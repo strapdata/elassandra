@@ -1209,7 +1209,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         indexInfo.mappers[i] = mapper;
                     } else {
                         ObjectMapper objectMapper = docMapper.objectMappers().get(fields[i]);
-                        if (objectMapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
+                        if (objectMapper != null && objectMapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
                             indexInfo.dynamicMappingUpdateLock = new ReentrantReadWriteLock();
                         indexInfo.mappers[i] = objectMapper;
                     }
@@ -2069,7 +2069,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     {
         boolean updateMapping = false;
         if (!event.state().blocks().isSame(event.previousState().blocks(), 
-                mappingInfo.indices == null ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
+                (mappingInfo == null || mappingInfo.indices == null) ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
             updateMapping = true;
         } else {
             for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
