@@ -803,6 +803,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             final boolean index_static_columns;
             final boolean index_static_only;
             final boolean index_on_compaction;
+            final boolean index_static_document;
             final boolean versionLessEngine;
             
             Mapper[] mappers;   // inititalized in the ImmutableMappingInfo constructor.
@@ -826,6 +827,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 this.index_on_compaction = getMetaSettings(metadata.settings(), indexService.getIndexSettings(), metaMap, IndexMetaData.INDEX_INDEX_ON_COMPACTION_SETTING);
                 this.index_static_columns = getMetaSettings(metadata.settings(), indexService.getIndexSettings(), metaMap, IndexMetaData.INDEX_INDEX_STATIC_COLUMNS_SETTING);
                 this.index_static_only = getMetaSettings(metadata.settings(), indexService.getIndexSettings(), metaMap, IndexMetaData.INDEX_INDEX_STATIC_ONLY_SETTING);
+                this.index_static_document = getMetaSettings(metadata.settings(), indexService.getIndexSettings(), metaMap, IndexMetaData.INDEX_INDEX_STATIC_DOCUMENT_SETTING);
             }
 
             // get _meta, index, cluster or system settings.
@@ -1880,6 +1882,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 
                 private void index(ImmutableIndexInfo indexInfo, long startTime, long ttl) {
                     if (indexInfo.index_on_compaction || transactionType == IndexTransaction.Type.UPDATE) {
+                        if (isStatic() && !indexInfo.index_static_document)
+                            return; // ignore static document.
+                        if (!isStatic() && indexInfo.index_static_only)
+                            return; // ignore non-static document.
+                            
                         try {
                             Context context = buildContext(indexInfo, isStatic());
                             Field uid = context.uid();
@@ -1955,6 +1962,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 }
                 
                 private void delete(ImmutableIndexInfo indexInfo) {
+                    if (isStatic() && !indexInfo.index_static_document)
+                        return; // ignore static document.
+                    if (!isStatic() && indexInfo.index_static_only)
+                        return; // ignore non-static document.
+                    
                     final IndexShard indexShard = indexInfo.shard();
                     if (indexShard != null) {
                         if (logger.isDebugEnabled())

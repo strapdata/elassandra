@@ -353,6 +353,10 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
     public static final Setting<Boolean> INDEX_INDEX_STATIC_ONLY_SETTING =
             Setting.boolSetting(SETTING_INDEX_STATIC_ONLY, false, Property.Dynamic, Property.IndexScope);
     
+    public static final String SETTING_INDEX_STATIC_DOCUMENT = "index."+ClusterService.INDEX_STATIC_DOCUMENT; 
+    public static final Setting<Boolean> INDEX_INDEX_STATIC_DOCUMENT_SETTING =
+            Setting.boolSetting(SETTING_INDEX_STATIC_DOCUMENT, false, Property.Final, Property.IndexScope);
+    
     // hard-coded hash function as of 2.0
     // older indices will read which hash function to use in their index settings
     //private static final HashFunction MURMUR3_HASH_FUNCTION = new Murmur3HashFunction();

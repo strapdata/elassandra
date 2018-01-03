@@ -302,6 +302,11 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
      */
     public static final String INDEX_STATIC_ONLY = "index_static_only";
     
+    /**
+     * Index static document (document containing only static columns + partion keys).
+     */
+    public static final String INDEX_STATIC_DOCUMENT = "index_static_document";
+    
     // system property settings
     public static final String SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT = SYSTEM_PREFIX+MAPPING_UPDATE_TIMEOUT;
     public static final String SETTING_SYSTEM_SECONDARY_INDEX_CLASS = SYSTEM_PREFIX+SECONDARY_INDEX_CLASS;

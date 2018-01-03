@@ -50,6 +50,8 @@ public class CompositeTests extends ESSingleNodeTestCase {
                     .startObject("phonetic_name").field("type", "text").field("cql_collection", "singleton").field("cql_static_column", true).endObject()
                     .startObject("nicks").field("type", "text").field("cql_collection", "list").endObject()
                 .endObject()
+                .startObject("_meta").field("index_static_document",true).endObject()
+                .startObject("_meta").field("index_static_document",true).endObject()
             .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").setSettings(Settings.builder().put("index.token_ranges_bitset_cache",false).build()).addMapping("t2", mapping));
         ensureGreen("test");
@@ -64,7 +66,10 @@ public class CompositeTests extends ESSingleNodeTestCase {
     // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CompositeTests -Dtests.method="testCompositeTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testCompositeTest() throws Exception {
-        createIndex("composite", Settings.builder().put("index.token_ranges_bitset_cache", false).build());
+        createIndex("composite", Settings.builder()
+                .put("index.token_ranges_bitset_cache", false)
+                .put("index.index_static_document", true)
+                .build());
         ensureGreen("composite");
         
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite.t1 ( a text,b text,c bigint,f float,primary key ((a),b) )");
@@ -141,7 +146,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("c:2")).get().getHits().getTotalHits(), equalTo(1L));
         
         // delete with primary key
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(2L));
         process(ConsistencyLevel.ONE,"DELETE FROM composite.t2 WHERE a='a' AND b='b2' AND c=2");
         assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(1L));
         
@@ -235,6 +240,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                             .endObject()
                         .endObject()
                     .endObject()
+                    .startObject("_meta").field("index_static_document",true).endObject()
                 .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("timeseries", mapping));
         ensureGreen("test");
@@ -297,7 +303,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                 .get();
         SearchHits hits = rsp.getHits();
         Map<String, Object> source = hits.hits()[0].getSource();
-        assertThat(hits.getTotalHits(), equalTo(4L));
+        assertThat(hits.getTotalHits(), equalTo(3L));
         assertThat(source.get("m"), equalTo("server1-cpu"));
         assertThat(((Map)source.get("meta")).get("region"), equalTo("west"));
     }
@@ -317,6 +323,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                         .endObject()
                     .endObject()
                     .startObject("_meta")
+                        .field("index_static_document",true)
                         .field("index_static_only",true)
                     .endObject()
                 .endObject();
@@ -337,5 +344,39 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         assertThat(hits.getTotalHits(), equalTo(1L));
         assertThat(source.get("m"), equalTo("server1-cpu"));
         assertThat(((Map)source.get("meta")).get("region"), equalTo("west"));
+    }
+    
+    @Test
+    public void testTimeserieEmptyTest() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("m").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("t").field("type", "date").field("cql_collection", "singleton").field("cql_primary_key_order", 1).endObject()
+                        .startObject("v").field("type", "double").field("cql_collection", "singleton").endObject()
+                        .startObject("meta").field("type", "nested").field("cql_collection", "singleton").field("cql_struct", "map").field("cql_static_column", true).field("include_in_parent", true)
+                            .startObject("properties")
+                                .startObject("region").field("type", "text").endObject()
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                    .startObject("_meta")
+                        .field("index_static_only",true) // and index_static_document=false by default => index nothing
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("timeseries", mapping));
+        ensureGreen("test");
+            
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:30', 10);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:31', 20);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:32', 15);");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, meta) VALUES ('server1-cpu', { 'region':'west' } );");
+        
+        SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("timeseries")
+                .setQuery(QueryBuilders.matchAllQuery())
+                .setFetchSource(new String[] { "m",  "t", "v", "meta.region"}, null)
+                .get();
+        SearchHits hits = rsp.getHits();
+        assertThat(hits.getTotalHits(), equalTo(0L));
     }
 }
