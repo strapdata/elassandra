@@ -3052,8 +3052,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 // input list<text>, output text, weight int, payload text
                 Map<String, Object> mapValue = (Map<String, Object>) value;
                 components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_INPUT) == null) ? null : serialize(ksName, cfName, udt.fieldType(0), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_INPUT, mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_INPUT), null);
+                components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS) == null) ? null : serialize(ksName, cfName, udt.fieldType(1), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS, jsonMapper.writeValueAsString(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS)), null);
                 components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT) == null) ? null : serialize(ksName, cfName, udt.fieldType(2), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT, new Long((Integer) mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT)), null);
-                components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS) == null) ? null : serialize(ksName, cfName, udt.fieldType(3), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS, stringify(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS)), null);
             } else {
                 Map<String, Object> mapValue = (Map<String, Object>) value;
                 for (int j = 0; j < udt.size(); j++) {
