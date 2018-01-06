@@ -66,6 +66,15 @@ public class CompositeTests extends ESSingleNodeTestCase {
     // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CompositeTests -Dtests.method="testCompositeTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testCompositeTest() throws Exception {
+        testCompositeTest(false);
+    }
+    
+    @Test
+    public void testCompositeTestWithFlush() throws Exception {
+        testCompositeTest(true);
+    }
+    
+    public void testCompositeTest(boolean flush) throws Exception {
         createIndex("composite", Settings.builder()
                 .put("index.token_ranges_bitset_cache", false)
                 .put("index.index_static_document", true)
@@ -112,6 +121,10 @@ public class CompositeTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"insert into composite.t13 (a,b,c,d,s1) VALUES ('a','b3',5,5, 'ab4')");
         process(ConsistencyLevel.ONE,"insert into composite.t13 (a,b,c,d,s1) VALUES ('a','b3',6,6, 'ab5')");
         
+        // flushing change read before write results on delete operations
+        if (flush)
+            StorageService.instance.forceKeyspaceFlush("composite");
+        
         assertThat(client().prepareGet().setIndex("composite").setType("t1").setId("[\"a\",\"b1\"]").get().isExists(),equalTo(true));
         assertThat(client().prepareGet().setIndex("composite").setType("t2").setId("[\"a\",\"b2\",2]").get().isExists(),equalTo(true));
         assertThat(client().prepareGet().setIndex("composite").setType("t3").setId("[\"a\",\"b3\",2]").get().isExists(),equalTo(true));
@@ -143,12 +156,12 @@ public class CompositeTests extends ESSingleNodeTestCase {
         // delete with partition key
         assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
         process(ConsistencyLevel.ONE,"DELETE FROM composite.t1 WHERE a='a'");
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("c:2")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1L));
         
         // delete with primary key
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
         process(ConsistencyLevel.ONE,"DELETE FROM composite.t2 WHERE a='a' AND b='b2' AND c=2");
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1L));
         
         // delete a row
         process(ConsistencyLevel.ONE,"DELETE FROM composite.t3 WHERE a='a' AND b='b3' AND c = 4");
@@ -156,7 +169,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         
         // truncate content
         process(ConsistencyLevel.ONE,"TRUNCATE composite.t3");
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
         
         // test rebuild index
         assertAcked(client().admin().indices().prepareClose("composite").get());

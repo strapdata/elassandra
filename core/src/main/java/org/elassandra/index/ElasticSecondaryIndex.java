@@ -1353,7 +1353,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     if (!clusterings.isEmpty()) {
                         boolean hasMissingFields = false;
                         for(WideRowcument rowcument : rowcuments.values()) {
-                            if (rowcument.hasMissingFields()) {
+                            if (rowcument.hasLiveData && rowcument.hasMissingFields()) {
                                 hasMissingFields = true;
                                 break;
                             }
