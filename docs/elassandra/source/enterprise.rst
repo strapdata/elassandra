@@ -177,7 +177,7 @@ By default, an elasticsearch query returns the first 10 results, but you can req
 If `paging <https://docs.datastax.com/en/developer/java-driver/3.3/manual/paging/>`_ is enabled on your Cassandra driver and you request more 
 results than your page size, Elassandra use an elasticsearch scrolled search request to retreive all results. Default scoll timeout is 60 seconds.
 
-If all partition key columns are set in the where clause, elasticsearch query is directed sent to a node hosting the data (no fan out).
+If all partition key columns are set in the where clause, elasticsearch query is directly sent to a node hosting the data (no fan out).
 
 .. code::
 
@@ -886,8 +886,7 @@ Strapdata provides a SSL transport client to work with a secured Elassandra clus
 #. If your Elassandra cluster requires user authentification, check that your user have access to the cluster topology with the *Nodes Info API* (action **cluster:monitor/nodes/info**).
 #. Add the **ssl-transport-client.jar** and its dependencies in your CLASSPATH.
 #. Add the desired configuration to your client settings, including SSL settings as shown in the following exemple.
-#. Add an ``ssl.transport_client_credential`` containing *username*:*password* to monitor the cluster state. This account must be authorized to do 
-``cluster:monitor/state`` and ``cluster:monitor/nodes/liveness`` in the ``elastic_admin.privileges`` table.
+#. Add an ``ssl.transport_client_credential`` containing *username*:*password* to monitor the cluster state. This account must be authorized to do ``cluster:monitor/state`` and ``cluster:monitor/nodes/liveness`` in the ``elastic_admin.privileges`` table.
 
 .. code ::
 
@@ -912,7 +911,6 @@ appropriate `Cassandra permissions <https://docs.datastax.com/en/cql/3.3/cql/cql
         .put("ssl.transport_client_credential", "monitor:password")   // Add credential to monitor Elasticsearch
         ...
         .build())
-    .build()
     .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("localhost"), 9300))
     
     // Add user credential to request elasticsearch
@@ -974,7 +972,7 @@ Kibana needs a dedicated kibana account to manage kibana configuration, with the
     kibana |   kibana | <keyspace _kibana> |     SELECT
     kibana |   kibana | <keyspace _kibana> |     MODIFY
 
-Add cluster monitoring access rights to the *kibana* user.
+Add cluster monitoring access rights to the *kibana* user, and refresh the privileges cache.
 
 .. code::
 
