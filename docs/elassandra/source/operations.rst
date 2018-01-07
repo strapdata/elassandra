@@ -345,7 +345,7 @@ with the default mapping, and the *message* is explicitly mapped with a custom m
            "tweet" : {
                "discover":"^(?!message).*",
                "properties" : {
-                  "message" : { "type":"string", "index":"analyzed", "cql_collection":"singleton" }
+                  "message" : { "type":"keyword", "cql_collection":"singleton" }
                }
                
            }

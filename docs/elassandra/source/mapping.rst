@@ -92,8 +92,7 @@ Columns matching the provided regular expression are mapped as Elasticsearch fie
            "discover" : "a.*",
            "properties" : {
                "name" : {
-                   "type" : "string",
-                   "index" : "analyzed"
+                   "type" : "text"
                }
            }
        }
@@ -166,9 +165,9 @@ For example, you can create a new index **twitter2** mapped to the cassandra key
       "mappings" : {
          "tweet" : {
                "properties" : {
-                 "message" : { "type" : "string", "index" : "not_analyzed" },
+                 "message" : { "type" : "text" },
                  "post_date" : { "type" : "date", "format": "yyyy-MM-dd" },
-                 "user" : { "type" : "string","index" : "not_analyzed" },
+                 "user" : { "type" : "keyword" },
                  "size" : { "type" : "long" }
                }
          }
@@ -332,15 +331,15 @@ Create the type mapping from the cassandra table and search for the *bob* entry.
                "cql_collection" : "singleton",
                "properties" : {
                  "email" : {
-                   "type" : "string"
+                   "type" : "keyword"
                  },
                  "firstname" : {
-                   "type" : "string"
+                   "type" : "keyword"
                  }
                }
              },
              "name" : {
-               "type" : "string",
+               "type" : "keyword",
                "cql_collection" : "singleton",
                "cql_partition_key" : true,
                "cql_primary_key_order" : 0
@@ -409,15 +408,13 @@ Dynamic templates can be used when creating a dynamic field from a Cassandra map
                    { "strings_template": {
                          "match": "strings.*", 
                          "mapping": {
-                             "type": "string",
-                             "index": "not_analyzed"
+                             "type": "keyword"
                          }
                    }}
                ],
            "properties" : {
              "id" : {
-               "type" : "string",
-               "index" : "not_analyzed",
+               "type" : "keyword",
                "cql_collection" : "singleton",
                "cql_partition_key" : true,
                "cql_primary_key_order" : 0
@@ -440,8 +437,7 @@ Then, a new entry *key1* in the underlying cassandra map will have the following
             "dynamic_templates" : [ {
               "strings_template" : {
                 "mapping" : {
-                  "index" : "not_analyzed",
-                  "type" : "string",
+                  "type" : "keyword",
                   "doc_values" : true
                 },
                 "match" : "strings.*"
@@ -454,13 +450,11 @@ Then, a new entry *key1* in the underlying cassandra map will have the following
                 "type" : "nested",
                 "properties" : {
                   "key1" : {
-                    "index" : "not_analyzed",
-                    "type" : "string"
+                    "type" : "keyword"
                   }
               },
               "id" : {
-                "index" : "not_analyzed",
-                "type" : "string",
+                "type" : "keyword",
                 "cql_partition_key" : true,
                 "cql_primary_key_order" : 0,
                 "cql_collection" : "singleton"
