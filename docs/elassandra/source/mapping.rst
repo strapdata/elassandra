@@ -582,7 +582,7 @@ The following example demonstrates how to use static columns to store meta infor
                 "index_static_columns": true,
                 "properties" : {
                   "region" : {
-                    "type" : "string"
+                    "type" : "keyword"
                   }
                 }
               },
@@ -591,7 +591,7 @@ The following example demonstrates how to use static columns to store meta infor
                 "cql_collection" : "singleton"
               },
               "m" : {
-                "type" : "string",
+                "type" : "keyword",
                 "cql_partition_key" : true,
                 "cql_primary_key_order" : 0,
                 "cql_collection" : "singleton"
