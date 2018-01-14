@@ -135,7 +135,9 @@ import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -205,6 +207,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.LongConsumer;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -213,8 +216,10 @@ import javax.management.JMX;
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
 
+import static java.util.Collections.emptyList;
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
+import static org.elasticsearch.common.settings.Setting.listSetting;
 
 
 public class ClusterService extends org.elasticsearch.cluster.service.BaseClusterService {
@@ -224,6 +229,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     public static final String ELASTIC_ADMIN_METADATA_TABLE = "metadata";
 
     public static final String SETTING_CLUSTER_DATACENTER_GROUP = "datacenter.group";
+    public static final Setting<List<String>> SETTING_DATCENTER_GROUP = listSetting(SETTING_CLUSTER_DATACENTER_GROUP, emptyList(), Function.identity(), Property.NodeScope);
     
     // settings levels : system, cluster, index, table(_meta)
     public static final String SYSTEM_PREFIX = "es.";

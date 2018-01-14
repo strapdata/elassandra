@@ -428,6 +428,7 @@ public final class ClusterSettings extends AbstractScopedSettings {
                     ThreadPool.ESTIMATED_TIME_INTERVAL_SETTING,
                     FastVectorHighlighter.SETTING_TV_HIGHLIGHT_MULTI_VALUE,
                     Node.BREAKER_TYPE_KEY,
-                    IngestService.NEW_INGEST_DATE_FORMAT
+                    IngestService.NEW_INGEST_DATE_FORMAT,
+                    ClusterService.SETTING_DATCENTER_GROUP
             )));
 }
