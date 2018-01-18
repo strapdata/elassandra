@@ -76,7 +76,8 @@ public class OperationRouting extends AbstractComponent {
         return shard(clusterState.metaData().index(index).getIndex());
     }
 
-    public ShardIterator getShards(ClusterState clusterState, String index, String id, @Nullable String routing, @Nullable String preference) {
+    public ShardIterator getShards(ClusterState clusterState, String index, String id, @Nullable String routing, 
+            @Nullable String preference) {
         return shard(clusterState.metaData().index(index).getIndex());
     }
     
@@ -84,7 +85,8 @@ public class OperationRouting extends AbstractComponent {
         return shard(clusterState.metaData().index(index).getIndex());
     }
 
-    public GroupShardsIterator<ShardIterator> searchShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing, @Nullable String preference) {
+    public GroupShardsIterator<ShardIterator> searchShards(ClusterState clusterState, String[] concreteIndices, 
+            @Nullable Map<String, Set<String>> routing, @Nullable String preference) {
         return searchShards( clusterState, concreteIndices, null, routing, preference, null, null);
     }
         
@@ -104,7 +106,13 @@ public class OperationRouting extends AbstractComponent {
             }
         }
         if (logger.isDebugEnabled())
-            logger.debug("routing to nodes={}", set.stream().map(it -> it.nextOrNull().currentNodeId()).collect(Collectors.joining(",")));
+            logger.debug("routing to nodes={}", set.stream()    
+                    .filter(it -> it.remaining() > 0)
+                    .map(it -> {
+                        ShardRouting shard = it.nextOrNull();
+                        return shard.currentNodeId()+":"+shard.tokenRanges().toString();
+                    })
+                    .collect(Collectors.joining(", ")));
         return new GroupShardsIterator<>(new ArrayList<>(set));
     }
 
