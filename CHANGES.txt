@@ -1,3 +1,7 @@
+5.5.0.10 - 2018-01-20
+  * Fix #157 Indexing over set<text> not working
+  * Fix #153 datacenter.group settings ignored
+
 5.5.0.9 - 2018-01-06
   * Add support for completion suggester
   * Add static_document index settings from v2.4.5
