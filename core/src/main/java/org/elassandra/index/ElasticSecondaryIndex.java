@@ -1022,6 +1022,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         final ObjectIntHashMap<String> fieldsToIdx;
         final BitSet fieldsToRead;
         final BitSet staticColumns;
+        final boolean hasIndexedMultiCell;
         final boolean indexSomeStaticColumnsOnWideRow; 
         final boolean[] indexedPkColumns;   // bit mask of indexed PK columns.
         final long metadataVersion;
@@ -1039,11 +1040,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 this.fieldsToIdx = null;
                 this.fieldsToRead = null;
                 this.staticColumns = null;
+                this.hasIndexedMultiCell = false;
                 this.indexSomeStaticColumnsOnWideRow = false;
                 this.indexedPkColumns = null;
                 this.partitionFunctions = null;
                 this.indexOnCompaction = false;
-               return;
+                return;
             }
             
             Map<String, Boolean> fieldsMap = new HashMap<String, Boolean>();
@@ -1135,6 +1137,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 this.fieldsToIdx = null;
                 this.fieldsToRead = null;
                 this.staticColumns = null;
+                this.hasIndexedMultiCell = false;
                 this.indexSomeStaticColumnsOnWideRow = false;
                 this.indexedPkColumns = null;
                 this.partitionFunctions = null;
@@ -1180,14 +1183,21 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             
             this.fieldsToRead = new BitSet(fields.length);
             this.staticColumns = (baseCfs.metadata.hasStaticColumns()) ? new BitSet(fields.length) : null;
+            boolean hasMultiCellColumn = false;
             for(int i=0; i < fields.length; i++) {
                 ColumnIdentifier colId = new ColumnIdentifier(fields[i], true);
                 ColumnDefinition colDef = baseCfs.metadata.getColumnDefinition(colId);
-                // colDef may be null when mapping an object with no sub-field (and no underlying column, see #144)
-                this.fieldsToRead.set(i, colDef == null ? false : fieldsMap.get(fields[i]) && !colDef.isPrimaryKeyColumn());
-                if (staticColumns != null)
-                    this.staticColumns.set(i,colDef.isStatic());
+                if (colDef != null) {
+                    // colDef may be null when mapping an object with no sub-field (and no underlying column, see #144)
+                    this.fieldsToRead.set(i, fieldsMap.get(fields[i]) && !colDef.isPrimaryKeyColumn());
+                    hasMultiCellColumn |= colDef.type.isMultiCell();
+                    if (staticColumns != null)
+                        this.staticColumns.set(i, colDef.isStatic());
+                } else {
+                    this.fieldsToRead.set(i, false);
+                }
             }
+            this.hasIndexedMultiCell = hasMultiCellColumn;
             
             if (partFuncs != null && partFuncs.size() > 0) {
                 for(ImmutablePartitionFunction func : partFuncs.values()) {
@@ -1764,6 +1774,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                  * @return true if the rowcument needs some fields.
                  */
                 public boolean hasMissingFields() {
+                    if (hasIndexedMultiCell)
+                        return true;
+                    
                     // add missing or collection columns that should be read before indexing the document.
                     // read missing static or regular columns
                     final BitSet mustReadFields = (BitSet)fieldsToRead.clone();
@@ -1915,9 +1928,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                             
                             parsedDoc.parent(context.parent());
     
-                            if (logger.isTraceEnabled())
-                                logger.trace("index={} id={} type={} routing={} docs={}", context.indexInfo.name, parsedDoc.id(), parsedDoc.type(), parsedDoc.routing(), parsedDoc.docs());
-    
+                            if (logger.isTraceEnabled()) {
+                                logger.trace("index={} id={} type={} routing={}", context.indexInfo.name, parsedDoc.id(), parsedDoc.type(), parsedDoc.routing());
+                                for(int k = 0; k< parsedDoc.docs().size(); k++)
+                                    logger.trace("doc[{}]={}", k, parsedDoc.docs().get(k));
+                            }
+                            
                             final IndexShard indexShard = context.indexInfo.shard();
                             if (indexShard != null) {
                                 if (!indexInfo.updated)

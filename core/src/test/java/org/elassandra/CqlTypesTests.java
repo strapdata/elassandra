@@ -27,6 +27,7 @@ import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.geo.GeoPoint;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
@@ -359,19 +360,51 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("tab_set", mapping));
         ensureGreen("test");
         process(ConsistencyLevel.ONE,"insert into test.tab_set (\"_id\",item,items,attrs) values ('1',{name:'hello'},{{name:'world'},{name:'heaven'}},{'blue','red'})");
+        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("items.name:heaven")).get().getHits().getTotalHits(), equalTo(1L));
         assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("items.name:world")).get().getHits().getTotalHits(), equalTo(1L));
         assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("red")).get().getHits().getTotalHits(), equalTo(1L));
        
         process(ConsistencyLevel.ONE,"insert into test.tab_set (\"_id\",item,items,attrs) values ('1',{name:'hello'},{{name:'heaven'}},{'blue'})");
-        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("items.name:world")).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("items.name:heaven")).get().getHits().getTotalHits(), equalTo(1L));
         assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("red")).get().getHits().getTotalHits(), equalTo(0L));
        
         process(ConsistencyLevel.ONE,"update test.tab_set set items = items + {{name:'world'}} where \"_id\" = '1'");
+        assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("items.name:heaven")).get().getHits().getTotalHits(), equalTo(1L));
         assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("items.name:world")).get().getHits().getTotalHits(), equalTo(1L));
         process(ConsistencyLevel.ONE,"update test.tab_set set attrs = attrs + {'yellow'} where \"_id\" = '1'");
         assertThat(client().prepareSearch().setIndices("test").setTypes("tab_set").setQuery(QueryBuilders.queryStringQuery("yellow")).get().getHits().getTotalHits(), equalTo(1L));
     }
-       
+    
+    // #161 Search over a nested set returns wrong inner_hits
+    public void testNestedSets() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE,"CREATE TYPE IF NOT EXISTS test.model (name VARCHAR, date TIMESTAMP);");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.make_models (make VARCHAR, models SET<FROZEN<model>>, PRIMARY KEY (make));");
+        
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("make_models")
+                        .field("discover", ".*")
+                    .endObject()
+                .endObject();
+        assertTrue(client().admin().indices().preparePutMapping("test").setType("make_models").setSource(mapping).get().isAcknowledged());
+        
+        process(ConsistencyLevel.ONE, "UPDATE test.make_models SET models = models + {{name : 'dart', date : '2018-01-29 11:53:00'}} WHERE make='dodge';");
+        process(ConsistencyLevel.ONE, "UPDATE test.make_models SET models = models + {{name : 'polara', date : '2018-01-29 11:54:00'}} WHERE make='dodge';");
+        process(ConsistencyLevel.ONE, "UPDATE test.make_models SET models = models + {{name : 'mustang', date : '2018-02-01 11:50:00'}} WHERE make='ford';");
+        process(ConsistencyLevel.ONE, "UPDATE test.make_models SET models = models + {{name : 'galaxie', date : '2018-02-01 11:51:00'}} WHERE make='ford';");
+        process(ConsistencyLevel.ONE, "UPDATE test.make_models SET models = models + {{name : 'camaro', date : '2018-02-01 12:50:00'}} WHERE make='gm';");
+        process(ConsistencyLevel.ONE, "UPDATE test.make_models SET models = models + {{name : 'chevelle', date : '2018-02-01 12:52:00'}} WHERE make='gm';");
+        
+        assertThat(client().prepareSearch().setIndices("test").setTypes("make_models").setQuery(QueryBuilders.nestedQuery("models", QueryBuilders.termQuery("models.name", "galaxie"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        process(ConsistencyLevel.ONE, "UPDATE test.make_models SET models = models + {{name : 'mustang', date : '2018-02-01 11:50:00'}} WHERE make='ford';");
+        assertThat(client().prepareSearch().setIndices("test").setTypes("make_models").setQuery(QueryBuilders.nestedQuery("models", QueryBuilders.termQuery("models.name", "galaxie"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        process(ConsistencyLevel.ONE, "UPDATE test.make_models SET models = models + {{name : 'galaxie', date : '2018-02-01 11:51:00'}} WHERE make='ford';");
+        assertThat(client().prepareSearch().setIndices("test").setTypes("make_models").setQuery(QueryBuilders.nestedQuery("models", QueryBuilders.termQuery("models.name", "galaxie"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+    }
+    
     // test CQL timeuuid, date and time mapping.
     @Test
     public void testTimes() throws Exception {
