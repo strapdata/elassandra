@@ -213,7 +213,6 @@ public class AllFieldMapper extends MetadataFieldMapper {
     @Override
     public void postCreate(ParseContext context) throws IOException {
         createField(context, null);
-        super.parse(context);
     }
 
     @Override

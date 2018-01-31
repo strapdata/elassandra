@@ -29,12 +29,13 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.query.QueryShardContext;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * A mapper that indexes the field names of a document under <code>_field_names</code>. This mapper is typically useful in order
@@ -212,7 +213,6 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
     @Override
     public void postCreate(ParseContext context) throws IOException {
         createField(context, null);
-        super.parse(context);
     }
 
     @Override
@@ -269,7 +269,7 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
             return;
         }
         for (ParseContext.Document document : context.docs()) {
-            final List<String> paths = new ArrayList<>();
+            final Set<String> paths = new HashSet<>();
             for (IndexableField field : document.getFields()) {
                 paths.add(field.name());
             }
