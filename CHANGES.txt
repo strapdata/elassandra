@@ -1,3 +1,9 @@
+5.5.0.11 - 2018-02-03
+  * Fix #163 Invalid date mapping 
+  * Fix #161 Search over a nested set returns wrong inner_hits
+  * Fix duplicate indexing of _all and field_names
+  * Back port elasticsearch #26856 to fix IndexOutOfBoundsException in histograms for NaN doubles (#26787)
+
 5.5.0.10 - 2018-01-20
   * Fix #157 Indexing over set<text> not working
   * Fix #153 datacenter.group settings ignored
