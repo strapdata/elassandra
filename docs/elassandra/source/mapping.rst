@@ -19,14 +19,15 @@ Here is the mapping from Elasticsearch field basic types to CQL3 types :
 +----------------------+--------------------------+------------------------------------------------------------------------------------------+
 | date                 | timestamp                |                                                                                          |
 +----------------------+--------------------------+------------------------------------------------------------------------------------------+
-| date                 | date                     | Existing Cassandra *date* columns are mapped to an Elasticsearch date.                   |
-|                      |                          | (the number of day since epoch is converted to a timestamp)                              |
+| date                 | date                     | Existing Cassandra *date* columns mapped to an Elasticsearch date.                       |
+|                      |                          | (32-bit integer representing days since epoch, January 1, 1970)                          |
 +----------------------+--------------------------+------------------------------------------------------------------------------------------+
 | integer, short, byte | int                      |                                                                                          |
 +----------------------+--------------------------+------------------------------------------------------------------------------------------+
 | long                 | bigint                   |                                                                                          |
 +----------------------+--------------------------+------------------------------------------------------------------------------------------+
-| long                 | time                     | Existing Cassandra *time* columns are mapped to an Elasticsearch long.                   |
+| long                 | time                     | Existing Cassandra *time* columns (64-bit signed integer representing                    |
+|                      |                          | the number of nanoseconds since midnight) stored as long in Elasticsearch.               |
 +----------------------+--------------------------+------------------------------------------------------------------------------------------+
 | double               | double                   |                                                                                          |
 +----------------------+--------------------------+------------------------------------------------------------------------------------------+

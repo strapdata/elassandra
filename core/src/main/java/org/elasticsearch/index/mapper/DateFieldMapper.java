@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper;
 
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.SimpleDateType;
+import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.SortedNumericDocValuesField;
@@ -412,7 +413,7 @@ public class DateFieldMapper extends FieldMapper {
         public Object cqlValue(Object value, AbstractType atype) {
             Date date = (Date)cqlValue(value);
             if (atype instanceof SimpleDateType) {
-                return (int)(date.getTime()/1000L);
+                return (int)SimpleDateSerializer.timeInMillisToDay(date.getTime());
             }
             return date;
         }
@@ -545,8 +546,8 @@ public class DateFieldMapper extends FieldMapper {
             if (object instanceof Date) {
                 value = ((Date)object).getTime();
             } else if (object instanceof Integer) {
-                // CQL date stored as integer, number of day since epoche
-                value = ((Integer)object).longValue()*86400L*1000L;
+                // CQL date stored as integer, number of day since epoch - Integer.MIN_VALUE;
+                value = SimpleDateSerializer.dayToTimeInMillis((Integer)object);
             } else if (object instanceof UUID) {
                 // CQL timeuuid
                 value = UUIDGen.unixTimestamp((UUID)object);

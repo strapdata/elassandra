@@ -72,6 +72,7 @@ import org.apache.cassandra.schema.TableParams;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MapSerializer;
 import org.apache.cassandra.serializers.MarshalException;
+import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.service.MigrationManager;
@@ -136,8 +137,8 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.Setting.Property;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -2109,7 +2110,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     values[i] = value(fieldMapper, row.getTimestamp(columnName).getTime(), valueForSearch);
                     break;
                 case DATE:
-                    values[i] = value(fieldMapper, row.getInt(columnName)*86400L*1000L, valueForSearch);
+                    values[i] = value(fieldMapper, SimpleDateSerializer.dayToTimeInMillis(row.getInt(columnName)), valueForSearch);
                     break;
                 case TIME:
                     values[i] = value(fieldMapper, row.getLong(columnName), valueForSearch);

@@ -21,13 +21,14 @@ import com.google.common.net.InetAddresses;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.TupleType;
+import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.UUIDGen;
 import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.geo.GeoPoint;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
@@ -37,12 +38,13 @@ import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -416,11 +418,19 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .setSource("{ \"event_test\" : { \"discover\" : \"^((?!end).*)\", \"properties\":{ \"end\":{\"type\":\"date\",\"cql_collection\":\"singleton\"}}}}").get());
         
         LocalDate localDate = LocalDate.parse("2010-10-10");
-        System.out.println("localDate="+localDate+ "epochDay="+Math.toIntExact(localDate.toEpochDay()));
+        Instant instant = Instant.from(localDate.atStartOfDay(ZoneId.of("GMT")));
+        UUID end = UUIDGen.getTimeUUID(instant.toEpochMilli());
+        UUID start = UUIDGen.getTimeUUID();
         
-        process(ConsistencyLevel.ONE,"INSERT INTO test.event_test (id , start , end, day, hour) VALUES (?,now(),now(),?,?)", "1", Math.toIntExact(localDate.toEpochDay()), 10*3600*1000000000L);
+        process(ConsistencyLevel.ONE,"INSERT INTO test.event_test (id , start , end, day, hour) VALUES (?,?,?,?,?)", 
+                "1", start, end, SimpleDateSerializer.dateStringToDays("2010-10-10"), 10*3600*1000000000L);
+        
         SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("day:2010-10-10")).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getHits()[0].getSource().get("day"), equalTo("2010-10-10T00:00:00.000Z"));
+        assertThat(resp.getHits().getHits()[0].getSource().get("hour"), equalTo(36000000000000L));
+        assertThat(resp.getHits().getHits()[0].getSource().get("start"), equalTo(start.toString()));
+        assertThat(resp.getHits().getHits()[0].getSource().get("end"), equalTo("2010-10-10T00:00:00.000Z"));
     }
     
     // see issue #128
