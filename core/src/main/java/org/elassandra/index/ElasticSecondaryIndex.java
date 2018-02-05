@@ -1331,9 +1331,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 try {
                     if (logger.isTraceEnabled()) {
                         if (inRow != null)
-                            logger.trace("indexer={} newRowData={} clustering={} static={} hasLiveData={}", WideRowcumentIndexer.this.hashCode(), inRow, inRow.clustering(), inRow.isStatic(), inRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness())); 
+                            logger.trace("indexer={} inRowData={} clustering={} static={} hasLiveData={}", 
+                                    WideRowcumentIndexer.this.hashCode(), inRow.toString(baseCfs.metadata, true, true), inRow.clustering(), 
+                                    inRow.isStatic(), inRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness())); 
                         if (outRow != null)
-                            logger.trace("indexer={} oldRowData={} clustering={} static={} hasLiveData={}", WideRowcumentIndexer.this.hashCode(), outRow, outRow.clustering(), outRow.isStatic(), outRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness())); 
+                            logger.trace("indexer={} outRowData={} clustering={} static={} hasLiveData={}", 
+                                    WideRowcumentIndexer.this.hashCode(), outRow.toString(baseCfs.metadata, true, true), outRow.clustering(), 
+                                    outRow.isStatic(), outRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness())); 
                     }
                     
                     if (inRow.isStatic()) {
@@ -1428,6 +1432,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void rangeTombstone(RangeTombstone tombstone) {
+                logger.trace("range tombestone row {}: {}", this.transactionType, tombstone);
                 try {
                     BitSet targets = targetIndices(pkCols);
                     if (targets == null) {
@@ -1551,6 +1556,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void insertRow(Row row) {
+                logger.trace("insert row {}: {}", this.transactionType, row);
                 collect(row, null);
             }
 
@@ -1575,6 +1581,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void updateRow(Row oldRowData, Row newRowData) {
+                logger.trace("update row {}: {} to {}", this.transactionType, oldRowData, newRowData);
                 collect(newRowData, oldRowData);
             }
 
@@ -1596,6 +1603,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void removeRow(Row row) {
+                logger.trace("remove row {}: {}", this.transactionType, row);
                 collect(null, row);
             }
 
@@ -1622,12 +1630,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             public abstract void flush(); 
             
             public RowIterator read(SinglePartitionReadCommand command) {
-                ReadExecutionController control = command.executionController();
-                try {
+                try(ReadExecutionController control = command.executionController()) {
                     UnfilteredRowIterator unfilteredRows = command.queryMemtableAndDisk(baseCfs, control);
                     return UnfilteredRowIterators.filter(unfilteredRows, nowInSec);
-                } finally {
-                    control.close();
                 }
             }
             
@@ -2010,6 +2015,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void partitionDelete(DeletionTime deletionTime) {
+                logger.trace("Delete partition {}: {}", this.transactionType, deletionTime);
                 if (deletionTime.isLive() || !deletionTime.deletes(System.currentTimeMillis())) {
                     // ignore non-expired partition-tombestone. 
                     return;

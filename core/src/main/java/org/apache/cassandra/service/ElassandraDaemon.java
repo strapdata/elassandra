@@ -241,14 +241,14 @@ public class ElassandraDaemon extends CassandraDaemon {
                 systemMetadata = this.node.clusterService().readMetaDataAsComment();
                 if (systemMetadata != null) {
                     this.node.activate();
-                    logger.debug("Starting Elasticsearch shards before open user keyspaces...");
+                    logger.info("Starting Elasticsearch shards before open user keyspaces...");
                     node.clusterService().addShardStartedBarrier();
                     node.clusterService().blockUntilShardsStarted();
-                    logger.debug("Shards started, ready to recover user keyspaces.");
+                    logger.info("Shards started, ready to recover user keyspaces.");
                 }
             } catch(NoPersistedMetaDataException e) {
                 this.bootstrapping = true;
-                logger.debug("Elasticsearch activation delayed after boostraping, no mapping available");
+                logger.info("Elasticsearch activation delayed after boostraping, no mapping available");
             } catch(Throwable e) {
                 logger.warn("Unexpected error",e);
             }

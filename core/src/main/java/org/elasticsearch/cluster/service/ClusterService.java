@@ -2749,15 +2749,15 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                     return parseMetaDataString(row.getString("metadata"));
             }
         } catch (UnavailableException e) {
-            logger.warn("Cannot read metadata with consistency="+cl,e);
+            logger.warn("Cannot read elasticsearch metadata with consistency="+cl, e);
             return null;
         } catch (KeyspaceNotDefinedException e) {
-            logger.warn("Keyspace {} not yet defined", ELASTIC_ADMIN_KEYSPACE);
+            logger.warn("Keyspace {} not yet defined", elasticAdminKeyspaceName);
             return null;
         } catch (Exception e) {
             throw new NoPersistedMetaDataException("Unexpected error",e);
         }
-        throw new NoPersistedMetaDataException("Unexpected error");
+        throw new NoPersistedMetaDataException("No elasticsearch metadata available");
     }
     
     public Long readMetaDataVersion(ConsistencyLevel cl) throws NoPersistedMetaDataException {
