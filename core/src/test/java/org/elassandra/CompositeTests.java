@@ -392,4 +392,38 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         SearchHits hits = rsp.getHits();
         assertThat(hits.getTotalHits(), equalTo(0L));
     }
+    
+    @Test
+    public void testReadBeforeWrite() throws Exception {
+        createIndex("test", Settings.builder().build());
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.t1 ( partition text, clustering int , status int, data text, primary key ((partition),clustering) )");
+        
+        XContentBuilder mapping = XContentFactory.jsonBuilder().startObject().startObject("t1").field("discover",".*").endObject().endObject();
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(mapping).get());
+        
+        process(ConsistencyLevel.ONE,"INSERT INTO test.t1 (partition, clustering, status, data) VALUES ('one', 1, 4, 'foo');");
+        process(ConsistencyLevel.ONE,"INSERT INTO test.t1 (partition, clustering, status, data) VALUES ('one', 2, 5, 'foo5');");
+        
+        SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat( rsp.getHits().getTotalHits(), equalTo(2L));
+        
+        process(ConsistencyLevel.ONE,"INSERT INTO test.t1 (partition, clustering, status) VALUES ('one', 1, 5);");
+        rsp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat( rsp.getHits().getTotalHits(), equalTo(2L));
+        
+        process(ConsistencyLevel.ONE,"UPDATE test.t1 SET status = ? WHERE partition = ?  AND clustering = ?", 6, "one", 1);
+        rsp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat( rsp.getHits().getTotalHits(), equalTo(2L));
+        
+        process(ConsistencyLevel.ONE,"DELETE FROM test.t1 WHERE partition = ?  AND clustering = ?", "one", 1);
+        rsp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat( rsp.getHits().getTotalHits(), equalTo(1L));
+        
+        process(ConsistencyLevel.ONE,"UPDATE test.t1 SET status = ? WHERE partition = ?  AND clustering = ?", 6, "one", 1);
+        rsp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat( rsp.getHits().getTotalHits(), equalTo(2L));
+    }
+
 }
