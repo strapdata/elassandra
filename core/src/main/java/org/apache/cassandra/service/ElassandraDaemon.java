@@ -15,16 +15,15 @@
  */
 package org.apache.cassandra.service;
 
-import io.netty.handler.ssl.OpenSsl;
-import io.netty.util.internal.PlatformDependent;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.config.SchemaConstants;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.QueryProcessor;
-import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.SystemKeyspace;
-import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.WindowsTimer;
 import org.apache.logging.log4j.Logger;
@@ -36,8 +35,6 @@ import org.elasticsearch.Version;
 import org.elasticsearch.bootstrap.Bootstrap;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.CreationException;
@@ -65,6 +62,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -96,7 +94,9 @@ public class ElassandraDaemon extends CassandraDaemon {
     protected volatile Node node = null;
     protected Environment env;
     
-    private boolean bootstrapping = false;
+    private boolean needsMappingFromSchema = false;
+    private boolean activated = false;
+    
     private MetaData systemMetadata = null;
     private List<SetupListener> setupListeners = new CopyOnWriteArrayList();
     
@@ -219,7 +219,8 @@ public class ElassandraDaemon extends CassandraDaemon {
         super.setup(); // start bootstrap CassandraDaemon
         super.start(); // start Thrift+RPC service
 
-        if (this.bootstrapping)
+        
+        if (this.needsMappingFromSchema)
             this.node.clusterService().submitNumberOfShardsAndReplicasUpdate("user-keyspaces-bootstraped");
         
         if (this.node != null) {
@@ -240,14 +241,10 @@ public class ElassandraDaemon extends CassandraDaemon {
             try {
                 systemMetadata = this.node.clusterService().readMetaDataAsComment();
                 if (systemMetadata != null) {
-                    this.node.activate();
-                    logger.info("Starting Elasticsearch shards before open user keyspaces...");
-                    node.clusterService().addShardStartedBarrier();
-                    node.clusterService().blockUntilShardsStarted();
-                    logger.info("Shards started, ready to recover user keyspaces.");
+                    activateAndWaitShards("before opening user keyspaces");
                 }
             } catch(NoPersistedMetaDataException e) {
-                this.bootstrapping = true;
+                this.needsMappingFromSchema = true;
                 logger.info("Elasticsearch activation delayed after boostraping, no mapping available");
             } catch(Throwable e) {
                 logger.warn("Unexpected error",e);
@@ -257,7 +254,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     
     @Override
     public void userKeyspaceInitialized() {
-        if (node != null && !bootstrapping) {
+        if (node != null && !needsMappingFromSchema) {
             // try to read a newer metadata from the local elastic_admin.metadata table.
             MetaData metaData = this.node.clusterService().readInternalMetaDataAsRow();
             if (metaData != null && metaData.version() > systemMetadata.version()) {
@@ -289,7 +286,8 @@ public class ElassandraDaemon extends CassandraDaemon {
         setupListeners.add(listener);
     }
     
-    public void completeSetup() {
+    public void completeSetup() 
+    {
         super.completeSetup();
         if (this.node != null && this.node.clusterService() != null) 
             this.node.clusterService().publishGossipStates();
@@ -298,31 +296,81 @@ public class ElassandraDaemon extends CassandraDaemon {
             listener.onComplete();
     }
     
+    /**
+     * Called just before boostraping, and after CQL schema is complete, 
+     * so elasticsearch mapping may be available from the CQL schema.
+     */
     @Override
     public void beforeBootstrap() {
-        if (node != null && this.bootstrapping) {
-            try {
-                // retry to load mapping jsut before boostrapping C*
+        if (node != null && needsMappingFromSchema)
+        {
+            try 
+            {
+                // load mapping from schema jsut before bootstrapping C*
                 systemMetadata = this.node.clusterService().readMetaDataAsComment();
-                logger.debug("Activating Elasticsearch and start shards before cassandra boostrap.");
-                node.activate();
-                node.clusterService().addShardStartedBarrier();
-                node.clusterService().blockUntilShardsStarted();
-                logger.debug("Shards started, ready for bootstrap.");
-            } catch(Throwable e) {
-                logger.error("Failed to load Elasticsearch mapping from CQL schema after bootstrap:",e);
+                activateAndWaitShards("before cassandra boostraping");
+            } catch(Throwable e) 
+            {
+                logger.error("Failed to load Elasticsearch mapping from CQL schema before bootstraping:", e);
             }
         }
     }
-
-    public void ringReady() {
-        // for first boot of first node, no shards to start.
-        if (node != null) {
-            logger.debug("Activating Elasticsearch for first time, no shard to start");
-            node.activate();
+    
+    /**
+     * Called when C* does not bootstrap, and before CQL schema is completed.
+     * If we don't have yet found the elasticsearch mapping from the CQL schema, wait for the CQL schema to complete before trying to start elasticsearch.
+     * Obviously, the first seed node will wait (30s by default) for nothing (or use cassandra.ring_delay_ms=0).
+     */
+    public void ringReady() 
+    {
+        if (node != null) 
+        {
+            // wait for schema before starting elasticsearch node
+            if (needsMappingFromSchema && !activated)  
+            {
+                try 
+                {
+                    logger.info("waiting "+StorageService.RING_DELAY+"ms for CQL schema to get the elasticsearch mapping");
+                    // first sleep the delay to make sure we see all our peers
+                    for (int i = 0; i < StorageService.RING_DELAY; i += 1000)
+                    {
+                        // if we see schema, we can proceed to the next check directly
+                        if (!Schema.instance.getVersion().equals(SchemaConstants.emptyVersion))
+                        {
+                            logger.debug("got schema: {}", Schema.instance.getVersion());
+                            break;
+                        }
+                        Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
+                    }
+                    
+                    // if our schema hasn't matched yet, wait until it has
+                    if (!MigrationManager.isReadyForBootstrap())
+                    {
+                        logger.info("waiting for schema information to complete");
+                        MigrationManager.waitUntilReadyForBootstrap();
+                    }
+                    systemMetadata = this.node.clusterService().readMetaDataAsComment();
+                } catch(Throwable e) 
+                {
+                    logger.warn("Failed to load elasticsearch mapping from CQL schema after after joining without boostraping:", e);
+                }
+            }
+            activateAndWaitShards((systemMetadata == null) ? "with empty elasticsearch mapping" : "after getting the elasticsearch mapping from CQL schema");
         }
     }
     
+    public void activateAndWaitShards(String source) 
+    {
+        if (!activated) {
+            activated = true;
+            logger.info("Activating Elasticsearch, shards starting "+source);
+            node.activate();
+            node.clusterService().addShardStartedBarrier();
+            node.clusterService().blockUntilShardsStarted();
+            logger.info("Elasticsearch shards started, ready to go on.");
+        }
+    }
+
     /**
      * hook for JSVC
      */
