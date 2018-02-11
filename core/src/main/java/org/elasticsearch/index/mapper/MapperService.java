@@ -249,7 +249,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
     
     public Map<String, Object> discoverTableMapping(final String type, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException {
         final String columnRegexp = (String)mapping.get(DISCOVER);
-        final String cfName = ClusterService.typeToCfName(type);
+        final String cfName = ClusterService.typeToCfName(keyspace(), type);
         if (columnRegexp != null) {
             mapping.remove(DISCOVER);
             Pattern pattern =  Pattern.compile(columnRegexp);

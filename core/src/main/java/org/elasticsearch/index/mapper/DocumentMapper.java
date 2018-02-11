@@ -140,7 +140,7 @@ public class DocumentMapper implements ToXContent {
         if (this.cqlFragments == null) {
             synchronized(this) {
                 if (this.cqlFragments == null)
-                    this.cqlFragments = new CqlFragments(ClusterService.getCFMetaData(mapperService.keyspace(), ClusterService.typeToCfName(type)));
+                    this.cqlFragments = new CqlFragments(ClusterService.getCFMetaData(mapperService.keyspace(), ClusterService.typeToCfName(mapperService.keyspace(), type)));
             }
         }
         return this.cqlFragments;
@@ -188,7 +188,7 @@ public class DocumentMapper implements ToXContent {
         if (this.columnDefs == null) {
             synchronized(this) {
                 if (this.columnDefs == null) {
-                    CFMetaData metadata = ClusterService.getCFMetaData(mapperService.keyspace(), ClusterService.typeToCfName(type));
+                    CFMetaData metadata = ClusterService.getCFMetaData(mapperService.keyspace(), ClusterService.typeToCfName(mapperService.keyspace(), type));
                     this.columnDefs = new HashMap<String, ColumnDefinition>();
                     for(Mapper fieldMapper : fieldMappers) {
                         if (fieldMapper.name().indexOf('.') == -1) {

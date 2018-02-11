@@ -118,7 +118,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
             // record keyspace.table having useless 2i 
             for(ObjectCursor<MappingMetaData> type:indexMetaData.getMappings().values()) 
                 if (!MapperService.DEFAULT_MAPPING.equals(type.value.type()))
-                    unindexedTables.put(indexMetaData, ClusterService.typeToCfName(type.value.type()));
+                    unindexedTables.put(indexMetaData, ClusterService.typeToCfName(indexMetaData.keyspace(), type.value.type()));
         }
         
         // add tombstones to the cluster state for each deleted index

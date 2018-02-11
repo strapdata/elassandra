@@ -229,7 +229,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
-        this.typeName = ClusterService.cfNameToType(ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
+        this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
         this.typeTermQuery = new TermQuery(new Term(TypeFieldMapper.NAME, typeName));
         this.indexMetadata = indexDef;
         this.index_name = baseCfs.keyspace.getName()+"."+baseCfs.name;
@@ -1959,7 +1959,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 IndexResult result = indexShard.index(indexShard.getEngine(), operation);
                                 
                                 if (logger.isDebugEnabled()) {
-                                    logger.debug("document CF={}.{} index={} type={} id={} version={} created={} static={} ttl={} refresh={} ", 
+                                    logger.debug("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={} ", 
                                         baseCfs.metadata.ksName, baseCfs.metadata.cfName,
                                         context.indexInfo.name, typeName,
                                         parsedDoc.id(), operation.version(), result.isCreated(), isStatic(), ttl, context.indexInfo.refresh);
@@ -2186,7 +2186,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 indexInfo.updated = false; // reset updated state
                                 indexShard.flush(new FlushRequest().force(false).waitIfOngoing(true));
                                 if (logger.isInfoEnabled())
-                                    logger.info("Elasticsearch index=[{}] flushed, duration={}ms",indexInfo.name, System.currentTimeMillis() - start);
+                                    logger.info("Elasticsearch index=[{}] type=[{}] flushed, duration={}ms",indexInfo.name, indexInfo.type, System.currentTimeMillis() - start);
                             } else {
                                 if (logger.isDebugEnabled())
                                     logger.debug("Cannot flush index=[{}], state=[{}]",indexInfo.name, indexShard.state());

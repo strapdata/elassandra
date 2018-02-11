@@ -275,7 +275,7 @@ public final class ShardGetService extends AbstractIndexShardComponent {
             try {
                 // fetch source from cassandra
                 DocPrimaryKey docPk = clusterService.parseElasticId(this.indexService, type, id);
-                String cfName = ClusterService.typeToCfName(type);
+                String cfName = ClusterService.typeToCfName(this.indexService.keyspace(), type);
                 Map<String, ColumnDefinition> columnDefs = mapperService.documentMapper(type).getColumnDefinitions();
                 UntypedResultSet result = clusterService.fetchRow(this.indexService, 
                         cfName, docPk, 

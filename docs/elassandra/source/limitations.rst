@@ -105,9 +105,11 @@ Such lightweight transactions is also used when updating the Elassandra mapping 
 Index and type names
 --------------------
 
-Because cassandra does not support special caraters in keyspace and table names, Elassandra automatically replaces dot (.) and dash (-) characters
-by underscore (_) in index and type names to create underlying Cassandra keyspaces and tables.
-When such a modification occurs, Elassandra keeps this change in memory to correctly convert keyspace/table to index/type.
+Because cassandra does not support special caraters in keyspace and table names, Elassandra automatically replaces dots (.) and hyphens (-) characters
+by underscore (_) in index names, and hyphen (-) characters by underscore (_) in type names to create underlying Cassandra keyspaces and tables.
+
+When such a modification occurs for document type names, Elassandra keeps type names translation in memory to correctly translate back table names to documents types.
+Obviously, if you have types names like *xxx-xxx* and *xxx_xxx* in the sames underlying keyspace, bijective translation is not possible and you will get some trouble.
 
 Moreover, Cassandra table names are limited to 48 caraters, so Elasticsearch type names are also limited to 48 characters.
 

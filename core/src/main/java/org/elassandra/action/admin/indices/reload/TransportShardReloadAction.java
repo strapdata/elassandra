@@ -68,7 +68,7 @@ public class TransportShardReloadAction extends TransportReplicationAction<Shard
         IndexMetaData indexMetaData = metaData.index(shardRequest.shardId().getIndex());
         for(ObjectCursor<MappingMetaData> it : indexMetaData.getMappings().values()) {
             MappingMetaData mapping = it.value;
-            String table = org.elasticsearch.cluster.service.ClusterService.typeToCfName(mapping.type());
+            String table = org.elasticsearch.cluster.service.ClusterService.typeToCfName(indexMetaData.keyspace(), mapping.type());
             tables.add(table);
         }
         

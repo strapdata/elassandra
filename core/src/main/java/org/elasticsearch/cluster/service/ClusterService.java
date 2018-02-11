@@ -861,22 +861,24 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
 
     public static final String PERCOLATOR_TABLE = "_percolator";
     
+    // Because Cassandra table name does not support dash, convert dash to underscore in elasticsearch type, an keep this information
+    // in a map for reverse lookup. Of course, conflict is still possible in a keyspace.
     private static final Map<String, String> cfNameToType = new ConcurrentHashMap<String, String>() {{
        put(PERCOLATOR_TABLE, MapperService.PERCOLATOR_LEGACY_TYPE_NAME);
     }};
     
-    public static String typeToCfName(String type) {
-        if (type.indexOf('-') >= 0) {
-            String cfName = type.replaceAll("\\-", "_");
-            cfNameToType.putIfAbsent(cfName, type);
+    public static String typeToCfName(String keyspaceName, String typeName) {
+        if (typeName.indexOf('-') >= 0) {
+            String cfName = typeName.replaceAll("\\-", "_");
+            cfNameToType.putIfAbsent(keyspaceName+"."+cfName, typeName);
             return cfName;
         }
-        return type;
+        return typeName;
     }
    
-    public static String cfNameToType(String cfName) {
+    public static String cfNameToType(String keyspaceName, String cfName) {
         if (cfName.indexOf('_') >= 0) {
-            String type = cfNameToType.get(cfName);
+            String type = cfNameToType.get(keyspaceName+"."+cfName);
             if (type != null)
                 return type;
         }
@@ -1161,7 +1163,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     public void updateTableSchema(final MapperService mapperService, final MappingMetaData mappingMd) throws IOException {
         try {
             String ksName = mapperService.keyspace();
-            String cfName = ClusterService.typeToCfName(mappingMd.type());
+            String cfName = ClusterService.typeToCfName(ksName, mappingMd.type());
             
             createIndexKeyspace(ksName, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1);
             
@@ -1710,7 +1712,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
    
     // build secondary indices when shard is started and mapping applied
     public void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException {
-        final String cfName = typeToCfName(mapping.type());
+        final String cfName = typeToCfName(ksName, mapping.type());
         final CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
         boolean found = false;
         if (cfm != null && cfm.getIndexes() != null) {
@@ -1861,7 +1863,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     public boolean rowExists(final IndexService indexService, final String type, final String id) 
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
         DocPrimaryKey docPk = parseElasticId(indexService, type, id);
-        return process(ConsistencyLevel.LOCAL_ONE, buildExistsQuery(indexService.mapperService().documentMapper(type), indexService.keyspace(), typeToCfName(type), id), docPk.values).size() > 0;
+        return process(ConsistencyLevel.LOCAL_ONE, buildExistsQuery(indexService.mapperService().documentMapper(type), indexService.keyspace(), typeToCfName(indexService.keyspace(), type), id), docPk.values).size() > 0;
     }
     
     
@@ -1944,7 +1946,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             throws IndexNotFoundException, IOException 
     {
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
-        String cfName = typeToCfName(type);
+        String cfName = typeToCfName(indexService.keyspace(), type);
         CFMetaData metadata = getCFMetaData(indexService.keyspace(), cfName);
         DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
         String regularColumn = null;
@@ -2023,7 +2025,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     public void deleteRow(final IndexService indexService, final String type, final String id, final ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
             IOException {
-        String cfName = typeToCfName(type);
+        String cfName = typeToCfName(indexService.keyspace(), type);
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
         process(cl, buildDeleteQuery(docMapper, indexService.keyspace(), cfName, id), parseElasticId(indexService, type, id).values);
     }
@@ -2301,7 +2303,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             sourceToParse.ttl(request.ttl());
 
         final String keyspaceName = indexMetaData.keyspace();
-        final String cfName = typeToCfName(request.type());
+        final String cfName = typeToCfName(keyspaceName, request.type());
 
         final Engine.Index operation = indexShard.prepareIndexOnPrimary(sourceToParse, request.version(), request.versionType(), request.getAutoGeneratedTimestamp(), false);
         final Mapping update = operation.parsedDoc().dynamicMappingsUpdate();
@@ -2516,7 +2518,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
      */
     public DocPrimaryKey parseElasticId(final IndexService indexService, final String type, final String id, Map<String, Object> map) throws JsonParseException, JsonMappingException, IOException {
         String ksName = indexService.keyspace();
-        String cfName = typeToCfName(type);
+        String cfName = typeToCfName(ksName, type);
         CFMetaData metadata = getCFMetaData(ksName, cfName);
         
         List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
@@ -2557,7 +2559,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     
     public DocPrimaryKey parseElasticRouting(final IndexService indexService, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
         String ksName = indexService.keyspace();
-        String cfName = typeToCfName(type);
+        String cfName = typeToCfName(ksName, type);
         CFMetaData metadata = getCFMetaData(ksName, cfName);
         List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
         int ptLen = partitionColumns.size();
@@ -2604,7 +2606,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
     
     public boolean isStaticDocument(final IndexService indexService, Uid uid) throws JsonParseException, JsonMappingException, IOException {
-        CFMetaData metadata = getCFMetaData(indexService.keyspace(), typeToCfName(uid.type()));
+        CFMetaData metadata = getCFMetaData(indexService.keyspace(), typeToCfName(indexService.keyspace(), uid.type()));
         String id = uid.id();
         if (id.startsWith("[") && id.endsWith("]")) {
             org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
@@ -2697,6 +2699,13 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             MetaData metaData;
             try {
                 metaData =  metaStateService.loadGlobalState(metadataString);
+                
+                // initialize typeToCfName map for later reverse lookup in ElasticSecondaryIndex
+                for(ObjectCursor<IndexMetaData> indexCursor : metaData.indices().values()) {
+                    for(ObjectCursor<MappingMetaData> mappingCursor :  indexCursor.value.getMappings().values()) {
+                        typeToCfName(indexCursor.value.keyspace(), mappingCursor.value.type());
+                    }
+                }
             } catch (Exception e) {
                 logger.error("Failed to parse metadata={}", e, metadataString);
                 throw new NoPersistedMetaDataException("Failed to parse metadata="+metadataString, e);

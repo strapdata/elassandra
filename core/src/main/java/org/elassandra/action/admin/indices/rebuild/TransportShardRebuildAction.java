@@ -73,7 +73,7 @@ public class TransportShardRebuildAction extends TransportReplicationAction<Shar
                 metaData.settings().get(org.elasticsearch.cluster.service.ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS, org.elasticsearch.cluster.service.ClusterService.defaultSecondaryIndexClass.getName()));
         for(ObjectCursor<MappingMetaData> it : indexMetaData.getMappings().values()) {
             MappingMetaData mapping = it.value;
-            String table = org.elasticsearch.cluster.service.ClusterService.typeToCfName(mapping.type());
+            String table = org.elasticsearch.cluster.service.ClusterService.typeToCfName(indexMetaData.keyspace(), mapping.type());
             tables.add(table);
             CFMetaData cfMetadata = org.elasticsearch.cluster.service.ClusterService.getCFMetaData(indexService.keyspace(), table);
             for(IndexMetadata index : cfMetadata.getIndexes()) {
