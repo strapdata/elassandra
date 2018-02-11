@@ -1,6 +1,8 @@
-5.5.0.11 - 2018-02-07
+5.5.0.12 - 2018-02-12
   * Improve elassandra bootstrap to build elasticsearch indices when rebuilding a datacenter from another one.
-   
+  * Improve mapping of _type having an hyphen in their name
+  * Fix scripting class loading issue #165
+  
 5.5.0.11 - 2018-02-03
   * Fix #163 Invalid date mapping 
   * Fix #161 Search over a nested set returns wrong inner_hits
