@@ -293,7 +293,10 @@ public class JarHell {
                 if (clazz.startsWith("org.apache.jasper")) {
                     return; // Because of Hadoop
                 }
-                
+                // workaround for asm required by both elasticsearch scripting modules and cassandra UDF, see #165 + CASSANDRA-11193
+                if (clazz.startsWith("org.objectweb.asm")) {
+                    return; 
+                }
                 throw new IllegalStateException("jar hell!" + System.lineSeparator() +
                         "class: " + clazz + System.lineSeparator() +
                         "jar1: " + previous + System.lineSeparator() +
