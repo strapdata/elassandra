@@ -395,13 +395,11 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
     
     @Test
     public void testReadBeforeWrite() throws Exception {
-        createIndex("test", Settings.builder().build());
-        ensureGreen("test");
-        
+        process(ConsistencyLevel.ONE,"CREATE KEYSPACE IF NOT EXISTS test WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', 'DC1':'1' }");
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.t1 ( partition text, clustering int , status int, data text, primary key ((partition),clustering) )");
         
         XContentBuilder mapping = XContentFactory.jsonBuilder().startObject().startObject("t1").field("discover",".*").endObject().endObject();
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(mapping).get());
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("t1", mapping).get());
         
         process(ConsistencyLevel.ONE,"INSERT INTO test.t1 (partition, clustering, status, data) VALUES ('one', 1, 4, 'foo');");
         process(ConsistencyLevel.ONE,"INSERT INTO test.t1 (partition, clustering, status, data) VALUES ('one', 2, 5, 'foo5');");
@@ -425,5 +423,8 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         rsp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
         assertThat( rsp.getHits().getTotalHits(), equalTo(2L));
     }
+    
+    
+    
 
 }
