@@ -2067,7 +2067,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         
         if (mappingInfo == null) {
             if (logger.isWarnEnabled())  
-                logger.warn("No Elasticsearch index ready");
+                logger.warn("No Elasticsearch index ready {}.{}",this.baseCfs.metadata.ksName, this.baseCfs.metadata.cfName);
             return false;
         }
         if (mappingInfo.indices == null || mappingInfo.indices.length == 0) {
