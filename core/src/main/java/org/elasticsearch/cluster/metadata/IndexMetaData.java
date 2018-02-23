@@ -74,10 +74,12 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import static org.elasticsearch.cluster.node.DiscoveryNodeFilters.IP_VALIDATOR;
 import static org.elasticsearch.cluster.node.DiscoveryNodeFilters.OpType.AND;
@@ -300,6 +302,15 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
     public static final String SETTING_KEYSPACE = "index.keyspace";
     public static final Setting<String> INDEX_SETTING_KEYSPACE_SETTING =
             Setting.simpleString(SETTING_KEYSPACE, Property.Final, Property.IndexScope);
+    
+    public static final String SETTING_REPLICATION = "index.replication";
+    public static final Pattern dcReplicationPattern = Pattern.compile("^[_A-Za-z][_A-Za-z0-9]+:\\d++$");
+    public static final Setting<List<String>> INDEX_SETTING_REPLICATION_SETTING =
+            Setting.listSetting(SETTING_REPLICATION, Collections.EMPTY_LIST, (s) -> { 
+                if (!dcReplicationPattern.matcher(s).matches()) 
+                    throw new IllegalArgumentException("Expecting a valid keyspace replication expression");
+                return s; 
+            }, Property.Final, Property.IndexScope);
     
     public static final String SETTING_SECONDARY_INDEX_CLASS = "index."+ClusterService.SECONDARY_INDEX_CLASS;
     public static final Setting<String> INDEX_SECONDARY_INDEX_CLASS_SETTING =
@@ -541,6 +552,15 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
     
     public String keyspace() {
         return getSettings().get(IndexMetaData.SETTING_KEYSPACE,index.getName());
+    }
+    
+    public Map<String, Integer> replication() {
+        Map<String, Integer> replicationMap = new HashMap<>();
+        for(String s : settings.getAsArray(IndexMetaData.SETTING_REPLICATION, new String[] {}, true)) {
+            int i = s.indexOf(":");
+            replicationMap.put(s.substring(0,i), Integer.parseInt(s.substring(i+1)));
+        }
+        return replicationMap;
     }
     
     /**
@@ -927,10 +947,6 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
             return this;
         }
         
-        public String keyspace() {
-            return settings.get(IndexMetaData.SETTING_KEYSPACE,index);
-        }
-
         public Builder numberOfShards(int numberOfShards) {
             settings = Settings.builder().put(settings).put(SETTING_NUMBER_OF_SHARDS, numberOfShards).build();
             return this;

@@ -15,14 +15,20 @@
  */
 package org.elassandra;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.equalTo;
-
+import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.service.StorageService;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
+
+import java.util.Map;
+
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.hamcrest.Matchers.equalTo;
 
 /**
  * Elassandra index rebuild tests.
@@ -95,5 +101,18 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource("{ \"t1\" : { \"discover\" : \".*\" }}").get());
         Thread.sleep(2000);
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+    }
+    
+    @Test
+    public void indexWithReplicationMap() throws Exception {
+        String indexName = "test_rep";
+        createIndex(indexName, Settings.builder().putArray(IndexMetaData.SETTING_REPLICATION, "DC1:1","DC2:2").build());
+        ensureGreen(indexName);
+        UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name = ?", indexName);
+        Map<String, String> replication = rs.one().getMap("replication", UTF8Type.instance, UTF8Type.instance);
+        System.out.println("replication="+replication);
+        assertThat(replication.get("class"), equalTo("org.apache.cassandra.locator.NetworkTopologyStrategy"));
+        assertThat(replication.get("DC1"), equalTo("1"));
+        assertThat(replication.get("DC2"), equalTo("2"));
     }
 }

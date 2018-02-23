@@ -464,7 +464,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                                     // don't create a keyspace while cassandra is not fully started.
                                     String keyspaceName = indexMetaData.keyspace();
                                     logger.debug("creating if not exists keyspace {} with RF={}", keyspaceName, indexMetaData.getNumberOfReplicas()+1);
-                                    clusterService.createIndexKeyspace(keyspaceName, indexMetaData.getNumberOfReplicas()+1);
+                                    clusterService.createIndexKeyspace(keyspaceName, indexMetaData.getNumberOfReplicas()+1, indexMetaData.replication());
                                     
                                     // create a cassandra table per type.
                                     for (ObjectObjectCursor<String,MappingMetaData> cursor : indexMetaData.getMappings()) {

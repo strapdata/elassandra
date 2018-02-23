@@ -622,7 +622,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     /**
      * Don't use QueryProcessor.executeInternal, we need to propagate this on all nodes.
      **/
-    public void createIndexKeyspace(final String ksname, final int replicationFactor) throws IOException {
+    public void createIndexKeyspace(final String ksname, final int replicationFactor, final Map<String, Integer> replicationMap) throws IOException {
         Keyspace ks = null;
         try {
             ks = Keyspace.open(ksname);
@@ -633,10 +633,16 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         }
 
         try {
-            if (ks == null)
-               process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
-                    String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = {'class':'NetworkTopologyStrategy', '%s':'%d' };", 
-                    ksname, DatabaseDescriptor.getLocalDataCenter(), replicationFactor));
+            if (ks == null) {
+                Map<String, String> replication = new HashMap<>();
+                replication.put("class", "NetworkTopologyStrategy");
+                for(Map.Entry<String, Integer> entry : replicationMap.entrySet())
+                    replication.put(entry.getKey(), Integer.toString(entry.getValue()));
+                replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(replicationFactor));
+                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
+                    String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s", 
+                            ksname,  FBUtilities.json(replication).replaceAll("\"", "'")));
+            }
         } catch (Throwable e) {
             throw new IOException(e.getMessage(), e);
         }
@@ -1165,7 +1171,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             String ksName = mapperService.keyspace();
             String cfName = ClusterService.typeToCfName(ksName, mappingMd.type());
             
-            createIndexKeyspace(ksName, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1);
+            createIndexKeyspace(ksName, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1, mapperService.getIndexSettings().getIndexMetaData().replication());
             
             CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
             boolean newTable = (cfm == null);
