@@ -1,3 +1,7 @@
+5.5.0.13 - 2018-02-23
+  * Upgrade to cassandra 3.11.2
+  * Set elasticsearch transport address to cassandra RPC address
+
 5.5.0.12 - 2018-02-12
   * Improve elassandra bootstrap to build elasticsearch indices when rebuilding a datacenter from another one.
   * Improve mapping of _type having an hyphen in their name
