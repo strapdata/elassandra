@@ -164,7 +164,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     if (row.has("rack"))
                         attrs.put("rack", row.getString("rack"));
                     
-                    DiscoveryNode dn = new DiscoveryNode(buildNodeName(peer), host_id, new InetSocketTransportAddress(peer, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
+                    DiscoveryNode dn = new DiscoveryNode(buildNodeName(peer), host_id, new InetSocketTransportAddress(rpc_address, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
                     EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(peer);
                     if (state == null) {
                         dn.status( DiscoveryNodeStatus.UNKNOWN );
@@ -290,9 +290,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         attrs.put("dc", localDc);
                         attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
 
-                        InetAddress internal_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.RPC_ADDRESS).value);
+                        InetAddress internal_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.INTERNAL_IP).value);
+                        InetAddress rpc_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.RPC_ADDRESS).value);
                         dn = new DiscoveryNode(buildNodeName(internal_address), hostId.toString(), 
-                                new InetSocketTransportAddress(internal_address, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
+                                new InetSocketTransportAddress(rpc_address, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
                         dn.status(status);
 
                         if (!localAddress.equals(endpoint)) {
@@ -369,10 +370,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 attrs.put("dc", localDc);
                 attrs.put("rack", DatabaseDescriptor.getEndpointSnitch().getRack(endpoint));
 
-                InetAddress internal_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.RPC_ADDRESS).value);
+                InetAddress internal_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.INTERNAL_IP).value);
+                InetAddress rpc_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.RPC_ADDRESS).value);
                 dn = new DiscoveryNode(buildNodeName(internal_address), 
                         hostId.toString(), 
-                        new InetSocketTransportAddress(internal_address, publishPort()), 
+                        new InetSocketTransportAddress(rpc_address, publishPort()), 
                         attrs, CASSANDRA_ROLES, Version.CURRENT);
                 dn.status(newStatus);
                 logger.debug("New node soure=updateNode internal_ip={} rpc_address={}, node_name={} host_id={} status={} timestamp={}", 
