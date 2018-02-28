@@ -1,6 +1,7 @@
-5.5.0.13 - 2018-02-23
+5.5.0.13 - 2018-02-28
   * Upgrade to cassandra 3.11.2
   * Set elasticsearch transport address to cassandra RPC address
+  * Add a new index setting to set keyspace replication map
 
 5.5.0.12 - 2018-02-12
   * Improve elassandra bootstrap to build elasticsearch indices when rebuilding a datacenter from another one.
