@@ -36,6 +36,8 @@ export CASSANDRA_CONF=/etc/cassandra
 export CASSANDRA_DATA=/var/lib/cassandra
 export CASSANDRA_LOGS=/var/log/cassandra
 
+export PROTOCOL="http"
+
 export CASSANDRA_EXEC=cassandra
 export NODETOOL_EXEC=nodetool
 
@@ -63,52 +65,52 @@ function cleanlogs() {
 }
 
 function get() {
-   curl -XGET "http://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XGET  $CREDENTIAL  "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
 }
 function put() {
-   curl -XPUT "http://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XPUT  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
 }
 function post() {
-   curl -XPOST "http://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
 }
 function delete() {
-   curl -XDELETE "http://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XDELETE  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
 }
 
 function close() {
-   curl -XPOST "http://$NODE:9200/$1/_close"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_close?pretty"
 }
 
 function open() {
-   curl -XPOST "http://$NODE:9200/$1/_open"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_open?pretty"
 }
 
 function forcemerge() {
    if [ "x$2" == "x" ]; then
-      curl -XPOST "http://$NODE:9200/$1/_forcemerge"
+    curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_forcemerge?pretty"
    else
-      curl -XPOST "http://$NODE:9200/$1/_forcemerge?max_num_segments=$2"
+    curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_forcemerge?max_num_segments=$2&pretty"
    fi
 }
 
 function rebuild() {
    if [ "x$2" == "x" ]; then
-      curl -XPOST "http://$NODE:9200/$1/_rebuild"
+      curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_rebuild"
    else
-      curl -XPOST "http://$NODE:9200/$1/_rebuild?num_threads=$2"
+      curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_rebuild?num_threads=$2"
    fi
 }
 
 function clearcache() {
-   curl -XPOST "http://$NODE:9200/$1/_cache/clear"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_cache/clear?pretty"
 }
 
 function flush() {
-   curl -XPOST "http://$NODE:9200/$1/_flush"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_flush?pretty"
 }
 
 function refresh() {
-   curl -XPOST "http://$NODE:9200/$1/_refresh"
+curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1/_refresh?pretty"
 }
 
 # Cassandra aliases
@@ -124,25 +126,26 @@ alias elstart='cassandra -e'
 alias eldebug='cassandra -d -e'
 
 # Elasticsearch aliases
-alias health='curl -XGET http://$NODE:9200/_cluster/health/?pretty=true'
-alias state='curl -XGET http://$NODE:9200/_cluster/state/?pretty=true'
-alias blocks='curl -XGET http://$NODE:9200/_cluster/state/blocks/?pretty=true'
-alias metadata='curl -XGET http://$NODE:9200/_cluster/state/metadata/?pretty=true'
-alias stats='curl -XGET http://$NODE:9200/_stats?pretty=true'
-alias shards='curl -s -XGET http://$NODE:9200/_cat/shards?v | sort'
-alias indices='curl -s -XGET http://$NODE:9200/_cat/indices?v | sort'
-alias fielddata='curl -XGET http://$NODE:9200/_cat/fielddata/body,text?v'
-alias threads='curl -XGET http://$NODE:9200/_cat/thread_pool?v'
-alias pending_tasks='curl -XGET http://$NODE:9200/_cat/pending_tasks?v'
-alias segments='curl -XGET http://$NODE:9200/_cat/segments?v'
-alias allocation='curl -XGET http://$NODE:9200/_cat/allocation?v'
-alias nodec='curl -XGET http://$NODE:9200/_cat/nodes?h=id,ip,heapPercent,ramPercent,fileDescriptorPercent,segmentsCount,segmentsMemory'
-alias nodes='curl -XGET "http://$NODE:9200/_nodes?pretty"'
-alias settings='curl -XGET http://$NODE:9200/_cluster/settings?pretty'
-alias plugins='curl "http://$NODE:9200/_nodes?plugin=true&pretty"'
-alias tasks='curl http://$NODE:9200/_tasks?pretty'
+alias health='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/health/?pretty=true'
+alias state='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/state/?pretty=true'
+alias blocks='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/state/blocks/?pretty=true'
+alias metadata='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/state/metadata/?pretty=true'
+alias stats='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_stats?pretty=true'
+alias shards='curl -s -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/shards?v | sort'
+alias indices='curl -s -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/indices?v | sort'
+alias fielddata='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/fielddata/body,text?v'
+alias threads='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/thread_pool?v'
+alias hotthreads='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_nodes/hot_threads'
+alias pending_tasks='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/pending_tasks?v'
+alias segments='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/segments?v'
+alias allocation='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/allocation?v'
+alias nodec='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/nodes?h=id,ip,heapPercent,ramPercent,fileDescriptorPercent,segmentsCount,segmentsMemory'
+alias nodes='curl -XGET  $CREDENTIAL "$PROTOCOL://$NODE:9200/_nodes?pretty"'
+alias settings='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/settings?pretty'
+alias tasks='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_tasks?pretty'
+alias aliases='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/aliases?v'
 
-alias nodes='curl -XGET "http://$NODE:9200/_nodes?pretty"'
+alias nodes='curl -XGET $CREDENTIAL "$PROTOCOL://$NODE:9200/_nodes?pretty"'
 
 alias open='open'
 alias close='close'

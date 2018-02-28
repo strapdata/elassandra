@@ -149,6 +149,7 @@ alias settings='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/settings
 alias tasks='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_tasks?pretty'
 alias aliases='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/aliases?v'
 
+alias nodes='curl -XGET $CREDENTIAL "$PROTOCOL://$NODE:9200/_nodes?pretty"'
 
 alias open='open'
 alias close='close'
