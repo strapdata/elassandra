@@ -2082,10 +2082,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         return this.index_name;
     }
     
-    public void initMapping() {
-        initMapping(this.clusterService.state());
-    }
-    
     public void initMapping(ClusterState clusterState) {
         mappingInfoLock.writeLock().lock();
         try {
@@ -2139,24 +2135,33 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             initCounter++;
             assert initCounter == 1 : "index initialized more than once";
             if (ElassandraDaemon.instance !=null && ElassandraDaemon.instance.node() != null) {
-                // 2i index can be recycled by cassandra, while ES node restarted during tests, so update clusterService reference.
-                clusterService = ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class);
-                clusterService.addListener(this);
-                
-                ClusterState state = clusterService.state();
-                logger.debug("Initializing elastic secondary index=[{}] hashCode={} initCounter={} metadata.version={} indices={}", 
-                        index_name, hashCode(), initCounter, state.metaData().version(), state.metaData().indices());
-                
-                initMapping(state);
+                initialize(ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class));
                 
                 // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
                 if (Keyspace.isInitialized() && !baseCfs.isEmpty() && !isBuilt())
                     baseCfs.indexManager.buildIndexBlocking(this);
             } else {
+                logger.warn("Index created, but mapping should be initialized later.");
                 clusterService = null;
             }
             return null;
         };
+    }
+    
+    public void initialize(ClusterService cs) {
+        // 2i index can be recycled by cassandra, while ES node restarted during tests, so update clusterService reference.
+        clusterService = cs;
+        clusterService.addListener(this);
+        
+        ClusterState state = clusterService.state();
+        logger.debug("Initializing elastic secondary index=[{}] hashCode={} initCounter={} metadata.version={} indices={}", 
+                index_name, hashCode(), initCounter, state.metaData().version(), state.metaData().indices());
+        
+        initMapping(state);
+    }
+    
+    public boolean initilized() {
+        return this.clusterService != null;
     }
     
     private boolean isBuilt()

@@ -17,6 +17,7 @@ package org.elassandra.shard;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 
+import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -85,6 +86,13 @@ public class CassandraShardStartedBarrier extends AbstractComponent  {
             }
         }
         if (readyToIndex && latch.getCount() > 0) {
+            // ensure all elastic secondary index are correctly initialized 
+            for(ElasticSecondaryIndex esi : ElasticSecondaryIndex.elasticSecondayIndices.values()) {
+                if (!esi.initilized()) {
+                    logger.debug("Delayed initialization of ElasticSecondaryIndex={}", esi);
+                    esi.initialize(this.clusterService);
+                }
+            }
             clusterService.removeShardStartedBarrier();
             latch.countDown();
         }
