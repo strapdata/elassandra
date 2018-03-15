@@ -636,9 +636,9 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             if (ks == null) {
                 Map<String, String> replication = new HashMap<>();
                 replication.put("class", "NetworkTopologyStrategy");
+                replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(replicationFactor));
                 for(Map.Entry<String, Integer> entry : replicationMap.entrySet())
                     replication.put(entry.getKey(), Integer.toString(entry.getValue()));
-                replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(replicationFactor));
                 process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
                     String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s", 
                             ksname,  FBUtilities.json(replication).replaceAll("\"", "'")));
