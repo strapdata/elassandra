@@ -1,3 +1,8 @@
+5.5.0.14 - 2018-03-18
+  * Merge #176 Don't overwrite replication setting
+  * Remove asm lib from the cassandra classpath to support elasticsearch scripting
+  * Improve index mapping initilization in multi-datacenter configuration
+  
 5.5.0.13 - 2018-02-28
   * Upgrade to cassandra 3.11.2
   * Set elasticsearch transport address to cassandra RPC address
