@@ -278,6 +278,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         for (Entry<InetAddress, EndpointState> entry : Gossiper.instance.getEndpointStates()) {
             EndpointState state = entry.getValue();
             InetAddress   endpoint = entry.getKey();
+            
+            if (!state.getStatus().equals(VersionedValue.STATUS_NORMAL) && !state.getStatus().equals(VersionedValue.SHUTDOWN)) {
+                logger.info("Ignoring node host_id={} status={}", state.getApplicationState(ApplicationState.HOST_ID).value, state.getStatus());
+                continue;
+            }
             DiscoveryNodeStatus status = (isNormal(state)) ? DiscoveryNode.DiscoveryNodeStatus.ALIVE : DiscoveryNode.DiscoveryNodeStatus.DEAD;
 
             if (isLocal(endpoint)) {
@@ -511,7 +516,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
     
     private boolean isNormal(EndpointState state) {
-        return state.isAlive() && state.getStatus().equals("NORMAL");
+        return state.isAlive() && state.getStatus().equals(VersionedValue.STATUS_NORMAL);
     }
     
     @Override
