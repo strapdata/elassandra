@@ -57,7 +57,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Elassandra'
-copyright = u'2016-2017, Strapdata'
+copyright = u'2016-2018, Strapdata'
 author = u'Strapdata'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -67,7 +67,7 @@ author = u'Strapdata'
 # The short X.Y version.
 version = u'5.5.0'
 # The full version, including alpha/beta/rc tags.
-release = u'5.5.0.4'
+release = u'5.5.0.14'
 
 tgz_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.tar.gz".format(release)
 deb_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.deb".format(release)
@@ -174,6 +174,13 @@ html_favicon = 'images/favicon.ico'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+# tricks from https://rackerlabs.github.io/docs-rackspace/tools/rtd-tables.html
+html_context = {
+    'css_files': [
+        '_static/theme_overrides.css',  # override wide tables in RTD theme
+        ],
+     }
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
