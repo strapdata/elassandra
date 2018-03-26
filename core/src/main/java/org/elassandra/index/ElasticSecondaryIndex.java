@@ -222,17 +222,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     protected volatile ImmutableMappingInfo mappingInfo;
     
     protected final ColumnFamilyStore baseCfs;
-    protected final String typeName;
-    protected final TermQuery typeTermQuery;
     protected final IndexMetadata indexMetadata;
+    protected String typeName;
+    protected TermQuery typeTermQuery;
     int initCounter = 0;
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
-        this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
-        this.typeTermQuery = new TermQuery(new Term(TypeFieldMapper.NAME, typeName));
         this.indexMetadata = indexDef;
         this.index_name = baseCfs.keyspace.getName()+"."+baseCfs.name;
+
+        this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
+        this.typeTermQuery = new TermQuery(new Term(TypeFieldMapper.NAME, typeName));
+
         this.logger = Loggers.getLogger(this.getClass().getName()+"."+baseCfs.keyspace.getName()+"."+baseCfs.name);
     }
     
@@ -1026,11 +1028,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         final boolean indexSomeStaticColumnsOnWideRow; 
         final boolean[] indexedPkColumns;   // bit mask of indexed PK columns.
         final long metadataVersion;
+        final String metadataClusterUUID;
         final String nodeId;
         final boolean indexOnCompaction;  // true if at least one index has index_on_compaction=true;
         
         ImmutableMappingInfo(final ClusterState state) {
             this.metadataVersion = state.metaData().version();
+            this.metadataClusterUUID = state.metaData().clusterUUID();
             this.nodeId = state.nodes().getLocalNodeId();
             
             if (state.blocks().hasGlobalBlock(ClusterBlockLevel.WRITE)) {
@@ -1339,13 +1343,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                     WideRowcumentIndexer.this.hashCode(), outRow.toString(baseCfs.metadata, true, true), outRow.clustering(), 
                                     outRow.isStatic(), outRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness())); 
                     }
-                    
-                    if (inRow.isStatic()) {
+
+                    Row row = (inRow != null) ? inRow : outRow;
+                    if (row.isStatic()) {
                         inStaticRow = inRow;
                         outStaticRow = outRow;
                     } else {
-                        clusterings.add(inRow.clustering());
-                        rowcuments.put(inRow.clustering(), new WideRowcument(inRow, outRow));
+                        clusterings.add(row.clustering());
+                        rowcuments.put(row.clustering(), new WideRowcument(inRow, outRow));
                     }
                 } catch(Throwable t) {
                     logger.error("Unexpected error", t);
@@ -2085,13 +2090,16 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     public void initMapping(ClusterState clusterState) {
         mappingInfoLock.writeLock().lock();
         try {
-           mappingInfo = new ImmutableMappingInfo(clusterState);
-           logger.debug("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={}", 
-                   index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
+           // initilization could occur after reading mapping from CQL and cfNameToType map update.
+           this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
+	   this.typeTermQuery = new TermQuery(new Term(TypeFieldMapper.NAME, typeName));
+           this.mappingInfo = new ImmutableMappingInfo(clusterState);
+           logger.info("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={} typeName={}", 
+               index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()), this.typeName);
         } catch(Exception e) {
-             logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to update mapping index=[{}]", index_name), e);
+           logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to update mapping index=[{}]", index_name), e);
         } finally {
-            mappingInfoLock.writeLock().unlock();
+           mappingInfoLock.writeLock().unlock();
         }
     }
     
@@ -2154,16 +2162,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         clusterService.addListener(this);
         
         ClusterState state = clusterService.state();
-        logger.debug("Initializing elastic secondary index=[{}] hashCode={} initCounter={} metadata.version={} indices={}", 
+        logger.info("Initializing elastic secondary index=[{}] hashCode={} initCounter={} metadata.version={} indices={}", 
                 index_name, hashCode(), initCounter, state.metaData().version(), state.metaData().indices());
         
         initMapping(state);
     }
     
     public boolean initilized() {
-        return this.clusterService != null;
+        return  this.mappingInfo != null && 
+                this.clusterService != null && 
+                this.mappingInfo.metadataVersion == this.clusterService.state().metaData().version() &&
+                this.mappingInfo.metadataClusterUUID == this.clusterService.state().metaData().clusterUUID();
     }
-    
+ 
     private boolean isBuilt()
     {
         return SystemKeyspace.isIndexBuilt(baseCfs.keyspace.getName(), this.indexMetadata.name);

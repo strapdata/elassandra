@@ -2709,7 +2709,9 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 // initialize typeToCfName map for later reverse lookup in ElasticSecondaryIndex
                 for(ObjectCursor<IndexMetaData> indexCursor : metaData.indices().values()) {
                     for(ObjectCursor<MappingMetaData> mappingCursor :  indexCursor.value.getMappings().values()) {
-                        typeToCfName(indexCursor.value.keyspace(), mappingCursor.value.type());
+                        String cfName = typeToCfName(indexCursor.value.keyspace(), mappingCursor.value.type());
+                        logger.info("keyspace.table={}.{} registred for elasticsearch index.type={}.{}", 
+		           indexCursor.value.keyspace(), cfName, indexCursor.value.getIndex().getName(), mappingCursor.value.type()); 
                     }
                 }
             } catch (Exception e) {

@@ -89,7 +89,7 @@ public class CassandraShardStartedBarrier extends AbstractComponent  {
             // ensure all elastic secondary index are correctly initialized 
             for(ElasticSecondaryIndex esi : ElasticSecondaryIndex.elasticSecondayIndices.values()) {
                 if (!esi.initilized()) {
-                    logger.debug("Delayed initialization of ElasticSecondaryIndex={}", esi);
+                    logger.info("Delayed initialization of ElasticSecondaryIndex={}", esi);
                     esi.initialize(this.clusterService);
                 }
             }
