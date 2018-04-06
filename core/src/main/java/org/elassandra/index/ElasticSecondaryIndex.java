@@ -1082,7 +1082,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 try {
                     Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
                     if (mappingMap.get("properties") != null) {
-                        IndicesService indicesService = ElassandraDaemon.injector().getInstance(IndicesService.class);
+                        // #181 IndiceService is available when activated and before Node start.
+                        IndicesService indicesService = ElassandraDaemon.instance.node().injector().getInstance(IndicesService.class);
                         IndexService indexService = indicesService.indexService(indexMetaData.getIndex());
                         if (indexService == null) {
                             logger.error("indexService not available for [{}], ignoring" , index);
@@ -2092,7 +2093,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         try {
            // initilization could occur after reading mapping from CQL and cfNameToType map update.
            this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
-	   this.typeTermQuery = new TermQuery(new Term(TypeFieldMapper.NAME, typeName));
+           this.typeTermQuery = new TermQuery(new Term(TypeFieldMapper.NAME, typeName));
            this.mappingInfo = new ImmutableMappingInfo(clusterState);
            logger.info("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={} typeName={}", 
                index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()), this.typeName);
