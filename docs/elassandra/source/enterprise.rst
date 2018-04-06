@@ -221,7 +221,7 @@ If your target index does not have the same name as the underlying keyspace, you
 Elasticsearch aggregations through CQL
 ......................................
 
-Elassandra supports elasticsearch aggregation through CQL query. In this case :
+Elassandra supports elasticsearch aggregation only in **regular CQL statement**. In this case :
 
 * Returned columns are named with aggregations names.
 * CQL function are not supported.
