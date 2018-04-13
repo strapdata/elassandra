@@ -179,7 +179,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         this.searchOperationListeners = Collections.unmodifiableList(searchOperationListeners);
         // kick off async ops for the first shard in this index
         this.refreshTask = new AsyncRefreshTask(this);
-        rescheduleFsyncTask(indexSettings.getTranslogDurability());
     }
 
     public int numberOfShards() {
@@ -664,25 +663,11 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             if (refreshTask.getInterval().equals(indexSettings.getRefreshInterval()) == false) {
                 rescheduleRefreshTasks();
             }
-            final Translog.Durability durability = indexSettings.getTranslogDurability();
-            if (durability != oldTranslogDurability) {
-                rescheduleFsyncTask(durability);
-            }
         }
 
         // update primary terms
         for (final IndexShard shard : this.shards.values()) {
             shard.updatePrimaryTerm(metadata.primaryTerm(shard.shardId().id()));
-        }
-    }
-
-    private void rescheduleFsyncTask(Translog.Durability durability) {
-        try {
-            if (fsyncTask != null) {
-                fsyncTask.close();
-            }
-        } finally {
-            fsyncTask = durability == Translog.Durability.REQUEST ? null : new AsyncTranslogFSync(this);
         }
     }
 
@@ -712,23 +697,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     final IndexStore getIndexStore() {
         return indexStore;
     } // pkg private for testing
-
-    private void maybeFSyncTranslogs() {
-        if (indexSettings.getTranslogDurability() == Translog.Durability.ASYNC) {
-            for (IndexShard shard : this.shards.values()) {
-                try {
-                    Translog translog = shard.getTranslog();
-                    if (translog.syncNeeded()) {
-                        translog.sync();
-                    }
-                } catch (AlreadyClosedException ex) {
-                    // fine - continue;
-                } catch (IOException e) {
-                    logger.warn("failed to sync translog", e);
-                }
-            }
-        }
-    }
 
     private void maybeRefreshEngine() {
         if (indexSettings.getRefreshInterval().millis() > 0) {
@@ -868,7 +836,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         }
         @Override
         protected void runInternal() {
-            indexService.maybeFSyncTranslogs();
+            
         }
 
         @Override
