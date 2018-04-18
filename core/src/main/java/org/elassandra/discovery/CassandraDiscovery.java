@@ -16,6 +16,7 @@
 package org.elassandra.discovery;
 
 import com.google.common.collect.Maps;
+import com.google.common.net.InetAddresses;
 
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
@@ -476,7 +477,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             clusterState.nodes().forEach((n) -> { 
                 if (!localNode.getId().equals(n.getId()) && 
                     n.status() == DiscoveryNodeStatus.ALIVE &&
-                    isNormal(Gossiper.instance.getEndpointStateForEndpoint(n.getInetAddress()))) 
+                    isNormal(n))
                     attendees.put(n.getId(), n); 
                 });
             logger.debug("new MetaDataVersionAckListener version={} attendees={}", expectedVersion, this.attendees.keySet());
@@ -513,6 +514,19 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     
     private boolean isMember(InetAddress endpoint) {
         return !this.localAddress.equals(endpoint) && DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc);
+    }
+    
+    /**
+     * #183 lookup EndpointState with the node name = cassandra broadcast address.
+     * ES RPC adress can be different from the cassandra broadcast address.
+     */
+    private boolean isNormal(DiscoveryNode node) {
+        EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(InetAddresses.forString(node.getName()));
+        if (state == null) {
+            logger.warn("Node name=[{}] address=[{}] state not found", node.getName(), node.getInetAddress());
+            return false;
+        }
+        return state.isAlive() && state.getStatus().equals(VersionedValue.STATUS_NORMAL);
     }
     
     private boolean isNormal(EndpointState state) {
