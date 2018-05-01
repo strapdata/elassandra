@@ -1,3 +1,8 @@
+5.5.0.15 - 2018-05-01
+  * Fix #183 by using node name as the cassandra broadcast address
+  * Fix #184 disable translog sync thread 
+  * Fix #188 race condition when starting elassandra on kubernetes
+
 5.5.0.14 - 2018-03-18
   * Merge #176 Don't overwrite replication setting
   * Remove asm lib from the cassandra classpath to support elasticsearch scripting
