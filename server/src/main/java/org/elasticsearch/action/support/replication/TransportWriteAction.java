@@ -67,10 +67,10 @@ public abstract class TransportWriteAction<
         > extends TransportReplicationAction<Request, ReplicaRequest, Response> {
 
     protected TransportWriteAction(Settings settings, String actionName, TransportService transportService,
-            ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+            ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool,
             ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
                                    Supplier<ReplicaRequest> replicaRequest, String executor) {
-        super(settings, actionName, transportService, clusterService, indicesService, threadPool, shardStateAction, actionFilters,
+        super(settings, actionName, transportService, clusterService, indicesService, threadPool, actionFilters,
                 indexNameExpressionResolver, request, replicaRequest, executor, true);
     }
 
@@ -387,15 +387,19 @@ public abstract class TransportWriteAction<
 
             logger.warn((org.apache.logging.log4j.util.Supplier<?>)
                     () -> new ParameterizedMessage("[{}] {}", replica.shardId(), message), exception);
+            /*
             shardStateAction.remoteShardFailed(replica.shardId(), replica.allocationId().getId(), primaryTerm, message, exception,
                     createListener(onSuccess, onPrimaryDemoted, onIgnoredFailure));
+                    */
         }
 
         @Override
         public void markShardCopyAsStaleIfNeeded(ShardId shardId, String allocationId, Runnable onSuccess,
                                                  Consumer<Exception> onPrimaryDemoted, Consumer<Exception> onIgnoredFailure) {
+            /*
             shardStateAction.remoteShardFailed(shardId, allocationId, primaryTerm, "mark copy as stale", null,
                     createListener(onSuccess, onPrimaryDemoted, onIgnoredFailure));
+                    */
         }
 
         private ShardStateAction.Listener createListener(final Runnable onSuccess, final Consumer<Exception> onPrimaryDemoted,

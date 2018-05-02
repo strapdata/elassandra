@@ -33,7 +33,7 @@ public class InternalEngineSettingsTests extends ESSingleNodeTestCase {
 
     public void testSettingsUpdate() {
         final IndexService service = createIndex("foo");
-        InternalEngine engine = ((InternalEngine) EngineAccess.engine(service.getShardOrNull(0)));
+        VersionLessInternalEngine engine = ((VersionLessInternalEngine) EngineAccess.engine(service.getShardOrNull(0)));
         assertThat(engine.getCurrentIndexWriterConfig().getUseCompoundFile(), is(true));
         final int iters = between(1, 20);
         for (int i = 0; i < iters; i++) {

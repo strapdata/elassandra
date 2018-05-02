@@ -19,6 +19,8 @@
 
 package org.elasticsearch.indices;
 
+import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.index.mapper.AllFieldMapper;
 import org.elasticsearch.index.mapper.FieldNamesFieldMapper;
 import org.elasticsearch.index.mapper.IdFieldMapper;
@@ -87,7 +89,7 @@ public class IndicesModuleTests extends ESTestCase {
 
     private static String[] EXPECTED_METADATA_FIELDS = new String[]{UidFieldMapper.NAME, IdFieldMapper.NAME, RoutingFieldMapper.NAME,
             IndexFieldMapper.NAME, SourceFieldMapper.NAME, TypeFieldMapper.NAME, AllFieldMapper.NAME, VersionFieldMapper.NAME,
-            ParentFieldMapper.NAME, SeqNoFieldMapper.NAME, FieldNamesFieldMapper.NAME};
+            ParentFieldMapper.NAME, SeqNoFieldMapper.NAME,  TokenFieldMapper.NAME,  NodeFieldMapper.NAME, FieldNamesFieldMapper.NAME};
 
     public void testBuiltinMappers() {
         IndicesModule module = new IndicesModule(Collections.emptyList());

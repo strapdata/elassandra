@@ -1345,6 +1345,7 @@ public class DocumentParserTests extends ESSingleNodeTestCase {
         assertThat(dateMapper, instanceOf(DateFieldMapper.class));
     }
 
+    /* Elassandra does not support dot in fields.
     public void testDynamicFieldsStartingAndEndingWithDot() throws Exception {
         BytesReference bytes = XContentFactory.jsonBuilder().startObject().startArray("top.")
                 .startObject().startArray("foo.")
@@ -1376,7 +1377,8 @@ public class DocumentParserTests extends ESSingleNodeTestCase {
                     containsString("object field starting or ending with a [.] makes object resolution ambiguous: [top..foo..bar]"));
         }
     }
-
+    */
+    
     public void testDynamicFieldsEmptyName() throws Exception {
         BytesReference bytes = XContentFactory.jsonBuilder()
                 .startObject().startArray("top.")

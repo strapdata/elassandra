@@ -144,8 +144,6 @@ public class RecoverySourceHandler {
             assert targetShardRouting.initializing() : "expected recovery target to be initializing but was " + targetShardRouting;
         });
 
-        try (Closeable ignored = shard.acquireTranslogRetentionLock()) {
-
             final Translog translog = shard.getTranslog();
 
             final long startingSeqNo;
@@ -212,7 +210,7 @@ public class RecoverySourceHandler {
             }
 
             finalizeRecovery(targetLocalCheckpoint);
-        }
+            
         return response;
     }
 

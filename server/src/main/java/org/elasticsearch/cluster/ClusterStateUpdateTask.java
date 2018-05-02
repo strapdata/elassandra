@@ -43,7 +43,7 @@ public abstract class ClusterStateUpdateTask implements ClusterStateTaskConfig, 
     @Override
     public final ClusterTasksResult<ClusterStateUpdateTask> execute(ClusterState currentState, List<ClusterStateUpdateTask> tasks) throws Exception {
         ClusterState result = execute(currentState);
-        return ClusterTasksResult.<ClusterStateUpdateTask>builder().successes(tasks).build(result);
+        return ClusterTasksResult.<ClusterStateUpdateTask>builder().successes(tasks).build(result, this.doPresistMetaData());
     }
 
     @Override
@@ -83,5 +83,10 @@ public abstract class ClusterStateUpdateTask implements ClusterStateTaskConfig, 
     @Override
     public final boolean runOnlyOnMaster() {
         return true;
+    }
+    
+    @Override
+    public boolean doPresistMetaData() {
+        return false;
     }
 }

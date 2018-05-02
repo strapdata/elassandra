@@ -19,13 +19,15 @@
 
 package org.elasticsearch.node;
 
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.SetOnce;
+import org.elassandra.discovery.CassandraDiscovery;
+import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.Build;
 import org.elasticsearch.ElasticsearchException;
-import org.elasticsearch.ElasticsearchTimeoutException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionModule;
 import org.elasticsearch.action.GenericAction;
@@ -42,8 +44,7 @@ import org.elasticsearch.cluster.ClusterInfo;
 import org.elasticsearch.cluster.ClusterInfoService;
 import org.elasticsearch.cluster.ClusterModule;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateObserver;
-import org.elasticsearch.cluster.InternalClusterInfoService;
+import org.elasticsearch.cluster.EmptyClusterInfoService;
 import org.elasticsearch.cluster.NodeConnectionsService;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -67,8 +68,8 @@ import org.elasticsearch.common.inject.util.Providers;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.logging.DeprecationLogger;
-import org.elasticsearch.common.logging.ServerLoggers;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.logging.ServerLoggers;
 import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.network.NetworkService;
@@ -79,19 +80,16 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.common.transport.BoundTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.PageCacheRecycler;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoveryModule;
-import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.gateway.GatewayAllocator;
 import org.elasticsearch.gateway.GatewayMetaState;
 import org.elasticsearch.gateway.GatewayModule;
-import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.gateway.MetaStateService;
 import org.elasticsearch.http.HttpServerTransport;
 import org.elasticsearch.index.analysis.AnalysisRegistry;
@@ -129,8 +127,6 @@ import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.SearchModule;
 import org.elasticsearch.search.SearchService;
 import org.elasticsearch.search.fetch.FetchPhase;
-import org.elasticsearch.snapshots.SnapshotShardsService;
-import org.elasticsearch.snapshots.SnapshotsService;
 import org.elasticsearch.tasks.TaskResultsService;
 import org.elasticsearch.threadpool.ExecutorBuilder;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -157,7 +153,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -232,7 +227,12 @@ public class Node implements Closeable {
     private final Collection<LifecycleComponent> pluginLifecycleComponents;
     private final LocalNodeFactory localNodeFactory;
     private final NodeService nodeService;
-
+    private final NamedXContentRegistry xContentRegistry;
+    
+    private final ClusterService clusterService;
+    private TransportService transportService;
+    private CassandraDiscovery discovery;
+    
     /**
      * Constructs a node with the given settings.
      *
@@ -240,6 +240,10 @@ public class Node implements Closeable {
      */
     public Node(Settings preparedSettings) {
         this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null));
+    }
+
+    public Node(Settings preparedSettings, Collection<Class<? extends Plugin>> classpathPlugins) {
+        this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), classpathPlugins);
     }
 
     public Node(Environment environment) {
@@ -302,7 +306,7 @@ public class Node implements Closeable {
 
             this.pluginsService = new PluginsService(tmpSettings, environment.configFile(), environment.modulesFile(), environment.pluginsFile(), classpathPlugins);
             this.settings = pluginsService.updatedSettings();
-            localNodeFactory = new LocalNodeFactory(settings, nodeEnvironment.nodeId());
+            localNodeFactory = new LocalNodeFactory(settings, SystemKeyspace.getLocalHostId().toString());
 
             // create the environment based on the finalized (processed) view of the settings
             // this is just to makes sure that people get the same settings, no matter where they ask them from
@@ -335,7 +339,7 @@ public class Node implements Closeable {
                 getCustomNameResolvers(pluginsService.filterPlugins(DiscoveryPlugin.class)));
 
             List<ClusterPlugin> clusterPlugins = pluginsService.filterPlugins(ClusterPlugin.class);
-            final ClusterService clusterService = new ClusterService(settings, settingsModule.getClusterSettings(), threadPool,
+            clusterService = new ClusterService(settings, settingsModule.getClusterSettings(), threadPool,
                ClusterModule.getClusterStateCustomSuppliers(clusterPlugins));
             clusterService.addStateApplier(scriptModule.getScriptService());
             resourcesToClose.add(clusterService);
@@ -358,7 +362,7 @@ public class Node implements Closeable {
             IndicesModule indicesModule = new IndicesModule(pluginsService.filterPlugins(MapperPlugin.class));
             modules.add(indicesModule);
 
-            SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class));
+            SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class), clusterService);
             CircuitBreakerService circuitBreakerService = createCircuitBreakerService(settingsModule.getSettings(),
                 settingsModule.getClusterSettings());
             resourcesToClose.add(circuitBreakerService);
@@ -378,7 +382,7 @@ public class Node implements Closeable {
                 ClusterModule.getNamedWriteables().stream())
                 .flatMap(Function.identity()).collect(Collectors.toList());
             final NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(namedWriteables);
-            NamedXContentRegistry xContentRegistry = new NamedXContentRegistry(Stream.of(
+            this.xContentRegistry = new NamedXContentRegistry(Stream.of(
                 NetworkModule.getNamedXContents().stream(),
                 searchModule.getNamedXContents().stream(),
                 pluginsService.filterPlugins(Plugin.class).stream()
@@ -391,8 +395,9 @@ public class Node implements Closeable {
                     analysisModule.getAnalysisRegistry(),
                 clusterModule.getIndexNameExpressionResolver(), indicesModule.getMapperRegistry(), namedWriteableRegistry,
                 threadPool, settingsModule.getIndexScopedSettings(), circuitBreakerService, bigArrays, scriptModule.getScriptService(),
-                client, metaStateService);
-
+                clusterService, client, metaStateService);
+            clusterService.setMetaStateService(metaStateService);
+            
             Collection<Object> pluginComponents = pluginsService.filterPlugins(Plugin.class).stream()
                 .flatMap(p -> p.createComponents(client, clusterService, threadPool, resourceWatcherService,
                                                  scriptModule.getScriptService(), xContentRegistry, environment, nodeEnvironment,
@@ -449,7 +454,7 @@ public class Node implements Closeable {
             }
 
             final DiscoveryModule discoveryModule = new DiscoveryModule(this.settings, threadPool, transportService, namedWriteableRegistry,
-                networkService, clusterService.getMasterService(), clusterService.getClusterApplierService(),
+                networkService, clusterService.getMasterService(), clusterService, clusterService.getClusterApplierService(),
                 clusterService.getClusterSettings(), pluginsService.filterPlugins(DiscoveryPlugin.class),
                 clusterModule.getAllocationService());
             this.nodeService = new NodeService(settings, threadPool, monitorService, discoveryModule.getDiscovery(),
@@ -584,43 +589,67 @@ public class Node implements Closeable {
         return nodeEnvironment;
     }
 
+    /**
+     * Start Elasticsearch for write-only operations.
+     * @return
+     */
+    public Node activate() {
+        if (!lifecycle.moveToStarted()) {
+            return this;
+        }
+        Logger logger = Loggers.getLogger(Node.class, NODE_NAME_SETTING.get(settings));
+        logger.info("activating ...");
+
+        transportService = injector.getInstance(TransportService.class);
+        transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
+        transportService.start();
+        
+        discovery = (CassandraDiscovery) injector.getInstance(Discovery.class);
+        final ClusterState initialClusterState = discovery.initClusterState(transportService.getLocalNode());
+        
+        final NodeConnectionsService nodeConnectionsService = injector.getInstance(NodeConnectionsService.class);
+        nodeConnectionsService.start();
+        clusterService.setNodeConnectionsService(nodeConnectionsService);
+        
+        clusterService.start();
+
+        injector.getInstance(IndicesService.class).start();
+        injector.getInstance(IndicesClusterStateService.class).start();
+
+        // gateway should start after disco, so it can try and recovery from gateway on "start"
+        gatewayService().start(); // block until recovery done from cassandra schema.
+
+        logger.info("activated ...");
+        return this;
+    }
 
     /**
      * Start the node. If the node is already started, this method is no-op.
      */
     public Node start() throws NodeValidationException {
-        if (!lifecycle.moveToStarted()) {
-            return this;
-        }
-
         Logger logger = Loggers.getLogger(Node.class, NODE_NAME_SETTING.get(settings));
         logger.info("starting ...");
+        
+        // hack around dependency injection problem (for now...)
         pluginLifecycleComponents.forEach(LifecycleComponent::start);
 
         injector.getInstance(MappingUpdatedAction.class).setClient(client);
-        injector.getInstance(IndicesService.class).start();
-        injector.getInstance(IndicesClusterStateService.class).start();
-        injector.getInstance(SnapshotsService.class).start();
-        injector.getInstance(SnapshotShardsService.class).start();
-        injector.getInstance(RoutingService.class).start();
+        //injector.getInstance(IndicesService.class).start();
+        //injector.getInstance(IndicesClusterStateService.class).start();
+        //injector.getInstance(SnapshotsService.class).start();
+        //injector.getInstance(SnapshotShardsService.class).start();
+        //injector.getInstance(RoutingService.class).start();
         injector.getInstance(SearchService.class).start();
         nodeService.getMonitorService().start();
 
-        final ClusterService clusterService = injector.getInstance(ClusterService.class);
-
-        final NodeConnectionsService nodeConnectionsService = injector.getInstance(NodeConnectionsService.class);
-        nodeConnectionsService.start();
-        clusterService.setNodeConnectionsService(nodeConnectionsService);
-
         injector.getInstance(ResourceWatcherService.class).start();
-        injector.getInstance(GatewayService.class).start();
-        Discovery discovery = injector.getInstance(Discovery.class);
-        clusterService.getMasterService().setClusterStatePublisher(discovery::publish);
-
+        
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
+        /*
         TransportService transportService = injector.getInstance(TransportService.class);
         transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
         transportService.start();
+        */
         assert localNodeFactory.getNode() != null;
         assert transportService.getLocalNode().equals(localNodeFactory.getNode())
             : "transportService has a different local node than the factory provided";
@@ -644,13 +673,13 @@ public class Node implements Closeable {
             .flatMap(p -> p.getBootstrapChecks().stream()).collect(Collectors.toList()));
 
         clusterService.addStateApplier(transportService.getTaskManager());
-        // start after transport service so the local disco is known
-        discovery.start(); // start before cluster service so that it can set initial state on ClusterApplierService
-        clusterService.start();
+        discovery.start();
+
         assert clusterService.localNode().equals(localNodeFactory.getNode())
             : "clusterService has a different local node than the factory provided";
-        transportService.acceptIncomingRequests();
+        
         discovery.startInitialJoin();
+        /*
         // tribe nodes don't have a master so we shouldn't register an observer         s
         final TimeValue initialStateTimeout = DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.get(settings);
         if (initialStateTimeout.millis() > 0) {
@@ -684,8 +713,16 @@ public class Node implements Closeable {
                 }
             }
         }
+        */
 
-
+        // create elastic_admin if not exists after joining the ring and before allowing metadata update.
+        clusterService().createOrUpdateElasticAdminKeyspace();
+        
+        // Cassandra started => release metadata update blocks.
+        gatewayService().enableMetaDataPersictency();
+        
+        transportService.acceptIncomingRequests();
+        
         if (NetworkModule.HTTP_ENABLED.get(settings)) {
             injector.getInstance(HttpServerTransport.class).start();
         }
@@ -699,6 +736,11 @@ public class Node implements Closeable {
             writePortsFile("transport", transport.boundAddress());
         }
 
+        logger.info("Elasticsearch started state={}", clusterService.state().toString());
+        
+        // Added for esrally when started in foreground.
+        System.out.println("Elassandra started"); 
+        
         logger.info("started");
 
         pluginsService.filterPlugins(ClusterPlugin.class).forEach(ClusterPlugin::onNodeStarted);
@@ -706,7 +748,7 @@ public class Node implements Closeable {
         return this;
     }
 
-    private Node stop() {
+    public Node stop() {
         if (!lifecycle.moveToStopped()) {
             return this;
         }
@@ -718,19 +760,19 @@ public class Node implements Closeable {
             injector.getInstance(HttpServerTransport.class).stop();
         }
 
-        injector.getInstance(SnapshotsService.class).stop();
-        injector.getInstance(SnapshotShardsService.class).stop();
+        //injector.getInstance(SnapshotsService.class).stop();
+        //injector.getInstance(SnapshotShardsService.class).stop();
         // stop any changes happening as a result of cluster state changes
         injector.getInstance(IndicesClusterStateService.class).stop();
         // close discovery early to not react to pings anymore.
         // This can confuse other nodes and delay things - mostly if we're the master and we're running tests.
         injector.getInstance(Discovery.class).stop();
         // we close indices first, so operations won't be allowed on it
-        injector.getInstance(RoutingService.class).stop();
+        //injector.getInstance(RoutingService.class).stop();
         injector.getInstance(ClusterService.class).stop();
         injector.getInstance(NodeConnectionsService.class).stop();
         nodeService.getMonitorService().stop();
-        injector.getInstance(GatewayService.class).stop();
+        injector.getInstance(CassandraGatewayService.class).stop();
         injector.getInstance(SearchService.class).stop();
         injector.getInstance(TransportService.class).stop();
 
@@ -766,9 +808,9 @@ public class Node implements Closeable {
         if (NetworkModule.HTTP_ENABLED.get(settings)) {
             toClose.add(injector.getInstance(HttpServerTransport.class));
         }
-        toClose.add(() -> stopWatch.stop().start("snapshot_service"));
-        toClose.add(injector.getInstance(SnapshotsService.class));
-        toClose.add(injector.getInstance(SnapshotShardsService.class));
+        //toClose.add(() -> stopWatch.stop().start("snapshot_service"));
+        //toClose.add(injector.getInstance(SnapshotsService.class));
+        //toClose.add(injector.getInstance(SnapshotShardsService.class));
         toClose.add(() -> stopWatch.stop().start("client"));
         Releasables.close(injector.getInstance(Client.class));
         toClose.add(() -> stopWatch.stop().start("indices_cluster"));
@@ -788,7 +830,7 @@ public class Node implements Closeable {
         toClose.add(() -> stopWatch.stop().start("monitor"));
         toClose.add(nodeService.getMonitorService());
         toClose.add(() -> stopWatch.stop().start("gateway"));
-        toClose.add(injector.getInstance(GatewayService.class));
+        toClose.add(injector.getInstance(CassandraGatewayService.class));
         toClose.add(() -> stopWatch.stop().start("search"));
         toClose.add(injector.getInstance(SearchService.class));
         toClose.add(() -> stopWatch.stop().start("transport"));
@@ -879,10 +921,18 @@ public class Node implements Closeable {
     /**
      * The {@link PluginsService} used to build this node's components.
      */
-    protected PluginsService getPluginsService() {
+    public PluginsService getPluginsService() {
         return pluginsService;
     }
 
+    public synchronized ClusterService clusterService() {
+        return this.clusterService;
+    }
+   
+    public synchronized CassandraGatewayService gatewayService() {
+        return this.injector.getInstance(CassandraGatewayService.class);
+    }
+   
     /**
      * Creates a new {@link CircuitBreakerService} based on the settings provided.
      * @see #BREAKER_TYPE_KEY
@@ -942,7 +992,8 @@ public class Node implements Closeable {
     /** Constructs a ClusterInfoService which may be mocked for tests. */
     protected ClusterInfoService newClusterInfoService(Settings settings, ClusterService clusterService,
                                                        ThreadPool threadPool, NodeClient client, Consumer<ClusterInfo> listeners) {
-        return new InternalClusterInfoService(settings, clusterService, threadPool, client, listeners);
+        return new EmptyClusterInfoService();
+        //return new InternalClusterInfoService(settings, clusterService, threadPool, client, listeners);
     }
 
     private static class LocalNodeFactory implements Function<BoundTransportAddress, DiscoveryNode> {
@@ -965,5 +1016,9 @@ public class Node implements Closeable {
             assert localNode.get() != null;
             return localNode.get();
         }
+    }
+    
+    public NamedXContentRegistry getNamedXContentRegistry() {
+        return xContentRegistry;
     }
 }

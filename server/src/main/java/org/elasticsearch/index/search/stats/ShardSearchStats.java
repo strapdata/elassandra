@@ -35,8 +35,8 @@ import static java.util.Collections.emptyMap;
 
 public final class ShardSearchStats implements SearchOperationListener {
 
-    private final StatsHolder totalStats = new StatsHolder();
-    private final CounterMetric openContexts = new CounterMetric();
+    public final StatsHolder totalStats = new StatsHolder();
+    public final CounterMetric openContexts = new CounterMetric();
     private volatile Map<String, StatsHolder> groupsStats = emptyMap();
 
     /**
@@ -183,7 +183,7 @@ public final class ShardSearchStats implements SearchOperationListener {
         totalStats.scrollMetric.inc(TimeUnit.NANOSECONDS.toMicros(System.nanoTime() - context.getOriginNanoTime()));
     }
 
-    static final class StatsHolder {
+    public static final class StatsHolder {
         public final MeanMetric queryMetric = new MeanMetric();
         public final MeanMetric fetchMetric = new MeanMetric();
         /* We store scroll statistics in microseconds because with nanoseconds we run the risk of overflowing the total stats if there are

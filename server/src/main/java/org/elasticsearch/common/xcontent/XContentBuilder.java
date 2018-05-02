@@ -19,6 +19,7 @@
 
 package org.elasticsearch.common.xcontent;
 
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.geo.GeoPoint;
@@ -38,6 +39,7 @@ import java.io.Flushable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -611,7 +613,20 @@ public final class XContentBuilder implements Releasable, Flushable {
         value(value.bytes, value.offset, value.length);
         return this;
     }
-
+    
+    public XContentBuilder binaryValue(ByteBuffer value) throws IOException {
+        if (value == null) {
+            return nullValue();
+        }
+        
+        ByteBuffer bb = ByteBufferUtil.clone(value);
+        byte[] bytes = new byte[bb.remaining()];
+        bb.get(bytes);
+        
+        value(bytes);
+        return this;
+    }
+    
     /**
      * Writes the binary content of the given {@link BytesRef} as UTF-8 bytes.
      *
@@ -813,13 +828,15 @@ public final class XContentBuilder implements Releasable, Flushable {
             value((BytesReference) value);
         } else if (value instanceof ToXContent) {
             value((ToXContent) value);
+        } else if (value instanceof ByteBuffer) {
+            binaryValue((ByteBuffer)value);
         } else {
             // This is a "value" object (like enum, DistanceUnit, etc) just toString() it
             // (yes, it can be misleading when toString a Java class, but really, jackson should be used in that case)
             value(Objects.toString(value));
         }
     }
-
+    
     ////////////////////////////////////////////////////////////////////////////
     // ToXContent
     //////////////////////////////////

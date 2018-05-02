@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action.admin.cluster.shards;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
@@ -31,14 +33,18 @@ import org.elasticsearch.cluster.routing.GroupShardsIterator;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.node.ResponseCollectorService;
 import org.elasticsearch.search.internal.AliasFilter;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -90,8 +96,15 @@ public class TransportClusterSearchShardsAction extends
         }
 
         Set<String> nodeIds = new HashSet<>();
-        GroupShardsIterator<ShardIterator> groupShardsIterator = clusterService.operationRouting().searchShards(clusterState, concreteIndices,
-                routingMap, request.preference());
+        GroupShardsIterator<ShardIterator> groupShardsIterator = clusterService.operationRouting().searchShards(clusterState, 
+                concreteIndices,
+                null,
+                routingMap, 
+                request.preference(),
+                null,
+                null,
+                null,
+                null);
         ShardRouting shard;
         ClusterSearchShardsGroup[] groupResponses = new ClusterSearchShardsGroup[groupShardsIterator.size()];
         int currentGroup = 0;

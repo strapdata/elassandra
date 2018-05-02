@@ -19,10 +19,12 @@
 
 package org.elasticsearch.discovery;
 
+import org.elassandra.discovery.CassandraDiscovery;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterApplier;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.logging.ServerLoggers;
@@ -31,9 +33,7 @@ import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.discovery.single.SingleNodeDiscovery;
 import org.elasticsearch.discovery.zen.UnicastHostsProvider;
-import org.elasticsearch.discovery.zen.ZenDiscovery;
 import org.elasticsearch.plugins.DiscoveryPlugin;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -56,15 +56,15 @@ import java.util.function.Supplier;
 public class DiscoveryModule {
 
     public static final Setting<String> DISCOVERY_TYPE_SETTING =
-        new Setting<>("discovery.type", "zen", Function.identity(), Property.NodeScope);
+        new Setting<>("discovery.type", "cassandra", Function.identity(), Property.NodeScope);
     public static final Setting<Optional<String>> DISCOVERY_HOSTS_PROVIDER_SETTING =
-        new Setting<>("discovery.zen.hosts_provider", (String)null, Optional::ofNullable, Property.NodeScope);
+        new Setting<>("discovery.cassandra.hosts_provider", (String)null, Optional::ofNullable, Property.NodeScope);
 
     private final Discovery discovery;
 
     public DiscoveryModule(Settings settings, ThreadPool threadPool, TransportService transportService,
                            NamedWriteableRegistry namedWriteableRegistry, NetworkService networkService, MasterService masterService,
-                           ClusterApplier clusterApplier, ClusterSettings clusterSettings, List<DiscoveryPlugin> plugins,
+                           ClusterService clusterService, ClusterApplier clusterApplier, ClusterSettings clusterSettings, List<DiscoveryPlugin> plugins,
                            AllocationService allocationService) {
         final UnicastHostsProvider hostsProvider;
         final Collection<BiConsumer<DiscoveryNode,ClusterState>> joinValidators = new ArrayList<>();
@@ -92,10 +92,15 @@ public class DiscoveryModule {
         }
 
         Map<String, Supplier<Discovery>> discoveryTypes = new HashMap<>();
+        /*
         discoveryTypes.put("zen",
             () -> new ZenDiscovery(settings, threadPool, transportService, namedWriteableRegistry, masterService, clusterApplier,
                 clusterSettings, hostsProvider, allocationService, Collections.unmodifiableCollection(joinValidators)));
         discoveryTypes.put("single-node", () -> new SingleNodeDiscovery(settings, transportService, masterService, clusterApplier));
+        */
+        discoveryTypes.put("cassandra",
+                () -> new CassandraDiscovery(settings, transportService, clusterService, clusterApplier, namedWriteableRegistry));
+        
         for (DiscoveryPlugin plugin : plugins) {
             plugin.getDiscoveryTypes(threadPool, transportService, namedWriteableRegistry,
                 masterService, clusterApplier, clusterSettings, hostsProvider, allocationService).entrySet().forEach(entry -> {

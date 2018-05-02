@@ -21,11 +21,15 @@ package org.elasticsearch.index.mapper;
 
 import com.carrotsearch.hppc.ObjectObjectHashMap;
 import com.carrotsearch.hppc.ObjectObjectMap;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterators;
+
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.lucene.all.AllEntries;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -45,7 +49,7 @@ public abstract class ParseContext {
         private final List<IndexableField> fields;
         private ObjectObjectMap<Object, IndexableField> keyedFields;
 
-        private Document(String path, Document parent) {
+        public Document(String path, Document parent) {
             fields = new ArrayList<>();
             this.path = path;
             this.prefix = path.isEmpty() ? "" : path + ".";
@@ -56,6 +60,10 @@ public abstract class ParseContext {
             this("", null);
         }
 
+        public String toString() {
+            return "path="+path+" prefix="+prefix+" fields="+fields+" parent="+parent;
+        }
+        
         /**
          * Return the path associated with this document.
          */
@@ -164,6 +172,35 @@ public abstract class ParseContext {
         }
 
     }
+    
+    static abstract class FilterableDocument extends ParseContext.Document implements Predicate<IndexableField> {
+        boolean applyFilter = false; 
+        
+        public FilterableDocument(String path, Document parent) {
+            super(path, parent);
+        }
+        
+        public FilterableDocument() {
+            super();
+        }
+        
+        public void applyFilter(boolean apply) {
+            applyFilter = apply;
+        }
+        
+        @Override
+        abstract public boolean apply(IndexableField input);
+        
+        @Override
+        public Iterator<IndexableField> iterator() {
+            if (applyFilter) {
+                return Iterators.filter(super.iterator(), this);
+            } else {
+                return super.iterator();
+            }
+        }
+    }
+    
 
     private static class FilterParseContext extends ParseContext {
 
@@ -478,7 +515,7 @@ public abstract class ParseContext {
     /**
      * Return a new context that will be used within a nested document.
      */
-    public final ParseContext createNestedContext(String fullPath) {
+    public ParseContext createNestedContext(String fullPath) {
         final Document doc = new Document(fullPath, doc());
         addDoc(doc);
         return switchDoc(doc);
@@ -517,6 +554,10 @@ public abstract class ParseContext {
 
     public abstract SourceToParse sourceToParse();
 
+    public void source(BytesReference source) {
+        
+    }
+    
     public abstract ContentPath path();
 
     public abstract XContentParser parser();
@@ -537,6 +578,14 @@ public abstract class ParseContext {
 
     public abstract Field version();
 
+    public String type() {
+        return this.sourceToParse().type();
+    }
+    
+    public String id() {
+        return this.sourceToParse().id();
+    }
+    
     public abstract void version(Field version);
 
     public abstract SeqNoFieldMapper.SequenceIDFields seqID();

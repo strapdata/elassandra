@@ -172,22 +172,6 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
         assertTrue(refreshTask.isClosed());
     }
 
-    public void testFsyncTaskIsRunning() throws IOException {
-        IndexService indexService = createIndex("test", Settings.builder().put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC).build());
-        IndexService.AsyncTranslogFSync fsyncTask = indexService.getFsyncTask();
-        assertNotNull(fsyncTask);
-        assertEquals(5000, fsyncTask.getInterval().millis());
-        assertTrue(fsyncTask.mustReschedule());
-        assertTrue(fsyncTask.isScheduled());
-
-        indexService.close("simon says", false);
-        assertFalse(fsyncTask.isScheduled());
-        assertTrue(fsyncTask.isClosed());
-
-        indexService = createIndex("test1", Settings.EMPTY);
-        assertNull(indexService.getFsyncTask());
-    }
-
     public void testRefreshActuallyWorks() throws Exception {
         IndexService indexService = createIndex("test", Settings.EMPTY);
         ensureGreen("test");

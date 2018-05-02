@@ -11,10 +11,18 @@
 
 
 
+# Sets the default values for cassandra variables used in this script
+ES_USER="cassandra"
+ES_GROUP="cassandra"
+
 # Source the default env file
 ES_ENV_FILE="${path.env}"
 if [ -f "$ES_ENV_FILE" ]; then
     . "$ES_ENV_FILE"
+fi
+
+if [ "$ES_USER" != "cassandra" ] || [ "$ES_GROUP" != "cassandra" ]; then
+    echo "WARNING: ES_USER and ES_GROUP are deprecated and will be removed in the next major version of cassandra, got: [$ES_USER:$ES_GROUP]"
 fi
 
 case "$1" in
@@ -22,23 +30,23 @@ case "$1" in
     # Debian ####################################################
     install|upgrade)
 
-        # Create elasticsearch group if not existing
-        if ! getent group elasticsearch > /dev/null 2>&1 ; then
-            echo -n "Creating elasticsearch group..."
-            addgroup --quiet --system elasticsearch
+        # Create cassandra group if not existing
+        if ! getent group "$ES_GROUP" > /dev/null 2>&1 ; then
+            echo -n "Creating $ES_GROUP group..."
+            addgroup --quiet --system "$ES_GROUP"
             echo " OK"
         fi
 
-        # Create elasticsearch user if not existing
-        if ! id elasticsearch > /dev/null 2>&1 ; then
-            echo -n "Creating elasticsearch user..."
+        # Create cassandra user if not existing
+        if ! id $ES_USER > /dev/null 2>&1 ; then
+            echo -n "Creating $ES_USER user..."
             adduser --quiet \
                     --system \
                     --no-create-home \
-                    --ingroup elasticsearch \
+                    --ingroup "$ES_GROUP" \
                     --disabled-password \
                     --shell /bin/false \
-                    elasticsearch
+                    "$ES_USER"
             echo " OK"
         fi
     ;;
@@ -48,22 +56,22 @@ case "$1" in
     # RedHat ####################################################
     1|2)
 
-        # Create elasticsearch group if not existing
-        if ! getent group elasticsearch > /dev/null 2>&1 ; then
-            echo -n "Creating elasticsearch group..."
-            groupadd -r elasticsearch
+        # Create cassandra group if not existing
+        if ! getent group "$ES_GROUP" > /dev/null 2>&1 ; then
+            echo -n "Creating $ES_GROUP group..."
+            groupadd -r "$ES_GROUP"
             echo " OK"
         fi
 
-        # Create elasticsearch user if not existing
-        if ! id elasticsearch > /dev/null 2>&1 ; then
-            echo -n "Creating elasticsearch user..."
+        # Create cassandra user if not existing
+        if ! id $ES_USER > /dev/null 2>&1 ; then
+            echo -n "Creating $ES_USER user..."
             useradd -r \
                     -M \
-                    --gid elasticsearch \
+                    --gid "$ES_GROUP" \
                     --shell /sbin/nologin \
-                    --comment "elasticsearch user" \
-                    elasticsearch
+                    --comment "cassandra user" \
+                    "$ES_USER"
             echo " OK"
         fi
     ;;

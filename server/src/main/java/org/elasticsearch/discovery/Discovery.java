@@ -72,6 +72,10 @@ public interface Discovery extends LifecycleComponent {
      */
     DiscoveryStats stats();
 
+    default DiscoverySettings getDiscoverySettings() {
+    	    return null;
+    }
+    
     /**
      * Triggers the first join cycle
      */

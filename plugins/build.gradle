@@ -19,7 +19,7 @@
 
 // only configure immediate children of plugins dir
 configure(subprojects.findAll { it.parent.path == project.path }) {
-  group = 'org.elasticsearch.plugin'
+  group = 'com.strapdata.elasticsearch.plugin'
 
   apply plugin: 'elasticsearch.esplugin'
 

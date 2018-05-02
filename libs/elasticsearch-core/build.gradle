@@ -42,8 +42,8 @@ dependencies {
     testCompile "org.hamcrest:hamcrest-all:${versions.hamcrest}"
 
     if (isEclipse == false || project.path == ":libs:elasticsearch-core-tests") {
-        testCompile("org.elasticsearch.test:framework:${version}") {
-            exclude group: 'org.elasticsearch', module: 'elasticsearch-core'
+        testCompile("com.strapdata.elasticsearch.test:framework:${version}") {
+            exclude group: 'com.strapdata.elasticsearch', module: 'elasticsearch-core'
         }
     }
 }

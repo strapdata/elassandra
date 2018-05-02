@@ -36,7 +36,6 @@ import org.elasticsearch.index.engine.EngineConfig;
 import org.elasticsearch.index.fielddata.IndexFieldDataService;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.MapperService;
-import org.elasticsearch.index.seqno.LocalCheckpointTracker;
 import org.elasticsearch.index.similarity.SimilarityService;
 import org.elasticsearch.index.store.FsDirectoryService;
 import org.elasticsearch.index.store.Store;
@@ -78,6 +77,24 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         IndexMetaData.INDEX_BLOCKS_READ_ONLY_ALLOW_DELETE_SETTING,
         IndexMetaData.INDEX_PRIORITY_SETTING,
         IndexMetaData.INDEX_DATA_PATH_SETTING,
+        
+        IndexMetaData.INDEX_SEARCH_STRATEGY_CLASS_SETTING,
+        IndexMetaData.INDEX_SECONDARY_INDEX_CLASS_SETTING,
+        IndexMetaData.INDEX_DROP_ON_DELETE_INDEX_SETTING,
+        IndexMetaData.INDEX_INCLUDE_NODE_ID_SETTING,
+        IndexMetaData.INDEX_INDEX_ON_COMPACTION_SETTING,
+        IndexMetaData.INDEX_PARTITION_FUNCTION_SETTING,
+        IndexMetaData.INDEX_PARTITION_FUNCTION_CLASS_SETTING,
+        IndexMetaData.INDEX_SYNCHRONOUS_REFRESH_SETTING,
+        IndexMetaData.INDEX_SNAPSHOT_WITH_SSTABLE_SETTING,
+        IndexMetaData.INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING,
+        IndexMetaData.INDEX_SETTING_KEYSPACE_SETTING,
+        IndexMetaData.INDEX_SETTING_TABLE_SETTING,
+        IndexMetaData.INDEX_SETTING_REPLICATION_SETTING,
+        IndexMetaData.INDEX_INDEX_STATIC_COLUMNS_SETTING,
+        IndexMetaData.INDEX_INDEX_STATIC_ONLY_SETTING,
+        IndexMetaData.INDEX_INDEX_STATIC_DOCUMENT_SETTING,
+        
         IndexMetaData.INDEX_FORMAT_SETTING,
         SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING,
         SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_WARN_SETTING,

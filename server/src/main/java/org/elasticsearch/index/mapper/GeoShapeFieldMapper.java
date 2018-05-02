@@ -30,7 +30,6 @@ import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.PackedQuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
-import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.geo.GeoUtils;
@@ -42,6 +41,7 @@ import org.elasticsearch.common.geo.parsers.ShapeParser;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.DistanceUnit;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.QueryShardException;
 import org.locationtech.spatial4j.shape.Point;
@@ -449,6 +449,23 @@ public class GeoShapeFieldMapper extends FieldMapper {
         public Query termQuery(Object value, QueryShardContext context) {
             throw new QueryShardException(context, "Geo fields do not support exact searching, use dedicated geo queries instead");
         }
+        
+        @Override
+        public Object cqlValue(Object value) {
+            if (value instanceof Map) {
+                try {
+                    return XContentFactory.jsonBuilder().map((Map)value).string();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            return value;
+        }
+        
+        @Override
+        public String cqlType() {
+            return "text";
+        }
     }
 
     protected Explicit<Boolean> coerce;
@@ -568,5 +585,10 @@ public class GeoShapeFieldMapper extends FieldMapper {
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
+    }
+    
+    @Override
+    public String cqlType() {
+        return "text";
     }
 }

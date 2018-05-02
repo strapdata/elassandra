@@ -117,6 +117,10 @@ public class QueryPhase implements SearchPhase {
                     .buildShardResults(searchContext.getProfilers());
             searchContext.queryResult().profileResults(shardResults);
         }
+        
+        if (searchContext.searchProcessor() != null) {
+            searchContext.searchProcessor().postProcess(searchContext);
+        }
     }
 
     /**

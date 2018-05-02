@@ -62,7 +62,7 @@ public abstract class AbstractClientHeadersTestCase extends ESTestCase {
                 IndexAction.INSTANCE,
 
                 // cluster admin actions
-                ClusterStatsAction.INSTANCE, CreateSnapshotAction.INSTANCE, ClusterRerouteAction.INSTANCE,
+                ClusterStatsAction.INSTANCE,
 
                 // indices admin actions
                 CreateIndexAction.INSTANCE, IndicesStatsAction.INSTANCE, ClearIndicesCacheAction.INSTANCE, FlushAction.INSTANCE
@@ -111,8 +111,8 @@ public abstract class AbstractClientHeadersTestCase extends ESTestCase {
 
         // choosing arbitrary cluster admin actions to test
         client.admin().cluster().prepareClusterStats().execute(new AssertingActionListener<>(ClusterStatsAction.NAME, client.threadPool()));
-        client.admin().cluster().prepareCreateSnapshot("repo", "bck").execute(new AssertingActionListener<>(CreateSnapshotAction.NAME, client.threadPool()));
-        client.admin().cluster().prepareReroute().execute(new AssertingActionListener<>(ClusterRerouteAction.NAME, client.threadPool()));
+        //client.admin().cluster().prepareCreateSnapshot("repo", "bck").execute(new AssertingActionListener<>(CreateSnapshotAction.NAME, client.threadPool()));
+        //client.admin().cluster().prepareReroute().execute(new AssertingActionListener<>(ClusterRerouteAction.NAME, client.threadPool()));
 
         // choosing arbitrary indices admin actions to test
         client.admin().indices().prepareCreate("idx").execute(new AssertingActionListener<>(CreateIndexAction.NAME, client.threadPool()));

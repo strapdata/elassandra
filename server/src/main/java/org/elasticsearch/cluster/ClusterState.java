@@ -373,6 +373,7 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
         // meta data
         if (metrics.contains(Metric.METADATA)) {
             builder.startObject("metadata");
+            builder.field("version", metaData().version());
             builder.field("cluster_uuid", metaData().clusterUUID());
             builder.startObject("templates");
             for (ObjectCursor<IndexTemplateMetaData> cursor : metaData().templates().values()) {
@@ -677,6 +678,10 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
         return builder.build();
     }
 
+    public static Diff<ClusterState> diff(ClusterState before, ClusterState after) {
+        return new ClusterStateDiff(before, after);
+    }
+    
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         clusterName.writeTo(out);

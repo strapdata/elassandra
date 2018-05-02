@@ -73,6 +73,7 @@ public class NodeTests extends ESTestCase {
         }
     }
 
+    /*
     public void testLoadPluginBootstrapChecks() throws IOException {
         final String name = randomBoolean() ? randomAlphaOfLength(10) : null;
         Settings.Builder settings = baseSettings();
@@ -94,7 +95,8 @@ public class NodeTests extends ESTestCase {
             assertTrue(executed.get());
         }
     }
-
+    */
+    
     public void testWarnIfPreRelease() {
         final Logger logger = mock(Logger.class);
 

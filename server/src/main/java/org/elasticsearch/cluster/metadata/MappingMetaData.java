@@ -53,7 +53,8 @@ public class MappingMetaData extends AbstractDiffable<MappingMetaData> {
         }
 
         public boolean required() {
-            return required;
+            // routing is not more required, based on cassandra partition key...
+            return false;
         }
 
         @Override

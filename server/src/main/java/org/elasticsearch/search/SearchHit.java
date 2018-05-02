@@ -52,6 +52,7 @@ import org.elasticsearch.search.suggest.completion.CompletionSuggestion;
 import org.elasticsearch.transport.RemoteClusterAware;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -113,6 +114,8 @@ public final class SearchHit implements Streamable, ToXContentObject, Iterable<D
 
     private Map<String, SearchHits> innerHits;
 
+    private List<ByteBuffer> values;
+    
     private SearchHit() {
 
     }
@@ -759,6 +762,13 @@ public final class SearchHit implements Streamable, ToXContentObject, Iterable<D
                 innerHits.put(key, value);
             }
         }
+        
+        if (this.version == Long.MIN_VALUE && in.readBoolean()) {
+            int rowSize = in.readVInt();
+            this.values = new ArrayList<ByteBuffer>(rowSize);
+            for(int i=0; i < rowSize; i++)
+                values.add(in.readByteBuffer());
+        }
     }
 
     @Override
@@ -810,6 +820,13 @@ public final class SearchHit implements Streamable, ToXContentObject, Iterable<D
                 out.writeString(entry.getKey());
                 entry.getValue().writeTo(out);
             }
+        }
+        
+        if (this.values != null) {
+            out.writeBoolean(true);
+            out.writeVInt(values.size());
+            for(ByteBuffer bb : values)
+               out.writeByteBuffer(bb);
         }
     }
 
@@ -952,5 +969,13 @@ public final class SearchHit implements Streamable, ToXContentObject, Iterable<D
         public int hashCode() {
             return Objects.hash(field, offset, child);
         }
+    }
+    
+    public List<ByteBuffer> getValues() {
+        return values;
+    }
+
+    public void setValues(List<ByteBuffer> row) {
+        this.values = row;
     }
 }

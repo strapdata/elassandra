@@ -44,6 +44,7 @@ import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.Index;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -226,6 +227,13 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                     routingTableBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
                     metaDataBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
                     logger.info("updating number_of_replicas to [{}] for indices {}", updatedNumberOfReplicas, actualIndices);
+                    for (String index : actualIndices) {
+                        final IndexMetaData indexMetaData = currentState.metaData().index(index);
+                        if (indexMetaData == null) {
+                            throw new IndexNotFoundException(index);
+                        }
+                        clusterService.alterKeyspaceReplicationFactor(indexMetaData.keyspace(), updatedNumberOfReplicas+1);
+                    }
                 }
 
                 ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
@@ -268,9 +276,10 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                 }
 
 
-                ClusterState updatedState = ClusterState.builder(currentState).metaData(metaDataBuilder).routingTable(routingTableBuilder.build()).blocks(blocks).build();
+                ClusterState updatedState = ClusterState.builder(currentState).metaData(metaDataBuilder).blocks(blocks).build();
 
                 // now, reroute in case things change that require it (like number of replicas)
+                /*
                 updatedState = allocationService.reroute(updatedState, "settings update");
                 try {
                     for (Index index : openIndices) {
@@ -290,6 +299,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                 } catch (IOException ex) {
                     throw ExceptionsHelper.convertToElastic(ex);
                 }
+                */
                 return updatedState;
             }
         });

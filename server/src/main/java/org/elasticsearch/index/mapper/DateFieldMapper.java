@@ -19,6 +19,10 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.SimpleDateType;
+import org.apache.cassandra.serializers.SimpleDateSerializer;
+import org.apache.cassandra.utils.UUIDGen;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.StoredField;
@@ -34,8 +38,10 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.Version;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.geo.ShapeRelation;
 import org.elasticsearch.common.joda.DateMathParser;
 import org.elasticsearch.common.joda.FormatDateTimeFormatter;
@@ -52,11 +58,13 @@ import org.elasticsearch.search.DocValueFormat;
 import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseDateTimeFormatter;
 
@@ -376,13 +384,46 @@ public class DateFieldMapper extends FieldMapper {
 
         @Override
         public Object valueForDisplay(Object value) {
-            Long val = (Long) value;
-            if (val == null) {
+            if (value == null) {
                 return null;
             }
-            return dateTimeFormatter().printer().print(val);
+            if (value instanceof Date) {
+                return dateTimeFormatter().printer().print( ((Date) value).getTime() );
+            }
+            if (value instanceof Long) {
+                Long val = (Long) value;
+                return dateTimeFormatter().printer().print(val);
+            }
+            return value;
         }
 
+
+        @Override
+        public Object cqlValue(Object value, AbstractType atype) {
+            Date date = (Date)cqlValue(value);
+            if (atype instanceof SimpleDateType) {
+                return (int)SimpleDateSerializer.timeInMillisToDay(date.getTime());
+            }
+            return date;
+        }
+        
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof Date) {
+                return (Date)value;
+            }
+            if (value instanceof Number) {
+                return new Date(((Number) value).longValue());
+            }
+            if (value instanceof BytesRef) {
+                return new Date(Numbers.bytesToLong((BytesRef) value));
+            }
+            return dateTimeFormatter.parser().parseDateTime(value.toString()).toDate();
+        }
+        
         @Override
         public DocValueFormat docValueFormat(@Nullable String format, DateTimeZone timeZone) {
             FormatDateTimeFormatter dateTimeFormatter = this.dateTimeFormatter;
@@ -393,6 +434,11 @@ public class DateFieldMapper extends FieldMapper {
                 timeZone = DateTimeZone.UTC;
             }
             return new DocValueFormat.DateTime(dateTimeFormatter, timeZone);
+        }
+        
+        @Override
+        public String cqlType() {
+            return "timestamp";
         }
     }
 
@@ -480,6 +526,53 @@ public class DateFieldMapper extends FieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        String dateAsString = null;
+        Long value = null;
+        float boost = fieldType().boost();
+        if (object == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            dateAsString = fieldType().nullValueAsString();
+            if (dateAsString != null) {
+                value = fieldType().parse(dateAsString);
+            }
+        } else {
+            if (object instanceof Date) {
+                value = ((Date)object).getTime();
+            } else if (object instanceof Integer) {
+                // CQL date stored as integer, number of day since epoch - Integer.MIN_VALUE;
+                value = SimpleDateSerializer.dayToTimeInMillis((Integer)object);
+            } else if (object instanceof UUID) {
+                // CQL timeuuid
+                value = UUIDGen.unixTimestamp((UUID)object);
+            } else {
+                value = (Long)object;
+            }
+            dateAsString = fieldType().dateTimeFormatter.printer().print(value);
+        }
+        if (dateAsString != null) {
+            if (context.includeInAll(includeInAll, this)) {
+                context.allEntries().addText(fieldType().name(), dateAsString, boost);
+            }
+        }
+        
+        if (fieldType().indexOptions() != IndexOptions.NONE) {
+            context.doc().add(new LongPoint(fieldType().name(), value));
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedNumericDocValuesField(fieldType().name(), value));
+        } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
+            createFieldNamesField(context, context.doc().getFields());
+        }
+        if (fieldType().stored()) {
+            context.doc().add(new StoredField(fieldType().name(), value));
+        }
+        super.createField(context, object);
+    }
+    
+    @Override
     protected void doMerge(Mapper mergeWith, boolean updateAllTypes) {
         super.doMerge(mergeWith, updateAllTypes);
         final DateFieldMapper other = (DateFieldMapper) mergeWith;
@@ -514,5 +607,10 @@ public class DateFieldMapper extends FieldMapper {
                 || fieldType().dateTimeFormatter().locale() != Locale.ROOT) {
             builder.field("locale", fieldType().dateTimeFormatter().locale());
         }
+    }
+    
+    @Override
+    public String cqlType() {
+        return "timestamp";
     }
 }

@@ -25,15 +25,12 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.action.support.replication.ReplicationOperation;
 import org.elasticsearch.action.support.replication.ReplicationResponse;
-import org.elasticsearch.action.support.replication.TransportReplicationAction;
 import org.elasticsearch.action.support.replication.TransportWriteAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.PrimaryReplicaSyncer;
@@ -55,9 +52,9 @@ public class TransportResyncReplicationAction extends TransportWriteAction<Resyn
     @Inject
     public TransportResyncReplicationAction(Settings settings, TransportService transportService,
                                             ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool,
-                                            ShardStateAction shardStateAction, ActionFilters actionFilters,
+                                            ActionFilters actionFilters,
                                             IndexNameExpressionResolver indexNameExpressionResolver) {
-        super(settings, ACTION_NAME, transportService, clusterService, indicesService, threadPool, shardStateAction, actionFilters,
+        super(settings, ACTION_NAME, transportService, clusterService, indicesService, threadPool, actionFilters,
             indexNameExpressionResolver, ResyncReplicationRequest::new, ResyncReplicationRequest::new, ThreadPool.Names.BULK);
     }
 
@@ -119,6 +116,7 @@ public class TransportResyncReplicationAction extends TransportWriteAction<Resyn
 
     public static Translog.Location performOnReplica(ResyncReplicationRequest request, IndexShard replica) throws Exception {
         Translog.Location location = null;
+        /*
         for (Translog.Operation operation : request.getOperations()) {
             try {
                 final Engine.Result operationResult = replica.applyTranslogOperation(operation, Engine.Operation.Origin.REPLICA,
@@ -134,6 +132,7 @@ public class TransportResyncReplicationAction extends TransportWriteAction<Resyn
                 }
             }
         }
+        */
         return location;
     }
 

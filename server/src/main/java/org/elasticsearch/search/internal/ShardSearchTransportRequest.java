@@ -19,18 +19,18 @@
 
 package org.elasticsearch.search.internal;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.IndicesRequest;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchShardIterator;
 import org.elasticsearch.action.search.SearchTask;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryRewriteContext;
-import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.Rewriteable;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.search.Scroll;
@@ -40,6 +40,7 @@ import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.transport.TransportRequest;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -63,6 +64,29 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
         this.originalIndices = originalIndices;
     }
 
+    // for test only
+    public ShardSearchTransportRequest(OriginalIndices originalIndices, SearchRequest searchRequest, SearchShardIterator shardIt, int numberOfShards,
+            AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias) {
+        this.shardSearchLocalRequest = new ShardSearchLocalRequest(searchRequest, shardIt, numberOfShards, aliasFilter, indexBoost, nowInMillis, clusterAlias);
+        this.originalIndices = originalIndices;
+    }
+    
+    
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+         return shardSearchLocalRequest.tokenRanges();
+    }
+
+    @Override
+    public Boolean tokenRangesBitsetCache() {
+        return shardSearchLocalRequest.tokenRangesBitsetCache();
+    }
+
+    @Override
+    public Map<String,Object> extraParams() {
+        return shardSearchLocalRequest.extraParams();
+    }
+    
     public void searchType(SearchType searchType) {
         shardSearchLocalRequest.setSearchType(searchType);
     }

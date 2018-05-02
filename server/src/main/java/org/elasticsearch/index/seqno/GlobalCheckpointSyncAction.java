@@ -65,7 +65,6 @@ public class GlobalCheckpointSyncAction extends TransportReplicationAction<
             final ClusterService clusterService,
             final IndicesService indicesService,
             final ThreadPool threadPool,
-            final ShardStateAction shardStateAction,
             final ActionFilters actionFilters,
             final IndexNameExpressionResolver indexNameExpressionResolver) {
         super(
@@ -75,7 +74,6 @@ public class GlobalCheckpointSyncAction extends TransportReplicationAction<
                 clusterService,
                 indicesService,
                 threadPool,
-                shardStateAction,
                 actionFilters,
                 indexNameExpressionResolver,
                 Request::new,

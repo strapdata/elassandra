@@ -1,0 +1,2 @@
+org.apache.cassandra.cql3.functions.ToStringFct$Loader
+org.apache.cassandra.cql3.functions.ToJsonArrayFct$Loader

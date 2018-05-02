@@ -33,13 +33,16 @@ import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.SetOnce.AlreadySetException;
 import org.elasticsearch.Version;
+import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.PageCacheRecycler;
+import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.env.ShardLock;
@@ -142,7 +145,7 @@ public class IndexModuleTests extends ESTestCase {
 
     private IndexService newIndexService(IndexModule module) throws IOException {
         return module.newIndexService(nodeEnvironment, xContentRegistry(), deleter, circuitBreakerService, bigArrays, threadPool,
-                scriptService, null, indicesQueryCache, mapperRegistry,
+                scriptService, (org.elasticsearch.cluster.service.ClusterService) clusterService, null, indicesQueryCache, mapperRegistry,
                 new IndicesFieldDataCache(settings, listener), writableRegistry());
     }
 

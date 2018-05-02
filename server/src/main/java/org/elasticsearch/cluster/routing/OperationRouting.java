@@ -19,24 +19,33 @@
 
 package org.elasticsearch.cluster.routing;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
+import org.elassandra.index.search.TokenRangesService;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.TransportAddress;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardNotFoundException;
 import org.elasticsearch.node.ResponseCollectorService;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -45,6 +54,8 @@ import java.util.stream.Collectors;
 
 public class OperationRouting extends AbstractComponent {
 
+    private final ClusterService clusterService;
+    
     public static final Setting<Boolean> USE_ADAPTIVE_REPLICA_SELECTION_SETTING =
             Setting.boolSetting("cluster.routing.use_adaptive_replica_selection", false,
                     Setting.Property.Dynamic, Setting.Property.NodeScope);
@@ -52,8 +63,9 @@ public class OperationRouting extends AbstractComponent {
     private String[] awarenessAttributes;
     private boolean useAdaptiveReplicaSelection;
 
-    public OperationRouting(Settings settings, ClusterSettings clusterSettings) {
+    public OperationRouting(Settings settings, ClusterSettings clusterSettings, ClusterService clusterService) {
         super(settings);
+        this.clusterService = clusterService;
         this.awarenessAttributes = AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.get(settings);
         this.useAdaptiveReplicaSelection = USE_ADAPTIVE_REPLICA_SELECTION_SETTING.get(settings);
         clusterSettings.addSettingsUpdateConsumer(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING,
@@ -61,6 +73,12 @@ public class OperationRouting extends AbstractComponent {
         clusterSettings.addSettingsUpdateConsumer(USE_ADAPTIVE_REPLICA_SELECTION_SETTING, this::setUseAdaptiveReplicaSelection);
     }
 
+    public ShardIterator shard(Index index) {
+        IndexService indexService = clusterService.indexServiceSafe(index);
+        ShardRouting shardRouting = indexService.getShardOrNull(0).routingEntry();
+        return new PlainShardIterator(new ShardId(index, 0), Collections.singletonList(shardRouting));
+    }
+    
     void setUseAdaptiveReplicaSelection(boolean useAdaptiveReplicaSelection) {
         this.useAdaptiveReplicaSelection = useAdaptiveReplicaSelection;
     }
@@ -70,33 +88,29 @@ public class OperationRouting extends AbstractComponent {
     }
 
     public ShardIterator indexShards(ClusterState clusterState, String index, String id, @Nullable String routing) {
-        return shards(clusterState, index, id, routing).shardsIt();
+        return shard(clusterState.metaData().index(index).getIndex());
     }
 
-    public ShardIterator getShards(ClusterState clusterState, String index, String id, @Nullable String routing, @Nullable String preference) {
-        return preferenceActiveShardIterator(shards(clusterState, index, id, routing), clusterState.nodes().getLocalNodeId(), clusterState.nodes(), preference, null, null);
+    public ShardIterator getShards(ClusterState clusterState, String index, String id, @Nullable String routing, 
+            @Nullable String preference) {
+        return shard(clusterState.metaData().index(index).getIndex());
     }
 
     public ShardIterator getShards(ClusterState clusterState, String index, int shardId, @Nullable String preference) {
-        final IndexShardRoutingTable indexShard = clusterState.getRoutingTable().shardRoutingTable(index, shardId);
-        return preferenceActiveShardIterator(indexShard, clusterState.nodes().getLocalNodeId(), clusterState.nodes(), preference, null, null);
-    }
-
-    public GroupShardsIterator<ShardIterator> searchShards(ClusterState clusterState,
-                                                           String[] concreteIndices,
-                                                           @Nullable Map<String, Set<String>> routing,
-                                                           @Nullable String preference) {
-        return searchShards(clusterState, concreteIndices, routing, preference, null, null);
+        return shard(clusterState.metaData().index(index).getIndex());
     }
 
 
     public GroupShardsIterator<ShardIterator> searchShards(ClusterState clusterState,
                                                            String[] concreteIndices,
+                                                           @Nullable String[] types,
                                                            @Nullable Map<String, Set<String>> routing,
                                                            @Nullable String preference,
                                                            @Nullable ResponseCollectorService collectorService,
+                                                           @Nullable Collection<Range<Token>> tokenRanges,
+                                                           @Nullable TransportAddress src,
                                                            @Nullable Map<String, Long> nodeCounts) {
-        final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices, routing);
+        final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices,  types, routing, preference, tokenRanges, src);
         final Set<ShardIterator> set = new HashSet<>(shards.size());
         for (IndexShardRoutingTable shard : shards) {
             ShardIterator iterator = preferenceActiveShardIterator(shard,
@@ -105,29 +119,56 @@ public class OperationRouting extends AbstractComponent {
                 set.add(iterator);
             }
         }
+        if (logger.isDebugEnabled())
+            logger.debug("routing to nodes={}", set.stream()    
+                    .filter(it -> it.remaining() > 0)
+                    .map(it -> {
+                        ShardRouting shard = it.nextOrNull();
+                        return shard.currentNodeId()+":"+shard.tokenRanges().toString();
+                    })
+                    .collect(Collectors.joining(", ")));
         return new GroupShardsIterator<>(new ArrayList<>(set));
     }
 
     private static final Map<String, Set<String>> EMPTY_ROUTING = Collections.emptyMap();
 
-    private Set<IndexShardRoutingTable> computeTargetedShards(ClusterState clusterState, String[] concreteIndices, @Nullable Map<String, Set<String>> routing) {
+    private Set<IndexShardRoutingTable> computeTargetedShards(ClusterState clusterState, String[] concreteIndices, 
+            @Nullable String[] types, 
+            @Nullable Map<String, Set<String>> routing,
+            @Nullable String preference, 
+            @Nullable Collection<Range<Token>> tokenRanges, 
+            @Nullable TransportAddress src) {
         routing = routing == null ? EMPTY_ROUTING : routing; // just use an empty map
         final Set<IndexShardRoutingTable> set = new HashSet<>();
         // we use set here and not list since we might get duplicates
         for (String index : concreteIndices) {
-            final IndexRoutingTable indexRouting = indexRoutingTable(clusterState, index);
             final IndexMetaData indexMetaData = indexMetaData(clusterState, index);
+            final IndexRoutingTable indexRouting = new IndexRoutingTable.Builder(indexMetaData.getIndex(), this.clusterService, clusterState, preference, src).build();
+            
+            // ignore routing if types is empty.
             final Set<String> effectiveRouting = routing.get(index);
-            if (effectiveRouting != null) {
+            if (types != null && types.length > 0 && effectiveRouting != null) {
                 for (String r : effectiveRouting) {
-                    final int routingPartitionSize = indexMetaData.getRoutingPartitionSize();
-                    for (int partitionOffset = 0; partitionOffset < routingPartitionSize; partitionOffset++) {
-                        set.add(shardRoutingTable(indexRouting, calculateScaledShardId(indexMetaData, r, partitionOffset)));
+                    for (IndexShardRoutingTable indexShard : indexRouting) {
+                        for(String type :types) {
+                            try {
+                                Token token = this.clusterService.getToken(this.clusterService.indexServiceSafe(indexMetaData.getIndex()), type, r);
+                                if (TokenRangesService.tokenRangesContains(indexShard.activeShards().iterator().next().tokenRanges(), token)) {
+                                    set.add(indexShard);
+                                    break;
+                                }
+                            } catch (IOException e) {
+                            }
+                        }
                     }
                 }
             } else {
                 for (IndexShardRoutingTable indexShard : indexRouting) {
-                    set.add(indexShard);
+                    if (indexShard.activeShards().iterator().hasNext()) {
+                        // eliminates shards not matching the requested tokenRanges if specified.
+                        if (tokenRanges == null || TokenRangesService.tokenRangesIntersec(indexShard.activeShards().iterator().next().tokenRanges(), tokenRanges))
+                            set.add(indexShard);
+                    }
                 }
             }
         }

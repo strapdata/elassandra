@@ -20,7 +20,6 @@
 package org.elasticsearch.cluster.node;
 
 import org.elasticsearch.Version;
-import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -31,11 +30,13 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.node.Node;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 
 
@@ -78,6 +79,68 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     private final Version version;
     private final Set<Role> roles;
 
+    private transient UUID nodeUuid;
+    private DiscoveryNodeStatus status = DiscoveryNodeStatus.UNKNOWN;
+    
+    public static enum DiscoveryNodeStatus {
+        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2);
+
+        private final byte status;
+
+        DiscoveryNodeStatus(byte status) {
+            this.status = status;
+        }
+
+        public byte status() {
+            return this.status;
+        }
+
+        @Override
+        public String toString() {
+            switch (this) {
+            case UNKNOWN:
+                return "UNKNOWN";
+            case ALIVE:
+                return "ALIVE";
+            case DEAD:
+                return "DEAD";
+            default:
+                throw new IllegalArgumentException();
+            }
+        }
+    }
+
+    public DiscoveryNode status(DiscoveryNodeStatus status) {
+        this.status = status;
+        return this;
+    }
+    
+    /**
+     * The name of the node.
+     */
+    public DiscoveryNodeStatus status() {
+        return this.status;
+    }
+
+    /**
+     * The name of the node.
+     */
+    public DiscoveryNodeStatus getStatus() {
+        return status();
+    }
+    
+    
+    public UUID uuid() {
+        return this.nodeUuid;
+    }
+    
+    /**
+     * The inet listen address of the node.
+     */
+    public InetAddress getInetAddress() {
+        TransportAddress addr = getAddress();
+        return addr.address().getAddress();
+    }
 
     /**
      * Creates a new {@link DiscoveryNode}
@@ -134,7 +197,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      */
     public DiscoveryNode(String nodeName, String nodeId, TransportAddress address,
                          Map<String, String> attributes, Set<Role> roles, Version version) {
-        this(nodeName, nodeId, UUIDs.randomBase64UUID(), address.address().getHostString(), address.getAddress(), address, attributes,
+        this(nodeName, nodeId, nodeId, address.address().getHostString(), address.getAddress(), address, attributes,
             roles, version);
     }
 
@@ -164,6 +227,11 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
             this.nodeName = "";
         }
         this.nodeId = nodeId.intern();
+        try {
+            this.nodeUuid = UUID.fromString(nodeId);
+        } catch (Exception e) {
+            this.nodeUuid = UUID.randomUUID();
+        }
         this.ephemeralId = ephemeralId.intern();
         this.hostName = hostName.intern();
         this.hostAddress = hostAddress.intern();

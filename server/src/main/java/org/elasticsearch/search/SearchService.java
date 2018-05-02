@@ -22,6 +22,7 @@ package org.elasticsearch.search;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.util.IOUtils;
+import org.elassandra.index.search.TokenRangesSearcherWrapper;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
@@ -93,8 +94,8 @@ import org.elasticsearch.search.sort.SortAndFormats;
 import org.elasticsearch.search.sort.SortBuilder;
 import org.elasticsearch.search.suggest.Suggest;
 import org.elasticsearch.search.suggest.completion.CompletionSuggestion;
-import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.threadpool.Scheduler.Cancellable;
+import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.threadpool.ThreadPool.Names;
 import org.elasticsearch.transport.TransportRequest;
 
@@ -589,13 +590,19 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         throws IOException {
         return createSearchContext(request, timeout, true);
     }
+    
     private DefaultSearchContext createSearchContext(ShardSearchRequest request, TimeValue timeout,
                                                      boolean assertAsyncActions)
             throws IOException {
         IndexService indexService = indicesService.indexServiceSafe(request.shardId().getIndex());
-        IndexShard indexShard = indexService.getShard(request.shardId().getId());
+        //IndexShard indexShard = indexService.getShard(request.shardId().getId());
+        IndexShard indexShard = indexService.getShard(0);
         SearchShardTarget shardTarget = new SearchShardTarget(clusterService.localNode().getId(),
                 indexShard.shardId(), request.getClusterAlias(), OriginalIndices.NONE);
+        
+        if (indexService.isTokenRangesBitsetCacheEnabled())
+            TokenRangesSearcherWrapper.current(request);
+        
         Engine.Searcher engineSearcher = indexShard.acquireSearcher("search");
 
         final DefaultSearchContext searchContext = new DefaultSearchContext(idGenerator.incrementAndGet(), request, shardTarget,
@@ -676,6 +683,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         try {
             context.clearReleasables(Lifetime.PHASE);
             context.setTask(null);
+            TokenRangesSearcherWrapper.removeCurrent();
         } finally {
             context.decRef();
         }

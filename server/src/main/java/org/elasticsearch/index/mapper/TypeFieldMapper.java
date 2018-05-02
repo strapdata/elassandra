@@ -306,6 +306,17 @@ public class TypeFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored()) {
+            return;
+        }
+        context.doc().add(new Field(fieldType().name(), context.type(), fieldType()));
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedSetDocValuesField(fieldType().name(), new BytesRef(context.type())));
+        }
+    }
+    
+    @Override
     protected String contentType() {
         return CONTENT_TYPE;
     }

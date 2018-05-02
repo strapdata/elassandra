@@ -83,7 +83,11 @@ public final class Mapping implements ToXContentFragment {
     public <T extends MetadataFieldMapper> T metadataMapper(Class<T> clazz) {
         return (T) metadataMappersMap.get(clazz);
     }
-
+    
+    public MetadataFieldMapper[] metadataMappers() {
+        return this.metadataMappers;
+    }
+    
     /** @see DocumentMapper#merge(Mapping, boolean) */
     public Mapping merge(Mapping mergeWith, boolean updateAllTypes) {
         RootObjectMapper mergedRoot = root.merge(mergeWith.root, updateAllTypes);

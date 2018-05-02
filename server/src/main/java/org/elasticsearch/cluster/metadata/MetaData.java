@@ -22,6 +22,8 @@ package org.elasticsearch.cluster.metadata;
 import com.carrotsearch.hppc.ObjectHashSet;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.CollectionUtil;
 import org.elasticsearch.cluster.Diff;
@@ -33,7 +35,6 @@ import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.collect.HppcMaps;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -71,6 +72,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -137,7 +139,8 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     public static final MetaData EMPTY_META_DATA = builder().build();
 
     public static final String CONTEXT_MODE_PARAM = "context_mode";
-
+    public static final String CONTEXT_CASSANDRA_PARAM = "cassandra_mode";
+    
     public static final String CONTEXT_MODE_SNAPSHOT = XContentContext.SNAPSHOT.toString();
 
     public static final String CONTEXT_MODE_GATEWAY = XContentContext.GATEWAY.toString();
@@ -180,10 +183,12 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         this.templates = templates;
         int totalNumberOfShards = 0;
         int numberOfShards = 0;
+        /*
         for (ObjectCursor<IndexMetaData> cursor : indices.values()) {
             totalNumberOfShards += cursor.value.getTotalNumberOfShards();
             numberOfShards += cursor.value.getNumberOfShards();
         }
+        */
         this.totalNumberOfShards = totalNumberOfShards;
         this.numberOfShards = numberOfShards;
 
@@ -828,7 +833,12 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         private final ImmutableOpenMap.Builder<String, Custom> customs;
 
         public Builder() {
-            clusterUUID = "_na_";
+            try {
+                clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            } catch (java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException |java.lang.NoClassDefFoundError e) {
+                // for testing when Cassandra is nnot initialized.
+                clusterUUID = UUID.randomUUID().toString();
+            }
             indices = ImmutableOpenMap.builder();
             templates = ImmutableOpenMap.builder();
             customs = ImmutableOpenMap.builder();
@@ -1001,11 +1011,14 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             this.clusterUUID = clusterUUID;
             return this;
         }
+        
+        public Builder incrementVersion() {
+            this.version = version + 1;
+            this.clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            return this;
+        }
 
         public Builder generateClusterUuidIfNeeded() {
-            if (clusterUUID.equals("_na_")) {
-                clusterUUID = UUIDs.randomBase64UUID();
-            }
             return this;
         }
 
@@ -1082,9 +1095,13 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         }
 
         public static String toXContent(MetaData metaData) throws IOException {
+            return toXContent(metaData, ToXContent.EMPTY_PARAMS);
+        }
+        
+        public static String toXContent(MetaData metaData, ToXContent.Params params) throws IOException {
             XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
             builder.startObject();
-            toXContent(metaData, builder, ToXContent.EMPTY_PARAMS);
+            toXContent(metaData, builder, params);
             builder.endObject();
             return builder.string();
         }
@@ -1115,7 +1132,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             }
             builder.endObject();
 
-            if (context == XContentContext.API && !metaData.indices().isEmpty()) {
+            if ((context == XContentContext.API || params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) && !metaData.indices().isEmpty()) {
                 builder.startObject("indices");
                 for (IndexMetaData indexMetaData : metaData) {
                     IndexMetaData.Builder.toXContent(indexMetaData, builder, params);
@@ -1203,6 +1220,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     static {
         Map<String, String> params = new HashMap<>(2);
         params.put("binary", "true");
+        params.put(CONTEXT_CASSANDRA_PARAM, "true");
         params.put(MetaData.CONTEXT_MODE_PARAM, MetaData.CONTEXT_MODE_GATEWAY);
         FORMAT_PARAMS = new MapParams(params);
     }
@@ -1215,6 +1233,31 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         @Override
         public void toXContent(XContentBuilder builder, MetaData state) throws IOException {
             Builder.toXContent(state, builder, FORMAT_PARAMS);
+        }
+
+        @Override
+        public MetaData fromXContent(XContentParser parser) throws IOException {
+            return Builder.fromXContent(parser);
+        }
+    };
+    
+    
+    public static final ToXContent.Params CASSANDRA_FORMAT_PARAMS;
+    static {
+        Map<String, String> params = new HashMap<>(2);
+        params.put("binary", "false");
+        params.put(CONTEXT_CASSANDRA_PARAM, "true");
+        CASSANDRA_FORMAT_PARAMS = new MapParams(params);
+    }
+    
+    /**
+     * State format for {@link MetaData} to write to and load from cassandra
+     */
+    public static final MetaDataStateFormat<MetaData> CASSANDRA_FORMAT = new MetaDataStateFormat<MetaData>(XContentType.JSON, "cassandra-global-") {
+
+        @Override
+        public void toXContent(XContentBuilder builder, MetaData state) throws IOException {
+            Builder.toXContent(state, builder, CASSANDRA_FORMAT_PARAMS);
         }
 
         @Override

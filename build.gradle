@@ -35,14 +35,28 @@ import java.security.MessageDigest
 
 // common maven publishing configuration
 subprojects {
-  group = 'org.elasticsearch'
+  group = 'com.strapdata.elasticsearch'
   version = VersionProperties.elasticsearch
   description = "Elasticsearch subproject ${project.path}"
 }
 
+ext.enableArtifactSigning = !version.endsWith("SNAPSHOT") && project.hasProperty("repoUsername")
+ext.repoUsername = { project.hasProperty("repoUsername") ? getProperty("repoUsername") : "" }
+ext.repoPassword = { project.hasProperty("repoPassword") ? getProperty("repoPassword") : "" }
+
 Path rootPath = rootDir.toPath()
 // setup pom license info, but only for artifacts that are part of elasticsearch
 configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
+
+   apply plugin: 'maven'
+   apply plugin: 'signing'
+ 
+   repositories {
+     mavenLocal()
+     maven {
+         url "https://oss.sonatype.org/content/repositories/snapshots/"
+     }
+   }
 
   // we only use maven publish to add tasks for pom generation
   plugins.withType(MavenPublishPlugin).whenPluginAdded {
@@ -52,7 +66,7 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
         all {
           pom.withXml { XmlProvider xml ->
             Node node = xml.asNode()
-            node.appendNode('inceptionYear', '2009')
+            node.appendNode('inceptionYear', '2015')
 
             Node license = node.appendNode('licenses').appendNode('license')
             license.appendNode('name', 'The Apache Software License, Version 2.0')
@@ -60,17 +74,78 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
             license.appendNode('distribution', 'repo')
 
             Node developer = node.appendNode('developers').appendNode('developer')
-            developer.appendNode('name', 'Elastic')
-            developer.appendNode('url', 'http://www.elastic.co')
+            developer.appendNode('name', 'Strapdata')
+            developer.appendNode('url', 'http://www.strapdata.com')
+          }
+        }
+        
+        maven(MavenPublication) {
+         if (components.hasProperty('java')) {
+             from components.java
+             artifacts {
+                 archives sourcesJar
+                 archives javadocJar
+             }
           }
         }
       }
     }
-  }
-  plugins.withType(BuildPlugin).whenPluginAdded {
-    project.licenseFile = project.rootProject.file('LICENSE.txt')
-    project.noticeFile = project.rootProject.file('NOTICE.txt')
-  }
+   
+    if (enableArtifactSigning) {
+       signing {
+         sign configurations.archives
+       }
+    }
+   
+    // OSSRH publication
+    uploadArchives {
+        repositories {
+            mavenDeployer {
+                uploadDescriptor = true
+                
+                // POM signature
+                beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+                
+                // Target repository
+                repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                    authentication(userName: repoUsername, password: repoPassword)
+                }
+
+                // SNAPSHOT repository
+                snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
+                    authentication(userName: repoUsername, password: repoPassword)
+                }
+                
+                pom.withXml { XmlProvider xml ->
+                    Node node = xml.asNode()
+                    node.appendNode('name',it.name)
+                    node.appendNode('description',"Elasticsearch subproject ${project.path}")
+                    node.appendNode('url', 'http://github.com/strapdata/elassandra')
+                    node.appendNode('inceptionYear', '2015')
+        
+                    Node license = node.appendNode('licenses').appendNode('license')
+                    license.appendNode('name', 'The Apache Software License, Version 2.0')
+                    license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
+                    license.appendNode('distribution', 'repo')
+                    
+                    def scm = node.appendNode('scm')
+                    scm.appendNode('url', 'http://github.com/strapdata/elassandra')
+                    scm.appendNode('connection', 'scm:git:git@github.com:strapdata/elassandra.git')
+                    scm.appendNode('developerConnection', 'scm:git:git@github.com:strapdata/elassandra.git')
+                    
+                    Node developer = node.appendNode('developers').appendNode('developer')
+                    developer.appendNode('name', 'Strapdata')
+                    developer.appendNode('url', 'https://github.com/strapdata/elassandra')
+                    developer.appendNode('organizationUrl', 'http://www.strapdata.com/')
+                }
+            }
+        }
+      }
+    }
+   plugins.withType(BuildPlugin).whenPluginAdded {
+      project.licenseFile = project.rootProject.file('LICENSE.txt')
+      project.noticeFile = project.rootProject.file('NOTICE.txt')
+   }
 }
 
 /* Introspect all versions of ES that may be tested against for backwards
@@ -106,6 +181,18 @@ allprojects {
     versionCollection = versions
 
     buildMetadata = buildMetadataMap
+    
+    
+    // elassandra adds a 4th digit to the version number
+    elassVersion = VersionProperties.elassandra
+    // full version number including the elassandra added digit, and taking care of eventual "-SNAPSHOT" suffix
+
+    if (version.endsWith("-SNAPSHOT")) {
+      fullElassVersion = "${version.minus('-SNAPSHOT')}.${elassVersion}-SNAPSHOT"
+    }
+    else {
+      fullElassVersion = "${version}.${elassVersion}"
+    }
   }
 }
 
@@ -116,7 +203,7 @@ task verifyVersions {
     }
     // Read the list from maven central
     Node xml
-    new URL('https://repo1.maven.org/maven2/org/elasticsearch/elasticsearch/maven-metadata.xml').openStream().withStream { s ->
+    new URL('https://oss.sonatype.org/content/repositories/snapshots/com/strapdata/elasticsearch/elasticsearch/maven-metadata.xml').openStream().withStream { s ->
         xml = new XmlParser().parse(s)
     }
     Set<Version> knownVersions = new TreeSet<>(xml.versioning.versions.version.collect { it.text() }.findAll { it ==~ /\d\.\d\.\d/ }.collect { Version.fromString(it) })
@@ -184,42 +271,44 @@ subprojects {
     them as external dependencies so the build plugin that we use can be used
     to build elasticsearch plugins outside of the elasticsearch source tree. */
   ext.projectSubstitutions = [
-    "org.elasticsearch.gradle:build-tools:${version}": ':build-tools',
+    "com.strapdata.elasticsearch.gradle:build-tools:${version}": ':build-tools',
     "org.elasticsearch:rest-api-spec:${version}": ':rest-api-spec',
-    "org.elasticsearch:elasticsearch:${version}": ':server',
-    "org.elasticsearch:elasticsearch-cli:${version}": ':server:cli',
-    "org.elasticsearch:elasticsearch-core:${version}": ':libs:elasticsearch-core',
-    "org.elasticsearch.client:elasticsearch-rest-client:${version}": ':client:rest',
-    "org.elasticsearch.client:elasticsearch-rest-client-sniffer:${version}": ':client:sniffer',
-    "org.elasticsearch.client:elasticsearch-rest-high-level-client:${version}": ':client:rest-high-level',
-    "org.elasticsearch.client:test:${version}": ':client:test',
-    "org.elasticsearch.client:transport:${version}": ':client:transport',
-    "org.elasticsearch.test:framework:${version}": ':test:framework',
-    "org.elasticsearch.distribution.integ-test-zip:elasticsearch:${version}": ':distribution:integ-test-zip',
-    "org.elasticsearch.distribution.zip:elasticsearch:${version}": ':distribution:zip',
-    "org.elasticsearch.distribution.tar:elasticsearch:${version}": ':distribution:tar',
-    "org.elasticsearch.distribution.rpm:elasticsearch:${version}": ':distribution:rpm',
-    "org.elasticsearch.distribution.deb:elasticsearch:${version}": ':distribution:deb',
-    "org.elasticsearch.test:logger-usage:${version}": ':test:logger-usage',
+    "com.strapdata.elasticsearch:elasticsearch:${version}": ':server',
+    "com.strapdata.elasticsearch:elasticsearch-cli:${version}": ':server:cli',
+    "com.strapdata.elasticsearch:elasticsearch-core:${version}": ':libs:elasticsearch-core',
+    "com.strapdata.elasticsearch.client:elasticsearch-rest-client:${version}": ':client:rest',
+    "com.strapdata.elasticsearch.client:elasticsearch-rest-client-sniffer:${version}": ':client:sniffer',
+    "com.strapdata.elasticsearch.client:elasticsearch-rest-high-level-client:${version}": ':client:rest-high-level',
+    "com.strapdata.elasticsearch.client:test:${version}": ':client:test',
+    "com.strapdata.elasticsearch.client:transport:${version}": ':client:transport',
+    "com.strapdata.elasticsearch.test:framework:${version}": ':test:framework',
+    "com.strapdata.elasticsearch.distribution.integ-test-zip:elasticsearch:${version}": ':distribution:integ-test-zip',
+    "com.strapdata.elasticsearch.distribution.zip:elasticsearch:${version}": ':distribution:zip',
+    "com.strapdata.elasticsearch.distribution.tar:elasticsearch:${version}": ':distribution:tar',
+    "com.strapdata.elasticsearch.distribution.rpm:elasticsearch:${version}": ':distribution:rpm',
+    "com.strapdata.elasticsearch.distribution.deb:elasticsearch:${version}": ':distribution:deb',
+    "com.strapdata.elasticsearch.test:logger-usage:${version}": ':test:logger-usage',
     // for transport client
-    "org.elasticsearch.plugin:transport-netty4-client:${version}": ':modules:transport-netty4',
-    "org.elasticsearch.plugin:reindex-client:${version}": ':modules:reindex',
-    "org.elasticsearch.plugin:lang-mustache-client:${version}": ':modules:lang-mustache',
-    "org.elasticsearch.plugin:parent-join-client:${version}": ':modules:parent-join',
-    "org.elasticsearch.plugin:aggs-matrix-stats-client:${version}": ':modules:aggs-matrix-stats',
-    "org.elasticsearch.plugin:percolator-client:${version}": ':modules:percolator',
-    "org.elasticsearch.plugin:rank-eval-client:${version}": ':modules:rank-eval',
+    "com.strapdata.elasticsearch.plugin:transport-netty4-client:${version}": ':modules:transport-netty4',
+    "com.strapdata.elasticsearch.plugin:reindex-client:${version}": ':modules:reindex',
+    "com.strapdata.elasticsearch.plugin:lang-mustache-client:${version}": ':modules:lang-mustache',
+    "com.strapdata.elasticsearch.plugin:parent-join-client:${version}": ':modules:parent-join',
+    "com.strapdata.elasticsearch.plugin:aggs-matrix-stats-client:${version}": ':modules:aggs-matrix-stats',
+    "com.strapdata.elasticsearch.plugin:percolator-client:${version}": ':modules:percolator',
+    "com.strapdata.elasticsearch.plugin:rank-eval-client:${version}": ':modules:rank-eval',
   ]
 
+/*
   for (final Version version : versionCollection.versionsIndexCompatibleWithCurrent) {
     if (version.branch != null) {
       final String snapshotProject = ":distribution:bwc-snapshot-${version.branch}"
       project(snapshotProject).ext.bwcVersion = version
-      ext.projectSubstitutions["org.elasticsearch.distribution.deb:elasticsearch:${version}"] = snapshotProject
-      ext.projectSubstitutions["org.elasticsearch.distribution.rpm:elasticsearch:${version}"] = snapshotProject
-      ext.projectSubstitutions["org.elasticsearch.distribution.zip:elasticsearch:${version}"] = snapshotProject
+      ext.projectSubstitutions["com.strapdata.elasticsearch.distribution.deb:elasticsearch:${version}"] = snapshotProject
+      ext.projectSubstitutions["com.strapdata.elasticsearch.distribution.rpm:elasticsearch:${version}"] = snapshotProject
+      ext.projectSubstitutions["com.strapdata.elasticsearch.distribution.zip:elasticsearch:${version}"] = snapshotProject
     }
   }
+*/
 
   project.afterEvaluate {
     configurations.all {
@@ -238,7 +327,7 @@ subprojects {
       String artifactsHost = VersionProperties.elasticsearch.endsWith("-SNAPSHOT") ? "https://snapshots.elastic.co" : "https://artifacts.elastic.co"
       Closure sortClosure = { a, b -> b.group <=> a.group }
       Closure depJavadocClosure = { dep ->
-        if (dep.group != null && dep.group.startsWith('org.elasticsearch')) {
+        if (dep.group != null && dep.group.startsWith('com.strapdata.elasticsearch')) {
           String substitution = project.ext.projectSubstitutions.get("${dep.group}:${dep.name}:${dep.version}")
           if (substitution != null) {
             project.javadoc.dependsOn substitution + ':javadoc'

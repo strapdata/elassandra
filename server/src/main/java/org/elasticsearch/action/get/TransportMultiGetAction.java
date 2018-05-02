@@ -29,7 +29,6 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.AtomicArray;
-import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -79,9 +78,9 @@ public class TransportMultiGetAction extends HandledTransportAction<MultiGetRequ
                 continue;
             }
 
-            ShardId shardId = clusterService.operationRouting()
+            ShardId shardId = new ShardId(clusterService.operationRouting()
                     .getShards(clusterState, concreteSingleIndex, item.id(), item.routing(), null)
-                    .shardId();
+                    .shardId().getIndex(), 0);
 
             MultiGetShardRequest shardRequest = shardRequests.get(shardId);
             if (shardRequest == null) {

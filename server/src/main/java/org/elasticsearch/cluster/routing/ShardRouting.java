@@ -19,6 +19,8 @@
 
 package org.elasticsearch.cluster.routing;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.cluster.routing.RecoverySource.PeerRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.StoreRecoverySource;
 import org.elasticsearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
@@ -26,13 +28,13 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
-import org.elasticsearch.common.xcontent.ToXContent.Params;
 import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -47,6 +49,11 @@ public final class ShardRouting implements Writeable, ToXContentObject {
      */
     public static final long UNAVAILABLE_EXPECTED_SHARD_SIZE = -1;
 
+    /**
+     * Dummy allocation ID to avoid unless random generation (this involve a lock on java.security.SecureRandom.nextBytes).
+     */
+    public static AllocationId DUMMY_ALLOCATION_ID = AllocationId.newInitializing("dummy_alloc_id");
+    
     private final ShardId shardId;
     private final String currentNodeId;
     private final String relocatingNodeId;
@@ -60,13 +67,39 @@ public final class ShardRouting implements Writeable, ToXContentObject {
     @Nullable
     private final ShardRouting targetRelocatingShard;
 
+    protected transient Collection<Range<Token>> tokenRanges;
+    
+    public Collection<Range<Token>> tokenRanges() {
+        return tokenRanges;
+    }
+
+    public void tokenRanges(Collection<Range<Token>> tokenRanges) {
+        this.tokenRanges = tokenRanges;
+    }
+
+    public ShardRouting(ShardId shardId, String currentNodeId, boolean primary, ShardRoutingState state, UnassignedInfo unassignedInfo, Collection<Range<Token>> tokenRanges) {
+        this(shardId, currentNodeId, null, primary, state, 
+                (!primary) ? PeerRecoverySource.INSTANCE : ((state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) ? RecoverySource.LocalShardsRecoverySource.INSTANCE : null), 
+                (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) ? unassignedInfo : null, 
+                (state == ShardRoutingState.STARTED || state == ShardRoutingState.INITIALIZING) ? DUMMY_ALLOCATION_ID : null, 
+                UNAVAILABLE_EXPECTED_SHARD_SIZE, tokenRanges);
+    }
+    
+    public ShardRouting(ShardId shardId, String currentNodeId,
+            String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
+            UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize) {
+        this(shardId, currentNodeId,
+            relocatingNodeId, primary, state, recoverySource,
+            unassignedInfo, allocationId, expectedShardSize, null);
+    }
+    
     /**
      * A constructor to internally create shard routing instances, note, the internal flag should only be set to true
      * by either this class or tests. Visible for testing.
      */
-    ShardRouting(ShardId shardId, String currentNodeId,
+    public ShardRouting(ShardId shardId, String currentNodeId,
                  String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
-                 UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize) {
+                 UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize, Collection<Range<Token>> tokenRanges) {
         this.shardId = shardId;
         this.currentNodeId = currentNodeId;
         this.relocatingNodeId = relocatingNodeId;
@@ -83,7 +116,8 @@ public final class ShardRouting implements Writeable, ToXContentObject {
         assert !(state == ShardRoutingState.UNASSIGNED && unassignedInfo == null) : "unassigned shard must be created with meta";
         assert (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) == (recoverySource != null) : "recovery source only available on unassigned or initializing shard but was " + state;
         assert recoverySource == null || recoverySource == PeerRecoverySource.INSTANCE || primary : "replica shards always recover from primary";
-        assert (currentNodeId == null) == (state == ShardRoutingState.UNASSIGNED)  : "unassigned shard must not be assigned to a node " + this;
+        //assert (currentNodeId == null) == (state == ShardRoutingState.UNASSIGNED)  : "unassigned shard must not be assigned to a node " + this;
+        this.tokenRanges = tokenRanges;
     }
 
     @Nullable
@@ -446,9 +480,7 @@ public final class ShardRouting implements Writeable, ToXContentObject {
      * no allocation at all..
      **/
     public boolean isSameAllocation(ShardRouting other) {
-        boolean b = this.allocationId != null && other.allocationId != null && this.allocationId.getId().equals(other.allocationId.getId());
-        assert b == false || this.currentNodeId.equals(other.currentNodeId) : "ShardRoutings have the same allocation id but not the same node. This [" + this + "], other [" + other + "]";
-        return b;
+        return true;
     }
 
     /**
@@ -621,6 +653,9 @@ public final class ShardRouting implements Writeable, ToXContentObject {
             .field("relocating_node", relocatingNodeId())
             .field("shard", id())
             .field("index", getIndexName());
+        if (tokenRanges != null && tokenRanges.size() > 0) {
+            builder.field("token_ranges", tokenRanges);
+        }
         if (expectedShardSize != UNAVAILABLE_EXPECTED_SHARD_SIZE) {
             builder.field("expected_shard_size_in_bytes", expectedShardSize);
         }

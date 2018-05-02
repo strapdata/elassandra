@@ -88,8 +88,8 @@ public class PreBuiltTransportClient extends TransportClient {
         Collections.unmodifiableList(
             Arrays.asList(
                 Netty4Plugin.class,
-                ReindexPlugin.class,
-                PercolatorPlugin.class,
+                //ReindexPlugin.class,
+                //PercolatorPlugin.class,
                 MustachePlugin.class,
                 ParentJoinPlugin.class));
 

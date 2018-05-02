@@ -18,8 +18,9 @@
  */
 
 task buildTar(type: Tar) {
-  dependsOn createLogDir, createPluginsDir
-  baseName = 'elasticsearch'
+  dependsOn createLogDir, createPluginsDir, createDataDir, createLogDir
+  baseName = 'elassandra'
+  version = project.fullElassVersion
   extension = 'tar.gz'
   with archivesFiles
   compression = Compression.GZIP

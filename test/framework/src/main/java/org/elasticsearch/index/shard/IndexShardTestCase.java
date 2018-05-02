@@ -298,8 +298,8 @@ public abstract class IndexShardTestCase extends ESTestCase {
             CircuitBreakerService breakerService = new HierarchyCircuitBreakerService(nodeSettings, clusterSettings);
             indexShard = new IndexShard(routing, indexSettings, shardPath, store, () -> null, indexCache, mapperService, similarityService,
                 engineFactory, indexEventListener, indexSearcherWrapper, threadPool,
-                BigArrays.NON_RECYCLING_INSTANCE, warmer, Collections.emptyList(), Arrays.asList(listeners), globalCheckpointSyncer,
-                breakerService);
+                BigArrays.NON_RECYCLING_INSTANCE, warmer, Collections.emptyList(), Arrays.asList(listeners),
+                breakerService, null, null);
             success = true;
         } finally {
             if (success == false) {
@@ -335,7 +335,7 @@ public abstract class IndexShardTestCase extends ESTestCase {
                 current.indexSettings().getIndexMetaData(),
                 null,
                 current.engineFactory,
-                current.getGlobalCheckpointSyncer(),
+                null,
                 listeners);
     }
 
@@ -585,7 +585,7 @@ public abstract class IndexShardTestCase extends ESTestCase {
 
     protected Engine.DeleteResult deleteDoc(IndexShard shard, String type, String id) throws IOException {
         if (shard.routingEntry().primary()) {
-            return shard.applyDeleteOperationOnPrimary(Versions.MATCH_ANY, type, id, VersionType.INTERNAL, update -> {});
+            return shard.applyDeleteOperationOnPrimary(Versions.MATCH_ANY, type, id, VersionType.INTERNAL, update -> {}, null);
         } else {
             return shard.applyDeleteOperationOnReplica(shard.seqNoStats().getMaxSeqNo() + 1,
                 0L, type, id, VersionType.EXTERNAL, update -> {});

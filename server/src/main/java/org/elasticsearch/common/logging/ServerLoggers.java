@@ -25,8 +25,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.Configurator;
 import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.Index;
@@ -78,7 +78,7 @@ public class ServerLoggers {
         return Loggers.getLogger(loggerName, prefixesList.toArray(new String[prefixesList.size()]));
     }
 
-    private static List<String> prefixesList(Settings settings, String... prefixes) {
+    public static List<String> prefixesList(Settings settings, String... prefixes) {
         List<String> prefixesList = new ArrayList<>();
         if (Node.NODE_NAME_SETTING.exists(settings)) {
             prefixesList.add(Node.NODE_NAME_SETTING.get(settings));
@@ -104,6 +104,9 @@ public class ServerLoggers {
     }
 
     public static void setLevel(Logger logger, Level level) {
+        ClusterService.setLoggingLevel(logger.getName(), level.toString());
+        
+        /*
         if (!LogManager.ROOT_LOGGER_NAME.equals(logger.getName())) {
             Configurator.setLevel(logger.getName(), level);
         } else {
@@ -121,10 +124,13 @@ public class ServerLoggers {
                 Configurator.setLevel(loggerConfig.getName(), level);
             }
         }
+        */
     }
 
+    /*
     public static void addAppender(final Logger logger, final Appender appender) {
-        final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+        final org.apache.logging.slf4j.SLF4JLoggerContext slf4jContext = (org.apache.logging.slf4j.SLF4JLoggerContext) LogManager.getContext(false);
+        final LoggerContext ctx = (LoggerContext) slf4jContext.getExternalContext();
         final Configuration config = ctx.getConfiguration();
         config.addAppender(appender);
         LoggerConfig loggerConfig = config.getLoggerConfig(logger.getName());
@@ -159,5 +165,5 @@ public class ServerLoggers {
         }
         return null;
     }
-
+    */
 }

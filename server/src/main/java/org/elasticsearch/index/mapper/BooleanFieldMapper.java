@@ -183,6 +183,9 @@ public class BooleanFieldMapper extends FieldMapper {
             if (value == null) {
                 return null;
             }
+            if (value instanceof Boolean) {
+                return (Boolean)value;
+            }
             switch(value.toString()) {
             case "F":
                 return false;
@@ -218,6 +221,11 @@ public class BooleanFieldMapper extends FieldMapper {
                 lowerTerm == null ? null : indexedValueForSearch(lowerTerm),
                 upperTerm == null ? null : indexedValueForSearch(upperTerm),
                 includeLower, includeUpper);
+        }
+        
+        @Override
+        public String cqlType() {
+            return "boolean";
         }
     }
 
@@ -271,6 +279,29 @@ public class BooleanFieldMapper extends FieldMapper {
     }
 
     @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        Boolean value = (Boolean) object;
+        if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored() && !fieldType().hasDocValues()) {
+            return;
+        }
+        if (value == null) {
+            if (fieldType().nullValue() == null) {
+               return;
+            }
+            value = fieldType().nullValue();
+        }
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            context.doc().add(new Field(fieldType().name(), value ? "T" : "F", fieldType()));
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedNumericDocValuesField(fieldType().name(), value ? 1 : 0));
+        } else {
+            createFieldNamesField(context, context.doc().getFields());
+        }
+        super.createField(context,value);
+    }
+
+    @Override
     protected String contentType() {
         return CONTENT_TYPE;
     }
@@ -281,5 +312,10 @@ public class BooleanFieldMapper extends FieldMapper {
         if (includeDefaults || fieldType().nullValue() != null) {
             builder.field("null_value", fieldType().nullValue());
         }
+    }
+    
+    @Override
+    public String cqlType() {
+        return "boolean";
     }
 }

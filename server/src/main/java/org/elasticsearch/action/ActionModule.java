@@ -425,19 +425,22 @@ public class ActionModule extends AbstractModule {
         actions.register(ClusterStateAction.INSTANCE, TransportClusterStateAction.class);
         actions.register(ClusterHealthAction.INSTANCE, TransportClusterHealthAction.class);
         actions.register(ClusterUpdateSettingsAction.INSTANCE, TransportClusterUpdateSettingsAction.class);
-        actions.register(ClusterRerouteAction.INSTANCE, TransportClusterRerouteAction.class);
+        //actions.register(ClusterRerouteAction.INSTANCE, TransportClusterRerouteAction.class);
         actions.register(ClusterSearchShardsAction.INSTANCE, TransportClusterSearchShardsAction.class);
         actions.register(PendingClusterTasksAction.INSTANCE, TransportPendingClusterTasksAction.class);
         actions.register(PutRepositoryAction.INSTANCE, TransportPutRepositoryAction.class);
         actions.register(GetRepositoriesAction.INSTANCE, TransportGetRepositoriesAction.class);
         actions.register(DeleteRepositoryAction.INSTANCE, TransportDeleteRepositoryAction.class);
         actions.register(VerifyRepositoryAction.INSTANCE, TransportVerifyRepositoryAction.class);
+        
+        /*
         actions.register(GetSnapshotsAction.INSTANCE, TransportGetSnapshotsAction.class);
         actions.register(DeleteSnapshotAction.INSTANCE, TransportDeleteSnapshotAction.class);
         actions.register(CreateSnapshotAction.INSTANCE, TransportCreateSnapshotAction.class);
         actions.register(RestoreSnapshotAction.INSTANCE, TransportRestoreSnapshotAction.class);
         actions.register(SnapshotsStatusAction.INSTANCE, TransportSnapshotsStatusAction.class);
-
+        */
+        
         actions.register(IndicesStatsAction.INSTANCE, TransportIndicesStatsAction.class);
         actions.register(IndicesSegmentsAction.INSTANCE, TransportIndicesSegmentsAction.class);
         actions.register(IndicesShardStoresAction.INSTANCE, TransportIndicesShardStoresAction.class);
@@ -534,19 +537,22 @@ public class ActionModule extends AbstractModule {
         registerHandler.accept(new RestClusterHealthAction(settings, restController));
         registerHandler.accept(new RestClusterUpdateSettingsAction(settings, restController));
         registerHandler.accept(new RestClusterGetSettingsAction(settings, restController, clusterSettings, settingsFilter));
-        registerHandler.accept(new RestClusterRerouteAction(settings, restController, settingsFilter));
+        //registerHandler.accept(new RestClusterRerouteAction(settings, restController, settingsFilter));
         registerHandler.accept(new RestClusterSearchShardsAction(settings, restController));
         registerHandler.accept(new RestPendingClusterTasksAction(settings, restController));
         registerHandler.accept(new RestPutRepositoryAction(settings, restController));
         registerHandler.accept(new RestGetRepositoriesAction(settings, restController, settingsFilter));
         registerHandler.accept(new RestDeleteRepositoryAction(settings, restController));
         registerHandler.accept(new RestVerifyRepositoryAction(settings, restController));
+        
+        /*
         registerHandler.accept(new RestGetSnapshotsAction(settings, restController));
         registerHandler.accept(new RestCreateSnapshotAction(settings, restController));
         registerHandler.accept(new RestRestoreSnapshotAction(settings, restController));
         registerHandler.accept(new RestDeleteSnapshotAction(settings, restController));
         registerHandler.accept(new RestSnapshotsStatusAction(settings, restController));
-
+        */
+        
         registerHandler.accept(new RestGetAllAliasesAction(settings, restController));
         registerHandler.accept(new RestGetAllMappingsAction(settings, restController));
         registerHandler.accept(new RestGetAllSettingsAction(settings, restController, indexScopedSettings, settingsFilter));

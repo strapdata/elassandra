@@ -276,13 +276,23 @@ class BuildPlugin implements Plugin<Project> {
                 // just a self contained test-fixture configuration, likely transitive and hellacious
                 return
             }
+            configuration.resolutionStrategy {
+                 force 'com.google.guava:guava:19.0'
+                 force 'org.apache.thrift:libthrift:0.9.2'
+                 force 'org.apache.httpcomponents:httpclient:4.5.2'
+                 force 'org.apache.httpcomponents:httpcore:4.4.5'
+                 force 'commons-logging:commons-logging:1.2'
+                 force 'commons-cli:commons-cli:1.3.1'
+                 force 'io.dropwizard.metrics:metrics-core:3.1.0'
+            }
             configuration.resolutionStrategy.failOnVersionConflict()
+            
         })
 
         // force all dependencies added directly to compile/testCompile to be non-transitive, except for ES itself
         Closure disableTransitiveDeps = { Dependency dep ->
             if (dep instanceof ModuleDependency && !(dep instanceof ProjectDependency)
-                    && dep.group.startsWith('org.elasticsearch') == false) {
+                    && dep.group.startsWith('com.strapdata') == false) {
                 dep.transitive = false
 
                 // also create a configuration just for this dependency version, so that later
@@ -555,32 +565,41 @@ class BuildPlugin implements Plugin<Project> {
     static Closure commonTestConfig(Project project) {
         return {
             jvm "${project.runtimeJavaHome}/bin/java"
-            parallelism System.getProperty('tests.jvms', 'auto')
+            parallelism System.getProperty('tests.jvms', '1')
             ifNoTests 'fail'
             onNonEmptyWorkDirectory 'wipe'
             leaveTemporary true
 
             // TODO: why are we not passing maxmemory to junit4?
-            jvmArg '-Xmx' + System.getProperty('tests.heap.size', '512m')
-            jvmArg '-Xms' + System.getProperty('tests.heap.size', '512m')
+            jvmArg '-Xmx' + System.getProperty('tests.heap.size', '1512m')
+            jvmArg '-Xms' + System.getProperty('tests.heap.size', '1512m')
             jvmArg '-XX:+HeapDumpOnOutOfMemoryError'
             File heapdumpDir = new File(project.buildDir, 'heapdump')
             heapdumpDir.mkdirs()
             jvmArg '-XX:HeapDumpPath=' + heapdumpDir
+            
+            jvmArg '-Xdebug'
+            jvmArg '-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4242'
+            
             argLine System.getProperty('tests.jvm.argline')
 
             // we use './temp' since this is per JVM and tests are forbidden from writing to CWD
+            systemProperty 'cassandra.jmx.local.port', "7199"
+            systemProperty 'cassandra.jmx.remote.port', "7199"
+            systemProperty 'com.sun.management.jmxremote.ssl', "false"
+            systemProperty 'com.sun.management.jmxremote.authenticate', "false"
+            
             systemProperty 'java.io.tmpdir', './temp'
             systemProperty 'java.awt.headless', 'true'
             systemProperty 'tests.gradle', 'true'
             systemProperty 'tests.artifact', project.name
             systemProperty 'tests.task', path
-            systemProperty 'tests.security.manager', 'true'
+            systemProperty 'tests.security.manager', 'false'
             systemProperty 'jna.nosys', 'true'
             // default test sysprop values
             systemProperty 'tests.ifNoTests', 'fail'
             // TODO: remove setting logging level via system property
-            systemProperty 'tests.logger.level', 'WARN'
+            systemProperty 'tests.logger.level', 'TRACE'
             for (Map.Entry<String, String> property : System.properties.entrySet()) {
                 if (property.getKey().startsWith('tests.') ||
                         property.getKey().startsWith('es.')) {
@@ -593,6 +612,21 @@ class BuildPlugin implements Plugin<Project> {
                 }
             }
 
+            // cassandra settings
+            systemProperty 'cassandra.home', "${project.buildDir}/testrun/test/J0"
+            systemProperty 'cassandra.logdir', "${project.buildDir}/testrun/test/J0"
+            systemProperty 'logback.configurationFile', "${project.projectDir}/src/test/resources/conf/logback.xml"
+            systemProperty 'java.library.path', "${project.projectDir}/cassandra/lib/sigar-bin"
+            systemProperty 'cassandra.config', "file://${project.projectDir}/src/test/resources/conf/cassandra.yaml"
+            systemProperty 'cassandra.config.dir', "${project.projectDir}/src/test/resources/conf"
+            systemProperty 'cassandra-rackdc.properties', "file://${project.projectDir}/src/test/resources/conf/cassandra-rackdc.properties"
+            systemProperty 'cassandra.config.loader', "org.elassandra.config.YamlTestConfigurationLoader"
+            systemProperty 'cassandra.storagedir', "${project.buildDir}/testrun/test/J0"
+            systemProperty 'es.synchronous_refresh', 'true'
+            systemProperty 'es.drop_on_delete_index', 'true'
+            systemProperty 'tests.maven', 'true'
+            //systemProperty 'io.netty.tryReflectionSetAccessible', 'false'
+            
             boolean assertionsEnabled = Boolean.parseBoolean(System.getProperty('tests.asserts', 'true'))
             enableSystemAssertions assertionsEnabled
             enableAssertions assertionsEnabled
@@ -640,6 +674,11 @@ class BuildPlugin implements Plugin<Project> {
         test.configure(commonTestConfig(project))
         test.configure {
             include '**/*Tests.class'
+            exclude '**/MockNodeTests.class'
+            exclude '**/MockTcpTransportTests.class'
+            exclude '**/InternalTestCluster.class'
+            exclude '**/InternalTestClusterTests.class'
+            exclude '**/discovery/*.class'
         }
 
         // Add a method to create additional unit tests for a project, which will share the same
@@ -661,7 +700,7 @@ class BuildPlugin implements Plugin<Project> {
         project.test.mustRunAfter(precommit)
         // only require dependency licenses for non-elasticsearch deps
         project.dependencyLicenses.dependencies = project.configurations.runtime.fileCollection {
-            it.group.startsWith('org.elasticsearch') == false
+            it.group.startsWith('com.strapdata.elasticsearch') == false
         } - project.configurations.provided
     }
 

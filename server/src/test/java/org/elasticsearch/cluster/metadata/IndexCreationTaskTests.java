@@ -50,16 +50,16 @@ import org.elasticsearch.index.mapper.ParentFieldMapper;
 import org.elasticsearch.index.mapper.RoutingFieldMapper;
 import org.elasticsearch.index.shard.IndexEventListener;
 import org.elasticsearch.indices.IndicesService;
-import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.hamcrest.Matchers;
 import org.mockito.ArgumentCaptor;
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.Collections;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
@@ -69,16 +69,16 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.Matchers.anyBoolean;
+import static org.mockito.Matchers.anyMap;
 import static org.mockito.Matchers.anyObject;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.anyMap;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-public class IndexCreationTaskTests extends ESTestCase {
+public class IndexCreationTaskTests extends ESSingleNodeTestCase {
 
     private final IndicesService indicesService = mock(IndicesService.class);
     private final AliasValidator aliasValidator = mock(AliasValidator.class);
@@ -220,22 +220,22 @@ public class IndexCreationTaskTests extends ESTestCase {
     public void testTemplateOrder2() throws Exception {
         addMatchingTemplate(builder -> builder
             .order(3)
-            .settings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 12))
+            .settings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1))
             .putAlias(AliasMetaData.builder("alias1").searchRouting("3").build())
         );
         addMatchingTemplate(builder -> builder
             .order(2)
-            .settings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 11))
+            .settings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1))
             .putAlias(AliasMetaData.builder("alias1").searchRouting("2").build())
         );
         addMatchingTemplate(builder -> builder
             .order(1)
-            .settings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 10))
+            .settings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1))
             .putAlias(AliasMetaData.builder("alias1").searchRouting("1").build())
         );
         final ClusterState result = executeTask();
 
-        assertThat(result.getMetaData().index("test").getSettings().get(SETTING_NUMBER_OF_SHARDS), equalTo("12"));
+        assertThat(result.getMetaData().index("test").getSettings().get(SETTING_NUMBER_OF_SHARDS), equalTo("1"));
         assertThat(result.metaData().index("test").getAliases().get("alias1").getSearchRouting(), equalTo("3"));
     }
 
@@ -387,7 +387,7 @@ public class IndexCreationTaskTests extends ESTestCase {
         setupState();
         setupRequest();
         final MetaDataCreateIndexService.IndexCreationTask task = new MetaDataCreateIndexService.IndexCreationTask(
-            logger, allocationService, request, listener, indicesService, aliasValidator, xContentRegistry, clusterStateSettings.build(),
+            logger, allocationService, request, listener, indicesService, clusterService(), aliasValidator, xContentRegistry, clusterStateSettings.build(),
             validator
         );
         return task.execute(state);

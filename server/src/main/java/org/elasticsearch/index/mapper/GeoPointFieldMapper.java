@@ -28,6 +28,7 @@ import org.apache.lucene.search.DocValuesFieldExistsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.elasticsearch.ElasticsearchParseException;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.geo.GeoUtils;
@@ -172,6 +173,11 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
         public String typeName() {
             return CONTENT_TYPE;
         }
+        
+        @Override
+        public String cqlType() {
+            return ClusterService.GEO_POINT_TYPE;
+        }
 
         @Override
         public MappedFieldType clone() {
@@ -200,7 +206,7 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
         }
     }
 
-    protected void parse(ParseContext originalContext, GeoPoint point) throws IOException {
+    public void parse(ParseContext originalContext, GeoPoint point) throws IOException {
         // Geopoint fields, by default, will not be included in _all
         final ParseContext context = originalContext.setIncludeInAllDefault(false);
 
@@ -316,5 +322,10 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
         if (includeDefaults || ignoreMalformed.explicit()) {
             builder.field(GeoPointFieldMapper.Names.IGNORE_MALFORMED, ignoreMalformed.value());
         }
+    }
+
+    @Override
+    public String cqlType() {
+        return "geo_point";
     }
 }

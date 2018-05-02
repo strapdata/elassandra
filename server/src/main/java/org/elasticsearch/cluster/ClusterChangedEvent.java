@@ -21,10 +21,12 @@ package org.elasticsearch.cluster;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
+
 import org.elasticsearch.cluster.metadata.IndexGraveyard;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.service.MasterService.TaskInputs;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.index.Index;
@@ -50,7 +52,13 @@ public class ClusterChangedEvent {
 
     private final DiscoveryNodes.Delta nodesDelta;
 
-    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState) {
+    // added to avoid to save a just recovered cluster state.
+    
+    private final TaskInputs taskInputs;
+    
+    private final boolean peristMetaData;
+    
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState, boolean peristMetaData, TaskInputs taskInputs) {
         Objects.requireNonNull(source, "source must not be null");
         Objects.requireNonNull(state, "state must not be null");
         Objects.requireNonNull(previousState, "previousState must not be null");
@@ -58,8 +66,22 @@ public class ClusterChangedEvent {
         this.state = state;
         this.previousState = previousState;
         this.nodesDelta = state.nodes().delta(previousState.nodes());
+        this.peristMetaData = peristMetaData;
+        this.taskInputs = taskInputs;
     }
 
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState, TaskInputs taskInputs) {
+        this(source, state, previousState, false, taskInputs);
+    }
+    
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState) {
+        this(source, state, previousState, false, null);
+    }
+    
+    public boolean peristMetaData() {
+        return peristMetaData;
+    }
+    
     /**
      * The source that caused this cluster event to be raised.
      */
@@ -74,6 +96,10 @@ public class ClusterChangedEvent {
         return this.state;
     }
 
+    public TaskInputs taskInputs() {
+        return this.taskInputs;
+    }
+    
     /**
      * The previous cluster state for this change event.
      */
@@ -238,9 +264,12 @@ public class ClusterChangedEvent {
      * elected that has never been part of the cluster before.
      */
     public boolean isNewCluster() {
+        return false;
+        /*
         final String prevClusterUUID = previousState.metaData().clusterUUID();
         final String currClusterUUID = state.metaData().clusterUUID();
         return prevClusterUUID.equals(currClusterUUID) == false;
+        */
     }
 
     // Get the deleted indices by comparing the index metadatas in the previous and new cluster states.

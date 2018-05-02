@@ -84,6 +84,8 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
                     new NumericDocValuesField(NAME, SequenceNumbers.UNASSIGNED_SEQ_NO),
                     new NumericDocValuesField(PRIMARY_TERM_NAME, 0));
         }
+        
+        public static NumericDocValuesField PRIMARY_TERM_ZERO = new NumericDocValuesField(PRIMARY_TERM_NAME, 0);
     }
 
     public static final String NAME = "_seq_no";
@@ -216,6 +218,10 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
             return new DocValuesIndexFieldData.Builder().numericType(NumericType.LONG);
         }
 
+        @Override
+        public String cqlType() {
+            return "bigint";
+        }
     }
 
     public SeqNoFieldMapper(Settings indexSettings) {
@@ -266,7 +272,33 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
             }
         }
     }
+    
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        // _primary_term in parent doc only.
+        if (context.doc().getParent() == null)
+            context.doc().add(SequenceIDFields.PRIMARY_TERM_ZERO);
+    }
 
+    @Override
+    public void postCreate(ParseContext context) throws IOException {
+        // In the case of nested docs, let's fill nested docs with the original
+        // so that Lucene doesn't write a Bitset for documents that
+        // don't have the field. This is consistent with the default value
+        // for efficiency.
+        // we share the parent docs fields to ensure good compression
+        int numDocs = context.docs().size();
+        final Version versionCreated = context.mapperService().getIndexSettings().getIndexVersionCreated();
+        final boolean includePrimaryTerm = versionCreated.before(Version.V_6_1_0);
+        for (int i = 1; i < numDocs; i++) {
+            final Document doc = context.docs().get(i);
+            if (includePrimaryTerm) {
+                // primary terms are used to distinguish between parent and nested docs since 6.1.0
+                doc.add(SequenceIDFields.PRIMARY_TERM_ZERO);
+            }
+        }
+    }
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

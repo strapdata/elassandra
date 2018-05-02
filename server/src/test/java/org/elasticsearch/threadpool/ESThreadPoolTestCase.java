@@ -19,12 +19,12 @@
 
 package org.elasticsearch.threadpool;
 
-import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public abstract class ESThreadPoolTestCase extends ESTestCase {
+public abstract class ESThreadPoolTestCase extends ESSingleNodeTestCase {
 
     protected final ThreadPool.Info info(final ThreadPool threadPool, final String name) {
         for (final ThreadPool.Info info : threadPool.info()) {

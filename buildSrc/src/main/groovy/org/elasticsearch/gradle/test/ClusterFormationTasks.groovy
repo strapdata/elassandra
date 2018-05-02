@@ -133,14 +133,14 @@ class ClusterFormationTasks {
         } else if (distro == 'integ-test-zip') {
             packaging = 'zip'
         }
-        project.dependencies.add(configuration.name, "org.elasticsearch.distribution.${distro}:elasticsearch:${elasticsearchVersion}@${packaging}")
+        project.dependencies.add(configuration.name, "com.strapdata.elasticsearch.distribution.${distro}:elasticsearch:${elasticsearchVersion}@${packaging}")
     }
 
     /** Adds a dependency on a different version of the given plugin, which will be retrieved using gradle's dependency resolution */
     static void configureBwcPluginDependency(String name, Project project, Project pluginProject, Configuration configuration, String elasticsearchVersion) {
         verifyProjectHasBuildPlugin(name, elasticsearchVersion, project, pluginProject)
         final String pluginName = findPluginName(pluginProject)
-        project.dependencies.add(configuration.name, "org.elasticsearch.plugin:${pluginName}:${elasticsearchVersion}@zip")
+        project.dependencies.add(configuration.name, "com.strapdata.elasticsearch.plugin:${pluginName}:${elasticsearchVersion}@zip")
     }
 
     /**

@@ -24,10 +24,10 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.Counter;
 import org.elasticsearch.action.search.SearchTask;
 import org.elasticsearch.action.search.SearchType;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.lucene.search.Queries;
@@ -81,7 +81,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
 
 final class DefaultSearchContext extends SearchContext {
 
@@ -177,6 +176,7 @@ final class DefaultSearchContext extends SearchContext {
             clusterAlias);
         queryShardContext.setTypes(request.types());
         queryBoost = request.indexBoost();
+        this.clusterState = indexService.clusterService().state();
     }
 
     @Override
@@ -264,6 +264,19 @@ final class DefaultSearchContext extends SearchContext {
     @Override
     public Query buildFilteredQuery(Query query) {
         List<Query> filters = new ArrayList<>();
+        
+        Query tokenRangeQuery = null;
+        if (Boolean.FALSE.equals(this.request.tokenRangesBitsetCache()) || 
+            !this.indexService.isTokenRangesBitsetCacheEnabled()) {
+            if ( (this.request.tokenRanges() != null && this.request.tokenRanges().size() > 0) && 
+                 (this.aggregations == null ||  this.aggregations.factories() == null || !this.aggregations.factories().hasTokenRangeAggregation()) ) {
+                tokenRangeQuery = this.clusterService().tokenRangesService().getTokenRangesQuery(request.tokenRanges());
+            }
+        }
+        if (tokenRangeQuery != null) {
+            filters.add(tokenRangeQuery);
+        }
+        
         Query typeFilter = createTypeFilter(queryShardContext.getTypes());
         if (typeFilter != null) {
             filters.add(typeFilter);
@@ -826,5 +839,15 @@ final class DefaultSearchContext extends SearchContext {
     @Override
     public boolean isCancelled() {
         return task.isCancelled();
+    }
+    
+    @Override
+    public ClusterService clusterService() {
+        return indexService.clusterService();
+    }
+    
+    @Override
+    public IndexService indexService() {
+        return indexService;
     }
 }

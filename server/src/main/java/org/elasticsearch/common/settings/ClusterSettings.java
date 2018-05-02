@@ -419,6 +419,7 @@ public final class ClusterSettings extends AbstractScopedSettings {
                     FastVectorHighlighter.SETTING_TV_HIGHLIGHT_MULTI_VALUE,
                     Node.BREAKER_TYPE_KEY,
                     OperationRouting.USE_ADAPTIVE_REPLICA_SELECTION_SETTING,
-                    IndexGraveyard.SETTING_MAX_TOMBSTONES
+                    IndexGraveyard.SETTING_MAX_TOMBSTONES,
+                    ClusterService.SETTING_DATCENTER_GROUP
             )));
 }

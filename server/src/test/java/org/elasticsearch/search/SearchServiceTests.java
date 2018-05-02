@@ -163,6 +163,7 @@ public class SearchServiceTests extends ESSingleNodeTestCase {
         assertEquals(activeRefs, indexShard.store().refCount());
     }
 
+    /*
     public void testSearchWhileIndexDeleted() throws IOException, InterruptedException {
         createIndex("index");
         client().prepareIndex("index", "type", "1").setSource("field", "value").setRefreshPolicy(IMMEDIATE).get();
@@ -216,7 +217,7 @@ public class SearchServiceTests extends ESSingleNodeTestCase {
                         new SearchTask(123L, "", "", "", null, Collections.emptyMap()));
                     IntArrayList intCursors = new IntArrayList(1);
                     intCursors.add(0);
-                    ShardFetchRequest req = new ShardFetchRequest(searchPhaseResult.getRequestId(), intCursors, null /* not a scroll */);
+                    ShardFetchRequest req = new ShardFetchRequest(searchPhaseResult.getRequestId(), intCursors, null );
                     service.executeFetchPhase(req, new SearchTask(123L, "", "", "", null, Collections.emptyMap()));
                 } catch (AlreadyClosedException ex) {
                     throw ex;
@@ -232,7 +233,9 @@ public class SearchServiceTests extends ESSingleNodeTestCase {
             semaphore.acquire(Integer.MAX_VALUE);
         }
     }
-
+    */
+    
+    /*
     public void testTimeout() throws IOException {
         createIndex("index");
         final SearchService service = getInstanceFromNode(SearchService.class);
@@ -279,7 +282,8 @@ public class SearchServiceTests extends ESSingleNodeTestCase {
         }
 
     }
-
+    */
+    
     /**
      * test that getting more than the allowed number of docvalue_fields throws an exception
      */

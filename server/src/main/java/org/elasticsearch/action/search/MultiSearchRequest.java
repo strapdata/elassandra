@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action.search;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.CompositeIndicesRequest;
@@ -36,6 +38,7 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -172,6 +175,7 @@ public class MultiSearchRequest extends ActionRequest implements CompositeIndice
                                            String[] types,
                                            String routing,
                                            String searchType,
+                                           Collection<Range<Token>> tokenRanges,
                                            NamedXContentRegistry registry,
                                            boolean allowExplicitIndex) throws IOException {
         int from = 0;
@@ -204,6 +208,9 @@ public class MultiSearchRequest extends ActionRequest implements CompositeIndice
             if (searchType != null) {
                 searchRequest.searchType(searchType);
             }
+            if (tokenRanges != null) {
+                searchRequest.tokenRanges(tokenRanges);
+            }
             IndicesOptions defaultOptions = SearchRequest.DEFAULT_INDICES_OPTIONS;
             // now parse the action
             if (nextMarker - from > 0) {
@@ -226,6 +233,8 @@ public class MultiSearchRequest extends ActionRequest implements CompositeIndice
                             searchRequest.preference(nodeStringValue(value, null));
                         } else if ("routing".equals(entry.getKey())) {
                             searchRequest.routing(nodeStringValue(value, null));
+                        } else if ("token_ranges_bitset_cache".equals(entry.getKey()) || "tokenRangesBitsetCache".equals(entry.getKey())) {
+                            searchRequest.tokenRangesBitsetCache(nodeBooleanValue(value, entry.getKey()));
                         }
                     }
                     defaultOptions = IndicesOptions.fromMap(source, defaultOptions);

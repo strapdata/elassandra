@@ -44,6 +44,10 @@ public interface ClusterStateTaskConfig {
      */
     Priority priority();
 
+    default boolean doPresistMetaData() {
+        return false;
+    }
+    
     /**
      * Build a cluster state update task configuration with the
      * specified {@link Priority} and no timeout.
@@ -70,6 +74,15 @@ public interface ClusterStateTaskConfig {
         return new Basic(priority, timeout);
     }
 
+    static ClusterStateTaskConfig build(Priority priority, boolean presistMetaData) {
+        return new Basic(priority, null) {
+            @Override
+            public boolean doPresistMetaData() {
+                return presistMetaData;
+            }
+        };
+    }
+    
     class Basic implements ClusterStateTaskConfig {
         final TimeValue timeout;
         final Priority priority;
@@ -87,6 +100,11 @@ public interface ClusterStateTaskConfig {
         @Override
         public Priority priority() {
             return priority;
+        }
+              
+        @Override
+        public boolean doPresistMetaData() {
+            return false;
         }
     }
 }

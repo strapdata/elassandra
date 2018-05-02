@@ -343,7 +343,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
             new MockLogAppender.UnseenEventExpectation("no completed message logged on dry run",
                 TransportClusterRerouteAction.class.getName(), Level.INFO, "allocated an empty primary*")
         );
-        ServerLoggers.addAppender(actionLogger, dryRunMockLog);
+        //ServerLoggers.addAppender(actionLogger, dryRunMockLog);
 
         AllocationCommand dryRunAllocation = new AllocateEmptyPrimaryAllocationCommand(indexName, 0, nodeName1, true);
         ClusterRerouteResponse dryRunResponse = client().admin().cluster().prepareReroute()
@@ -358,7 +358,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
 
         dryRunMockLog.assertAllExpectationsMatched();
         dryRunMockLog.stop();
-        ServerLoggers.removeAppender(actionLogger, dryRunMockLog);
+        //ServerLoggers.removeAppender(actionLogger, dryRunMockLog);
 
         MockLogAppender allocateMockLog = new MockLogAppender();
         allocateMockLog.start();
@@ -370,7 +370,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
             new MockLogAppender.UnseenEventExpectation("no message for second allocate empty primary",
                 TransportClusterRerouteAction.class.getName(), Level.INFO, "allocated an empty primary*" + nodeName2 + "*")
         );
-        ServerLoggers.addAppender(actionLogger, allocateMockLog);
+        //ServerLoggers.addAppender(actionLogger, allocateMockLog);
 
         AllocationCommand yesDecisionAllocation = new AllocateEmptyPrimaryAllocationCommand(indexName, 0, nodeName1, true);
         AllocationCommand noDecisionAllocation = new AllocateEmptyPrimaryAllocationCommand("noexist", 1, nodeName2, true);
@@ -386,7 +386,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
 
         allocateMockLog.assertAllExpectationsMatched();
         allocateMockLog.stop();
-        ServerLoggers.removeAppender(actionLogger, allocateMockLog);
+        //ServerLoggers.removeAppender(actionLogger, allocateMockLog);
     }
 
     public void testClusterRerouteWithBlocks() throws Exception {

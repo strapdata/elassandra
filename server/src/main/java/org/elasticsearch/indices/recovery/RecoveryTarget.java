@@ -375,7 +375,7 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
     @Override
     public void finalizeRecovery(final long globalCheckpoint) throws IOException {
         final IndexShard indexShard = indexShard();
-        indexShard.updateGlobalCheckpointOnReplica(globalCheckpoint, "finalizing recovery");
+        //indexShard.updateGlobalCheckpointOnReplica(globalCheckpoint, "finalizing recovery");
         // Persist the global checkpoint.
         indexShard.sync();
         indexShard.finalizeRecovery();
@@ -399,6 +399,7 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
         if (indexShard().state() != IndexShardState.RECOVERING) {
             throw new IndexShardNotRecoveringException(shardId, indexShard().state());
         }
+        /*
         for (Translog.Operation operation : operations) {
             Engine.Result result = indexShard().applyTranslogOperation(operation, Engine.Operation.Origin.PEER_RECOVERY, update -> {
                 throw new MapperException("mapping updates are not allowed [" + operation + "]");
@@ -411,6 +412,7 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
         indexShard().sync();
         // roll over / flush / trim if needed
         indexShard().afterWriteOperation();
+        */
         return indexShard().getLocalCheckpoint();
     }
 

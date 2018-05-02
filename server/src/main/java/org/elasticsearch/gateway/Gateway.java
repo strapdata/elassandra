@@ -19,22 +19,19 @@
 
 package org.elasticsearch.gateway;
 
-import com.carrotsearch.hppc.ObjectFloatHashMap;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.service.StorageService;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.elasticsearch.action.FailedNodeException;
+import org.apache.logging.log4j.util.Supplier;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
-import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.discovery.zen.ElectMasterService;
-import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.IndicesService;
 
-import java.util.Arrays;
 import java.util.Map;
 
 public class Gateway extends AbstractComponent {
@@ -56,6 +53,7 @@ public class Gateway extends AbstractComponent {
         this.minimumMasterNodes = ElectMasterService.DISCOVERY_ZEN_MINIMUM_MASTER_NODES_SETTING.get(settings);
     }
 
+    /*
     public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
         String[] nodesIds = clusterService.state().nodes().getMasterNodes().keys().toArray(String.class);
         logger.trace("performing state recovery from {}", Arrays.toString(nodesIds));
@@ -153,7 +151,49 @@ public class Gateway extends AbstractComponent {
         builder.metaData(metaDataBuilder);
         listener.onSuccess(builder.build());
     }
-
+    */
+    
+    public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
+        ClusterState.Builder builder = ClusterState.builder(clusterService.state());
+        
+        MetaData metadata = null;
+        if (Keyspace.isInitialized()) {
+            // try recover from elastic_admin.metadata
+            try {
+                if (StorageService.instance.isJoined()) {
+                    metadata = clusterService.readMetaDataAsRow(ConsistencyLevel.ONE);
+                    if (metadata != null) {
+                        logger.debug("Successfull recovery from metadata table version={}", metadata.version());
+                        listener.onSuccess( builder.metaData(metadata).build() );
+                        return;
+                    }
+                } else {
+                    if (metadata != null) {
+                        logger.debug("Successfull recovery from internal metadata table version={}", metadata.version());
+                        listener.onSuccess( builder.metaData(metadata).build() );
+                        return;
+                    }
+                }
+            } catch (Exception e) {
+            }
+        }
+        
+        // fallback to CQL schema
+        try {
+            metadata = clusterService.readMetaDataAsComment();
+            logger.debug("Successfull recovery from CQL schema version={}", metadata.version());
+            listener.onSuccess( builder.metaData(metadata).build() );
+            return;
+        } catch (Exception e) {
+            logger.trace((Supplier<?>) () -> new ParameterizedMessage("Cannot read metadata from CQL schema"), e);
+            metadata = clusterService.state().metaData();
+            if (metadata.clusterUUID().equals("_na_")) {
+                metadata = MetaData.builder(metadata).clusterUUID(clusterService.localNode().getId()).build();
+            }
+            listener.onSuccess( builder.metaData(metadata).build() );
+        }
+    }
+    
     private void logUnknownSetting(String settingType, Map.Entry<String, String> e) {
         logger.warn("ignoring unknown {} setting: [{}] with value [{}]; archiving", settingType, e.getKey(), e.getValue());
     }

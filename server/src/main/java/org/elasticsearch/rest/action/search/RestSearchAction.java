@@ -136,7 +136,8 @@ public class RestSearchAction extends BaseRestHandler {
         }
         parseSearchSource(searchRequest.source(), request, setSize);
         searchRequest.requestCache(request.paramAsBoolean("request_cache", null));
-
+        searchRequest.tokenRangesBitsetCache(request.paramAsBoolean("token_ranges_bitset_cache", null));
+        
         String scroll = request.param("scroll");
         if (scroll != null) {
             searchRequest.scroll(new Scroll(parseTimeValue(scroll, null, "scroll")));
@@ -145,6 +146,7 @@ public class RestSearchAction extends BaseRestHandler {
         searchRequest.types(Strings.splitStringByCommaToArray(request.param("type")));
         searchRequest.routing(request.param("routing"));
         searchRequest.preference(request.param("preference"));
+        searchRequest.tokenRanges(request.paramsAsTokenRanges("token_ranges"));
         searchRequest.indicesOptions(IndicesOptions.fromRequest(request, searchRequest.indicesOptions()));
     }
 

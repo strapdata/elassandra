@@ -22,8 +22,6 @@ package org.elasticsearch.action.admin.indices.flush;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.action.support.replication.TransportReplicationAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
@@ -39,9 +37,9 @@ public class TransportShardFlushAction extends TransportReplicationAction<ShardF
 
     @Inject
     public TransportShardFlushAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                     IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                     IndicesService indicesService, ThreadPool threadPool,
                                      ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver) {
-        super(settings, NAME, transportService, clusterService, indicesService, threadPool, shardStateAction,
+        super(settings, NAME, transportService, clusterService, indicesService, threadPool,
             actionFilters, indexNameExpressionResolver, ShardFlushRequest::new, ShardFlushRequest::new, ThreadPool.Names.FLUSH);
     }
 
@@ -59,8 +57,10 @@ public class TransportShardFlushAction extends TransportReplicationAction<ShardF
 
     @Override
     protected ReplicaResult shardOperationOnReplica(ShardFlushRequest request, IndexShard replica) {
+        /*
         replica.flush(request.getRequest());
         logger.trace("{} flush request executed on replica", replica.shardId());
+        */
         return new ReplicaResult();
     }
 }

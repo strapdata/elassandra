@@ -19,6 +19,9 @@
 
 package org.elasticsearch.common.io.stream;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.Token;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
@@ -42,6 +45,7 @@ import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryNotEmptyException;
@@ -140,6 +144,18 @@ public abstract class StreamOutput extends OutputStream {
         writeBytes(b, 0, b.length);
     }
 
+
+    public void writeByteBuffer(ByteBuffer bb) throws IOException {
+        if (bb == null) {
+            writeVInt(-1);
+        } else {
+            ByteBuffer duplicate = bb.duplicate();
+            byte[] bytes = new byte[duplicate.remaining()];
+            duplicate.get(bytes);
+            writeByteArray(bytes);
+        }
+    }
+    
     /**
      * Writes the bytes reference, including a length header.
      */
@@ -629,6 +645,13 @@ public abstract class StreamOutput extends OutputStream {
             o.writeString(zonedDateTime.getZone().getId());
             o.writeLong(zonedDateTime.toInstant().toEpochMilli());
         });
+        writers.put(Token.class, (o, v) -> {
+            o.writeByte((byte) 64);
+            IPartitioner p = DatabaseDescriptor.getPartitioner();
+            ByteBuffer b = p.getTokenFactory().toByteArray((Token) v);
+            o.writeVInt(b.array().length);
+            o.writeBytes(b.array());
+        });
         WRITERS = Collections.unmodifiableMap(writers);
     }
 
@@ -654,6 +677,8 @@ public abstract class StreamOutput extends OutputStream {
             type = ReadableInstant.class;
         } else if (value instanceof BytesReference) {
             type = BytesReference.class;
+        } else if (value instanceof Token) {
+            type = Token.class;
         } else {
             type = value.getClass();
         }

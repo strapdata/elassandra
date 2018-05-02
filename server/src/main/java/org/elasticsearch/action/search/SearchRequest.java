@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action.search;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -38,7 +40,9 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -91,6 +95,11 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
 
     private IndicesOptions indicesOptions = DEFAULT_INDICES_OPTIONS;
 
+    private Boolean tokenRangesBitsetCache;
+    private Collection<Range<Token>> tokenRanges;
+    private Map<String,Object> extraParams;
+    
+
     public SearchRequest() {
     }
 
@@ -100,6 +109,35 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
      */
     public SearchRequest(String... indices) {
         this(indices, new SearchSourceBuilder());
+    }
+
+    public Collection<Range<Token>> tokenRanges() {
+        return tokenRanges;
+    }
+
+    public SearchRequest tokenRanges(Collection<Range<Token>> tokenRanges) {
+        this.tokenRanges = tokenRanges;
+        return this;
+    }
+
+    /**
+     * Sets if this request should use the request the token bitset cache or not, assuming the index is configured to use token bitset cache.
+     */
+    public SearchRequest tokenRangesBitsetCache(Boolean tokenRangesBitsetCache) {
+        this.tokenRangesBitsetCache = tokenRangesBitsetCache;
+        return this;
+    }
+
+    public Boolean tokenRangesBitsetCache() {
+        return this.tokenRangesBitsetCache;
+    }
+
+    public Map<String, Object> extraParams() {
+        return extraParams;
+    }
+
+    public void extraParams(Map<String, Object> extraParams) {
+        this.extraParams = extraParams;
     }
 
     /**
@@ -427,6 +465,22 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
             maxConcurrentShardRequests = in.readVInt();
             preFilterShardSize = in.readVInt();
         }
+        
+
+        if (in.available() > 0)
+            tokenRangesBitsetCache = in.readOptionalBoolean();
+        
+        if (in.available() > 0 && in.readBoolean()) {
+            Object[] tokens = (Object[]) in.readGenericValue();
+            this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+            for (int i = 0; i < tokens.length;) {
+                Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+                this.tokenRanges.add(range);
+            }
+        }
+        
+        if (in.available() > 0 && in.readBoolean())
+            extraParams = in.readMap();
     }
 
     @Override
@@ -449,6 +503,23 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
             out.writeVInt(maxConcurrentShardRequests);
             out.writeVInt(preFilterShardSize);
         }
+        
+        out.writeOptionalBoolean(tokenRangesBitsetCache);
+        
+        out.writeBoolean(tokenRanges != null);
+        if (tokenRanges != null) {
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
+        }
+        
+        out.writeBoolean(this.extraParams != null);
+        if (this.extraParams != null)
+            out.writeMap(this.extraParams);
     }
 
     @Override

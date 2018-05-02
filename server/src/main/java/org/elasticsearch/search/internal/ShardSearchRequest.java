@@ -19,6 +19,8 @@
 
 package org.elasticsearch.search.internal;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cluster.metadata.AliasMetaData;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -28,8 +30,6 @@ import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryRewriteContext;
-import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.Rewriteable;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.AliasFilterParsingException;
@@ -38,6 +38,8 @@ import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -139,6 +141,21 @@ public interface ShardSearchRequest {
         }
     }
 
+    default Boolean tokenRangesBitsetCache() {
+        return false;
+    }
+    
+    /**
+     * Returns the token range for this request
+     */
+    default Collection<Range<Token>> tokenRanges() {
+        return null;
+    }
+    
+    default Map<String,Object> extraParams() {
+        return null;
+    }
+    
     /**
      * Returns the cluster alias if this request is for a remote cluster or <code>null</code> if the request if targeted to the local
      * cluster.

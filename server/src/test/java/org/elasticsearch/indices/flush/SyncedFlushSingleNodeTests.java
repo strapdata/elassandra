@@ -44,7 +44,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testModificationPreventsFlushing() throws InterruptedException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 
@@ -56,7 +56,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
         assertEquals("exactly one active shard", 1, activeShards.size());
         Map<String, SyncedFlushService.PreSyncedFlushResponse> preSyncedResponses = SyncedFlushUtil.sendPreSyncRequests(flushService, activeShards, state, shardId);
         assertEquals("exactly one commit id", 1, preSyncedResponses.size());
-        client().prepareIndex("test", "test", "2").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "2").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         String syncId = UUIDs.randomBase64UUID();
         SyncedFlushUtil.LatchedListener<ShardsSyncedFlushResult> listener = new SyncedFlushUtil.LatchedListener<>();
         flushService.sendSyncRequests(syncId, activeShards, state, preSyncedResponses, shardId, shardRoutingTable.size(), listener);
@@ -88,7 +88,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testSingleShardSuccess() throws InterruptedException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 
@@ -108,7 +108,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testSyncFailsIfOperationIsInFlight() throws InterruptedException, ExecutionException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 
@@ -163,7 +163,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testFailAfterIntermediateCommit() throws InterruptedException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 
@@ -196,7 +196,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testFailWhenCommitIsMissing() throws InterruptedException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 

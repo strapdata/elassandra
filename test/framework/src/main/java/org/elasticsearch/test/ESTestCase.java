@@ -156,8 +156,8 @@ import static org.hamcrest.Matchers.hasItem;
         ReproduceInfoPrinter.class,
         LoggingListener.class
 })
-@ThreadLeakScope(Scope.SUITE)
-@ThreadLeakLingering(linger = 5000) // 5 sec lingering
+@ThreadLeakScope(Scope.NONE)
+@ThreadLeakLingering(linger = 20000) // 5 sec lingering
 @TimeoutSuite(millis = 20 * TimeUnits.MINUTE)
 @LuceneTestCase.SuppressSysoutChecks(bugUrl = "we log a lot on purpose")
 // we suppress pretty much all the lucene codecs for now, except asserting
@@ -182,11 +182,12 @@ public abstract class ESTestCase extends LuceneTestCase {
         System.setProperty("log4j2.disable.jmx", "true");
 
         // shutdown hook so that when the test JVM exits, logging is shutdown too
+        /*
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LoggerContext context = (LoggerContext) LogManager.getContext(false);
             Configurator.shutdown(context);
         }));
-
+        */
         BootstrapForTesting.ensureInitialized();
     }
 

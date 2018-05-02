@@ -220,7 +220,7 @@ public class RestoreService extends AbstractComponent implements ClusterStateApp
                     ClusterState.Builder builder = ClusterState.builder(currentState);
                     MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                    RoutingTable.Builder rtBuilder = RoutingTable.builder(currentState.routingTable());
+                    RoutingTable.Builder rtBuilder = RoutingTable.builder(clusterService, currentState);
                     ImmutableOpenMap<ShardId, RestoreInProgress.ShardRestoreStatus> shards;
                     Set<String> aliases = new HashSet<>();
                     if (!renamedIndices.isEmpty()) {

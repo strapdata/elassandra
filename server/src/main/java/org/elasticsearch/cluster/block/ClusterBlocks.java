@@ -20,6 +20,7 @@
 package org.elasticsearch.cluster.block;
 
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+
 import org.elasticsearch.cluster.AbstractDiffable;
 import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -32,6 +33,7 @@ import org.elasticsearch.rest.RestStatus;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -147,6 +149,32 @@ public class ClusterBlocks extends AbstractDiffable<ClusterBlocks> {
         return indicesBlocks.containsKey(index) && indicesBlocks.get(index).contains(block);
     }
 
+    public boolean isSame(ClusterBlocks that, List<String> indices) {
+        for(ClusterBlock block : this.global)
+            if (!that.hasGlobalBlock(block))
+                return false;
+        for(ClusterBlock block : that.global)
+            if (!hasGlobalBlock(block))
+                return false;
+        
+        for(String index : indices) {
+            if (this.indicesBlocks.get(index) != null)
+                for(ClusterBlock block : this.indicesBlocks.get(index)) {
+                    if (!that.hasIndexBlock(index, block))
+                        return false;
+                }
+        }
+        for(String index : indices) {
+            if (that.indicesBlocks.get(index) != null)
+                for(ClusterBlock block : that.indicesBlocks.get(index)) {
+                    if (!this.hasIndexBlock(index, block))
+                        return false;
+                }
+        }
+        
+        return true;
+    }
+    
     public void globalBlockedRaiseException(ClusterBlockLevel level) throws ClusterBlockException {
         ClusterBlockException blockException = globalBlockedException(level);
         if (blockException != null) {

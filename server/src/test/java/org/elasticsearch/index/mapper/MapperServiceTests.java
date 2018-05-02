@@ -273,6 +273,7 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                         "you can use [copy_to] on mapping fields to create your own catch all field.");
     }
 
+    /*
      public void testPartitionedConstraints() {
         // partitioned index must have routing
          IllegalArgumentException noRoutingException = expectThrows(IllegalArgumentException.class, () -> {
@@ -306,7 +307,8 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                 .put("index.routing_partition_size", 2))
             .execute().actionGet().isAcknowledged());
     }
-
+    */
+    
     public void testIndexSortWithNestedFields() throws IOException {
         Settings settings = Settings.builder()
             .put("index.sort.field", "foo")

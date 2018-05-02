@@ -70,7 +70,6 @@ import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.SearchTransportService;
 import org.elasticsearch.action.search.SearchType;
-import org.elasticsearch.action.support.replication.TransportReplicationActionTests;
 import org.elasticsearch.action.termvectors.MultiTermVectorsAction;
 import org.elasticsearch.action.termvectors.MultiTermVectorsRequest;
 import org.elasticsearch.action.termvectors.TermVectorsAction;
@@ -632,12 +631,14 @@ public class IndicesRequestIT extends ESIntegTestCase {
 
     static IndicesRequest convertRequest(TransportRequest request) {
         final IndicesRequest indicesRequest;
+        /*
         if (request instanceof IndicesRequest) {
             indicesRequest = (IndicesRequest) request;
         } else {
-            indicesRequest = TransportReplicationActionTests.resolveRequest(request);
+          //  indicesRequest = TransportReplicationActionTests.resolveRequest(request);
         }
-        return indicesRequest;
+        */
+        return (IndicesRequest) request;
     }
 
     private String randomIndexOrAlias() {

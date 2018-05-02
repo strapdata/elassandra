@@ -45,7 +45,7 @@ public class IndexingSlowLogTests extends ESTestCase {
     public void testSlowLogParsedDocumentPrinterSourceToLog() throws IOException {
         BytesReference source = JsonXContent.contentBuilder().startObject().field("foo", "bar").endObject().bytes();
         ParsedDocument pd = new ParsedDocument(new NumericDocValuesField("version", 1), SeqNoFieldMapper.SequenceIDFields.emptySeqID(), "id",
-                "test", null, null, source, XContentType.JSON, null);
+                "test", null, 0L, null, source, XContentType.JSON, null);
         Index index = new Index("foo", "123");
         // Turning off document logging doesn't log source[]
         SlowLogParsedDocumentPrinter p = new SlowLogParsedDocumentPrinter(index, pd, 10, true, 0);
@@ -67,7 +67,7 @@ public class IndexingSlowLogTests extends ESTestCase {
         // Throwing a error if source cannot be converted
         source = new BytesArray("invalid");
         pd = new ParsedDocument(new NumericDocValuesField("version", 1), SeqNoFieldMapper.SequenceIDFields.emptySeqID(), "id",
-            "test", null, null, source, XContentType.JSON, null);
+            "test", null, 0L, null, source, XContentType.JSON, null);
         p = new SlowLogParsedDocumentPrinter(index, pd, 10, true, 3);
 
         assertThat(p.toString(), containsString("_failed_to_convert_[Unrecognized token 'invalid':"

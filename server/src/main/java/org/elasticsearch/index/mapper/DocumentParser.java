@@ -42,7 +42,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** A parser for documents, given mappings from a DocumentMapper */
-final class DocumentParser {
+public final class DocumentParser {
 
     private final IndexSettings indexSettings;
     private final DocumentMapperParser docMapperParser;
@@ -153,6 +153,7 @@ final class DocumentParser {
             context.sourceToParse().id(),
             context.sourceToParse().type(),
             source.routing(),
+            source.token(),
             context.docs(),
             context.sourceToParse().source(),
             context.sourceToParse().getXContentType(),
@@ -410,7 +411,7 @@ final class DocumentParser {
         }
     }
 
-    private static void nested(ParseContext context, ObjectMapper.Nested nested) {
+    public static void nested(ParseContext context, ObjectMapper.Nested nested) {
         ParseContext.Document nestedDoc = context.doc();
         ParseContext.Document parentDoc = nestedDoc.getParent();
         if (nested.isIncludeInParent()) {
@@ -432,8 +433,8 @@ final class DocumentParser {
             }
         }
     }
-
-    private static ParseContext nestedContext(ParseContext context, ObjectMapper mapper) {
+    
+    public static ParseContext nestedContext(ParseContext context, ObjectMapper mapper) {
         context = context.createNestedContext(mapper.fullPath());
         ParseContext.Document nestedDoc = context.doc();
         ParseContext.Document parentDoc = nestedDoc.getParent();

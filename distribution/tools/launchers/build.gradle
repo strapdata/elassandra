@@ -45,7 +45,7 @@ forbiddenApisTest {
 }
 
 namingConventions {
-    testClass = 'org.elasticsearch.tools.launchers.LaunchersTestCase'
+    testClass = 'com.strapdata.elasticsearch.tools.launchers.LaunchersTestCase'
     skipIntegTestInDisguise = true
 }
 

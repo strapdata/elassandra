@@ -113,6 +113,17 @@ public class MetaStateService extends AbstractComponent {
         return MetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, nodeEnv.nodeDataPaths());
     }
 
+    
+    /**
+     * Decode global state from a string.
+     * @param stringMetaData
+     * @return
+     * @throws Exception
+     */
+    public MetaData loadGlobalState(String stringMetaData) throws IOException {
+        return MetaData.CASSANDRA_FORMAT.loadLatestState(logger, namedXContentRegistry, stringMetaData);
+    }
+
     /**
      * Writes the index state.
      *

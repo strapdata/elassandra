@@ -20,7 +20,10 @@
 package org.elasticsearch.index;
 
 import org.apache.lucene.util.SetOnce;
+import org.elassandra.index.search.TokenRangesSearcherWrapper;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Setting;
@@ -34,12 +37,12 @@ import org.elasticsearch.index.cache.query.DisabledQueryCache;
 import org.elasticsearch.index.cache.query.IndexQueryCache;
 import org.elasticsearch.index.cache.query.QueryCache;
 import org.elasticsearch.index.engine.EngineFactory;
+import org.elasticsearch.index.engine.VersionLessInternalEngineFactory;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.shard.IndexEventListener;
 import org.elasticsearch.index.shard.IndexSearcherWrapper;
 import org.elasticsearch.index.shard.IndexingOperationListener;
 import org.elasticsearch.index.shard.SearchOperationListener;
-import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.similarity.BM25SimilarityProvider;
 import org.elasticsearch.index.similarity.SimilarityProvider;
 import org.elasticsearch.index.similarity.SimilarityService;
@@ -321,6 +324,7 @@ public final class IndexModule {
             BigArrays bigArrays,
             ThreadPool threadPool,
             ScriptService scriptService,
+            ClusterService clusterService,
             Client client,
             IndicesQueryCache indicesQueryCache,
             MapperRegistry mapperRegistry,
@@ -328,8 +332,20 @@ public final class IndexModule {
             NamedWriteableRegistry namedWriteableRegistry)
         throws IOException {
         final IndexEventListener eventListener = freeze();
-        IndexSearcherWrapperFactory searcherWrapperFactory = indexSearcherWrapper.get() == null
-            ? (shard) -> null : indexSearcherWrapper.get();
+        IndexSearcherWrapperFactory searcherWrapperFactory;
+        
+        if (indexSearcherWrapper.get() == null) {
+            searcherWrapperFactory = (this.indexSettings.getValue(IndexMetaData.INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING)) ? 
+                    new IndexSearcherWrapperFactory() {
+                        public IndexSearcherWrapper newWrapper(IndexService indexService) {
+                            return new TokenRangesSearcherWrapper(indexService.tokenRangesBitsetFilterCache, clusterService.tokenRangesService());
+                        }
+                    } : (shard) -> null;
+        } else {
+            searcherWrapperFactory = indexSearcherWrapper.get();
+        }
+        
+        
         eventListener.beforeIndexCreated(indexSettings.getIndex(), indexSettings.getSettings());
         final String storeType = indexSettings.getValue(INDEX_STORE_TYPE_SETTING);
         final IndexStore store;
@@ -356,10 +372,12 @@ public final class IndexModule {
         } else {
             queryCache = new DisabledQueryCache(indexSettings);
         }
+        if (engineFactory.get() == null)
+            engineFactory.set(new VersionLessInternalEngineFactory());
         return new IndexService(indexSettings, environment, xContentRegistry,
                 new SimilarityService(indexSettings, scriptService, similarities),
                 shardStoreDeleter, analysisRegistry, engineFactory.get(), circuitBreakerService, bigArrays, threadPool, scriptService,
-                client, queryCache, store, eventListener, searcherWrapperFactory, mapperRegistry,
+                clusterService, client, queryCache, store, eventListener, searcherWrapperFactory, mapperRegistry,
                 indicesFieldDataCache, searchOperationListeners, indexOperationListeners, namedWriteableRegistry);
     }
 

@@ -25,10 +25,13 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.IOUtils;
+import org.elassandra.index.search.TokenRangesBitsetFilterCache;
+import org.elassandra.search.SearchProcessorFactory;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.lease.Releasable;
@@ -99,6 +102,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private final IndexEventListener eventListener;
     private final IndexFieldDataService indexFieldData;
     private final BitsetFilterCache bitsetFilterCache;
+    protected final TokenRangesBitsetFilterCache tokenRangesBitsetFilterCache;
     private final NodeEnvironment nodeEnv;
     private final ShardStoreDeleter shardStoreDeleter;
     private final IndexStore indexStore;
@@ -127,10 +131,13 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private final ThreadPool threadPool;
     private final BigArrays bigArrays;
     private final ScriptService scriptService;
+    private final ClusterService clusterService;
     private final Client client;
     private final CircuitBreakerService circuitBreakerService;
     private Supplier<Sort> indexSortSupplier;
 
+    private SearchProcessorFactory searchProcessorFactory;
+    
     public IndexService(
             IndexSettings indexSettings,
             NodeEnvironment nodeEnv,
@@ -143,6 +150,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             BigArrays bigArrays,
             ThreadPool threadPool,
             ScriptService scriptService,
+            ClusterService clusterService,
             Client client,
             QueryCache queryCache,
             IndexStore indexStore,
@@ -154,6 +162,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             List<IndexingOperationListener> indexingOperationListeners,
             NamedWriteableRegistry namedWriteableRegistry) throws IOException {
         super(indexSettings);
+        this.clusterService = clusterService;
         this.indexSettings = indexSettings;
         this.xContentRegistry = xContentRegistry;
         this.similarityService = similarityService;
@@ -184,9 +193,15 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         this.indexStore = indexStore;
         indexFieldData.setListener(new FieldDataCacheListener(this));
         this.bitsetFilterCache = new BitsetFilterCache(indexSettings, new BitsetCacheListener(this));
+
+        this.tokenRangesBitsetFilterCache = new TokenRangesBitsetFilterCache(indexSettings, clusterService.tokenRangesService());
+        this.tokenRangesBitsetFilterCache.setListener(new TokenRangeBitsetCacheListener(this));
+        
         this.warmer = new IndexWarmer(indexSettings.getSettings(), threadPool, indexFieldData,
             bitsetFilterCache.createListener(threadPool));
         this.indexCache = new IndexCache(indexSettings, queryCache, bitsetFilterCache);
+        this.indexCache.tokenRangeBitsetFilterCache(this.tokenRangesBitsetFilterCache);
+        
         this.engineFactory = engineFactory;
         // initialize this last -- otherwise if the wrapper requires any other member to be non-null we fail with an NPE
         this.searcherWrapper = wrapperFactory.newWrapper(this);
@@ -196,7 +211,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         this.refreshTask = new AsyncRefreshTask(this);
         this.trimTranslogTask = new AsyncTrimTranslogTask(this);
         this.globalCheckpointTask = new AsyncGlobalCheckpointTask(this);
-        rescheduleFsyncTask(indexSettings.getTranslogDurability());
     }
 
     public int numberOfShards() {
@@ -279,6 +293,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             } finally {
                 IOUtils.close(
                         bitsetFilterCache,
+                        tokenRangesBitsetFilterCache,
                         indexCache,
                         indexFieldData,
                         mapperService,
@@ -290,6 +305,21 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         }
     }
 
+    public SearchProcessorFactory searchProcessorFactory() {
+        return this.searchProcessorFactory;
+    }
+    
+    public boolean isTokenRangesBitsetCacheEnabled() {
+        return this.indexSettings.getSettings().getAsBoolean(IndexMetaData.SETTING_TOKEN_RANGES_BITSET_CACHE, this.clusterService.settings().getAsBoolean(ClusterService.SETTING_CLUSTER_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE)));
+    }
+    
+    public ClusterService clusterService() {
+        return this.clusterService;
+    }
+    
+    public String keyspace() {
+        return this.mapperService.keyspace();
+    }
 
     public String indexUUID() {
         return indexSettings.getUUID();
@@ -308,6 +338,10 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         } else {
             return sum / count;
         }
+    }
+    
+    public IndexShard createShard(ShardRouting routing) throws IOException {
+        return createShard(routing, s -> {});
     }
 
     public synchronized IndexShard createShard(ShardRouting routing, Consumer<ShardId> globalCheckpointSyncer) throws IOException {
@@ -381,8 +415,8 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             indexShard = new IndexShard(routing, this.indexSettings, path, store, indexSortSupplier,
                 indexCache, mapperService, similarityService, engineFactory,
                 eventListener, searcherWrapper, threadPool, bigArrays, engineWarmer,
-                searchOperationListeners, indexingOperationListeners, () -> globalCheckpointSyncer.accept(shardId),
-                circuitBreakerService);
+                searchOperationListeners, indexingOperationListeners,
+                circuitBreakerService, this, clusterService);
             eventListener.indexShardStateChanged(indexShard, null, indexShard.state(), "shard created");
             eventListener.afterIndexShardCreated(indexShard);
             shards = newMapBuilder(shards).put(shardId.id(), indexShard).immutableMap();
@@ -581,6 +615,36 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         }
     }
 
+    private static final class TokenRangeBitsetCacheListener implements TokenRangesBitsetFilterCache.Listener {
+        final IndexService indexService;
+
+        private TokenRangeBitsetCacheListener(IndexService indexService) {
+            this.indexService = indexService;
+        }
+
+        @Override
+        public void onCache(ShardId shardId, Accountable accountable) {
+            if (shardId != null) {
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+                if (shard != null) {
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
+                    shard.tokenRangesBitsetFilterCache().onCached(ramBytesUsed);
+                }
+            }
+        }
+
+        @Override
+        public void onRemoval(ShardId shardId, Accountable accountable) {
+            if (shardId != null) {
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+                if (shard != null) {
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
+                    shard.tokenRangesBitsetFilterCache().onRemoval(ramBytesUsed);
+                }
+            }
+        }
+    }
+    
     private final class FieldDataCacheListener implements IndexFieldDataCache.Listener {
         final IndexService indexService;
 
@@ -629,20 +693,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             if (refreshTask.getInterval().equals(indexSettings.getRefreshInterval()) == false) {
                 rescheduleRefreshTasks();
             }
-            final Translog.Durability durability = indexSettings.getTranslogDurability();
-            if (durability != oldTranslogDurability) {
-                rescheduleFsyncTask(durability);
-            }
-        }
-    }
-
-    private void rescheduleFsyncTask(Translog.Durability durability) {
-        try {
-            if (fsyncTask != null) {
-                fsyncTask.close();
-            }
-        } finally {
-            fsyncTask = durability == Translog.Durability.REQUEST ? null : new AsyncTranslogFSync(this);
         }
     }
 
@@ -671,23 +721,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     final IndexStore getIndexStore() {
         return indexStore;
     } // pkg private for testing
-
-    private void maybeFSyncTranslogs() {
-        if (indexSettings.getTranslogDurability() == Translog.Durability.ASYNC) {
-            for (IndexShard shard : this.shards.values()) {
-                try {
-                    Translog translog = shard.getTranslog();
-                    if (translog.syncNeeded()) {
-                        translog.sync();
-                    }
-                } catch (AlreadyClosedException ex) {
-                    // fine - continue;
-                } catch (IOException e) {
-                    logger.warn("failed to sync translog", e);
-                }
-            }
-        }
-    }
 
     private void maybeRefreshEngine() {
         if (indexSettings.getRefreshInterval().millis() > 0) {
@@ -882,7 +915,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
 
         @Override
         protected void runInternal() {
-            indexService.maybeFSyncTranslogs();
         }
 
         @Override

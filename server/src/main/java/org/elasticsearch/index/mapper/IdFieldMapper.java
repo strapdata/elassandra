@@ -213,6 +213,11 @@ public class IdFieldMapper extends MetadataFieldMapper {
                 }
             };
         }
+        
+        @Override
+        public String cqlType() {
+            return "text";
+        }
     }
 
     private static AtomicFieldData wrap(AtomicFieldData in) {
@@ -303,6 +308,18 @@ public class IdFieldMapper extends MetadataFieldMapper {
         }
     }
 
+    @Override
+    public void createField(ParseContext context, Object _id) throws IOException {
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            if (context.mapperService().getIndexSettings().getIndexVersionCreated().onOrAfter(Version.V_6_0_0_beta1)) {
+                BytesRef id = Uid.encodeId( (String)_id);
+                context.doc().add(new Field(NAME, id, fieldType));
+            } else {
+                context.doc().add(new Field(NAME, (String)_id, fieldType));
+            }
+        }
+    }
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

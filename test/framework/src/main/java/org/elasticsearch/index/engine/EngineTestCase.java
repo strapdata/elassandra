@@ -101,8 +101,8 @@ public abstract class EngineTestCase extends ESTestCase {
     protected Store store;
     protected Store storeReplica;
 
-    protected InternalEngine engine;
-    protected InternalEngine replicaEngine;
+    protected VersionLessInternalEngine engine;
+    //protected InternalEngine replicaEngine;
 
     protected IndexSettings defaultSettings;
     protected String codecName;
@@ -145,6 +145,7 @@ public abstract class EngineTestCase extends ESTestCase {
             engine.config().setEnableGcDeletes(false);
         }
         replicaTranslogDir = createTempDir("translog-replica");
+        /*
         replicaEngine = createEngine(storeReplica, replicaTranslogDir);
         currentIndexWriterConfig = replicaEngine.getCurrentIndexWriterConfig();
 
@@ -153,6 +154,7 @@ public abstract class EngineTestCase extends ESTestCase {
         if (randomBoolean()) {
             engine.config().setEnableGcDeletes(false);
         }
+        */
     }
 
     public EngineConfig copy(EngineConfig config, EngineConfig.OpenMode openMode) {
@@ -184,11 +186,13 @@ public abstract class EngineTestCase extends ESTestCase {
         if (engine != null && engine.isClosed.get() == false) {
             engine.getTranslog().getDeletionPolicy().assertNoOpenTranslogRefs();
         }
+        /*
         if (replicaEngine != null && replicaEngine.isClosed.get() == false) {
             replicaEngine.getTranslog().getDeletionPolicy().assertNoOpenTranslogRefs();
         }
+        */
         IOUtils.close(
-                replicaEngine, storeReplica,
+                storeReplica,
                 engine, store);
         terminate(threadPool);
     }
@@ -225,7 +229,7 @@ public abstract class EngineTestCase extends ESTestCase {
         document.add(seqID.primaryTerm);
         BytesRef ref = source.toBytesRef();
         document.add(new StoredField(SourceFieldMapper.NAME, ref.bytes, ref.offset, ref.length));
-        return new ParsedDocument(versionField, seqID, id, "test", routing, Arrays.asList(document), source, XContentType.JSON,
+        return new ParsedDocument(versionField, seqID, id, "test", routing, 0L, Arrays.asList(document), source, XContentType.JSON,
                 mappingUpdate);
     }
 
@@ -256,22 +260,22 @@ public abstract class EngineTestCase extends ESTestCase {
         return new Translog(translogConfig, null, createTranslogDeletionPolicy(INDEX_SETTINGS), () -> SequenceNumbers.UNASSIGNED_SEQ_NO);
     }
 
-    protected InternalEngine createEngine(Store store, Path translogPath) throws IOException {
+    protected VersionLessInternalEngine createEngine(Store store, Path translogPath) throws IOException {
         return createEngine(defaultSettings, store, translogPath, newMergePolicy(), null);
     }
 
-    protected InternalEngine createEngine(Store store, Path translogPath, LongSupplier globalCheckpointSupplier) throws IOException {
+    protected VersionLessInternalEngine createEngine(Store store, Path translogPath, LongSupplier globalCheckpointSupplier) throws IOException {
         return createEngine(defaultSettings, store, translogPath, newMergePolicy(), null, null, globalCheckpointSupplier);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             Store store,
             Path translogPath,
             BiFunction<Long, Long, LocalCheckpointTracker> localCheckpointTrackerSupplier) throws IOException {
         return createEngine(defaultSettings, store, translogPath, newMergePolicy(), null, localCheckpointTrackerSupplier, null);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             Store store,
             Path translogPath,
             BiFunction<Long, Long, LocalCheckpointTracker> localCheckpointTrackerSupplier,
@@ -280,18 +284,18 @@ public abstract class EngineTestCase extends ESTestCase {
                 defaultSettings, store, translogPath, newMergePolicy(), null, localCheckpointTrackerSupplier, null, seqNoForOperation);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             IndexSettings indexSettings, Store store, Path translogPath, MergePolicy mergePolicy) throws IOException {
         return createEngine(indexSettings, store, translogPath, mergePolicy, null);
 
     }
 
-    protected InternalEngine createEngine(IndexSettings indexSettings, Store store, Path translogPath, MergePolicy mergePolicy,
+    protected VersionLessInternalEngine createEngine(IndexSettings indexSettings, Store store, Path translogPath, MergePolicy mergePolicy,
                                           @Nullable IndexWriterFactory indexWriterFactory) throws IOException {
         return createEngine(indexSettings, store, translogPath, mergePolicy, indexWriterFactory, null, null);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             IndexSettings indexSettings,
             Store store,
             Path translogPath,
@@ -304,7 +308,7 @@ public abstract class EngineTestCase extends ESTestCase {
                 globalCheckpointSupplier);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             IndexSettings indexSettings,
             Store store,
             Path translogPath,
@@ -325,7 +329,7 @@ public abstract class EngineTestCase extends ESTestCase {
                 globalCheckpointSupplier);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             IndexSettings indexSettings,
             Store store,
             Path translogPath,
@@ -336,7 +340,7 @@ public abstract class EngineTestCase extends ESTestCase {
             @Nullable Sort indexSort,
             @Nullable LongSupplier globalCheckpointSupplier) throws IOException {
         EngineConfig config = config(indexSettings, store, translogPath, mergePolicy, null, indexSort, globalCheckpointSupplier);
-        InternalEngine internalEngine = createInternalEngine(indexWriterFactory, localCheckpointTrackerSupplier, seqNoForOperation, config);
+        VersionLessInternalEngine internalEngine = createInternalEngine(indexWriterFactory, localCheckpointTrackerSupplier, seqNoForOperation, config);
         if (config.getOpenMode() == EngineConfig.OpenMode.OPEN_INDEX_AND_TRANSLOG) {
             internalEngine.recoverFromTranslog();
         }
@@ -349,13 +353,13 @@ public abstract class EngineTestCase extends ESTestCase {
         IndexWriter createWriter(Directory directory, IndexWriterConfig iwc) throws IOException;
     }
 
-    public static InternalEngine createInternalEngine(
+    public static VersionLessInternalEngine createInternalEngine(
             @Nullable final IndexWriterFactory indexWriterFactory,
             @Nullable final BiFunction<Long, Long, LocalCheckpointTracker> localCheckpointTrackerSupplier,
             @Nullable final ToLongBiFunction<Engine, Engine.Operation> seqNoForOperation,
             final EngineConfig config) {
         if (localCheckpointTrackerSupplier == null) {
-            return new InternalEngine(config) {
+            return new VersionLessInternalEngine(config) {
                 @Override
                 IndexWriter createWriter(Directory directory, IndexWriterConfig iwc) throws IOException {
                     return (indexWriterFactory != null) ?
@@ -371,7 +375,7 @@ public abstract class EngineTestCase extends ESTestCase {
                 }
             };
         } else {
-            return new InternalEngine(config, localCheckpointTrackerSupplier) {
+            return new VersionLessInternalEngine(config, localCheckpointTrackerSupplier) {
                 @Override
                 IndexWriter createWriter(Directory directory, IndexWriterConfig iwc) throws IOException {
                     return (indexWriterFactory != null) ?

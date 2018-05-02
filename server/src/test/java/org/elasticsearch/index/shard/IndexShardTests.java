@@ -197,6 +197,7 @@ public class IndexShardTests extends IndexShardTestCase {
         }
     }
 
+    /*
     public void testPersistenceStateMetadataPersistence() throws Exception {
         IndexShard shard = newStartedShard();
         final Path shardStatePath = shard.shardPath().getShardStatePath();
@@ -218,7 +219,8 @@ public class IndexShardTests extends IndexShardTestCase {
             new ShardStateMetaData(routing.primary(), shard.indexSettings().getUUID(), routing.allocationId()));
         closeShards(shard);
     }
-
+    */
+    
     public void testFailShard() throws Exception {
         IndexShard shard = newStartedShard();
         final ShardPath shardPath = shard.shardPath();
@@ -275,6 +277,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
     }
 
+    /*
     public void testClosesPreventsNewOperations() throws InterruptedException, ExecutionException, IOException {
         IndexShard indexShard = newStartedShard();
         closeShards(indexShard);
@@ -293,6 +296,7 @@ public class IndexShardTests extends IndexShardTestCase {
             // expected
         }
     }
+    */
 
     public void testRejectOperationPermitWithHigherTermWhenNotStarted() throws IOException {
         IndexShard indexShard = newShard(false);
@@ -1079,6 +1083,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(newShard);
     }
 
+    /*
     public void testAsyncFsync() throws InterruptedException, IOException {
         IndexShard shard = newStartedShard();
         Semaphore semaphore = new Semaphore(Integer.MAX_VALUE);
@@ -1110,6 +1115,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(shard);
     }
+    */
 
     public void testMinimumCompatVersion() throws IOException {
         Version versionCreated = VersionUtils.randomVersion(random());
@@ -1133,6 +1139,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(test);
     }
 
+    /*
     public void testShardStats() throws IOException {
 
         IndexShard shard = newStartedShard();
@@ -1165,7 +1172,8 @@ public class IndexShardTests extends IndexShardTestCase {
         }
         closeShards(shard);
     }
-
+    */
+    
     public void testRefreshMetric() throws IOException {
         IndexShard shard = newStartedShard();
         assertThat(shard.refreshStats().getTotal(), equalTo(3L)); // refresh on: finalize, end of recovery and on starting shard
@@ -1501,6 +1509,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(shard);
     }
 
+    /*
     public void testRecoverFromStoreWithOutOfOrderDelete() throws IOException {
         /*
          * The flow of this test:
@@ -1512,7 +1521,7 @@ public class IndexShardTests extends IndexShardTestCase {
          * - index #2
          * - index #5
          * - If flush and then recover from the existing store, delete #1 will be removed while index #0 is still retained and replayed.
-         */
+         *
         final IndexShard shard = newStartedShard(false);
         final Consumer<Mapping> mappingConsumer = getMappingUpdater(shard, "test");
         shard.applyDeleteOperationOnReplica(1, 2, "test", "id", VersionType.EXTERNAL, mappingConsumer);
@@ -1557,7 +1566,7 @@ public class IndexShardTests extends IndexShardTestCase {
         assertDocCount(newShard, 3);
         closeShards(newShard);
     }
-
+    
     public void testRecoverFromStore() throws IOException {
         final IndexShard shard = newStartedShard(true);
         int totalOps = randomInt(10);
@@ -1606,7 +1615,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(primarySource, primaryTarget);
     }
 
-    /* This test just verifies that we fill up local checkpoint up to max seen seqID on primary recovery */
+    // This test just verifies that we fill up local checkpoint up to max seen seqID on primary recovery
     public void testRecoverFromStoreWithNoOps() throws IOException {
         final IndexShard shard = newStartedShard(true);
         indexDoc(shard, "test", "0");
@@ -1768,6 +1777,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(shard);
     }
+    */
 
     public void testRestoreShard() throws IOException {
         final IndexShard source = newStartedShard(true);
@@ -1926,6 +1936,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(shard);
     }
 
+    /*
     public void testIndexingOperationListenersIsInvokedOnRecovery() throws IOException {
         IndexShard shard = newStartedShard(true);
         indexDoc(shard, "test", "0", "{\"foo\" : \"bar\"}");
@@ -1977,7 +1988,8 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(newShard);
     }
-
+    */
+    
     public void testSearchIsReleaseIfWrapperFails() throws IOException {
         IndexShard shard = newStartedShard(true);
         indexDoc(shard, "test", "0", "{\"foo\" : \"bar\"}");
@@ -2010,6 +2022,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(newShard);
     }
 
+    /*
     public void testTranslogRecoverySyncsTranslog() throws IOException {
         Settings settings = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
@@ -2037,7 +2050,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(primary, replica);
     }
-
+    
     public void testRecoverFromTranslog() throws IOException {
         Settings settings = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
@@ -2204,7 +2217,8 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(primary, replica);
     }
-
+    */
+        
     public void testRecoverFromLocalShard() throws IOException {
         Settings settings = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
@@ -2277,6 +2291,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(sourceShard, targetShard);
     }
 
+    /*
     public void testDocStats() throws IOException {
         IndexShard indexShard = null;
         try {
@@ -2415,12 +2430,14 @@ public class IndexShardTests extends IndexShardTestCase {
             closeShards(indexShard);
         }
     }
-
+    */
+    
     /**
      * here we are simulating the scenario that happens when we do async shard fetching from GatewaySerivce while we are finishing
      * a recovery and concurrently clean files. This should always be possible without any exception. Yet there was a bug where IndexShard
      * acquired the index writer lock before it called into the store that has it's own locking for metadata reads
      */
+    /*
     public void testReadSnapshotConcurrently() throws IOException, InterruptedException {
         IndexShard indexShard = newStartedShard();
         indexDoc(indexShard, "doc", "0", "{\"foo\" : \"bar\"}");
@@ -2461,11 +2478,13 @@ public class IndexShardTests extends IndexShardTestCase {
         thread.join();
         closeShards(newShard);
     }
-
+    */
+    
     /**
      * Simulates a scenario that happens when we are async fetching snapshot metadata from GatewayService
      * and checking index concurrently. This should always be possible without any exception.
      */
+    /*
     public void testReadSnapshotAndCheckIndexConcurrently() throws Exception {
         final boolean isPrimary = randomBoolean();
         IndexShard indexShard = newStartedShard(isPrimary);
@@ -2526,7 +2545,8 @@ public class IndexShardTests extends IndexShardTestCase {
         snapshotter.join();
         closeShards(newShard);
     }
-
+    */
+    
     class Result {
         private final int localCheckpoint;
         private final int maxSeqNo;

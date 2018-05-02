@@ -338,7 +338,7 @@ public class GlobalCheckpointTracker extends AbstractIndexShardComponent impleme
         super(shardId, indexSettings);
         assert globalCheckpoint >= SequenceNumbers.UNASSIGNED_SEQ_NO : "illegal initial global checkpoint: " + globalCheckpoint;
         this.shardAllocationId = allocationId;
-        this.primaryMode = false;
+        this.primaryMode = true;
         this.handoffInProgress = false;
         this.appliedClusterStateVersion = -1L;
         this.checkpoints = new HashMap<>(1 + indexSettings.getNumberOfReplicas());
@@ -346,7 +346,7 @@ public class GlobalCheckpointTracker extends AbstractIndexShardComponent impleme
         this.pendingInSync = new HashSet<>();
         this.routingTable = null;
         this.replicationGroup = null;
-        assert invariant();
+        //assert invariant();
     }
 
     /**

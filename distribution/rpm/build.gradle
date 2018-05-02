@@ -21,19 +21,19 @@ import org.elasticsearch.gradle.LoggedExec
 
 task buildRpm(type: Rpm) {
   dependsOn preparePackagingFiles
-  baseName 'elasticsearch' // this is what pom generation uses for artifactId
+  baseName 'elassandra' // this is what pom generation uses for artifactId
   // Follow elasticsearch's rpm file naming convention
-  archiveName "${packageName}-${project.version}.rpm"
+  archiveName "${packageName}-${project.fullElassVersion}.rpm"
   packageGroup 'Application/Internet'
   prefix '/usr'
-  packager 'Elasticsearch'
-  version = project.version.replace('-', '_')
+  packager 'root'
+  version = project.fullElassVersion.replace('-', '_')
   release = '1'
   arch 'NOARCH'
   os 'LINUX'
   license '2009'
-  distribution 'Elasticsearch'
-  vendor 'Elasticsearch'
+  distribution 'Strapdata'
+  vendor 'Strapdata'
   dirMode 0755
   fileMode 0644
   addParentDirs false
@@ -41,12 +41,15 @@ task buildRpm(type: Rpm) {
 
   // Declare the folders so that the RPM package manager removes
   // them when upgrading or removing the package
-  directory('/usr/share/elasticsearch/bin', 0755)
-  directory('/usr/share/elasticsearch/lib', 0755)
-  directory('/usr/share/elasticsearch/modules', 0755)
+  directory('/usr/share/cassandra/lib/sigar-bin', 0755)
+  directory('/usr/share/cassandra/lib', 0755)
+  directory('/usr/share/cassandra/tools/bin', 0755)
+  directory('/usr/share/cassandra/tools', 0755)
+  directory('/usr/share/cassandra/modules', 0755)
+  directory('/usr/share/cassandra/bin', 0755)
   modulesFiles.eachFile { FileCopyDetails fcp ->
     if (fcp.name == "plugin-descriptor.properties") {
-      directory('/usr/share/elasticsearch/modules/' + fcp.file.parentFile.name, 0755)
+      directory('/usr/share/cassandra/modules/' + fcp.file.parentFile.name, 0755)
     }
   }
 }

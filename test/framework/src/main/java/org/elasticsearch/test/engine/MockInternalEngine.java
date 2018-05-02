@@ -24,11 +24,11 @@ import org.apache.lucene.search.ReferenceManager;
 import org.apache.lucene.search.SearcherManager;
 import org.elasticsearch.index.engine.EngineConfig;
 import org.elasticsearch.index.engine.EngineException;
-import org.elasticsearch.index.engine.InternalEngine;
+import org.elasticsearch.index.engine.VersionLessInternalEngine;
 
 import java.io.IOException;
 
-final class MockInternalEngine extends InternalEngine {
+final class MockInternalEngine extends VersionLessInternalEngine {
     private MockEngineSupport support;
     private Class<? extends FilterDirectoryReader> wrapperClass;
 

@@ -20,9 +20,9 @@
 import org.elasticsearch.gradle.precommit.PrecommitTasks;
 
 dependencies {
-  compile "org.elasticsearch.client:elasticsearch-rest-client:${version}"
-  compile "org.elasticsearch:elasticsearch:${version}"
-  compile "org.elasticsearch:elasticsearch-cli:${version}"
+  compile "com.strapdata.elasticsearch.client:elasticsearch-rest-client:${version}"
+  compile "com.strapdata.elasticsearch:elasticsearch:${version}"
+  compile "com.strapdata.elasticsearch:elasticsearch-cli:${version}"
   compile "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
   compile "junit:junit:${versions.junit}"
   compile "org.hamcrest:hamcrest-all:${versions.hamcrest}"
@@ -30,6 +30,7 @@ dependencies {
   compile "org.apache.lucene:lucene-codecs:${versions.lucene}"
   compile "org.apache.httpcomponents:httpclient:${versions.httpclient}"
   compile "org.apache.httpcomponents:httpcore:${versions.httpcore}"
+  compile "org.apache.httpcomponents:httpasyncclient:${versions.httpasyncclient}"
   compile "commons-logging:commons-logging:${versions.commonslogging}"
   compile "commons-codec:commons-codec:${versions.commonscodec}"
   compile "org.elasticsearch:securemock:${versions.securemock}"

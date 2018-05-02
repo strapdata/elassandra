@@ -36,6 +36,7 @@ import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.network.InetAddresses;
+import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.fielddata.IndexFieldData;
@@ -298,7 +299,24 @@ public class IpFieldMapper extends FieldMapper {
             if (value == null) {
                 return null;
             }
+            if (value instanceof String) {
+                return value;
+            }
+            if (value instanceof InetAddress) {
+                return NetworkAddress.format((InetAddress)value);
+            }
             return DocValueFormat.IP.format((BytesRef) value);
+        }
+
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof String) {
+                return com.google.common.net.InetAddresses.forString((String)value);
+            }
+            return value;
         }
 
         @Override
@@ -311,6 +329,11 @@ public class IpFieldMapper extends FieldMapper {
                     + "] does not support custom time zones");
             }
             return DocValueFormat.IP;
+        }
+        
+        @Override
+        public String cqlType() {
+            return "inet";
         }
     }
 
@@ -397,6 +420,43 @@ public class IpFieldMapper extends FieldMapper {
         }
     }
 
+    //@SuppressForbidden(reason = "toUpperCase() for consistency level")
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        InetAddress address = null;
+        
+        if (object instanceof String) {
+            //TODO: find why we got String object here ?
+            address = com.google.common.net.InetAddresses.forString((String)object);
+        } else {
+            address =  (InetAddress) object;
+        }
+        
+        if (address == null) {
+            String ipAsString = fieldType().nullValueAsString();
+            if (ipAsString == null) {
+                return;
+            }
+            if (com.google.common.net.InetAddresses.isInetAddress(ipAsString)) {
+                address = com.google.common.net.InetAddresses.forString(ipAsString);
+            }
+        }
+        
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().name(), NetworkAddress.format(address), fieldType().boost());
+        }
+
+        if (fieldType().indexOptions() != IndexOptions.NONE) {
+            context.doc().add(new InetAddressPoint(fieldType().name(), address));
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedSetDocValuesField(fieldType().name(), new BytesRef(InetAddressPoint.encode(address))));
+        } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
+            createFieldNamesField(context, context.doc().getFields());
+        }
+        super.createField(context, object); // for multi fields.
+    }
+    
     @Override
     protected void doMerge(Mapper mergeWith, boolean updateAllTypes) {
         super.doMerge(mergeWith, updateAllTypes);
@@ -427,5 +487,10 @@ public class IpFieldMapper extends FieldMapper {
         } else if (includeDefaults) {
             builder.field("include_in_all", false);
         }
+    }
+    
+    @Override
+    public String cqlType() {
+        return "inet";
     }
 }

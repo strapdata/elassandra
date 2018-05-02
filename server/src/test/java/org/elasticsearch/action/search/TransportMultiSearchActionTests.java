@@ -21,7 +21,6 @@ package org.elasticsearch.action.search;
 
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterName;
@@ -34,6 +33,7 @@ import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.tasks.TaskManager;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -55,7 +55,7 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class TransportMultiSearchActionTests extends ESTestCase {
+public class TransportMultiSearchActionTests extends ESSingleNodeTestCase {
 
     protected ThreadPool threadPool;
 
@@ -79,7 +79,7 @@ public class TransportMultiSearchActionTests extends ESTestCase {
                 .put("node.name", TransportMultiSearchActionTests.class.getSimpleName())
                 .build();
         ActionFilters actionFilters = mock(ActionFilters.class);
-        when(actionFilters.filters()).thenReturn(new ActionFilter[0]);
+        //when(actionFilters.filters()).thenReturn(new ActionFilter[0]);
         ThreadPool threadPool = new ThreadPool(settings);
         TaskManager taskManager = mock(TaskManager.class);
         TransportService transportService = new TransportService(Settings.EMPTY, null, threadPool,
@@ -91,7 +91,7 @@ public class TransportMultiSearchActionTests extends ESTestCase {
                 return taskManager;
             }
         };
-        ClusterService clusterService = mock(ClusterService.class);
+        ClusterService clusterService = clusterService();
         when(clusterService.state()).thenReturn(ClusterState.builder(new ClusterName("test")).build());
         IndexNameExpressionResolver resolver = new IndexNameExpressionResolver(Settings.EMPTY);
 

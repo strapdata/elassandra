@@ -24,6 +24,7 @@ import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.Engine.Searcher;
 import org.elasticsearch.index.fielddata.SortedBinaryDocValues;
@@ -58,7 +59,7 @@ public class ValuesSourceConfigTests extends ESSingleNodeTestCase {
         IndexService indexService = createIndex("index", Settings.EMPTY, "type",
                 "bytes", "type=keyword");
         client().prepareIndex("index", "type", "1")
-                .setSource()
+                .setSource("{ \"foo\":\"bar\" }", XContentType.JSON)
                 .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
                 .get();
 
@@ -85,7 +86,7 @@ public class ValuesSourceConfigTests extends ESSingleNodeTestCase {
     public void testUnmappedKeyword() throws Exception {
         IndexService indexService = createIndex("index", Settings.EMPTY, "type");
         client().prepareIndex("index", "type", "1")
-                .setSource()
+                .setSource("{ \"foo\":\"bar\" }", XContentType.JSON)
                 .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
                 .get();
 
@@ -133,7 +134,7 @@ public class ValuesSourceConfigTests extends ESSingleNodeTestCase {
         IndexService indexService = createIndex("index", Settings.EMPTY, "type",
                 "long", "type=long");
         client().prepareIndex("index", "type", "1")
-                .setSource()
+                .setSource("{ \"foo\":\"bar\" }", XContentType.JSON)
                 .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
                 .get();
 
@@ -160,7 +161,7 @@ public class ValuesSourceConfigTests extends ESSingleNodeTestCase {
     public void testUnmappedLong() throws Exception {
         IndexService indexService = createIndex("index", Settings.EMPTY, "type");
         client().prepareIndex("index", "type", "1")
-                .setSource()
+                .setSource("{ \"foo\":\"bar\" }", XContentType.JSON)
                 .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
                 .get();
 
@@ -209,7 +210,7 @@ public class ValuesSourceConfigTests extends ESSingleNodeTestCase {
         IndexService indexService = createIndex("index", Settings.EMPTY, "type",
                 "bool", "type=boolean");
         client().prepareIndex("index", "type", "1")
-                .setSource()
+                .setSource("{ \"foo\":\"bar\" }", XContentType.JSON)
                 .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
                 .get();
 
@@ -236,7 +237,7 @@ public class ValuesSourceConfigTests extends ESSingleNodeTestCase {
     public void testUnmappedBoolean() throws Exception {
         IndexService indexService = createIndex("index", Settings.EMPTY, "type");
         client().prepareIndex("index", "type", "1")
-                .setSource()
+                .setSource("{ \"foo\":\"bar\" }", XContentType.JSON)
                 .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
                 .get();
 

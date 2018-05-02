@@ -167,7 +167,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
 
     @Override
     public void beforeRefresh() throws IOException {
-        currentRefreshLocation = translog.getLastWriteLocation();
+        currentRefreshLocation = Translog.DUMMY_LOCATION;
     }
 
     @Override

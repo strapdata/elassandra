@@ -34,7 +34,9 @@ import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.index.SegmentReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ReferenceManager;
+import org.apache.lucene.search.join.BitSetProducer;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
@@ -57,6 +59,7 @@ import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.common.lucene.uid.VersionsAndSeqNoResolver;
 import org.elasticsearch.common.lucene.uid.VersionsAndSeqNoResolver.DocIdAndVersion;
 import org.elasticsearch.common.metrics.CounterMetric;
+import org.elasticsearch.common.metrics.MeanMetric;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.index.VersionType;
@@ -292,6 +295,88 @@ public abstract class Engine implements Closeable {
 
     public abstract NoOpResult noOp(NoOp noOp);
 
+
+    /** @deprecated This was removed, but we keep this API so translog can replay any DBQs on upgrade. */
+    @Deprecated
+    public  void delete(DeleteByQuery delete) throws EngineException {
+        
+    }
+    
+    public static class DeleteByQuery {
+        private final Query query;
+        private final BytesReference source;
+        private final String[] filteringAliases;
+        private final Query aliasFilter;
+        private final String[] types;
+        private final BitSetProducer parentFilter;
+        private final Operation.Origin origin;
+
+        private final long startTime;
+        private long endTime;
+
+        public DeleteByQuery(Query query, BytesReference source, @Nullable String[] filteringAliases, @Nullable Query aliasFilter, BitSetProducer parentFilter, Operation.Origin origin, long startTime, String... types) {
+            this.query = query;
+            this.source = source;
+            this.types = types;
+            this.filteringAliases = filteringAliases;
+            this.aliasFilter = aliasFilter;
+            this.parentFilter = parentFilter;
+            this.startTime = startTime;
+            this.origin = origin;
+        }
+
+        public Query query() {
+            return this.query;
+        }
+
+        public BytesReference source() {
+            return this.source;
+        }
+
+        public String[] types() {
+            return this.types;
+        }
+
+        public String[] filteringAliases() {
+            return filteringAliases;
+        }
+
+        public Query aliasFilter() {
+            return aliasFilter;
+        }
+
+        public boolean nested() {
+            return parentFilter != null;
+        }
+
+        public BitSetProducer parentFilter() {
+            return parentFilter;
+        }
+
+        public Operation.Origin origin() {
+            return this.origin;
+        }
+
+        /**
+         * Returns operation start time in nanoseconds.
+         */
+        public long startTime() {
+            return this.startTime;
+        }
+
+        public DeleteByQuery endTime(long endTime) {
+            this.endTime = endTime;
+            return this;
+        }
+
+        /**
+         * Returns operation end time in nanoseconds.
+         */
+        public long endTime() {
+            return this.endTime;
+        }
+    }
+    
     /**
      * Base class for index and delete operation results
      * Holds result meta data (e.g. translog location, updated version)
@@ -1313,7 +1398,7 @@ public abstract class Engine implements Closeable {
 
         public static final GetResult NOT_EXISTS = new GetResult(false, Versions.NOT_FOUND, null, null);
 
-        private GetResult(boolean exists, long version, DocIdAndVersion docIdAndVersion, Searcher searcher) {
+        public GetResult(boolean exists, long version, DocIdAndVersion docIdAndVersion, Searcher searcher) {
             this.exists = exists;
             this.version = version;
             this.docIdAndVersion = docIdAndVersion;
@@ -1552,5 +1637,34 @@ public abstract class Engine implements Closeable {
      */
     public boolean isRecovering() {
         return false;
+    }
+    
+    public MeanMetric schedulerTotalMerges() {
+        return null;
+    }
+    public CounterMetric schedulerTotalMergesNumDocs(){
+        return null;
+    }
+    public CounterMetric schedulerTotalMergesSizeInBytes(){
+        return null;
+    }
+    public CounterMetric schedulerCurrentMerges(){
+        return null;
+    }
+    public CounterMetric schedulerCurrentMergesNumDocs(){
+        return null;
+    }
+    public CounterMetric schedulerCurrentMergesSizeInBytes(){
+        return null;
+    }
+    public CounterMetric schedulerTotalMergeStoppedTime(){
+        return null;
+    }
+    public CounterMetric schedulerTotalMergeThrottledTime(){
+        return null;
+    }
+    
+    public double getIORateLimitMBPerSec() {
+        return Double.NaN;
     }
 }

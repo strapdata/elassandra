@@ -19,6 +19,8 @@
 package org.elasticsearch.common.settings;
 
 import org.apache.logging.log4j.Logger;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.common.Booleans;
@@ -993,7 +995,11 @@ public class Setting<T> implements ToXContentObject {
     public static Setting<String> simpleString(String key, Validator<String> validator, Property... properties) {
         return new Setting<>(new SimpleKey(key), null, s -> "", Function.identity(), validator, properties);
     }
-
+    
+    public static Setting<String> simpleString(String key, String defaultValue, Property... properties) {
+        return new Setting<>(key, s -> defaultValue, Function.identity(), properties);
+    }
+    
     public static int parseInt(String s, int minValue, String key) {
         return parseInt(s, minValue, Integer.MAX_VALUE, key);
     }
@@ -1221,6 +1227,10 @@ public class Setting<T> implements ToXContentObject {
         return timeSetting(key, defaultValue, TimeValue.timeValueMillis(0), properties);
     }
 
+    public static Setting<Class<? extends AbstractSearchStrategy>> searchStrategy(String key, String defaultValue, Property... properties) {
+        return new Setting<>(key, (s) -> PrimaryFirstSearchStrategy.class.getName(), (s) -> AbstractSearchStrategy.getSearchStrategyClass(s), properties);
+    }
+    
     public static Setting<Double> doubleSetting(String key, double defaultValue, double minValue, Property... properties) {
         return new Setting<>(key, (s) -> Double.toString(defaultValue), (s) -> {
             final double d = Double.parseDouble(s);

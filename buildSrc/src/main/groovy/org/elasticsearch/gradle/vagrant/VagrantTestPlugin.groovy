@@ -96,9 +96,11 @@ class VagrantTestPlugin implements Plugin<Project> {
           https://artifacts.elastic.co/downloads/elasticsearch/[module]-[revision].[ext]
           which should work for 5.0.0+. This isn't a real ivy repository but gradle
           is fine with that */
+        /*
         repos.ivy {
             artifactPattern "https://artifacts.elastic.co/downloads/elasticsearch/[module]-[revision].[ext]"
         }
+        */
     }
 
     private static void createBatsConfiguration(Project project) {
@@ -119,7 +121,8 @@ class VagrantTestPlugin implements Plugin<Project> {
 
         UPGRADE_FROM_ARCHIVES.each {
             // The version of elasticsearch that we upgrade *from*
-            project.dependencies.add(BATS, "org.elasticsearch.distribution.${it}:elasticsearch:${upgradeFromVersion}@${it}")
+            //project.dependencies.add(BATS, "org.elasticsearch.distribution.${it}:elasticsearch:${upgradeFromVersion}@${it}")
+            project.dependencies.add(BATS, "com.strapdata.elasticsearch.distribution.${it}:elassandra:${upgradeFromVersion}@${it}")
         }
 
         project.extensions.esvagrant.upgradeFromVersion = upgradeFromVersion
@@ -206,6 +209,12 @@ class VagrantTestPlugin implements Plugin<Project> {
             contents project.version
         }
 
+        Task createFullElassVersionFile = project.tasks.create('createFullElassVersionFile', FileContentsTask) {
+            dependsOn createBatsDirsTask
+            file "${batsDir}/archives/full_elass_version"
+            contents project.fullElassVersion
+        }
+        
         Task createUpgradeFromFile = project.tasks.create('createUpgradeFromFile', FileContentsTask) {
             dependsOn createBatsDirsTask
             file "${batsDir}/archives/upgrade_from_version"
@@ -214,7 +223,7 @@ class VagrantTestPlugin implements Plugin<Project> {
 
         Task vagrantSetUpTask = project.tasks.create('setupBats')
         vagrantSetUpTask.dependsOn 'vagrantCheckVersion'
-        vagrantSetUpTask.dependsOn copyBatsTests, copyBatsUtils, copyBatsArchives, createVersionFile, createUpgradeFromFile
+        vagrantSetUpTask.dependsOn copyBatsTests, copyBatsUtils, copyBatsArchives, createVersionFile, createFullElassVersionFile, createUpgradeFromFile
     }
 
     private static void createPackagingTestTask(Project project) {

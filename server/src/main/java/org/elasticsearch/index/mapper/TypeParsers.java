@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.index.IndexOptions;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.Version;
@@ -29,6 +30,8 @@ import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
+import org.elasticsearch.index.mapper.Mapper.CqlCollection;
+import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.similarity.SimilarityProvider;
 
 import java.util.Collections;
@@ -39,6 +42,7 @@ import java.util.Map.Entry;
 
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.isArray;
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeFloatValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeIntegerValue;
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeMapValue;
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeStringValue;
 
@@ -49,6 +53,14 @@ public class TypeParsers {
     public static final String INDEX_OPTIONS_FREQS = "freqs";
     public static final String INDEX_OPTIONS_POSITIONS = "positions";
     public static final String INDEX_OPTIONS_OFFSETS = "offsets";
+
+    public static final String CQL_COLLECTION = "cql_collection";
+    public static final String CQL_STRUCT = "cql_struct";
+    public static final String CQL_UDT_NAME = "cql_udt_name";
+    public static final String CQL_MANDATORY = "cql_mandatory";
+    public static final String CQL_STATIC_COLUMN = "cql_static_column";
+    public static final String CQL_PARTITION_KEY = "cql_partition_key";
+    public static final String CQL_PRIMARY_KEY_ORDER = "cql_primary_key_order";
 
     private static final DeprecationLogger DEPRECATION_LOGGER = new DeprecationLogger(Loggers.getLogger(TypeParsers.class));
 
@@ -236,6 +248,33 @@ public class TypeParsers {
                 iterator.remove();
             } else if (propName.equals("boost")) {
                 builder.boost(nodeFloatValue(propNode));
+                iterator.remove();
+            } else if (propName.equals(CQL_STRUCT)) {
+                switch(StringUtils.lowerCase(propNode.toString())) {
+                case "map" : builder.cqlStruct(CqlStruct.MAP); break;
+                case "udt" : builder.cqlStruct(CqlStruct.UDT); break;
+                case "tuple" : builder.cqlStruct(CqlStruct.TUPLE); break;
+                }
+                iterator.remove();
+            } else if (propName.equals(CQL_MANDATORY)) {
+                builder.cqlPartialUpdate(nodeBooleanValue(name, CQL_MANDATORY, propNode, parserContext));
+                iterator.remove();
+            } else if (propName.equals(CQL_PARTITION_KEY)) {
+                builder.cqlPartitionKey(nodeBooleanValue(name, CQL_PARTITION_KEY, propNode, parserContext));
+                iterator.remove();
+            } else if (propName.equals(CQL_STATIC_COLUMN)) {
+                builder.cqlStaticColumn(nodeBooleanValue(name, CQL_STATIC_COLUMN, propNode, parserContext));
+                iterator.remove();
+            } else if (propName.equals(CQL_PRIMARY_KEY_ORDER)) {
+                builder.cqlPrimaryKeyOrder(nodeIntegerValue(propNode));
+                iterator.remove();
+            } else if (propName.equals(TypeParsers.CQL_COLLECTION)) {
+                String value = StringUtils.lowerCase(propNode.toString());
+                switch (value) {
+                case "list": builder.cqlCollection(CqlCollection.LIST); break;
+                case "set": builder.cqlCollection(CqlCollection.SET); break;
+                case "singleton": builder.cqlCollection(CqlCollection.SINGLETON); break;
+                }
                 iterator.remove();
             } else if (parserContext.indexVersionCreated().before(Version.V_5_0_0_alpha1)
                 && parseNorms(builder, name, propName, propNode, parserContext)) {

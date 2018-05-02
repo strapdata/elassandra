@@ -46,7 +46,7 @@ public class Loggers {
         return ESLoggerFactory.getLogger(formatPrefix(prefixes), name);
     }
 
-    private static String formatPrefix(String... prefixes) {
+    public static String formatPrefix(String... prefixes) {
         String prefix = null;
         if (prefixes != null && prefixes.length > 0) {
             StringBuilder sb = new StringBuilder();

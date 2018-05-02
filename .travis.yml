@@ -1,0 +1,54 @@
+sudo: false
+language: java
+jdk:
+  - oraclejdk8
+
+before_cache:
+  - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
+  - rm -fr $HOME/.gradle/caches/*/plugin-resolution/
+
+cache:
+  directories:
+    - $HOME/.gradle/caches/
+    - $HOME/.gradle/wrapper/
+
+install: gradle assemble -Dbuild.snapshot=false
+
+script: gradle core:test -Dbuild.snapshot=false
+
+before_deploy:
+  - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
+  - export ZIPBALL=$(ls distribution/zip/build/distributions/elassandra-*.zip)
+  - export DEBPKG=$(ls distribution/deb/build/distributions/elassandra-*.deb)
+  - export RPMPKG=$(ls distribution/rpm/build/distributions/elassandra-*.rpm)
+
+deploy:
+  - provider: releases
+    overwrite: true
+    draft: false
+    api_key:
+      secure: "MFhecFMYXJRTZYYTY0zrvQyDoTUXtaODNuF/Im7pFZDbC7aWgo5s8HFmyzNpJADKwydO1RLFPpEhJGTJ/FbuTDvshc/PirzVbrVr4jK0hnNCFaYEBqOypJzoR1j5bdivmMWxaHVvKEfAr+iNs9fwEVeb3uS+JrsZspImBkDbbeuOq0SKyxl1CrE1KF3aZJWOv50zKJaGyre9dKUq9JL8Js2dNKpebYhP8tjhD7iShD344I00br9qu3ThZ3rG6LTv4c3llI0ZRhWb644iNFtz9CoKQXK30ATjh1avT1wZr6Ci+62kYAePBToagbHd5xs8S78hFkUcm7Z0/8XX8m5KJNyJl+MSh0F/vkEpBJaLSqwUPcgbEB5wqYvWDTWADY9rQ80Mv6I97kmxpYPGpRLONBxjDby2fUVGnyr+7tWhAmAXOomtMXMl6LOLHCp0gNFMO2Twp77vTRz8e38B2dJ5vg155bGNHM7kBwP3EuiKiKFwA+RUpukVLQon7foGvikEsB1HLrNoOg44QEzrcEL6UP9tHyEFWWfwSnD3q7ybQ7bjzFC4N9F1t/NpYI2icR8X/3dRrj4GjWMCMWK75HZWjycrfd0nNLdhKyGAw2rlTmgq6Sypm3g80aq3LvGJ+Pnb7s6B2IAzNgOyhT8TKlIILZ3wQlYMrVBaVaMTmRItHWY="
+    file:
+      - "$TARBALL"
+      - "$ZIPBALL"
+      - "$RPMPKG"
+      - "$DEBPKG"
+    skip_cleanup: true
+    on:
+      tags: true
+      repo: strapdata/elassandra
+
+  - provider: releases
+    overwrite: true
+    draft: false
+    api_key:
+      secure: "CtTEWfptldC5QoeOl+nseF3uVyjmJglxnk7Mv9qHH4w24/R3GI6Q4TsJxLjp0yf0+ltnE6vg1wERIY5HiE0jvIM3l/ZFUKEFE/f6h9yvmUWFaQD2yOKNKB4fvqYfX0KZWDF0YotMi3bweegrXS66fu5s3jfjXH6DLNmzGjv0cAcumdppJDUOmETktIlWr86KKRJMuYTXiJIe4CXLfgkZEEY7cYsHysrfJvYBPYka9n4kzlcj0PB3Ux4mT8flMLIzfFymnxGWXv2Ubf1DJpCtfyb65OqFqMcWL1NjL+T2Z3OoWI5QgMtoapHX6Z6xuoBQbnN+PR5dq7pmUXJKXpoEsBzfMdv8FpiPS/NV1iRIEzgpab7nIuQ00QDkTA6R+69ugGpwOnaceoNIMnjOQjfaAHT6Xfc4vByFhhZxSp1H6hmdhtaksE1U1w4HMfHnejXTLCNMnsnbmDW1Tygjyu/zI7t9lCeF5kpnbXDV+oBHKxGR6yBZjVbG49Y3IQY7WFoFUKBgkCgYWqFMnLzCwVaJfqTFjQHOzhp1vg+RTgAtTWhjeWKwm9HqSH+R6F6tbhwKdPCDOOdzEAksnwmqUqi4iz8vjTsoiU86WXgds3PDVk4IK6ZxGRJ/UabQz/krXgay1dWOBVRYr4FzP+a5VH7mEyjdW+3SBMztbTw48g65jEE="
+    file:
+      - "$TARBALL"
+      - "$ZIPBALL"
+      - "$RPMPKG"
+      - "$DEBPKG"
+    skip_cleanup: true
+    on:
+      tags: true
+      repo: strapdata/elassandra5-rc

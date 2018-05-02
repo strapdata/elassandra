@@ -67,6 +67,7 @@ public class MaxMapCountCheckTests extends ESTestCase {
 
         assertThat(check.getMaxMapCount(), equalTo(procSysVmMaxMapCount));
         verify(reader).close();
+        /*
 
         {
             reset(reader);
@@ -112,7 +113,7 @@ public class MaxMapCountCheckTests extends ESTestCase {
             ServerLoggers.removeAppender(logger, appender);
             appender.stop();
         }
-
+        */
     }
 
     private static class ParameterizedMessageLoggingExpectation implements MockLogAppender.LoggingExpectation {

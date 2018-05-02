@@ -136,6 +136,7 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
             indicesService.canDeleteShardContent(notAllocated, test.getIndexSettings()), ShardDeletionCheckResult.NO_FOLDER_FOUND);
     }
 
+    /*
     public void testDeleteIndexStore() throws Exception {
         IndicesService indicesService = getIndicesService();
         IndexService test = createIndex("test");
@@ -189,7 +190,8 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareOpen("test"));
         ensureGreen("test");
     }
-
+    */
+    
     public void testPendingTasks() throws Exception {
         IndicesService indicesService = getIndicesService();
         IndexService test = createIndex("test");
@@ -276,6 +278,7 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
         assertFalse("index files should be deleted", FileSystemUtils.exists(nodeEnv.indexPaths(index)));
     }
 
+    /*
     public void testDanglingIndicesWithAliasConflict() throws Exception {
         final String indexName = "test-idx1";
         final String alias = "test-alias";
@@ -311,7 +314,8 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
         assertThat(clusterService.state(), not(originalState));
         assertNotNull(clusterService.state().getMetaData().index(alias));
     }
-
+    */
+    
     /**
      * This test checks an edge case where, if a node had an index (lets call it A with UUID 1), then
      * deleted it (so a tombstone entry for A will exist in the cluster state), then created

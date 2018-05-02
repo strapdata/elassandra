@@ -19,8 +19,11 @@
 
 package org.elasticsearch.search.internal;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchShardIterator;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -28,16 +31,17 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.query.QueryRewriteContext;
-import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.Rewriteable;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.search.Scroll;
-import org.elasticsearch.search.SearchService;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -76,13 +80,39 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
 
     private boolean profile;
 
+    private Boolean tokenRangesBitsetCache;
+    private Collection<Range<Token>> tokenRanges = null;
+    private Map<String, Object> extraParams;
+    
+    
     ShardSearchLocalRequest() {
     }
+    
 
+    
+    // for tests only.
     ShardSearchLocalRequest(SearchRequest searchRequest, ShardId shardId, int numberOfShards,
+            AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias) {
+            this(shardId,
+            // set token ranges from original request is not null, or from the shard.
+            searchRequest.tokenRanges(),
+            numberOfShards, searchRequest.searchType(),
+            searchRequest.source(), searchRequest.types(), searchRequest.requestCache(), 
+            searchRequest.tokenRangesBitsetCache(), searchRequest.extraParams(), aliasFilter, indexBoost);
+            this.scroll = searchRequest.scroll();
+            this.nowInMillis = nowInMillis;
+            this.clusterAlias = clusterAlias;
+    }
+ 
+    ShardSearchLocalRequest(SearchRequest searchRequest, SearchShardIterator shardIt, int numberOfShards,
                             AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias) {
-        this(shardId, numberOfShards, searchRequest.searchType(),
-                searchRequest.source(), searchRequest.types(), searchRequest.requestCache(), aliasFilter, indexBoost);
+        this(shardIt.shardId(),
+                // set token ranges from original request is not null, or from the shard.
+                searchRequest.tokenRanges() != null ? searchRequest.tokenRanges() : (shardIt.getShardRoutings().size() == 0 ? null : shardIt.getShardRoutings().iterator().next().tokenRanges()), 
+                numberOfShards, searchRequest.searchType(),
+                searchRequest.source(), searchRequest.types(), searchRequest.requestCache(),
+                searchRequest.tokenRangesBitsetCache(), searchRequest.extraParams(),
+                aliasFilter, indexBoost);
         this.scroll = searchRequest.scroll();
         this.nowInMillis = nowInMillis;
         this.clusterAlias = clusterAlias;
@@ -96,8 +126,13 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         indexBoost = 1.0f;
     }
 
-    public ShardSearchLocalRequest(ShardId shardId, int numberOfShards, SearchType searchType, SearchSourceBuilder source, String[] types,
+    public ShardSearchLocalRequest(ShardId shardId,  int numberOfShards, SearchType searchType, SearchSourceBuilder source, String[] types,
             Boolean requestCache, AliasFilter aliasFilter, float indexBoost) {
+        this(shardId, null, numberOfShards, searchType, source, types, requestCache, false, null, aliasFilter, indexBoost);
+    }
+
+    public ShardSearchLocalRequest(ShardId shardId, Collection<Range<Token>> tokenRanges, int numberOfShards, SearchType searchType, SearchSourceBuilder source, String[] types,
+            Boolean requestCache, Boolean tokenRangesBitsetCache, Map<String, Object> extraParms, AliasFilter aliasFilter, float indexBoost) {
         this.shardId = shardId;
         this.numberOfShards = numberOfShards;
         this.searchType = searchType;
@@ -106,6 +141,11 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         this.requestCache = requestCache;
         this.aliasFilter = aliasFilter;
         this.indexBoost = indexBoost;
+        
+        // Use the user provided token_range of the shardRouting one.
+        this.tokenRanges = tokenRanges;
+        this.tokenRangesBitsetCache = tokenRangesBitsetCache;
+        this.extraParams = extraParms;
     }
 
 
@@ -210,6 +250,19 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         if (in.getVersion().onOrAfter(Version.V_5_6_0)) {
             clusterAlias = in.readOptionalString();
         }
+        
+        tokenRangesBitsetCache = in.readOptionalBoolean();
+        
+        // read tokenRanges
+        Object[] tokens = (Object[]) in.readGenericValue();
+        this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+        for (int i = 0; i < tokens.length;) {
+            Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+            this.tokenRanges.add(range);
+        }
+        
+        if (in.readBoolean())
+            extraParams = in.readMap();
     }
 
     protected void innerWriteTo(StreamOutput out, boolean asKey) throws IOException {
@@ -232,6 +285,25 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         if (out.getVersion().onOrAfter(Version.V_5_6_0)) {
             out.writeOptionalString(clusterAlias);
         }
+        
+        out.writeOptionalBoolean(tokenRangesBitsetCache);
+        
+        // write tokenRanges
+        if (tokenRanges != null) {
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
+        } else {
+            out.writeGenericValue(new Token[0]);
+        }
+        
+        out.writeBoolean(extraParams != null);
+        if (extraParams != null)
+            out.writeMap(extraParams);
     }
 
     @Override
@@ -275,4 +347,18 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         }
     }
 
+    @Override
+    public Boolean tokenRangesBitsetCache() {
+        return this.tokenRangesBitsetCache;
+    }
+
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+        return this.tokenRanges;
+    }
+    
+    @Override
+    public Map<String,Object> extraParams() {
+        return this.extraParams;
+    }
 }

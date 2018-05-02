@@ -19,6 +19,9 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.TimeUUIDType;
+import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.document.Field;
@@ -45,6 +48,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseField;
 
@@ -160,7 +164,7 @@ public final class KeywordFieldMapper extends FieldMapper {
         }
     }
 
-    public static final class KeywordFieldType extends StringFieldType {
+    public static class KeywordFieldType extends StringFieldType {
 
         private NamedAnalyzer normalizer = null;
 
@@ -242,11 +246,34 @@ public final class KeywordFieldMapper extends FieldMapper {
             if (value == null) {
                 return null;
             }
+            if (value instanceof String) {
+                return value;
+            }
             // keywords are internally stored as utf8 bytes
             BytesRef binaryValue = (BytesRef) value;
             return binaryValue.utf8ToString();
         }
 
+        @Override
+        public Object cqlValue(Object value, AbstractType atype) {
+            if (value == null) {
+                return null;
+            }
+            if (atype instanceof UUIDType || atype instanceof TimeUUIDType) {
+                // #74 workaround
+                return UUID.fromString(value.toString()); 
+            }
+            return value.toString();
+        }
+        
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            return value.toString();
+        }
+        
         @Override
         protected BytesRef indexedValueForSearch(Object value) {
             if (searchAnalyzer() == Lucene.KEYWORD_ANALYZER) {
@@ -358,6 +385,56 @@ public final class KeywordFieldMapper extends FieldMapper {
         }
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object object) throws IOException {
+        String value = (object instanceof UUID) ? object.toString() : (String) object; // #74 uuid stored as string
+        if (value == null)
+            value = fieldType().nullValueAsString();
+        
+        if (value == null || value.length() > ignoreAbove) {
+            return;
+        }
+        
+        final NamedAnalyzer normalizer = fieldType().normalizer();
+        if (normalizer != null) {
+            try (TokenStream ts = normalizer.tokenStream(name(), value)) {
+                final CharTermAttribute termAtt = ts.addAttribute(CharTermAttribute.class);
+                ts.reset();
+                if (ts.incrementToken() == false) {
+                  throw new IllegalStateException("The normalization token stream is "
+                      + "expected to produce exactly 1 token, but got 0 for analyzer "
+                      + normalizer + " and input \"" + value + "\"");
+                }
+                final String newValue = termAtt.toString();
+                if (ts.incrementToken()) {
+                  throw new IllegalStateException("The normalization token stream is "
+                      + "expected to produce exactly 1 token, but got 2+ for analyzer "
+                      + normalizer + " and input \"" + value + "\"");
+                }
+                ts.end();
+                value = newValue;
+            }
+        }
+
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldType().name(), value, fieldType().boost());
+        }
+
+        // convert to utf8 only once before feeding postings/dv/stored fields
+        final BytesRef binaryValue = new BytesRef(value);
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            Field field = new Field(fieldType().name(), binaryValue, fieldType());
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
+        } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
+            createFieldNamesField(context, context.doc().getFields());
+        }
+        super.createField(context, object);
+    }
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -393,5 +470,11 @@ public final class KeywordFieldMapper extends FieldMapper {
         } else if (includeDefaults) {
             builder.nullField("normalizer");
         }
+    }
+    
+    
+    @Override
+    public String cqlType() {
+        return "text";
     }
 }

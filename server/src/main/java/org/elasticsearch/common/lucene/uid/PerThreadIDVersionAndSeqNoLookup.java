@@ -71,10 +71,11 @@ final class PerThreadIDVersionAndSeqNoLookup {
             throw new IllegalArgumentException("reader misses the [" + uidField + "] field");
         }
         termsEnum = terms.iterator();
+        /*
         if (reader.getNumericDocValues(VersionFieldMapper.NAME) == null) {
             throw new IllegalArgumentException("reader misses the [" + VersionFieldMapper.NAME + "] field");
         }
-
+        */
         Object readerKey = null;
         assert (readerKey = reader.getCoreCacheHelper().getKey()) != null;
         this.readerKey = readerKey;
@@ -94,13 +95,15 @@ final class PerThreadIDVersionAndSeqNoLookup {
 
         if (docID != DocIdSetIterator.NO_MORE_DOCS) {
             final NumericDocValues versions = context.reader().getNumericDocValues(VersionFieldMapper.NAME);
+            /*
             if (versions == null) {
                 throw new IllegalArgumentException("reader misses the [" + VersionFieldMapper.NAME + "] field");
             }
             if (versions.advanceExact(docID) == false) {
                 throw new IllegalArgumentException("Document [" + docID + "] misses the [" + VersionFieldMapper.NAME + "] field");
             }
-            return new DocIdAndVersion(docID, versions.longValue(), context);
+            */
+            return new DocIdAndVersion(docID, 1L, context);
         } else {
             return null;
         }

@@ -318,6 +318,11 @@ public class RangeFieldMapper extends FieldMapper {
             return rangeType.rangeQuery(name(), hasDocValues(), lowerTerm, upperTerm, includeLower, includeUpper, relation,
                 timeZone, parser, context);
         }
+        
+        @Override
+        public String cqlType() {
+            return "text";
+        }
     }
 
     private Boolean includeInAll;
@@ -456,6 +461,12 @@ public class RangeFieldMapper extends FieldMapper {
         }
     }
 
+    // TODO: store range as UDT
+    @Override
+    public String cqlType() {
+        return null;
+    }
+    
     private static Range parseIpRangeFromCidr(final XContentParser parser) throws IOException {
         final Tuple<InetAddress, Integer> cidr = InetAddresses.parseCidr(parser.text());
         // create the lower value by zeroing out the host portion, upper value by filling it with all ones.

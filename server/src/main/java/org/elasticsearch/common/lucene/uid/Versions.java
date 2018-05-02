@@ -28,7 +28,7 @@ public final class Versions {
     public static final long NOT_FOUND = -1L;
 
     // -2 was used for docs that can be found in the index but do not have a version
-
+    
     /**
      * used to indicate that the write operation should be executed if the document is currently deleted
      * i.e., not found in the index and/or found as deleted (with version) in the version map

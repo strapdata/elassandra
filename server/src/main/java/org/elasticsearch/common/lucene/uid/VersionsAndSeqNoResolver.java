@@ -99,7 +99,7 @@ public final class VersionsAndSeqNoResolver {
         public final long version;
         public final LeafReaderContext context;
 
-        DocIdAndVersion(int docId, long version, LeafReaderContext context) {
+        public DocIdAndVersion(int docId, long version, LeafReaderContext context) {
             this.docId = docId;
             this.version = version;
             this.context = context;

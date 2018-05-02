@@ -35,6 +35,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.metrics.MeanMetric;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
@@ -298,7 +299,11 @@ public class TransportService extends AbstractLifecycleComponent {
     public TransportStats stats() {
         return transport.getStats();
     }
-
+    
+    public long getOpenConnections() {
+        return transport.getStats().getServerOpen();
+    }
+    
     public BoundTransportAddress boundAddress() {
         return transport.boundAddress();
     }

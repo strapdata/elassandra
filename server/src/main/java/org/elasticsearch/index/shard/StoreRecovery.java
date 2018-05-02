@@ -349,7 +349,7 @@ final class StoreRecovery {
      */
     private void internalRecoverFromStore(IndexShard indexShard) throws IndexShardRecoveryException {
         final RecoveryState recoveryState = indexShard.recoveryState();
-        final boolean indexShouldExists = recoveryState.getRecoverySource().getType() != RecoverySource.Type.EMPTY_STORE;
+        boolean indexShouldExists = recoveryState.getRecoverySource().getType() != RecoverySource.Type.EMPTY_STORE;
         indexShard.prepareForIndexRecovery();
         long version = -1;
         SegmentInfos si = null;
@@ -360,6 +360,7 @@ final class StoreRecovery {
                 store.failIfCorrupted();
                 try {
                     si = store.readLastCommittedSegmentsInfo();
+                    indexShouldExists = true;
                 } catch (Exception e) {
                     String files = "_unknown_";
                     try {
@@ -368,11 +369,11 @@ final class StoreRecovery {
                         inner.addSuppressed(e);
                         files += " (failure=" + ExceptionsHelper.detailedMessage(inner) + ")";
                     }
-                    if (indexShouldExists) {
-                        throw new IndexShardRecoveryException(shardId, "shard allocated for local recovery (post api), should exist, but doesn't, current files: " + files, e);
-                    }
+                    indexShouldExists = false;
                 }
                 if (si != null) {
+                    version = si.getVersion();
+                    /*
                     if (indexShouldExists) {
                         version = si.getVersion();
                     } else {
@@ -382,6 +383,7 @@ final class StoreRecovery {
                         Lucene.cleanLuceneIndex(store.directory());
                         si = null;
                     }
+                    */
                 }
             } catch (Exception e) {
                 throw new IndexShardRecoveryException(shardId, "failed to fetch index version after copying it over", e);

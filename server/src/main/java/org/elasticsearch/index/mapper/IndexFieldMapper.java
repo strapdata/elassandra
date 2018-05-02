@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.MatchAllDocsQuery;
@@ -163,6 +164,11 @@ public class IndexFieldMapper extends MetadataFieldMapper {
         public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName) {
             return new ConstantIndexFieldData.Builder(mapperService -> fullyQualifiedIndexName);
         }
+        
+        @Override
+        public String cqlType() {
+            return "text";
+        }
     }
 
     private IndexFieldMapper(Settings indexSettings, MappedFieldType existing) {
@@ -182,6 +188,11 @@ public class IndexFieldMapper extends MetadataFieldMapper {
     @Override
     protected void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException {}
 
+    @Override
+    public void createField(ParseContext context, Object value) throws IOException {
+        context.doc().add(new Field(fieldType().name(), (String)value, fieldType()));
+    }
+    
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

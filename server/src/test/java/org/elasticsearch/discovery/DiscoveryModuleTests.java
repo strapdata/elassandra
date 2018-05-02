@@ -99,7 +99,7 @@ public class DiscoveryModuleTests extends ESTestCase {
 
     private DiscoveryModule newModule(Settings settings, List<DiscoveryPlugin> plugins) {
         return new DiscoveryModule(settings, threadPool, transportService, namedWriteableRegistry, null, masterService,
-            clusterApplier, clusterSettings, plugins, null);
+                null, clusterApplier, clusterSettings, plugins, null);
     }
 
     public void testDefaults() {
