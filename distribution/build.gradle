@@ -406,7 +406,7 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
   }
 
   task fillEtc(type: Copy) {
-    dependsOn createEtc
+    dependsOn createEtc, createEtcScripts
      with copySpec {
       with configFiles
       exclude '*.gcloud'
