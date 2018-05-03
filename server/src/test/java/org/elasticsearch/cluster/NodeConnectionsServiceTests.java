@@ -82,6 +82,7 @@ public class NodeConnectionsServiceTests extends ESTestCase {
         return ClusterState.builder(new ClusterName("test")).nodes(builder).build();
     }
 
+    /* elassandra only support one node per JVM
     public void testConnectAndDisconnect() {
         List<DiscoveryNode> nodes = generateNodes();
         NodeConnectionsService service = new NodeConnectionsService(Settings.EMPTY, threadPool, transportService);
@@ -104,8 +105,10 @@ public class NodeConnectionsServiceTests extends ESTestCase {
         service.disconnectFromNodesExcept(event.state().nodes());
         assertConnectedExactlyToNodes(event.state());
     }
+    */
 
 
+    /* elassandra only support one node per JVM
     public void testReconnect() {
         List<DiscoveryNode> nodes = generateNodes();
         NodeConnectionsService service = new NodeConnectionsService(Settings.EMPTY, threadPool, transportService);
@@ -130,7 +133,8 @@ public class NodeConnectionsServiceTests extends ESTestCase {
         service.new ConnectionChecker().run();
         assertConnectedExactlyToNodes(event.state());
     }
-
+    */
+    
     private void assertConnectedExactlyToNodes(ClusterState state) {
         assertConnected(state.nodes());
         assertThat(transport.connectedNodes.size(), equalTo(state.nodes().getSize()));

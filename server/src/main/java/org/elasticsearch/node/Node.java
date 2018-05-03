@@ -996,12 +996,12 @@ public class Node implements Closeable {
         //return new InternalClusterInfoService(settings, clusterService, threadPool, client, listeners);
     }
 
-    private static class LocalNodeFactory implements Function<BoundTransportAddress, DiscoveryNode> {
+    public static class LocalNodeFactory implements Function<BoundTransportAddress, DiscoveryNode> {
         private final SetOnce<DiscoveryNode> localNode = new SetOnce<>();
         private final String persistentNodeId;
         private final Settings settings;
 
-        private LocalNodeFactory(Settings settings, String persistentNodeId) {
+        public LocalNodeFactory(Settings settings, String persistentNodeId) {
             this.persistentNodeId = persistentNodeId;
             this.settings = settings;
         }

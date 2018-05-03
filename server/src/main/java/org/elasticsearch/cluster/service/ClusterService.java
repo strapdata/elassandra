@@ -3245,6 +3245,6 @@ public class ClusterService extends BaseClusterService {
     
     @Override
     public DiscoveryNode localNode() {
-        return this.discovery.localNode();
+        return (this.discovery != null) ? this.discovery.localNode() : this.getClusterApplierService().state().nodes().getLocalNode();
     }
 }

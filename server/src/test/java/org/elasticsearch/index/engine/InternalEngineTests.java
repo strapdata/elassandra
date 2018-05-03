@@ -1585,11 +1585,13 @@ public class InternalEngineTests extends EngineTestCase {
         }
     }
 
+    /*
     public void testInternalVersioningOnPrimary() throws IOException {
         final List<Engine.Operation> ops = generateSingleDocHistory(false, VersionType.INTERNAL, false, 2, 2, 20);
         assertOpsOnPrimary(ops, Versions.NOT_FOUND, true, engine);
     }
-
+    */
+    
     private int assertOpsOnPrimary(List<Engine.Operation> ops, long currentOpVersion, boolean docDeleted, VersionLessInternalEngine engine)
         throws IOException {
         String lastFieldValue = null;
@@ -1794,6 +1796,7 @@ public class InternalEngineTests extends EngineTestCase {
     }
     */
     
+    /*
     public void testConcurrentExternalVersioningOnPrimary() throws IOException, InterruptedException {
         final List<Engine.Operation> ops = generateSingleDocHistory(false, VersionType.EXTERNAL, false, 2, 100, 300);
         final Engine.Operation lastOp = ops.get(ops.size() - 1);
@@ -1817,7 +1820,8 @@ public class InternalEngineTests extends EngineTestCase {
             }
         }
     }
-
+    */
+    
     public void testConcurrentGetAndSetOnPrimary() throws IOException, InterruptedException {
         Thread[] thread = new Thread[randomIntBetween(3, 5)];
         CountDownLatch startGun = new CountDownLatch(thread.length);
@@ -1973,6 +1977,7 @@ public class InternalEngineTests extends EngineTestCase {
         }
     }
 
+    /*
     public void testSeqNoAndCheckpoints() throws IOException {
         final int opCount = randomIntBetween(1, 256);
         long primarySeqNo = SequenceNumbers.NO_OPS_PERFORMED;
@@ -2095,7 +2100,8 @@ public class InternalEngineTests extends EngineTestCase {
             IOUtils.close(recoveringEngine);
         }
     }
-
+    */
+    
     // this test writes documents to the engine while concurrently flushing/commit
     // and ensuring that the commit points contain the correct sequence number data
     public void testConcurrentWritesAndCommits() throws Exception {
@@ -2510,6 +2516,7 @@ public class InternalEngineTests extends EngineTestCase {
         }
     }
 
+    /*
     public void testSkipTranslogReplay() throws IOException {
         final int numDocs = randomIntBetween(1, 10);
         for (int i = 0; i < numDocs; i++) {
@@ -2526,7 +2533,8 @@ public class InternalEngineTests extends EngineTestCase {
             assertThat(topDocs.totalHits, equalTo(0L));
         }
     }
-
+    */
+    
     private Mapping dynamicUpdate() {
         BuilderContext context = new BuilderContext(
             Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT).build(), new ContentPath());
@@ -3093,6 +3101,7 @@ public class InternalEngineTests extends EngineTestCase {
         }
     }
 
+    /*
     public void testDoubleDeliveryReplicaAppendingAndDeleteOnly() throws IOException {
         final ParsedDocument doc = testParsedDocument("1", null, testDocumentWithTextField(),
             new BytesArray("{}".getBytes(Charset.defaultCharset())), null);
@@ -3136,6 +3145,7 @@ public class InternalEngineTests extends EngineTestCase {
             assertEquals(0, topDocs.totalHits);
         }
     }   
+    */
     
     /*
     public void testDoubleDeliveryReplicaAppendingOnly() throws IOException {
@@ -3559,6 +3569,7 @@ public class InternalEngineTests extends EngineTestCase {
         }
     }
 
+    /*
     public void testSequenceIDs() throws Exception {
         Tuple<Long, Long> seqID = getSequenceID(engine, new Engine.Get(false, "type", "2", newUid("1")));
         // Non-existent doc returns no seqnum and no primary term
@@ -3609,7 +3620,8 @@ public class InternalEngineTests extends EngineTestCase {
         MatcherAssert.assertThat(searchResult, EngineSearcherTotalHitsMatcher.engineSearcherTotalHits(LongPoint.newExactQuery("_seq_no", 2), 1));
         searchResult.close();
     }
-
+    */
+    
     /**
      * A sequence number generator that will generate a sequence number and if {@code stall} is set to true will wait on the barrier and the
      * referenced latch before returning. If the local checkpoint should advance (because {@code stall} is false, then the value of
@@ -3646,6 +3658,7 @@ public class InternalEngineTests extends EngineTestCase {
         };
     }
 
+    /*
     public void testSequenceNumberAdvancesToMaxSeqOnEngineOpenOnPrimary() throws BrokenBarrierException, InterruptedException, IOException {
         engine.close();
         final int docs = randomIntBetween(1, 32);
@@ -3699,7 +3712,9 @@ public class InternalEngineTests extends EngineTestCase {
             assertThat(recoveringEngine.getLocalCheckpointTracker().getCheckpoint(), greaterThanOrEqualTo((long) (docs - 1)));
         }
     }
-
+    */
+    
+    /*
     public void testSequenceNumberAdvancesToMaxSeqNoOnEngineOpenOnReplica() throws IOException {
         final long v = 1;
         final VersionType t = VersionType.EXTERNAL;
@@ -3739,7 +3754,8 @@ public class InternalEngineTests extends EngineTestCase {
             assertThat(recoveringEngine.getLocalCheckpointTracker().getCheckpoint(), greaterThanOrEqualTo((long) (3 * (docs - 1) + 2 - 1)));
         }
     }
-
+    */
+    
     /** java docs */
     public void testOutOfOrderSequenceNumbersWithVersionConflict() throws IOException {
         final List<Engine.Operation> operations = new ArrayList<>();
@@ -3960,6 +3976,7 @@ public class InternalEngineTests extends EngineTestCase {
         }
     }
 
+    /*
     public void testRestoreLocalCheckpointFromTranslog() throws IOException {
         engine.close();
         VersionLessInternalEngine actualEngine = null;
@@ -4011,7 +4028,8 @@ public class InternalEngineTests extends EngineTestCase {
             IOUtils.close(actualEngine);
         }
     }
-
+    */
+    
     /*
     public void testFillUpSequenceIdGapsOnRecovery() throws IOException {
         final int docs = randomIntBetween(1, 32);
@@ -4398,6 +4416,7 @@ public class InternalEngineTests extends EngineTestCase {
         }
     }
 
+    /*
     public void testOpenIndexAndTranslogKeepOnlySafeCommit() throws Exception {
         IOUtils.close(engine);
         final AtomicLong globalCheckpoint = new AtomicLong(SequenceNumbers.UNASSIGNED_SEQ_NO);
@@ -4422,7 +4441,8 @@ public class InternalEngineTests extends EngineTestCase {
             assertThat("OPEN_INDEX_AND_TRANSLOG should keep only safe commit", existingCommits, contains(safeCommit));
         }
     }
-
+    */
+    
     public void testOpenIndexCreateTranslogKeepOnlyLastCommit() throws Exception {
         IOUtils.close(engine);
         final EngineConfig config = copy(engine.config(), EngineConfig.OpenMode.OPEN_INDEX_AND_TRANSLOG);

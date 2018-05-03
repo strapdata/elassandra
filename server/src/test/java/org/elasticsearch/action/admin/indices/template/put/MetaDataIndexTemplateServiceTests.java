@@ -157,6 +157,7 @@ public class MetaDataIndexTemplateServiceTests extends ESSingleNodeTestCase {
         assertThat(errors.get(0).getMessage(), equalTo("failed to parse filter for alias [invalid_alias]"));
     }
 
+    /*
     public void testFindTemplates() throws Exception {
         client().admin().indices().prepareDeleteTemplate("*").get(); // Delete all existing templates
         putTemplateDetail(new PutRequest("test", "foo-1").patterns(Arrays.asList("foo-*")).order(1));
@@ -169,7 +170,8 @@ public class MetaDataIndexTemplateServiceTests extends ESSingleNodeTestCase {
             .map(IndexTemplateMetaData::name).collect(Collectors.toList()), contains("bar"));
         assertThat(MetaDataIndexTemplateService.findTemplates(state.metaData(), "baz"), empty());
     }
-
+    */
+    
     private static List<Throwable> putTemplate(NamedXContentRegistry xContentRegistry, PutRequest request) {
         MetaDataCreateIndexService createIndexService = new MetaDataCreateIndexService(
                 Settings.EMPTY,

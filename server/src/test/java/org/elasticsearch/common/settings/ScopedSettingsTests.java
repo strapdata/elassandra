@@ -773,6 +773,7 @@ public class ScopedSettingsTests extends ESTestCase {
         assertFalse(AbstractScopedSettings.isValidAffixKey(""));
     }
 
+    /*
     public void testLoggingUpdates() {
         final Level level = ESLoggerFactory.getRootLogger().getLevel();
         final Level testLevel = ESLoggerFactory.getLogger("test").getLevel();
@@ -799,7 +800,8 @@ public class ScopedSettingsTests extends ESTestCase {
             ServerLoggers.setLevel(ESLoggerFactory.getLogger("test"), testLevel);
         }
     }
-
+    */
+    
     public void testFallbackToLoggerLevel() {
         final Level level = ESLoggerFactory.getRootLogger().getLevel();
         try {

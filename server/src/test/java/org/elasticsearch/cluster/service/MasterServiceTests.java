@@ -122,6 +122,7 @@ public class MasterServiceTests extends ESTestCase {
         return timedMasterService;
     }
 
+    /*
     public void testMasterAwareExecution() throws Exception {
         TimedMasterService nonMaster = createTimedMasterService(false);
 
@@ -165,7 +166,8 @@ public class MasterServiceTests extends ESTestCase {
 
         nonMaster.close();
     }
-
+    */
+    
     /*
    * test that a listener throwing an exception while handling a
    * notification does not prevent publication notification to the
