@@ -12,23 +12,24 @@ Concepts Mapping
 
 .. cssclass:: table-bordered
 
-    +------------------------+--------------------+-------------------------------------------------------------------------+
-    | Elasticsearch          | Cassandra          | Description                                                             |
-    +========================+====================+=========================================================================+
-    | Cluster                | Virtual Datacenter | All nodes of a datacenter forms an Elasticsearch cluster                |
-    +------------------------+--------------------+-------------------------------------------------------------------------+
-    | Shard                  | Node               | Each cassandra node is an elasticsearch shard for each indexed keyspace |
-    +------------------------+--------------------+-------------------------------------------------------------------------+
-    | Index                  | Keyspace           | An elasticsearch index is backed by a keyspace                          |
-    +------------------------+--------------------+-------------------------------------------------------------------------+
-    | Type                   | Table              | Each elasticsearch document type is backed by a cassandra table         |
-    +------------------------+--------------------+-------------------------------------------------------------------------+
-    | Document               | Row                | An elasticsearch document is backed by a cassandra row                  |
-    +------------------------+--------------------+-------------------------------------------------------------------------+
-    | Field                  | Cell               | Each indexed field is backed by a cassandra cell (row x column)         |
-    +------------------------+--------------------+-------------------------------------------------------------------------+
-    | Object or nested field | User Defined Type  | Automatically create User Defined Type to store elasticsearch object    |
-    +------------------------+--------------------+-------------------------------------------------------------------------+
+    +------------------------+--------------------+--------------------------------------------------------------------------+
+    | Elasticsearch          | Cassandra          | Description                                                              |
+    +========================+====================+==========================================================================+
+    | Cluster                | Virtual Datacenter | All nodes of a datacenter forms an Elasticsearch cluster                 |
+    +------------------------+--------------------+--------------------------------------------------------------------------+
+    | Shard                  | Node               | Each cassandra node is an elasticsearch shard for each indexed keyspace  |
+    +------------------------+--------------------+--------------------------------------------------------------------------+
+    | Index                  | Keyspace           | An elasticsearch index is backed by a keyspace                           |
+    +------------------------+--------------------+--------------------------------------------------------------------------+
+    | Type                   | Table              | Each elasticsearch document type is backed by a cassandra table.         |
+    |                        |                    | Elasticsearch 6+ support only one document type, named "_doc" by default.|
+    +------------------------+--------------------+--------------------------------------------------------------------------+
+    | Document               | Row                | An elasticsearch document is backed by a cassandra row                   |
+    +------------------------+--------------------+--------------------------------------------------------------------------+
+    | Field                  | Cell               | Each indexed field is backed by a cassandra cell (row x column)          |
+    +------------------------+--------------------+--------------------------------------------------------------------------+
+    | Object or nested field | User Defined Type  | Automatically create User Defined Type to store elasticsearch object     |
+    +------------------------+--------------------+--------------------------------------------------------------------------+
 
 From an Elasticsearch perspective :
 
@@ -38,7 +39,7 @@ From an Elasticsearch perspective :
 * Elasticsearch data is not more stored in lucene indices, but in cassandra tables.
 
   * An Elasticsearch index is mapped to a cassandra keyspace,
-  * Elasticsearch document type is mapped to a cassandra table.
+  * Elasticsearch document type is mapped to a cassandra table. Elasticsearch 6+ support only one document type, named "_doc" by default.
   * Elasticsearch document *_id* is a string representation of the cassandra primary key.
 
 * Elasticsearch discovery now rely on the cassandra `gossip protocol <https://wiki.apache.org/cassandra/ArchitectureGossip>`_. When a node join or leave the cluster, or when a schema change occurs, each nodes update nodes status and its local routing table.
