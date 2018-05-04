@@ -121,8 +121,8 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private final List<SearchOperationListener> searchOperationListeners;
     private final List<IndexingOperationListener> indexingOperationListeners;
     private volatile AsyncRefreshTask refreshTask;
-    private volatile AsyncTranslogFSync fsyncTask;
-    private volatile AsyncGlobalCheckpointTask globalCheckpointTask;
+    //private volatile AsyncTranslogFSync fsyncTask;
+    //private volatile AsyncGlobalCheckpointTask globalCheckpointTask;
 
     // don't convert to Setting<> and register... we only set this in tests and register via a plugin
     private final String INDEX_TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING = "index.translog.retention.check_interval";
@@ -210,7 +210,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         // kick off async ops for the first shard in this index
         this.refreshTask = new AsyncRefreshTask(this);
         this.trimTranslogTask = new AsyncTrimTranslogTask(this);
-        this.globalCheckpointTask = new AsyncGlobalCheckpointTask(this);
     }
 
     public int numberOfShards() {
@@ -298,9 +297,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
                         indexFieldData,
                         mapperService,
                         refreshTask,
-                        fsyncTask,
-                        trimTranslogTask,
-                        globalCheckpointTask);
+                        trimTranslogTask);
             }
         }
     }
@@ -1008,11 +1005,11 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     }
 
     AsyncTranslogFSync getFsyncTask() { // for tests
-        return fsyncTask;
+        return null;
     }
 
     AsyncGlobalCheckpointTask getGlobalCheckpointTask() {
-        return globalCheckpointTask;
+        return null;
     }
 
     /**

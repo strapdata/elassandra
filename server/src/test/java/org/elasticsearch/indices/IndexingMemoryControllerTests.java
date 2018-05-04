@@ -360,6 +360,7 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
                     Settings.builder().put("index.number_of_shards", 1)
                                       .put("index.number_of_replicas", 0)
                                       .put("index.refresh_interval", -1)
+                                      .put("index.synchronous_refresh", false)  // disable the default elassandra synchronous_refresh for test.
                                       .build());
         ensureGreen();
 

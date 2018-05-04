@@ -94,8 +94,8 @@ final class PerThreadIDVersionAndSeqNoLookup {
         int docID = getDocID(id, context.reader().getLiveDocs());
 
         if (docID != DocIdSetIterator.NO_MORE_DOCS) {
-            final NumericDocValues versions = context.reader().getNumericDocValues(VersionFieldMapper.NAME);
             /*
+            final NumericDocValues versions = context.reader().getNumericDocValues(VersionFieldMapper.NAME);
             if (versions == null) {
                 throw new IllegalArgumentException("reader misses the [" + VersionFieldMapper.NAME + "] field");
             }

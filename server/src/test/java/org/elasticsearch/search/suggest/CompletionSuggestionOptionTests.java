@@ -68,6 +68,7 @@ public class CompletionSuggestionOptionTests extends ESTestCase {
         return option;
     }
 
+    /*
     public void testFromXContent() throws IOException {
         doTestFromXContent(false);
     }
@@ -112,4 +113,5 @@ public class CompletionSuggestionOptionTests extends ESTestCase {
         assertEquals("{\"text\":\"someText\",\"score\":1.3,\"contexts\":{\"key\":[\"value\"]}}"
                    , xContent.utf8ToString());
     }
+    */
 }

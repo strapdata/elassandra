@@ -173,7 +173,9 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
     }
 
     public void testRefreshActuallyWorks() throws Exception {
-        IndexService indexService = createIndex("test", Settings.EMPTY);
+        IndexService indexService = createIndex("test", 
+                Settings.builder().put("index.synchronous_refresh", false)  // disable the default elassandra synchronous_refresh for test.
+                .build());
         ensureGreen("test");
         IndexService.AsyncRefreshTask refreshTask = indexService.getRefreshTask();
         assertEquals(1000, refreshTask.getInterval().millis());
@@ -201,6 +203,7 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
         });
     }
 
+    /* Elassandra does not sync translog
     public void testAsyncFsyncActuallyWorks() throws Exception {
         Settings settings = Settings.builder()
             .put(IndexSettings.INDEX_TRANSLOG_SYNC_INTERVAL_SETTING.getKey(), "100ms") // very often :)
@@ -255,7 +258,8 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
                 .get();
         assertNotNull(indexService.getFsyncTask());
     }
-
+    */
+    
     public void testAsyncTranslogTrimActuallyWorks() throws Exception {
         Settings settings = Settings.builder()
             .put(TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING.getKey(), "100ms") // very often :)

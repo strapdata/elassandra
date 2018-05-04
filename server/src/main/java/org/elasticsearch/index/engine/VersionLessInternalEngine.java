@@ -1227,8 +1227,7 @@ public class VersionLessInternalEngine extends Engine {
     }
 
     private DeletionStrategy planDeletionAsNonPrimary(Delete delete) throws IOException {
-        assert delete.origin() != Operation.Origin.PRIMARY : "planing as primary but got " + delete.origin();
-        /*
+    	    assert delete.origin() != Operation.Origin.PRIMARY : "planing as primary but got " + delete.origin();
         // drop out of order operations
         assert delete.versionType().versionTypeForReplicationAndRecovery() == delete.versionType() :
             "resolving out of order delivery based on versioning but version type isn't fit for it. got ["
@@ -1262,13 +1261,13 @@ public class VersionLessInternalEngine extends Engine {
                 opVsLucene == OpVsLuceneDocStatus.LUCENE_DOC_NOT_FOUND,
                 delete.seqNo(), delete.version());
         }
-        */
-        return DeletionStrategy.processNormally(false, 0L, 1L);
+        return plan;
     }
 
     private DeletionStrategy planDeletionAsPrimary(Delete delete) throws IOException {
         assert delete.origin() == Operation.Origin.PRIMARY : "planing as primary but got " + delete.origin();
         // resolve operation from external to internal
+        /*
         final VersionValue versionValue = resolveDocVersion(delete);
         assert incrementVersionLookup();
         final long currentVersion;
@@ -1291,6 +1290,8 @@ public class VersionLessInternalEngine extends Engine {
                     delete.versionType().updateVersion(currentVersion, delete.version()));
         }
         return plan;
+        */
+        return DeletionStrategy.processNormally(false, 0L, 1L);
     }
 
     private DeleteResult deleteInLucene(Delete delete, DeletionStrategy plan)

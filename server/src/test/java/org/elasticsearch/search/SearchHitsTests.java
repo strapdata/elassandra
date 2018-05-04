@@ -50,6 +50,7 @@ public class SearchHitsTests extends ESTestCase {
         return new SearchHits(hits, totalHits, maxScore);
     }
 
+    /*
     public void testFromXContent() throws IOException {
         SearchHits searchHits = createTestItem();
         XContentType xcontentType = randomFrom(XContentType.values());
@@ -68,7 +69,8 @@ public class SearchHitsTests extends ESTestCase {
         }
         assertToXContentEquivalent(originalBytes, toXContent(parsed, xcontentType, humanReadable), xcontentType);
     }
-
+    */
+    
     /**
      * This test adds randomized fields on all json objects and checks that we
      * can parse it to ensure the parsing is lenient for forward compatibility.
