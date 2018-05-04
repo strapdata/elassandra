@@ -263,7 +263,10 @@ public class CompactionTests extends ESSingleNodeTestCase {
     // gradle :core:test -Dtests.seed=C2C04213660E4546 -Dtests.class=org.elassandra.CompositeTests -Dtests.method="testReadBeforeWrite" -Dtests.security.manager=false -Dtests.locale=zh-TW -Dtests.timezone=Pacific/Pitcairn
     @Test
     public void expiredTtlColumnCompactionTest() throws Exception {
-        createIndex("test", Settings.builder().put(IndexMetaData.SETTING_INDEX_ON_COMPACTION, true).build());
+        createIndex("test", Settings.builder()
+                .put("index.refresh_interval", -1)
+                .put(IndexMetaData.SETTING_INDEX_ON_COMPACTION, true)
+                .build());
         ensureGreen("test");
         
         long N = 10;
@@ -286,8 +289,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
             i++;
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b,c) VALUES (?,?,?)", i, "b"+i, "c"+i);
         }
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
         StorageService.instance.forceKeyspaceFlush("test","t1");
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
         
         for(String s:gauges.keySet())
             System.out.println(s+"="+gauges.get(s).getValue());

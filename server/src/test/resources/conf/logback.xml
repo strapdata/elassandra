@@ -74,7 +74,7 @@
   <logger name="org.elasticsearch.transport" level="WARN"/>
     -->
 
-  <root level="TRACE">
+  <root level="INFO">
     <appender-ref ref="FILE" />
     <!--<appender-ref ref="STDOUT" />-->
   </root>

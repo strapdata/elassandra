@@ -80,6 +80,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         
         process(ConsistencyLevel.ONE,"insert into cmdb.server (name,ip,netmask,prod) VALUES ('localhost','127.0.0.1',8,true)");
         process(ConsistencyLevel.ONE,"insert into cmdb.server (name,ip,netmask,prod) VALUES ('my-server','123.45.67.78',24,true)");
+        StorageService.instance.forceKeyspaceFlush("cmdb","server"); // flush to build the index correctly.
         
         assertThat(client().prepareGet().setIndex("cmdb").setType("server").setId("my-server").get().isExists(), equalTo(true));
         assertThat(client().prepareGet().setIndex("cmdb").setType("server").setId("localhost").get().isExists(), equalTo(true));
@@ -88,7 +89,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             .setSource("{\"ip\": \"22.22.22.22\", \"netmask\":32, \"prod\" : true, \"description\": \"my big server\" }", XContentType.JSON)
             .get().getResult(), DocWriteResponse.Result.CREATED);
         
-        assertThat(client().prepareSearch().setIndices("cmdb").setTypes("server").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(3L));
+        assertThat(client().prepareSearch().setIndices("cmdb").setTypes("server").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(3L));
     }
 
     @Test
