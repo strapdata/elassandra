@@ -1,7 +1,6 @@
+dist: trusty
 sudo: false
 language: java
-jdk:
-  - oraclejdk8
 
 before_cache:
   - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
@@ -12,9 +11,20 @@ cache:
     - $HOME/.gradle/caches/
     - $HOME/.gradle/wrapper/
 
-install: gradle assemble -Dbuild.snapshot=false
+before_install:
+  - wget https://github.com/sormuras/bach/raw/master/install-jdk.sh
 
-script: gradle core:test -Dbuild.snapshot=false
+matrix:
+  include:
+# Java 10 "Oracle JDK"
+    - env: JDK='Oracle JDK 10'
+      install: . ./install-jdk.sh -F 10 -L BCL
+
+install: ./gradlew --version
+
+script: 
+- ./gradlew server:test -Dbuild.snapshot=false
+- ./gradlew assemble -Dbuild.snapshot=false
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
@@ -42,7 +52,7 @@ deploy:
     overwrite: true
     draft: false
     api_key:
-      secure: "CtTEWfptldC5QoeOl+nseF3uVyjmJglxnk7Mv9qHH4w24/R3GI6Q4TsJxLjp0yf0+ltnE6vg1wERIY5HiE0jvIM3l/ZFUKEFE/f6h9yvmUWFaQD2yOKNKB4fvqYfX0KZWDF0YotMi3bweegrXS66fu5s3jfjXH6DLNmzGjv0cAcumdppJDUOmETktIlWr86KKRJMuYTXiJIe4CXLfgkZEEY7cYsHysrfJvYBPYka9n4kzlcj0PB3Ux4mT8flMLIzfFymnxGWXv2Ubf1DJpCtfyb65OqFqMcWL1NjL+T2Z3OoWI5QgMtoapHX6Z6xuoBQbnN+PR5dq7pmUXJKXpoEsBzfMdv8FpiPS/NV1iRIEzgpab7nIuQ00QDkTA6R+69ugGpwOnaceoNIMnjOQjfaAHT6Xfc4vByFhhZxSp1H6hmdhtaksE1U1w4HMfHnejXTLCNMnsnbmDW1Tygjyu/zI7t9lCeF5kpnbXDV+oBHKxGR6yBZjVbG49Y3IQY7WFoFUKBgkCgYWqFMnLzCwVaJfqTFjQHOzhp1vg+RTgAtTWhjeWKwm9HqSH+R6F6tbhwKdPCDOOdzEAksnwmqUqi4iz8vjTsoiU86WXgds3PDVk4IK6ZxGRJ/UabQz/krXgay1dWOBVRYr4FzP+a5VH7mEyjdW+3SBMztbTw48g65jEE="
+      secure: "IGw9pr6twtu6JxN2qRbCvDtdIQuJvFxdjXCJrr1YsB8K1kFJlbUcJcQ4BHbisL2oRQFJyWDcx7wiDPL6/6ViiJfnNtPUAVQLDgxQtQXA+TNGK8UI7q06bDsPusaodo8iwkton5I6Q2AHtwxaZ7jgkfxpI8YMyjo4DvzGvbNuAC4WNImEqifcC+nMxIbREOo85Q6ZHFoQiVA7SvPUYta1k3s8r2tC84UL8s6tO+T+iiO70Tc4dVAfIsA2vNlea8aOlK+zPITFIPxG7xdlzkkP3KpLSR4yZF67wP9i6j4LNYfa43WLHSDmy3OPw8AC3ceeex8xL+lP7F/eASOxzwnXjXMOd/TAW4AsYeqnGwaqtBVfFFwpqueowKqE+5s9j0Kll4PFMsYSKz0rV1JGWE/SAHzr1NDtNHdFUytJAnzqScdQsWUpNAePQGlugYy1JtAiuGSMVt7na31mdGZzGlzcjvZEe+x6NJTI6dMe5CTEsdXpsT8RBFH6od1rXi9wOqcyTAofED4ZooGwmMznGKxdW0hHsSjAh1DGk93GKM5KmJjPqldc6g6oYq0NZkrtPIvEsQCenu0dByxQH6pAJt2CmA2WCnIVDg5Qoy8qTCs7BDBkKSCuq/ICEHU3vSD66xLzAMfldZPPtsgyN217Ho6fVYkTsY2Xl5kIVGcxN56D/zk="
     file:
       - "$TARBALL"
       - "$ZIPBALL"
@@ -51,4 +61,4 @@ deploy:
     skip_cleanup: true
     on:
       tags: true
-      repo: strapdata/elassandra5-rc
+      repo: strapdata/elassandra6-rc
