@@ -121,7 +121,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(fields.get("c9"),equalTo("U29tZSBiaW5hcnkgYmxvYg=="));
         
         process(ConsistencyLevel.ONE,"insert into ks1.natives (c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) VALUES ('tutu', 'titi', '2016-11-11', 1, 45, 1.0, 2.23, false,textAsBlob('bdb14fbe076f6b94444c660e36a400151f26fc6f'),ae8c9260-dd02-11e6-b9d5-bbfb41c263ba,ae8c9260-dd02-11e6-b9d5-bbfb41c263ba)");
-        assertThat(client().prepareSearch().setIndices("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("ks1").setTypes("natives").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
         
         fields = client().prepareSearch().setIndices("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("c5:45")).get().getHits().getHits()[0].getSourceAsMap();
         
@@ -171,7 +171,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             assertThat(client().prepareSearch()
                     .setIndices("ks"+i)
                     .setTypes(String.format(Locale.ROOT,"t%s",type))
-                    .setQuery(QueryBuilders.queryStringQuery("*:*"))
+                    .setQuery(QueryBuilders.matchAllQuery())
                     .storedFields("_id","_routing","_ttl","_timestamp","_source","v")
                     .get().getHits().getTotalHits(), equalTo(1L));
         }
@@ -215,7 +215,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             assertThat(client().prepareSearch()
                     .setIndices("ks"+i)
                     .setTypes(String.format(Locale.ROOT,"t%s",type))
-                    .setQuery(QueryBuilders.queryStringQuery("*:*"))
+                    .setQuery(QueryBuilders.matchAllQuery())
                     .storedFields("_id","_routing","_ttl","_timestamp","_source","ck","v")
                     .get().getHits().getTotalHits(), equalTo(1L));
         }

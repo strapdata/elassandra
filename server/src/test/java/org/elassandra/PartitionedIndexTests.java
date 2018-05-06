@@ -54,7 +54,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         }
         
         for(long i=20; i < 30; i++)
-            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(i));
+            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
     }
     
     @Test
@@ -75,7 +75,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         }
         
         for(long i=20; i < 30; i++)
-            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(i));
+            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
     }
     
     @Test

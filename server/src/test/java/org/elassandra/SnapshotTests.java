@@ -95,14 +95,14 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         
         for(long i=0; i < 1000; i++)
            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(1000L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1000L));
         
         // take snaphot
         StorageService.instance.takeSnapshot("snap1", "ks");
         
         // drop all
         process(ConsistencyLevel.ONE,"TRUNCATE ks.t1");
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
         
         // close index and restore SSTable+Lucene files
         assertAcked(client().admin().indices().prepareClose("ks").get());
@@ -116,7 +116,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareOpen("ks").get());
         ensureGreen("ks");
         
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(1000L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1000L));
     }
     
     @Test
@@ -131,8 +131,8 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         Index index1 = resolveIndex("ks");
         
         for(long i=0; i < 1000; i++)
-           process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(1000L));
+           process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));    
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1000L));
         
         UUID cfId = Schema.instance.getCFMetaData("ks","t1").cfId;
         String id = cfId.toString().replaceAll("\\-", "");
@@ -150,7 +150,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         ensureGreen("ks");
         Index index2 = resolveIndex("ks");
         
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
         
         // close index and restore SSTable+Lucene files
         assertAcked(client().admin().indices().prepareClose("ks").get());
@@ -172,6 +172,6 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         ensureGreen("ks");
         
         Thread.sleep(3000);
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("*:*")).get().getHits().getTotalHits(), equalTo(1000L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1000L));
     }
 }
