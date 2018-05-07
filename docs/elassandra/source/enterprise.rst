@@ -221,7 +221,7 @@ If your target index does not have the same name as the underlying keyspace, you
 Elasticsearch aggregations through CQL
 ......................................
 
-Elassandra supports elasticsearch aggregation only in **regular CQL statement**. In this case :
+Elassandra supports elasticsearch aggregation only in **regular CQL statements**. In this case :
 
 * Returned columns are named with aggregations names.
 * CQL function are not supported.
@@ -1273,6 +1273,6 @@ If you try to insert an unsupported query in ``elastic_admin.privileges.query``,
 
 .. code::
 
-   cassandra@cqlsh> insert into elastic_admin."privileges" (role,actions,indices,query) VALUES ('blogger','indices:data/read/.*','blog','{"query":{ "has_parent":{"parent_type":"blog","query":{"term":{"tag":"something"}}}}}');
+   cassandra@cqlsh> insert into elastic_admin."privileges" (role,actions,indices,query) VALUES ('blogger','indices:data/read/.*','blog','{ "has_parent":{"parent_type":"blog","query":{"term":{"tag":"something"}}}}');
    SyntaxException: Unsupported query for content-based filtering
    
