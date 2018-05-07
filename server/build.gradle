@@ -169,11 +169,11 @@ dependencies {
 
   // Elasticsearch require netty 4.1
   // https://github.com/netty/netty/issues/6855
-  compile "io.netty:netty-all:4.1.24.Final"
+  compile "io.netty:netty-all:4.1.16.Final"
 
   // https://www.elastic.co/guide/en/elasticsearch/client/java-api/current/_using_another_logger.html
   // log4j2 to slf4j to logback
-  compile "org.apache.logging.log4j:log4j-to-slf4j:2.8.2"
+  compile "org.apache.logging.log4j:log4j-to-slf4j:${versions.log4j}"
   compile "org.slf4j:slf4j-api:1.7.25", optional
   compile "ch.qos.logback:logback-classic:1.1.8"
   compile "ch.qos.logback:logback-core:1.1.8"

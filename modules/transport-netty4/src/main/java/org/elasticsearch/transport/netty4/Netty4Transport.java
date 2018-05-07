@@ -234,7 +234,16 @@ public class Netty4Transport extends TcpTransport {
         return new ClientChannelInitializer();
     }
 
-    static final AttributeKey<NettyTcpChannel> CHANNEL_KEY = AttributeKey.newInstance("es-channel");
+    static final AttributeKey<NettyTcpChannel> CHANNEL_KEY;
+    // We can have more than one Netty4Transport class instances initialized from several classloader, 
+    // but AttributeKey should be created once from netty in the cassandra system classloader. So this
+    // static block insure that CHANNEL_KEY is create only-once.
+    static {
+        AttributeKey<NettyTcpChannel> channelKey = AttributeKey.valueOf("es-channel");
+        if (channelKey == null)
+            channelKey = AttributeKey.newInstance("es-channel");
+        CHANNEL_KEY = channelKey;
+    }
 
     protected final void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         final Throwable unwrapped = ExceptionsHelper.unwrap(cause, ElasticsearchException.class);
