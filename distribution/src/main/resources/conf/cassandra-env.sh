@@ -320,3 +320,15 @@ JVM_OPTS="$JVM_OPTS -Dlog4j2.disable.jmx=true"
 JVM_OPTS="$JVM_OPTS -Dlog4j.skipJansi=true"
 
 
+# Elasticsearch tmp directory.
+if [ -z "$ES_TMPDIR" ]; then
+  set +e
+  mktemp --version 2>&1 | grep coreutils > /dev/null
+  mktemp_coreutils=$?
+  set -e
+  if [ $mktemp_coreutils -eq 0 ]; then
+    ES_TMPDIR=`mktemp -d --tmpdir "elasticsearch.XXXXXXXX"`
+  else
+    ES_TMPDIR=`mktemp -d -t elasticsearch`
+  fi
+fi

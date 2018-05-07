@@ -736,7 +736,7 @@ Map<String, String> expansionsForDistribution(distributionType) {
       'rpm': '/etc/sysconfig/cassandra',
       /* There isn't one of these files for tar or zip but its important to
         make an empty string here so the script can properly skip it. */
-      'def': 'if [ -z "$ES_PATH_CONF" ]; then ES_PATH_CONF="$ES_HOME"/config; done',
+      'def': 'if [ -z "$ES_PATH_CONF" ]; then ES_PATH_CONF="$CASSANDRA_HOME"/conf; done',
     ],
     'source.path.env': [
        'deb': 'source /etc/default/cassandra',
