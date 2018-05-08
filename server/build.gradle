@@ -162,7 +162,7 @@ dependencies {
   // at the top-level, with same version numbers as in the modules.
   compile "org.apache.httpcomponents:httpclient:${versions.httpclient}"
   compile "org.apache.httpcomponents:httpcore:${versions.httpcore}"
-  //compile "commons-codec:commons-codec:${versions.commonscodec}"
+  compile "commons-codec:commons-codec:${versions.commonscodec}"
   compile "commons-logging:commons-logging:${versions.commonslogging}"
   compile "org.apache.commons:commons-lang3:3.4"
 
