@@ -317,7 +317,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             InetAddress   endpoint = entry.getKey();
             
             if (!state.getStatus().equals(VersionedValue.STATUS_NORMAL) && !state.getStatus().equals(VersionedValue.SHUTDOWN)) {
-                logger.info("Ignoring node host_id={} status={}", state.getApplicationState(ApplicationState.HOST_ID).value, state.getStatus());
+                logger.info("Ignoring node state={}", state);
                 continue;
             }
             DiscoveryNodeStatus status = (isNormal(state)) ? DiscoveryNode.DiscoveryNodeStatus.ALIVE : DiscoveryNode.DiscoveryNodeStatus.DEAD;
