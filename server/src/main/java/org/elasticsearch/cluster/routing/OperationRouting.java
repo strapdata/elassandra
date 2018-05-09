@@ -164,12 +164,10 @@ public class OperationRouting extends AbstractComponent {
                 }
             } else {
                 for (IndexShardRoutingTable indexShard : indexRouting) {
-                    if (indexShard.activeShards().iterator().hasNext()) {
-                        // eliminates shards not matching the requested tokenRanges if specified.
-                        if (tokenRanges == null || TokenRangesService.tokenRangesIntersec(indexShard.activeShards().iterator().next().tokenRanges(), tokenRanges))
-                            set.add(indexShard);
+                    if (tokenRanges == null || (TokenRangesService.tokenRangesIntersec(indexShard.primaryShard().tokenRanges(), tokenRanges))) {
+                        set.add(indexShard); 
                     }
-                }
+                }  
             }
         }
         return set;

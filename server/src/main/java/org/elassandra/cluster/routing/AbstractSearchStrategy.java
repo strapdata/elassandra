@@ -248,8 +248,8 @@ public abstract class AbstractSearchStrategy {
                             if (node2.status() != DiscoveryNodeStatus.ALIVE)
                                 info = IndexRoutingTable.UNASSIGNED_INFO_NODE_LEFT;
                             
-                            // unassigned secondary shards (yellow)
-                            ShardRouting replicaShardRouting = new ShardRouting(new ShardId(index, shardId), node2.getId(), false, 
+                            // unassigned secondary shards (yellow), so id = null
+                            ShardRouting replicaShardRouting = new ShardRouting(new ShardId(index, shardId), null, false, 
                                     Router.this.getShardRoutingState(node2), 
                                     info, 
                                     EMPTY_RANGE_TOKEN_LIST);
