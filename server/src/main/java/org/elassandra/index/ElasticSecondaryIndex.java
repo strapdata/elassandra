@@ -2020,17 +2020,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                     indexInfo.updated = true;
                                 
                                 DocumentMapper docMapper = indexShard.indexService().mapperService().documentMapper(typeName);
-                                Term termUid;
-                                if (indexInfo.indexService.getIndexSettings().getIndexVersionCreated().onOrAfter(Version.V_6_0_0_beta1)) {
-                                    termUid = new Term(IdFieldMapper.NAME, Uid.encodeId(id));
-                                } else if (docMapper.idFieldMapper().fieldType().indexOptions() != IndexOptions.NONE) {
-                                    termUid = new Term(IdFieldMapper.NAME, id);
-                                } else {
-                                    termUid = new Term(UidFieldMapper.NAME, Uid.createUidAsBytes(typeName, id));
-                                }
-                                
                                 final Engine.Index operation = new Engine.Index(
-                                        termUid, 
+                                        termUid(indexInfo.indexService, id), 
                                         parsedDoc,
                                         SequenceNumbers.UNASSIGNED_SEQ_NO,
                                         0L,
@@ -2137,6 +2128,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         return true;
     }
     
+    @Override
     public String toString() {
         return this.index_name;
     }
@@ -2190,6 +2182,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         }
     }
 
+    @Override
     public Callable<?> getInitializationTask() 
     {
         return () -> {
@@ -2233,7 +2226,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         return SystemKeyspace.isIndexBuilt(baseCfs.keyspace.getName(), this.indexMetadata.name);
     }
 
-
+    @Override
     public Callable<?> getMetadataReloadTask(IndexMetadata indexMetadata) 
     {
         return null;
@@ -2242,6 +2235,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     /**
      * Cassandra index flush .. Elasticsearch flush ... lucene commit and disk sync.
      */
+    @Override
     public Callable<?> getBlockingFlushTask() 
     {
         return () -> {
@@ -2283,6 +2277,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
      * Cassandra table snapshot, hard links associated elasticsearch lucene files.
      */
     @SuppressForbidden(reason="File used for snapshots")
+    @Override
     public Callable<?> getSnapshotWithoutFlushTask(String snapshotName) 
     {
         return () -> {
