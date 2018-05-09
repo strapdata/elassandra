@@ -441,6 +441,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         sb.append('{').append(ephemeralId).append('}');
         sb.append('{').append(hostName).append('}');
         sb.append('{').append(address).append('}');
+        sb.append('{').append(status.toString()).append('}');
         if (!attributes.isEmpty()) {
             sb.append(attributes);
         }
@@ -451,6 +452,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject(getId());
         builder.field("name", getName());
+        builder.field("status", getStatus().toString());
         builder.field("ephemeral_id", getEphemeralId());
         builder.field("transport_address", getAddress().toString());
 
