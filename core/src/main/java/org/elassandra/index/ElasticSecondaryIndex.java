@@ -90,7 +90,7 @@ import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermRangeQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CloseableThreadLocal;
-import org.elassandra.index.mapper.internal.TokenFieldMapper;
+import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.WideRowcumentIndexer.WideRowcument;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.cluster.ClusterChangedEvent;
@@ -126,6 +126,7 @@ import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.Engine.DeleteByQuery;
 import org.elasticsearch.index.engine.Engine.IndexResult;
 import org.elasticsearch.index.engine.Engine.Operation;
+import org.elasticsearch.index.engine.EngineException;
 import org.elasticsearch.index.mapper.BaseGeoPointFieldMapper;
 import org.elasticsearch.index.mapper.ContentPath;
 import org.elasticsearch.index.mapper.DocumentMapper;
@@ -144,6 +145,7 @@ import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.ParseContext.Document;
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.index.mapper.RootObjectMapper;
+import org.elasticsearch.index.mapper.RoutingFieldMapper;
 import org.elasticsearch.index.mapper.SourceFieldMapper;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.mapper.TypeFieldMapper;
@@ -1294,7 +1296,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             return targets;
         }
 
-        class WideRowcumentIndexer extends RowcumentIndexer {        
+        class WideRowcumentIndexer extends RowcumentIndexer {
             NavigableSet<Clustering> clusterings = new java.util.TreeSet<Clustering>(baseCfs.metadata.comparator);
             Map<Clustering, WideRowcument> rowcuments = new TreeMap<Clustering, WideRowcument>(baseCfs.metadata.comparator);
             Row inStaticRow, outStaticRow;
@@ -1431,6 +1433,22 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             }
             
             /**
+             * Notification of a top level partition delete.
+             * Deleting a wide-row require a deleteByQuery on doc type + partition key = elasticsearch _routing.
+             * @param deletionTime
+             */
+            @Override
+            public void partitionDelete(IndexShard indexShard) throws IOException {
+                if (logger.isTraceEnabled())
+                    logger.trace("deleting documents where _routing={} from index.type={}.{}", this.partitionKey, indexShard.shardId().getIndexName(), typeName);
+                BooleanQuery.Builder builder = new BooleanQuery.Builder();
+                builder.add(typeTermQuery, Occur.FILTER);
+                builder.add(new TermQuery(new Term(RoutingFieldMapper.NAME, this.partitionKey)), Occur.FILTER);
+                DeleteByQuery deleteByQuery = new DeleteByQuery(builder.build(), null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+                indexShard.getEngine().delete(deleteByQuery);
+            }
+            
+            /**
              * Notification of a RangeTombstone.
              * An update of a single partition may contain multiple RangeTombstones,
              * and a notification will be passed for each of them.
@@ -1507,6 +1525,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         }
                     }
                 }
+            }
+            
+            /**
+             * Notification of a top level partition delete.
+             * @param deletionTime
+             */
+            @Override
+            public void partitionDelete(IndexShard indexShard) throws IOException {
+                Term termUid = new Term(UidFieldMapper.NAME, BytesRefs.toBytesRef(Uid.createUid(typeName, this.partitionKey)));
+                if (logger.isDebugEnabled())
+                    logger.debug("deleting document from index.type={}.{} id={} termUid={}", indexShard.shardId().getIndexName(), typeName, this.partitionKey, termUid.text());
+                Engine.Delete delete = new Engine.Delete(typeName, this.partitionKey, termUid);
+                indexShard.delete(indexShard.getEngine(), delete);
             }
         }
         
@@ -1829,7 +1860,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     if (indexInfo.includeNodeId)
                         context.docMapper.nodeFieldMapper().createField(context, ImmutableMappingInfo.this.nodeId);
                     
-                    if (context.docMapper.routingFieldMapper().required())
+                    if (this instanceof WideRowcument)
                         context.docMapper.routingFieldMapper().createField(context, partitionKey);
 
                     if (!indexInfo.versionLessEngine) {
@@ -2022,29 +2053,20 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             @Override
             public void partitionDelete(DeletionTime deletionTime) {
                 logger.trace("Delete partition {}: {}", this.transactionType, deletionTime);
-                if (deletionTime.isLive() || !deletionTime.deletes(System.currentTimeMillis())) {
-                    // ignore non-expired partition-tombestone. 
-                    return;
-                }
-                    
-                Long  token_long = (Long) key.getToken().getTokenValue();
-                Query tokenRangeQuery = LongPoint.newRangeQuery(TokenFieldMapper.NAME, token_long, token_long);
-                
                 mappingInfoLock.readLock().lock();
                 try {
-                    // Delete documents where _token = token_long + _type = typeName
                     for (ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices) {
-                        if (logger.isTraceEnabled())
-                            logger.trace("deleting documents where _token={} from index.type={}.{}", token_long, indexInfo.name, typeName);
                         IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
                         if (indexShard != null) {
                             if (!indexInfo.updated)
                                 indexInfo.updated = true;
-                            BooleanQuery.Builder builder = new BooleanQuery.Builder();
-                            builder.add(typeTermQuery, Occur.FILTER);
-                            builder.add(tokenRangeQuery, Occur.FILTER);
-                            DeleteByQuery deleteByQuery = new DeleteByQuery(builder.build(), null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
-                            indexShard.getEngine().delete(deleteByQuery);
+                            try {
+                                partitionDelete(indexShard);
+                            } catch (EngineException e) {
+                                logger.error("Document deletion error", e);
+                            }
+                        } else {
+                            logger.warn("Shard not available to delete document index.type={}.{} partitionKey={}", indexInfo.name, indexInfo.type, this.partitionKey);
                         }
                     }
                 } catch(Throwable t) {
@@ -2053,6 +2075,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     mappingInfoLock.readLock().unlock();
                 }
             }
+            
+            public abstract void partitionDelete(IndexShard indexShard) throws IOException;
 
             /**
              * Notification of a RangeTombstone.
@@ -2138,6 +2162,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         }
     }
 
+    @Override
     public Callable<?> getInitializationTask() 
     {
         return () -> {
@@ -2181,7 +2206,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         return SystemKeyspace.isIndexBuilt(baseCfs.keyspace.getName(), this.indexMetadata.name);
     }
 
-
+    @Override
     public Callable<?> getMetadataReloadTask(IndexMetadata indexMetadata) 
     {
         return null;
@@ -2190,6 +2215,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     /**
      * Cassandra index flush .. Elasticsearch flush ... lucene commit and disk sync.
      */
+    @Override
     public Callable<?> getBlockingFlushTask() 
     {
         return () -> {
@@ -2231,6 +2257,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
      * Cassandra table snapshot, hard links associated elasticsearch lucene files.
      */
     @SuppressForbidden(reason="File used for snapshots")
+    @Override
     public Callable<?> getSnapshotWithoutFlushTask(String snapshotName) 
     {
         return () -> {
@@ -2274,6 +2301,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         };
     }
 
+    @Override
     public Callable<?> getInvalidateTask() {
         return () -> {
             this.clusterService.removeListener(this);
@@ -2282,6 +2310,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         };
     }
 
+    @Override
     public Callable<?> getTruncateTask(long truncatedAt) {
         return () -> {
             if (isIndexing()) {
@@ -2307,6 +2336,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         };
     }
 
+    @Override
     public boolean shouldBuildBlocking() {
         return isIndexing();
     }
