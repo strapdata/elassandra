@@ -1410,42 +1410,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 }
             }
             
-            /**
-             * Notification of a top level partition delete.
-             * @param deletionTime
-             */
             @Override
-            public void partitionDelete(DeletionTime deletionTime) {
-                logger.trace("Delete partition {}: {}", this.transactionType, deletionTime);
-                if (deletionTime.isLive() || !deletionTime.deletes(System.currentTimeMillis())) {
-                    // ignore non-expired partition-tombestone. 
-                    return;
-                }
-                
-                mappingInfoLock.readLock().lock();
-                try {
-                    // Delete documents where _routing = partitionKey
-                    for (ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices) {
-                        IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
-                        if (indexShard != null) {
-                            if (!indexInfo.updated)
-                                indexInfo.updated = true;
-                            try {
-                                if (logger.isTraceEnabled())
-                                    logger.trace("deleting documents where _routing={} from index.type={}.{}", this.partitionKey, indexInfo.name, typeName);
-                                TermQuery termQuery = new TermQuery(new Term(RoutingFieldMapper.NAME, this.partitionKey));
-                                DeleteByQuery deleteByQuery = new DeleteByQuery(termQuery, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
-                                indexShard.getEngine().delete(deleteByQuery);
-                            } catch (EngineException e) {
-                                logger.error("Document deletion error", e);
-                            }
-                        }
-                    }
-                } catch(Throwable t) {
-                    logger.error("Unexpected error", t);
-                } finally {
-                    mappingInfoLock.readLock().unlock();
-                }
+            public void partitionDelete(IndexShard indexShard) throws IOException {
+                if (logger.isTraceEnabled())
+                    logger.trace("deleting documents where _routing={} from index.type={}.{}", this.partitionKey, indexShard.shardId().getIndexName(), typeName);
+                TermQuery termQuery = new TermQuery(new Term(RoutingFieldMapper.NAME, this.partitionKey));
+                DeleteByQuery deleteByQuery = new DeleteByQuery(termQuery, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+                indexShard.getEngine().delete(deleteByQuery);    
             }
             
             /**
@@ -1527,45 +1498,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 }
             }
             
-            /**
-             * Notification of a top level partition delete.
-             * @param deletionTime
-             */
             @Override
-            public void partitionDelete(DeletionTime deletionTime) {
-                logger.trace("Delete partition {}: {}", this.transactionType, deletionTime);
-                if (deletionTime.isLive() || !deletionTime.deletes(System.currentTimeMillis())) {
-                    // ignore non-expired partition-tombestone. 
-                    return;
-                }
-                
-                mappingInfoLock.readLock().lock();
-                try {
-                    // Delete documents where _id = partitionKey
-                    for (ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices) {
-                        IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
-                        if (indexShard != null) {
-                            if (!indexInfo.updated)
-                                indexInfo.updated = true;
-                            
-                            try {
-                                Term termUid = termUid(indexShard.indexService(), this.partitionKey);
-                                if (logger.isDebugEnabled())
-                                    logger.debug("deleting document from index.type={}.{} id={} termUid={}", indexInfo.name, typeName, this.partitionKey, termUid.text());
-                                Engine.Delete delete = new Engine.Delete(typeName, this.partitionKey, termUid);
-                                indexShard.delete(indexShard.getEngine(), delete);
-                            } catch (IOException e) {
-                                logger.error("Document deletion error", e);
-                            }
-                        }
-                    }
-                } catch(Throwable t) {
-                    logger.error("Unexpected error", t);
-                } finally {
-                    mappingInfoLock.readLock().unlock();
-                }
+            public void partitionDelete(IndexShard indexShard) throws IOException {
+                Term termUid = termUid(indexShard.indexService(), this.partitionKey);
+                if (logger.isDebugEnabled())
+                    logger.debug("deleting document from index.type={}.{} id={} termUid={}", indexShard.shardId().getIndexName(), typeName, this.partitionKey, termUid.text());
+                Engine.Delete delete = new Engine.Delete(typeName, this.partitionKey, termUid);
+                indexShard.delete(indexShard.getEngine(), delete);          
             }
-            
         }
         
         
@@ -2095,7 +2035,33 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              * @param deletionTime
              */
             @Override
-            public abstract void partitionDelete(DeletionTime deletionTime);
+            public void partitionDelete(DeletionTime deletionTime) {
+                logger.trace("Delete partition {}: {}", this.transactionType, deletionTime);
+                mappingInfoLock.readLock().lock();
+                try {
+                    // Delete documents where _routing = partitionKey
+                    for (ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices) {
+                        IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
+                        if (indexShard != null) {
+                            if (!indexInfo.updated)
+                                indexInfo.updated = true;
+                            try {
+                                partitionDelete(indexShard);
+                            } catch (EngineException e) {
+                                logger.error("Document deletion error", e);
+                            }
+                        } else {
+                            logger.warn("Shard not available to delete document index.type={}.{} partitionKey={}", indexInfo.name, indexInfo.type, this.partitionKey);
+                        }
+                    }
+                } catch(Throwable t) {
+                    logger.error("Unexpected error", t);
+                } finally {
+                    mappingInfoLock.readLock().unlock();
+                }
+            }
+            
+            public abstract void partitionDelete(IndexShard indexShard)  throws IOException;
             
             /**
              * Notification of a RangeTombstone.
