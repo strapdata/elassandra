@@ -15,7 +15,7 @@ If you are filing a bug report, please remove the below feature
 request block and provide responses for all of the below items.
 -->
 
-**Elasticsearch version**:
+**Elassandra version**:
 
 **Plugins installed**: []
 
@@ -29,6 +29,10 @@ request block and provide responses for all of the below items.
  1.
  2.
  3.
+
+**Provide elasticsearch cluster state**:
+
+**Provide user CQL schema**:
 
 **Provide logs (if relevant)**:
 
