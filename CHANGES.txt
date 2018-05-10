@@ -1,3 +1,10 @@
+5.5.0.16 - 2018-05-10
+  * #187 refactoring of partitionDelete
+  * Fix #191 NPE
+  * Don't discover es_query and es_options pseudo columns
+  * Improves shards starting before playing commitlogs
+  * Update the cassandra startup script
+  
 5.5.0.15 - 2018-05-01
   * Fix #183 by using node name as the cassandra broadcast address
   * Fix #184 disable translog sync thread 
