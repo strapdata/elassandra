@@ -1085,7 +1085,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
                     if (mappingMap.get("properties") != null) {
                         // #181 IndiceService is available when activated and before Node start.
-                        IndicesService indicesService = ElassandraDaemon.instance.node().injector().getInstance(IndicesService.class);
+                        IndicesService indicesService = ElasticSecondaryIndex.this.clusterService.getIndicesService();
                         IndexService indexService = indicesService.indexService(indexMetaData.getIndex());
                         if (indexService == null) {
                             logger.error("indexService not available for [{}], ignoring" , index);
