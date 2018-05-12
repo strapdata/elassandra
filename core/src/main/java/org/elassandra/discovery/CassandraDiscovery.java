@@ -705,7 +705,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
     
     public void publishShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
-        ShardRoutingState prevShardRoutingState = localShardStateMap.put(index, shardRoutingState);
+        final ShardRoutingState prevShardRoutingState;
+        if (shardRoutingState == null) {
+            prevShardRoutingState = localShardStateMap.remove(index);
+        } else {
+            prevShardRoutingState = localShardStateMap.put(index, shardRoutingState);
+        }
         if (shardRoutingState != prevShardRoutingState)
             publishX1();
     }
