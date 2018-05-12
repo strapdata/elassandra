@@ -82,5 +82,22 @@ public class CassandraShardStateListener extends AbstractComponent implements In
             logger.error("Unexpected error", e);
         }
     }
+    
+    /**
+     * Called after the index shard has been deleted from disk.
+     *
+     * Note: this method is only called if the deletion of the shard did finish without an exception
+     *
+     * @param shardId The shard id
+     * @param indexSettings the shards index settings
+     */
+    @Override
+    public void afterIndexShardDeleted(ShardId shardId, Settings indexSettings) {
+        try {
+            clusterService.publishShardRoutingState(shardId.getIndexName(), null);
+        } catch (IOException e) {
+            logger.error("Unexpected error", e);
+        }
+    }
 
 }
