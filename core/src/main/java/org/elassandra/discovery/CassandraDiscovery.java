@@ -521,9 +521,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * ES RPC adress can be different from the cassandra broadcast address.
      */
     private boolean isNormal(DiscoveryNode node) {
-        EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(InetAddresses.forString(node.getName()));
+        EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(node.getInetAddress());
         if (state == null) {
-            logger.warn("Node name=[{}] address=[{}] state not found", node.getName(), node.getInetAddress());
+            logger.warn("Node endpoint address=[{}] name=[{}] state not found", node.getInetAddress(), node.getName());
             return false;
         }
         return state.isAlive() && state.getStatus().equals(VersionedValue.STATUS_NORMAL);
