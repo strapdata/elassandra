@@ -309,7 +309,8 @@ public class MasterService extends AbstractLifecycleComponent {
 
     public TaskOutputs calculateTaskOutputs(TaskInputs taskInputs, ClusterState previousClusterState, long startTimeNS) {
         ClusterTasksResult<Object> clusterTasksResult = executeTasks(taskInputs, startTimeNS, previousClusterState);
-        ClusterState newClusterState = patchVersions(previousClusterState, clusterTasksResult);
+        // With Elassandra, only metadata.version is global and increased only when persisting the new metadata in CassandraDiscovery.publish()
+        ClusterState newClusterState = clusterTasksResult.resultingState;
         return new TaskOutputs(taskInputs, previousClusterState, newClusterState, getNonFailedTasks(taskInputs, clusterTasksResult),
             clusterTasksResult.executionResults, clusterTasksResult.doPresistMetaData);
     }
