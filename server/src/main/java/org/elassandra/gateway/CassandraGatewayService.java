@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CassandraGatewayService extends GatewayService {
 
-    public static final ClusterBlock NO_CASSANDRA_RING_BLOCK = new ClusterBlock(12, "no cassandra ring", true, true, true, RestStatus.SERVICE_UNAVAILABLE, EnumSet.of(ClusterBlockLevel.READ));
+    public static final ClusterBlock NO_CASSANDRA_RING_BLOCK = new ClusterBlock(12, "no cassandra ring", true, false, true, RestStatus.SERVICE_UNAVAILABLE, EnumSet.of(ClusterBlockLevel.READ));
 
     private final ClusterService clusterService;
     

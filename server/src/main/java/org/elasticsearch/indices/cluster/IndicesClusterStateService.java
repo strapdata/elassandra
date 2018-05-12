@@ -195,6 +195,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
         // we need to clean the shards and indices we have on this node, since we
         // are going to recover them again once state persistence is disabled (no master / not recovered)
         // TODO: feels hacky, a block disables state persistence, and then we clean the allocated shards, maybe another flag in blocks?
+        /*
         if (state.blocks().disableStatePersistence()) {
             for (AllocatedIndex<? extends Shard> indexService : indicesService) {
                 indicesService.removeIndex(indexService.index(), NO_LONGER_ASSIGNED,
@@ -202,7 +203,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
             }
             return;
         }
-
+        */
         //updateFailedShardsCache(state);
 
         deleteIndices(event); // also deletes shards of deleted indices

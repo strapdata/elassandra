@@ -28,6 +28,9 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.gateway.GatewayService;
+import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.index.shard.IndexShardState;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -69,19 +72,23 @@ public class CassandraShardStartedBarrier extends AbstractComponent  {
             readyToIndex = false;
         } else {
             readyToIndex = true;
-            DiscoveryNode localNode = clusterState.nodes().getLocalNode();
-            RoutingTable routingTable = clusterState.routingTable();
             for(ObjectCursor<IndexMetaData> cursor : clusterState.metaData().indices().values()) {
                 IndexMetaData indexMetaData = cursor.value;
-                IndexRoutingTable indexRoutingTable;
-                ShardRouting shardRouting;
-                if (indexMetaData.getState() == IndexMetaData.State.OPEN &&
-                   ( (indexRoutingTable=routingTable.index(indexMetaData.getIndex())) == null ||
-                         (shardRouting = indexRoutingTable.primaryShardRouting(localNode.getId())) == null ||
-                         !shardRouting.started() 
-                   )) {
-                    readyToIndex = false;
-                    break;
+                if (indexMetaData.getState() == IndexMetaData.State.OPEN) {
+                    IndexService indexService = clusterService.getIndicesService().indexService(indexMetaData.getIndex());
+                    if (indexService == null) {
+                        readyToIndex = false;
+                        break;
+                    }
+                    IndexShard localShard = indexService.getShard(0);
+                    if (localShard == null) {
+                        readyToIndex = false;
+                        break;
+                    }
+                    if (localShard.state() != IndexShardState.STARTED) {
+                        readyToIndex = false;
+                        break;
+                    }
                 }
             }
         }

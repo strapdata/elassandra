@@ -118,7 +118,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     private final InetAddress localAddress;
     private final String localDc;
-    private DiscoveryNode localNode;
     
     private final ConcurrentMap<String, ShardRoutingState> localShardStateMap = new ConcurrentHashMap<String, ShardRoutingState>();
     private final ConcurrentMap<UUID, Map<String,ShardRoutingState>> remoteShardRoutingStateMap = new ConcurrentHashMap<UUID, Map<String,ShardRoutingState>>();
@@ -169,12 +168,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     
     @Override
     protected void doStart()  {
-        this.localNode = transportService.getLocalNode();
-        
         synchronized (clusterGroup) {
             logger.debug("Connected to cluster [{}]", clusterName.value());
-            clusterGroup.put(this.localNode.getId(), this.localNode);
-            logger.info("localNode name={} id={} localAddress={} publish_host={}", this.localNode().getName(), this.localNode().getId(), localAddress, this.localNode().getAddress());
+            clusterGroup.put(localNode().getId(), localNode());
+            logger.info("localNode name={} id={} localAddress={} publish_host={}", localNode().getName(), localNode().getId(), localAddress, localNode().getAddress());
 
             // initialize cluster from cassandra system.peers 
             // WARNING: system.peers may be incomplete because commitlogs not yet applied
@@ -470,7 +467,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             return;
         
         String hostId = endPointState.getApplicationState(ApplicationState.HOST_ID).value;
-        if (hostId == null || this.localNode.getId().equals(hostId) || !listener.attendees.containsKey(hostId))
+        if (hostId == null || this.localNode().getId().equals(hostId) || !listener.attendees.containsKey(hostId))
             return;
         
         if (!endPointState.isAlive() || !endPointState.getStatus().equals("NORMAL")) {
@@ -511,7 +508,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             MetaDataVersionListener prevListener = CassandraDiscovery.this.metaDataVersionListener.getAndSet(this);
             assert prevListener == null : "metaDataVersionAckListener should be null";
             clusterState.nodes().forEach((n) -> { 
-                if (!localNode.getId().equals(n.getId()) && 
+                if (!localNode().getId().equals(n.getId()) && 
                     n.status() == DiscoveryNodeStatus.ALIVE &&
                     isNormal(n))
                     attendees.put(n.getId(), n); 
@@ -830,12 +827,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
 
     public DiscoveryNode localNode() {
-        return this.localNode;
+        return this.transportService.getLocalNode();
     }
 
     
     public String nodeDescription() {
-        return clusterName.value() + "/" + this.localNode.getId();
+        return clusterName.value() + "/" + localNode().getId();
     }
  
     public DiscoveryNodes nodes() {
