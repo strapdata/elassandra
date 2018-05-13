@@ -2687,7 +2687,8 @@ public class ClusterService extends BaseClusterService {
                 for(ObjectCursor<IndexMetaData> indexCursor : metaData.indices().values()) {
                     for(ObjectCursor<MappingMetaData> mappingCursor :  indexCursor.value.getMappings().values()) {
                         String cfName = typeToCfName(indexCursor.value.keyspace(), mappingCursor.value.type());
-                        logger.info("keyspace.table={}.{} registred for elasticsearch index.type={}.{}", 
+                        if (logger.isDebugEnabled())
+                            logger.debug("keyspace.table={}.{} registred for elasticsearch index.type={}.{}", 
 		           indexCursor.value.keyspace(), cfName, indexCursor.value.getIndex().getName(), mappingCursor.value.type()); 
                     }
                 }

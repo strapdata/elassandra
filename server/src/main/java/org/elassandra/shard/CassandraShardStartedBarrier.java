@@ -66,6 +66,11 @@ public class CassandraShardStartedBarrier extends AbstractComponent  {
         
     }
 
+    /**
+     * Release the barrier if all local shards (for OPEN indices) are started.
+     * @param clusterState
+     * @return
+     */
     public boolean isReadyToIndex(ClusterState clusterState) {
         boolean readyToIndex;
         if (clusterState.blocks().hasGlobalBlock(GatewayService.STATE_NOT_RECOVERED_BLOCK)) {
@@ -103,7 +108,7 @@ public class CassandraShardStartedBarrier extends AbstractComponent  {
             clusterService.removeShardStartedBarrier();
             latch.countDown();
         }
-        logger.debug("readyToIndex={} latch={} state={}",readyToIndex, latch.getCount(), clusterState);
+        logger.debug("readyToIndex={} latch={} state={}", readyToIndex, latch.getCount(), clusterState);
         return readyToIndex;
     }
     
