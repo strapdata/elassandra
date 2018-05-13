@@ -773,6 +773,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
 
     }
 
+    static Pattern synchronousRefreshPattern = Pattern.compile(System.getProperty(ClusterService.SETTING_SYSTEM_SYNCHRONOUS_REFRESH, "(\\.kibana.*)"));
+    
     final class ImmutableMappingInfo {
         
         class ImmutableIndexInfo  {
@@ -793,6 +795,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             ReadWriteLock dynamicMappingUpdateLock;
             volatile boolean updated = false;
 
+            
             public ImmutableIndexInfo(String name, IndexService indexService, MappingMetaData mappingMetaData, MetaData metadata, boolean versionLessEngine) throws IOException {
                 this.name = name;
                 this.versionLessEngine = versionLessEngine;
@@ -803,7 +806,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
                 Map<String,Object> metaMap = (mappingMap == null) ? null : (Map<String,Object>)mappingMap.get("_meta");
                 
-                this.refresh = getMetaSettings(metadata.settings(), indexService.getIndexSettings(), metaMap, IndexMetaData.INDEX_SYNCHRONOUS_REFRESH_SETTING);
+                this.refresh = getMetaSettings(metadata.settings(), indexService.getIndexSettings(), metaMap, IndexMetaData.INDEX_SYNCHRONOUS_REFRESH_SETTING) || synchronousRefreshPattern.matcher(name).matches();
+                logger.debug("index.type=[{}.{}] {}=[{}]", name, this.type, IndexMetaData.INDEX_SYNCHRONOUS_REFRESH_SETTING.getKey(), refresh);
+                
                 this.snapshot = getMetaSettings(metadata.settings(), indexService.getIndexSettings(), metaMap, IndexMetaData.INDEX_SNAPSHOT_WITH_SSTABLE_SETTING);
                 this.includeNodeId = getMetaSettings(metadata.settings(), indexService.getIndexSettings(), metaMap, IndexMetaData.INDEX_INCLUDE_NODE_ID_SETTING);
                 
@@ -821,9 +826,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     value = XContentMapValues.nodeBooleanValue(metaMap.get(propName.getKey().substring(6)));
                 } else {
                     value = (Boolean)indexSettings.getValue(propName);
-                    //(ClusterService.INDEX_PREFIX+propName, metadataSettings.getAsBoolean(ClusterService.CLUSTER_PREFIX+propName, Boolean.getBoolean(ClusterService.SYSTEM_PREFIX+propName)));
                 }
-                logger.debug("index.type=[{}.{}] {}=[{}]", name, this.type, propName.getKey(), value);
+                if (!propName.getKey().equals(IndexMetaData.INDEX_SYNCHRONOUS_REFRESH_SETTING.getKey()))
+                    logger.debug("index.type=[{}.{}] {}=[{}]", name, this.type, propName.getKey(), value);
                 return value;
             }
             
