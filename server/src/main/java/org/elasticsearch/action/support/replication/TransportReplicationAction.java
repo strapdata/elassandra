@@ -748,29 +748,33 @@ public abstract class TransportReplicationAction<
             //assert request.shardId() != null : "request shardId must be set in resolveRequest";
             //assert request.waitForActiveShards() != ActiveShardCount.DEFAULT : "request waitForActiveShards must be set in resolveRequest";
 
-            final ShardRouting primary = primary(state);
             /* No need for retry in ELassandra.
+            final ShardRouting primary = primary(state);
             if (retryIfUnavailable(state, primary)) {
                 return;
             }
             */
-            final DiscoveryNode node = state.nodes().get(primary.currentNodeId());
+            final DiscoveryNode node = state.nodes().getLocalNode();
+            performLocalAction(state, null, node, indexMetaData);
+            /*
             if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                 performLocalAction(state, primary, node, indexMetaData);
             } else {
                 performRemoteAction(state, primary, node);
             }
+            */
         }
 
         private void performLocalAction(ClusterState state, ShardRouting primary, DiscoveryNode node, IndexMetaData indexMetaData) {
             setPhase(task, "waiting_on_primary");
-            request.setShardId(new ShardId(request.shardId().getIndex(), 0));
+            ShardId shardId = new ShardId(request.shardId().getIndex(), 0);
+            request.setShardId(shardId);
             if (logger.isTraceEnabled()) {
                 logger.trace("send action [{}] to local primary [{}] for request [{}] with cluster state version [{}] to [{}] ",
-                    transportPrimaryAction, request.shardId(), request, state.version(), primary.currentNodeId());
+                    transportPrimaryAction, request.shardId(), request, state.version(), node.getId());
             }
             performAction(node, transportPrimaryAction, true,
-                new ConcreteShardRequest<>(request, primary.allocationId().getId(), indexMetaData.primaryTerm(primary.id())));
+                new ConcreteShardRequest<>(request, ShardRouting.DUMMY_ALLOCATION_ID.getId(), 1L));
         }
 
         private void performRemoteAction(ClusterState state, ShardRouting primary, DiscoveryNode node) {        
