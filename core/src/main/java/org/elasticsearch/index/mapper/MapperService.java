@@ -43,6 +43,7 @@ import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.DelegatingAnalyzerWrapper;
 import org.apache.lucene.index.Term;
+import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.ElasticsearchGenerationException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -269,7 +270,11 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                 UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT column_name, type FROM system_schema.columns WHERE keyspace_name=? and table_name=?", 
                         new Object[] { keyspace(), cfName });
                 for (Row row : result) {
-                    if (row.has("type") && pattern.matcher(row.getString("column_name")).matches() && !row.getString("column_name").startsWith("_")) {
+                    if (row.has("type") && 
+                        pattern.matcher(row.getString("column_name")).matches() && 
+                       !row.getString("column_name").startsWith("_") &&
+                       !ElasticSecondaryIndex.ES_QUERY.equals(row.getString("column_name")) &&
+                       !ElasticSecondaryIndex.ES_OPTIONS.equals(row.getString("column_name"))) {
                         String columnName = row.getString("column_name");
                         Map<String,Object> props = (Map<String, Object>) properties.get(columnName);
                         if (props == null) {
