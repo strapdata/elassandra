@@ -980,6 +980,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 return this.index_static_only;
             }
             
+            @Override
             public String toString() {
                 return this.name;
             }
@@ -2109,6 +2110,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         return true;
     }
     
+    @Override
     public String toString() {
         return this.index_name;
     }
@@ -2169,11 +2171,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
      * @param hadBootstrap If the node had bootstrap before joining.
      * @return task to be executed by the index manager before joining the ring.
      */
+    @Override
     public Callable<?> getPreJoinTask(boolean hadBootstrap)
     {
         return () -> {
             if (!this.buildSubmit && !baseCfs.isEmpty() && !isBuilt()) {
-                logger.info("building index for  [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
+                logger.info("building index for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
                 baseCfs.forceBlockingFlush();
                 baseCfs.indexManager.buildIndexBlocking(this);
             }
@@ -2198,7 +2201,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 
                 // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
                 if (Keyspace.isInitialized() && !baseCfs.isEmpty() && !isBuilt()) {
-                    logger.info("building index for  [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
+                    logger.info("building index for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
                     this.buildSubmit = true;
                     baseCfs.forceBlockingFlush();
                     baseCfs.indexManager.buildIndexBlocking(this);
@@ -2333,7 +2336,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     @Override
     public Callable<?> getInvalidateTask() {
         return () -> {
-            this.clusterService.removeListener(this);
+            if (this.clusterService != null)
+                this.clusterService.removeListener(this);
             elasticSecondayIndices.remove(index_name);
             return null;
         };
