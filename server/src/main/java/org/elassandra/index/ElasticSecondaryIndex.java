@@ -154,7 +154,6 @@ import org.elasticsearch.index.mapper.SeqNoFieldMapper;
 import org.elasticsearch.index.mapper.SeqNoFieldMapper.SequenceIDFields;
 import org.elasticsearch.index.mapper.SourceFieldMapper;
 import org.elasticsearch.index.mapper.SourceToParse;
-import org.elasticsearch.index.mapper.TypeFieldMapper;
 import org.elasticsearch.index.mapper.TypeParsers;
 import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.UidFieldMapper;
@@ -2165,7 +2164,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     {
         return () -> {
             if (!this.buildSubmit && !baseCfs.isEmpty() && !isBuilt()) {
-                logger.info("building index for  [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
+                logger.info("building index for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
                 baseCfs.forceBlockingFlush();
                 baseCfs.indexManager.buildIndexBlocking(this);
             }
@@ -2190,7 +2189,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 
                 // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
                 if (Keyspace.isInitialized() && !baseCfs.isEmpty() && !isBuilt()) {
-                    logger.info("building index for  [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
+                    logger.info("building index for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
                     this.buildSubmit = true;
                     baseCfs.forceBlockingFlush();
                     baseCfs.indexManager.buildIndexBlocking(this);
@@ -2325,7 +2324,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     @Override
     public Callable<?> getInvalidateTask() {
         return () -> {
-            this.clusterService.removeListener(this);
+            if (this.clusterService != null)
+                this.clusterService.removeListener(this);
             elasticSecondayIndices.remove(index_name);
             return null;
         };
