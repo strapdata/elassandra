@@ -17,6 +17,7 @@ package org.elassandra;
 
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.service.StorageService;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -100,7 +101,10 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         StorageService.instance.forceKeyspaceFlush("test","t1");
         
         assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(discoverMapping("t1")).get());
-        Thread.sleep(2000);
+        // wait for index rebuild by the compaction manager thread
+        while (!SystemKeyspace.isIndexBuilt("test", "elastic_t1_idx"))
+            Thread.sleep(500); 
+            
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
     }
     

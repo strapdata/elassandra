@@ -233,6 +233,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     protected final IndexMetadata indexMetadata;
     protected String typeName;
     int initCounter = 0;
+    protected volatile boolean buildSubmit = false;
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
@@ -2153,6 +2154,31 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         }
     }
 
+    /**
+     * Return a task to be executed before the node enters NORMAL state and finally joins the ring.
+     *
+     * @param hadBootstrap If the node had bootstrap before joining.
+     * @return task to be executed by the index manager before joining the ring.
+     */
+    @Override
+    public Callable<?> getPreJoinTask(boolean hadBootstrap)
+    {
+        return () -> {
+            if (!this.buildSubmit && !baseCfs.isEmpty() && !isBuilt()) {
+                logger.info("building index for  [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
+                baseCfs.forceBlockingFlush();
+                baseCfs.indexManager.buildIndexBlocking(this);
+            }
+            return null;
+        };
+    }
+    
+    /**
+     * Return a task to perform any initialization work when a new index instance is created.
+     * This may involve costly operations such as (re)building the index, and is performed asynchronously
+     * by SecondaryIndexManager
+     * @return a task to perform any necessary initialization work
+     */
     @Override
     public Callable<?> getInitializationTask() 
     {
@@ -2163,8 +2189,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 initialize(ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class));
                 
                 // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
-                if (Keyspace.isInitialized() && !baseCfs.isEmpty() && !isBuilt())
+                if (Keyspace.isInitialized() && !baseCfs.isEmpty() && !isBuilt()) {
+                    logger.info("building index for  [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
+                    this.buildSubmit = true;
+                    baseCfs.forceBlockingFlush();
                     baseCfs.indexManager.buildIndexBlocking(this);
+                }
             } else {
                 logger.warn("Index created, but mapping should be initialized later.");
                 clusterService = null;
