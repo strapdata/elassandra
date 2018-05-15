@@ -23,20 +23,21 @@
 #   -v: print version string and exit
 
 # CONTROLLING STARTUP:
-#
+# 
 # This script relies on few environment variables to determine startup
 # behavior, those variables are:
 #
 #   CLASSPATH -- A Java classpath containing everything necessary to run.
 #   JVM_OPTS -- Additional arguments to the JVM for heap size, etc
+#   JVM_ON_OUT_OF_MEMORY_ERROR_OPT -- The OnOutOfMemoryError JVM option if specified
 #   CASSANDRA_CONF -- Directory containing Cassandra configuration files.
 #   CASSANDRA_LOGDIR -- Directory containing cassandra logs, override default location
 #   CASSANDRA_DAEMON -- the cassandra entry point class:
 #        "org.apache.cassandra.service.ElassandraDaemon" to enable elasticsearch
 #
 # As a convenience, a fragment of shell is sourced in order to set one or
-# more of these variables. This so-called `include' can be placed in a
-# number of locations and will be searched for in order. The lowest
+# more of these variables. This so-called `include' can be placed in a 
+# number of locations and will be searched for in order. The highest 
 # priority search path is the same directory as the startup script, and
 # since this is the location of the sample in the project tree, it should
 # almost work Out Of The Box.
@@ -44,7 +45,7 @@
 # Any serious use-case though will likely require customization of the
 # include. For production installations, it is recommended that you copy
 # the sample to one of /usr/share/cassandra/cassandra.in.sh,
-# /usr/local/share/cassandra/cassandra.in.sh, or
+# /usr/local/share/cassandra/cassandra.in.sh, or 
 # /opt/cassandra/cassandra.in.sh and make your modifications there.
 #
 # Another option is to specify the full path to the include file in the
@@ -52,15 +53,15 @@
 #
 #   $ CASSANDRA_INCLUDE=/path/to/in.sh cassandra -p /var/run/cass.pid
 #
-# Note: This is particularly handy for running multiple instances on a
+# Note: This is particularly handy for running multiple instances on a 
 # single installation, or for quick tests.
 #
-# Finally, developers and enthusiasts who frequently run from an SVN
+# Finally, developers and enthusiasts who frequently run from an SVN 
 # checkout, and do not want to locally modify bin/cassandra.in.sh, can put
 # a customized include file at ~/.cassandra.in.sh.
 #
 # If you would rather configure startup entirely from the environment, you
-# can disable the include by exporting an empty CASSANDRA_INCLUDE, or by
+# can disable the include by exporting an empty CASSANDRA_INCLUDE, or by 
 # ensuring that no include files exist in the aforementioned search list.
 # Be aware that you will be entirely responsible for populating the needed
 # environment variables.
@@ -103,7 +104,7 @@ else
 fi
 
 if [ -z $JAVA ] ; then
-    echo Unable to find java executable. Check JAVA_HOME and PATH environment variables. > /dev/stderr
+    echo Unable to find java executable. Check JAVA_HOME and PATH environment variables. >&2
     exit 1;
 fi
 
@@ -111,7 +112,7 @@ fi
 # avoid disk I/O. Even for the purpose of CPU efficiency, we don't
 # really have CPU<->data affinity anyway. Also, empirically test that numactl
 # works before trying to use it (CASSANDRA-3245).
-NUMACTL_ARGS="--interleave=all"
+NUMACTL_ARGS=${NUMACTL_ARGS:-"--interleave=all"}
 if which numactl >/dev/null 2>/dev/null && numactl $NUMACTL_ARGS ls / >/dev/null 2>/dev/null
 then
     NUMACTL="numactl $NUMACTL_ARGS"
@@ -130,7 +131,7 @@ fi
 
 # Special-case path variables.
 case "`uname`" in
-    CYGWIN*)
+    CYGWIN*|MINGW*) 
         CLASSPATH=`cygpath -p -w "$CLASSPATH"`
         CASSANDRA_CONF=`cygpath -p -w "$CASSANDRA_CONF"`
     ;;
@@ -224,19 +225,29 @@ launch_service()
     # to close stdout/stderr, but it's up to us not to background.
     if [ "x$foreground" != "x" ]; then
         cassandra_parms="$cassandra_parms -Dcassandra-foreground=yes"
-        exec $NUMACTL "$JAVA" $JVM_OPTS $cassandra_parms -cp "$CLASSPATH" $props "$class"
+        if [ "x$JVM_ON_OUT_OF_MEMORY_ERROR_OPT" != "x" ]; then
+            exec $NUMACTL "$JAVA" $JVM_OPTS "$JVM_ON_OUT_OF_MEMORY_ERROR_OPT" $cassandra_parms -cp "$CLASSPATH" $props "$class"
+        else
+            exec $NUMACTL "$JAVA" $JVM_OPTS $cassandra_parms -cp "$CLASSPATH" $props "$class"
+        fi
     # Startup CassandraDaemon, background it, and write the pid.
     else
-        exec $NUMACTL "$JAVA" $JVM_OPTS $cassandra_parms -cp "$CLASSPATH" $props "$class" <&- &
-        [ ! -z "$pidpath" ] && printf "%d" $! > "$pidpath"
-        true
+        if [ "x$JVM_ON_OUT_OF_MEMORY_ERROR_OPT" != "x" ]; then
+            exec $NUMACTL "$JAVA" $JVM_OPTS "$JVM_ON_OUT_OF_MEMORY_ERROR_OPT" $cassandra_parms -cp "$CLASSPATH" $props "$class" <&- &
+            [ ! -z "$pidpath" ] && printf "%d" $! > "$pidpath"
+            true
+        else
+            exec $NUMACTL "$JAVA" $JVM_OPTS $cassandra_parms -cp "$CLASSPATH" $props "$class" <&- &
+            [ ! -z "$pidpath" ] && printf "%d" $! > "$pidpath"
+            true
+        fi
     fi
 
     return $?
 }
 
 # Parse any command line options.
-args=`getopt vefdhp:bD:H:E: "$@"`
+args=`getopt vRefdhp:bD:H:E: "$@"`
 eval set -- "$args"
 
 while true; do
@@ -256,6 +267,10 @@ while true; do
         -v)
             "$JAVA" -cp "$CLASSPATH" "-Dlogback.configurationFile=logback-tools.xml" org.apache.cassandra.tools.GetVersion
             exit 0
+        ;;
+        -R)
+            allow_root="yes"
+            shift
         ;;
         -D)
             properties="$properties -D$2"
@@ -280,10 +295,14 @@ while true; do
         ;;
         --)
             shift
+            if [ "x$*" != "x" ] ; then
+                echo "Error parsing arguments! Unknown argument \"$*\"" >&2
+                exit 1
+            fi
             break
         ;;
         *)
-            echo "Error parsing arguments!" >&2
+            echo "Error parsing arguments! Unknown argument \"$1\"" >&2
             exit 1
         ;;
     esac
@@ -298,15 +317,17 @@ else
   classname="org.apache.cassandra.service.CassandraDaemon"
 fi
 
-# see CASSANDRA-7254
-"$JAVA" -cp "$CLASSPATH" $JVM_OPTS 2>&1 | grep -q 'Error: Exception thrown by the agent : java.lang.NullPointerException'
-if [ $? -ne "1" ]; then
-    echo Unable to bind JMX, is Cassandra already running?
-    exit 1;
+if [ "x$allow_root" != "xyes" ] ; then
+    if [ "`id -u`" = "0" ] || [ "`id -g`" = "0" ] ; then
+        echo "Running Cassandra as root user or group is not recommended - please start Cassandra using a different system user."
+        echo "If you really want to force running Cassandra as root, use -R command line option."
+        exit 1
+    fi
 fi
 
 # Start up the service
 launch_service "$pidfile" "$foreground" "$properties" "$classname"
+
 exit $?
 
 # vi:ai sw=4 ts=4 tw=0 et
