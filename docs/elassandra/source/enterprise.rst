@@ -132,6 +132,11 @@ Search through CQL
 
 To enable Elasticsearch query over CQL:
 
+* Add the following system property to your cassandra-env.sh and restart your nodes :
+
+.. code::
+   JVM_OPTS="$JVM_OPTS -Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler"
+   
 * Add a dummy column ``es_query`` to your cassandra table.
 * Add a dummy column ``es_options`` to your cassandra table if you need to specify some specific options like target index names.
 
@@ -335,7 +340,7 @@ CQL Driver integration
 ......................
 
 For better performances, you can use a CQL prepared statement to submit Elasticsearch queries as shown bellow in java. 
-You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total** and **_shards.failed** 
+You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total**, **_shards.successful**, **_shards.skipped** and **_shards.failed** 
 from the result `custom payload <https://docs.datastax.com/en/developer/java-driver/3.2/manual/custom_payloads/>`_.
 
 .. code-block:: java
@@ -344,11 +349,15 @@ from the result `custom payload <https://docs.datastax.com/en/developer/java-dri
         public final long hitTotal;
         public final float hitMaxScore;
         public final int shardTotal;
+        public final int shardSuccessful;
+        public final int shardSkipped;
         public final int shardFailed;
         public IncomingPayload(Map<String,ByteBuffer> payload) {
             hitTotal = payload.get("hits.total").getLong();
             hitMaxScore = payload.get("hits.max_score").getFloat();
             shardTotal = payload.get("_shards.total").getInt();
+            shardSuccessful = payload.get("_shards.successful").getInt();
+            shardSkipped = payload.get("_shards.skipped").getInt();
             shardFailed = payload.get("_shards.failed").getInt();
         }
    }
@@ -358,6 +367,10 @@ from the result `custom payload <https://docs.datastax.com/en/developer/java-dri
    IncomingPayload payload = new IncomingPayload(rs.getExecutionInfo().getIncomingPayload());
    System.out.println("hits.total="+payload.hitTotal);
 
+.. TIP::
+
+   When sum of **_shards.successful**, **_shards.skipped** and **_shards.failed** is lower than **_shards.total**, it means the search is not consistent because of missing nodes. In such cases, index state is red.
+   
 CQL Tracing
 ...........
 

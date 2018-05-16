@@ -9,14 +9,14 @@ First, let's create a twitter user, and add some tweets (the *twitter* index wil
 
 .. code::
 
-   curl -XPUT 'http://localhost:9200/twitter/user/kimchy' -d '{ "name" : "Shay Banon" }'
-   curl -XPUT 'http://localhost:9200/twitter/tweet/1' -d '
+   curl -XPUT -H 'Content-Type: application/json' 'http://localhost:9200/twitter/user/kimchy' -d '{ "name" : "Shay Banon" }'
+   curl -XPUT -H 'Content-Type: application/json' 'http://localhost:9200/twitter/tweet/1' -d '
    {
        "user": "kimchy",
        "postDate": "2009-11-15T13:12:00",
        "message": "Trying out Elassandra, so far so good?"
    }'
-   curl -XPUT 'http://localhost:9200/twitter/tweet/2' -d '
+   curl -XPUT -H 'Content-Type: application/json' 'http://localhost:9200/twitter/tweet/2' -d '
    {
        "user": "kimchy",
        "postDate": "2009-11-15T14:12:12",
@@ -258,7 +258,7 @@ You can create an index with the ``RandomSearchStrategy`` as shown below (or cha
 
 .. code::
 
-   curl -XPUT "http://localhost:9200/twitter/" -d '{ 
+   curl -XPUT -H "Content-Type: application/json" "http://localhost:9200/twitter/" -d '{ 
       "settings" : { 
          "index.search_strategy_class":"RandomSearchStrategy" 
       }
@@ -293,7 +293,7 @@ You can also bypass this cache by adding *token_ranges_bitset_cache=false* in yo
 
 .. code::
 
-   curl -XPUT "http://localhost:9200/twitter/_search?token_ranges_bitset_cache=false&q=*:*"
+   curl -XGET "http://localhost:9200/twitter/_search?token_ranges_bitset_cache=false&q=*:*"
 
 Finally, you can check the in-memory size of the token ranges bitset cache with the Elasticsearch stats API, and clear it when clearing the Elasticsearch query_cache :
 
@@ -339,7 +339,7 @@ with the default mapping, and the *message* is explicitly mapped with a custom m
 
 .. code::
 
-   curl -XPUT 'http://localhost:9200/twitter_index' -d '{
+   curl -XPUT -H 'Content-Type: application/json' 'http://localhost:9200/twitter_index' -d '{
        "settings": { "keyspace":"twitter" }
        "mappings": { 
            "tweet" : {

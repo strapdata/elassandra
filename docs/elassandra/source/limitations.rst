@@ -9,7 +9,7 @@ If you want to use Elassandra as Elasticsearch, you can configure your cluster o
 
 .. code::
 
-   $curl -XPUT "$NODE:9200/twitter/" -d'{ 
+   $curl -XPUT -H "Content-Type: application/json" "$NODE:9200/twitter/" -d'{ 
       "settings":{ "index":{ "drop_on_delete_index":true } }
    }'
 
@@ -17,7 +17,7 @@ Or to set ``drop_on delete_index`` at cluster level :
 
 .. code::
 
-   $curl -XPUT "$NODE:9200/_cluster/settings" -d'{ 
+   $curl -XPUT -H "Content-Type: application/json" "$NODE:9200/_cluster/settings" -d'{ 
       "persistent":{ "cluster.drop_on_delete_index":true }
    }'
 
@@ -95,7 +95,7 @@ If you want to keep the Elasticsearch internal lucene file format including a ve
 
 .. code::
 
-   $curl -XPUT "$NODE:9200/twitter/" -d'{ 
+   $curl -XPUT -H "Content-Type: application/json" "$NODE:9200/twitter/" -d'{ 
       "settings":{ "index.version_less_engine":false } }
    }'
 
@@ -106,7 +106,7 @@ Primary term and Sequence Number
 --------------------------------
 
 As explained `here <https://www.elastic.co/blog/elasticsearch-sequence-ids-6-0>`_, Elasticsearch introduced **_primary_term** and **_seq_no** in order to manage
-shard replication consistently and store these field in lucene documents. But in Elassandra, replication is fully managed by cassandra and all shard are considered as primary. Thus, these two
+shard replication consistently and store these fields in lucene documents. But in Elassandra, replication is fully managed by cassandra and all shard are considered as primary. Thus, these two
 fields are not more stored in lucene by the default elassandra lucene engine named **VersionLessInternalEngine**. Consequently, all search results comes with *_primary_term = 0* and *_seq_no = 1*.
 
 Index and type names
@@ -130,6 +130,18 @@ Null values
 
 To be able to search for null values, Elasticsearch can replace null by a default value (see `<https://www.elastic.co/guide/en/elasticsearch/reference/2.4/null-value.html>`_ ).
 In Elasticsearch, an empty array is not a null value,  wheras in Cassandra, an empty array is stored as null and replaced by the default null value at index time.
+
+Refresh on write
+----------------
+
+Elasticsearch write operations support a ``refresh`` parameter to control when changes made by this request are made visible to search. Possible values are *true*, *false*, or *wait_for* and in this last case, the coordinator node
+waits until a refresh happens. But in elassandra, replication is managed by Cassandra and can be asynchronous. As the result managing a refresh on involved shards or waiting for a refresh to happen in not possible.
+
+If we need to search right after a write operation, you can force a refresh before search or, if you have a reasonably low level of updates, set the index settings ``ìndex.synchronous_refresh`` to true.
+This provides *Real Time Search* by refreshing shards after each update, but of course, its comes with a cost.
+
+If you have legacy applications using ``refresh=true`` or ``refresh=wait_for``, you can set the system property ``es.synchronous_refresh`` to a regexp of index name to automatically set ``synchronous_refresh`` to **true**.
+By default, because Kibana sometimes updates elasticsearch with ``refresh=wait_for``, this system property ``es.synchronous_refresh`` is set by default to (\.kibana.*).
 
 Elasticsearch unsupported features
 ----------------------------------
