@@ -163,17 +163,11 @@ public class Gateway extends AbstractComponent {
                 if (StorageService.instance.isJoined()) {
                     metadata = clusterService.readMetaDataAsRow(ConsistencyLevel.ONE);
                     if (metadata != null) {
-                        logger.debug("Successfull recovery from metadata table version={}", metadata.version());
+                        logger.info("Successfull cluster state recovery from metadata table version={}/{}", metadata.clusterUUID(), metadata.version());
                         listener.onSuccess( builder.metaData(metadata).build() );
                         return;
                     }
-                } else {
-                    if (metadata != null) {
-                        logger.debug("Successfull recovery from internal metadata table version={}", metadata.version());
-                        listener.onSuccess( builder.metaData(metadata).build() );
-                        return;
-                    }
-                }
+                } 
             } catch (Exception e) {
             }
         }
@@ -181,15 +175,15 @@ public class Gateway extends AbstractComponent {
         // fallback to CQL schema
         try {
             metadata = clusterService.readMetaDataAsComment();
-            logger.debug("Successfull recovery from CQL schema version={}", metadata.version());
+            logger.info("Successfull cluster state recovery from CQL schema version={}/{}", metadata.clusterUUID(), metadata.version());
             listener.onSuccess( builder.metaData(metadata).build() );
             return;
         } catch (Exception e) {
-            logger.trace((Supplier<?>) () -> new ParameterizedMessage("Cannot read metadata from CQL schema"), e);
             metadata = clusterService.state().metaData();
             if (metadata.clusterUUID().equals("_na_")) {
                 metadata = MetaData.builder(metadata).clusterUUID(clusterService.localNode().getId()).build();
             }
+            logger.info("New cluster state metadata version={}/{}", metadata.clusterUUID(), metadata.version());
             listener.onSuccess( builder.metaData(metadata).build() );
         }
     }
