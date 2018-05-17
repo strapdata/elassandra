@@ -23,10 +23,7 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.suggest.Suggest.Suggestion;
 import org.elasticsearch.search.suggest.SuggestBuilder;
-import org.elasticsearch.search.suggest.completion.CompletionSuggestion.Entry;
-import org.elasticsearch.search.suggest.completion.CompletionSuggestion.Entry.Option;
 import org.elasticsearch.search.suggest.completion.CompletionSuggestionBuilder;
 import org.elasticsearch.search.suggest.completion.context.CategoryQueryContext;
 import org.elasticsearch.test.ESSingleNodeTestCase;
@@ -46,6 +43,68 @@ import static org.hamcrest.Matchers.equalTo;
  *
  */
 public class CompletionTests extends ESSingleNodeTestCase {
+    
+    @Test
+    public void testCompletionSubfield() throws Exception {
+        
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+            .startObject()
+                .startObject("properties")
+                    .startObject("description")
+                        .field("type", "text")
+                        .field("cql_collection", "singleton")
+                        .field("analyzer", "standard")
+                        .startObject("fields")
+                            .startObject("keywordstring")
+                                .field("type", "text")
+                                .field("analyzer", "keyword")
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                    .startObject("tags")
+                        .field("type", "keyword")
+                        .field("cql_collection", "list")
+                        .startObject("fields")
+                            .startObject("tag_suggest").field("type", "completion").endObject()
+                        .endObject() 
+                    .endObject()
+                    .startObject("title").field("type", "text").field("cql_collection", "singleton").endObject()
+                .endObject()
+            .endObject();
+        assertAcked(client().admin().indices()
+                .prepareCreate("products")
+                .setSettings(Settings.builder().build())
+                .addMapping("software", mapping));
+        ensureGreen("products");
+        
+        assertThat(client().prepareIndex("products", "software", "1")
+            .setSource("{\"title\": \"Product1\",\"description\": \"Product1 Description\",\"tags\": ["+
+      "\"blog\",\"magazine\",\"responsive\",\"two columns\",\"wordpress\"]}", XContentType.JSON)
+            .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
+        assertThat(client().prepareIndex("products", "software", "2")
+                .setSource("{\"title\": \"Product2\",\"description\": \"Product2 Description\",\"tags\": ["+
+          "\"blog\",\"paypal\",\"responsive\",\"skrill\",\"wordland\"]}", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
+        assertThat(client().prepareIndex("products", "software", "3")
+                .setSource("{\"title\": \"Product2\",\"description\": \"Product2 Description\",\"tags\": ["+
+          "\"blog\",\"paypal\",\"responsive\",\"skrill\",\"word\"] }", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
+        
+        CompletionSuggestionBuilder suggestion = new CompletionSuggestionBuilder("tags.tag_suggest").text("word");
+        SuggestBuilder sb = new SuggestBuilder().addSuggestion("product_suggest", suggestion);
+        SearchResponse rsp = client().prepareSearch().setIndices("products").setTypes("software")
+                .setQuery(QueryBuilders.matchAllQuery())
+                .suggest(sb)
+                .setSize(0)
+                .get();
+        
+        for(org.elasticsearch.search.suggest.Suggest.Suggestion.Entry<? extends org.elasticsearch.search.suggest.Suggest.Suggestion.Entry.Option> entry : rsp.getSuggest().getSuggestion("product_suggest").getEntries()) {
+            assertThat(entry.getOptions().size(), equalTo(3));
+        }
+    }
     
     @Test
     public void testCompletionSuggestion() throws Exception {
@@ -70,11 +129,22 @@ public class CompletionTests extends ESSingleNodeTestCase {
       "\"blog\",\"magazine\",\"responsive\",\"two columns\",\"wordpress\"],"+
       "\"tag_suggest\": {\"input\": [\"blog\", \"magazine\",\"responsive\",\"two columns\",\"wordpress\"]}}", XContentType.JSON)
             .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
         assertThat(client().prepareIndex("products", "software", "2")
                 .setSource("{\"title\": \"Product2\",\"description\": \"Product2 Description\",\"tags\": ["+
           "\"blog\",\"paypal\",\"responsive\",\"skrill\",\"wordland\"],"+
           "\"tag_suggest\": {\"input\": [\"blog\", \"paypal\",\"responsive\",\"skrill\",\"wordland\"]}}", XContentType.JSON)
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
+        assertThat(client().prepareIndex("products", "software", "3")
+                .setSource("{\"title\": \"Product2\",\"description\": \"Product2 Description\",\"tags\": ["+
+          "\"blog\",\"paypal\",\"responsive\",\"skrill\",\"wordland\"],"+
+          "\"tag_suggest\": ["+
+              "{\"input\": [\"blog\", \"paypal\",\"responsive\",\"skrill\",\"wordland\"], \"weight\" : 34}," +
+              "{\"input\": [\"article\", \"paypal\",\"responsive\",\"skrill\",\"word\"], \"weight\" : 10 }"  +
+              "] }", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        
         
         CompletionSuggestionBuilder suggestion = new CompletionSuggestionBuilder("tag_suggest").text("word");
         SuggestBuilder sb = new SuggestBuilder().addSuggestion("product_suggest", suggestion);
@@ -85,7 +155,7 @@ public class CompletionTests extends ESSingleNodeTestCase {
                 .get();
         
         for(org.elasticsearch.search.suggest.Suggest.Suggestion.Entry<? extends org.elasticsearch.search.suggest.Suggest.Suggestion.Entry.Option> entry : rsp.getSuggest().getSuggestion("product_suggest").getEntries()) {
-            assertThat(entry.getOptions().size(), equalTo(2));
+            assertThat(entry.getOptions().size(), equalTo(3));
         }
     }
     
