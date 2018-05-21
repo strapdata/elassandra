@@ -664,12 +664,12 @@ public abstract class TransportReplicationAction<
             //assert request.shardId() != null : "request shardId must be set in resolveRequest";
             //assert request.waitForActiveShards() != ActiveShardCount.DEFAULT : "request waitForActiveShards must be set in resolveRequest";
 
-            final ShardRouting primary = primary(state);
+            final DiscoveryNode node = state.nodes().getLocalNode();
+            performLocalAction(state, null, node);
             /* No need for retry in ELassandra.
             if (retryIfUnavailable(state, primary)) {
                 return;
             }
-            */
             
             final DiscoveryNode node = state.nodes().get(primary.currentNodeId());
             if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
@@ -677,6 +677,7 @@ public abstract class TransportReplicationAction<
             } else {
                 performRemoteAction(state, primary, node);
             }
+            */
         }
 
         private void performLocalAction(ClusterState state, ShardRouting primary, DiscoveryNode node) {
@@ -684,9 +685,9 @@ public abstract class TransportReplicationAction<
             request.setShardId(new ShardId(request.shardId().getIndex(), 0));
             if (logger.isTraceEnabled()) {
                 logger.trace("send action [{}] on primary [{}] for request [{}] with cluster state version [{}] to [{}] ",
-                    transportPrimaryAction, request.shardId(), request, state.version(), primary.currentNodeId());
+                    transportPrimaryAction, request.shardId(), request, state.version(), node.getId());
             }
-            performAction(node, transportPrimaryAction, true, new ConcreteShardRequest<>(request, primary.allocationId().getId()));
+            performAction(node, transportPrimaryAction, true, new ConcreteShardRequest<>(request, ShardRouting.DUMMY_ALLOCATION_ID.getId()));
         }
 
         private void performRemoteAction(ClusterState state, ShardRouting primary, DiscoveryNode node) {
