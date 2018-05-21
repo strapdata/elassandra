@@ -268,6 +268,10 @@ public final class Settings implements ToXContent {
         return settings.get(setting);
     }
 
+    public Object getAsObject(String setting) {
+        return settings.get(setting);
+    }
+    
     /**
      * Returns the setting value associated with the setting key. If it does not exists,
      * returns the default value provided.

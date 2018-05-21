@@ -1244,7 +1244,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
                     }
                     break;
                 default:
-                    builder.field(entry.getKey(), entry.getValue());
+                    builder.field(entry.getKey(), indexMetaData.getSettings().getAsObject(entry.getKey()));
                 }
             }
             builder.endObject();
