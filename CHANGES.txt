@@ -1,3 +1,8 @@
+5.5.0.17 - 2018-05-22
+  * Fix list settings representation
+  * Make replicated actions executed locally
+  * Improve completion type mapping to get closer to elasticsearch behavior
+
 5.5.0.16 - 2018-05-10
   * #187 refactoring of partitionDelete
   * Fix #191 NPE
