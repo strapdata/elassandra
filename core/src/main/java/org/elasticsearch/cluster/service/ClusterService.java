@@ -1055,9 +1055,9 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
         return typeName;
     }
 
-    private static final String GEO_POINT_TYPE = "geo_point";
-    private static final String ATTACHEMENT_TYPE = "attachement";
-    private static final String COMPLETION_TYPE = "completion";
+    public static final String GEO_POINT_TYPE = "geo_point";
+    public static final String ATTACHEMENT_TYPE = "attachement";
+    public static final String COMPLETION_TYPE = "completion";
     
     private void buildGeoPointType(String ksName) throws RequestExecutionException {
         String query = String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( %s double, %s double)", 
@@ -1071,7 +1071,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
     }
     
     private void buildCompletionType(String ksName) throws RequestExecutionException {
-        String query = String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" (input list<text>, contexts text, weight bigint)", ksName, COMPLETION_TYPE);
+        String query = String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" (input list<text>, contexts text, weight int)", ksName, COMPLETION_TYPE);
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
     }
 
@@ -3077,7 +3077,7 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 Map<String, Object> mapValue = (Map<String, Object>) value;
                 components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_INPUT) == null) ? null : serialize(ksName, cfName, udt.fieldType(0), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_INPUT, mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_INPUT), null);
                 components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS) == null) ? null : serialize(ksName, cfName, udt.fieldType(1), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS, jsonMapper.writeValueAsString(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_CONTEXTS)), null);
-                components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT) == null) ? null : serialize(ksName, cfName, udt.fieldType(2), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT, new Long((Integer) mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT)), null);
+                components[i++]=(mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT) == null) ? null : serialize(ksName, cfName, udt.fieldType(2), CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT, (Integer) mapValue.get(CompletionFieldMapper.Fields.CONTENT_FIELD_NAME_WEIGHT), null);
             } else {
                 Map<String, Object> mapValue = (Map<String, Object>) value;
                 for (int j = 0; j < udt.size(); j++) {
