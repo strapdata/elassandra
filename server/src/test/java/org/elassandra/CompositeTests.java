@@ -249,7 +249,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=v:10&fields=
 curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:west&fields=m,t,v,meta.region"
 
  */
-    /*
+
     @Test
     public void testTimeserieWithStaticTest() throws Exception {
         XContentBuilder mapping = XContentFactory.jsonBuilder()
@@ -347,8 +347,9 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                         .endObject()
                     .endObject()
                     .startObject("_meta")
+                        .field("index_static_columns",true)
                         .field("index_static_document",true)
-                        //.field("index_static_only",true)
+                        .field("index_static_only",true)
                     .endObject()
                 .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("timeseries", mapping));
@@ -406,6 +407,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         assertThat(hits.getTotalHits(), equalTo(0L));
     }
     
+    /*
     @Test
     public void testReadBeforeWrite() throws Exception {
         process(ConsistencyLevel.ONE,"CREATE KEYSPACE IF NOT EXISTS test WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', 'DC1':'1' }");

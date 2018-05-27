@@ -143,6 +143,7 @@ import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
+import org.elasticsearch.index.mapper.NumberFieldMapper;
 import org.elasticsearch.index.mapper.ObjectMapper;
 import org.elasticsearch.index.mapper.ParentFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
@@ -514,7 +515,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             this.indexInfo = ii;
             this.docMapper = ii.indexService.mapperService().documentMapper(uid.type());
             assert this.docMapper != null;
-            this.document = ii.indexStaticOnly() ? new StaticDocument("",null, uid) : new Document();
+            this.document = ii.indexStaticOnly() ? new StaticDocument("", null, uid) : new Document();
             this.documents.add(this.document);
         }
         
@@ -522,12 +523,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             this.indexInfo = ii;
             this.docMapper = ii.indexService.mapperService().documentMapper(uid.type());
             assert this.docMapper != null;
-            this.document = ii.indexStaticOnly() ? new StaticDocument("",null, uid) : new Document();
+            this.document = ii.indexStaticOnly() ? new StaticDocument("", null, uid) : new Document();
             this.documents.clear();
             this.documents.add(this.document);
             this.id = uid.id();
             this.uid = new Field(UidFieldMapper.NAME, uid.toBytesRef(), UidFieldMapper.Defaults.FIELD_TYPE);
-            //this.path.reset();
             this.allEntries = (this.docMapper.allFieldMapper().enabled()) ? new AllEntries() : null;
             this.docBoost = 1.0f;
             this.dynamicMappers = null;
@@ -741,25 +741,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         
         class StaticDocument extends FilterableDocument {
             Uid uid;
+            
             public StaticDocument(String path, Document parent, Uid uid) {
                 super(path, parent);
                 this.uid = uid;
             }
             
-            
             public boolean apply(IndexableField input) {
-                // when applying filter for static columns, update _id and _uid....
-                if (input.name().equals(IdFieldMapper.NAME)) {
-                    ((Field)input).setStringValue(uid.id());
-                }
-                if (input.name().equals(UidFieldMapper.NAME)) {
-                    if (input instanceof BinaryDocValuesField) {
-                        ((BinaryDocValuesField)input).setBytesValue(new BytesRef(uid.toString()));
-                    } else if (input instanceof Field) {
-                        ((Field)input).setStringValue(uid.toString());
-                    }
-                }
-                if (input.name().startsWith("_")) {
+                if (MapperService.isMetadataField(input.name())) {
                     return true;
                 }
                 int x = input.name().indexOf('.');
@@ -1343,7 +1332,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             }
             
             @Override
-            public void flush() {
+            public void commit() {
                 if (logger.isTraceEnabled())
                     logger.trace("indexer={} inStaticRow={} outStaticRow={} clustering={}", this.hashCode(), inStaticRow, outStaticRow, this.clusterings);
                 
@@ -1475,7 +1464,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             }
             
             @Override
-            public void flush() {
+            public void commit() {
                 if (rowcument != null) {
                     switch(transactionType) {
                     case CLEANUP:
@@ -1622,7 +1611,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void finish() {
-                flush();
+                commit();
                 if (this.targets == null) {
                     // refresh all associated indices.
                     for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices)
@@ -1636,7 +1625,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             
             public abstract void collect(Row inRow, Row outRow);
             
-            public abstract void flush(); 
+            public abstract void commit(); 
             
             public Term termUid(IndexService indexService, String id) {
                 Term termUid;
@@ -1839,7 +1828,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     context.docMapper.uidMapper().createField(context, uid);
                     context.docMapper.typeMapper().createField(context, typeName);
                     context.docMapper.tokenFieldMapper().createField(context, (Long) key.getToken().getTokenValue());
-                    context.docMapper.seqNoFieldMapper().createField(context, null); // add zero _primary_term
+                    context.docMapper.seqNoFieldMapper().createField(context, null); // add zero _seq_no
                     
                     if (indexInfo.includeNodeId)
                         context.docMapper.nodeFieldMapper().createField(context, ImmutableMappingInfo.this.nodeId);
@@ -1981,12 +1970,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 };
                                 
                                 IndexResult result = indexShard.index(indexShard.getEngine(), operation);
-                                
-                                if (logger.isDebugEnabled()) {
-                                    logger.debug("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={} ", 
-                                        baseCfs.metadata.ksName, baseCfs.metadata.cfName,
-                                        context.indexInfo.name, typeName,
-                                        parsedDoc.id(), operation.version(), result.isCreated(), isStatic(), ttl, context.indexInfo.refresh);
+
+                                if (result.hasFailure() && logger.isErrorEnabled()) {
+                                    logger.error((Supplier<?>) () -> 
+                                        new ParameterizedMessage("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={}", 
+                                            baseCfs.metadata.ksName, baseCfs.metadata.cfName,
+                                            context.indexInfo.name, typeName,
+                                            parsedDoc.id(), operation.version(), result.isCreated(), isStatic(), ttl, context.indexInfo.refresh),
+                                        result.getFailure());
+                                } else if (logger.isDebugEnabled()) {
+                                    logger.debug("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={}", 
+                                            baseCfs.metadata.ksName, baseCfs.metadata.cfName,
+                                            context.indexInfo.name, typeName,
+                                            parsedDoc.id(), operation.version(), result.isCreated(), isStatic(), ttl, context.indexInfo.refresh);
                                 }
                              }
                         } catch (IOException e) {
