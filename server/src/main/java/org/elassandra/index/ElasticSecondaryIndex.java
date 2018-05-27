@@ -231,7 +231,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     protected final ColumnFamilyStore baseCfs;
     protected final IndexMetadata indexMetadata;
     protected String typeName;
-    int initCounter = 0;
     protected volatile boolean buildSubmit = false;
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
@@ -2162,14 +2161,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     @Override
     public Callable<?> getPreJoinTask(boolean hadBootstrap)
     {
-        return () -> {
-            if (!this.buildSubmit && !baseCfs.isEmpty() && !isBuilt()) {
-                logger.info("building index for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
-                baseCfs.forceBlockingFlush();
-                baseCfs.indexManager.buildIndexBlocking(this);
-            }
-            return null;
-        };
+        return null;
     }
     
     /**
@@ -2181,25 +2173,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     @Override
     public Callable<?> getInitializationTask() 
     {
-        return () -> {
-            initCounter++;
-            assert initCounter == 1 : "index initialized more than once";
-            if (ElassandraDaemon.instance !=null && ElassandraDaemon.instance.node() != null) {
-                initialize(ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class));
-                
-                // Avoid inter-bocking with Keyspace.open()->rebuild()->flush()->open().
-                if (Keyspace.isInitialized() && !baseCfs.isEmpty() && !isBuilt()) {
-                    logger.info("building index for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
-                    this.buildSubmit = true;
+        if (ElassandraDaemon.instance !=null && ElassandraDaemon.instance.node() != null) {
+            initialize(ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class));
+
+            if (!baseCfs.isEmpty() && !isBuilt()) {
+                logger.info("index building task for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
+                return () -> {
                     baseCfs.forceBlockingFlush();
                     baseCfs.indexManager.buildIndexBlocking(this);
-                }
-            } else {
-                logger.warn("Index created, but mapping should be initialized later.");
-                clusterService = null;
+                    return null;
+                };
             }
-            return null;
-        };
+        }
+        return null;
     }
     
     public void initialize(ClusterService cs) {
@@ -2207,11 +2193,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         clusterService = cs;
         clusterService.addListener(this);
         
-        ClusterState state = clusterService.state();
-        logger.info("Initializing elastic secondary index=[{}] hashCode={} initCounter={} metadata.version={} indices={}", 
-                index_name, hashCode(), initCounter, state.metaData().version(), state.metaData().indices());
-        
-        initMapping(state);
+        try {
+            ClusterState state = clusterService.state();
+            logger.info("Initializing elastic secondary mapping index=[{}] hashCode={} metadata.version={}/{} indices={}", 
+                    index_name, hashCode(), state.metaData().clusterUUID(), state.metaData().version(), state.metaData().indices());
+            initMapping(state);
+        } catch (Throwable e) {
+            // minor error thrown when bootstrapping because state is not yet available.
+            logger.trace("Mapping initialization failed", e);
+        }
     }
     
     public boolean initilized() {
