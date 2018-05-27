@@ -522,13 +522,13 @@ public class NumberFieldMapper extends FieldMapper {
             }
             
             @Override
-            Object cqlValue(Object value) {
-                return (byte)value;
+            String cqlType() {
+                return "tinyint";
             }
             
             @Override
-            String cqlType() {
-                return "tinyint";
+            Object cqlValue(Object value) {
+                return ((Number)value).byteValue();
             }
         },
         SHORT("short", NumericType.SHORT) {
@@ -590,7 +590,7 @@ public class NumberFieldMapper extends FieldMapper {
             
             @Override
             Object cqlValue(Object value) {
-                return (short)value;
+                return ((Number)value).shortValue();
             }
         },
         INTEGER("integer", NumericType.INT) {

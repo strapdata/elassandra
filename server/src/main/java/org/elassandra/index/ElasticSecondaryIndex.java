@@ -33,7 +33,6 @@ import org.apache.cassandra.db.ClusteringBound;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
-import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.PartitionColumns;
 import org.apache.cassandra.db.RangeTombstone;
 import org.apache.cassandra.db.ReadCommand;
@@ -67,25 +66,24 @@ import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
+import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
-import org.apache.lucene.document.BinaryDocValuesField;
-import org.apache.lucene.document.DoublePoint;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.FloatPoint;
-import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
+import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.IndexOrDocValuesQuery;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
@@ -130,7 +128,9 @@ import org.elasticsearch.index.engine.Engine.DeleteByQuery;
 import org.elasticsearch.index.engine.Engine.IndexResult;
 import org.elasticsearch.index.engine.Engine.Operation;
 import org.elasticsearch.index.engine.EngineException;
+import org.elasticsearch.index.mapper.BooleanFieldMapper;
 import org.elasticsearch.index.mapper.ContentPath;
+import org.elasticsearch.index.mapper.DateFieldMapper;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.DocumentMapperParser;
 import org.elasticsearch.index.mapper.DocumentParser;
@@ -139,6 +139,7 @@ import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.GeoShapeFieldMapper;
 import org.elasticsearch.index.mapper.IdFieldMapper;
+import org.elasticsearch.index.mapper.IpFieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
@@ -166,6 +167,7 @@ import org.elasticsearch.indices.IndicesService;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
@@ -179,6 +181,7 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -191,6 +194,7 @@ import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -854,7 +858,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 }
             }
             
-            public void deleteByQuery(RangeTombstone tombstone) {
+            public void deleteByQuery(final Object pkCols[], RangeTombstone tombstone) {
                 IndexShard shard = shard();
                 if (shard != null) {
                     Slice slice = tombstone.deletedSlice();
@@ -864,14 +868,33 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     DocumentMapper docMapper = indexService.mapperService().documentMapper(typeName);
                     BooleanQuery.Builder builder = new BooleanQuery.Builder();
                     
+                    int partitionKeyLen = baseCfs.metadata.partitionKeyColumns().size();
+                    
                     // build the primary key part of the delete by query
                     int i = 0;
                     for(ColumnDefinition cd : baseCfs.metadata.primaryKeyColumns()) {
-                        if (i >= start.size())
+                        if (i >= (partitionKeyLen + Math.max(start.size(), end.size())))
                             break;
+                        
                         if (indexedPkColumns[i]) {
                             FieldMapper mapper = docMapper.mappers().smartNameFieldMapper(cd.name.toString());
-                            builder.add( buildQuery( cd, mapper, start.get(i), end.get(i), start.isInclusive(), end.isInclusive()), Occur.FILTER);
+                            Query q;
+                            if (i < partitionKeyLen) {
+                                q = buildQuery( cd, mapper, pkCols[i], pkCols[i], true, true);
+                            } else {
+                                ByteBuffer startByteBuffer = null, endByteBuffer = null;
+                                boolean startIsInclusive = true, endIsInclusive = true;
+                                if (i - partitionKeyLen < start.size()) {
+                                    startByteBuffer = start.get(i - partitionKeyLen);
+                                    startIsInclusive = start.isInclusive();
+                                }
+                                if (i - partitionKeyLen < end.size()) {
+                                    endByteBuffer = end.get(i - partitionKeyLen);
+                                    endIsInclusive = end.isInclusive();
+                                }
+                                q = buildQuery( cd, mapper, startByteBuffer, endByteBuffer, startIsInclusive, endIsInclusive);
+                            }
+                            builder.add(q , Occur.FILTER);
                         }
                         i++;
                     }
@@ -897,10 +920,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              * @param includeUpper
              * @return
              */
-            @SuppressForbidden(reason="unchecked")
             private Query buildQuery(ColumnDefinition cd, FieldMapper mapper, ByteBuffer lower, ByteBuffer upper, boolean includeLower, boolean includeUpper) {
-                Object start = cd.type.compose(lower);
-                Object end = cd.type.compose(upper);
+                Object start = lower == null ? null : cd.type.compose(lower);
+                Object end = upper == null ? null : cd.type.compose(upper);
+                return buildQuery(cd, mapper, start, end, includeLower, includeUpper);
+            }
+            
+            @SuppressForbidden(reason="unchecked")
+            private Query buildQuery(ColumnDefinition cd, FieldMapper mapper, Object start, Object end, boolean includeLower, boolean includeUpper) {
                 Query query = null;
                 if (mapper != null) {
                     CQL3Type cql3Type = cd.type.asCQL3Type();
@@ -909,35 +936,99 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         case ASCII:
                         case TEXT:
                         case VARCHAR:
-                            if (start.equals(end)) {
-                                query = new TermQuery(new Term(cd.name.toString(),  BytesRefs.toBytesRef(start)));
-                            } else {
-                                query = new TermRangeQuery(cd.name.toString(),  BytesRefs.toBytesRef(start),  BytesRefs.toBytesRef(end),includeLower, includeUpper);
-                            }
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ? 
+                                    new TermQuery(new Term(mapper.name(),  BytesRefs.toBytesRef(start))) :
+                                    new TermRangeQuery(mapper.name(),  BytesRefs.toBytesRef(start),  BytesRefs.toBytesRef(end), includeLower, includeUpper);
                             break;
                         case INT:
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ? 
+                                    NumberFieldMapper.NumberType.INTEGER.termQuery(mapper.name(), (Integer) start) :
+                                    NumberFieldMapper.NumberType.INTEGER.rangeQuery(mapper.name(), (Integer) start, (Integer) end, includeLower, includeUpper, mapper.fieldType().hasDocValues());
+                            break;
                         case SMALLINT:
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ? 
+                                    NumberFieldMapper.NumberType.SHORT.termQuery(mapper.name(), (Short) start) :
+                                    NumberFieldMapper.NumberType.SHORT.rangeQuery(mapper.name(), (Short) start, (Short) end, includeLower, includeUpper, mapper.fieldType().hasDocValues());
+                            break;
                         case TINYINT:
-                            query = IntPoint.newRangeQuery(cd.name.toString(), (Integer) start, (Integer) end);
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ?
+                                    NumberFieldMapper.NumberType.BYTE.termQuery(mapper.name(), (Byte) start) :
+                                    NumberFieldMapper.NumberType.BYTE.rangeQuery(mapper.name(), (Byte) start, (Byte) end, includeLower, includeUpper, mapper.fieldType().hasDocValues());
                             break;
                         case INET:
-                        case TIMESTAMP:
+                            IpFieldMapper ipMapper = (IpFieldMapper)mapper;
+                            query = start != null && end != null && ((InetAddress)start).equals((InetAddress)end) ?
+                                    ipMapper.fieldType().termQuery(start, null) :
+                                    ipMapper.fieldType().rangeQuery(start, end, includeLower, includeUpper, null);
+                            break;
+                        case TIMESTAMP: {
+                                DateFieldMapper dateMapper = (DateFieldMapper)mapper;
+                                long l, u;
+                                if (start == null) {
+                                    l = Long.MIN_VALUE;
+                                } else {
+                                    l = ((Date)start).getTime();
+                                    if (includeLower == false) {
+                                        ++l;
+                                    }
+                                }
+                                if (end == null) {
+                                    u = Long.MAX_VALUE;
+                                } else {
+                                    u = ((Date)end).getTime();
+                                    if (includeUpper == false) {
+                                        --u;
+                                    }
+                                }
+                                query = LongPoint.newRangeQuery(dateMapper.name(), l, u);
+                                if (dateMapper.fieldType().hasDocValues()) {
+                                    Query dvQuery = SortedNumericDocValuesField.newSlowRangeQuery(dateMapper.name(), l, u);
+                                    query = new IndexOrDocValuesQuery(query, dvQuery);
+                                }
+                            }
+                            break;
                         case BIGINT:
-                            query = LongPoint.newRangeQuery(cd.name.toString(), (Long) start, (Long) start);
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ? 
+                                    NumberFieldMapper.NumberType.LONG.termQuery(mapper.name(), (Long) start) :
+                                    NumberFieldMapper.NumberType.LONG.rangeQuery(mapper.name(), (Long) start, (Long) end, includeLower, includeUpper, mapper.fieldType().hasDocValues());
                             break;
                         case DOUBLE:
-                            query = DoublePoint.newRangeQuery(cd.name.toString(), (Double) start, (Double) start);
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ?
+                                    NumberFieldMapper.NumberType.DOUBLE.termQuery(mapper.name(), (Double) start) :
+                                    NumberFieldMapper.NumberType.DOUBLE.rangeQuery(mapper.name(), (Double) start, (Double) end, includeLower, includeUpper, mapper.fieldType().hasDocValues());
                             break;
                         case FLOAT:
-                            query = FloatPoint.newRangeQuery(cd.name.toString(), (Float) start, (Float) start);
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ?
+                                    NumberFieldMapper.NumberType.FLOAT.termQuery(mapper.name(), (Float) start) :
+                                    NumberFieldMapper.NumberType.FLOAT.rangeQuery(mapper.name(), (Float) start, (Float) end, includeLower, includeUpper, mapper.fieldType().hasDocValues());
                             break;
-                            
-                        case DECIMAL:
                         case TIMEUUID:
+                            if (start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0) {
+                                query = (mapper instanceof DateFieldMapper) ?
+                                         NumberFieldMapper.NumberType.LONG.termQuery(mapper.name(), UUIDGen.unixTimestamp((UUID) start)) :
+                                         new TermQuery(new Term(mapper.name(), BytesRefs.toBytesRef(start)));
+                            } else {
+                                if (mapper instanceof DateFieldMapper) {
+                                    long l = (start == null) ? Long.MIN_VALUE : UUIDGen.unixTimestamp((UUID) start);
+                                    long u = (end == null) ? Long.MAX_VALUE : UUIDGen.unixTimestamp((UUID) end);
+                                    query = NumberFieldMapper.NumberType.LONG.rangeQuery(mapper.name(), l, u,  includeLower, includeUpper, mapper.fieldType().hasDocValues());
+                                } else {
+                                    query = new TermRangeQuery(mapper.name(), BytesRefs.toBytesRef(start),  BytesRefs.toBytesRef(end), includeLower, includeUpper);
+                                }
+                            }
+                            break;
                         case UUID:
-                        case BLOB:
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ?
+                                    new TermQuery(new Term(mapper.name(), BytesRefs.toBytesRef(start))) :
+                                    new TermRangeQuery(mapper.name(), BytesRefs.toBytesRef(start), BytesRefs.toBytesRef(end), includeLower, includeUpper);
+                            break;
                         case BOOLEAN:
-                            throw new UnsupportedOperationException("Unsupported data type in primary key");
+                            query = ((BooleanFieldMapper)mapper).fieldType().rangeQuery(start, end, includeLower, includeUpper, null);
+                            break;
+                        case DECIMAL:
+                            throw new UnsupportedOperationException("Unsupported type [decimal] in primary key");
+                        case BLOB:
+                            throw new UnsupportedOperationException("Unsupported type [blob] in primary key");
                         }
                     }
                 } else {
@@ -1420,15 +1511,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void rangeTombstone(RangeTombstone tombstone) {
-                logger.trace("range tombestone row {}: {}", this.transactionType, tombstone);
+                logger.trace("range tombestone row {}: {}", this.transactionType, tombstone.deletedSlice());
                 try {
                     BitSet targets = targetIndices(pkCols);
                     if (targets == null) {
                         for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices)
-                            indexInfo.deleteByQuery(tombstone);
+                            indexInfo.deleteByQuery(pkCols, tombstone);
                     } else {
                         for(int i = targets.nextSetBit(0); i >= 0 && i < indices.length; i = targets.nextSetBit(i+1))
-                            indices[i].deleteByQuery(tombstone);
+                            indices[i].deleteByQuery(pkCols, tombstone);
                     }
                 } catch(Throwable t) {
                     logger.error("Unexpected error", t);

@@ -44,6 +44,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -98,7 +99,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         ensureGreen("ks1");
         
         process(ConsistencyLevel.ONE,
-                "CREATE TABLE ks1.natives (c1 text primary key, c2 text, c3 timestamp, c4 int, c5 bigint, c6 double, c7 float, c8 boolean, c9 blob, c10 uuid, c11 timeuuid)");
+                "CREATE TABLE ks1.natives (c1 text primary key, c2 text, c3 timestamp, c4 int, c5 bigint, c6 double, c7 float, c8 boolean, c9 blob, c10 uuid, c11 timeuuid, c12 smallint, c13 tinyint)");
         assertAcked(client().admin().indices()
                 .preparePutMapping("ks1")
                 .setType("natives")
@@ -107,7 +108,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         
         // {"c2": "toto", "c3" : "2016-10-10", "c4": 1, "c5":44, "c6":1.0, "c7":2.22, "c8": true, "c9":"U29tZSBiaW5hcnkgYmxvYg==" }
         assertThat(client().prepareIndex("ks1", "natives", "1")
-                .setSource("{\"c2\": \"toto\", \"c3\" : \"2016-10-10\", \"c4\": 1, \"c5\":44, \"c6\":1.0, \"c7\":2.22, \"c8\": true, \"c9\":\"U29tZSBiaW5hcnkgYmxvYg==\", \"c10\":\"ae8c9260-dd02-11e6-b9d5-bbfb41c263ba\",\"c11\":\"ae8c9260-dd02-11e6-b9d5-bbfb41c263ba\"  }", XContentType.JSON)
+                .setSource("{\"c2\": \"toto\", \"c3\" : \"2016-10-10\", \"c4\": 1, \"c5\":44, \"c6\":1.0, \"c7\":2.22, \"c8\": true, \"c9\":\"U29tZSBiaW5hcnkgYmxvYg==\", \"c10\":\"ae8c9260-dd02-11e6-b9d5-bbfb41c263ba\",\"c11\":\"ae8c9260-dd02-11e6-b9d5-bbfb41c263ba\", \"c12\":1, \"c13\":1  }", XContentType.JSON)
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
         Map<String,Object> fields = client().prepareSearch("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("c2:toto"))
                 .get().getHits().getHits()[0]
@@ -120,8 +121,10 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(fields.get("c7"),equalTo(2.22));
         assertThat(fields.get("c8"),equalTo(true));
         assertThat(fields.get("c9"),equalTo("U29tZSBiaW5hcnkgYmxvYg=="));
+        assertThat(fields.get("c12"),equalTo(1));
+        assertThat(fields.get("c13"),equalTo(1));
         
-        process(ConsistencyLevel.ONE,"insert into ks1.natives (c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11) VALUES ('tutu', 'titi', '2016-11-11', 1, 45, 1.0, 2.23, false,textAsBlob('bdb14fbe076f6b94444c660e36a400151f26fc6f'),ae8c9260-dd02-11e6-b9d5-bbfb41c263ba,ae8c9260-dd02-11e6-b9d5-bbfb41c263ba)");
+        process(ConsistencyLevel.ONE,"insert into ks1.natives (c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13) VALUES ('tutu', 'titi', '2016-11-11', 1, 45, 1.0, 2.23, false,textAsBlob('bdb14fbe076f6b94444c660e36a400151f26fc6f'),ae8c9260-dd02-11e6-b9d5-bbfb41c263ba,ae8c9260-dd02-11e6-b9d5-bbfb41c263ba, 1, 1)");
         assertThat(client().prepareSearch().setIndices("ks1").setTypes("natives").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
         
         fields = client().prepareSearch().setIndices("ks1").setTypes("natives").setQuery(QueryBuilders.queryStringQuery("c5:45")).get().getHits().getHits()[0].getSourceAsMap();
@@ -133,16 +136,17 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(fields.get("c6"),equalTo(1.0));
         assertThat(fields.get("c7"),equalTo(2.23));
         assertThat(fields.get("c8"),equalTo(false));
+        assertThat(fields.get("c12"),equalTo(1));
+        assertThat(fields.get("c13"),equalTo(1));
     }
 
-    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testSinglePkTypesTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testSinglePkTypesTest() throws Exception {
         createIndex("ks");
         ensureGreen("ks");
-        
-        String[] types = new String[] { "text","int","bigint","double","float","boolean","blob","timestamp","inet","uuid" };
-        Object[] values = new Object[] { "foo",1,2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID() };
+
+        String[] types = new String[] { "text","int","smallint","tinyint","bigint","double","float","boolean","blob","timestamp","inet","uuid" };
+        Object[] values = new Object[] { "foo", 1, (short)1, (byte)1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID() };
         for(int i=0; i < types.length; i++) {
             String type = types[i];
             Object value = values[i];
@@ -150,25 +154,24 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"CREATE TABLE ks.t%s (pk%s %s PRIMARY KEY, v text)", type, type, type));
             process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"INSERT INTO ks.t%s (pk%s, v) VALUES (?, 'foobar')", type, type), value);
         }
-        
+
         // flush for rebuild_index
         StorageService.instance.forceKeyspaceFlush("ks");
         for(int i=0; i < types.length; i++) {
             String type = types[i];
-            System.out.println("discover pk type="+type+ " index ks"+i);
+            System.out.println("discover pk type="+type);
             CreateIndexRequestBuilder builder = client().admin().indices().prepareCreate("ks"+i);
             builder.request()
                 .settings(Settings.builder().put("index.keyspace","ks"))
                 .mapping(String.format(Locale.ROOT,"t%s",type), String.format(Locale.ROOT,"{ \"t%s\" : { \"discover\" : \".*\" }}",type), XContentType.JSON);
             assertAcked(builder.get());
         }
-        
+
         // search
-        Thread.sleep(2000);
         for(int i=0; i < types.length; i++) {
             String type = types[i];
             System.out.println("search pk type="+type+" in index ks"+i);
-        
+
             assertThat(client().prepareSearch()
                     .setIndices("ks"+i)
                     .setTypes(String.format(Locale.ROOT,"t%s",type))
@@ -178,47 +181,66 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         }
     }
     
-    // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testCompoundPkTypesTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testCompoundPkTypesTest() throws Exception {
         createIndex("ks");
         ensureGreen("ks");
-        
-        String[] types = new String[] { "text", "int","bigint","double","float","boolean","blob","timestamp","inet","uuid" };
-        Object[] values = new Object[] { "foo", 1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID() };
+
+        Date now = new Date();
+        String[] types = new String[] { "text", "int","smallint","tinyint", "bigint","double","float","boolean","blob","timestamp","inet","uuid","timeuuid","timeuuid" };
+        String[] names = new String[] { "text", "int","smallint","tinyint", "bigint","double","float","boolean","blob","timestamp","inet","uuid","timeuuid","timeuuid2" };
+        Object[] values = new Object[] { "foo", 1, (short)1, (byte)1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID(), UUIDGen.getTimeUUID(now.getTime()), UUIDGen.getTimeUUID(now.getTime()) };
         int randomCk = randomInt(types.length-1);
         int randomVal= randomInt(types.length-1);
         for(int i=0; i < types.length; i++) {
             String type = types[i];
-            System.out.println("insert pk type="+type);
-            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"CREATE TABLE ks.t%s (pk%s %s, ck %s, v %s, PRIMARY KEY (pk%s,ck))", type, type, type, types[randomCk], types[randomVal], type));
-            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"INSERT INTO ks.t%s (pk%s, ck, v) VALUES (?, ?, ?)", type, type), values[i], values[randomCk], values[randomVal]);
+            String name = names[i];
+            System.out.println("insert pk name="+name+" type="+type);
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"CREATE TABLE ks.t%s (pk%s %s, ck %s, v %s, PRIMARY KEY (pk%s,ck))", name, name, type, types[randomCk], types[randomVal], name));
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"INSERT INTO ks.t%s (pk%s, ck, v) VALUES (?, ?, ?)", name, name), values[i], values[randomCk], values[randomVal]);
         }
-        
+
         // flush for rebuild_index
         StorageService.instance.forceKeyspaceFlush("ks");
         for(int i=0; i < types.length; i++) {
             String type = types[i];
-            System.out.println("discover pk type="+type+ " index ks"+i);
+            String name = names[i];
+            String mapping = name.equals("timeuuid2") ? 
+                    String.format(Locale.ROOT,"{ \"discover\" : \"^((?!pktimeuuid2).*)\", \"properties\":{ \"pktimeuuid2\":{ \"type\":\"date\", \"cql_collection\":\"singleton\",\"cql_partition_key\":true,\"cql_primary_key_order\":0}}}") :
+                    String.format(Locale.ROOT,"{ \"discover\" : \".*\" }");
+            System.out.println("discover index=ks"+i+" pk name="+name+" type="+type+" mapping="+mapping);
             CreateIndexRequestBuilder builder = client().admin().indices().prepareCreate("ks"+i);
             builder.request()
                 .settings(Settings.builder().put("index.keyspace","ks"))
-                .mapping(String.format(Locale.ROOT,"t%s",type), String.format(Locale.ROOT,"{ \"t%s\" : { \"discover\" : \".*\" }}",type), XContentType.JSON);
+                .mapping("t"+name, mapping, XContentType.JSON);
             assertAcked(builder.get());
         }
-        
-        // search
-        Thread.sleep(2000);
+
+        // search for indexed documents
         for(int i=0; i < types.length; i++) {
             String type = types[i];
-            System.out.println("search pk type="+type+" in index ks"+i);
-        
+            String name = names[i];
+            System.out.println("search index=ks"+i+" pk name="+name+" type="+type);
             assertThat(client().prepareSearch()
                     .setIndices("ks"+i)
-                    .setTypes(String.format(Locale.ROOT,"t%s",type))
+                    .setTypes(String.format(Locale.ROOT,"t%s", name))
                     .setQuery(QueryBuilders.matchAllQuery())
                     .storedFields("_id","_routing","_ttl","_timestamp","_source","ck","v")
                     .get().getHits().getTotalHits(), equalTo(1L));
+        }
+
+        // range delete to test delete by query
+        for(int i=0; i < types.length; i++) {
+            String type = types[i];
+            String name = names[i];
+            System.out.println("delete pk name="+name+" type="+type+" value="+values[i]+" ck type="+types[randomCk]+" value="+values[randomCk]);
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"DELETE FROM ks.t%s WHERE pk%s = ? AND ck >= ?", name, name), values[i], values[randomCk]);
+            if (!type.equals("blob")) // blob not supported for delete by query
+                assertThat(client().prepareSearch()
+                    .setIndices("ks"+i)
+                    .setTypes(String.format(Locale.ROOT,"t%s", name))
+                    .setQuery(QueryBuilders.matchAllQuery())
+                    .get().getHits().getTotalHits(), equalTo(0L));
         }
     }
     

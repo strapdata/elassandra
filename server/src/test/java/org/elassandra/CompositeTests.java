@@ -83,14 +83,15 @@ public class CompositeTests extends ESSingleNodeTestCase {
             .put("index.index_static_document", true)
             .build();
         
-        for(String s : new String[] { "1","2","3","11","12","13"})
+        for(String s : new String[] { "1","2","3","4","11","12","13"})
             createIndex("composite"+s, compositSettings);
-        for(String s : new String[] { "1","2","3","11","12","13"})
+        for(String s : new String[] { "1","2","3","4","11","12","13"})
             ensureGreen("composite"+s);
         
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite1.t1 ( a text,b text,c bigint,f float,primary key ((a),b) )");
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite2.t2 ( a text,b text,c bigint,d bigint,primary key ((a),b,c) )");
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite3.t3 ( a text,b text,c bigint,d bigint,primary key ((a,b),c) )");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite4.t4 ( a text,b text,c bigint,d bigint, e double, primary key ((a,b),c,d) )");
         
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite11.t11 ( a text,b text,c bigint,f float, s1 text static, primary key ((a),b) )");
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite12.t12 ( a text,b text,c bigint,d bigint,s1 text static, primary key ((a),b,c) )");
@@ -99,6 +100,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().preparePutMapping("composite1").setType("t1").setSource("{ \"t1\" : { \"discover\" : \".*\" }}", XContentType.JSON).get());
         assertAcked(client().admin().indices().preparePutMapping("composite2").setType("t2").setSource("{ \"t2\" : { \"discover\" : \".*\" }}", XContentType.JSON).get());
         assertAcked(client().admin().indices().preparePutMapping("composite3").setType("t3").setSource("{ \"t3\" : { \"discover\" : \".*\" }}", XContentType.JSON).get());
+        assertAcked(client().admin().indices().preparePutMapping("composite4").setType("t4").setSource("{ \"t4\" : { \"discover\" : \".*\" }}", XContentType.JSON).get());
         
         assertAcked(client().admin().indices().preparePutMapping("composite11").setType("t11").setSource("{ \"t11\" : { \"discover\" : \".*\" }}", XContentType.JSON).get());
         assertAcked(client().admin().indices().preparePutMapping("composite12").setType("t12").setSource("{ \"t12\" : { \"discover\" : \".*\" }}", XContentType.JSON).get());
@@ -110,11 +112,10 @@ public class CompositeTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"insert into composite2.t2 (a,b,c,d) VALUES ('a','b2',2,1)");
         process(ConsistencyLevel.ONE,"insert into composite2.t2 (a,b,c,d) VALUES ('a','b2',3,1)");
         
-        process(ConsistencyLevel.ONE,"insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',2,3)");
-        process(ConsistencyLevel.ONE,"insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',3,3)");
-        process(ConsistencyLevel.ONE,"insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',4,4)");
-        process(ConsistencyLevel.ONE,"insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',5,5)");
-        process(ConsistencyLevel.ONE,"insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',6,6)");
+        for(int i=0; i < 10; i++) {
+            process(ConsistencyLevel.ONE, String.format("insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',%s,%s)",i,i));
+            process(ConsistencyLevel.ONE, String.format("insert into composite4.t4 (a,b,c,d,e) VALUES ('a','b3',%s,%s,0.0)",i,i));
+        }
         
         process(ConsistencyLevel.ONE,"insert into composite11.t11 (a,b,c,f,s1) VALUES ('a','b1',1, 1.2, 'a')");
         process(ConsistencyLevel.ONE,"insert into composite11.t11 (a,b,c,f,s1) VALUES ('b','b1',2, 5, 'b');");
@@ -130,7 +131,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         
         // flushing change read before write results on delete operations
         if (flush) {
-            for(String s : new String[] { "1","2","3","11","12","13"})
+            for(String s : new String[] { "1","2","3","4","11","12","13"})
                 StorageService.instance.forceKeyspaceFlush("composite"+s);
         }
             
@@ -138,6 +139,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         assertThat(client().prepareGet().setIndex("composite1").setType("t1").setId("[\"a\",\"b1\"]").get().isExists(),equalTo(true));
         assertThat(client().prepareGet().setIndex("composite2").setType("t2").setId("[\"a\",\"b2\",2]").get().isExists(),equalTo(true));
         assertThat(client().prepareGet().setIndex("composite3").setType("t3").setId("[\"a\",\"b3\",2]").get().isExists(),equalTo(true));
+        assertThat(client().prepareGet().setIndex("composite4").setType("t4").setId("[\"a\",\"b3\",2, 2]").get().isExists(),equalTo(true));
         
         assertThat(client().prepareGet().setIndex("composite11").setType("t11").setId("[\"a\",\"b1\"]").get().isExists(),equalTo(true));
         assertThat(client().prepareGet().setIndex("composite12").setType("t12").setId("[\"a\",\"b2\",2]").get().isExists(),equalTo(true));
@@ -145,7 +147,8 @@ public class CompositeTests extends ESSingleNodeTestCase {
         
         assertThat(client().prepareSearch().setIndices("composite1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("c:1")).get().getHits().getTotalHits(), equalTo(1L));
         assertThat(client().prepareSearch().setIndices("composite2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("d:3")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("d:3")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("d:4")).get().getHits().getTotalHits(), equalTo(1L));
         
         assertThat(client().prepareSearch().setIndices("composite11").setTypes("t11").setQuery(QueryBuilders.queryStringQuery("c:1")).get().getHits().getTotalHits(), equalTo(1L));
         assertThat(client().prepareSearch().setIndices("composite12").setTypes("t12").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(2L));
@@ -158,6 +161,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         assertThat(client().prepareMultiGet().add("composite1", "t1", "[\"a\",\"b1\"]", "[\"b\",\"b1\"]").get().getResponses()[0].getIndex(), equalTo("composite1") );
         assertThat(client().prepareMultiGet().add("composite2", "t2", "[\"a\",\"b2\",2]", "[\"a\",\"b2\",3]").get().getResponses()[0].getIndex(), equalTo("composite2") );
         assertThat(client().prepareMultiGet().add("composite3", "t3", "[\"a\",\"b3\",2]", "[\"a\",\"b3\",3]").get().getResponses()[0].getIndex(), equalTo("composite3")  );
+        assertThat(client().prepareMultiGet().add("composite4", "t4", "[\"a\",\"b3\",2,2]", "[\"a\",\"b3\",3,3]").get().getResponses()[0].getIndex(), equalTo("composite4")  );
         
         assertThat(client().prepareMultiGet().add("composite11", "t11", "[\"a\",\"b1\"]", "[\"b\",\"b1\"]").get().getResponses()[0].getIndex(), equalTo("composite11") );
         assertThat(client().prepareMultiGet().add("composite12", "t12", "[\"a\",\"b2\",2]", "[\"a\",\"b2\",3]").get().getResponses()[0].getIndex(), equalTo("composite12") );
@@ -173,13 +177,33 @@ public class CompositeTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"DELETE FROM composite2.t2 WHERE a='a' AND b='b2' AND c=2");
         assertThat(client().prepareSearch().setIndices("composite2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1L));
         
-        // delete a row
+        // delete with primary key
         process(ConsistencyLevel.ONE,"DELETE FROM composite3.t3 WHERE a='a' AND b='b3' AND c = 4");
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(9L));
+        
+        // t3 delete a slice with composite partition key
+        process(ConsistencyLevel.ONE,"DELETE FROM composite3.t3 WHERE a='a' AND b='b3' AND c >= 3 AND c <= 5");
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(7L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite3.t3 WHERE a='a' AND b='b3' AND c <= 5");
         assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(4L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite3.t3 WHERE a='a' AND b='b3' AND c > 6");
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(1L));
+        
+        // t4 delete a slice with composite partition and a composite clustering keys
+        process(ConsistencyLevel.ONE,"DELETE FROM composite4.t4 WHERE a='a' AND b='b3' AND c = 4");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(9L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite4.t4 WHERE a='a' AND b='b3' AND c >= 3 AND c <= 5");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(7L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite4.t4 WHERE a='a' AND b='b3' AND c >= 7");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(4L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite4.t4 WHERE a='a' AND b='b3' AND c <= 3");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(1L));
         
         // truncate content
         process(ConsistencyLevel.ONE,"TRUNCATE composite3.t3");
         assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
+        process(ConsistencyLevel.ONE,"TRUNCATE composite4.t4");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
         
         // test rebuild index
         assertAcked(client().admin().indices().prepareClose("composite3").get());
@@ -249,7 +273,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=v:10&fields=
 curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:west&fields=m,t,v,meta.region"
 
  */
-
+    
     @Test
     public void testTimeserieWithStaticTest() throws Exception {
         XContentBuilder mapping = XContentFactory.jsonBuilder()
@@ -275,7 +299,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, meta) VALUES ('server1-cpu', { 'region':'west' } );");
         
         SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("timeseries")
-                .setQuery(QueryBuilders.queryStringQuery("v:20"))
+                .setQuery(QueryBuilders.termQuery("v", 20))
                 .setFetchSource(new String[] { "m",  "t", "v", "meta.region"}, null)
                 .get();
         SearchHits hits = rsp.getHits();
@@ -285,7 +309,7 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         assertThat(((Map)source.get("meta")).get("region"), equalTo("west"));
         
         rsp = client().prepareSearch().setIndices("test").setTypes("timeseries")
-                .setQuery(QueryBuilders.queryStringQuery("meta.region:west"))
+                .setQuery(QueryBuilders.termQuery("meta.region","west"))
                 .setFetchSource(new String[] { "m", "meta.region"}, null)
                 .get();
         hits = rsp.getHits();
@@ -347,9 +371,9 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                         .endObject()
                     .endObject()
                     .startObject("_meta")
-                        .field("index_static_columns",true)
-                        .field("index_static_document",true)
-                        .field("index_static_only",true)
+                    .field("index_static_columns",true)
+                    .field("index_static_document",true)
+                    .field("index_static_only",true)
                     .endObject()
                 .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("timeseries", mapping));

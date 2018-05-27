@@ -298,7 +298,6 @@ public class CompactionTests extends ESSingleNodeTestCase {
         
         for(int j=0 ; j < N; j++) {
             i++;
-            process(ConsistencyLevel.ONE,"insert into test.t1 (a,c) VALUES (?,?) ", i, "c"+i);
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?) USING TTL 15", i, "b"+i);
         }
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
@@ -315,7 +314,7 @@ public class CompactionTests extends ESSingleNodeTestCase {
         Thread.sleep(15*1000);  // wait TTL expiration
         Thread.sleep(20*1000);  // wait gc_grace_seconds expiration
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits(), equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits(), equalTo(N));
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b","*")).get().getHits().getTotalHits(), equalTo(2*N));
 
         StorageService.instance.forceKeyspaceFlush("test");
@@ -324,8 +323,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
         
         UntypedResultSet rs = process(ConsistencyLevel.ONE,"SELECT * FROM test.t1");
         System.out.println("t1.count = "+rs.size());
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits(), equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits(), equalTo(N));
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b","*")).get().getHits().getTotalHits(), equalTo(N));
     }
 }
