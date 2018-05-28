@@ -1119,6 +1119,20 @@ public class NumberFieldMapper extends FieldMapper {
     public void createField(ParseContext context, Object value) throws IOException {
         final boolean includeInAll = context.includeInAll(this.includeInAll, this);
         
+        Number numericValue = null;
+        if (value != null) {
+            try {
+                numericValue = fieldType().type.parse(value, coerce.value());
+            } catch (IllegalArgumentException e) {
+                if (ignoreMalformed.value()) {
+                    return;
+                } else {
+                    throw e;
+                }
+            }
+            value = numericValue;
+        }
+
         if (value == null) {
             value = fieldType().nullValue();
         }
@@ -1126,9 +1140,7 @@ public class NumberFieldMapper extends FieldMapper {
         if (value == null) {
             return;
         }
-
-        Number numericValue = fieldType().type.parse(value, coerce.value());
-
+        
         if (includeInAll) {
             context.allEntries().addText(fieldType().name(), value.toString(), fieldType().boost());
         }
