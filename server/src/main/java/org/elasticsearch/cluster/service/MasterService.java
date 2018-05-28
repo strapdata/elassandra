@@ -236,7 +236,10 @@ public class MasterService extends AbstractLifecycleComponent {
             logger.debug("processing [{}]: took [{}] no change in cluster state", summary, executionTime);
             warnAboutSlowTaskIfNeeded(executionTime, summary);
         } else {
-            ClusterState newClusterState = taskOutputs.newClusterState;
+            ClusterState newClusterState = ClusterState.builder(taskOutputs.newClusterState)
+                    .routingTable(RoutingTable.build(this.clusterService, taskOutputs.newClusterState))
+                    .build();
+            
             if (logger.isTraceEnabled()) {
                 logger.trace("cluster state updated, source [{}]\n{}", summary, newClusterState);
             } else if (logger.isDebugEnabled()) {
