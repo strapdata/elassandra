@@ -382,6 +382,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
             .put("double", "double")
             .put("float", "float")
             .put("bigint", "long")
+            .put("smallint", "short")
+            .put("tinyint", "byte")
             .put("boolean", "boolean")
             .put("blob", "binary")
             .put("inet", "ip" )

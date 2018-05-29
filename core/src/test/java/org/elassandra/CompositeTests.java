@@ -75,119 +75,150 @@ public class CompositeTests extends ESSingleNodeTestCase {
     }
     
     public void testCompositeTest(boolean flush) throws Exception {
-        createIndex("composite", Settings.builder()
-                .put("index.token_ranges_bitset_cache", false)
-                .put("index.index_static_document", true)
-                .build());
-        ensureGreen("composite");
+        Settings compositSettings = Settings.builder()
+            .put("index.token_ranges_bitset_cache", false)
+            .put("index.index_static_document", true)
+            .build();
         
-        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite.t1 ( a text,b text,c bigint,f float,primary key ((a),b) )");
-        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite.t2 ( a text,b text,c bigint,d bigint,primary key ((a),b,c) )");
-        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite.t3 ( a text,b text,c bigint,d bigint,primary key ((a,b),c) )");
+        for(String s : new String[] { "1","2","3","4","11","12","13"})
+            createIndex("composite"+s, compositSettings);
+        for(String s : new String[] { "1","2","3","4","11","12","13"})
+            ensureGreen("composite"+s);
         
-        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite.t11 ( a text,b text,c bigint,f float, s1 text static, primary key ((a),b) )");
-        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite.t12 ( a text,b text,c bigint,d bigint,s1 text static, primary key ((a),b,c) )");
-        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite.t13 ( a text,b text,c bigint,d bigint,s1 text static, primary key ((a,b),c) )");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite1.t1 ( a text,b text,c bigint,f float,primary key ((a),b) )");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite2.t2 ( a text,b text,c bigint,d bigint,primary key ((a),b,c) )");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite3.t3 ( a text,b text,c bigint,d bigint,primary key ((a,b),c) )");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite4.t4 ( a text,b text,c bigint,d bigint, e double, primary key ((a,b),c,d) )");
+        
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite11.t11 ( a text,b text,c bigint,f float, s1 text static, primary key ((a),b) )");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite12.t12 ( a text,b text,c bigint,d bigint,s1 text static, primary key ((a),b,c) )");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS composite13.t13 ( a text,b text,c bigint,d bigint,s1 text static, primary key ((a,b),c) )");
 
-        assertAcked(client().admin().indices().preparePutMapping("composite").setType("t1").setSource("{ \"t1\" : { \"discover\" : \".*\" }}").get());
-        assertAcked(client().admin().indices().preparePutMapping("composite").setType("t2").setSource("{ \"t2\" : { \"discover\" : \".*\" }}").get());
-        assertAcked(client().admin().indices().preparePutMapping("composite").setType("t3").setSource("{ \"t3\" : { \"discover\" : \".*\" }}").get());
+        assertAcked(client().admin().indices().preparePutMapping("composite1").setType("t1").setSource("{ \"t1\" : { \"discover\" : \".*\" }}").get());
+        assertAcked(client().admin().indices().preparePutMapping("composite2").setType("t2").setSource("{ \"t2\" : { \"discover\" : \".*\" }}").get());
+        assertAcked(client().admin().indices().preparePutMapping("composite3").setType("t3").setSource("{ \"t3\" : { \"discover\" : \".*\" }}").get());
+        assertAcked(client().admin().indices().preparePutMapping("composite4").setType("t4").setSource("{ \"t4\" : { \"discover\" : \".*\" }}").get());
         
-        assertAcked(client().admin().indices().preparePutMapping("composite").setType("t11").setSource("{ \"t11\" : { \"discover\" : \".*\" }}").get());
-        assertAcked(client().admin().indices().preparePutMapping("composite").setType("t12").setSource("{ \"t12\" : { \"discover\" : \".*\" }}").get());
-        assertAcked(client().admin().indices().preparePutMapping("composite").setType("t13").setSource("{ \"t13\" : { \"discover\" : \".*\" }}").get());
+        assertAcked(client().admin().indices().preparePutMapping("composite11").setType("t11").setSource("{ \"t11\" : { \"discover\" : \".*\" }}").get());
+        assertAcked(client().admin().indices().preparePutMapping("composite12").setType("t12").setSource("{ \"t12\" : { \"discover\" : \".*\" }}").get());
+        assertAcked(client().admin().indices().preparePutMapping("composite13").setType("t13").setSource("{ \"t13\" : { \"discover\" : \".*\" }}").get());
         
-        process(ConsistencyLevel.ONE,"insert into composite.t1 (a,b,c,f) VALUES ('a','b1',1, 1.2)");
-        process(ConsistencyLevel.ONE,"insert into composite.t1 (a,b,c,f) VALUES ('b','b1',2, 5);");
+        process(ConsistencyLevel.ONE,"insert into composite1.t1 (a,b,c,f) VALUES ('a','b1',1, 1.2)");
+        process(ConsistencyLevel.ONE,"insert into composite1.t1 (a,b,c,f) VALUES ('b','b1',2, 5);");
         
-        process(ConsistencyLevel.ONE,"insert into composite.t2 (a,b,c,d) VALUES ('a','b2',2,1)");
-        process(ConsistencyLevel.ONE,"insert into composite.t2 (a,b,c,d) VALUES ('a','b2',3,1)");
+        process(ConsistencyLevel.ONE,"insert into composite2.t2 (a,b,c,d) VALUES ('a','b2',2,1)");
+        process(ConsistencyLevel.ONE,"insert into composite2.t2 (a,b,c,d) VALUES ('a','b2',3,1)");
         
-        process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',2,3)");
-        process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',3,3)");
-        process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',4,4)");
-        process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',5,5)");
-        process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',6,6)");
+        for(int i=0; i < 10; i++) {
+            process(ConsistencyLevel.ONE, String.format("insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',%d,%d)",i,i));
+            process(ConsistencyLevel.ONE, String.format("insert into composite4.t4 (a,b,c,d,e) VALUES ('a','b3',%d,%d,0.0)",i,i));
+        }
         
-        process(ConsistencyLevel.ONE,"insert into composite.t11 (a,b,c,f,s1) VALUES ('a','b1',1, 1.2, 'a')");
-        process(ConsistencyLevel.ONE,"insert into composite.t11 (a,b,c,f,s1) VALUES ('b','b1',2, 5, 'b');");
+        process(ConsistencyLevel.ONE,"insert into composite11.t11 (a,b,c,f,s1) VALUES ('a','b1',1, 1.2, 'a')");
+        process(ConsistencyLevel.ONE,"insert into composite11.t11 (a,b,c,f,s1) VALUES ('b','b1',2, 5, 'b');");
         
-        process(ConsistencyLevel.ONE,"insert into composite.t12 (a,b,c,d,s1) VALUES ('a','b2',2,1, 'a1')");
-        process(ConsistencyLevel.ONE,"insert into composite.t12 (a,b,c,d,s1) VALUES ('a','b2',3,1, 'a2')");
+        process(ConsistencyLevel.ONE,"insert into composite12.t12 (a,b,c,d,s1) VALUES ('a','b2',2,1, 'a1')");
+        process(ConsistencyLevel.ONE,"insert into composite12.t12 (a,b,c,d,s1) VALUES ('a','b2',3,1, 'a2')");
         
-        process(ConsistencyLevel.ONE,"insert into composite.t13 (a,b,c,d,s1) VALUES ('a','b3',2,3, 'ab1')");
-        process(ConsistencyLevel.ONE,"insert into composite.t13 (a,b,c,d,s1) VALUES ('a','b3',3,3, 'ab2')");
-        process(ConsistencyLevel.ONE,"insert into composite.t13 (a,b,c,d,s1) VALUES ('a','b3',4,4, 'ab3')");
-        process(ConsistencyLevel.ONE,"insert into composite.t13 (a,b,c,d,s1) VALUES ('a','b3',5,5, 'ab4')");
-        process(ConsistencyLevel.ONE,"insert into composite.t13 (a,b,c,d,s1) VALUES ('a','b3',6,6, 'ab5')");
+        process(ConsistencyLevel.ONE,"insert into composite13.t13 (a,b,c,d,s1) VALUES ('a','b3',2,3, 'ab1')");
+        process(ConsistencyLevel.ONE,"insert into composite13.t13 (a,b,c,d,s1) VALUES ('a','b3',3,3, 'ab2')");
+        process(ConsistencyLevel.ONE,"insert into composite13.t13 (a,b,c,d,s1) VALUES ('a','b3',4,4, 'ab3')");
+        process(ConsistencyLevel.ONE,"insert into composite13.t13 (a,b,c,d,s1) VALUES ('a','b3',5,5, 'ab4')");
+        process(ConsistencyLevel.ONE,"insert into composite13.t13 (a,b,c,d,s1) VALUES ('a','b3',6,6, 'ab5')");
         
         // flushing change read before write results on delete operations
-        if (flush)
-            StorageService.instance.forceKeyspaceFlush("composite");
+        if (flush) {
+            for(String s : new String[] { "1","2","3","4","11","12","13"})
+                StorageService.instance.forceKeyspaceFlush("composite"+s);
+        }
+            
         
-        assertThat(client().prepareGet().setIndex("composite").setType("t1").setId("[\"a\",\"b1\"]").get().isExists(),equalTo(true));
-        assertThat(client().prepareGet().setIndex("composite").setType("t2").setId("[\"a\",\"b2\",2]").get().isExists(),equalTo(true));
-        assertThat(client().prepareGet().setIndex("composite").setType("t3").setId("[\"a\",\"b3\",2]").get().isExists(),equalTo(true));
+        assertThat(client().prepareGet().setIndex("composite1").setType("t1").setId("[\"a\",\"b1\"]").get().isExists(),equalTo(true));
+        assertThat(client().prepareGet().setIndex("composite2").setType("t2").setId("[\"a\",\"b2\",2]").get().isExists(),equalTo(true));
+        assertThat(client().prepareGet().setIndex("composite3").setType("t3").setId("[\"a\",\"b3\",2]").get().isExists(),equalTo(true));
+        assertThat(client().prepareGet().setIndex("composite4").setType("t4").setId("[\"a\",\"b3\",2, 2]").get().isExists(),equalTo(true));
         
-        assertThat(client().prepareGet().setIndex("composite").setType("t11").setId("[\"a\",\"b1\"]").get().isExists(),equalTo(true));
-        assertThat(client().prepareGet().setIndex("composite").setType("t12").setId("[\"a\",\"b2\",2]").get().isExists(),equalTo(true));
-        assertThat(client().prepareGet().setIndex("composite").setType("t13").setId("[\"a\",\"b3\",2]").get().isExists(),equalTo(true));
+        assertThat(client().prepareGet().setIndex("composite11").setType("t11").setId("[\"a\",\"b1\"]").get().isExists(),equalTo(true));
+        assertThat(client().prepareGet().setIndex("composite12").setType("t12").setId("[\"a\",\"b2\",2]").get().isExists(),equalTo(true));
+        assertThat(client().prepareGet().setIndex("composite13").setType("t13").setId("[\"a\",\"b3\",2]").get().isExists(),equalTo(true));
         
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("c:1")).get().getHits().getTotalHits(), equalTo(1L));
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("d:3")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("c:1")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("d:3")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("d:4")).get().getHits().getTotalHits(), equalTo(1L));
         
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t11").setQuery(QueryBuilders.queryStringQuery("c:1")).get().getHits().getTotalHits(), equalTo(1L));
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t12").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t13").setQuery(QueryBuilders.queryStringQuery("d:3")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite11").setTypes("t11").setQuery(QueryBuilders.queryStringQuery("c:1")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite12").setTypes("t12").setQuery(QueryBuilders.queryStringQuery("d:1")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite13").setTypes("t13").setQuery(QueryBuilders.queryStringQuery("d:3")).get().getHits().getTotalHits(), equalTo(2L));
         
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t11").setQuery(QueryBuilders.queryStringQuery("s1:b")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t12").setQuery(QueryBuilders.queryStringQuery("s1:a2")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t13").setQuery(QueryBuilders.queryStringQuery("s1:ab5")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite11").setTypes("t11").setQuery(QueryBuilders.queryStringQuery("s1:b")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite12").setTypes("t12").setQuery(QueryBuilders.queryStringQuery("s1:a2")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("composite13").setTypes("t13").setQuery(QueryBuilders.queryStringQuery("s1:ab5")).get().getHits().getTotalHits(), equalTo(2L));
         
-        assertThat(client().prepareMultiGet().add("composite", "t1", "[\"a\",\"b1\"]", "[\"b\",\"b1\"]").get().getResponses()[0].getIndex(), equalTo("composite") );
-        assertThat(client().prepareMultiGet().add("composite", "t2", "[\"a\",\"b2\",2]", "[\"a\",\"b2\",3]").get().getResponses()[0].getIndex(), equalTo("composite") );
-        assertThat(client().prepareMultiGet().add("composite", "t3", "[\"a\",\"b3\",2]", "[\"a\",\"b3\",3]").get().getResponses()[0].getIndex(), equalTo("composite")  );
+        assertThat(client().prepareMultiGet().add("composite1", "t1", "[\"a\",\"b1\"]", "[\"b\",\"b1\"]").get().getResponses()[0].getIndex(), equalTo("composite1") );
+        assertThat(client().prepareMultiGet().add("composite2", "t2", "[\"a\",\"b2\",2]", "[\"a\",\"b2\",3]").get().getResponses()[0].getIndex(), equalTo("composite2") );
+        assertThat(client().prepareMultiGet().add("composite3", "t3", "[\"a\",\"b3\",2]", "[\"a\",\"b3\",3]").get().getResponses()[0].getIndex(), equalTo("composite3")  );
+        assertThat(client().prepareMultiGet().add("composite4", "t4", "[\"a\",\"b3\",2,2]", "[\"a\",\"b3\",3,3]").get().getResponses()[0].getIndex(), equalTo("composite4")  );
         
-        assertThat(client().prepareMultiGet().add("composite", "t11", "[\"a\",\"b1\"]", "[\"b\",\"b1\"]").get().getResponses()[0].getIndex(), equalTo("composite") );
-        assertThat(client().prepareMultiGet().add("composite", "t12", "[\"a\",\"b2\",2]", "[\"a\",\"b2\",3]").get().getResponses()[0].getIndex(), equalTo("composite") );
-        assertThat(client().prepareMultiGet().add("composite", "t13", "[\"a\",\"b3\",2]", "[\"a\",\"b3\",3]").get().getResponses()[0].getIndex(), equalTo("composite")  );
+        assertThat(client().prepareMultiGet().add("composite11", "t11", "[\"a\",\"b1\"]", "[\"b\",\"b1\"]").get().getResponses()[0].getIndex(), equalTo("composite11") );
+        assertThat(client().prepareMultiGet().add("composite12", "t12", "[\"a\",\"b2\",2]", "[\"a\",\"b2\",3]").get().getResponses()[0].getIndex(), equalTo("composite12") );
+        assertThat(client().prepareMultiGet().add("composite13", "t13", "[\"a\",\"b3\",2]", "[\"a\",\"b3\",3]").get().getResponses()[0].getIndex(), equalTo("composite13")  );
         
         // delete with partition key
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
-        process(ConsistencyLevel.ONE,"DELETE FROM composite.t1 WHERE a='a'");
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite1.t1 WHERE a='a'");
+        assertThat(client().prepareSearch().setIndices("composite1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1L));
         
         // delete with primary key
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
-        process(ConsistencyLevel.ONE,"DELETE FROM composite.t2 WHERE a='a' AND b='b2' AND c=2");
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("composite2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite2.t2 WHERE a='a' AND b='b2' AND c=2");
+        assertThat(client().prepareSearch().setIndices("composite2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1L));
         
-        // delete a row
-        process(ConsistencyLevel.ONE,"DELETE FROM composite.t3 WHERE a='a' AND b='b3' AND c = 4");
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(4L));
+        // delete with primary key
+        process(ConsistencyLevel.ONE,"DELETE FROM composite3.t3 WHERE a='a' AND b='b3' AND c = 4");
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(9L));
+        
+        // t3 delete a slice with composite partition key
+        process(ConsistencyLevel.ONE,"DELETE FROM composite3.t3 WHERE a='a' AND b='b3' AND c >= 3 AND c <= 5");
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(7L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite3.t3 WHERE a='a' AND b='b3' AND c <= 5");
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(4L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite3.t3 WHERE a='a' AND b='b3' AND c > 6");
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(1L));
+        
+        // t4 delete a slice with composite partition and a composite clustering keys
+        process(ConsistencyLevel.ONE,"DELETE FROM composite4.t4 WHERE a='a' AND b='b3' AND c = 4");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(9L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite4.t4 WHERE a='a' AND b='b3' AND c >= 3 AND c <= 5");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(7L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite4.t4 WHERE a='a' AND b='b3' AND c >= 7");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(4L));
+        process(ConsistencyLevel.ONE,"DELETE FROM composite4.t4 WHERE a='a' AND b='b3' AND c <= 3");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(1L));
         
         // truncate content
-        process(ConsistencyLevel.ONE,"TRUNCATE composite.t3");
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
+        process(ConsistencyLevel.ONE,"TRUNCATE composite3.t3");
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
+        process(ConsistencyLevel.ONE,"TRUNCATE composite4.t4");
+        assertThat(client().prepareSearch().setIndices("composite4").setTypes("t4").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
         
         // test rebuild index
-        assertAcked(client().admin().indices().prepareClose("composite").get());
-        process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',2,3)");
-        process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',3,3)");
-        process(ConsistencyLevel.ONE,"insert into composite.t3 (a,b,c,d) VALUES ('a','b3',4,4)");
-        assertAcked(client().admin().indices().prepareOpen("composite").get());
-        ensureGreen("composite");
+        assertAcked(client().admin().indices().prepareClose("composite3").get());
+        process(ConsistencyLevel.ONE,"insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',2,3)");
+        process(ConsistencyLevel.ONE,"insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',3,3)");
+        process(ConsistencyLevel.ONE,"insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',4,4)");
+        assertAcked(client().admin().indices().prepareOpen("composite3").get());
+        ensureGreen("composite3");
         
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(0L));
         
-        StorageService.instance.forceKeyspaceFlush("composite", "t3");
-        StorageService.instance.rebuildSecondaryIndex("composite", "t3", "elastic_t3_idx");
+        StorageService.instance.forceKeyspaceFlush("composite3", "t3");
+        StorageService.instance.rebuildSecondaryIndex("composite3", "t3", "elastic_t3_idx");
 
-        assertThat(client().prepareSearch().setIndices("composite").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(3L));
+        assertThat(client().prepareSearch().setIndices("composite3").setTypes("t3").setQuery(QueryBuilders.queryStringQuery("a:a")).get().getHits().getTotalHits(), equalTo(3L));
 
         // delete index
-        assertAcked(client().admin().indices().prepareDelete("composite").get());
+        assertAcked(client().admin().indices().prepareDelete("composite3").get());
     }
     
     
