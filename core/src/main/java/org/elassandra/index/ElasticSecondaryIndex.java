@@ -1746,15 +1746,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              */
             @Override
             public void finish() {
-                flush();
-                if (this.targets == null) {
-                    // refresh all associated indices.
-                    for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices)
-                        indexInfo.refresh();
-                } else {
-                    // refresh matching partition indices.
-                    for(int i = targets.nextSetBit(0); i >= 0 && i < indices.length; i = targets.nextSetBit(i+1))
-                        indices[i].refresh();
+                try {
+                    flush();
+                    if (this.targets == null) {
+                        // refresh all associated indices.
+                        for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices)
+                            indexInfo.refresh();
+                    } else {
+                        // refresh matching partition indices.
+                        for(int i = targets.nextSetBit(0); i >= 0 && i < indices.length; i = targets.nextSetBit(i+1))
+                            indices[i].refresh();
+                    }
+                } catch(Throwable t) {
+                    logger.error("Unexpected error", t);
                 }
             }
             
