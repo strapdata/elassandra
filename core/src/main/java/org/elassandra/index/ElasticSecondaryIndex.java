@@ -1377,7 +1377,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     if (!clusterings.isEmpty()) {
                         boolean hasMissingFields = false;
                         for(WideRowcument rowcument : rowcuments.values()) {
-                            if (rowcument.hasLiveData && rowcument.hasMissingFields()) {
+                            if (rowcument.hasMissingFields()) {
                                 hasMissingFields = true;
                                 break;
                             }
@@ -1387,7 +1387,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 logger.trace("indexer={} read partition for clusterings={}", this.hashCode(), clusterings);
                             SinglePartitionReadCommand command = SinglePartitionReadCommand.create(baseCfs.metadata, nowInSec, key, clusterings);
                             RowIterator rowIt = read(command);
-                            this.inStaticRow = rowIt.staticRow();
+                            if (!rowIt.staticRow().isEmpty())
+                                this.inStaticRow = rowIt.staticRow();
                             for(; rowIt.hasNext(); ) {
                                 Row row = rowIt.next();
                                 try {
@@ -1820,6 +1821,10 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 public boolean hasMissingFields() {
                     if (hasIndexedMultiCell)
                         return true;
+                    
+                    // if row as no live data, it's a delete operation
+                    if (!hasLiveData)
+                        return false;
                     
                     // add missing or collection columns that should be read before indexing the document.
                     // read missing static or regular columns
