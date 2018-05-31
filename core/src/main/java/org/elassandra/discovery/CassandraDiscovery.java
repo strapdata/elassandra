@@ -127,8 +127,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         this.transportService = transportService;
         this.clusterName = clusterService.getClusterName();
 
-        this.localAddress = FBUtilities.getBroadcastAddress();
-        this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(localAddress);
+        this.localAddress = (DatabaseDescriptor.getReplaceAddress() == null) ? FBUtilities.getBroadcastAddress() : DatabaseDescriptor.getReplaceAddress();
+        this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());
         
         this.clusterGroup = new ClusterGroup();
     }
