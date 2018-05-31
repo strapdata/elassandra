@@ -446,6 +446,43 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test").setTypes("make_models").setQuery(QueryBuilders.nestedQuery("models", QueryBuilders.termQuery("models.name", "galaxie"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
     }
     
+    // #197 Deletion of a List element removes the document on ES 
+    public void testDeleteInUDTList() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE, "CREATE TYPE test.type_test (id text);");
+        process(ConsistencyLevel.ONE, "CREATE TABLE test.table_test (" + 
+                "    id1 text," + 
+                "    id2 text," + 
+                "    list list<frozen<type_test>>," + 
+                "    PRIMARY KEY (id1, id2)" + 
+                ");");
+        
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("table_test")
+                        .field("discover", ".*")
+                    .endObject()
+                .endObject();
+        assertTrue(client().admin().indices().preparePutMapping("test").setType("table_test").setSource(mapping).get().isAcknowledged());
+        process(ConsistencyLevel.ONE, "UPDATE test.table_test SET list = list + [{ id:'foo'}] where id1='1' and id2='2';");
+        process(ConsistencyLevel.ONE, "UPDATE test.table_test SET list = list + [{ id:'bar'}] where id1='1' and id2='2';");
+        
+        SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("table_test").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        List<Object> list = (List<Object>) resp.getHits().getAt(0).getSourceAsMap().get("list");
+        assertThat(list.size(), equalTo(2));
+        Map<String, Object> map = (Map<String, Object>)list.get(0);
+        assertThat(map.size(), equalTo(1));
+        
+        process(ConsistencyLevel.ONE, "UPDATE test.table_test SET list = list - [{ id:'bar'}] where id1='1' and id2='2';");
+        SearchResponse resp2 = client().prepareSearch().setIndices("test").setTypes("table_test").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp2.getHits().getTotalHits(), equalTo(1L));
+        Map<String, Object> map2 = (Map<String, Object>) resp2.getHits().getAt(0).getSourceAsMap().get("list");
+        assertThat(map2.size(), equalTo(1));
+    }
+    
     // test CQL timeuuid, date and time mapping.
     @Test
     public void testTimes() throws Exception {
