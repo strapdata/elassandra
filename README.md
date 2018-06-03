@@ -2,7 +2,7 @@
 
 ![Elassandra Logo](elassandra-logo.png)
 
-## [http://www.strapdata.com/](http://www.strapdata.com/)
+## [http://www.elassandra.io/](http://www.elassandra.io/)
 
 Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run as a plugin for [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
 
