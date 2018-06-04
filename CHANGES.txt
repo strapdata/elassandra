@@ -1,6 +1,29 @@
-6.2.3.1 - 2018-05-01
+6.2.3.1 - 2018-06-09
   * Upgrade to Elasticsearch 6.2.3 + Cassandra 3.11.2
+  * Allow to use the cassandra listen_address as the elasticsearch transport publish address.
+
+5.5.0.18 - 2018-06-03
+  * Fix support for range partition deletion and add support for smallint and tinyint
+  * Fix #197 Deletion of a List element removes the document on ES
+  * Improve catch exception to avoid cassandra write timeout
+
+5.5.0.17 - 2018-05-22
+  * Fix list settings representation
+  * Make replicated actions executed locally
+  * Improve completion type mapping to get closer to elasticsearch behavior
+
+5.5.0.16 - 2018-05-10
+  * #187 refactoring of partitionDelete
+  * Fix #191 NPE
+  * Don't discover es_query and es_options pseudo columns
+  * Improves shards starting before playing commitlogs
+  * Update the cassandra startup script
   
+5.5.0.15 - 2018-05-01
+  * Fix #183 by using node name as the cassandra broadcast address
+  * Fix #184 disable translog sync thread 
+  * Fix #188 race condition when starting elassandra on kubernetes
+
 5.5.0.14 - 2018-03-18
   * Merge #176 Don't overwrite replication setting
   * Remove asm lib from the cassandra classpath to support elasticsearch scripting
