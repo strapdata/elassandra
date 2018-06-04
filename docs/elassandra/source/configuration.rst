@@ -26,6 +26,11 @@ Elasticsearch paths are set according to the following environement variables an
 Configuration
 -------------
 
+ .put("network.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
+                .put("network.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
+                .put("transport.bind_host", FBUtilities.getLocalAddress().getHostAddress())
+                .put("transport.publish_host", Boolean.getBoolean("es.use_internal_address") ? FBUtilities.getLocalAddress().getHostAddress() : FBUtilities.getBroadcastAddress().getHostAddress())
+               
 Elasticsearch configuration rely on cassandra configuration file **conf/cassandra.yaml** for the following parameters.
 
 .. cssclass:: table-bordered
@@ -46,12 +51,15 @@ Elasticsearch configuration rely on cassandra configuration file **conf/cassandr
 
 Node role (master, primary, data) is automatically set by elassandra, standard configuration should only set **cluster_name**, **rpc_address** in the ``conf/cassandra.yaml``.
 
-By default, Elasticsearch HTTP is bound to Cassandra RPC addresses, while Elasticsearch transport protocol is bound to Cassandra internal addresses. 
+By default, Elasticsearch HTTP is bound to Cassandra RPC address ``rpc_address``, while Elasticsearch transport protocol is bound to Cassandra internal address ``listen_address``. 
 You can overload these default settings by defining Elasticsearch network settings in conf/elasticsearch.yaml (in order to bind Elasticsearch transport on 
-a public interface if you want to use the Elasticsearch transport client from your application).
+a another interface).
+
+By default, Elasticsearch transport publish adress is the Cassandra broadcast adress. However, in some network configurations (including multi-cloud deployment), the Cassandra broadcast adress is a public address managed by a firewall, and
+it would invlove a network overhead for elasticsearch inter-node communication. In such case, you can set the system property ``es.use_internal_address=true`` to use the Cassandra  ``listen_address`` as the elasticsearch transport published address. 
 
 .. CAUTION::
-   If you use the `GossipPropertyFile <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureSnitchGossipPF_c.html>`_ Snitch to configure your cassandra datacenter and rack properties in **conf/cassandra-rackdc.properties**, keep
+   If you use the `GossipingPropertyFile <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureSnitchGossipPF_c.html>`_ Snitch to configure your cassandra datacenter and rack properties in **conf/cassandra-rackdc.properties**, keep
    in mind this snitch falls back to the PropertyFileSnitch when gossip is not enabled. So, when re-starting the first node, dead nodes can appear in the default DC and rack configured in **conf/cassandra-topology.properties**. This also
    breaks the replica placement strategy and the computation of the Elasticsearch routing tables. So it is strongly recommended to set the same default rack and datacenter in both the **conf/cassandra-topology.properties** and **conf/cassandra-rackdc.properties**.
 

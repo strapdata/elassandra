@@ -40,6 +40,7 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.network.InetAddresses;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
@@ -106,8 +107,14 @@ public abstract class AbstractSearchStrategy {
                 this.strategy = Keyspace.open(ksName).getReplicationStrategy();
                 this.metadata = StorageService.instance.getTokenMetadata().cloneOnlyTokenMap();
                 for(DiscoveryNode node : clusterState.nodes()) {
-                    for(Token token : this.metadata.getTokens(node.getInetAddress())) 
-                        this.tokenToNodes.put(token, node);
+                    InetAddress endpoint = node.getNameAsInetAddress();
+                    if (endpoint == null) {
+                        endpoint = this.metadata.getEndpointForHostId(node.uuid());
+                    }
+                    if (endpoint != null && this.metadata.isMember(endpoint)) {
+                        for(Token token : this.metadata.getTokens(endpoint)) 
+                            this.tokenToNodes.put(token, node);
+                    }
                 }
             } else {
                 this.strategy = null;
@@ -128,7 +135,7 @@ public abstract class AbstractSearchStrategy {
 
                 // greenshard = available node -> token range bitset, 
                 boolean orphanRange = true;
-                for(InetAddress endpoint :  (this.metadata == null) ? Collections.singletonList(localNode.getInetAddress()) : this.strategy.calculateNaturalEndpoints(token, this.metadata)) {
+                for(InetAddress endpoint :  (this.metadata == null) ? Collections.singletonList(localNode.getNameAsInetAddress()) : this.strategy.calculateNaturalEndpoints(token, this.metadata)) {
                     UUID uuid = StorageService.instance.getHostId(endpoint);
                     DiscoveryNode node =  (uuid == null) ? clusterState.nodes().findByInetAddress(endpoint) : clusterState.nodes().get(uuid.toString());
                     if (node != null && node.status() == DiscoveryNode.DiscoveryNodeStatus.ALIVE) {

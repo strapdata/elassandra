@@ -81,7 +81,7 @@ public class PrimaryFirstSearchStrategy extends AbstractSearchStrategy {
                     this.greenShards.get(node).set(tokenIndex, false);
                 } else {
                     if (logger.isTraceEnabled())
-                        logger.trace("uuid={} for replica={} node found", node.uuid(), node.getInetAddress());
+                        logger.trace("uuid={} for replica={} node found", node.uuid(), node.getName());
                 } 
             }
 
