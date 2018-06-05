@@ -16,7 +16,6 @@
 package org.elassandra.discovery;
 
 import com.google.common.collect.Maps;
-import com.google.common.net.InetAddresses;
 
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
@@ -53,6 +52,7 @@ import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.network.InetAddresses;
 import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
@@ -128,7 +128,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         this.clusterName = clusterService.getClusterName();
 
         this.localAddress = FBUtilities.getBroadcastAddress();
-        this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(localAddress);
+        this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());
         
         this.clusterGroup = new ClusterGroup();
     }
@@ -542,7 +542,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             switch (state) {
             case STATUS:
                 if (logger.isTraceEnabled())
-                    logger.trace("onChange Endpoint={} ApplicationState={} value={}", endpoint, state, versionValue);
+                    logger.trace("Endpoint={} ApplicationState={} value={}", endpoint, state, versionValue);
                 if (isNormal(epState)) {
                     updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
                 } else {
@@ -566,6 +566,17 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     }
                 } catch (Exception e) {
                     logger.warn("Failed to parse gossip index shard state", e);
+                }
+                break;
+            
+            case RPC_ADDRESS: // manage ip rpc_address replacement from a remote node
+                if (logger.isTraceEnabled())
+                    logger.trace("Endpoint={} ApplicationState={} value={}", endpoint, state, versionValue);
+                InetAddress newRpcAddress = InetAddresses.forString(versionValue.value);
+                String hostId = epState.getApplicationState(ApplicationState.HOST_ID).value;
+                if (clusterGroup.needUpdate(hostId, newRpcAddress)) {
+                    logger.info("Node HOST_ID={} change RPC_ADDRESS={}", hostId, newRpcAddress);
+                    updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
                 }
                 break;
             }
@@ -628,7 +639,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     @Override
     public void onAlive(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
-            logger.debug("onAlive Endpoint={} ApplicationState={} isAlive={} => update node + connecting", endpoint, epState, epState.isAlive());
+            logger.debug("Endpoint={} ApplicationState={} isAlive={} => update node + connecting", endpoint, epState, epState.isAlive());
             if (isNormal(epState))
                 updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
         }
@@ -637,7 +648,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     @Override
     public void onDead(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
-            logger.debug("onDead Endpoint={}  ApplicationState={} isAlive={} => update node + disconnecting", endpoint, epState, epState.isAlive());
+            logger.debug("Endpoint={}  ApplicationState={} isAlive={} => update node + disconnecting", endpoint, epState, epState.isAlive());
             if (this.metaDataVersionAckListener.get() != null) {
                 notifyMetaDataVersionAckListener(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
             }
@@ -649,7 +660,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     public void onRestart(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
             if (logger.isTraceEnabled())
-                logger.debug("onRestart Endpoint={}  ApplicationState={} isAlive={} status={}", endpoint, epState, epState.isAlive());
+                logger.debug("Endpoint={}  ApplicationState={} isAlive={} status={}", endpoint, epState, epState.isAlive());
             if (isNormal(epState))
                 updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
         }
@@ -659,7 +670,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     public void onJoin(InetAddress endpoint, EndpointState epState) {
         if (isLocal(endpoint)) {
             if (logger.isTraceEnabled())
-                logger.trace("onJoin Endpoint={} ApplicationState={} isAlive={} status={}", endpoint, epState, epState.isAlive(), epState.getStatus() );
+                logger.trace("Endpoint={} ApplicationState={} isAlive={} status={}", endpoint, epState, epState.isAlive(), epState.getStatus() );
             if (isNormal(epState))
                 updateNode(endpoint, epState, DiscoveryNodeStatus.ALIVE);
         }
@@ -820,6 +831,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         
         public boolean contains(String id) {
             return members.containsKey(id);
+        }
+        
+        public boolean needUpdate(String id, InetAddress rpcAddess) {
+            DiscoveryNode n = members.get(id);
+            return n != null && n.getInetAddress().equals(rpcAddess);
         }
         
         public Collection<DiscoveryNode> values() {
