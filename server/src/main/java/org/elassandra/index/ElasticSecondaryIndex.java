@@ -1450,33 +1450,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                             if (!rowIt.staticRow().isEmpty())
                                 this.inStaticRow = rowIt.staticRow();
                             for(; rowIt.hasNext(); ) {
-                                Row row = rowIt.next();
                                 try {
+                                    Row row = rowIt.next();
                                     WideRowcument rowcument = new WideRowcument(row, null);
-                                    try {
-                                        if (indexSomeStaticColumnsOnWideRow && inStaticRow != null)
-                                            rowcument.readCellValues(inStaticRow, true);
-                                    } catch (IOException e) {
-                                        logger.error("Unexpected error", e);
-                                    }
-                                    if (rowcument.hasLiveData(nowInSec)) {
-                                        rowcument.index();
-                                    } else {
-                                        rowcument.delete();
-                                    }
+                                    if (indexSomeStaticColumnsOnWideRow && inStaticRow != null)
+                                        rowcument.readCellValues(inStaticRow, true);
+                                    rowcuments.put(row.clustering(), rowcument);
                                 } catch (IOException e) {
                                     logger.error("Unexpected error", e);
                                 }
                             }
-                        } else {
-                            for(WideRowcument rowcument : rowcuments.values()) {
-                                if (rowcument.hasLiveData(nowInSec)) {
-                                    rowcument.index();
-                                 } else {
-                                    rowcument.delete();
-                                 }
-                            }
                         }
+                        for(WideRowcument rowcument : rowcuments.values())
+                            rowcument.write();
                     }
                 }
                 
@@ -1484,11 +1470,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 if (this.inStaticRow != null) {
                     try {
                         WideRowcument rowcument = new WideRowcument(inStaticRow, outStaticRow);
-                        if (rowcument.hasLiveData(nowInSec)) {
-                            rowcument.index();
-                        } else {
-                            rowcument.delete();
-                        }
+                        rowcument.write();
                     } catch (IOException e) {
                         logger.error("Unexpected error", e);
                     }
@@ -1560,7 +1542,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 if (rowcument != null) {
                     switch(transactionType) {
                     case CLEANUP:
-                        this.rowcument.delete();
+                        rowcument.delete();
                         break;
                     case COMPACTION: // remove expired row or reindex a doc when a column has expired, happen only when index_on_compaction=true for at least one elasticsearch index.
                     case UPDATE:
@@ -1569,16 +1551,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                             RowIterator rowIt = read(command);
                             if (rowIt.hasNext())
                                 try {
-                                    this.rowcument = new SkinnyRowcument(rowIt.next(), null);
+                                    rowcument = new SkinnyRowcument(rowIt.next(), null);
                                 } catch (IOException e) {
                                     logger.error("Unexpected error", e);
                                 }
                         }
-                        if (this.rowcument.hasLiveData(nowInSec)) {
-                            this.rowcument.index();
-                        } else {
-                            this.rowcument.delete();
-                        }
+                        rowcument.write();
                     }
                 }
             }
@@ -1748,9 +1726,10 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 final BitSet fieldsNotNull = new BitSet(fieldsToIdx.size());     // regular or static columns only
                 final BitSet tombstoneColumns = new BitSet(fieldsToIdx.size());  // regular or static columns only
                 int   docTtl = Integer.MAX_VALUE;
-                int   inRowDataSize;
+                int   inRowDataSize = 0;
+                boolean hasLiveData = false;
+                boolean hasRowMarker = false;
                 final boolean isStatic;
-                final boolean hasLiveData;
                 
                 /**
                  * 
@@ -1759,12 +1738,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                  * @throws IOException
                  */
                 public Rowcument(Row inRow, Row outRow) throws IOException {
-                    inRowDataSize =  inRow != null ? inRow.dataSize() : 0;
+                    if (inRow != null) {
+                        this.inRowDataSize = inRow.dataSize();
+                        this.hasRowMarker = inRow.primaryKeyLivenessInfo().isLive(nowInSec);
+                        this.hasLiveData = inRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness());
+                    }
                     Row row = inRow != null ? inRow : outRow;
                     this.isStatic = row.isStatic();
-                    this.hasLiveData = inRow != null && inRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness());
-                    //if (inRow != null && inRow.isStatic())
-                    //   logger.error("indexer={} inRow static hasLive={} inRow.timestamp={}", RowcumentIndexer.this.hashCode(), hasLiveData, inRow.primaryKeyLivenessInfo().timestamp());
                     
                     // copy the indexed columns of partition key in values
                     int x = 0;
@@ -1794,7 +1774,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         readCellValues(inRow, true);
                 }
                 
-                public boolean hasLiveData(int nowInSec) {
+                public boolean hasLiveData() {
                     return hasLiveData;
                 }
                 
@@ -1887,10 +1867,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 public boolean hasMissingFields() {
                     if (hasIndexedMultiCell)
                         return true;
-                    
-                    // if row as no live data, it's a delete operation
-                    if (!hasLiveData)
-                        return false;
                     
                     // add missing or collection columns that should be read before indexing the document.
                     // read missing static or regular columns
@@ -1994,7 +1970,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     return context;
                 }
                 
-                public void index() {
+                public void write() {
+                    try {
+                        if (hasLiveData() || hasRowMarker) {
+                            index();
+                        } else {
+                            delete();
+                        }
+                    } catch (Exception e) {
+                        logger.error("Unexpected error", e);
+                    }
+                }
+                
+                private void index() {
                     long startTime = System.nanoTime();
                     long ttl = (long)((this.docTtl < Integer.MAX_VALUE) ? this.docTtl : 0);
                     
