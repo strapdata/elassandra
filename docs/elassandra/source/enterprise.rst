@@ -1,4 +1,3 @@
-
 Enterprise
 ==========
 
@@ -135,6 +134,7 @@ To enable Elasticsearch query over CQL:
 * Add the following system property to your cassandra-env.sh and restart your nodes :
 
 .. code::
+
    JVM_OPTS="$JVM_OPTS -Dcassandra.custom_query_handler_class=org.elassandra.index.ElasticQueryHandler"
    
 * Add a dummy column ``es_query`` to your cassandra table.
@@ -1077,8 +1077,8 @@ Finally, user accounts must have :
 Elasticsearch Spark connector
 .............................
 
-The `elasticsearch-hadoop <https://github.com/strapdata/elasticsearch-hadoop>`_ connector can access a secured Elassandra cluster by providing the 
-sames SSL/TLS and Username/Pasword authentication parameters as the orginal `elasticsearch-hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/security.html>`_ connector.
+The `elasticsearch-hadoop <https://github.com/strapdata/elasticsearch-hadoop/>`_ connector can access a secured Elassandra cluster by providing the 
+sames SSL/TLS and Username/Pasword authentication parameters as the orginal `elasticsearch-hadoop security <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/security.html>`_ connector.
 Here is an example with a spark-shell.
 
 .. code::

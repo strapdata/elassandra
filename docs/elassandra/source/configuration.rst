@@ -26,11 +26,6 @@ Elasticsearch paths are set according to the following environement variables an
 Configuration
 -------------
 
- .put("network.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
-                .put("network.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
-                .put("transport.bind_host", FBUtilities.getLocalAddress().getHostAddress())
-                .put("transport.publish_host", Boolean.getBoolean("es.use_internal_address") ? FBUtilities.getLocalAddress().getHostAddress() : FBUtilities.getBroadcastAddress().getHostAddress())
-               
 Elasticsearch configuration rely on cassandra configuration file **conf/cassandra.yaml** for the following parameters.
 
 .. cssclass:: table-bordered

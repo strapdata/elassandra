@@ -178,6 +178,8 @@ html_static_path = ['_static']
 # tricks from https://rackerlabs.github.io/docs-rackspace/tools/rtd-tables.html
 html_context = {
     'css_files': [
+	'https://media.readthedocs.org/css/sphinx_rtd_theme.css',
+        'https://media.readthedocs.org/css/readthedocs-doc-embed.css',
         '_static/theme_overrides.css',  # override wide tables in RTD theme
         ],
      }
