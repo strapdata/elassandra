@@ -19,6 +19,7 @@ import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import com.google.common.net.InetAddresses;
 
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.TupleType;
 import org.apache.cassandra.serializers.SimpleDateSerializer;
@@ -154,6 +155,13 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                     .setSource(String.format(Locale.ROOT,"{ \"t%s\" : { \"discover\" : \".*\" }}",type)).get());
         }
         
+        // wait for index rebuild by the compaction manager thread
+        for(int i=0; i < types.length; i++) {
+            String type = types[i];
+            while (!SystemKeyspace.isIndexBuilt("ks1", "elastic_"+String.format(Locale.ROOT,"t%s", type)+"_idx"))
+                Thread.sleep(250); 
+        }
+        
         // search
         for(int i=0; i < types.length; i++) {
             String type = types[i];
@@ -198,6 +206,14 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                     .preparePutMapping("ks2")
                     .setType(String.format(Locale.ROOT,"t%s", name))
                     .setSource(mapping, XContentType.JSON).get());
+        }
+        
+        // wait for index rebuild by the compaction manager thread
+        for(int i=0; i < types.length; i++) {
+            String type = types[i];
+            String name = names[i];
+            while (!SystemKeyspace.isIndexBuilt("ks2", "elastic_"+String.format(Locale.ROOT,"t%s", name)+"_idx"))
+                Thread.sleep(250); 
         }
         
         // search
@@ -462,6 +478,52 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(resp2.getHits().getTotalHits(), equalTo(1L));
         Map<String, Object> map2 = (Map<String, Object>) resp2.getHits().getAt(0).getSourceAsMap().get("list");
         assertThat(map2.size(), equalTo(1));
+        
+        // Row delete when all value updated to null, see https://issues.apache.org/jira/browse/CASSANDRA-11805
+        process(ConsistencyLevel.ONE, "UPDATE test.table_test SET list = list - [{ id:'foo'}] where id1='1' and id2='2';");
+        SearchResponse resp3 = client().prepareSearch().setIndices("test").setTypes("table_test").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp3.getHits().getTotalHits(), equalTo(0L));
+        
+        process(ConsistencyLevel.ONE, "INSERT INTO test.table_test (id1, id2, list) VALUES ('1', '2', null);");
+        SearchResponse resp4 = client().prepareSearch().setIndices("test").setTypes("table_test").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp4.getHits().getTotalHits(), equalTo(1L));
+    }
+    
+    // #199 unit test
+    public void testNullUpdate() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+        
+        process(ConsistencyLevel.ONE, "CREATE TABLE test.t1 (" + 
+                "    id1 text," + 
+                "    id2 text," + 
+                "    id3 text," + 
+                "    id4 text," + 
+                "    PRIMARY KEY (id1, id2)" + 
+                ");");
+        
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("t1")
+                        .field("discover", ".*")
+                    .endObject()
+                .endObject();
+        assertTrue(client().admin().indices().preparePutMapping("test").setType("t1").setSource(mapping).get().isAcknowledged());
+        process(ConsistencyLevel.ONE, "UPDATE test.t1 SET id3 = 'foo' where id1='1' and id2='2';");
+        SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        
+        process(ConsistencyLevel.ONE, "UPDATE test.t1 SET id4 = 'foo' where id1='1' and id2='2';");
+        resp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        
+        process(ConsistencyLevel.ONE, "UPDATE test.t1 SET id4 = null where id1='1' and id2='2';");
+        resp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        
+        process(ConsistencyLevel.ONE, "UPDATE test.t1 SET id3 = null where id1='1' and id2='2';");
+        resp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(0L));
     }
     
     // test CQL timeuuid, date and time mapping.

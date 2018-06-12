@@ -309,8 +309,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
         
         UntypedResultSet rs = process(ConsistencyLevel.ONE,"SELECT * FROM test.t1");
         System.out.println("t1.count = "+rs.size());
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits(), equalTo(2*N));
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b","*")).get().getHits().getTotalHits(), equalTo(N));
     }
 }
