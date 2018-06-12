@@ -176,11 +176,13 @@ html_favicon = 'images/favicon.ico'
 html_static_path = ['_static']
 
 # tricks from https://rackerlabs.github.io/docs-rackspace/tools/rtd-tables.html
-#html_context = {
-#    'css_files': [
-#        '_static/theme_overrides.css',  # override wide tables in RTD theme
-#        ],
-#     }
+html_context = {
+    'css_files': [
+        'https://media.readthedocs.org/css/sphinx_rtd_theme.css',            
+        'https://media.readthedocs.org/css/readthedocs-doc-embed.css',
+        '_static/theme_overrides.css',  # override wide tables in RTD theme
+        ],
+     }
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
