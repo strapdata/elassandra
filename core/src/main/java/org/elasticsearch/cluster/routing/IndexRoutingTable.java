@@ -377,7 +377,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
             } catch (NullPointerException | java.lang.AssertionError e) {
                 // thrown by cassandra when the keyspace is not yet create locally. 
                 // We must wait for a gossip schema change to update the routing Table.
-                Loggers.getLogger(getClass().getName()).warn("Keyspace not available: {}", e, this.index);
+                Loggers.getLogger(getClass().getName()).warn("Keyspace not available for index ["+this.index+"]", e);
             }
         }
         
@@ -398,9 +398,9 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
             } catch (NullPointerException | java.lang.AssertionError e) {
                 // thrown by cassandra when the keyspace is not yet create locally. 
                 // We must wait for a gossip schema change to update the routing Table.
-                Loggers.getLogger(getClass()).warn("Keyspace {} not  available", e, this.index);
+                Loggers.getLogger(getClass()).warn("Keyspace not available for index ["+this.index+"]", e);
             } catch (Exception e1) {
-                Loggers.getLogger(getClass()).warn("Failde to compute route for {}", e1, this.index);
+                Loggers.getLogger(getClass()).warn("Failed to compute route for index ["+this.index+"]", e1);
             }
         }
         

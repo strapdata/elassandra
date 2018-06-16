@@ -20,10 +20,10 @@
 package org.elasticsearch.cluster.node;
 
 import org.elasticsearch.Version;
-import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.network.InetAddresses;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.LocalTransportAddress;
@@ -80,6 +80,7 @@ public class DiscoveryNode implements Writeable, ToXContent {
     private final String hostName;
     private final String hostAddress;
     private final TransportAddress address;
+    private transient final InetAddress nodeNameAddress;
     private final Map<String, String> attributes;
     private final Version version;
     private final Set<Role> roles;
@@ -137,6 +138,10 @@ public class DiscoveryNode implements Writeable, ToXContent {
     
     public UUID uuid() {
         return this.nodeUuid;
+    }
+    
+    public InetAddress getNameAsInetAddress() {
+        return this.nodeNameAddress;
     }
     
     /**
@@ -229,11 +234,17 @@ public class DiscoveryNode implements Writeable, ToXContent {
      */
     public DiscoveryNode(String nodeName, String nodeId, String ephemeralId, String hostName, String hostAddress,
                          TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version) {
+        InetAddress nodeAddr = null;
         if (nodeName != null) {
             this.nodeName = nodeName.intern();
+            try {
+                nodeAddr = InetAddresses.forString(nodeName);
+            } catch (Exception e) {
+            }
         } else {
             this.nodeName = "";
         }
+        this.nodeNameAddress = nodeAddr;
         this.nodeId = nodeId.intern();
         try {
             this.nodeUuid = UUID.fromString(nodeId);
@@ -293,6 +304,12 @@ public class DiscoveryNode implements Writeable, ToXContent {
      */
     public DiscoveryNode(StreamInput in) throws IOException {
         this.nodeName = in.readString().intern();
+        InetAddress nodeNameAddress = null;
+        try {
+            nodeNameAddress = InetAddresses.forString(this.nodeName);
+        } catch (Exception e) {
+        }
+        this.nodeNameAddress = nodeNameAddress;
         this.nodeId = in.readString().intern();
         this.ephemeralId = in.readString().intern();
         this.hostName = in.readString().intern();

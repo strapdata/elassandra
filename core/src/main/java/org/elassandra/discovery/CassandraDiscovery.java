@@ -151,8 +151,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
             // initialize cluster from cassandra system.peers 
             // WARNING: system.peers may be incomplete because commitlogs not yet applied
-            for (UntypedResultSet.Row row : executeInternal("SELECT peer, data_center, rack, rpc_address, host_id from system." + SystemKeyspace.PEERS)) {
+            for (UntypedResultSet.Row row : executeInternal("SELECT peer, data_center, rack, preferred_ip, rpc_address, host_id from system." + SystemKeyspace.PEERS)) {
                 InetAddress peer = row.getInetAddress("peer");
+                InetAddress preferred_ip = row.has("preferred_ip") ? row.getInetAddress("preferred_ip") : null;
                 InetAddress rpc_address = row.has("rpc_address") ? row.getInetAddress("rpc_address") : null;
                 String datacenter = row.has("data_center") ? row.getString("data_center") : null;
                 String host_id = row.has("host_id") ? row.getUUID("host_id").toString() : null;
@@ -162,7 +163,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     if (row.has("rack"))
                         attrs.put("rack", row.getString("rack"));
                     
-                    DiscoveryNode dn = new DiscoveryNode(buildNodeName(peer), host_id, new InetSocketTransportAddress(rpc_address, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
+                    DiscoveryNode dn = new DiscoveryNode(buildNodeName(peer), host_id, 
+                            new InetSocketTransportAddress(Boolean.getBoolean("es.use_internal_address") && preferred_ip != null ? preferred_ip : rpc_address, publishPort()), 
+                            attrs, 
+                            CASSANDRA_ROLES, 
+                            Version.CURRENT);
                     EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(peer);
                     if (state == null) {
                         dn.status( DiscoveryNodeStatus.UNKNOWN );
@@ -295,8 +300,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
                         InetAddress internal_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.INTERNAL_IP).value);
                         InetAddress rpc_address = com.google.common.net.InetAddresses.forString(state.getApplicationState(ApplicationState.RPC_ADDRESS).value);
+                        
                         dn = new DiscoveryNode(buildNodeName(internal_address), hostId.toString(), 
-                                new InetSocketTransportAddress(rpc_address, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
+                                new InetSocketTransportAddress(Boolean.getBoolean("es.use_internal_address") ? internal_address : rpc_address, publishPort()), attrs, CASSANDRA_ROLES, Version.CURRENT);
                         dn.status(status);
 
                         if (!localAddress.equals(endpoint)) {
@@ -518,7 +524,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * ES RPC adress can be different from the cassandra broadcast address.
      */
     private boolean isNormal(DiscoveryNode node) {
-        EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(node.getInetAddress());
+        // endpoint address = C* broadcast address = Elasticsearch node name (transport may be bound to C* internal or C* RPC broadcast)
+        EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(InetAddresses.forString(node.getName()));
         if (state == null) {
             logger.warn("Node endpoint address=[{}] name=[{}] state not found", node.getInetAddress(), node.getName());
             return false;
