@@ -1,0 +1,10 @@
+curl -XPUT  -H "Content-Type:application/json" "$PROTOCOL://$NODE:9200/test" -d'{
+  "settings": {
+    "keyspace": "test"
+  },
+  "mappings": {
+    "table_test": {
+      "discover": ".*"
+    }
+  }
+}
