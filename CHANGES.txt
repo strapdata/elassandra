@@ -1,3 +1,8 @@
+5.5.0.19 - 2018-06-17
+  * Enhance multicloud support
+  * Fix #199 cassandra update to null
+  * Fix race condition on index initialization
+
 5.5.0.18 - 2018-06-05
   * Fix support for range partition deletion and add support for smallint and tinyint
   * Fix #197 Deletion of a List element removes the document on ES
