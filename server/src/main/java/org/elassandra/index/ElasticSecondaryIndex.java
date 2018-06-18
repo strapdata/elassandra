@@ -236,7 +236,6 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     protected final ColumnFamilyStore baseCfs;
     protected final IndexMetadata indexMetadata;
     protected String typeName;
-    protected volatile boolean buildSubmit = false;
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
