@@ -25,6 +25,7 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.NativeLibrary;
 import org.apache.cassandra.utils.WindowsTimer;
 import org.apache.logging.log4j.Logger;
 import org.elassandra.NoPersistedMetaDataException;
@@ -150,6 +151,9 @@ public class ElassandraDaemon extends CassandraDaemon {
             logger.error(e.getMessage(),e);
         }
          */
+        
+        // #202 Initialize NativeLibrary.jnaLockable for correct Node initialization.
+        NativeLibrary.tryMlockall();
         
         //setup(addShutdownHook, settings, env, pluginList);
         org.elasticsearch.bootstrap.Bootstrap.initializeNatives(
