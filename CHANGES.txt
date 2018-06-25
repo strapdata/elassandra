@@ -1,3 +1,7 @@
+6.2.3.2 - 2018-06-25
+  * Fix packaging of elasticsearch-plugin in tarball distribution
+  * Fix #202 Memory lock not working
+
 6.2.3.1 - 2018-06-09
   * Upgrade to Elasticsearch 6.2.3 + Cassandra 3.11.2
   * Allow to use the cassandra listen_address as the elasticsearch transport publish address.
