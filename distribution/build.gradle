@@ -758,7 +758,7 @@ Map<String, String> expansionsForDistribution(distributionType) {
     'path.plugin_eshome': [
       'deb': '/usr/share/cassandra',
       'rpm': '/usr/share/cassandra',
-      'def': '`dirname "$SCRIPT"`'
+      'def': '$(dirname $(dirname "$SCRIPT"))'
     ],
     
     'heap.min': defaultHeapSize,
