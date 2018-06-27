@@ -263,7 +263,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             MetaData metaData = this.node.clusterService().readInternalMetaDataAsRow();
             if (metaData != null && metaData.version() > systemMetadata.version()) {
                 try {
-                    logger.warn("Refreshing newer metadata found in {}.{} metaData uuid={} version={}", 
+                    logger.warn("Refreshing newer metadata found in {}.{} metaData uuid={} version={}",
                             ClusterService.ELASTIC_ADMIN_KEYSPACE, ClusterService.ELASTIC_ADMIN_METADATA_TABLE,
                             metaData.clusterUUID(), metaData.version());
                     node.clusterService().submitRefreshMetaData(metaData, "metadatarefresh");
@@ -290,10 +290,10 @@ public class ElassandraDaemon extends CassandraDaemon {
         setupListeners.add(listener);
     }
     
-    public void completeSetup() 
+    public void completeSetup()
     {
         super.completeSetup();
-        if (this.node != null && this.node.clusterService() != null) 
+        if (this.node != null && this.node.clusterService() != null)
             this.node.clusterService().publishGossipStates();
         
         for(SetupListener listener : setupListeners)
@@ -301,19 +301,19 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
     
     /**
-     * Called just before boostraping, and after CQL schema is complete, 
+     * Called just before boostraping, and after CQL schema is complete,
      * so elasticsearch mapping may be available from the CQL schema.
      */
     @Override
     public void beforeBootstrap() {
         if (node != null && needsMappingFromSchema)
         {
-            try 
+            try
             {
                 // load mapping from schema jsut before bootstrapping C*
                 systemMetadata = this.node.clusterService().readMetaDataAsComment();
                 activateAndWaitShards("before cassandra boostraping");
-            } catch(Throwable e) 
+            } catch(Throwable e)
             {
                 logger.error("Failed to load Elasticsearch mapping from CQL schema before bootstraping:", e);
             }
@@ -325,14 +325,14 @@ public class ElassandraDaemon extends CassandraDaemon {
      * If we don't have yet found the elasticsearch mapping from the CQL schema, wait for the CQL schema to complete before trying to start elasticsearch.
      * Obviously, the first seed node will wait (30s by default) for nothing (or use cassandra.ring_delay_ms=0).
      */
-    public void ringReady() 
+    public void ringReady()
     {
-        if (node != null) 
+        if (node != null)
         {
             // wait for schema before starting elasticsearch node
-            if (needsMappingFromSchema && !activated)  
+            if (needsMappingFromSchema && !activated)
             {
-                try 
+                try
                 {
                     logger.info("waiting "+StorageService.RING_DELAY+"ms for CQL schema to get the elasticsearch mapping");
                     // first sleep the delay to make sure we see all our peers
@@ -354,7 +354,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                         MigrationManager.waitUntilReadyForBootstrap();
                     }
                     systemMetadata = this.node.clusterService().readMetaDataAsComment();
-                } catch(Throwable e) 
+                } catch(Throwable e)
                 {
                     logger.warn("Failed to load elasticsearch mapping from CQL schema after after joining without boostraping:", e);
                 }
@@ -363,7 +363,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
     }
     
-    public void activateAndWaitShards(String source) 
+    public void activateAndWaitShards(String source)
     {
         if (!activated) {
             activated = true;
@@ -450,7 +450,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                 .put("discovery.type", "cassandra")
                 .put("node.data", true)
                 .put("node.master", true)
-                .put("node.name", CassandraDiscovery.buildNodeName(DatabaseDescriptor.getBroadcastAddress()))
+                .put("node.name", CassandraDiscovery.buildNodeName(FBUtilities.getBroadcastAddress()))
                 .put("node.attr.dc", DatabaseDescriptor.getLocalDataCenter())
                 .put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastAddress()))
                 .put("cluster.name", ClusterService.getElasticsearchClusterName(env.settings()))
