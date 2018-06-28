@@ -517,7 +517,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                     }
                                 }
                             } else {
-                                logger.error("Unexpected subfield={} for field={} column type={}, ignoring value={}",entry.getKey(), mapper.name(), cd.type.asCQL3Type().toString(), entry.getValue());
+                                logger.error("Unexpected subfield={} for field={} column type={}, ignoring value={}",
+                                        entry.getKey(), mapper != null ? mapper.name() : null, cd != null && cd.type != null ? cd.type.asCQL3Type().toString() : null, entry.getValue());
                             }
                         }
 
