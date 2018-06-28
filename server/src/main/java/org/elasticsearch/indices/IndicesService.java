@@ -779,8 +779,8 @@ public class IndicesService extends AbstractLifecycleComponent
                 logger.warn((Supplier<?>) () -> new ParameterizedMessage("[{}] failed to load state file from a stale deleted index, folders will be left on disk", index), e);
                 return null;
             }
-            final IndexSettings indexSettings = buildIndexSettings(metaData);
             try {
+                final IndexSettings indexSettings = buildIndexSettings(metaData);
                 deleteIndexStoreIfDeletionAllowed("stale deleted index", index, indexSettings, ALWAYS_TRUE);
             } catch (Exception e) {
                 // we just warn about the exception here because if deleteIndexStoreIfDeletionAllowed
