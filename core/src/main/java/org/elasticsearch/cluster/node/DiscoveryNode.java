@@ -211,9 +211,20 @@ public class DiscoveryNode implements Writeable, ToXContent {
      */
     public DiscoveryNode(String nodeName, String nodeId, TransportAddress address,
                          Map<String, String> attributes, Set<Role> roles, Version version) {
-        this(nodeName, nodeId, nodeId, address.getHost(), address.getAddress(), address, attributes, roles, version);
+        this(nodeName, nodeId, nodeId, address.getHost(), address.getAddress(), address, attributes, roles, version, DiscoveryNodeStatus.UNKNOWN);
+    }
+    
+    public DiscoveryNode(String nodeName, String nodeId, TransportAddress address,
+            Map<String, String> attributes, Set<Role> roles, Version version, DiscoveryNodeStatus status) {
+        this(nodeName, nodeId, nodeId, address.getHost(), address.getAddress(), address, attributes, roles, version, status);
     }
 
+    public DiscoveryNode(String nodeName, String nodeId, String ephemeralId, String hostName, String hostAddress,
+            TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version versions) {
+        this(nodeName, nodeId, ephemeralId, hostName, hostAddress,
+            address, attributes, roles, versions, DiscoveryNodeStatus.UNKNOWN);
+    }
+    
     /**
      * Creates a new {@link DiscoveryNode}.
      * <p>
@@ -233,7 +244,7 @@ public class DiscoveryNode implements Writeable, ToXContent {
      * @param version          the version of the node
      */
     public DiscoveryNode(String nodeName, String nodeId, String ephemeralId, String hostName, String hostAddress,
-                         TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version) {
+                         TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version, DiscoveryNodeStatus status) {
         InetAddress nodeAddr = null;
         if (nodeName != null) {
             this.nodeName = nodeName.intern();
@@ -255,6 +266,7 @@ public class DiscoveryNode implements Writeable, ToXContent {
         this.hostName = hostName.intern();
         this.hostAddress = hostAddress.intern();
         this.address = address;
+        this.status = status;
         if (version == null) {
             this.version = Version.CURRENT;
         } else {
@@ -278,8 +290,7 @@ public class DiscoveryNode implements Writeable, ToXContent {
     public static DiscoveryNode createLocal(Settings settings, TransportAddress publishAddress, String nodeId) {
         Map<String, String> attributes = new HashMap<>(Node.NODE_ATTRIBUTES.get(settings).getAsMap());
         Set<Role> roles = getRolesFromSettings(settings);
-
-        return new DiscoveryNode(Node.NODE_NAME_SETTING.get(settings), nodeId, publishAddress, attributes, roles, Version.CURRENT);
+        return new DiscoveryNode(Node.NODE_NAME_SETTING.get(settings), nodeId, publishAddress, attributes, roles, Version.CURRENT, DiscoveryNodeStatus.ALIVE);
     }
 
     /** extract node roles from the given settings */
