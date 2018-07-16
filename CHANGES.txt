@@ -1,3 +1,9 @@
+6.2.3.3 - 2018-07-16
+  * #211 Improve ip replacement management
+  * Fix race condition when computing the routing table
+  * Fix NPE when logging an error
+  * Fix bug #199 with node.name
+
 6.2.3.2 - 2018-06-25
   * Fix packaging of elasticsearch-plugin in tarball distribution
   * Fix #202 Memory lock not working
