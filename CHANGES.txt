@@ -1,3 +1,9 @@
+5.5.0.20 - 2018-07-16
+* #211 Improve ip replacement management
+* Fix race condition when computing the routing table
+* Fix NPE when logging an error
+* Fix bug #199 with node.name
+
 5.5.0.19 - 2018-06-17
   * Enhance multicloud support
   * Fix #199 cassandra update to null
