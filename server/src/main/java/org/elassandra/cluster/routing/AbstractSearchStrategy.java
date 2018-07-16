@@ -257,7 +257,7 @@ public abstract class AbstractSearchStrategy {
                             
                             // unassigned secondary shards (yellow), so id = null
                             ShardRouting replicaShardRouting = new ShardRouting(new ShardId(index, shardId), null, false, 
-                                    Router.this.getShardRoutingState(node2), 
+                                    ShardRoutingState.UNASSIGNED, 
                                     info, 
                                     EMPTY_RANGE_TOKEN_LIST);
                             shards.add(replicaShardRouting);
@@ -281,7 +281,7 @@ public abstract class AbstractSearchStrategy {
                         
                         // add one unassigned primary shards (red) for orphan token ranges.
                         ShardRouting primaryShardRouting = new ShardRouting(new ShardId(index, shardId), node.getId(), true, 
-                                Router.this.getShardRoutingState(node),
+                                ShardRoutingState.UNASSIGNED,
                                 info,
                                 Router.this.getTokenRanges(Router.this.redShards.get(node)));
                         isrt.add( new IndexShardRoutingTable(new ShardId(index,shardId), primaryShardRouting) );
