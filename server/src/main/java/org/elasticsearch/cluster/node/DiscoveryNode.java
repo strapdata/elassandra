@@ -204,7 +204,36 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     public DiscoveryNode(String nodeName, String nodeId, TransportAddress address,
                          Map<String, String> attributes, Set<Role> roles, Version version) {
         this(nodeName, nodeId, nodeId, address.address().getHostString(), address.getAddress(), address, attributes,
-            roles, version);
+            roles, version, DiscoveryNodeStatus.UNKNOWN);
+    }
+    
+    /**
+     * Creates a new {@link DiscoveryNode}
+     * <p>
+     * <b>Note:</b> if the version of the node is unknown {@link Version#minimumCompatibilityVersion()} should be used for the current
+     * version. it corresponds to the minimum version this elasticsearch version can communicate with. If a higher version is used
+     * the node might not be able to communicate with the remove node. After initial handshakes node versions will be discovered
+     * and updated.
+     * </p>
+     *
+     * @param nodeName         the nodes name
+     * @param nodeId           the nodes unique persistent id. An ephemeral id will be auto generated.
+     * @param address          the nodes transport address
+     * @param attributes       node attributes
+     * @param roles            node roles
+     * @param version          the version of the node
+     * @param status           DiscoveryNodeStus
+     */
+    public DiscoveryNode(String nodeName, String nodeId, TransportAddress address,
+            Map<String, String> attributes, Set<Role> roles, Version version, DiscoveryNodeStatus status) {
+            this(nodeName, nodeId, nodeId, address.address().getHostString(), address.getAddress(), address, attributes,
+                    roles, version, status);
+    }
+    
+    public DiscoveryNode(String nodeName, String nodeId, String ephemeralId, String hostName, String hostAddress,
+            TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version) {
+        this(nodeName, nodeId, ephemeralId, hostName, hostAddress,
+            address, attributes, roles, version, DiscoveryNodeStatus.UNKNOWN);
     }
 
     /**
@@ -226,7 +255,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      * @param version          the version of the node
      */
     public DiscoveryNode(String nodeName, String nodeId, String ephemeralId, String hostName, String hostAddress,
-                         TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version) {
+                         TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version, DiscoveryNodeStatus status) {
         InetAddress nodeAddr = null;
         if (nodeName != null) {
             this.nodeName = nodeName.intern();
@@ -248,6 +277,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         this.hostName = hostName.intern();
         this.hostAddress = hostAddress.intern();
         this.address = address;
+        this.status = status;
         if (version == null) {
             this.version = Version.CURRENT;
         } else {
@@ -271,7 +301,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     public static DiscoveryNode createLocal(Settings settings, TransportAddress publishAddress, String nodeId) {
         Map<String, String> attributes = Node.NODE_ATTRIBUTES.getAsMap(settings);
         Set<Role> roles = getRolesFromSettings(settings);
-        return new DiscoveryNode(Node.NODE_NAME_SETTING.get(settings), nodeId, publishAddress, attributes, roles, Version.CURRENT);
+        return new DiscoveryNode(Node.NODE_NAME_SETTING.get(settings), nodeId, publishAddress, attributes, roles, Version.CURRENT, DiscoveryNodeStatus.ALIVE);
     }
 
     /** extract node roles from the given settings */

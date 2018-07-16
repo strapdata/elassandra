@@ -23,7 +23,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
 import org.elassandra.discovery.CassandraDiscovery;
-import org.elassandra.discovery.CassandraDiscovery.MetaDataVersionListener;
+import org.elassandra.discovery.CassandraDiscovery.MetaDataVersionAckListener;
 import org.elassandra.shard.CassandraShardStartedBarrier;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.cluster.AckedClusterStateTaskListener;
