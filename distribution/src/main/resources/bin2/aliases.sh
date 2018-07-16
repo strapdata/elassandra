@@ -137,6 +137,7 @@ alias metadata='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/state/me
 alias stats='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_stats?pretty=true'
 alias shards='curl -s -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/shards?v | sort'
 alias indices='curl -s -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/indices?v | sort'
+alias allocation='curl -s -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/allocation?v'
 alias fielddata='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/fielddata/body,text?v'
 alias threads='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/thread_pool?v'
 alias hotthreads='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_nodes/hot_threads'
