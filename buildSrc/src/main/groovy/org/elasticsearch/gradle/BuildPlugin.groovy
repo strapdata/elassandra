@@ -277,13 +277,16 @@ class BuildPlugin implements Plugin<Project> {
                 return
             }
             configuration.resolutionStrategy {
-                 force 'com.google.guava:guava:19.0'
-                 force 'org.apache.thrift:libthrift:0.9.2'
+                 force 'com.google.guava:guava:23.3-jre'
+                 force 'com.google.code.findbugs:jsr305:3.0.2'
                  force 'org.apache.httpcomponents:httpclient:4.5.2'
                  force 'org.apache.httpcomponents:httpcore:4.4.5'
                  force 'commons-logging:commons-logging:1.2'
                  force 'commons-cli:commons-cli:1.3.1'
-                 force 'io.dropwizard.metrics:metrics-core:3.1.0'
+                 force 'io.dropwizard.metrics:metrics-core:3.1.5'
+                 force 'com.fasterxml.jackson.core:jackson-annotations:2.9.5'
+                 force 'net.openhft:chronicle-core:1.9.21'
+                 force 'org.codehaus.mojo:animal-sniffer-annotations:1.15'
             }
             configuration.resolutionStrategy.failOnVersionConflict()
             

@@ -17,13 +17,14 @@ package org.apache.cassandra.service;
 
 import com.google.common.util.concurrent.Uninterruptibles;
 
-import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.config.SchemaConstants;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.schema.MigrationManager;
+import org.apache.cassandra.schema.Schema;
+import org.apache.cassandra.schema.SchemaConstants;
+import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NativeLibrary;
 import org.apache.cassandra.utils.WindowsTimer;
@@ -209,13 +210,13 @@ public class ElassandraDaemon extends CassandraDaemon {
         // Set workload it to "elasticsearch" if column workload exists.
         try {
             ColumnIdentifier workload = new ColumnIdentifier("workload",false);
-            CFMetaData local = SystemKeyspace.metadata().getTableOrViewNullable(SystemKeyspace.LOCAL);
-            if (local.getColumnDefinition(workload) != null) {
+            TableMetadata local = SystemKeyspace.metadata().getTableOrViewNullable(SystemKeyspace.LOCAL);
+            if (local.getColumn(workload) != null) {
                 QueryProcessor.executeOnceInternal("INSERT INTO system.local (key, workload) VALUES (?,?)" , new Object[] { "local","elasticsearch" });
                 logger.info("Internal workload set to elasticsearch");
                 
-                CFMetaData system = SystemKeyspace.metadata().getTableOrViewNullable(SystemKeyspace.LOCAL);
-                hasWorkloadColumn = system.getColumnDefinition(workload) != null;
+                TableMetadata system = SystemKeyspace.metadata().getTableOrViewNullable(SystemKeyspace.LOCAL);
+                hasWorkloadColumn = system.getColumn(workload) != null;
             }
         } catch (Exception e1) {
             logger.error("Failed to set the workload to elasticsearch.",e1);
@@ -443,18 +444,18 @@ public class ElassandraDaemon extends CassandraDaemon {
                  // overloadable settings from elasticsearch.yml
                  // by default, HTTP is bound to C* rpc address, Transport is bound to C* internal listen address.
                 .put("network.bind_host", DatabaseDescriptor.getRpcAddress().getHostAddress())
-                .put("network.publish_host", FBUtilities.getBroadcastRpcAddress().getHostAddress())
-                .put("transport.bind_host", FBUtilities.getLocalAddress().getHostAddress())
-                .put("transport.publish_host", Boolean.getBoolean("es.use_internal_address") ? FBUtilities.getLocalAddress().getHostAddress() : FBUtilities.getBroadcastAddress().getHostAddress())
+                .put("network.publish_host", FBUtilities.getBroadcastNativeAddressAndPort().address.getHostAddress())
+                .put("transport.bind_host", FBUtilities.getLocalAddressAndPort().address.getHostAddress())
+                .put("transport.publish_host", Boolean.getBoolean("es.use_internal_address") ? FBUtilities.getLocalAddressAndPort().address.getHostAddress() : FBUtilities.getBroadcastNativeAddressAndPort().address.getHostAddress())
                 .put("path.data", getElasticsearchDataDir())
                 .put(settings)
                  // not overloadable settings.
                 .put("discovery.type", "cassandra")
                 .put("node.data", true)
                 .put("node.master", true)
-                .put("node.name", CassandraDiscovery.buildNodeName(FBUtilities.getBroadcastAddress()))
+                .put("node.name", CassandraDiscovery.buildNodeName(FBUtilities.getLocalAddressAndPort()))
                 .put("node.attr.dc", DatabaseDescriptor.getLocalDataCenter())
-                .put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastAddress()))
+                .put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastNativeAddressAndPort()))
                 .put("cluster.name", ClusterService.getElasticsearchClusterName(env.settings()))
                 .build();
     }

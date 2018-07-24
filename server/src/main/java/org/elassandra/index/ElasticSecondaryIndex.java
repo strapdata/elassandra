@@ -22,8 +22,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Maps;
 
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.Operator;
@@ -33,13 +31,14 @@ import org.apache.cassandra.db.ClusteringBound;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
-import org.apache.cassandra.db.PartitionColumns;
 import org.apache.cassandra.db.RangeTombstone;
 import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.db.ReadExecutionController;
+import org.apache.cassandra.db.RegularAndStaticColumns;
 import org.apache.cassandra.db.SinglePartitionReadCommand;
 import org.apache.cassandra.db.Slice;
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.db.WriteContext;
 import org.apache.cassandra.db.filter.RowFilter;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CollectionType;
@@ -62,7 +61,9 @@ import org.apache.cassandra.index.IndexRegistry;
 import org.apache.cassandra.index.transactions.IndexTransaction;
 import org.apache.cassandra.index.transactions.IndexTransaction.Type;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.IndexMetadata;
+import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
@@ -203,6 +204,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.google.common.collect.Iterables.transform;
+
 /**
  * Custom secondary index for CQL3 only, should be created when mapping is applied and local shard started.
  * Index rows as documents when Elasticsearch clusterState has no write blocks and local shard is started.
@@ -241,7 +244,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         this.baseCfs = baseCfs;
         this.indexMetadata = indexDef;
         this.index_name = baseCfs.keyspace.getName()+"."+baseCfs.name;
-        this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
+        this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.name);
         this.logger = Loggers.getLogger(this.getClass().getName()+"."+baseCfs.keyspace.getName()+"."+baseCfs.name);
     }
     
@@ -251,7 +254,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
     
     // Public because it's also used to convert index metadata into a thrift-compatible format
-    public static Pair<ColumnDefinition, IndexTarget.Type> parseTarget(CFMetaData cfm, IndexMetadata indexDef)
+    public static Pair<ColumnMetadata, IndexTarget.Type> parseTarget(TableMetadata cfm, IndexMetadata indexDef)
     {
         String target = indexDef.options.get("target");
         assert target != null : String.format(Locale.ROOT,"No target definition found for index %s", indexDef.name);
@@ -287,9 +290,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         // if it's not a CQL table, we can't assume that the column name is utf8, so
         // in that case we have to do a linear scan of the cfm's columns to get the matching one
         if (cfm.isCQLTable())
-            return Pair.create(cfm.getColumnDefinition(new ColumnIdentifier(columnName, true)), targetType);
+            return Pair.create(cfm.getColumn(new ColumnIdentifier(columnName, true)), targetType);
         else
-            for (ColumnDefinition column : cfm.allColumns())
+            for (ColumnMetadata column : cfm.columns())
                 if (column.name.toString().equals(columnName))
                     return Pair.create(column, targetType);
 
@@ -397,7 +400,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     }
                     if (subMapper == null) {
                         // dynamic field in top level map => update mapping and add the field.
-                        ColumnDefinition cd = baseCfs.metadata.getColumnDefinition(mapper.cqlName());
+                        ColumnMetadata cd = baseCfs.metadata.get().getColumn(mapper.cqlName());
                         if (subMapper == null && cd != null && cd.type.isCollection() && cd.type instanceof MapType) {
                             logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
                             CollectionType ctype = (CollectionType) cd.type;
@@ -541,7 +544,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         
         @Override
         public ParseContext createNestedContext(String fullPath) {
-            final Document doc = (baseCfs.metadata.hasStaticColumns()) ? new StaticDocument(fullPath, doc(), new Uid(docMapper.type(), id)) : new Document(fullPath, doc());
+            final Document doc = (baseCfs.metadata.get().hasStaticColumns()) ? new StaticDocument(fullPath, doc(), new Uid(docMapper.type(), id)) : new Document(fullPath, doc());
             addDoc(doc);
             return switchDoc(doc);
         }
@@ -758,7 +761,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 int x = input.name().indexOf('.');
                 String colName = (x > 0) ? input.name().substring(0,x) : input.name();
                 int idx = indexInfo.indexOf(colName);
-                return idx < baseCfs.metadata.partitionKeyColumns().size() || indexInfo.isStaticField(idx) ;
+                return idx < baseCfs.metadata.get().partitionKeyColumns().size() || indexInfo.isStaticField(idx) ;
             }
         }
 
@@ -868,11 +871,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     DocumentMapper docMapper = indexService.mapperService().documentMapper(typeName);
                     BooleanQuery.Builder builder = new BooleanQuery.Builder();
                     
-                    int partitionKeyLen = baseCfs.metadata.partitionKeyColumns().size();
+                    int partitionKeyLen = baseCfs.metadata.get().partitionKeyColumns().size();
                     
                     // build the primary key part of the delete by query
                     int i = 0;
-                    for(ColumnDefinition cd : baseCfs.metadata.primaryKeyColumns()) {
+                    for(ColumnMetadata cd : baseCfs.metadata.get().primaryKeyColumns()) {
                         if (i >= (partitionKeyLen + Math.max(start.size(), end.size())))
                             break;
                         
@@ -901,7 +904,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     
                     Query query = builder.build();
                     if (logger.isDebugEnabled()) {
-                        logger.debug("delete rangeTombstone from ks.cf={}.{} query={} in elasticsearch index=[{}]", baseCfs.metadata.ksName, baseCfs.name, query, name);
+                        logger.debug("delete rangeTombstone from ks.cf={}.{} query={} in elasticsearch index=[{}]", baseCfs.metadata.keyspace, baseCfs.name, query, name);
                     }
                     if (!updated)
                         updated = true;
@@ -920,14 +923,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
              * @param includeUpper
              * @return
              */
-            private Query buildQuery(ColumnDefinition cd, FieldMapper mapper, ByteBuffer lower, ByteBuffer upper, boolean includeLower, boolean includeUpper) {
+            private Query buildQuery(ColumnMetadata cd, FieldMapper mapper, ByteBuffer lower, ByteBuffer upper, boolean includeLower, boolean includeUpper) {
                 Object start = lower == null ? null : cd.type.compose(lower);
                 Object end = upper == null ? null : cd.type.compose(upper);
                 return buildQuery(cd, mapper, start, end, includeLower, includeUpper);
             }
             
             @SuppressForbidden(reason="unchecked")
-            private Query buildQuery(ColumnDefinition cd, FieldMapper mapper, Object start, Object end, boolean includeLower, boolean includeUpper) {
+            private Query buildQuery(ColumnMetadata cd, FieldMapper mapper, Object start, Object end, boolean includeLower, boolean includeUpper) {
                 Query query = null;
                 if (mapper != null) {
                     CQL3Type cql3Type = cd.type.asCQL3Type();
@@ -1121,7 +1124,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             List<ImmutableIndexInfo> indexList = new ArrayList<ImmutableIndexInfo>();
             
             for(IndexMetaData indexMetaData:state.metaData()) {
-                if (!ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace()))
+                if (!ElasticSecondaryIndex.this.baseCfs.metadata.keyspace.equals(indexMetaData.keyspace()))
                    continue;
                 
                 String index = indexMetaData.getIndex().getName();
@@ -1200,7 +1203,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             
             if (indexList.size() == 0) {
                 if (logger.isTraceEnabled())
-                    logger.warn("No active elasticsearch index for keyspace.table=[{}.{}] state={}",baseCfs.metadata.ksName, baseCfs.name, state);
+                    logger.warn("No active elasticsearch index for keyspace.table=[{}.{}] state={}",baseCfs.metadata.keyspace, baseCfs.name, state);
                 this.indices = null;
                 this.indexToIdx = null;
                 this.fieldsToIdx = null;
@@ -1224,10 +1227,10 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             
             // order fields with pk columns first
             final String[] fields = new String[fieldsMap.size()];
-            final int pkLength = baseCfs.metadata.partitionKeyColumns().size()+baseCfs.metadata.clusteringColumns().size();
+            final int pkLength = baseCfs.metadata.get().partitionKeyColumns().size()+baseCfs.metadata.get().clusteringColumns().size();
             this.indexedPkColumns = new boolean[pkLength];
             int j=0, l=0;
-            for(ColumnDefinition cd : Iterables.concat(baseCfs.metadata.partitionKeyColumns(), baseCfs.metadata.clusteringColumns())) {
+            for(ColumnMetadata cd : Iterables.concat(baseCfs.metadata.get().partitionKeyColumns(), baseCfs.metadata.get().clusteringColumns())) {
                 indexedPkColumns[l] = fieldsMap.containsKey(cd.name.toString());
                 if (indexedPkColumns[l])
                     fields[j++] = cd.name.toString();
@@ -1251,11 +1254,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 this.fieldsToIdx.put(fields[i], i);
             
             this.fieldsToRead = new BitSet(fields.length);
-            this.staticColumns = (baseCfs.metadata.hasStaticColumns()) ? new BitSet(fields.length) : null;
+            this.staticColumns = (baseCfs.metadata.get().hasStaticColumns()) ? new BitSet(fields.length) : null;
             boolean hasMultiCellColumn = false;
             for(int i=0; i < fields.length; i++) {
                 ColumnIdentifier colId = new ColumnIdentifier(fields[i], true);
-                ColumnDefinition colDef = baseCfs.metadata.getColumnDefinition(colId);
+                ColumnMetadata colDef = baseCfs.metadata.get().getColumn(colId);
                 if (colDef != null) {
                     // colDef may be null when mapping an object with no sub-field (and no underlying column, see #144)
                     this.fieldsToRead.set(i, fieldsMap.get(fields[i]) && !colDef.isPrimaryKeyColumn());
@@ -1359,16 +1362,16 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         }
 
         class WideRowcumentIndexer extends RowcumentIndexer {        
-            NavigableSet<Clustering> clusterings = new java.util.TreeSet<Clustering>(baseCfs.metadata.comparator);
-            Map<Clustering, WideRowcument> rowcuments = new TreeMap<Clustering, WideRowcument>(baseCfs.metadata.comparator);
+            NavigableSet<Clustering> clusterings = new java.util.TreeSet<Clustering>(baseCfs.metadata.get().comparator);
+            Map<Clustering, WideRowcument> rowcuments = new TreeMap<Clustering, WideRowcument>(baseCfs.metadata.get().comparator);
             Row inStaticRow, outStaticRow;
             
             public WideRowcumentIndexer(final DecoratedKey key,
-                    final PartitionColumns columns,
+                    final RegularAndStaticColumns columns,
                     final int nowInSec,
-                    final OpOrder.Group opGroup,
+                    final WriteContext ctx,
                     final IndexTransaction.Type transactionType) {
-                super(key, columns, nowInSec, opGroup, transactionType);
+                super(key, columns, nowInSec, ctx, transactionType);
             }
             
             public class WideRowcument extends Rowcument {
@@ -1401,12 +1404,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     if (logger.isTraceEnabled()) {
                         if (inRow != null)
                             logger.trace("indexer={} inRowData={} clustering={} static={} hasLiveData={}", 
-                                    WideRowcumentIndexer.this.hashCode(), inRow.toString(baseCfs.metadata, true, true), inRow.clustering(), 
-                                    inRow.isStatic(), inRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness())); 
+                                    WideRowcumentIndexer.this.hashCode(), inRow.toString(baseCfs.metadata.get(), true, true), inRow.clustering(), 
+                                    inRow.isStatic(), inRow.hasLiveData(nowInSec, baseCfs.metadata.get().enforceStrictLiveness())); 
                         if (outRow != null)
                             logger.trace("indexer={} outRowData={} clustering={} static={} hasLiveData={}", 
-                                    WideRowcumentIndexer.this.hashCode(), outRow.toString(baseCfs.metadata, true, true), outRow.clustering(), 
-                                    outRow.isStatic(), outRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness())); 
+                                    WideRowcumentIndexer.this.hashCode(), outRow.toString(baseCfs.metadata.get(), true, true), outRow.clustering(), 
+                                    outRow.isStatic(), outRow.hasLiveData(nowInSec, baseCfs.metadata.get().enforceStrictLiveness())); 
                     }
 
                     Row row = (inRow != null) ? inRow : outRow;
@@ -1445,7 +1448,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         if (hasMissingFields) {
                             if (logger.isTraceEnabled())
                                 logger.trace("indexer={} read partition for clusterings={}", this.hashCode(), clusterings);
-                            SinglePartitionReadCommand command = SinglePartitionReadCommand.create(baseCfs.metadata, nowInSec, key, clusterings);
+                            SinglePartitionReadCommand command = SinglePartitionReadCommand.create(baseCfs.metadata.get(), nowInSec, key, clusterings);
                             RowIterator rowIt = read(command);
                             if (!rowIt.staticRow().isEmpty())
                                 this.inStaticRow = rowIt.staticRow();
@@ -1514,11 +1517,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             SkinnyRowcument rowcument;
             
             public SkinnyRowcumentIndexer(final DecoratedKey key,
-                    final PartitionColumns columns,
+                    final RegularAndStaticColumns columns,
                     final int nowInSec,
-                    final OpOrder.Group opGroup,
+                    final WriteContext ctx,
                     final IndexTransaction.Type transactionType) {
-                super(key, columns, nowInSec, opGroup, transactionType);
+                super(key, columns, nowInSec, ctx, transactionType);
             }
             
             public class SkinnyRowcument extends Rowcument {
@@ -1547,7 +1550,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     case COMPACTION: // remove expired row or reindex a doc when a column has expired, happen only when index_on_compaction=true for at least one elasticsearch index.
                     case UPDATE:
                         if (rowcument.hasMissingFields()) {
-                            SinglePartitionReadCommand command = SinglePartitionReadCommand.fullPartitionRead(baseCfs.metadata, nowInSec, key);
+                            SinglePartitionReadCommand command = SinglePartitionReadCommand.fullPartitionRead(baseCfs.metadata.get(), nowInSec, key);
                             RowIterator rowIt = read(command);
                             if (rowIt.hasNext())
                                 try {
@@ -1576,31 +1579,31 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             final DecoratedKey key;
             final int nowInSec;
             final IndexTransaction.Type transactionType;
-            final OpOrder.Group opGroup;
-            final Object[] pkCols = new Object[baseCfs.metadata.partitionKeyColumns().size()+baseCfs.metadata.clusteringColumns().size()];
+            final WriteContext ctx;
+            final Object[] pkCols = new Object[baseCfs.metadata.get().partitionKeyColumns().size()+baseCfs.metadata.get().clusteringColumns().size()];
             final String partitionKey;
             BitSet targets = null;
             
             public RowcumentIndexer(final DecoratedKey key,
-                    final PartitionColumns columns,
+                    final RegularAndStaticColumns columns,
                     final int nowInSec,
-                    final OpOrder.Group opGroup,
+                    final WriteContext ctx,
                     final IndexTransaction.Type transactionType) {
                 this.key = key;
                 this.nowInSec = nowInSec;
-                this.opGroup = opGroup;
+                this.ctx = ctx;
                 this.transactionType = transactionType;
                 
-                AbstractType<?> keyValidator = baseCfs.metadata.getKeyValidator();
+                List<ColumnMetadata> partitionColumns = baseCfs.metadata.get().partitionKeyColumns();
                 int i = 0;
-                if (keyValidator instanceof CompositeType) {
-                    CompositeType composite = (CompositeType) keyValidator;
+                if (partitionColumns.size() == 1) {
+                    pkCols[i++] = baseCfs.metadata.get().partitionKeyType.compose(key.getKey());
+                } else {
+                    CompositeType composite = (CompositeType) baseCfs.metadata.get().partitionKeyType;
                     for(ByteBuffer bb : composite.split(key.getKey())) {
                         AbstractType<?> type = composite.types.get(i);
                         pkCols[i++] = type.compose(bb);
                     }
-                } else {
-                    pkCols[i++] = keyValidator.compose(key.getKey());
                 }
                 this.partitionKey = ClusterService.stringify(pkCols, i);
             }
@@ -1741,24 +1744,24 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     if (inRow != null) {
                         this.inRowDataSize = inRow.dataSize();
                         this.hasRowMarker = inRow.primaryKeyLivenessInfo().isLive(nowInSec);
-                        this.hasLiveData = inRow.hasLiveData(nowInSec, baseCfs.metadata.enforceStrictLiveness());
+                        this.hasLiveData = inRow.hasLiveData(nowInSec, baseCfs.metadata.get().enforceStrictLiveness());
                     }
                     Row row = inRow != null ? inRow : outRow;
                     this.isStatic = row.isStatic();
                     
                     // copy the indexed columns of partition key in values
                     int x = 0;
-                    for(int i=0 ; i < baseCfs.metadata.partitionKeyColumns().size(); i++) {
+                    for(int i=0 ; i < baseCfs.metadata.get().partitionKeyColumns().size(); i++) {
                         if (indexedPkColumns[i])
                             values[x++] = pkCols[i];
                     }
                     // copy the indexed columns of clustering key in values
                     if (!row.isStatic() && row.clustering().size() > 0) {
                         int i=0;
-                        for(ColumnDefinition ccd : baseCfs.metadata.clusteringColumns()) {
+                        for(ColumnMetadata ccd : baseCfs.metadata.get().clusteringColumns()) {
                             Object value = ClusterService.deserialize(ccd.type, row.clustering().get(i));
-                            pkCols[baseCfs.metadata.partitionKeyColumns().size()+i] = value;
-                            if (indexedPkColumns[baseCfs.metadata.partitionKeyColumns().size()+i])
+                            pkCols[baseCfs.metadata.get().partitionKeyColumns().size()+i] = value;
+                            if (indexedPkColumns[baseCfs.metadata.get().partitionKeyColumns().size()+i])
                                 values[x++] = value;
                             i++;
                         }
@@ -1796,7 +1799,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     if (cell.isLive(nowInSec) && indexOp) {
                         docTtl = Math.min(cell.localDeletionTime(), docTtl);
                         
-                        ColumnDefinition cd = cell.column();
+                        ColumnMetadata cd = cell.column();
                         if (cd.type.isCollection()) {
                             CollectionType ctype = (CollectionType) cd.type;
                             Object value = null;
@@ -2020,7 +2023,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                     SeqNoFieldMapper.SequenceIDFields.emptySeqID(),
                                     (isStatic()) ? partitionKey : id,
                                     context.type(),
-                                    ClusterService.stringify(pkCols, baseCfs.metadata.partitionKeyColumns().size()), // routing
+                                    ClusterService.stringify(pkCols, baseCfs.metadata.get().partitionKeyColumns().size()), // routing
                                     ((Long)key.getToken().getTokenValue()).longValue(), 
                                     context.docs(), 
                                     context.source(), // source 
@@ -2062,13 +2065,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 if (result.hasFailure() && logger.isErrorEnabled()) {
                                     logger.error((Supplier<?>) () -> 
                                         new ParameterizedMessage("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={}", 
-                                            baseCfs.metadata.ksName, baseCfs.metadata.cfName,
+                                            baseCfs.metadata.keyspace, baseCfs.metadata.name,
                                             context.indexInfo.name, typeName,
                                             parsedDoc.id(), operation.version(), result.isCreated(), isStatic(), ttl, context.indexInfo.refresh),
                                         result.getFailure());
                                 } else if (logger.isDebugEnabled()) {
                                     logger.debug("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={}", 
-                                            baseCfs.metadata.ksName, baseCfs.metadata.cfName,
+                                            baseCfs.metadata.keyspace, baseCfs.metadata.name,
                                             context.indexInfo.name, typeName,
                                             parsedDoc.id(), operation.version(), result.isCreated(), isStatic(), ttl, context.indexInfo.refresh);
                                 }
@@ -2171,12 +2174,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         
         if (mappingInfo == null) {
             if (logger.isWarnEnabled())  
-                logger.warn("No Elasticsearch index ready {}.{}",this.baseCfs.metadata.ksName, this.baseCfs.metadata.cfName);
+                logger.warn("No Elasticsearch index ready {}.{}",this.baseCfs.metadata.keyspace, this.baseCfs.metadata.name);
             return false;
         }
         if (mappingInfo.indices == null || mappingInfo.indices.length == 0) {
             if (logger.isWarnEnabled())  
-                logger.warn("No Elasticsearch index configured for {}.{}",this.baseCfs.metadata.ksName, this.baseCfs.metadata.cfName);
+                logger.warn("No Elasticsearch index configured for {}.{}",this.baseCfs.metadata.keyspace, this.baseCfs.metadata.name);
             return false;
         }
         return true;
@@ -2191,7 +2194,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         mappingInfoLock.writeLock().lock();
         try {
            // initilization could occur after reading mapping from CQL and cfNameToType map update.
-           this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
+           this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.name);
            this.mappingInfo = new ImmutableMappingInfo(clusterState);
            logger.info("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={} typeName={}", 
                index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()), this.typeName);
@@ -2213,7 +2216,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         } else {
             for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
                 IndexMetaData indexMetaData = cursor.value;
-                if (indexMetaData.keyspace().equals(this.baseCfs.metadata.ksName) && 
+                if (indexMetaData.keyspace().equals(this.baseCfs.metadata.keyspace) && 
                     indexMetaData.mapping(this.typeName) != null &&
                    !indexMetaData.equals(event.previousState().metaData().index(indexMetaData.getIndex().getName()))) {
                     updateMapping = true;
@@ -2415,7 +2418,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         if (indexShard != null) {
                             DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(typeName);
                             if (logger.isDebugEnabled()) {
-                                logger.debug("truncating from ks.cf={}.{} in elasticsearch index=[{}]", baseCfs.metadata.ksName, baseCfs.name, indexInfo.name);
+                                logger.debug("truncating from ks.cf={}.{} in elasticsearch index=[{}]", baseCfs.metadata.keyspace, baseCfs.name, indexInfo.name);
                             }
                             if (!indexInfo.updated)
                                 indexInfo.updated = true;
@@ -2448,7 +2451,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
 
     @Override
-    public boolean dependsOn(ColumnDefinition column) {
+    public boolean dependsOn(ColumnMetadata column) {
         return ES_QUERY_BYTE_BUFFER.equals(column.name.bytes) || 
                ES_OPTIONS_BYTE_BUFFER.equals(column.name.bytes) || 
                (this.mappingInfo != null && this.mappingInfo.fieldsToIdx.containsKey(column.name.toString()));
@@ -2470,7 +2473,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
 
     @Override
-    public boolean supportsExpression(ColumnDefinition column, Operator operator) {
+    public boolean supportsExpression(ColumnMetadata column, Operator operator) {
         return operator.equals(Operator.EQ) && (ES_QUERY_BYTE_BUFFER.equals(column.name.bytes) || ES_OPTIONS_BYTE_BUFFER.equals(column.name.bytes));
     }
 
@@ -2499,14 +2502,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
     
     @Override
-    public Indexer indexerFor(DecoratedKey key, PartitionColumns columns, int nowInSec, Group opGroup, Type transactionType) {
+    public Indexer indexerFor(DecoratedKey key, RegularAndStaticColumns columns, int nowInSec, WriteContext ctx, Type transactionType) {
         if (isIndexing()) {
             if (transactionType == Type.COMPACTION && !this.mappingInfo.indexOnCompaction)
                 return null;
 
             boolean found = (columns.size() == 0);
             if (!found) {
-                for(ColumnDefinition cd : columns) {
+                for(ColumnMetadata cd : columns) {
                     if (this.mappingInfo.fieldsToIdx.containsKey(cd.name.toString())) {
                         found = true;
                         break;
@@ -2516,9 +2519,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             if (found) {
                 try {
                     if (baseCfs.getComparator().size() == 0)
-                        return this.mappingInfo.new SkinnyRowcumentIndexer(key, columns, nowInSec, opGroup, transactionType);
+                        return this.mappingInfo.new SkinnyRowcumentIndexer(key, columns, nowInSec, ctx, transactionType);
                     else 
-                        return this.mappingInfo.new WideRowcumentIndexer(key, columns, nowInSec, opGroup, transactionType);
+                        return this.mappingInfo.new WideRowcumentIndexer(key, columns, nowInSec, ctx, transactionType);
                 } catch (Throwable e) {
                     throw new RuntimeException(e);
                 }

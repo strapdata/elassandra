@@ -26,10 +26,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.net.InetAddresses;
 
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.ColumnSpecification;
@@ -64,10 +61,15 @@ import org.apache.cassandra.exceptions.UnavailableException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
+import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.NetworkTopologyStrategy;
+import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.MigrationManager;
 import org.apache.cassandra.schema.ReplicationParams;
+import org.apache.cassandra.schema.Schema;
+import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableParams;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MapSerializer;
@@ -75,7 +77,6 @@ import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
-import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.ProtocolVersion;
@@ -529,43 +530,43 @@ public class ClusterService extends BaseClusterService {
         return router;
     }
     
-    public UntypedResultSet process(final ConsistencyLevel cl, final String query) 
+    public UntypedResultSet process(final String keyspace, final ConsistencyLevel cl, final String query) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return process(cl, null, query, new Long(0), new Object[] {});
+        return process(keyspace, cl, null, query, new Long(0), new Object[] {});
     }
     
-    public UntypedResultSet process(final ConsistencyLevel cl, ClientState clientState, final String query) 
+    public UntypedResultSet process(final String keyspace, final ConsistencyLevel cl, ClientState clientState, final String query) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return process(cl, null, clientState, query, new Long(0), new Object[] {});
+        return process(keyspace, cl, null, clientState, query, new Long(0), new Object[] {});
     }
 
-    public UntypedResultSet process(final ConsistencyLevel cl, ClientState clientState, final String query, Object... values) 
+    public UntypedResultSet process(final String keyspace, final ConsistencyLevel cl, ClientState clientState, final String query, Object... values) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return process(cl, null, clientState, query, new Long(0), values);
+        return process(keyspace, cl, null, clientState, query, new Long(0), values);
     }
     
     public UntypedResultSet process(final ConsistencyLevel cl, final String query, Object... values) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return process(cl, null, query, new Long(0), values);
+        return process(null, cl, null, query, new Long(0), values);
     }
    
-    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, final Object... values) 
+    public UntypedResultSet process(final String keyspace, final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, final Object... values) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        return process(cl, serialConsistencyLevel, query, new Long(0), values);
+        return process(keyspace, cl, serialConsistencyLevel, query, new Long(0), values);
     }
 
-    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, Long writetime, final Object... values) {
-        return process(cl, serialConsistencyLevel, ClientState.forInternalCalls(), query, writetime, values);
+    public UntypedResultSet process(final String keyspace, final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, Long writetime, final Object... values) {
+        return process(keyspace, cl, serialConsistencyLevel, ClientState.forInternalCalls(), query, writetime, values);
     }
     
-    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, ClientState clientState, final String query, Long writetime, final Object... values)
+    public UntypedResultSet process(final String keyspace, final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, ClientState clientState, final String query, Long writetime, final Object... values)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         if (logger.isDebugEnabled()) 
             logger.debug("processing CL={} SERIAL_CL={} query={}", cl, serialConsistencyLevel, query);
         
         // retreive prepared
         QueryState queryState = new QueryState(clientState);
-        ResultMessage.Prepared prepared = ClientState.getCQLQueryHandler().prepare(query, queryState, Collections.EMPTY_MAP);
+        ResultMessage.Prepared prepared = ClientState.getCQLQueryHandler().prepare(query, clientState, Collections.EMPTY_MAP);
         
         // bind
         List<ByteBuffer> boundValues = new ArrayList<ByteBuffer>(values.length);
@@ -576,20 +577,20 @@ public class ClusterService extends BaseClusterService {
         }
         
         // execute
-        QueryOptions queryOptions = (serialConsistencyLevel == null) ? QueryOptions.forInternalCalls(cl, boundValues) : QueryOptions.forInternalCalls(cl, serialConsistencyLevel, boundValues);
+        QueryOptions queryOptions = (serialConsistencyLevel == null) ? QueryOptions.forInternalCalls(cl, boundValues) : QueryOptions.forInternalCalls(cl, serialConsistencyLevel, boundValues, keyspace);
         ResultMessage result = ClientState.getCQLQueryHandler().process(query, queryState, queryOptions, Collections.EMPTY_MAP, System.nanoTime());
-        writetime = queryState.getTimestamp();
+        writetime = clientState.getTimestamp();
         return (result instanceof ResultMessage.Rows) ? UntypedResultSet.create(((ResultMessage.Rows) result).result) : null;
     }
 
-    public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, final String query, Object... values) {
-        return processWriteConditional(cl, serialCl, ClientState.forInternalCalls(), query, values);
+    public boolean processWriteConditional(final String keyspace, final ConsistencyLevel cl, final ConsistencyLevel serialCl, final String query, Object... values) {
+        return processWriteConditional(keyspace, cl, serialCl, ClientState.forInternalCalls(), query, values);
     }
     
-    public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, ClientState clientState, final String query, Object... values) 
+    public boolean processWriteConditional(final String keyspace, final ConsistencyLevel cl, final ConsistencyLevel serialCl, ClientState clientState, final String query, Object... values) 
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         try {
-            UntypedResultSet result = process(cl, serialCl, clientState, query, new Long(0), values);
+            UntypedResultSet result = process(keyspace, cl, serialCl, clientState, query, new Long(0), values);
             if (serialCl == null)
                 return true;
             
@@ -633,7 +634,7 @@ public class ClusterService extends BaseClusterService {
                 replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(replicationFactor));
                 for(Map.Entry<String, Integer> entry : replicationMap.entrySet())
                     replication.put(entry.getKey(), Integer.toString(entry.getValue()));
-                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
+                process(ksname, ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
                     String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s", 
                             ksname,  FBUtilities.json(replication).replaceAll("\"", "'")));
             }
@@ -1151,7 +1152,7 @@ public class ClusterService extends BaseClusterService {
             
             createIndexKeyspace(ksName, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1, mapperService.getIndexSettings().getIndexMetaData().replication());
             
-            CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
+            TableMetadata cfm = Schema.instance.getTableMetadata(ksName, cfName);
             boolean newTable = (cfm == null);
             
             DocumentMapper docMapper = mapperService.documentMapper(mappingMd.type());
@@ -1184,7 +1185,7 @@ public class ClusterService extends BaseClusterService {
                 FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
                 if (fieldMapper != null) {
                     if (fieldMapper instanceof GeoPointFieldMapper) {
-                        ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+                        ColumnMetadata cdef = (newTable) ? null : cfm.getColumn(new ColumnIdentifier(column, true));
                         if (cdef != null && cdef.type instanceof UTF8Type) {
                             // index geohash stored as text in cassandra.
                             cqlType = "text";
@@ -1293,7 +1294,7 @@ public class ClusterService extends BaseClusterService {
                         if (isStatic) columnsList.append(" static");
                     }
                 } else {
-                    ColumnDefinition cdef = cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+                    ColumnMetadata cdef = cfm.getColumn(new ColumnIdentifier(column, true));
                     if (cqlType != null) {
                         if (cdef == null) {
                             for(int i=0; i < primaryKeyLength; i++) {
@@ -1407,11 +1408,12 @@ public class ClusterService extends BaseClusterService {
                                         ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE,
                                         metadataSchemaUpdate.version, metadataSchemaUpdate.timestamp);
                                 // delayed CQL schema update with timestamp = time of cluster state update
-                                CFMetaData cfm = getCFMetaData(ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE).copy();
+                                TableMetadata cfm = getTableMetadata(ELASTIC_ADMIN_KEYSPACE, ELASTIC_ADMIN_METADATA_TABLE);
+                                TableMetadata.Builder builder = cfm.unbuild();
                                 TableAttributes attrs = new TableAttributes();
                                 attrs.addProperty(TableParams.Option.COMMENT.toString(), metadataSchemaUpdate.metaDataString);
-                                cfm.params( attrs.asAlteredTableParams(cfm.params) );
-                                MigrationManager.announceColumnFamilyUpdate(cfm, null, false, metadataSchemaUpdate.timestamp);
+                                builder.params( attrs.asAlteredTableParams(cfm.params) );
+                                MigrationManager.announceTableUpdate(builder.build(), null, false, metadataSchemaUpdate.timestamp);
                                 /*
                                 QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'", 
                                         elasticAdminKeyspaceName,  ELASTIC_ADMIN_METADATA_TABLE, metadataSchemaUpdate.metaDataString));
@@ -1446,10 +1448,10 @@ public class ClusterService extends BaseClusterService {
     // build secondary indices when shard is started and mapping applied
     public void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException {
         final String cfName = typeToCfName(ksName, mapping.type());
-        final CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
+        final TableMetadata cfm = Schema.instance.getTableMetadata(ksName, cfName);
         boolean found = false;
-        if (cfm != null && cfm.getIndexes() != null) {
-            for(IndexMetadata indexMetadata : cfm.getIndexes()) {
+        if (cfm != null && cfm.indexes != null) {
+            for(IndexMetadata indexMetadata : cfm.indexes) {
                 if (indexMetadata.isCustom() && indexMetadata.options.get(IndexTarget.CUSTOM_INDEX_OPTION_NAME).equals(className)) {
                     found = true;
                     break;
@@ -1474,26 +1476,26 @@ public class ClusterService extends BaseClusterService {
     
     public void dropSecondaryIndices(final IndexMetaData indexMetaData) throws RequestExecutionException {
         String ksName = indexMetaData.keyspace();
-        for(CFMetaData cfMetaData : Schema.instance.getKSMetaData(ksName).tablesAndViews()) {
+        for(TableMetadata cfMetaData : Schema.instance.getKeyspaceMetadata(ksName).tablesAndViews()) {
             if (cfMetaData.isCQLTable())
                 dropSecondaryIndex(cfMetaData);
         }
     }
 
     public void dropSecondaryIndex(String ksName, String cfName) throws RequestExecutionException  {
-        CFMetaData cfMetaData = Schema.instance.getCFMetaData(ksName, cfName);
+        TableMetadata cfMetaData = Schema.instance.getTableMetadata(ksName, cfName);
         if (cfMetaData != null)
             dropSecondaryIndex(cfMetaData);
     }
 
-    public void dropSecondaryIndex(CFMetaData cfMetaData) throws RequestExecutionException  {
-        for(IndexMetadata idx : cfMetaData.getIndexes()) {
+    public void dropSecondaryIndex(TableMetadata cfMetaData) throws RequestExecutionException  {
+        for(IndexMetadata idx : cfMetaData.indexes) {
             if (idx.isCustom()) {
                 String className = idx.options.get(IndexTarget.CUSTOM_INDEX_OPTION_NAME);
                 if (className != null && className.endsWith("ElasticSecondaryIndex")) {
-                    logger.debug("DROP INDEX IF EXISTS {}.{}", cfMetaData.ksName, idx.name);
+                    logger.debug("DROP INDEX IF EXISTS {}.{}", cfMetaData.keyspace, idx.name);
                     QueryProcessor.process(String.format(Locale.ROOT, "DROP INDEX IF EXISTS \"%s\".\"%s\"",
-                            cfMetaData.ksName, idx.name), 
+                            cfMetaData.keyspace, idx.name), 
                             ConsistencyLevel.LOCAL_ONE);
                 }
             }
@@ -1508,7 +1510,7 @@ public class ClusterService extends BaseClusterService {
     }
 
     public void dropTable(String ksName, String cfName) throws RequestExecutionException  {
-        CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
+        TableMetadata cfm = Schema.instance.getTableMetadata(ksName, cfName);
         if (cfm != null) {
             logger.warn("DROP TABLE IF EXISTS {}.{}", ksName, cfName);
             QueryProcessor.process(String.format(Locale.ROOT, "DROP TABLE IF EXISTS \"%s\".\"%s\"", ksName, cfName), ConsistencyLevel.LOCAL_ONE);
@@ -1528,8 +1530,8 @@ public class ClusterService extends BaseClusterService {
             .append("_idx").toString();
     }
     
-    public static CFMetaData getCFMetaData(final String ksName, final String cfName) throws ActionRequestValidationException {
-        CFMetaData metadata = Schema.instance.getCFMetaData(ksName, cfName);
+    public static TableMetadata getTableMetadata(final String ksName, final String cfName) throws ActionRequestValidationException {
+        TableMetadata metadata = Schema.instance.getTableMetadata(ksName, cfName);
         if (metadata == null) {
             ActionRequestValidationException arve = new ActionRequestValidationException();
             arve.addValidationError(ksName+"."+cfName+" table does not exists");;
@@ -1628,7 +1630,7 @@ public class ClusterService extends BaseClusterService {
     }
     
     
-    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final String id, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException, RequestExecutionException,
+    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final String id, final String[] columns, Map<String, ColumnMetadata> columnDefs) throws InvalidRequestException, RequestExecutionException,
             RequestValidationException, IOException {
         return fetchRow(indexService, type, id, columns, ConsistencyLevel.LOCAL_ONE, columnDefs);
     }
@@ -1636,7 +1638,7 @@ public class ClusterService extends BaseClusterService {
     /**
      * Fetch from the coordinator node.
      */
-    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final String id, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException,
+    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final String id, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnMetadata> columnDefs) throws InvalidRequestException,
             RequestExecutionException, RequestValidationException, IOException {
         DocPrimaryKey docPk = parseElasticId(indexService, type, id);
         return fetchRow(indexService, type, docPk, columns, cl, columnDefs);
@@ -1645,12 +1647,12 @@ public class ClusterService extends BaseClusterService {
     /**
      * Fetch from the coordinator node.
      */
-    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException,
+    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnMetadata> columnDefs) throws InvalidRequestException,
             RequestExecutionException, RequestValidationException, IOException {
         return process(cl, buildFetchQuery(indexService, type, columns, docPk.isStaticDocument, columnDefs), docPk. values);
     }
     
-    public Engine.GetResult fetchSourceInternal(final IndexService indexService, String type, String id, Map<String,ColumnDefinition> columnDefs, LongConsumer onRefresh) throws IOException {
+    public Engine.GetResult fetchSourceInternal(final IndexService indexService, String type, String id, Map<String,ColumnMetadata> columnDefs, LongConsumer onRefresh) throws IOException {
         long time = System.nanoTime();
         DocPrimaryKey docPk = parseElasticId(indexService, type, id);
         UntypedResultSet result = fetchRowInternal(indexService, type, docPk, columnDefs.keySet().toArray(new String[columnDefs.size()]), columnDefs);
@@ -1666,16 +1668,16 @@ public class ClusterService extends BaseClusterService {
         return Engine.GetResult.NOT_EXISTS;
     }
 
-    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String id, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
+    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String id, final String[] columns, Map<String,ColumnMetadata> columnDefs) throws ConfigurationException, IOException  {
         DocPrimaryKey docPk = parseElasticId(indexService, cfName, id);
         return fetchRowInternal(indexService, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
     }
 
-    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final  DocPrimaryKey docPk, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
+    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final  DocPrimaryKey docPk, final String[] columns, Map<String,ColumnMetadata> columnDefs) throws ConfigurationException, IOException  {
         return fetchRowInternal(indexService, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
     }
 
-    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String[] columns, final Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException, IndexNotFoundException  {
+    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String[] columns, final Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnMetadata> columnDefs) throws ConfigurationException, IOException, IndexNotFoundException  {
         return QueryProcessor.executeInternal(buildFetchQuery(indexService, cfName, columns, forStaticDocument, columnDefs), pkColumns);
     }
   
@@ -1697,12 +1699,12 @@ public class ClusterService extends BaseClusterService {
         return null;
     }
     
-    public String buildFetchQuery(final IndexService indexService, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs) 
+    public String buildFetchQuery(final IndexService indexService, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnMetadata> columnDefs) 
             throws IndexNotFoundException, IOException 
     {
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
         String cfName = typeToCfName(indexService.keyspace(), type);
-        CFMetaData metadata = getCFMetaData(indexService.keyspace(), cfName);
+        TableMetadata metadata = getTableMetadata(indexService.keyspace(), cfName);
         DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
         String regularColumn = null;
         StringBuilder query = new StringBuilder();
@@ -1741,7 +1743,7 @@ public class ClusterService extends BaseClusterService {
                 // nothing to add.
                 break;
             default:
-                ColumnDefinition cd = columnDefs.get(c);
+                ColumnMetadata cd = columnDefs.get(c);
                 if (cd != null && (cd.isPartitionKey() || cd.isStatic() || !forStaticDocument)) {
                    query.append(query.length() > prefixLength ? ',':' ').append("\"").append(c).append("\"");
                 }
@@ -2074,7 +2076,7 @@ public class ClusterService extends BaseClusterService {
                 indexService.index().getName(), cfName, request.id(), sourceMap, 
                 request.waitForActiveShards().toCassandraConsistencyLevel());
 
-        final CFMetaData metadata = getCFMetaData(keyspaceName, cfName);
+        final TableMetadata metadata = getTableMetadata(keyspaceName, cfName);
         
         String id = request.id();
         Map<String, ByteBuffer> map = new HashMap<String, ByteBuffer>();
@@ -2106,7 +2108,7 @@ public class ClusterService extends BaseClusterService {
             } else {
                 colName = mapper.cqlName();    // cached ByteBuffer column name.
             }
-            final ColumnDefinition cd = metadata.getColumnDefinition(colName);
+            final ColumnMetadata cd = metadata.getColumn(colName);
             if (cd != null) {
                 // we got a CQL column.
                 Object fieldValue = sourceMap.get(field);
@@ -2132,7 +2134,7 @@ public class ClusterService extends BaseClusterService {
                     }
                     
                     // hack to store percolate query as a string while mapper is an object mapper.
-                    if (metadata.cfName.equals("_percolator") && field.equals("query")) {
+                    if (metadata.name.equals("_percolator") && field.equals("query")) {
                         if (cd.type.isCollection()) {
                             switch (((CollectionType<?>)cd.type).kind) {
                             case LIST :
@@ -2171,18 +2173,18 @@ public class ClusterService extends BaseClusterService {
             query = buildInsertQuery(keyspaceName, cfName, map, id, 
                     true,                
                     values, 0);
-            final boolean applied = processWriteConditional(request.waitForActiveShards().toCassandraConsistencyLevel(), ConsistencyLevel.LOCAL_SERIAL, query, (Object[])values);
+            final boolean applied = processWriteConditional(indexService.keyspace(), request.waitForActiveShards().toCassandraConsistencyLevel(), ConsistencyLevel.LOCAL_SERIAL, query, (Object[])values);
             if (!applied)
                 throw new VersionConflictEngineException(indexShard.shardId(), cfName, request.id(), "PAXOS insert failed, document already exists");
         } else {
             // set empty top-level fields to null to overwrite existing columns.
             for(FieldMapper m : fieldMappers) {
                 String fullname = m.name();
-                if (map.get(fullname) == null && !fullname.startsWith("_") && fullname.indexOf('.') == -1 && metadata.getColumnDefinition(m.cqlName()) != null) 
+                if (map.get(fullname) == null && !fullname.startsWith("_") && fullname.indexOf('.') == -1 && metadata.getColumn(m.cqlName()) != null) 
                     map.put(fullname, null);
             }
             for(String m : objectMappers.keySet()) {
-                if (map.get(m) == null && m.indexOf('.') == -1 && metadata.getColumnDefinition(objectMappers.get(m).cqlName()) != null)
+                if (map.get(m) == null && m.indexOf('.') == -1 && metadata.getColumn(objectMappers.get(m).cqlName()) != null)
                     map.put(m, null);
             }
             values = new ByteBuffer[map.size()];
@@ -2250,10 +2252,10 @@ public class ClusterService extends BaseClusterService {
     public DocPrimaryKey parseElasticId(final IndexService indexService, final String type, final String id, Map<String, Object> map) throws JsonParseException, JsonMappingException, IOException {
         String ksName = indexService.keyspace();
         String cfName = typeToCfName(ksName, type);
-        CFMetaData metadata = getCFMetaData(ksName, cfName);
+        TableMetadata metadata = getTableMetadata(ksName, cfName);
         
-        List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
-        List<ColumnDefinition> clusteringColumns = metadata.clusteringColumns();
+        List<ColumnMetadata> partitionColumns = metadata.partitionKeyColumns();
+        List<ColumnMetadata> clusteringColumns = metadata.clusteringColumns();
         int ptLen = partitionColumns.size();
         
         if (id.startsWith("[") && id.endsWith("]")) {
@@ -2266,7 +2268,7 @@ public class ClusterService extends BaseClusterService {
                 throw new JsonMappingException("_id="+id+" longer than the primary key size="+(ptLen+clusteringColumns.size()) );
             
             for(int i=0; i < elements.length; i++) {
-                ColumnDefinition cd = (i < ptLen) ? partitionColumns.get(i) : clusteringColumns.get(i - ptLen);
+                ColumnMetadata cd = (i < ptLen) ? partitionColumns.get(i) : clusteringColumns.get(i - ptLen);
                 AbstractType<?> atype = cd.type;
                 if (map == null) {
                     names[i] = cd.name.toString();
@@ -2291,8 +2293,8 @@ public class ClusterService extends BaseClusterService {
     public DocPrimaryKey parseElasticRouting(final IndexService indexService, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
         String ksName = indexService.keyspace();
         String cfName = typeToCfName(ksName, type);
-        CFMetaData metadata = getCFMetaData(ksName, cfName);
-        List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
+        TableMetadata metadata = getTableMetadata(ksName, cfName);
+        List<ColumnMetadata> partitionColumns = metadata.partitionKeyColumns();
         int ptLen = partitionColumns.size();
         if (routing.startsWith("[") && routing.endsWith("]")) {
             // _routing is JSON array of values.
@@ -2304,7 +2306,7 @@ public class ClusterService extends BaseClusterService {
                 throw new JsonMappingException("_routing="+routing+" does not match the partition key size="+ptLen);
             
             for(int i=0; i < elements.length; i++) {
-                ColumnDefinition cd = partitionColumns.get(i);
+                ColumnMetadata cd = partitionColumns.get(i);
                 AbstractType<?> atype = cd.type;
                 names[i] = cd.name.toString();
                 values[i] = atype.compose( fromString(atype, elements[i].toString()) );
@@ -2320,11 +2322,11 @@ public class ClusterService extends BaseClusterService {
     
     public Token getToken(final IndexService indexService, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
         DocPrimaryKey pk = parseElasticRouting(indexService, type, routing);
-        CFMetaData cfm = getCFMetaData(indexService.keyspace(), type);
-        CBuilder builder = CBuilder.create(cfm.getKeyValidatorAsClusteringComparator());
+        TableMetadata cfm = getTableMetadata(indexService.keyspace(), type);
+        CBuilder builder = CBuilder.create(cfm.partitionKeyAsClusteringComparator());
         for (int i = 0; i < cfm.partitionKeyColumns().size(); i++)
             builder.add(pk.values[i]);
-        return cfm.partitioner.getToken(CFMetaData.serializePartitionKey(builder.build()));
+        return cfm.partitioner.getToken(builder.build().serializeAsPartitionKey());
     }
     
     public Set<Token> getTokens(final IndexService indexService, final String[] types, final String routing) throws JsonParseException, JsonMappingException, IOException {
@@ -2337,7 +2339,7 @@ public class ClusterService extends BaseClusterService {
     }
     
     public boolean isStaticDocument(final IndexService indexService, Uid uid) throws JsonParseException, JsonMappingException, IOException {
-        CFMetaData metadata = getCFMetaData(indexService.keyspace(), typeToCfName(indexService.keyspace(), uid.type()));
+        TableMetadata metadata = getTableMetadata(indexService.keyspace(), typeToCfName(indexService.keyspace(), uid.type()));
         String id = uid.id();
         if (id.startsWith("[") && id.endsWith("]")) {
             org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
@@ -2369,9 +2371,9 @@ public class ClusterService extends BaseClusterService {
     
     
     
-    public boolean isDatacenterGroupMember(InetAddress endpoint) {
+    public boolean isDatacenterGroupMember(InetAddressAndPort endpoint) {
         String endpointDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint);
-        KeyspaceMetadata  elasticAdminMetadata = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
+        KeyspaceMetadata  elasticAdminMetadata = Schema.instance.getKeyspaceMetadata(this.elasticAdminKeyspaceName);
         if (elasticAdminMetadata != null) {
             ReplicationParams replicationParams = elasticAdminMetadata.params.replication;
             if (replicationParams.klass == NetworkTopologyStrategy.class && replicationParams.options.get(endpointDc) != null) {
@@ -2485,7 +2487,7 @@ public class ClusterService extends BaseClusterService {
     
     public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException {
         try {
-            UntypedResultSet rs = process(cl, ClientState.forInternalCalls(), selectMetadataQuery, DatabaseDescriptor.getClusterName());
+            UntypedResultSet rs = process(elasticAdminKeyspaceName, cl, ClientState.forInternalCalls(), selectMetadataQuery, DatabaseDescriptor.getClusterName());
             if (rs != null && !rs.isEmpty()) {
                 Row row = rs.one();
                 if (row.has("metadata"))
@@ -2505,7 +2507,7 @@ public class ClusterService extends BaseClusterService {
     
     public Long readMetaDataVersion(ConsistencyLevel cl) throws NoPersistedMetaDataException {
         try {
-            UntypedResultSet rs = process(cl, ClientState.forInternalCalls(), selectVersionMetadataQuery, DatabaseDescriptor.getClusterName());
+            UntypedResultSet rs = process(elasticAdminKeyspaceName, cl, ClientState.forInternalCalls(), selectVersionMetadataQuery, DatabaseDescriptor.getClusterName());
             if (rs != null && !rs.isEmpty()) {
                 Row row = rs.one();
                 if (row.has("version"))
@@ -2527,10 +2529,10 @@ public class ClusterService extends BaseClusterService {
     
     public int getLocalDataCenterSize() {
         int count = 1; 
-        for (UntypedResultSet.Row row : executeInternal("SELECT data_center, rpc_address FROM system." + SystemKeyspace.PEERS))
-            if (row.has("rpc_address") && DatabaseDescriptor.getLocalDataCenter().equals(row.getString("data_center")))
+        for (UntypedResultSet.Row row : executeInternal("SELECT data_center, native_address FROM system." + SystemKeyspace.PEERS_V2))
+            if (row.has("native_address") && DatabaseDescriptor.getLocalDataCenter().equals(row.getString("data_center")))
                 count++;
-        logger.info(" datacenter=[{}] size={} from peers", DatabaseDescriptor.getLocalDataCenter(), count);
+        logger.info(" datacenter=[{}] size={} from peers_v2", DatabaseDescriptor.getLocalDataCenter(), count);
         return count;
     }
 
@@ -2545,7 +2547,7 @@ public class ClusterService extends BaseClusterService {
             String createKeyspace = String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s;",
                 elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
             logger.info(createKeyspace);
-            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createKeyspace);
+            process(elasticAdminKeyspaceName, ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createKeyspace);
         } catch (Exception e) {
             logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to initialize keyspace {}", elasticAdminKeyspaceName), e);
             throw e;
@@ -2556,7 +2558,7 @@ public class ClusterService extends BaseClusterService {
 
     // Modify keyspace replication
     public void alterKeyspaceReplicationFactor(String keyspaceName, int rf) {
-        ReplicationParams replication = Schema.instance.getKSMetaData(keyspaceName).params.replication;
+        ReplicationParams replication = Schema.instance.getKeyspaceMetadata(keyspaceName).params.replication;
         
         if (!NetworkTopologyStrategy.class.getName().equals(replication.klass))
             throw new ConfigurationException("Keyspace ["+keyspaceName+"] should use "+NetworkTopologyStrategy.class.getName()+" replication strategy");
@@ -2570,7 +2572,7 @@ public class ClusterService extends BaseClusterService {
                 String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s",
                         keyspaceName, FBUtilities.json(repMap).replaceAll("\"", "'"));
                 logger.info(query);
-                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
+                process(keyspaceName, ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
             } catch (Throwable e) {
                 logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to alter keyspace [{}]",keyspaceName), e);
                 throw e;
@@ -2586,7 +2588,7 @@ public class ClusterService extends BaseClusterService {
             String createTable = String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint, metadata text) WITH comment='%s';",
                 elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metaDataString);
             logger.info(createTable);
-            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createTable);
+            process(elasticAdminKeyspaceName, ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createTable);
         } catch (Exception e) {
             logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE), e);
             throw e;
@@ -2598,7 +2600,7 @@ public class ClusterService extends BaseClusterService {
     Void insertFirstMetaRow(final MetaData metadata, final String metaDataString) {
         try {
             logger.info(insertMetadataQuery);
-            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), insertMetadataQuery,
+            process(elasticAdminKeyspaceName, ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), insertMetadataQuery,
                 DatabaseDescriptor.getClusterName(), UUID.fromString(StorageService.instance.getLocalHostId()), metadata.version(), metaDataString);
         } catch (Exception e) {
             logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed insert first row into table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE), e);
@@ -2669,7 +2671,7 @@ public class ClusterService extends BaseClusterService {
                     String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s", 
                             elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
                     logger.info(query);
-                    process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
+                    process(elasticAdminKeyspaceName, ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
                 } catch (Throwable e) {
                     logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to alter keyspace [{}]", elasticAdminKeyspaceName),e);
                     throw e;
@@ -2704,6 +2706,7 @@ public class ClusterService extends BaseClusterService {
         String metaDataString = MetaData.Builder.toXContent(newMetaData, MetaData.CASSANDRA_FORMAT_PARAMS);
         UUID owner = UUID.fromString(localNode().getId());
         boolean applied = processWriteConditional(
+                this.elasticAdminKeyspaceName,
                 this.metadataWriteCL,
                 this.metadataSerialCL,
                 ClientState.forInternalCalls(),

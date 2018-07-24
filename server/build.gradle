@@ -130,7 +130,7 @@ dependencies {
     }
   }
   testCompile 'com.google.jimfs:jimfs:1.1'
-  compile 'com.google.guava:guava:19.0'
+  compile 'com.google.guava:guava:23.3-jre'
 
   // Elassandra add-ons
   compile("com.strapdata.cassandra:cassandra-all:${versions.cassandra}") {
@@ -143,12 +143,6 @@ dependencies {
     exclude group:'joda-time', module:'joda-time' 
     exclude group:'commons-codec', module:'commons-codec' 
   }
-  /*
-  compile group: 'org.antlr', name: 'antlr', version: '3.5.2'
-  compile group: 'org.antlr', name: 'antlr-runtime', version: '3.5.2'
-  compile group: 'com.boundary', name: 'high-scale-lib', version: '1.0.6'
-  compile group: 'com.github.jbellis', name: 'jamm', version: '0.3.0'
-  */
 
   // See CASSANDRA-11193 Missing binary dependencies for running Cassandra in embedded mode
   //compile("org.ow2.asm:asm-debug-all:5.1")
@@ -175,8 +169,8 @@ dependencies {
   // log4j2 to slf4j to logback
   compile "org.apache.logging.log4j:log4j-to-slf4j:${versions.log4j}"
   compile "org.slf4j:slf4j-api:1.7.25", optional
-  compile "ch.qos.logback:logback-classic:1.1.8"
-  compile "ch.qos.logback:logback-core:1.1.8"
+  compile "ch.qos.logback:logback-classic:1.2.3"
+  compile "ch.qos.logback:logback-core:1.2.3"
   compile "org.javassist:javassist:3.20.0-GA"
 
   compile 'net.sf.jopt-simple:jopt-simple:5.0.2'

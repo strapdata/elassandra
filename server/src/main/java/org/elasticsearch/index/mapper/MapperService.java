@@ -24,8 +24,6 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.CQLFragmentParser;
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -40,6 +38,8 @@ import org.apache.cassandra.db.marshal.SetType;
 import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.cassandra.schema.ColumnMetadata;
+import org.apache.cassandra.schema.TableMetadata;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.DelegatingAnalyzerWrapper;
@@ -272,9 +272,9 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
             }
             String ksName = keyspace();
             try {
-                CFMetaData metadata = ClusterService.getCFMetaData(ksName, cfName);
+                TableMetadata metadata = ClusterService.getTableMetadata(ksName, cfName);
                 List<String> pkColNames = new ArrayList<String>(metadata.partitionKeyColumns().size() + metadata.clusteringColumns().size());
-                for(ColumnDefinition cd: Iterables.concat(metadata.partitionKeyColumns(), metadata.clusteringColumns())) {
+                for(ColumnMetadata cd: Iterables.concat(metadata.partitionKeyColumns(), metadata.clusteringColumns())) {
                     pkColNames.add(cd.name.toString());
                 }
                 
@@ -299,7 +299,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                                 props.put(TypeParsers.CQL_PARTITION_KEY, true);
                             }
                         }
-                        if (metadata.getColumnDefinition(new ColumnIdentifier(columnName, true)).isStatic()) {
+                        if (metadata.getColumn(new ColumnIdentifier(columnName, true)).isStatic()) {
                             props.put(TypeParsers.CQL_STATIC_COLUMN, true);
                         }
                         

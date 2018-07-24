@@ -11,7 +11,6 @@ commitlog_segment_size_in_mb: 5
 partitioner: org.apache.cassandra.dht.Murmur3Partitioner
 listen_address: 127.0.0.1
 storage_port: 7000
-rpc_port: 9160
 start_native_transport: true
 native_transport_port: 9042
 column_index_size_in_kb: 4
@@ -25,8 +24,8 @@ seed_provider:
           - seeds: "127.0.0.1"
 endpoint_snitch: GossipingPropertyFileSnitch
 dynamic_snitch: true
-request_scheduler: org.apache.cassandra.scheduler.RoundRobinScheduler
-request_scheduler_id: keyspace
+#request_scheduler: org.apache.cassandra.scheduler.RoundRobinScheduler
+#request_scheduler_id: keyspace
 server_encryption_options:
     internode_encryption: none
     keystore: conf/.keystore

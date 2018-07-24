@@ -23,6 +23,7 @@ import com.carrotsearch.hppc.ObjectHashSet;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
+import org.apache.cassandra.locator.InetAddressAndPort;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.AbstractDiffable;
 import org.elasticsearch.cluster.Diff;
@@ -262,10 +263,10 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      * @param address {@link TransportAddress} of the wanted node
      * @return node identified by the given address or <code>null</code> if no such node exists
      */
-    public DiscoveryNode findByInetAddress(InetAddress address) {
+    public DiscoveryNode findByInetAddress(InetAddressAndPort address) {
         for (ObjectCursor<DiscoveryNode> cursor : nodes.values()) {
             DiscoveryNode node = cursor.value;
-            if (node.getInetAddress().equals(address) || node.getName().equals(address.getHostAddress())) {
+            if (node.getInetAddressAndPort().equals(address)) {
                 return node;
             }
         }

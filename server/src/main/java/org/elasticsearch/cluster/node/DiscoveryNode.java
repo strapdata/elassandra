@@ -19,6 +19,9 @@
 
 package org.elasticsearch.cluster.node;
 
+import com.google.common.net.HostAndPort;
+
+import org.apache.cassandra.locator.InetAddressAndPort;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -71,7 +74,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     }
 
     private final String nodeName;
-    private transient final InetAddress nodeNameAddress;
+    private transient final InetAddressAndPort nodeNameAddressAndPort;
     private final String nodeId;
     private final String ephemeralId;
     private final String hostName;
@@ -144,8 +147,8 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         return addr.address().getAddress();
     }
     
-    public InetAddress getNameAsInetAddress() {
-        return this.nodeNameAddress;
+    public InetAddressAndPort getInetAddressAndPort() {
+        return this.nodeNameAddressAndPort;
     }
 
     /**
@@ -256,17 +259,14 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      */
     public DiscoveryNode(String nodeName, String nodeId, String ephemeralId, String hostName, String hostAddress,
                          TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version, DiscoveryNodeStatus status) {
-        InetAddress nodeAddr = null;
+        InetAddressAndPort nodeAddrAndPort = null;
         if (nodeName != null) {
             this.nodeName = nodeName.intern();
-            try {
-                nodeAddr = InetAddresses.forString(nodeName);
-            } catch (Exception e) {
-            }
+            nodeAddrAndPort = getInetAddressAndPort(nodeName);;
         } else {
             this.nodeName = "";
         }
-        this.nodeNameAddress = nodeAddr;
+        this.nodeNameAddressAndPort = nodeAddrAndPort;
         this.nodeId = nodeId.intern();
         try {
             this.nodeUuid = UUID.fromString(nodeId);
@@ -319,6 +319,20 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         return roles;
     }
 
+    public static InetAddressAndPort getInetAddressAndPort(String nodeName) {
+        InetAddressAndPort nodeAddrAndPort = null;
+        if (nodeName != null) {
+            try {
+                HostAndPort hap = HostAndPort.fromString(nodeName);
+                nodeAddrAndPort = InetAddressAndPort.getByAddressOverrideDefaults(
+                        InetAddresses.forString(hap.getHost()), 
+                        hap.getPort());
+            } catch (Exception e) {
+            }
+        }
+        return nodeAddrAndPort;
+    }
+    
     /**
      * Creates a new {@link DiscoveryNode} by reading from the stream provided as argument
      * @param in the stream
@@ -326,12 +340,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      */
     public DiscoveryNode(StreamInput in) throws IOException {
         this.nodeName = in.readString().intern();
-        InetAddress nodeNameAddress = null;
-        try {
-            nodeNameAddress = InetAddresses.forString(this.nodeName);
-        } catch (Exception e) {
-        }
-        this.nodeNameAddress = nodeNameAddress;
+        this.nodeNameAddressAndPort = getInetAddressAndPort(nodeName);
         this.nodeId = in.readString().intern();
         this.ephemeralId = in.readString().intern();
         this.hostName = in.readString().intern();
