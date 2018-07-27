@@ -24,6 +24,7 @@ import com.google.common.collect.Maps;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.Operator;
@@ -33,8 +34,6 @@ import org.apache.cassandra.db.ClusteringBound;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
-import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.LivenessInfo;
 import org.apache.cassandra.db.PartitionColumns;
 import org.apache.cassandra.db.RangeTombstone;
 import org.apache.cassandra.db.ReadCommand;
@@ -81,14 +80,21 @@ import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.StoredField;
+import org.apache.lucene.index.IndexReaderContext;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.ReaderUtil;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexOrDocValuesQuery;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermRangeQuery;
+import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.join.BitSetProducer;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.WideRowcumentIndexer.WideRowcument;
@@ -111,6 +117,7 @@ import org.elasticsearch.common.geo.builders.ShapeBuilder;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.BytesRefs;
 import org.elasticsearch.common.lucene.all.AllEntries;
+import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
@@ -237,6 +244,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     protected TermQuery typeTermQuery;
     int initCounter = 0;
     protected volatile boolean buildSubmit = false;
+    protected Object[] readBeforeWriteLocks = new Object[DatabaseDescriptor.getConcurrentWriters() * 128];
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
@@ -247,6 +255,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         this.typeTermQuery = new TermQuery(new Term(TypeFieldMapper.NAME, typeName));
 
         this.logger = Loggers.getLogger(this.getClass().getName()+"."+baseCfs.keyspace.getName()+"."+baseCfs.name);
+        for(int i=0; i < readBeforeWriteLocks.length; i++)
+            readBeforeWriteLocks[i] = new Object();
     }
     
     public static ElasticSecondaryIndex newElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
@@ -1480,24 +1490,29 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         if (hasMissingFields) {
                             if (logger.isTraceEnabled())
                                 logger.trace("indexer={} read partition for clusterings={}", this.hashCode(), clusterings);
-                            SinglePartitionReadCommand command = SinglePartitionReadCommand.create(baseCfs.metadata, nowInSec, key, clusterings);
-                            RowIterator rowIt = read(command);
-                            if (!rowIt.staticRow().isEmpty())
-                                this.inStaticRow = rowIt.staticRow();
-                            for(; rowIt.hasNext(); ) {
-                                try {
-                                    Row row = rowIt.next();
-                                    WideRowcument rowcument = new WideRowcument(row, null);
-                                    if (indexSomeStaticColumnsOnWideRow && inStaticRow != null)
-                                        rowcument.readCellValues(inStaticRow, true);
-                                    rowcuments.put(row.clustering(), rowcument);
-                                } catch (IOException e) {
-                                    logger.error("Unexpected error", e);
+                            synchronized(getLock()) {
+                                SinglePartitionReadCommand command = SinglePartitionReadCommand.create(baseCfs.metadata, nowInSec, key, clusterings);
+                                RowIterator rowIt = read(command);
+                                if (!rowIt.staticRow().isEmpty())
+                                    this.inStaticRow = rowIt.staticRow();
+                                for(; rowIt.hasNext(); ) {
+                                    try {
+                                        Row row = rowIt.next();
+                                        WideRowcument rowcument = new WideRowcument(row, null);
+                                        if (indexSomeStaticColumnsOnWideRow && inStaticRow != null)
+                                            rowcument.readCellValues(inStaticRow, true);
+                                        rowcuments.put(row.clustering(), rowcument);
+                                    } catch (IOException e) {
+                                        logger.error("Unexpected error", e);
+                                    }
                                 }
+                                for(WideRowcument rowcument : rowcuments.values())
+                                    rowcument.write();
                             }
+                        } else {
+                            for(WideRowcument rowcument : rowcuments.values())
+                                rowcument.write();
                         }
-                        for(WideRowcument rowcument : rowcuments.values())
-                            rowcument.write();
                     }
                 }
                 
@@ -1589,16 +1604,20 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     case COMPACTION: // remove expired row or reindex a doc when a column has expired, happen only when index_on_compaction=true for at least one elasticsearch index.
                     case UPDATE:
                         if (rowcument.hasMissingFields()) {
-                            SinglePartitionReadCommand command = SinglePartitionReadCommand.fullPartitionRead(baseCfs.metadata, nowInSec, key);
-                            RowIterator rowIt = read(command);
-                            if (rowIt.hasNext())
-                                try {
-                                    rowcument = new SkinnyRowcument(rowIt.next(), null);
-                                } catch (IOException e) {
-                                    logger.error("Unexpected error", e);
-                                }
+                            synchronized(getLock()) {
+                                SinglePartitionReadCommand command = SinglePartitionReadCommand.fullPartitionRead(baseCfs.metadata, nowInSec, key);
+                                RowIterator rowIt = read(command);
+                                if (rowIt.hasNext())
+                                    try {
+                                        rowcument = new SkinnyRowcument(rowIt.next(), null);
+                                    } catch (IOException e) {
+                                        logger.error("Unexpected error", e);
+                                    }
+                                rowcument.write();
+                            }
+                        } else {
+                            rowcument.write();
                         }
-                        rowcument.write();
                     }
                 }
             }
@@ -1649,7 +1668,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 }
                 this.partitionKey = ClusterService.stringify(pkCols, i);
             }
-                
+
+            // return a per partition object for read-before-write locking
+            protected Object getLock() {
+                return readBeforeWriteLocks[Math.abs(key.hashCode() % readBeforeWriteLocks.length)];
+            }
+
             /**
              * Notification of the start of a partition update.
              * This event always occurs before any other during the update.
