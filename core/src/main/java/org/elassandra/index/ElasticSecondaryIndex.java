@@ -2464,7 +2464,24 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                             }
                             if (!indexInfo.updated)
                                 indexInfo.updated = true;
-                            DeleteByQuery deleteByQuery = new DeleteByQuery(typeTermQuery, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+                            
+                            DeleteByQuery deleteByQuery;
+                            if (indexInfo.indexService.mapperService().hasNested()) {
+                                BitSetProducer parentFilter = new BitSetProducer() {
+                                 @Override
+                                 public org.apache.lucene.util.BitSet getBitSet(LeafReaderContext context) throws IOException {
+                                     final IndexReaderContext topLevelContext = ReaderUtil.getTopLevelContext(context);
+                                     final IndexSearcher searcher = new IndexSearcher(topLevelContext);
+                                     searcher.setQueryCache(null);
+                                     final Weight weight = searcher.createNormalizedWeight(typeTermQuery, false);
+                                     Scorer s = weight.scorer(context);
+                                     return (s == null) ? null : org.apache.lucene.util.BitSet.of(s.iterator(), context.reader().maxDoc());
+                                 }
+                                };
+                                deleteByQuery = new DeleteByQuery(Queries.newMatchAllQuery(), null, null, null, parentFilter, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+                             } else {
+                                deleteByQuery = new DeleteByQuery(typeTermQuery, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+                             }
                             indexShard.getEngine().delete(deleteByQuery);
                         }
                     } catch (ElasticsearchException e) {
