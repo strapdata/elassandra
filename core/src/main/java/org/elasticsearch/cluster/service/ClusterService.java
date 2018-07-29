@@ -2282,7 +2282,8 @@ public class ClusterService extends org.elasticsearch.cluster.service.BaseCluste
                 .indices(new org.elasticsearch.index.Index[] {indexService.index()})
                 .type(type)
                 .source(source)
-                .ackTimeout(timeout);
+                .ackTimeout(timeout)
+                .masterNodeTimeout(timeout);
         metaDataMappingService.putMapping(putRequest, mappingUpdateListener);
         mappingUpdateListener.waitForUpdate(timeout);
     }
