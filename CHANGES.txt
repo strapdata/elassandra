@@ -1,3 +1,8 @@
+5.5.0.21 - 2018-08-04
+* Fix cassandra discovery for k8s
+* Delete nested documents when truncating a cassandra table
+* Fix concurrent partition read-before-indexing
+
 5.5.0.20 - 2018-07-16
 * #211 Improve ip replacement management
 * Fix race condition when computing the routing table
