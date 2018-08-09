@@ -80,15 +80,22 @@ import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.index.IndexOptions;
+import org.apache.lucene.index.IndexReaderContext;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.ReaderUtil;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexOrDocValuesQuery;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermRangeQuery;
+import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.join.BitSetProducer;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.WideRowcumentIndexer.WideRowcument;
@@ -113,6 +120,7 @@ import org.elasticsearch.common.geo.parsers.ShapeParser;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.BytesRefs;
 import org.elasticsearch.common.lucene.all.AllEntries;
+import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
@@ -909,7 +917,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     }
                     if (!updated)
                         updated = true;
-                    DeleteByQuery deleteByQuery = new DeleteByQuery(query, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+                    DeleteByQuery deleteByQuery = buildDeleteByQuery(shard.indexService(), query);
                     shard.getEngine().delete(deleteByQuery);
                 }
             }
@@ -1362,6 +1370,24 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             return targets;
         }
 
+        public DeleteByQuery buildDeleteByQuery(IndexService indexService, Query query) {
+            BitSetProducer parentFilter = null;
+            if (indexService.mapperService().hasNested()) {
+                parentFilter = new BitSetProducer() {
+                 @Override
+                 public org.apache.lucene.util.BitSet getBitSet(LeafReaderContext context) throws IOException {
+                     final IndexReaderContext topLevelContext = ReaderUtil.getTopLevelContext(context);
+                     final IndexSearcher searcher = new IndexSearcher(topLevelContext);
+                     searcher.setQueryCache(null);
+                     final Weight weight = searcher.createNormalizedWeight(new MatchAllDocsQuery(), false);
+                     Scorer s = weight.scorer(context);
+                     return (s == null) ? null : org.apache.lucene.util.BitSet.of(s.iterator(), context.reader().maxDoc());
+                 }
+                };
+            }
+            return new DeleteByQuery(query, null, null, null, parentFilter, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);    
+        }
+        
         class WideRowcumentIndexer extends RowcumentIndexer {        
             NavigableSet<Clustering> clusterings = new java.util.TreeSet<Clustering>(baseCfs.metadata.comparator);
             Map<Clustering, WideRowcument> rowcuments = new TreeMap<Clustering, WideRowcument>(baseCfs.metadata.comparator);
@@ -1491,7 +1517,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 if (logger.isTraceEnabled())
                     logger.trace("deleting documents where _routing={} from index.type={}.{}", this.partitionKey, indexShard.shardId().getIndexName(), typeName);
                 TermQuery termQuery = new TermQuery(new Term(RoutingFieldMapper.NAME, this.partitionKey));
-                DeleteByQuery deleteByQuery = new DeleteByQuery(termQuery, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+                DeleteByQuery deleteByQuery = buildDeleteByQuery(indexShard.indexService(), termQuery);
                 indexShard.getEngine().delete(deleteByQuery);    
             }
             
@@ -2440,7 +2466,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                             }
                             if (!indexInfo.updated)
                                 indexInfo.updated = true;
-                            DeleteByQuery deleteByQuery = new DeleteByQuery(new MatchAllDocsQuery(), null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
+                            DeleteByQuery deleteByQuery = mappingInfo.buildDeleteByQuery(indexInfo.indexService, Queries.newMatchAllQuery());
                             indexShard.getEngine().delete(deleteByQuery);
                         }
                     } catch (ElasticsearchException e) {
