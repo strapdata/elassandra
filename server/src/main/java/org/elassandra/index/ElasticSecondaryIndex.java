@@ -24,6 +24,7 @@ import com.google.common.collect.Maps;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.Operator;
@@ -236,6 +237,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     protected final ColumnFamilyStore baseCfs;
     protected final IndexMetadata indexMetadata;
     protected String typeName;
+    protected Object[] readBeforeWriteLocks = new Object[DatabaseDescriptor.getConcurrentWriters() * 128];
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
@@ -243,6 +245,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         this.index_name = baseCfs.keyspace.getName()+"."+baseCfs.name;
         this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.cfName);
         this.logger = Loggers.getLogger(this.getClass().getName()+"."+baseCfs.keyspace.getName()+"."+baseCfs.name);
+        for(int i=0; i < readBeforeWriteLocks.length; i++)
+            readBeforeWriteLocks[i] = new Object();
     }
     
     public static ElasticSecondaryIndex newElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
@@ -1445,24 +1449,29 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         if (hasMissingFields) {
                             if (logger.isTraceEnabled())
                                 logger.trace("indexer={} read partition for clusterings={}", this.hashCode(), clusterings);
-                            SinglePartitionReadCommand command = SinglePartitionReadCommand.create(baseCfs.metadata, nowInSec, key, clusterings);
-                            RowIterator rowIt = read(command);
-                            if (!rowIt.staticRow().isEmpty())
-                                this.inStaticRow = rowIt.staticRow();
-                            for(; rowIt.hasNext(); ) {
-                                try {
-                                    Row row = rowIt.next();
-                                    WideRowcument rowcument = new WideRowcument(row, null);
-                                    if (indexSomeStaticColumnsOnWideRow && inStaticRow != null)
-                                        rowcument.readCellValues(inStaticRow, true);
-                                    rowcuments.put(row.clustering(), rowcument);
-                                } catch (IOException e) {
-                                    logger.error("Unexpected error", e);
+                            synchronized(getLock()) {
+                                SinglePartitionReadCommand command = SinglePartitionReadCommand.create(baseCfs.metadata, nowInSec, key, clusterings);
+                                RowIterator rowIt = read(command);
+                                if (!rowIt.staticRow().isEmpty())
+                                    this.inStaticRow = rowIt.staticRow();
+                                for(; rowIt.hasNext(); ) {
+                                    try {
+                                        Row row = rowIt.next();
+                                        WideRowcument rowcument = new WideRowcument(row, null);
+                                        if (indexSomeStaticColumnsOnWideRow && inStaticRow != null)
+                                            rowcument.readCellValues(inStaticRow, true);
+                                        rowcuments.put(row.clustering(), rowcument);
+                                    } catch (IOException e) {
+                                        logger.error("Unexpected error", e);
+                                    }
                                 }
+                                for(WideRowcument rowcument : rowcuments.values())
+                                    rowcument.write();
                             }
+                        } else {
+                            for(WideRowcument rowcument : rowcuments.values())
+                                rowcument.write();
                         }
-                        for(WideRowcument rowcument : rowcuments.values())
-                            rowcument.write();
                     }
                 }
                 
@@ -1547,16 +1556,21 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     case COMPACTION: // remove expired row or reindex a doc when a column has expired, happen only when index_on_compaction=true for at least one elasticsearch index.
                     case UPDATE:
                         if (rowcument.hasMissingFields()) {
-                            SinglePartitionReadCommand command = SinglePartitionReadCommand.fullPartitionRead(baseCfs.metadata, nowInSec, key);
-                            RowIterator rowIt = read(command);
-                            if (rowIt.hasNext())
-                                try {
-                                    rowcument = new SkinnyRowcument(rowIt.next(), null);
-                                } catch (IOException e) {
-                                    logger.error("Unexpected error", e);
+                            synchronized(getLock()) {
+                                SinglePartitionReadCommand command = SinglePartitionReadCommand.fullPartitionRead(baseCfs.metadata, nowInSec, key);
+                                RowIterator rowIt = read(command);
+                                if (rowIt.hasNext()) {
+                                    try {
+                                        rowcument = new SkinnyRowcument(rowIt.next(), null);
+                                    } catch (IOException e) {
+                                        logger.error("Unexpected error", e);
+                                    }
                                 }
-                        }
-                        rowcument.write();
+                                rowcument.write();
+                            }
+                        } else {
+                            rowcument.write();
+                        } 
                     }
                 }
             }
@@ -1675,6 +1689,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 collect(null, row);
             }
 
+            /**
+             * @return a per partition object for read-before-write locking
+             */
+            protected Object getLock() {
+                return readBeforeWriteLocks[Math.abs(key.hashCode() % readBeforeWriteLocks.length)];
+            }
+            
             /**
              * Notification of the end of the partition update.
              * This event always occurs after all others for the particular update.
