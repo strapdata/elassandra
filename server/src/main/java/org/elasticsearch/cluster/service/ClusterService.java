@@ -2017,7 +2017,8 @@ public class ClusterService extends BaseClusterService {
                 .indices(new org.elasticsearch.index.Index[] {indexService.index()})
                 .type(type)
                 .source(source)
-                .ackTimeout(timeout);
+                .ackTimeout(timeout)
+                .masterNodeTimeout(timeout);
         metaDataMappingService.putMapping(putRequest, mappingUpdateListener);
         mappingUpdateListener.waitForUpdate(timeout);
         logger.debug("Cluster state successfully updated for index=[{}], type=[{}], source=[{}] metadata.version={}/{}", 
