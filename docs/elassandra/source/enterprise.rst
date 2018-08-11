@@ -1,3 +1,4 @@
+
 Enterprise
 ==========
 
@@ -764,8 +765,8 @@ Once authentication is enabled, create a new Cassandra superuser to avoid issue 
 
 .. code::
 
-   cqlsh> CREATE ROLE admin WITH PASSWORD='******' AND LOGIN=true AND SUPERUSER=true;
-   cqlsh> ALTER ROLE cassandra WITH PASSWORD='******';
+   CREATE ROLE admin WITH PASSWORD='******' AND LOGIN=true AND SUPERUSER=true;
+   ALTER ROLE cassandra WITH PASSWORD='******';
    
 Then configure the replication factor for the *system_auth* keyspace according to your cluster configuration (see `Configure Native Authentication <https://docs.datastax.com/en/cassandra/3.0/cassandra/configuration/secureConfigNativeAuth.html>`_).
 Finally, adjust roles and credential cache settings and disable JMX configuration of authentifcation and authorization cache.
@@ -835,7 +836,7 @@ Privileges are defined in the Cassandra table ``elastic_admin.privileges``.
 
 .. IMPORTANT::
 
-   * Cassandra superuser have full access to Elasticsearch.
+   * Cassandra roles with *superuser* = **true** have full access to Elasticsearch.
    * All cluster-level access should be granted using privileges.
    * Content-Based Security should be used with read-only accounts.
 
@@ -847,8 +848,8 @@ Cassandra permission associated to a role are `granted <https://docs.datastax.co
 
 .. code::
 
-   cassandra@cqlsh> GRANT SELECT ON KEYSPACE sales TO sales;
-   cassandra@cqlsh> LIST ALL PERMISSIONS;
+   GRANT SELECT ON KEYSPACE sales TO sales;
+   LIST ALL PERMISSIONS;
 
     role      | username  | resource         | permission
    -----------+-----------+------------------+------------
@@ -889,14 +890,14 @@ Cassandra permissions associated to a role are mapped to Elasticserach Document 
 | DESCRIBE            | Retrieve stats about elasticsearch indices        | indices:monitor/stats             | Indices Stats            |
 |                     | associated to the granted mbeans.                 | indices:monitor/segments          | Indices Segments         |
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
-| SELECT              | SELECT on any table.                              | indices:data/read/*               | All document reading API |
+| SELECT              | SELECT on any table.                              | indices:data/read/.*              | All document reading API |
 |                     |                                                   | indices:admin/get                 | Get Index                |
 |                     |                                                   | indices:admin/exists              | Indices Exists           |
 |                     |                                                   | indices:admin/types/exists        | Type Exists              |
 |                     |                                                   | indices:admin/mapping             | Get Mapping              |
 |                     |                                                   | indices:admin/mappings/fields/get | Get Field Mapping        |
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
-| MODIFY              | INSERT, UPDATE, DELETE on any table.              | indices:data/write/*              | All document writing API |
+| MODIFY              | INSERT, UPDATE, DELETE on any table.              | indices:data/write/.*             | All document writing API |
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
 
 
@@ -963,9 +964,9 @@ Strapdata provides a SSL transport client to work with a secured Elassandra clus
 
 .. code ::
 
-   cassandra@cqlsh> CREATE ROLE monitor WITH PASSWORD = 'monitor' AND LOGIN = true;
-   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role, actions,indices) VALUES('monitor','cluster:monitor/state','.*');
-   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role, actions,indices) VALUES('monitor','cluster:monitor/nodes/liveness','.*');
+   CREATE ROLE monitor WITH PASSWORD = 'monitor' AND LOGIN = true;
+   INSERT INTO elastic_admin.privileges (role, actions,indices) VALUES('monitor','cluster:monitor/state','.*');
+   INSERT INTO elastic_admin.privileges (role, actions,indices) VALUES('monitor','cluster:monitor/nodes/liveness','.*');
 
 #. Add an **Authorization** header to your client containing your based-64 encoded login and password. This account must have 
 appropriate `Cassandra permissions <https://docs.datastax.com/en/cql/3.3/cql/cql_using/useSecurePermission.html>`_ or privileges in the ``elastic_admin.privileges`` table.
@@ -1030,13 +1031,13 @@ Kibana needs a dedicated kibana account to manage kibana configuration, with the
 
 .. code::
 
-   cassandra@cqlsh> CREATE ROLE kibana WITH PASSWORD = '*****' AND LOGIN = true;
-   cassandra@cqlsh> CREATE KEYSPACE "_kibana" WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1':'1'};
-   cassandra@cqlsh> GRANT CREATE ON KEYSPACE "_kibana" TO kibana;
-   cassandra@cqlsh> GRANT ALTER ON KEYSPACE "_kibana" TO kibana;
-   cassandra@cqlsh> GRANT SELECT ON KEYSPACE "_kibana" TO kibana;
-   cassandra@cqlsh> GRANT MODIFY ON KEYSPACE "_kibana" TO kibana;
-   cassandra@cqlsh> LIST ALL PERMISSIONS OF kibana;
+   CREATE ROLE kibana WITH PASSWORD = '*****' AND LOGIN = true;
+   CREATE KEYSPACE "_kibana" WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1':'1'};
+   GRANT CREATE ON KEYSPACE "_kibana" TO kibana;
+   GRANT ALTER ON KEYSPACE "_kibana" TO kibana;
+   GRANT SELECT ON KEYSPACE "_kibana" TO kibana;
+   GRANT MODIFY ON KEYSPACE "_kibana" TO kibana;
+   LIST ALL PERMISSIONS OF kibana;
    
     role   | username | resource           | permission
    --------+----------+--------------------+------------
@@ -1049,14 +1050,14 @@ Add cluster monitoring access rights to the *kibana* user, and refresh the privi
 
 .. code::
 
-   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('kibana','cluster:monitor/.*','.*');
-   cassandra@cqlsh> SELECT * FROM elastic_admin.privileges ;
+   INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('kibana','cluster:monitor/.*','.*');
+   SELECT * FROM elastic_admin.privileges;
    
     role   | actions            | indices | fields | query
    --------+--------------------+---------+--------+-------
     kibana | cluster:monitor/.* |      .* |   null |  null
 
-Finally, user accounts must have :
+Finally, Kibana user accounts must have :
 
 * the SELECT permission on vizualized indices, especially on your default kibana index.
 * the SELECT permission on the kibana keyspace to read kibana configuration.
@@ -1065,12 +1066,41 @@ Finally, user accounts must have :
 .. TIP::
 
    Once a user if authenticated by kibana, kibana keeps this information. In order to logout from your browser, clear cookies and data associated to your kibana server.
+
+Kibana and Content-Based Security
+.................................
+
+As explain in the `cassandra documentation <http://cassandra.apache.org/doc/latest/cql/security.html#database-roles>`_, you can grant a role to another role and create a hierarchy of roles.
+Then you can gives some elasticsearch privileges to a base role inherited by some user roles allowed to login, and specify a query filter or field-level filter to this base role.
+
+In the following example, the base role *group_a* have read access to index *my_index* with a document-level filter defined by a term query.
+Then the user role *bob* (allowed to log in) inherits of the privileges from the base role *group_a* to read the kibana configuration and the index *my_index* only for documents where *category* is *A*.
+
+.. code::
+
+   REVOKE SELECT ON KEYSPACE my_index FROM kibana;
+   CREATE ROLE group_a WITH LOGIN = false;
+   GRANT SELECT ON KEYSPACE "_kibana" to group_a;
+   INSERT INTO elastic_admin.privileges (role, actions, indices, query) VALUES('group_a','indices:data/read/.*','my_index', '{ "term" : { "category" : "A" }}');
+   CREATE ROLE bob WITH PASSWORD = 'bob' AND LOGIN = true;
+   GRANT group_a TO bob;
+
+Don't forget to refresh the privileges cache by issuing the following command :
+
+.. code::
+   
+   POST /_aaa_clear_privilege_cache
+
    
 Elasticsearch Spark connector
 .............................
 
 The `elasticsearch-hadoop <https://github.com/strapdata/elasticsearch-hadoop>`_ connector can access a secured Elassandra cluster by providing the 
+<<<<<<< HEAD
 sames SSL/TLS and Username/Pasword authentication parameters as the orginal `elasticsearch-hadoop security <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/security.html>`_ connector.
+=======
+sames SSL/TLS and Username/Pasword authentication parameters as the orginal `elasticsearch-hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/security.html>`_ connector.
+>>>>>>> 36e1529... Doc update
 Here is an example with a spark-shell.
 
 .. code::
@@ -1090,10 +1120,10 @@ The *spark* role have no cassandra permission, but user *john* inherits its priv
 
 .. code::
 
-   cassandra@cqlsh> CREATE ROLE spark;
-   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('spark','cluster:monitor/.*','.*');
-   cassandra@cqlsh> INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('spark','indices:admin/shards/search_shards','.*');
-   cassandra@cqlsh> SELECT * FROM elastic_admin.privileges WHERE role='spark';
+   CREATE ROLE spark;
+   INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('spark','cluster:monitor/.*','.*');
+   INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('spark','indices:admin/shards/search_shards','.*');
+   SELECT * FROM elastic_admin.privileges WHERE role='spark';
    
     role   | actions                            | indices | fields | query
    --------+------------------------------------+---------+--------+-------
@@ -1101,8 +1131,8 @@ The *spark* role have no cassandra permission, but user *john* inherits its priv
      spark | indices:admin/shards/search_shards |      .* |   null |  null
    
    (2 rows)
-   cassandra@cqlsh> GRANT spark TO john;
-   cassandra@cqlsh> LIST ROLES of john;
+   GRANT spark TO john;
+   LIST ROLES of john;
    
     role  | super | login | options
    -------+-------+-------+---------

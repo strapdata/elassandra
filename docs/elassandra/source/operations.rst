@@ -47,7 +47,7 @@ By default, when using the Elasticsearch API to replace a document by a new one,
 Elassandra insert a row corresponding to the new document including null for unset fields.
 Without these null (cell tombstones), old fields not present in the new document would be kept at the Cassandra level as zombie cells.
 
-Moreover, indexing with ``op_type=create`` (See `Elasticsearch indexing `<https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#operation-type>`_ ) require a Cassandra PAXOS transaction
+Moreover, indexing with ``op_type=create`` (See `Elasticsearch indexing <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#operation-type>`_ ) require a Cassandra PAXOS transaction
 to check if the document exists in the underlying datacenter. This comes with useless performance cost if you use automatic generated
 document ID (See `Automatic ID generation <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#_automatic_id_generation>`_.
 ), as this ID will be the Cassandra primary key.
