@@ -15,6 +15,7 @@
  */
 package org.elassandra;
 
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 import java.util.Locale;
@@ -72,6 +73,41 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         for(long i=20; i < 30; i++) {
             for(int j=0; j < i; j++)
                 process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d-%d', %d)",i,j,i));
+        }
+        
+        for(long i=20; i < 30; i++)
+            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
+    }
+    
+    @Test
+    public void basicStringPartitionFunctionWithDummyIndexTest() throws Exception {
+        process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
+        process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 (name text, age int, primary key (name))");
+        
+        XContentBuilder mappingt1 = XContentFactory.jsonBuilder().startObject()
+                    .startObject("properties")
+                       .startObject("name").field("type", "keyword").field("cql_collection", "singleton").field("index", false).endObject()
+                       .startObject("age").field("type", "integer").field("cql_collection", "singleton").field("index", false).endObject()
+                    .endObject()
+              .endObject();
+        assertAcked(client().admin().indices().prepareCreate("ks").addMapping("t1", mappingt1).get());
+        
+        for(long i=20; i < 30; i++) {
+            createIndex("ks_"+i, Settings.builder().put("index.keyspace","ks")
+                    .put("index.partition_function", "byage ks_%d age")
+                    .put("index.partition_function_class", "org.elassandra.index.StringPartitionFunction")
+                    .build(),"t1", discoverMapping("t1"));
+            ensureGreen("ks_"+i);
+        }
+        for(long i=20; i < 30; i++) {
+            for(int j=0; j < i; j++) {
+                String name = String.format("name%d-%d", i, j);
+                XContentBuilder doc = XContentFactory.jsonBuilder().startObject()
+                        .field("name", name)
+                        .field("age", i)
+                        .endObject();
+                client().prepareIndex("ks", "t1", name).setSource(doc).get();
+            }
         }
         
         for(long i=20; i < 30; i++)
