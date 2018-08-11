@@ -126,8 +126,8 @@ The `Elasticsearch JDBC driver <https://github.com/Anchormen/sql4es>`_. can be u
 Running Spark with Elassandra
 -----------------------------
 
-A modified version of the `elasticsearch-hadoop <https://github.com/elastic/elasticsearch-hadoop>`_ connector is available for elassandra at `https://github.com/strapdata/elasticsearch-hadoop`_. 
-This connector works with spark as describe in the elasticsearch documentation available at `https://www.elastic.co/guide/en/elasticsearch/hadoop/current/index.html`_.
+For elassandra 5.5, a modified version of the `elasticsearch-hadoop <https://github.com/elastic/elasticsearch-hadoop>`_ connector is available for elassandra on the `strapdata repository <https://github.com/strapdata/elasticsearch-hadoop>`_. 
+This connector works with spark as describe in the elasticsearch documentation available at `elasticsearch/hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/index.html>`_.
 
 For example, in order to submit a spark job in client mode.
 
