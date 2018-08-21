@@ -544,6 +544,23 @@ Because of data distribution and because Elassandra store the _source document i
 to import data from an existing Elasticsearch cluster to Elassandra, you can use the `logstash elasticsearch input plugin <https://www.elastic.co/guide/en/logstash/5.5/plugins-inputs-elasticsearch.html>`_ 
 and the `cassandra output plugin <https://github.com/PerimeterX/logstash-output-cassandra>`_. 
 
+Upgrading Elassandra
+--------------------
+
+Major Elasticsearch upgrade requires index rebuild from the existing cassandra data. Basically, the upgrade path is :
+* Delete all your easticsearch indices,
+* Restart your datacenter with Elasticsearch disabled (require a restart with the CassandraDaemon as the main class).
+* Drop the ``elastic_admin`` keyspace. 
+* Upgrade Elassandra binaraires in a rolling stop and restart in version N+1 with Elasticsearch enabled (restart with the ElassandraDaemon as the main class),
+* Re-create your Elasticsearch mapping for version N+1. This may require some changes in your Elasticsearch mapping or use a mapping discover.
+* Elassandra automatically rebuild Elasticsearch indices for existing data. By default, index rebuild run on one thread. If you want to rebuild faster, stop the current rebuild and restart it with additionnal threads.
+
+If you need to keep your Elasticsearch verion N running while upgrading to version N+1, create a new cassandra datacenter dedicated to live upgarde:
+* Create a new Elassandra datacenter with a dedicated datacenter.goup defined in your elasticsearch.yml, and properly configure the replication factor for keyspaces you want to index in Elasticsearch version N+1.
+* Create your Elasticsearch version N+1 indices in that new datacenter, with the proper Elasticsearch mapping. With the cassandra replication, indices version N and N+1 will be populated at the same time.
+* Switch your applications connection URL to Elasticsearch version N+1 in the new datacenter.
+* Remove the cassandra datacenter running Elasticearch version N form your cluster.
+
 How to change the elassandra cluster name
 _________________________________________
 
