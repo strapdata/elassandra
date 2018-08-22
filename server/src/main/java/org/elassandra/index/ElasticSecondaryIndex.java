@@ -2263,7 +2263,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         if (ElassandraDaemon.instance !=null && ElassandraDaemon.instance.node() != null) {
             initialize(ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class));
 
-            if (!baseCfs.isEmpty() && !isBuilt()) {
+            if (!baseCfs.isEmpty() && !isBuilt() && !baseCfs.indexManager.isIndexBuilding(getIndexMetadata().name)) {
                 logger.info("index building task for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
                 return () -> {
                     baseCfs.forceBlockingFlush();
