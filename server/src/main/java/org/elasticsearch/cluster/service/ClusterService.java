@@ -2529,7 +2529,7 @@ public class ClusterService extends BaseClusterService {
     public int getLocalDataCenterSize() {
         int count = 1; 
         for (UntypedResultSet.Row row : executeInternal("SELECT data_center, rpc_address FROM system." + SystemKeyspace.PEERS))
-            if (row.has("rpc_address") && DatabaseDescriptor.getLocalDataCenter().equals(row.getString("data_center")))
+            if (row.has("rpc_address") && row.has("data_center") && DatabaseDescriptor.getLocalDataCenter().equals(row.getString("data_center")))
                 count++;
         logger.info(" datacenter=[{}] size={} from peers", DatabaseDescriptor.getLocalDataCenter(), count);
         return count;
