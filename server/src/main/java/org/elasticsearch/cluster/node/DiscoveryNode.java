@@ -85,7 +85,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     private DiscoveryNodeStatus status = DiscoveryNodeStatus.UNKNOWN;
     
     public static enum DiscoveryNodeStatus {
-        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2);
+        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2), DISABLED((byte) 3);
 
         private final byte status;
 
@@ -106,6 +106,8 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
                 return "ALIVE";
             case DEAD:
                 return "DEAD";
+            case DISABLED:
+                return "DISABLED";
             default:
                 throw new IllegalArgumentException();
             }
