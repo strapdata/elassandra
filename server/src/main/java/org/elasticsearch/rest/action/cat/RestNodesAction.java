@@ -272,13 +272,20 @@ public class RestNodesAction extends AbstractCatAction {
             table.addCell(info == null ? null : info.getBuild().shortHash());
             table.addCell(jvmInfo == null ? null : jvmInfo.version());
             
-            long diskTotal = fsInfo.getTotal().getTotal().getBytes();
-            long diskUsed = diskTotal - fsInfo.getTotal().getAvailable().getBytes();
-            double diskUsedRatio = diskTotal == 0 ? 1.0 : (double) diskUsed / diskTotal;
-            table.addCell(fsInfo == null ? null : fsInfo.getTotal().getTotal());
-            table.addCell(fsInfo == null ? null : new ByteSizeValue(diskUsed));
-            table.addCell(fsInfo == null ? null : fsInfo.getTotal().getAvailable());
-            table.addCell(fsInfo == null ? null : String.format(Locale.ROOT, "%.2f", 100.0 * diskUsedRatio));
+            if (fsInfo != null) {
+                long diskTotal = fsInfo.getTotal().getTotal().getBytes();
+                long diskUsed = diskTotal - fsInfo.getTotal().getAvailable().getBytes();
+                double diskUsedRatio = diskTotal == 0 ? 1.0 : (double) diskUsed / diskTotal;
+                table.addCell(fsInfo.getTotal().getTotal());
+                table.addCell(new ByteSizeValue(diskUsed));
+                table.addCell(fsInfo.getTotal().getAvailable());
+                table.addCell(String.format(Locale.ROOT, "%.2f", 100.0 * diskUsedRatio));
+            } else {
+                table.addCell(null);
+                table.addCell(null);
+                table.addCell(null);
+                table.addCell(null);
+            }
             
             table.addCell(jvmStats == null ? null : jvmStats.getMem().getHeapUsed());
             table.addCell(jvmStats == null ? null : jvmStats.getMem().getHeapUsedPercent());
