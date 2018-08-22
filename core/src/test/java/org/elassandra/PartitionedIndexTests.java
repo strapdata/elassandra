@@ -78,7 +78,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         for(long i=20; i < 30; i++) {
             createIndex("ks_"+i, Settings.builder().put("index.keyspace","ks")
                     .put("index.partition_function", "byage ks_%d age")
-                    .put("index.partition_function_class", "org.elassandra.index.StringPartitionFunction")
+                    .put("index.partition_function_class", "StringPartitionFunction")
                     .build(),"t1", mapping);
             ensureGreen("ks_"+i);
         }

@@ -582,7 +582,8 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
     
     public PartitionFunction partitionFunctionClass() {
         String partFuncClass = getSettings().get(IndexMetaData.SETTING_PARTITION_FUNCTION_CLASS, MessageFormatPartitionFunction.class.getName());
-        return FBUtilities.instanceOrConstruct(partFuncClass, "PartitionFunction class used to generate index name from document fields");
+        String partFuncClassName = partFuncClass.contains(".") ? partFuncClass : "org.elassandra.index." + partFuncClass;
+        return FBUtilities.instanceOrConstruct(partFuncClassName, "PartitionFunction class used to generate index name from document fields");
     }
     
     public ImmutableOpenMap<String, AliasMetaData> getAliases() {
