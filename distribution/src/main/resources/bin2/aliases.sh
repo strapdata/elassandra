@@ -38,10 +38,8 @@ export CASSANDRA_CONF=$CASSANDRA_HOME/conf
 export CASSANDRA_DATA=$CASSANDRA_HOME/data
 export CASSANDRA_LOGS=$CASSANDRA_HOME/logs
 
-export PROTOCOL="http"
-[ "x$ELASTICSEARCH_SSL" != "x" ] && PROTOCOL=https
-[ "x$ELASTICSEARCH_SSL" != "x" ] && CREDENTIAL="$CREDENTIAL --cacert $CASSANDRA_CONF/cacert.pem"
 
+export PROTOCOL="${PROTOCOL:-http}"
 export CQLSH_OPTS=""
 [ "x$CASSANDRA_SSL" != "x" ] && CQLSH_OPTS="$CQLSH_OPTS --ssl"
 
