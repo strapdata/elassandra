@@ -94,6 +94,7 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         IndexMetaData.INDEX_INDEX_STATIC_COLUMNS_SETTING,
         IndexMetaData.INDEX_INDEX_STATIC_ONLY_SETTING,
         IndexMetaData.INDEX_INDEX_STATIC_DOCUMENT_SETTING,
+        IndexMetaData.INDEX_INDEX_INSERT_ONLY_SETTING,
         
         IndexMetaData.INDEX_FORMAT_SETTING,
         SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING,

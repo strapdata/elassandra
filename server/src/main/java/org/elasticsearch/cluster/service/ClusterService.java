@@ -304,6 +304,11 @@ public class ClusterService extends BaseClusterService {
      */
     public static final String INDEX_STATIC_DOCUMENT = "index_static_document";
     
+    /**
+     * Index in insert-only mode without a read-before-write
+     */
+    public static final String INDEX_INSERT_ONLY = "index_insert_only";
+    
     // system property settings
     public static final String SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT = SYSTEM_PREFIX+MAPPING_UPDATE_TIMEOUT;
     public static final String SETTING_SYSTEM_SECONDARY_INDEX_CLASS = SYSTEM_PREFIX+SECONDARY_INDEX_CLASS;
