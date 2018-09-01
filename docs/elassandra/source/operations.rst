@@ -329,6 +329,7 @@ To improve CQL fetch requests response time, Cassandra provides key and row cach
 To enable Cassandra row caching, set the ``row_cache_size_in_mb`` parameter in your **conf/cassandra.yaml**, and set ``row_cache_class_name: org.apache.cassandra.cache.OHCProvider`` to use off-heap memory.
 
 .. TIP::
+
    Elasticsearch also provides a Lucene query cache, used for segments having more than 10k documents, and for some frequent queries (queries done more than 5 or 20 times depending of the nature of the query). The shard request cache, can also be enable if the token range bitset cache is disabled. 
 
 Create, delete and rebuild index
@@ -399,8 +400,8 @@ If the compaction manager is busy, secondary index rebuild is added as a pending
 
 To stop a compaction task (including a rebuild index task), you can either use a **nodetool stop --compaction-id <uuid>** or use the JMX management operation  **stopCompactionById**  (on MBean org.apache.cassandra.db.CompactionManager).
 
-Open, close, index
-__________________
+Open, close index
+_________________
 
 Open and close operations allow to close and open an Elasticsearch index. Even if the Cassandra secondary index remains in the CQL schema while the index is closed, it has no overhead, it's just a dummy function call.
 Obviously, when several Elasticsearch indices are associated to the same Cassandra table, data are indexed in opened indices, but not in closed ones.
@@ -438,8 +439,7 @@ Moreover, remember that a ``nodetool snapshot``  also involve a flush before cre
 
    Elasticsearch automatically triggers a flush when an index shard is inactive for more than ``indices.memory.shard_inactive_time`` (default is 5 minutes) or when `Translog <https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-translog.html>`_ size is greater than ``index.translog.flush_threshold_size`` (Default is 512Mb).
    Elassandra implements a dummy Translog to track the size of indexed data and triggers a flush on the same size threashold. Elassandra also triggers an Elasticsearch flush when flushing `Cassandra SSTables <https://docs.datastax.com/en/cassandra/3.0/cassandra/dml/dmlHowDataWritten.html>`_.
-   
-   
+
 Managing Elassandra nodes
 _________________________
 

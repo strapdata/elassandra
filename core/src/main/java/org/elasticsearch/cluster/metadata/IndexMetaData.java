@@ -366,7 +366,11 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
     
     public static final String SETTING_INDEX_STATIC_DOCUMENT = "index."+ClusterService.INDEX_STATIC_DOCUMENT; 
     public static final Setting<Boolean> INDEX_INDEX_STATIC_DOCUMENT_SETTING =
-            Setting.boolSetting(SETTING_INDEX_STATIC_DOCUMENT, false, Property.Final, Property.IndexScope);
+            Setting.boolSetting(SETTING_INDEX_STATIC_DOCUMENT, false, Property.Dynamic, Property.IndexScope);
+    
+    public static final String SETTING_INDEX_APPEND_ONLY = "index."+ClusterService.INDEX_INSERT_ONLY; 
+    public static final Setting<Boolean> INDEX_INDEX_INSERT_ONLY_SETTING =
+            Setting.boolSetting(SETTING_INDEX_APPEND_ONLY, false, Property.Dynamic, Property.IndexScope);
     
     // hard-coded hash function as of 2.0
     // older indices will read which hash function to use in their index settings

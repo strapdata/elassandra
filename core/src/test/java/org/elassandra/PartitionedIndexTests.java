@@ -118,7 +118,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         }
         for(long i=20; i < 30; i++) {
             for(int j=0; j < i; j++) {
-                String name = String.format("name%d-%d", i, j);
+                String name = String.format(Locale.ROOT, "name%d-%d", i, j);
                 XContentBuilder doc = XContentFactory.jsonBuilder().startObject()
                         .field("name", name)
                         .field("age", i)

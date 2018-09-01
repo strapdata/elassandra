@@ -26,6 +26,7 @@ import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
+import java.util.Locale;
 import java.util.Map;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
@@ -78,6 +79,7 @@ public class CompositeTests extends ESSingleNodeTestCase {
         Settings compositSettings = Settings.builder()
             .put("index.token_ranges_bitset_cache", false)
             .put("index.index_static_document", true)
+            .put("index.index_static_columns", true)
             .build();
         
         for(String s : new String[] { "1","2","3","4","11","12","13"})
@@ -110,8 +112,8 @@ public class CompositeTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"insert into composite2.t2 (a,b,c,d) VALUES ('a','b2',3,1)");
         
         for(int i=0; i < 10; i++) {
-            process(ConsistencyLevel.ONE, String.format("insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',%d,%d)",i,i));
-            process(ConsistencyLevel.ONE, String.format("insert into composite4.t4 (a,b,c,d,e) VALUES ('a','b3',%d,%d,0.0)",i,i));
+            process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "insert into composite3.t3 (a,b,c,d) VALUES ('a','b3',%d,%d)",i,i));
+            process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "insert into composite4.t4 (a,b,c,d,e) VALUES ('a','b3',%d,%d,0.0)",i,i));
         }
         
         process(ConsistencyLevel.ONE,"insert into composite11.t11 (a,b,c,f,s1) VALUES ('a','b1',1, 1.2, 'a')");

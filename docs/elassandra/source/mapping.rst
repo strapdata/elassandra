@@ -62,23 +62,23 @@ These parameters control the cassandra mapping.
 
 .. cssclass:: table-bordered
 
-+---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Parameter                 | Values                        | Description                                                                                                                                                                                                            |
-+===========================+===============================+========================================================================================================================================================================================================================+
-| ``cql_collection``        | **list**, set or singleton    | Control how the field of type X is mapped to a column list<X>, set<X> or X. Default is **list** because Elasticsearch fields are multivalued.                                                                          |
-+---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_struct``            | **udt** or map                | Control how an object or nested field is mapped to a User Defined Type or to a cassandra map<text,?>. Default is **udt**.                                                                                              |
-+---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_mandatory``         | **true** or false             | Elasticsearch index full document. For partial CQL updates, this control which fields should be read to index a full document from a row. Default is **true** meaning that updates involve reading all missing fields. |
-+---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_primary_key_order`` | **integer**                   | Field position in the cassandra the primary key of the underlying cassandra table. Default is **-1** meaning that the field is not part of the cassandra primary key.                                                  |
-+---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_partition_key``     | true or **false**             | When the cql_primary_key_order >= 0, specify if the field is part of the cassandra partition key. Default is **false** meaning that the field is not part of the cassandra partition key.                              |
-+---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``cql_udt_name``          | **<table_name>_<field_name>** | Specify the Cassandra User Defined Type name to use to store an object. By default, this is automatically build (dots in *field_names* are replaced by underscores)                                                    |
-+---------------------------+-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++---------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Parameter                 | Values                        | Description                                                                                                                                                                               |
++===========================+===============================+===========================================================================================================================================================================================+
+| ``cql_collection``        | **list**, set or singleton    | Control how the field of type X is mapped to a column list<X>, set<X> or X. Default is **list** because Elasticsearch fields are multivalued.                                             |
++---------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_struct``            | **udt** or map                | Control how an object or nested field is mapped to a User Defined Type or to a cassandra map<text,?>. Default is **udt**.                                                                 |
++---------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_static_column``     | true or **false**             | When *true*, the underlying CQL column is static. Default is **false**.                                                                                                                   |
++---------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_primary_key_order`` | **integer**                   | Field position in the cassandra the primary key of the underlying cassandra table. Default is **-1** meaning that the field is not part of the cassandra primary key.                     |
++---------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_partition_key``     | true or **false**             | When the cql_primary_key_order >= 0, specify if the field is part of the cassandra partition key. Default is **false** meaning that the field is not part of the cassandra partition key. |
++---------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_udt_name``          | **<table_name>_<field_name>** | Specify the Cassandra User Defined Type name to use to store an object. By default, this is automatically build (dots in *field_names* are replaced by underscores)                       |
++---------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-For more information about cassandra collection types and compound primary key, see `CQL Collections <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_collections_c.html>`_ and `Compound keys <https://docs.datastax.com/en/cql/3.1/cql/ddl/ddl_compound_keys_c.html>`_.
+For more information about cassandra collection types and compound primary key, see `CQL Collections <http://cassandra.apache.org/doc/latest/cql/types.html?highlight=collection#collections>`_ and `Compound keys <https://docs.datastax.com/en/cql/3.1/cql/ddl/ddl_compound_keys_c.html>`_.
 
 
 Bidirectionnal mapping
@@ -669,7 +669,7 @@ Search for rows where meta.region=west, returns only a static document (i.e. doc
 
 If needed, you can change the default behavior for a specific cassandra table (or elasticsearch document type), by using the following custom metadata :
 
-* ``index_static_document`` controls whether or not static document (i.e. document containg the partition key and static columns) are indexed (default is *false*).
+* ``index_static_document`` controls whether or not static document (i.e. document containing the partition key and static columns) are indexed (default is *false*).
 * ``index_static_only`` if *true*, it ony indexes static documents with partition key as ``_id`` and static columns as fields.
 * ``index_static_columns`` controls whether or not static columns are included in indexed documents (default is *false*).
 
