@@ -1,3 +1,9 @@
+6.2.3.5 - 2018-09-03
+  * Upgrade to cassandra 3.11.3
+  * Improve indexing of updates not time-ordered
+  * Fix #178 add package name to function class if needed
+  * Add a node status DISABLED for cassandra-only nodes
+
 6.2.3.4 - 2018-08-10
   * Fix cassandra discovery for k8s
   * Delete nested documents when truncating a cassandra table
