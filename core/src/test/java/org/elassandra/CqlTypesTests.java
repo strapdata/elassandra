@@ -235,7 +235,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             String name = names[i];
             System.out.println("delete pk name="+name+" type="+type+" value="+values[i]+" ck type="+types[randomCk]+" value="+values[randomCk]);
             process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"DELETE FROM ks2.t%s WHERE pk%s = ? AND ck >= ?", name, name), values[i], values[randomCk]);
-            if (!type.equals("blob")) // blob not supported for delete by query
+            if (!type.equals("blob") && !types[randomCk].equals("blob")) // blob not supported for delete by query
                 assertThat(client().prepareSearch()
                     .setIndices("ks2")
                     .setTypes(String.format(Locale.ROOT,"t%s", name))
