@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -18,6 +18,8 @@ package org.elassandra;
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import com.google.common.net.InetAddresses;
 
+import org.apache.cassandra.cql3.ResultSet;
+import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.TupleType;
@@ -25,8 +27,10 @@ import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.lucene.search.join.ScoreMode;
+import org.elasticsearch.action.ActionRequestBuilder;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
+import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.geo.GeoPoint;
@@ -205,7 +209,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         for(int i=0; i < types.length; i++) {
             String type = types[i];
             String name = names[i];
-            String mapping = name.equals("timeuuid2") ? 
+            String mapping = name.equals("timeuuid2") ?
                     String.format(Locale.ROOT,"{ \"discover\" : \"^((?!pktimeuuid2).*)\", \"properties\":{ \"pktimeuuid2\":{ \"type\":\"date\", \"cql_collection\":\"singleton\",\"cql_partition_key\":true,\"cql_primary_key_order\":0}}}") :
                     String.format(Locale.ROOT,"{ \"discover\" : \".*\" }");
             System.out.println("discover index=ks"+i+" pk name="+name+" type="+type+" mapping="+mapping);
@@ -319,7 +323,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .setSource("{ \"event_test\" : { \"discover\" : \".*\", "+
                         "\"dynamic_templates\": [ "+
                             "{ \"strings_template\": { "+
-                                "\"match\": \"strings.*\", "+ 
+                                "\"match\": \"strings.*\", "+
                                 "\"mapping\": { "+
                                     "\"type\": \"text\"" +
                                 "}"+
@@ -446,17 +450,17 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test").setTypes("make_models").setQuery(QueryBuilders.nestedQuery("models", QueryBuilders.termQuery("models.name", "galaxie"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
     }
     
-    // #197 Deletion of a List element removes the document on ES 
+    // #197 Deletion of a List element removes the document on ES
     public void testDeleteInUDTList() throws Exception {
         createIndex("test");
         ensureGreen("test");
         
         process(ConsistencyLevel.ONE, "CREATE TYPE test.type_test (id text);");
-        process(ConsistencyLevel.ONE, "CREATE TABLE test.table_test (" + 
-                "    id1 text," + 
-                "    id2 text," + 
-                "    list list<frozen<type_test>>," + 
-                "    PRIMARY KEY (id1, id2)" + 
+        process(ConsistencyLevel.ONE, "CREATE TABLE test.table_test (" +
+                "    id1 text," +
+                "    id2 text," +
+                "    list list<frozen<type_test>>," +
+                "    PRIMARY KEY (id1, id2)" +
                 ");");
         
         XContentBuilder mapping = XContentFactory.jsonBuilder()
@@ -497,12 +501,12 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         createIndex("test");
         ensureGreen("test");
         
-        process(ConsistencyLevel.ONE, "CREATE TABLE test.t1 (" + 
-                "    id1 text," + 
-                "    id2 text," + 
-                "    id3 text," + 
-                "    id4 text," + 
-                "    PRIMARY KEY (id1, id2)" + 
+        process(ConsistencyLevel.ONE, "CREATE TABLE test.t1 (" +
+                "    id1 text," +
+                "    id2 text," +
+                "    id3 text," +
+                "    id4 text," +
+                "    PRIMARY KEY (id1, id2)" +
                 ");");
         
         XContentBuilder mapping = XContentFactory.jsonBuilder()
@@ -544,7 +548,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         UUID end = UUIDGen.getTimeUUID(instant.toEpochMilli());
         UUID start = UUIDGen.getTimeUUID();
         
-        process(ConsistencyLevel.ONE,"INSERT INTO test.event_test (id , start , end, day, hour) VALUES (?,?,?,?,?)", 
+        process(ConsistencyLevel.ONE,"INSERT INTO test.event_test (id , start , end, day, hour) VALUES (?,?,?,?,?)",
                 "1", start, end, SimpleDateSerializer.dateStringToDays("2010-10-10"), 10*3600*1000000000L);
         
         SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("day:2010-10-10")).get();
@@ -609,6 +613,40 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(2L));
         assertThat(resp.getFailedShards(), equalTo(0));
+    }
+    
+    
+    /**
+     * Test indexing dynamically an empty document (pk-only)
+     */
+    @Test
+    public void testPkOnlyDocument() throws InterruptedException {
+        createIndex("test1");
+        ensureGreen("test1");
+        
+        // insert two empty documents, generating a mapping update
+        assertThat(client().prepareIndex("test1", "pk_only", "1").setSource("{}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test1", "pk_only", "2").setSource("{}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+    
+    
+        // get the first record from CQL
+        UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT * FROM test1.pk_only WHERE \"_id\" = '1'");
+
+        // assert only one row
+        assertEquals(1, rs.size());
+        // assert only one column
+        assertEquals(1, rs.metadata().size());
+        // assert the name is of the column is "_id"
+        assertThat(rs.metadata().get(0).name.toString(), equalTo("_id"));
+        // ensure the value is correct
+        assertThat(rs.one().getString("_id"), equalTo("1"));
+        
+        
+        // ensure elasticsearch can query this records
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
+        GetResponse resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("1").get();
+        assertTrue(resp.isExists());
+        assertTrue(resp.getSource().isEmpty());
     }
 }
 
