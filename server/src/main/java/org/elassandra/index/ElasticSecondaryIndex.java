@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -39,7 +39,10 @@ import org.apache.cassandra.db.SinglePartitionReadCommand;
 import org.apache.cassandra.db.Slice;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.WriteContext;
+import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.filter.RowFilter;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
+import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CollectionType;
 import org.apache.cassandra.db.marshal.CompositeType;
@@ -58,18 +61,24 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterators;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.index.IndexRegistry;
+import org.apache.cassandra.index.SecondaryIndexBuilder;
+import org.apache.cassandra.index.internal.CollatedViewIndexBuilder;
 import org.apache.cassandra.index.transactions.IndexTransaction;
 import org.apache.cassandra.index.transactions.IndexTransaction.Type;
+import org.apache.cassandra.io.sstable.ReducingKeyIterator;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
+import org.apache.cassandra.utils.concurrent.Refs;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -197,12 +206,14 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import static com.google.common.collect.Iterables.transform;
 
@@ -308,7 +319,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     };
 
     abstract class FilterableDocument extends ParseContext.Document implements Predicate<IndexableField> {
-        boolean applyFilter = false; 
+        boolean applyFilter = false;
         
         public FilterableDocument(String path, Document parent) {
             super(path, parent);
@@ -385,7 +396,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             //ContentPath.Type origPathType = path().pathType();
             //path().pathType(objectMapper.pathType());
 
-            if (value instanceof Map<?,?>) {   
+            if (value instanceof Map<?,?>) {
                 for(Entry<String,Object> entry : ((Map<String,Object>)value).entrySet()) {
                     // see http://docs.oracle.com/javase/7/docs/api/java/util/concurrent/locks/ReentrantReadWriteLock.html for locking a cache
                     if (mapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
@@ -474,13 +485,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     } finally {
                         if (mapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
                             indexInfo.dynamicMappingUpdateLock.readLock().unlock();
-                    }    
+                    }
                 }
             } else {
                 if (context.docMapper().type().equals("percolator")) {
                     // store percolator query as source.
                     String sourceQuery = "{\"query\":"+value+"}";
-                    if (logger.isDebugEnabled()) 
+                    if (logger.isDebugEnabled())
                         logger.debug("Store percolate query={}", sourceQuery);
                     
                     BytesReference source = new BytesArray(sourceQuery);
@@ -939,17 +950,17 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         case ASCII:
                         case TEXT:
                         case VARCHAR:
-                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ? 
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ?
                                     new TermQuery(new Term(mapper.name(),  BytesRefs.toBytesRef(start))) :
                                     new TermRangeQuery(mapper.name(),  BytesRefs.toBytesRef(start),  BytesRefs.toBytesRef(end), includeLower, includeUpper);
                             break;
                         case INT:
-                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ? 
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ?
                                     NumberFieldMapper.NumberType.INTEGER.termQuery(mapper.name(), (Integer) start) :
                                     NumberFieldMapper.NumberType.INTEGER.rangeQuery(mapper.name(), (Integer) start, (Integer) end, includeLower, includeUpper, mapper.fieldType().hasDocValues());
                             break;
                         case SMALLINT:
-                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ? 
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ?
                                     NumberFieldMapper.NumberType.SHORT.termQuery(mapper.name(), (Short) start) :
                                     NumberFieldMapper.NumberType.SHORT.rangeQuery(mapper.name(), (Short) start, (Short) end, includeLower, includeUpper, mapper.fieldType().hasDocValues());
                             break;
@@ -991,7 +1002,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                             }
                             break;
                         case BIGINT:
-                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ? 
+                            query = start != null && end != null && ((Comparable)start).compareTo((Comparable)end) == 0 ?
                                     NumberFieldMapper.NumberType.LONG.termQuery(mapper.name(), (Long) start) :
                                     NumberFieldMapper.NumberType.LONG.rangeQuery(mapper.name(), (Long) start, (Long) end, includeLower, includeUpper, mapper.fieldType().hasDocValues());
                             break;
@@ -1075,7 +1086,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             String indexName(Object[] values) {
                 Object[] args = new Object[fields.length];
                 for(int i=0; i < fieldsIdx.length; i++)
-                    args[i] = (fieldsIdx[i] < values.length) ? values[fieldsIdx[i]] : null; 
+                    args[i] = (fieldsIdx[i] < values.length) ? values[fieldsIdx[i]] : null;
                 return partitionFunction.format(pattern, args);
             }
             
@@ -1085,14 +1096,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         }
 
         
-        final Map<String, ImmutablePartitionFunction> partitionFunctions; 
+        final Map<String, ImmutablePartitionFunction> partitionFunctions;
         final ImmutableIndexInfo[] indices;
         final ObjectIntHashMap<String> indexToIdx;
         final ObjectIntHashMap<String> fieldsToIdx;
         final BitSet fieldsToRead;
         final BitSet staticColumns;
         final boolean hasIndexedMultiCell;
-        final boolean indexSomeStaticColumnsOnWideRow; 
+        final boolean indexSomeStaticColumnsOnWideRow;
         final boolean[] indexedPkColumns;   // bit mask of indexed PK columns.
         final long metadataVersion;
         final String metadataClusterUUID;
@@ -1183,7 +1194,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         
                         String[] pf = indexMetaData.partitionFunction();
                         if (pf != null) {
-                            if (partFuncs == null) 
+                            if (partFuncs == null)
                                 partFuncs = new HashMap<String, ImmutablePartitionFunction>();
                             ImmutablePartitionFunction func = partFuncs.get(pf[0]);
                             if (func == null) {
@@ -1326,12 +1337,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     targets.set(indexIdx);
                 } else {
                     if (logger.isDebugEnabled())
-                        logger.debug("No target index=[{}] found for partition function name=[{}] pattern=[{}] indices={}", 
-                                indexName, func.name, func.pattern, 
+                        logger.debug("No target index=[{}] found for partition function name=[{}] pattern=[{}] indices={}",
+                                indexName, func.name, func.pattern,
                                 Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
                 }
             }
-            if (logger.isTraceEnabled()) 
+            if (logger.isTraceEnabled())
                 logger.trace("Partition index bitset={} indices={}", targets, this.indices);
             return targets;
         }
@@ -1348,8 +1359,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     targets.set(indexIdx);
                 } else {
                     if (logger.isWarnEnabled())
-                        logger.warn("No target index=[{}] found, function name=[{}] pattern=[{}], return all indices={}", 
-                                indexName, func.name, func.pattern, 
+                        logger.warn("No target index=[{}] found, function name=[{}] pattern=[{}], return all indices={}",
+                                indexName, func.name, func.pattern,
                                 Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
                     for(String index : func.indices) {
                         int i = this.indexToIdx.getOrDefault(index, -1);
@@ -1361,7 +1372,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             return targets;
         }
 
-        class WideRowcumentIndexer extends RowcumentIndexer {        
+        class WideRowcumentIndexer extends RowcumentIndexer {
             NavigableSet<Clustering> clusterings = new java.util.TreeSet<Clustering>(baseCfs.metadata.get().comparator);
             Map<Clustering, WideRowcument> rowcuments = new TreeMap<Clustering, WideRowcument>(baseCfs.metadata.get().comparator);
             Row inStaticRow, outStaticRow;
@@ -1403,13 +1414,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 try {
                     if (logger.isTraceEnabled()) {
                         if (inRow != null)
-                            logger.trace("indexer={} inRowData={} clustering={} static={} hasLiveData={}", 
-                                    WideRowcumentIndexer.this.hashCode(), inRow.toString(baseCfs.metadata.get(), true, true), inRow.clustering(), 
-                                    inRow.isStatic(), inRow.hasLiveData(nowInSec, baseCfs.metadata.get().enforceStrictLiveness())); 
+                            logger.trace("indexer={} inRowData={} clustering={} static={} hasLiveData={}",
+                                    WideRowcumentIndexer.this.hashCode(), inRow.toString(baseCfs.metadata.get(), true, true), inRow.clustering(),
+                                    inRow.isStatic(), inRow.hasLiveData(nowInSec, baseCfs.metadata.get().enforceStrictLiveness()));
                         if (outRow != null)
-                            logger.trace("indexer={} outRowData={} clustering={} static={} hasLiveData={}", 
-                                    WideRowcumentIndexer.this.hashCode(), outRow.toString(baseCfs.metadata.get(), true, true), outRow.clustering(), 
-                                    outRow.isStatic(), outRow.hasLiveData(nowInSec, baseCfs.metadata.get().enforceStrictLiveness())); 
+                            logger.trace("indexer={} outRowData={} clustering={} static={} hasLiveData={}",
+                                    WideRowcumentIndexer.this.hashCode(), outRow.toString(baseCfs.metadata.get(), true, true), outRow.clustering(),
+                                    outRow.isStatic(), outRow.hasLiveData(nowInSec, baseCfs.metadata.get().enforceStrictLiveness()));
                     }
 
                     Row row = (inRow != null) ? inRow : outRow;
@@ -1486,7 +1497,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     logger.trace("deleting documents where _routing={} from index.type={}.{}", this.partitionKey, indexShard.shardId().getIndexName(), typeName);
                 TermQuery termQuery = new TermQuery(new Term(RoutingFieldMapper.NAME, this.partitionKey));
                 DeleteByQuery deleteByQuery = new DeleteByQuery(termQuery, null, null, null, null, Operation.Origin.PRIMARY, System.currentTimeMillis(), typeName);
-                indexShard.getEngine().delete(deleteByQuery);    
+                indexShard.getEngine().delete(deleteByQuery);
             }
             
             /**
@@ -1510,7 +1521,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 } catch(Throwable t) {
                     logger.error("Unexpected error", t);
                 }
-            }    
+            }
         }
         
         class SkinnyRowcumentIndexer extends RowcumentIndexer {
@@ -1570,7 +1581,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 if (logger.isDebugEnabled())
                     logger.debug("deleting document from index.type={}.{} id={} termUid={}", indexShard.shardId().getIndexName(), typeName, this.partitionKey, termUid.text());
                 Engine.Delete delete = new Engine.Delete(typeName, this.partitionKey, termUid);
-                indexShard.delete(indexShard.getEngine(), delete);          
+                indexShard.delete(indexShard.getEngine(), delete);
             }
         }
         
@@ -1607,14 +1618,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 }
                 this.partitionKey = ClusterService.stringify(pkCols, i);
             }
-                
+
             /**
              * Notification of the start of a partition update.
              * This event always occurs before any other during the update.
              */
             @Override
             public void begin() {
-                
+
             }
 
             /**
@@ -1702,7 +1713,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             
             public abstract void collect(Row inRow, Row outRow);
             
-            public abstract void commit(); 
+            public abstract void commit();
             
             public Term termUid(IndexService indexService, String id) {
                 Term termUid;
@@ -1735,7 +1746,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 final boolean isStatic;
                 
                 /**
-                 * 
+                 *
                  * @param inRow  = inserted data
                  * @param outRow = removed data
                  * @throws IOException
@@ -1805,44 +1816,44 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                             Object value = null;
                   
                             switch (ctype.kind) {
-                            case LIST: 
+                            case LIST:
                                 value = ClusterService.deserialize(((ListType)cd.type).getElementsType(), cell.value() );
-                                if (logger.isTraceEnabled()) 
+                                if (logger.isTraceEnabled())
                                     logger.trace("list name={} kind={} type={} value={}", cellNameString, cd.kind, cd.type.asCQL3Type().toString(), value);
                                 List l = (List) values[idx];
                                 if (l == null) {
                                     l = new ArrayList<>(1);
                                     values[idx] = l;
-                                } 
+                                }
                                 l.add(value);
                                 break;
                             case SET:
                                 value = ClusterService.deserialize(((SetType)cd.type).getElementsType(), cell.path().get(0) );
-                                if (logger.isTraceEnabled()) 
+                                if (logger.isTraceEnabled())
                                     logger.trace("set name={} kind={} type={} value={}", cellNameString, cd.kind, cd.type.asCQL3Type().toString(), value);
                                 Set s = (Set) values[idx];
                                 if (s == null) {
                                     s = new HashSet<>();
                                     values[idx] = s;
-                                } 
+                                }
                                 s.add(value);
                                 break;
                             case MAP:
                                 value = ClusterService.deserialize(((MapType)cd.type).getValuesType(), cell.value() );
                                 CellPath cellPath = cell.path();
                                 Object key = ClusterService.deserialize(((MapType)cd.type).getKeysType(), cellPath.get(cellPath.size()-1));
-                                if (logger.isTraceEnabled()) 
-                                    logger.trace("map name={} kind={} type={} key={} value={}", 
-                                            cellNameString, cd.kind, 
+                                if (logger.isTraceEnabled())
+                                    logger.trace("map name={} kind={} type={} key={} value={}",
+                                            cellNameString, cd.kind,
                                             cd.type.asCQL3Type().toString(),
-                                            key, 
+                                            key,
                                             value);
                                 if (key instanceof String) {
                                     Map m = (Map) values[idx];
                                     if (m == null) {
                                         m = new HashMap<>();
                                         values[idx] = m;
-                                    } 
+                                    }
                                     m.put(key,value);
                                 }
                                 break;
@@ -1850,7 +1861,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                             fieldsNotNull.set(idx, value != null);
                         } else {
                             Object value = ClusterService.deserialize(cd.type, cell.value() );
-                            if (logger.isTraceEnabled()) 
+                            if (logger.isTraceEnabled())
                                 logger.trace("name={} kind={} type={} value={}", cellNameString, cd.kind, cd.type.asCQL3Type().toString(), value);
                             
                             values[idx] = value;
@@ -1949,7 +1960,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 parent = (String) values[fieldsToIdx.get(cols[0])];
                             } else {
                                 Object parentValues[] = new Object[cols.length];
-                                for(int i = 0; i < cols.length; i++) 
+                                for(int i = 0; i < cols.length; i++)
                                     parentValues[i] = values[fieldsToIdx.get(cols[i])];
                                 parent = ClusterService.stringify(parentValues, cols.length);
                             }
@@ -2024,9 +2035,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                     (isStatic()) ? partitionKey : id,
                                     context.type(),
                                     ClusterService.stringify(pkCols, baseCfs.metadata.get().partitionKeyColumns().size()), // routing
-                                    ((Long)key.getToken().getTokenValue()).longValue(), 
-                                    context.docs(), 
-                                    context.source(), // source 
+                                    ((Long)key.getToken().getTokenValue()).longValue(),
+                                    context.docs(),
+                                    context.source(), // source
                                     XContentType.JSON,
                                     (Mapping)null); // mappingUpdate
                             
@@ -2045,14 +2056,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 
                                 DocumentMapper docMapper = indexShard.indexService().mapperService().documentMapper(typeName);
                                 final Engine.Index operation = new Engine.Index(
-                                        termUid(indexInfo.indexService, id), 
+                                        termUid(indexInfo.indexService, id),
                                         parsedDoc,
                                         SequenceNumbers.UNASSIGNED_SEQ_NO,
                                         0L,
-                                        1L, 
-                                        VersionType.INTERNAL, 
-                                        Engine.Operation.Origin.PRIMARY, 
-                                        startTime, 
+                                        1L,
+                                        VersionType.INTERNAL,
+                                        Engine.Operation.Origin.PRIMARY,
+                                        startTime,
                                         startTime, false) {
                                     @Override
                                     public int estimatedSizeInBytes() {
@@ -2063,14 +2074,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                 IndexResult result = indexShard.index(indexShard.getEngine(), operation);
 
                                 if (result.hasFailure() && logger.isErrorEnabled()) {
-                                    logger.error((Supplier<?>) () -> 
-                                        new ParameterizedMessage("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={}", 
+                                    logger.error((Supplier<?>) () ->
+                                        new ParameterizedMessage("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={}",
                                             baseCfs.metadata.keyspace, baseCfs.metadata.name,
                                             context.indexInfo.name, typeName,
                                             parsedDoc.id(), operation.version(), result.isCreated(), isStatic(), ttl, context.indexInfo.refresh),
                                         result.getFailure());
                                 } else if (logger.isDebugEnabled()) {
-                                    logger.debug("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={}", 
+                                    logger.debug("document CF={}.{} index/type={}/{} id={} version={} created={} static={} ttl={} refresh={}",
                                             baseCfs.metadata.keyspace, baseCfs.metadata.name,
                                             context.indexInfo.name, typeName,
                                             parsedDoc.id(), operation.version(), result.isCreated(), isStatic(), ttl, context.indexInfo.refresh);
@@ -2169,16 +2180,16 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
 
     public boolean isIndexing() {
-        if (!runsElassandra) 
+        if (!runsElassandra)
             return false;
         
         if (mappingInfo == null) {
-            if (logger.isWarnEnabled())  
+            if (logger.isWarnEnabled())
                 logger.warn("No Elasticsearch index ready {}.{}",this.baseCfs.metadata.keyspace, this.baseCfs.metadata.name);
             return false;
         }
         if (mappingInfo.indices == null || mappingInfo.indices.length == 0) {
-            if (logger.isWarnEnabled())  
+            if (logger.isWarnEnabled())
                 logger.warn("No Elasticsearch index configured for {}.{}",this.baseCfs.metadata.keyspace, this.baseCfs.metadata.name);
             return false;
         }
@@ -2196,7 +2207,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
            // initilization could occur after reading mapping from CQL and cfNameToType map update.
            this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.name);
            this.mappingInfo = new ImmutableMappingInfo(clusterState);
-           logger.info("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={} typeName={}", 
+           logger.info("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={} typeName={}",
                index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()), this.typeName);
         } catch(Exception e) {
            logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to update mapping index=[{}]", index_name), e);
@@ -2207,16 +2218,16 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     // TODO: notify 2i only for udated indices (not all)
     @Override
-    public void clusterChanged(ClusterChangedEvent event) 
+    public void clusterChanged(ClusterChangedEvent event)
     {
         boolean updateMapping = false;
-        if ( mappingInfo==null || !event.state().blocks().isSame(event.previousState().blocks(), 
+        if ( mappingInfo==null || !event.state().blocks().isSame(event.previousState().blocks(),
                 mappingInfo.indices == null ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
             updateMapping = true;
         } else {
             for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
                 IndexMetaData indexMetaData = cursor.value;
-                if (indexMetaData.keyspace().equals(this.baseCfs.metadata.keyspace) && 
+                if (indexMetaData.keyspace().equals(this.baseCfs.metadata.keyspace) &&
                     indexMetaData.mapping(this.typeName) != null &&
                    !indexMetaData.equals(event.previousState().metaData().index(indexMetaData.getIndex().getName()))) {
                     updateMapping = true;
@@ -2258,18 +2269,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
      * @return a task to perform any necessary initialization work
      */
     @Override
-    public Callable<?> getInitializationTask() 
+    public Callable<?> getInitializationTask()
     {
         if (ElassandraDaemon.instance !=null && ElassandraDaemon.instance.node() != null) {
             initialize(ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class));
 
-            if (!baseCfs.isEmpty() && !isBuilt() && !baseCfs.indexManager.isIndexBuilding(getIndexMetadata().name)) {
+            if (!baseCfs.isEmpty() && !isBuilt() /*&& !baseCfs.indexManager.isIndexBuilding(getIndexMetadata().name)*/) {
                 logger.info("index building task for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
-                return () -> {
-                    baseCfs.forceBlockingFlush();
-                    baseCfs.indexManager.buildIndexBlocking(this);
-                    return null;
-                };
+                return getBuildIndexTask();
+//                return () -> {
+//                    baseCfs.forceBlockingFlush();
+//                    baseCfs.indexManager.buildIndexBlocking(this);
+//                    return null;
+//                };
             }
         }
         return null;
@@ -2282,7 +2294,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         
         try {
             ClusterState state = clusterService.state();
-            logger.info("Initializing elastic secondary mapping index=[{}] hashCode={} metadata.version={}/{} indices={}", 
+            logger.info("Initializing elastic secondary mapping index=[{}] hashCode={} metadata.version={}/{} indices={}",
                     index_name, hashCode(), state.metaData().clusterUUID(), state.metaData().version(), state.metaData().indices());
             initMapping(state);
         } catch (Throwable e) {
@@ -2292,8 +2304,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
     
     public boolean initilized() {
-        return  this.mappingInfo != null && 
-                this.clusterService != null && 
+        return  this.mappingInfo != null &&
+                this.clusterService != null &&
                 this.mappingInfo.metadataVersion == this.clusterService.state().metaData().version() &&
                 this.mappingInfo.metadataClusterUUID == this.clusterService.state().metaData().clusterUUID();
     }
@@ -2304,7 +2316,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
 
     @Override
-    public Callable<?> getMetadataReloadTask(IndexMetadata indexMetadata) 
+    public Callable<?> getMetadataReloadTask(IndexMetadata indexMetadata)
     {
         return null;
     }
@@ -2313,7 +2325,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
      * Cassandra index flush .. Elasticsearch flush ... lucene commit and disk sync.
      */
     @Override
-    public Callable<?> getBlockingFlushTask() 
+    public Callable<?> getBlockingFlushTask()
     {
         return () -> {
              if (isIndexing()) {
@@ -2342,8 +2354,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
     
     static FileAttribute<?> snapshotDirPermissions = PosixFilePermissions.asFileAttribute(EnumSet.of(
-            PosixFilePermission.OWNER_EXECUTE, 
-            PosixFilePermission.OWNER_READ, 
+            PosixFilePermission.OWNER_EXECUTE,
+            PosixFilePermission.OWNER_READ,
             PosixFilePermission.OWNER_WRITE,
             PosixFilePermission.GROUP_EXECUTE,
             PosixFilePermission.GROUP_READ,
@@ -2355,7 +2367,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
      */
     @SuppressForbidden(reason="File used for snapshots")
     @Override
-    public Callable<?> getSnapshotWithoutFlushTask(String snapshotName) 
+    public Callable<?> getSnapshotWithoutFlushTask(String snapshotName)
     {
         return () -> {
              if (isIndexing()) {
@@ -2365,12 +2377,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                         if (indexShard.state() == IndexShardState.STARTED)  {
                             // snapshotPath = data/elasticsearch.data/nodes/0/snapshots
                             Path snapshotPath = indexShard.shardPath().resolveSnapshot();
-                            if ((Files.notExists(snapshotPath))) 
+                            if ((Files.notExists(snapshotPath)))
                                 Files.createDirectory(snapshotPath, snapshotDirPermissions);
                             
                             // snapshotIndex = data/elasticsearch.data/nodes/0/snapshots/<index_uuid>
                             Path snapshotIndex = snapshotPath.resolve(indexShard.shardId().getIndex().getUUID());
-                            if ((Files.notExists(snapshotIndex))) 
+                            if ((Files.notExists(snapshotIndex)))
                                 Files.createDirectory(snapshotIndex, snapshotDirPermissions);
                             
                             // snapshotDir = data/elasticsearch.data/nodes/0/snapshots/<index_uuid>/<snapshot_name>
@@ -2452,8 +2464,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
 
     @Override
     public boolean dependsOn(ColumnMetadata column) {
-        return ES_QUERY_BYTE_BUFFER.equals(column.name.bytes) || 
-               ES_OPTIONS_BYTE_BUFFER.equals(column.name.bytes) || 
+        return ES_QUERY_BYTE_BUFFER.equals(column.name.bytes) ||
+               ES_OPTIONS_BYTE_BUFFER.equals(column.name.bytes) ||
                (this.mappingInfo != null && this.mappingInfo.fieldsToIdx.containsKey(column.name.toString()));
     }
 
@@ -2520,7 +2532,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 try {
                     if (baseCfs.getComparator().size() == 0)
                         return this.mappingInfo.new SkinnyRowcumentIndexer(key, columns, nowInSec, ctx, transactionType);
-                    else 
+                    else
                         return this.mappingInfo.new WideRowcumentIndexer(key, columns, nowInSec, ctx, transactionType);
                 } catch (Throwable e) {
                     throw new RuntimeException(e);
@@ -2529,5 +2541,50 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         }
         return null;
     }
+
+    private Callable<?> getBuildIndexTask()
+    {
+        return () -> {
+            buildBlocking();
+            return null;
+        };
+    }
+
+    private void buildBlocking()
+    {
+        baseCfs.forceBlockingFlush();
+
+        try (ColumnFamilyStore.RefViewFragment viewFragment = baseCfs.selectAndReference(View.selectFunction(SSTableSet.CANONICAL));
+             Refs<SSTableReader> sstables = viewFragment.refs)
+        {
+            if (sstables.isEmpty())
+            {
+                logger.info("No SSTable data for {}.{} to build index {} from, marking empty index as built",
+                    baseCfs.metadata.keyspace,
+                    baseCfs.metadata.name,
+                    indexMetadata.name);
+                return;
+            }
+
+            logger.info("Submitting index build of {} for data in {}",
+                indexMetadata.name,
+                getSSTableNames(sstables));
+
+            SecondaryIndexBuilder builder = new CollatedViewIndexBuilder(baseCfs,
+                Collections.singleton(this),
+                new ReducingKeyIterator(sstables));
+            Future<?> future = CompactionManager.instance.submitIndexBuild(builder);
+            FBUtilities.waitOnFuture(future);
+        }
+        logger.info("Index build of {} complete", indexMetadata.name);
+    }
+
+    private static String getSSTableNames(Collection<SSTableReader> sstables)
+    {
+        return StreamSupport.stream(sstables.spliterator(), false)
+            .map(SSTableReader::toString)
+            .collect(Collectors.joining(", "));
+    }
+
 
 }

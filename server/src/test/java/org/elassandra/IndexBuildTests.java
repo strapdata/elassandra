@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -93,9 +93,7 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         ensureGreen("test");
         
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.t1 ( a int,b text, primary key (a) )");
-        int i=0;
-        for(int j=0 ; j < N; j++) {
-            i++;
+        for(int i=0 ; i < N; i++) {
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", i, "x"+i);
         }
         StorageService.instance.forceKeyspaceFlush("test","t1");
@@ -103,21 +101,20 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(discoverMapping("t1")).get());
         // wait for index rebuild by the compaction manager thread
         while (!SystemKeyspace.isIndexBuilt("test", "elastic_t1_idx"))
-            Thread.sleep(500); 
-            
+            Thread.sleep(500);
+
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
     }
     
     @Test
     public void indexWithReplicationMap() throws Exception {
         String indexName = "test_rep";
-        createIndex(indexName, Settings.builder().putList(IndexMetaData.SETTING_REPLICATION, "DC1:1","DC2:2").build());
+        createIndex(indexName, Settings.builder().putList(IndexMetaData.SETTING_REPLICATION, "DC1:2").build());
         ensureGreen(indexName);
         UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name = ?", indexName);
         Map<String, String> replication = rs.one().getMap("replication", UTF8Type.instance, UTF8Type.instance);
         System.out.println("replication="+replication);
         assertThat(replication.get("class"), equalTo("org.apache.cassandra.locator.NetworkTopologyStrategy"));
-        assertThat(replication.get("DC1"), equalTo("1"));
-        assertThat(replication.get("DC2"), equalTo("2"));
+        assertThat(replication.get("DC1"), equalTo("2"));
     }
 }
