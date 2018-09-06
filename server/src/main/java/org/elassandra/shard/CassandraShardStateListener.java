@@ -15,6 +15,7 @@
  */
 package org.elassandra.shard;
 
+import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.routing.RoutingTable;
@@ -52,6 +53,12 @@ public class CassandraShardStateListener extends AbstractComponent implements In
     @Override
     public void afterIndexShardStarted(IndexShard indexShard) {
         try {
+            String cassandraIndexName = indexShard.indexService().keyspace()+"."+indexShard.indexService().table();
+            ElasticSecondaryIndex esi = ElasticSecondaryIndex.elasticSecondayIndices.computeIfPresent(cassandraIndexName, (n, i) -> {
+                        i.initialize(clusterService);
+                        return i;
+                    });
+            
             clusterService.publishShardRoutingState(indexShard.shardId().getIndexName(), ShardRoutingState.STARTED);
             clusterService.submitStateUpdateTask("shard-started-update-routing", new ClusterStateUpdateTask() {
                 @Override

@@ -65,7 +65,7 @@ public class ExtendedElasticSecondaryIndex implements Index {
     private Index newIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         try {
             Class indexClass = Class.forName("org.elassandra.index.ElasticSecondaryIndex");
-            Method method = indexClass.getMethod("newElasticSecondaryIndex",ColumnFamilyStore.class, IndexMetadata.class);
+            Method method = indexClass.getMethod("newElasticSecondaryIndex", ColumnFamilyStore.class, IndexMetadata.class);
             return (Index) method.invoke(null, baseCfs, indexDef);
         } catch (ClassNotFoundException e) {
             logger.warn("Class org.elassandra.index.ElasticSecondaryIndex not found, using a dummy secondary index.");
@@ -82,6 +82,11 @@ public class ExtendedElasticSecondaryIndex implements Index {
     @Override
     public Callable<?> getInitializationTask() {
         return elasticSecondaryIndex.getInitializationTask();
+    }
+    
+    @Override
+    public boolean delayInitializationTask() {
+        return elasticSecondaryIndex.delayInitializationTask();
     }
 
     @Override

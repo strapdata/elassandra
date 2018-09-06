@@ -317,6 +317,10 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     public String keyspace() {
         return this.mapperService.keyspace();
     }
+    
+    public String table() {
+        return this.mapperService.table();
+    }
 
     public String indexUUID() {
         return indexSettings.getUUID();

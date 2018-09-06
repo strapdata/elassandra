@@ -39,10 +39,7 @@ import org.apache.cassandra.db.SinglePartitionReadCommand;
 import org.apache.cassandra.db.Slice;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.WriteContext;
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.filter.RowFilter;
-import org.apache.cassandra.db.lifecycle.SSTableSet;
-import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CollectionType;
 import org.apache.cassandra.db.marshal.CompositeType;
@@ -61,22 +58,16 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterators;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.index.IndexRegistry;
-import org.apache.cassandra.index.SecondaryIndexBuilder;
-import org.apache.cassandra.index.internal.CollatedViewIndexBuilder;
 import org.apache.cassandra.index.transactions.IndexTransaction;
 import org.apache.cassandra.index.transactions.IndexTransaction.Type;
-import org.apache.cassandra.io.sstable.ReducingKeyIterator;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
-import org.apache.cassandra.utils.concurrent.Refs;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -98,8 +89,6 @@ import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermRangeQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CloseableThreadLocal;
-import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.SkinnyRowcumentIndexer;
-import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.WideRowcumentIndexer;
 import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.WideRowcumentIndexer.WideRowcument;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
@@ -206,7 +195,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -214,7 +203,6 @@ import java.util.function.BiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
 /**
  * Custom secondary index for CQL3 only, should be created when mapping is applied and local shard started.
@@ -238,17 +226,19 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     public static boolean runsElassandra = false;
     
-    final String index_name;
-    final Logger logger;
-    ClusterService clusterService;
+    public final String index_name;
+    private final Logger logger;
     
     // updated when create/open/close/remove an ES index.
     protected final ReadWriteLock mappingInfoLock = new ReentrantReadWriteLock();
     protected final AtomicReference<ImmutableMappingInfo> mappingInfoRef = new AtomicReference<>(null);
+    protected final AtomicReference<ClusterService> clusterServiceRef = new AtomicReference<>(null);
     
     protected final ColumnFamilyStore baseCfs;
     protected final IndexMetadata indexMetadata;
     protected String typeName;
+    protected AtomicBoolean delayInitializationTask = new AtomicBoolean(true);
+    protected AtomicBoolean haveDelayedIndexInitialization = new AtomicBoolean(false);
     
     ElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.baseCfs = baseCfs;
@@ -256,6 +246,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         this.index_name = baseCfs.keyspace.getName()+"."+baseCfs.name;
         this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.name);
         this.logger = Loggers.getLogger(this.getClass().getName()+"."+baseCfs.keyspace.getName()+"."+baseCfs.name);
+        initialize();
     }
     
     public static ElasticSecondaryIndex newElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
@@ -455,7 +446,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                                         String mappingUpdate = builder.string();
                                         logger.info("updating mapping={}", mappingUpdate);
                                         
-                                        ElasticSecondaryIndex.this.clusterService.blockingMappingUpdate(indexInfo.indexService, context.docMapper().type(), mappingUpdate);
+                                        ElasticSecondaryIndex.this.clusterServiceRef.get().blockingMappingUpdate(indexInfo.indexService, context.docMapper().type(), mappingUpdate);
                                         DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(indexInfo.type);
                                         ObjectMapper newObjectMapper = docMapper.objectMappers().get(mapper.name());
                                         subMapper = newObjectMapper.getMapper(entry.getKey());
@@ -1160,7 +1151,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     Map<String,Object> mappingMap = (Map<String,Object>)mappingMetaData.getSourceAsMap();
                     if (mappingMap.get("properties") != null) {
                         // #181 IndiceService is available when activated and before Node start.
-                        IndicesService indicesService = ElasticSecondaryIndex.this.clusterService.getIndicesService();
+                        IndicesService indicesService = ElasticSecondaryIndex.this.clusterServiceRef.get().getIndicesService();
                         IndexService indexService = indicesService.indexService(indexMetaData.getIndex());
                         if (indexService == null) {
                             logger.error("indexService not available for [{}], ignoring" , index);
@@ -2200,12 +2191,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     public String toString() {
         return this.index_name;
     }
-    
-    public void initMapping(ClusterState clusterState) {
-        updateMappingInfo(clusterState);
-    }
-    
-    private synchronized void updateMappingInfo(ClusterState clusterState) {
+
+    private void updateMappingInfo(ClusterState clusterState) {
         mappingInfoLock.writeLock().lock();
         try {
             ImmutableMappingInfo newMappingInfo = new ImmutableMappingInfo(clusterState);
@@ -2213,10 +2200,14 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             logger.debug("secondary index=[{}] metadata.version={} mappingInfo.indices={}",
                     this.index_name, clusterState.metaData().version(),
                     newMappingInfo.indices == null ? "" : Arrays.stream(newMappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
-            if (oldMappingInfo == null) {
-                // may trigger the first index build if not yet done or ongoing.
-                if (!isBuilt() && !this.baseCfs.indexManager.isIndexBuilding(this.getIndexMetadata().name)) {
-                    this.baseCfs.indexManager.initIndex(this);
+            
+            delayInitializationTask.set(false);
+            
+            if (haveDelayedIndexInitialization.get()) {
+                if (!isBuilt() &&                                                               // index not yet built
+                    !this.baseCfs.indexManager.isIndexBuilding(this.getIndexMetadata().name)) { // index not currently building
+                    logger.debug("initilizaing secondary index=[{}]", this.index_name);
+                    baseCfs.indexManager.initIndex(this);
                 }
             }
         } catch(Exception e) {
@@ -2272,17 +2263,13 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     @Override
     public Callable<?> getInitializationTask()
     {
-        if (ElassandraDaemon.instance !=null && ElassandraDaemon.instance.node() != null) {
-            initialize(ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class));
-
-            if (!baseCfs.isEmpty() && !isBuilt()) {
-                logger.info("index building task for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
-                return () -> {
-                    baseCfs.forceBlockingFlush();
-                    baseCfs.indexManager.buildIndexBlocking(this, false);
-                    return null;
-                };
-            }
+        if (!baseCfs.isEmpty() && !isBuilt()) {
+            logger.info("index building task for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
+            return () -> {
+                baseCfs.forceBlockingFlush();
+                baseCfs.indexManager.buildIndexBlocking(this, 1, false);
+                return null;
+            };
         }
         return null;
     }
@@ -2294,31 +2281,42 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     @Override
     public boolean delayInitializationTask()
     {
-        return mappingInfoRef.get() == null;
+        haveDelayedIndexInitialization.set(delayInitializationTask.get());
+        return haveDelayedIndexInitialization.get();
     }
     
-    public void initialize(ClusterService cs) {
-        // 2i index can be recycled by cassandra, while ES node restarted during tests, so update clusterService reference.
-        clusterService = cs;
-        clusterService.addListener(this);
-        
-        try {
+    // 2i index can be recycled by cassandra, while ES node restarted during tests, so update clusterService reference.
+    public boolean initialize() {
+        if (ElassandraDaemon.instance != null && ElassandraDaemon.instance.node() != null) {
+            ClusterService clusterService = ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class);
+            if (clusterService != null)
+                return initialize(clusterService);
+        }
+        return false;
+    }
+    
+    public boolean initialize(ClusterService clusterService) {
+        logger.trace("clusterService={}", clusterService.hashCode());
+        if (clusterServiceRef.compareAndSet(null, clusterService)) {
+            clusterService.addListener(this);
             ClusterState state = clusterService.state();
             logger.info("Initializing elastic secondary mapping index=[{}] hashCode={} metadata.version={}/{} indices={}",
                     index_name, hashCode(), state.metaData().clusterUUID(), state.metaData().version(), state.metaData().indices());
-            initMapping(state);
-        } catch (Throwable e) {
-            // minor error thrown when bootstrapping because state is not yet available.
-            logger.trace("Mapping initialization failed", e);
+            updateMappingInfo(state);
+            return true;
         }
+        logger.trace("ClusterService already initialized");
+        return false;
     }
+
     
     public boolean initilized() {
+        ClusterService clusterService = clusterServiceRef.get();
         ImmutableMappingInfo mappingInfo = mappingInfoRef.get();
         return  mappingInfo != null &&
-                this.clusterService != null &&
-                mappingInfo.metadataVersion == this.clusterService.state().metaData().version() &&
-                mappingInfo.metadataClusterUUID == this.clusterService.state().metaData().clusterUUID();
+                clusterServiceRef.get() != null &&
+                mappingInfo.metadataVersion == clusterService.state().metaData().version() &&
+                mappingInfo.metadataClusterUUID == clusterService.state().metaData().clusterUUID();
     }
  
     private boolean isBuilt()
@@ -2424,8 +2422,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     @Override
     public Callable<?> getInvalidateTask() {
         return () -> {
-            if (this.clusterService != null)
-                this.clusterService.removeListener(this);
+            ClusterService clusterService = clusterServiceRef.get();
+            if (clusterService != null)
+                clusterService.removeListener(this);
             elasticSecondayIndices.remove(index_name);
             return null;
         };
