@@ -76,8 +76,6 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
-import org.apache.cassandra.utils.concurrent.OpOrder;
-import org.apache.cassandra.utils.concurrent.OpOrder.Group;
 import org.apache.cassandra.utils.concurrent.Refs;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
@@ -100,6 +98,8 @@ import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermRangeQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CloseableThreadLocal;
+import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.SkinnyRowcumentIndexer;
+import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.WideRowcumentIndexer;
 import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.WideRowcumentIndexer.WideRowcument;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
@@ -207,6 +207,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
@@ -214,8 +215,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-
-import static com.google.common.collect.Iterables.transform;
 
 /**
  * Custom secondary index for CQL3 only, should be created when mapping is applied and local shard started.
@@ -245,7 +244,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     // updated when create/open/close/remove an ES index.
     protected final ReadWriteLock mappingInfoLock = new ReentrantReadWriteLock();
-    protected volatile ImmutableMappingInfo mappingInfo;
+    protected final AtomicReference<ImmutableMappingInfo> mappingInfoRef = new AtomicReference<>(null);
     
     protected final ColumnFamilyStore baseCfs;
     protected final IndexMetadata indexMetadata;
@@ -1339,7 +1338,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     if (logger.isDebugEnabled())
                         logger.debug("No target index=[{}] found for partition function name=[{}] pattern=[{}] indices={}",
                                 indexName, func.name, func.pattern,
-                                Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
+                                Arrays.stream(this.indices).map(i -> i.name).collect(Collectors.joining()));
                 }
             }
             if (logger.isTraceEnabled())
@@ -1361,7 +1360,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     if (logger.isWarnEnabled())
                         logger.warn("No target index=[{}] found, function name=[{}] pattern=[{}], return all indices={}",
                                 indexName, func.name, func.pattern,
-                                Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
+                                Arrays.stream(this.indices).map(i -> i.name).collect(Collectors.joining()));
                     for(String index : func.indices) {
                         int i = this.indexToIdx.getOrDefault(index, -1);
                         if (i >= 0)
@@ -2183,14 +2182,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         if (!runsElassandra)
             return false;
         
+        ImmutableMappingInfo mappingInfo = mappingInfoRef.get();
         if (mappingInfo == null) {
             if (logger.isWarnEnabled())
-                logger.warn("No Elasticsearch index ready {}.{}",this.baseCfs.metadata.keyspace, this.baseCfs.metadata.name);
+                logger.warn("No Elasticsearch index ready {}.{}", this.baseCfs.metadata.keyspace, this.baseCfs.metadata.name);
             return false;
         }
         if (mappingInfo.indices == null || mappingInfo.indices.length == 0) {
             if (logger.isWarnEnabled())
-                logger.warn("No Elasticsearch index configured for {}.{}",this.baseCfs.metadata.keyspace, this.baseCfs.metadata.name);
+                logger.warn("No Elasticsearch index configured for {}.{}", this.baseCfs.metadata.keyspace, this.baseCfs.metadata.name);
             return false;
         }
         return true;
@@ -2202,24 +2202,35 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
     
     public void initMapping(ClusterState clusterState) {
+        updateMappingInfo(clusterState);
+    }
+    
+    private synchronized void updateMappingInfo(ClusterState clusterState) {
         mappingInfoLock.writeLock().lock();
         try {
-           // initilization could occur after reading mapping from CQL and cfNameToType map update.
-           this.typeName = ClusterService.cfNameToType(baseCfs.keyspace.getName(), ElasticSecondaryIndex.this.baseCfs.metadata.name);
-           this.mappingInfo = new ImmutableMappingInfo(clusterState);
-           logger.info("Secondary index=[{}] initialized, metadata.version={} mappingInfo.indices={} typeName={}",
-               index_name, mappingInfo.metadataVersion, mappingInfo.indices==null ? null : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()), this.typeName);
+            ImmutableMappingInfo newMappingInfo = new ImmutableMappingInfo(clusterState);
+            ImmutableMappingInfo oldMappingInfo = mappingInfoRef.getAndSet(newMappingInfo);
+            logger.debug("secondary index=[{}] metadata.version={} mappingInfo.indices={}",
+                    this.index_name, clusterState.metaData().version(),
+                    newMappingInfo.indices == null ? "" : Arrays.stream(newMappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
+            if (oldMappingInfo == null) {
+                // may trigger the first index build if not yet done or ongoing.
+                if (!isBuilt() && !this.baseCfs.indexManager.isIndexBuilding(this.getIndexMetadata().name)) {
+                    this.baseCfs.indexManager.initIndex(this);
+                }
+            }
         } catch(Exception e) {
-           logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to update mapping index=[{}]", index_name), e);
-        } finally {
-           mappingInfoLock.writeLock().unlock();
-        }
+            logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to update mapping index=[{}]", index_name), e);
+         } finally {
+            mappingInfoLock.writeLock().unlock();
+         }
     }
     
     // TODO: notify 2i only for udated indices (not all)
     @Override
     public void clusterChanged(ClusterChangedEvent event)
     {
+        ImmutableMappingInfo mappingInfo = mappingInfoRef.get();
         boolean updateMapping = false;
         if ( mappingInfo==null || !event.state().blocks().isSame(event.previousState().blocks(),
                 mappingInfo.indices == null ? Collections.EMPTY_LIST : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.toList()))) {
@@ -2236,17 +2247,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             }
         }
         if (updateMapping) {
-            mappingInfoLock.writeLock().lock();
-            try {
-                mappingInfo = new ImmutableMappingInfo(event.state());
-                logger.debug("secondary index=[{}] metadata.version={} mappingInfo.indices={}",
-                        this.index_name, event.state().metaData().version(),
-                        mappingInfo.indices == null ? "" : Arrays.stream(mappingInfo.indices).map(i -> i.name).collect(Collectors.joining()));
-            } catch(Exception e) {
-                logger.error("Failed to update mapping index=["+index_name+"]", e);
-            } finally {
-                mappingInfoLock.writeLock().unlock();
-            }
+            updateMappingInfo(event.state());
         }
     }
 
@@ -2274,17 +2275,26 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         if (ElassandraDaemon.instance !=null && ElassandraDaemon.instance.node() != null) {
             initialize(ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class));
 
-            if (!baseCfs.isEmpty() && !isBuilt() /*&& !baseCfs.indexManager.isIndexBuilding(getIndexMetadata().name)*/) {
+            if (!baseCfs.isEmpty() && !isBuilt() && !baseCfs.indexManager.isIndexBuilding(getIndexMetadata().name)) {
                 logger.info("index building task for [{}.{}]", baseCfs.keyspace.getName(), baseCfs.name);
-                return getBuildIndexTask();
-//                return () -> {
-//                    baseCfs.forceBlockingFlush();
-//                    baseCfs.indexManager.buildIndexBlocking(this);
-//                    return null;
-//                };
+                return () -> {
+                    baseCfs.forceBlockingFlush();
+                    baseCfs.indexManager.buildIndexBlocking(this);
+                    return null;
+                };
             }
         }
         return null;
+    }
+    
+    /**
+     * If index is not ready, delay index initialization
+     * @return
+     */
+    @Override
+    public boolean delayInitializationTask() 
+    {
+        return mappingInfoRef.get() == null;
     }
     
     public void initialize(ClusterService cs) {
@@ -2304,10 +2314,11 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     }
     
     public boolean initilized() {
-        return  this.mappingInfo != null &&
+        ImmutableMappingInfo mappingInfo = mappingInfoRef.get();
+        return  mappingInfo != null &&
                 this.clusterService != null &&
-                this.mappingInfo.metadataVersion == this.clusterService.state().metaData().version() &&
-                this.mappingInfo.metadataClusterUUID == this.clusterService.state().metaData().clusterUUID();
+                mappingInfo.metadataVersion == this.clusterService.state().metaData().version() &&
+                mappingInfo.metadataClusterUUID == this.clusterService.state().metaData().clusterUUID();
     }
  
     private boolean isBuilt()
@@ -2329,7 +2340,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     {
         return () -> {
              if (isIndexing()) {
-                for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : mappingInfo.indices) {
+                for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : mappingInfoRef.get().indices) {
                     try {
                         IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
                         if (indexShard != null && indexInfo.updated) {
@@ -2371,7 +2382,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     {
         return () -> {
              if (isIndexing()) {
-                for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : mappingInfo.indices) {
+                for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : mappingInfoRef.get().indices) {
                     IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
                     if (indexShard != null && indexInfo.snapshot) {
                         if (indexShard.state() == IndexShardState.STARTED)  {
@@ -2424,7 +2435,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     public Callable<?> getTruncateTask(long truncatedAt) {
         return () -> {
             if (isIndexing()) {
-                for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : mappingInfo.indices) {
+                for(ImmutableMappingInfo.ImmutableIndexInfo indexInfo : mappingInfoRef.get().indices) {
                     try {
                         IndexShard indexShard = indexInfo.indexService.getShardOrNull(0);
                         if (indexShard != null) {
@@ -2464,9 +2475,10 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
 
     @Override
     public boolean dependsOn(ColumnMetadata column) {
+        ImmutableMappingInfo mappingInfo = mappingInfoRef.get();
         return ES_QUERY_BYTE_BUFFER.equals(column.name.bytes) ||
                ES_OPTIONS_BYTE_BUFFER.equals(column.name.bytes) ||
-               (this.mappingInfo != null && this.mappingInfo.fieldsToIdx.containsKey(column.name.toString()));
+               (mappingInfo != null && mappingInfo.fieldsToIdx.containsKey(column.name.toString()));
     }
 
     @Override
@@ -2515,14 +2527,15 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
     
     @Override
     public Indexer indexerFor(DecoratedKey key, RegularAndStaticColumns columns, int nowInSec, WriteContext ctx, Type transactionType) {
+        ImmutableMappingInfo mappingInfo = this.mappingInfoRef.get();
         if (isIndexing()) {
-            if (transactionType == Type.COMPACTION && !this.mappingInfo.indexOnCompaction)
+            if (transactionType == Type.COMPACTION && !mappingInfo.indexOnCompaction)
                 return null;
 
             boolean found = (columns.size() == 0);
             if (!found) {
                 for(ColumnMetadata cd : columns) {
-                    if (this.mappingInfo.fieldsToIdx.containsKey(cd.name.toString())) {
+                    if (mappingInfo.fieldsToIdx.containsKey(cd.name.toString())) {
                         found = true;
                         break;
                     }
@@ -2531,9 +2544,9 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             if (found) {
                 try {
                     if (baseCfs.getComparator().size() == 0)
-                        return this.mappingInfo.new SkinnyRowcumentIndexer(key, columns, nowInSec, ctx, transactionType);
+                        return mappingInfo.new SkinnyRowcumentIndexer(key, columns, nowInSec, ctx, transactionType);
                     else
-                        return this.mappingInfo.new WideRowcumentIndexer(key, columns, nowInSec, ctx, transactionType);
+                        return mappingInfo.new WideRowcumentIndexer(key, columns, nowInSec, ctx, transactionType);
                 } catch (Throwable e) {
                     throw new RuntimeException(e);
                 }
@@ -2541,50 +2554,4 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
         }
         return null;
     }
-
-    private Callable<?> getBuildIndexTask()
-    {
-        return () -> {
-            buildBlocking();
-            return null;
-        };
-    }
-
-    private void buildBlocking()
-    {
-        baseCfs.forceBlockingFlush();
-
-        try (ColumnFamilyStore.RefViewFragment viewFragment = baseCfs.selectAndReference(View.selectFunction(SSTableSet.CANONICAL));
-             Refs<SSTableReader> sstables = viewFragment.refs)
-        {
-            if (sstables.isEmpty())
-            {
-                logger.info("No SSTable data for {}.{} to build index {} from, marking empty index as built",
-                    baseCfs.metadata.keyspace,
-                    baseCfs.metadata.name,
-                    indexMetadata.name);
-                return;
-            }
-
-            logger.info("Submitting index build of {} for data in {}",
-                indexMetadata.name,
-                getSSTableNames(sstables));
-
-            SecondaryIndexBuilder builder = new CollatedViewIndexBuilder(baseCfs,
-                Collections.singleton(this),
-                new ReducingKeyIterator(sstables));
-            Future<?> future = CompactionManager.instance.submitIndexBuild(builder);
-            FBUtilities.waitOnFuture(future);
-        }
-        logger.info("Index build of {} complete", indexMetadata.name);
-    }
-
-    private static String getSSTableNames(Collection<SSTableReader> sstables)
-    {
-        return StreamSupport.stream(sstables.spliterator(), false)
-            .map(SSTableReader::toString)
-            .collect(Collectors.joining(", "));
-    }
-
-
 }
