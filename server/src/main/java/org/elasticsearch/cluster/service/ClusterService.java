@@ -1437,6 +1437,7 @@ public class ClusterService extends BaseClusterService {
         cassandraSecondaryIndicesApplier.recoverShard(index);
     }
     
+    /*
     public void createSecondaryIndices(final IndexMetaData indexMetaData) throws IOException {
         String ksName = indexMetaData.keyspace();
         String className = indexMetaData.getSettings().get(IndexMetaData.SETTING_SECONDARY_INDEX_CLASS, this.settings.get(SETTING_CLUSTER_SECONDARY_INDEX_CLASS, defaultSecondaryIndexClass.getName()));
@@ -1444,7 +1445,8 @@ public class ClusterService extends BaseClusterService {
             createSecondaryIndex(ksName, cursor.value, className);
         }
     }
-   
+   */
+    
     // build secondary indices when shard is started and mapping applied
     public void createSecondaryIndex(String ksName, MappingMetaData mapping, String className) throws IOException {
         final String cfName = typeToCfName(ksName, mapping.type());

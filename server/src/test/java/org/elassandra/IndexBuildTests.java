@@ -109,12 +109,13 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
     @Test
     public void indexWithReplicationMap() throws Exception {
         String indexName = "test_rep";
-        createIndex(indexName, Settings.builder().putList(IndexMetaData.SETTING_REPLICATION, "DC1:2").build());
+        createIndex(indexName, Settings.builder().putList(IndexMetaData.SETTING_REPLICATION, "DC1:1","DC2:2").build());
         ensureGreen(indexName);
         UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name = ?", indexName);
         Map<String, String> replication = rs.one().getMap("replication", UTF8Type.instance, UTF8Type.instance);
         System.out.println("replication="+replication);
         assertThat(replication.get("class"), equalTo("org.apache.cassandra.locator.NetworkTopologyStrategy"));
-        assertThat(replication.get("DC1"), equalTo("2"));
+        assertThat(replication.get("DC1"), equalTo("1"));
+        assertThat(replication.get("DC2"), equalTo("2"));
     }
 }
