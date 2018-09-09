@@ -64,7 +64,10 @@ import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.engine.Engine.DeleteByQuery;
+import org.elasticsearch.index.engine.Engine.Get;
+import org.elasticsearch.index.engine.Engine.GetResult;
 import org.elasticsearch.index.engine.Engine.Operation;
+import org.elasticsearch.index.engine.Engine.Searcher;
 import org.elasticsearch.index.mapper.IdFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.UidFieldMapper;
@@ -365,12 +368,12 @@ public class VersionLessInternalEngine extends Engine {
 
     @Override
     public GetResult get(Get get, Function<String, Searcher> searcherFactory, LongConsumer onRefresh) throws EngineException {
-        /*
         assert Objects.equals(get.uid().field(), uidField) : get.uid().field();
         try (ReleasableLock lock = readLock.acquire()) {
             ensureOpen();
             if (get.realtime()) {
-                VersionValue versionValue = versionMap.getUnderLock(get.uid());
+                //VersionValue versionValue = versionMap.getUnderLock(get.uid());
+                VersionValue versionValue = null;
                 if (versionValue != null) {
                     if (versionValue.isDelete()) {
                         return GetResult.NOT_EXISTS;
@@ -388,8 +391,6 @@ public class VersionLessInternalEngine extends Engine {
             // no version, get the version from the index, we know that we refresh on flush
             return getFromSearcher(get, searcherFactory);
         }
-        */
-        return null;
     }
 
     /**

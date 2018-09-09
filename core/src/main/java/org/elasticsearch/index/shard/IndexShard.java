@@ -706,6 +706,11 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         }
     }
     
+    public Engine.GetResult getDoc(Engine.Get get) {
+        readAllowed();
+        return getEngine().get(get, this::acquireSearcher, (timeElapsed) -> refreshMetric.inc(timeElapsed));
+    }
+
     /**
      * Writes all indexing changes to disk and opens a new searcher reflecting all changes.  This can throw {@link AlreadyClosedException}.
      */

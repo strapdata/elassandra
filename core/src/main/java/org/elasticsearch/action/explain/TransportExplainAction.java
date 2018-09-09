@@ -97,7 +97,9 @@ public class TransportExplainAction extends TransportSingleShardAction<ExplainRe
             if (uidTerm == null) {
                 return new ExplainResponse(shardId.getIndexName(), request.type(), request.id(), false);
             }
-            result = context.indexShard().get(new Engine.Get(false, request.type(), request.id(), uidTerm));
+            //result = context.indexShard().get(new Engine.Get(false, request.type(), request.id(), uidTerm));
+            result = context.indexShard().getDoc(new Engine.Get(false, request.type(), request.id(), uidTerm));
+
             if (!result.exists()) {
                 return new ExplainResponse(shardId.getIndexName(), request.type(), request.id(), false);
             }

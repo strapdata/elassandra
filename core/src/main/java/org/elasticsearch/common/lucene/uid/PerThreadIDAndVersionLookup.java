@@ -50,7 +50,7 @@ final class PerThreadIDAndVersionLookup {
     final String uidField;
     private final TermsEnum termsEnum;
     /** _version data */
-    private final NumericDocValues versions;
+    //private final NumericDocValues versions;
 
     /** Reused for iteration (when the term exists) */
     private PostingsEnum docsEnum;
@@ -70,11 +70,11 @@ final class PerThreadIDAndVersionLookup {
                 "] field");
         }
         termsEnum = terms.iterator();
-        versions = reader.getNumericDocValues(VersionFieldMapper.NAME);
-        if (versions == null) {
-            throw new IllegalArgumentException("reader misses the [" + VersionFieldMapper.NAME +
-                "] field");
-        }
+//        versions = reader.getNumericDocValues(VersionFieldMapper.NAME);
+//        if (versions == null) {
+//            throw new IllegalArgumentException("reader misses the [" + VersionFieldMapper.NAME +
+//                "] field");
+//        }
         Object readerKey = null;
         assert (readerKey = reader.getCoreCacheKey()) != null;
         this.readerKey = readerKey;
@@ -88,7 +88,7 @@ final class PerThreadIDAndVersionLookup {
         int docID = getDocID(id, liveDocs);
 
         if (docID != DocIdSetIterator.NO_MORE_DOCS) {
-            return new DocIdAndVersion(docID, versions.get(docID), context);
+            return new DocIdAndVersion(docID, 1L, context);
         } else {
             return null;
         }
