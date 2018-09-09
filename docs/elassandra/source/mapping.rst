@@ -109,7 +109,7 @@ Columns matching the provided regular expression are mapped as Elasticsearch fie
    }'
 
 
-By default, all text columns are mapped with ``"index":"not_analyzed"``.
+By default, all text columns are mapped with ``"type":"keyword"``.
 
 .. TIP::
    When creating the first Elasticsearch index for a given cassandra table, elassandra creates a custom CQL secondary index asynchonously for each mapped field when all shards are started.
@@ -473,7 +473,7 @@ Then, a new entry *key1* in the underlying cassandra map will have the following
           }
         }    
 
-Note that because doc_values is true by default for a not analyzed field, it does not appear in the mapping.
+Note that because doc_values is true by default for a keyword field, it does not appear in the mapping.
 
 Parent-Child Relationship
 -------------------------
