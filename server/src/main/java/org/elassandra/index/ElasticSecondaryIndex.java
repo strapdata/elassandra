@@ -1687,6 +1687,8 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
             
             @Override
             public void update() {
+                if (rowcument != null)
+                    rowcument.delete();
             }
         }
         
