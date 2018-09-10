@@ -21,7 +21,6 @@ if [ "x$CASSANDRA_HOME" = "x" ]; then
     export CASSANDRA_HOME="`dirname "$0"`/.."
 fi
 
-#
 # Please set the following variable in your environnement (multihoming support)
 export NODE="127.0.0.1"
 export NODETOOL_JMX_PORT="7199"
@@ -70,13 +69,13 @@ function get() {
    curl -XGET  $CREDENTIAL  "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
 }
 function put() {
-   curl -XPUT  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XPUT -H Content-Type:application/json $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" -d "$2"
 }
 function post() {
-   curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XPOST -H Content-Type:application/json $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" -d "$2"
 }
 function delete() {
-   curl -XDELETE  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XDELETE -H Content-Type:application/json $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" -d "$2"
 }
 
 function close() {

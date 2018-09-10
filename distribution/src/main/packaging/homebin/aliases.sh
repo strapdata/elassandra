@@ -17,9 +17,8 @@
 # Elassandra useful aliases (packaged version)
 #
 
-CASSANDRA_HOME=/usr/share/cassandra
+export CASSANDRA_HOME=/usr/share/cassandra
 
-#
 # Please set the following variable in your environnement (multihoming support)
 export NODE="127.0.0.1"
 export NODETOOL_JMX_PORT="7199"
@@ -36,7 +35,9 @@ export CASSANDRA_CONF=/etc/cassandra
 export CASSANDRA_DATA=/var/lib/cassandra
 export CASSANDRA_LOGS=/var/log/cassandra
 
-export PROTOCOL="http"
+export PROTOCOL="${PROTOCOL:-http}"
+export CQLSH_OPTS=""
+[ "x$CASSANDRA_SSL" != "x" ] && CQLSH_OPTS="$CQLSH_OPTS --ssl"
 
 export CASSANDRA_EXEC=cassandra
 export NODETOOL_EXEC=nodetool
@@ -68,13 +69,13 @@ function get() {
    curl -XGET  $CREDENTIAL  "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
 }
 function put() {
-   curl -XPUT  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XPUT -H Content-Type:application/json $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" -d "$2"
 }
 function post() {
-   curl -XPOST  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XPOST -H Content-Type:application/json $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" -d "$2"
 }
 function delete() {
-   curl -XDELETE  $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" $2 $2 $4 $5
+   curl -XDELETE -H Content-Type:application/json $CREDENTIAL "$PROTOCOL://$NODE:9200/$1" -d "$2"
 }
 
 function close() {
@@ -133,6 +134,7 @@ alias metadata='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/state/me
 alias stats='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_stats?pretty=true'
 alias shards='curl -s -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/shards?v | sort'
 alias indices='curl -s -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/indices?v | sort'
+alias allocation='curl -s -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/allocation?v'
 alias fielddata='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/fielddata/body,text?v'
 alias threads='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/thread_pool?v'
 alias hotthreads='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_nodes/hot_threads'
