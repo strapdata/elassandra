@@ -39,6 +39,7 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  *
  */
+//gradle :server:test -Dtests.seed=65E2CF27F286CC89 -Dtests.class=org.elassandra.CompositeTests -Dtests.security.manager=false -Dtests.locale=en-PH -Dtests.timezone=America/Coral_Harbour
 public class CompositeTests extends ESSingleNodeTestCase {
     
     @Test
@@ -336,11 +337,29 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
                         .endObject()
                     .endObject()
                     .startObject("_meta")
-                        .field("index_static_columns",true)
+                        .field("index_static_columns", true)
+                    .endObject()
+                .endObject();
+        XContentBuilder mapping2 = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("m").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("t").field("type", "date").field("cql_collection", "singleton").field("cql_primary_key_order", 1).endObject()
+                        .startObject("v").field("type", "double").field("cql_collection", "singleton").endObject()
+                        .startObject("meta").field("type", "nested").field("cql_collection", "singleton").field("cql_struct", "map").field("cql_static_column", true).field("include_in_parent", true)
+                            .startObject("properties")
+                                .startObject("region").field("type", "text").endObject()
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                    .startObject("_meta")
+                        .field("index_static_columns",false)
                     .endObject()
                 .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("timeseries", mapping));
+        assertAcked(client().admin().indices().prepareCreate("test2").setSettings(Settings.builder().put("index.keyspace","test").build()).addMapping("timeseries", mapping2));
         ensureGreen("test");
+        ensureGreen("test2");
         
         process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, meta) VALUES ('server1-cpu', { 'region':'west' } );");
         process(ConsistencyLevel.ONE,"INSERT INTO test.timeseries (m, t, v) VALUES ('server1-cpu', '2016-04-10 13:30', 10);");
@@ -356,6 +375,13 @@ curl -XGET "http://$NODE:9200/test/timeseries/_search?pretty=true&q=meta.region:
         assertThat(hits.getTotalHits(), equalTo(3L));
         assertThat(source.get("m"), equalTo("server1-cpu"));
         assertThat(((Map)source.get("meta")).get("region"), equalTo("west"));
+        
+        // check static column is ot indexed when index_static_columns=false
+        SearchResponse rsp2 = client().prepareSearch().setIndices("test2").setTypes("timeseries")
+                .setQuery(QueryBuilders.queryStringQuery("meta.region:west"))
+                .setFetchSource(new String[] { "m",  "t", "v", "meta.region"}, null)
+                .get();
+        assertThat(rsp2.getHits().getTotalHits(), equalTo(0L));
     }
     
     @Test
