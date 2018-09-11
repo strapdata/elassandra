@@ -61,4 +61,4 @@ deploy:
     skip_cleanup: true
     on:
       tags: true
-      repo: strapdata/elassandra6-rc
+      repo: strapdata/elassandra-rc
