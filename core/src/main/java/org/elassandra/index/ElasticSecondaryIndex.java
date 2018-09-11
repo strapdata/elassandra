@@ -2074,7 +2074,7 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     
                     // add all mapped fields to the current context.
                     for(int i=0; i < values.length; i++) {
-                        if (indexInfo.mappers[i] != null)
+                        if (indexInfo.mappers[i] != null && (indexInfo.index_static_columns || indexInfo.index_static_document || !indexInfo.isStaticField(i)))
                             try {
                                 context.addField(indexInfo, indexInfo.mappers[i], values[i]);
                             } catch (IOException e) {
