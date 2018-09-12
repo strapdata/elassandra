@@ -49,8 +49,8 @@ Node role (master, primary, data) is automatically set by elassandra, standard c
 By default, Elasticsearch HTTP is bound to Cassandra RPC address ``rpc_address``, while Elasticsearch transport protocol is bound to Cassandra internal address ``listen_address``.
 You can overload these default settings by defining Elasticsearch network settings in conf/elasticsearch.yaml (in order to bind Elasticsearch transport on another interface).
 
-By default, Elasticsearch transport publish adress is the Cassandra broadcast adress. However, in some network configurations (including multi-cloud deployment), the Cassandra broadcast adress is a public address managed by a firewall, and
-it would invlove a network overhead for elasticsearch inter-node communication. In such case, you can set the system property ``es.use_internal_address=true`` to use the Cassandra  ``listen_address`` as the elasticsearch transport published address.
+By default, Elasticsearch transport publish address is the Cassandra broadcast address. However, in some network configurations (including multi-cloud deployment), the Cassandra broadcast adress is a public address managed by a firewall, and
+it would involve a network overhead for elasticsearch inter-node communication. In such case, you can set the system property ``es.use_internal_address=true`` to use the Cassandra  ``listen_address`` as the elasticsearch transport published address.
 
 
 .. CAUTION::
