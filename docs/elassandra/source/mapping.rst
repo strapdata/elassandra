@@ -675,7 +675,7 @@ Search for rows where meta.region=west, returns only a static document (i.e. doc
 If needed, you can change the default behavior for a specific cassandra table (or elasticsearch document type), by using the following custom metadata :
 
 * ``index_static_document`` controls whether or not static document (i.e. document containing the partition key and static columns) are indexed (default is *false*).
-* ``index_static_only`` if *true*, it ony indexes static documents with partition key as ``_id`` and static columns as fields.
+* ``index_static_only`` if *true*, it only indexes static documents with partition key as ``_id`` and static columns as fields.
 * ``index_static_columns`` controls whether or not static columns are included in indexed documents (default is *false*).
 
 Be careful, if ``index_static_document`` = *false* and ``index_static_only`` = *true*, it does not index any document. In our example with the following mapping, static columns are indexed in every documents, allowing to search on.

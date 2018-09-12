@@ -50,8 +50,8 @@ By default, Elasticsearch HTTP is bound to Cassandra RPC address ``rpc_address``
 You can overload these default settings by defining Elasticsearch network settings in conf/elasticsearch.yaml (in order to bind Elasticsearch transport on 
 a another interface).
 
-By default, Elasticsearch transport publish adress is the Cassandra broadcast adress. However, in some network configurations (including multi-cloud deployment), the Cassandra broadcast adress is a public address managed by a firewall, and
-it would invlove a network overhead for elasticsearch inter-node communication. In such case, you can set the system property ``es.use_internal_address=true`` to use the Cassandra  ``listen_address`` as the elasticsearch transport published address. 
+By default, Elasticsearch transport publish address is the Cassandra broadcast address. However, in some network configurations (including multi-cloud deployment), the Cassandra broadcast adress is a public address managed by a firewall, and
+it would involve a network overhead for elasticsearch inter-node communication. In such case, you can set the system property ``es.use_internal_address=true`` to use the Cassandra  ``listen_address`` as the elasticsearch transport published address.
 
 .. CAUTION::
    If you use the `GossipingPropertyFile <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureSnitchGossipPF_c.html>`_ Snitch to configure your cassandra datacenter and rack properties in **conf/cassandra-rackdc.properties**, keep
