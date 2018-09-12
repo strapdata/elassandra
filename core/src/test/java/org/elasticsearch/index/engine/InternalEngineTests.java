@@ -1532,6 +1532,7 @@ public class InternalEngineTests extends ESTestCase {
         return opsPerformed;
     }
 
+    /*
     public void testNonInternalVersioningOnPrimary() throws IOException {
         final Set<VersionType> nonInternalVersioning = new HashSet<>(Arrays.asList(VersionType.values()));
         nonInternalVersioning.remove(VersionType.INTERNAL);
@@ -1609,7 +1610,6 @@ public class InternalEngineTests extends ESTestCase {
         }
     }
 
-    /*
     public void testVersioningPromotedReplica() throws IOException {
         final List<Engine.Operation> replicaOps = generateSingleDocHistory(true, VersionType.INTERNAL, 2, 20);
         List<Engine.Operation> primaryOps = generateSingleDocHistory(false, VersionType.INTERNAL, 2, 20);
@@ -1643,7 +1643,6 @@ public class InternalEngineTests extends ESTestCase {
             }
         }
     }
-    */
 
     public void testConcurrentGetAndSetOnPrimary() throws IOException, InterruptedException {
         Thread[] thread = new Thread[randomIntBetween(3, 5)];
@@ -1709,9 +1708,9 @@ public class InternalEngineTests extends ESTestCase {
         Set<String> currentValues = new HashSet<>();
         for (int i = 0; i < sortedHistory.size(); i++) {
             OpAndVersion op = sortedHistory.get(i);
-//            if (i > 0) {
-//                assertThat("duplicate version", op.version, not(equalTo(sortedHistory.get(i - 1).version)));
-//            }
+            if (i > 0) {
+                assertThat("duplicate version", op.version, not(equalTo(sortedHistory.get(i - 1).version)));
+            }
             boolean exists = op.removed == null ? true : currentValues.remove(op.removed);
             assertTrue(op.removed + " should exist", exists);
             exists = currentValues.add(op.added);
@@ -1726,6 +1725,7 @@ public class InternalEngineTests extends ESTestCase {
             assertThat(currentValues, equalTo(new HashSet<>(values)));
         }
     }
+*/
 
     public void testBasicCreatedFlag() throws IOException {
         ParsedDocument doc = testParsedDocument("1", "test", null, -1, -1, testDocument(), B_1, null);
