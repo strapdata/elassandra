@@ -1,6 +1,11 @@
 dist: trusty
-sudo: false
-language: java
+sudo: required
+language: 
+  - java
+  - bash
+
+services:
+  - docker
 
 before_cache:
   - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
@@ -31,6 +36,7 @@ before_deploy:
   - export ZIPBALL=$(ls distribution/zip/build/distributions/elassandra-*.zip)
   - export DEBPKG=$(ls distribution/deb/build/distributions/elassandra-*.deb)
   - export RPMPKG=$(ls distribution/rpm/build/distributions/elassandra-*.rpm)
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
 deploy:
   - provider: releases
@@ -62,3 +68,9 @@ deploy:
     on:
       tags: true
       repo: strapdata/elassandra-rc
+
+  - provider: script
+    skip_cleanup: true
+    script: bash docker/build.sh
+    on:
+      tags: true
