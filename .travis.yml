@@ -42,7 +42,7 @@ deploy:
     overwrite: true
     draft: false
     api_key:
-      secure: "CtTEWfptldC5QoeOl+nseF3uVyjmJglxnk7Mv9qHH4w24/R3GI6Q4TsJxLjp0yf0+ltnE6vg1wERIY5HiE0jvIM3l/ZFUKEFE/f6h9yvmUWFaQD2yOKNKB4fvqYfX0KZWDF0YotMi3bweegrXS66fu5s3jfjXH6DLNmzGjv0cAcumdppJDUOmETktIlWr86KKRJMuYTXiJIe4CXLfgkZEEY7cYsHysrfJvYBPYka9n4kzlcj0PB3Ux4mT8flMLIzfFymnxGWXv2Ubf1DJpCtfyb65OqFqMcWL1NjL+T2Z3OoWI5QgMtoapHX6Z6xuoBQbnN+PR5dq7pmUXJKXpoEsBzfMdv8FpiPS/NV1iRIEzgpab7nIuQ00QDkTA6R+69ugGpwOnaceoNIMnjOQjfaAHT6Xfc4vByFhhZxSp1H6hmdhtaksE1U1w4HMfHnejXTLCNMnsnbmDW1Tygjyu/zI7t9lCeF5kpnbXDV+oBHKxGR6yBZjVbG49Y3IQY7WFoFUKBgkCgYWqFMnLzCwVaJfqTFjQHOzhp1vg+RTgAtTWhjeWKwm9HqSH+R6F6tbhwKdPCDOOdzEAksnwmqUqi4iz8vjTsoiU86WXgds3PDVk4IK6ZxGRJ/UabQz/krXgay1dWOBVRYr4FzP+a5VH7mEyjdW+3SBMztbTw48g65jEE="
+      secure: "NN1SqRo+yryyjsnuan7rtqFd7IgVPTTaWO1m8ZptBdPENvapT2SXiCXa9Clrtgyamt3B/j5G8CdRp480xSXI/yUBwHHDE1Q0OV7eV1CfzmZvlXoxS1rWaDByDuFnvXdoQTBij1ytZHgVsfgmHdU47CcmQVpvQi/IQmu+9WEMpIt55l5fLNvIuy5UiynYDchBN1MYkJLxzlSoqmZdmM58DtL/vBg1nDNqsxvaesyh+8RzoQ33uM4+BWItpzjdvwbfCYN5Bsq8lvdPuxCYeQ5b7RWYPxpTNaV7zS8XDvcbgss7DwZ7w59YloDNvL0WbliE7pma3VHnvctX+oQY/LWhdJ3vJwNvmuwW9zgNUz70s5ec9Eos105xWWiKakIMEgtUdW35VBWEdnQdTYo9zbL/2deScXugcWkMv1Cb/EDeo6gFbc6cBL9TivCyWsv7GqMMC13X9Sj3vDi4S+wzMXQAuDgkdFTY2CfjAiFPRlxe9wPn00RAmnpq46Cma+NoAvnqMuCglKi/WAak8byxEMLRskrb5zHXFKTG8xCqiPJpz7hxnMoRULwn9jJj/6xRQlemKY4eF0DLebWmJ8hpebdX+tx6iMhI0qvpOb3j0uvySIi0bmR/6B9PlhULUNzwf+LFoSA37DCxcqDdOQX/qp8FJdBk7fM55lkVvhe+bCzufRg="
     file:
       - "$TARBALL"
       - "$ZIPBALL"
@@ -51,4 +51,4 @@ deploy:
     skip_cleanup: true
     on:
       tags: true
-      repo: strapdata/elassandra5-rc
+      repo: strapdata/elassandra-rc
