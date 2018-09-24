@@ -1,6 +1,7 @@
-6.2.3.5 - 2018-09-03
+6.2.3.5 - 2018-09-24
   * Upgrade to cassandra 3.11.3
   * Improve indexing of updates not time-ordered
+  * Add new index setting index_insert_only for insert only workloads.
   * Fix #178 add package name to function class if needed
   * Add a node status DISABLED for cassandra-only nodes
 
