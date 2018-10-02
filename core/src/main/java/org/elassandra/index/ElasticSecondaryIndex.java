@@ -1510,9 +1510,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                     logger.trace("indexer={} inStaticRow={} outStaticRow={} clustering={} rangeTombstones={}", 
                             this.hashCode(), inStaticRow, outStaticRow, this.clusterings, this.rangeTombstones);
                
-                // index rebuild may force partition delete before re-indexing, 
-                if (delTime != null)
+                // A partition delete before an insert indexed after that insert could trigger a wrong delete, so we need to read-before-write when indexInsertOnly=false, ... 
+                if (delTime != null && delTime.deletes(this.nowInSec)) {
                     deletePartition();
+                    if (ImmutableMappingInfo.this.indexInsertOnly)
+                        return;
+                }
                 
                 if (rangeTombstones != null) {
                     for(RangeTombstone tombstone:rangeTombstones) {
@@ -1665,9 +1668,12 @@ public class ElasticSecondaryIndex implements Index, ClusterStateListener {
                 if (logger.isTraceEnabled())
                     logger.trace("indexer={} key={}", this.hashCode(), key);
 
-                // index rebuild may force partition delete before re-indexing, 
-                if (delTime != null)
+                // A partition delete before an insert indexed after that insert could trigger a wrong delete, so we need to read-before-write when indexInsertOnly=false, ... 
+                if (delTime != null && delTime.deletes(this.nowInSec)) {
                     deletePartition();
+                    if (ImmutableMappingInfo.this.indexInsertOnly)
+                        return;
+                }
                 
                 if (ImmutableMappingInfo.this.indexInsertOnly) {
                     if (rowcument != null)
