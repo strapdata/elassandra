@@ -1,3 +1,7 @@
+5.5.0.23 - 2018-10-02
+  * Improve index rebuild performance
+  * Fix missing hotspot_compiler
+  
 5.5.0.22 - 2018-09-24
   * Upgrade to cassandra-3.11.3
   * Improve indexing of updates not time-ordered
