@@ -85,7 +85,7 @@ public class CassandraShardStartedBarrier extends AbstractComponent  {
                         readyToIndex = false;
                         break;
                     }
-                    IndexShard localShard = indexService.getShard(0);
+                    IndexShard localShard = indexService.getShardOrNull(0);
                     if (localShard == null) {
                         readyToIndex = false;
                         break;
