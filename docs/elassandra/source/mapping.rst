@@ -97,7 +97,7 @@ Columns matching the provided regular expression are mapped as Elasticsearch fie
 
 .. code::
 
-   curl -XPUT "http://localhost:9200/my_keyspace/_mapping/my_table" -d '{
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/my_keyspace/_mapping/my_table" -d '{
        "my_table" : {
            "discover" : "a.*",
            "properties" : {
@@ -170,7 +170,7 @@ For example, you can create a new index **twitter2** mapped to the cassandra key
 
 .. code::
 
-   curl -XPUT "http://localhost:9200/twitter2/" -d '{
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter2/" -d '{
       "settings" : { "keyspace" : "twitter" } },
       "mappings" : {
          "tweet" : {
@@ -196,7 +196,7 @@ Once your **twitter2** index is ready, set an alias **twitter** for **twitter2**
 
 .. code::
 
-   curl -XPOST "http://localhost:9200/_aliases" -d '{ "actions" : [ { "add" : { "index" : "twitter2", "alias" : "twitter" } } ] }'
+   curl -XPOST -H 'Content-Type: application/json' "http://localhost:9200/_aliases" -d '{ "actions" : [ { "add" : { "index" : "twitter2", "alias" : "twitter" } } ] }'
    curl -XDELETE "http://localhost:9200/twitter"
 
 Partitioned Index
@@ -235,7 +235,7 @@ All those indices will be mapped to the keyspace **logs**, and all columns of th
 
 .. code::
 
-   curl -XPUT "http://localhost:9200/logs_2016" -d '{
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/logs_2016" -d '{
      "settings": {
          "keyspace":"logs",
          "index.partition_function":"toYearIndex logs_{0,date,yyyy} date_field",
@@ -265,7 +265,7 @@ By default, Elasticsearch `Object or nested types <https://www.elastic.co/guide/
 
 .. code::
 
-   curl -XPUT 'http://localhost:9200/twitter/tweet/1' -d '{
+   curl -XPUT -H 'Content-Type: application/json' 'http://localhost:9200/twitter/tweet/1' -d '{
         "user" : {
             "name" : {
                 "first_name" : "Vincent",
@@ -326,7 +326,7 @@ Create the type mapping from the cassandra table and search for the *bob* entry.
 
 .. code::
 
-   curl -XPUT "http://localhost:9200/twitter/_mapping/user" -d '{ "user" : { "discover" : ".*" }}'
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter/_mapping/user" -d '{ "user" : { "discover" : ".*" }}'
    {"acknowledged":true}
 
    curl -XGET 'http://localhost:9200/twitter/_mapping/user?pretty=true'
@@ -503,7 +503,7 @@ Create an index company (a cassandra keyspace), a cassandra table, insert 2 rows
    INSERT INTO company.employee ("_parent","_id",name,dob,hobby) VALUES ('london','2','Alice Smith','1990-10-24','hiking');
    EOF
 
-   curl -XPUT "http://$NODE:9200/company2" -d '{
+   curl -XPUT -H 'Content-Type: application/json' "http://$NODE:9200/company2" -d '{
       "mappings" : {
        "employee" : {
                "discover" : ".*",
@@ -511,7 +511,7 @@ Create an index company (a cassandra keyspace), a cassandra table, insert 2 rows
            }
        }
    }'
-   curl -XPOST "http://127.0.0.1:9200/company/branch/_bulk" -d '
+   curl -XPOST -H 'Content-Type: application/json' "http://127.0.0.1:9200/company/branch/_bulk" -d '
    { "index": { "_id": "london" }}
    { "district": "London Westminster", "city": "London", "country": "UK" }
    { "index": { "_id": "liverpool" }}
@@ -572,7 +572,7 @@ The following example demonstrates how to use static columns to store meta infor
 
 .. code::
 
-   curl -XPUT "http://localhost:9200/test" -d '{
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/test" -d '{
       "mappings" : {
           "timeseries" : {
             "properties" : {
@@ -682,7 +682,7 @@ Be careful, if ``index_static_document`` = *false* and ``index_static_only`` = *
 
 .. code::
 
-   curl -XPUT http://localhost:9200/test/_mapping/timeseries -d '{ 
+   curl -XPUT -H 'Content-Type: application/json' http://localhost:9200/test/_mapping/timeseries -d '{ 
       "timeseries": { 
          "discover" : ".*", 
          "_meta": { 
@@ -708,7 +708,7 @@ In this case, the mapping may be use to cast types or format date fields, as sho
        user list<text>
    )
    
-   curl -XPUT "http://$NODE:9200/twitter/" -d'{ 
+   curl -XPUT -H 'Content-Type: application/json' "http://$NODE:9200/twitter/" -d'{ 
       "settings":{ "index.mapper.dynamic":false }, 
       "mappings":{
          "tweet":{ 
@@ -724,7 +724,7 @@ As the result, you can index, get or delete a cassandra row, including any colum
 
 .. code::
 
-   curl -XPUT "http://localhost:9200/twitter/tweet/1?consistency=one" -d '{
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter/tweet/1?consistency=one" -d '{
         "user" : "vince",
         "post_date" : "2009-11-15T14:12:12",
         "message" : "look at Elassandra !!",
