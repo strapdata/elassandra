@@ -39,8 +39,8 @@ LABEL description="Elassandra docker image"
 ARG elassandra_version
 ARG elassandra_url
 
-ENV ELASSANDRA_VERSION=${elassandra_version:-5.5.0.22-rc3}
-ENV ELASSANDRA_URL=${elassandra_url:-https://github.com/strapdata/elassandra-rc/releases/download/v${ELASSANDRA_VERSION}/elassandra-${ELASSANDRA_VERSION}.tar.gz}
+ENV ELASSANDRA_VERSION=${elassandra_version}
+ENV ELASSANDRA_URL=${elassandra_url:-https://github.com/strapdata/elassandra/releases/download/v${ELASSANDRA_VERSION}/elassandra-${ELASSANDRA_VERSION}.tar.gz}
 
 ENV ELASSANDRA_VERSION ${ELASSANDRA_VERSION} 
 ENV CASSANDRA_HOME /opt/elassandra-${ELASSANDRA_VERSION}
