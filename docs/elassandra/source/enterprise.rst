@@ -227,7 +227,7 @@ If your target index does not have the same name as the underlying keyspace, you
 Elasticsearch aggregations through CQL
 ......................................
 
-Elassandra supports elasticsearch aggregation only in **regular CQL statements**. In this case :
+Elassandra supports elasticsearch aggregation only in **regular CQL statement**. In this case :
 
 * Returned columns are named with aggregations names.
 * CQL function are not supported.
@@ -341,7 +341,7 @@ CQL Driver integration
 ......................
 
 For better performances, you can use a CQL prepared statement to submit Elasticsearch queries as shown bellow in java. 
-You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total**, **_shards.successful**, **_shards.skipped** and **_shards.failed** 
+You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total** and **_shards.failed** 
 from the result `custom payload <https://docs.datastax.com/en/developer/java-driver/3.2/manual/custom_payloads/>`_.
 
 .. code-block:: java
@@ -350,15 +350,11 @@ from the result `custom payload <https://docs.datastax.com/en/developer/java-dri
         public final long hitTotal;
         public final float hitMaxScore;
         public final int shardTotal;
-        public final int shardSuccessful;
-        public final int shardSkipped;
         public final int shardFailed;
         public IncomingPayload(Map<String,ByteBuffer> payload) {
             hitTotal = payload.get("hits.total").getLong();
             hitMaxScore = payload.get("hits.max_score").getFloat();
             shardTotal = payload.get("_shards.total").getInt();
-            shardSuccessful = payload.get("_shards.successful").getInt();
-            shardSkipped = payload.get("_shards.skipped").getInt();
             shardFailed = payload.get("_shards.failed").getInt();
         }
    }
@@ -368,10 +364,6 @@ from the result `custom payload <https://docs.datastax.com/en/developer/java-dri
    IncomingPayload payload = new IncomingPayload(rs.getExecutionInfo().getIncomingPayload());
    System.out.println("hits.total="+payload.hitTotal);
 
-.. TIP::
-
-   When sum of **_shards.successful**, **_shards.skipped** and **_shards.failed** is lower than **_shards.total**, it means the search is not consistent because of missing nodes. In such cases, index state is red.
-   
 CQL Tracing
 ...........
 
@@ -1096,6 +1088,28 @@ Then the user role *bob* (allowed to log in) inherits of the privileges from the
 Don't forget to refresh the privileges cache by issuing the following command :
 
 .. code::
+
+Kibana and Content-Based Security
+.................................
+
+As explain in the `cassandra documentation <http://cassandra.apache.org/doc/latest/cql/security.html#database-roles>`_, you can grant a role to another role and create a hierarchy of roles.
+Then you can gives some elasticsearch privileges to a base role inherited by some user roles allowed to login, and specify a query filter or field-level filter to this base role.
+
+In the following example, the base role *group_a* have read access to index *my_index* with a document-level filter defined by a term query.
+Then the user role *bob* (allowed to log in) inherits of the privileges from the base role *group_a* to read the kibana configuration and the index *my_index* only for documents where *category* is *A*.
+
+.. code::
+
+   REVOKE SELECT ON KEYSPACE my_index FROM kibana;
+   CREATE ROLE group_a WITH LOGIN = false;
+   GRANT SELECT ON KEYSPACE "_kibana" to group_a;
+   INSERT INTO elastic_admin.privileges (role, actions, indices, query) VALUES('group_a','indices:data/read/.*','my_index', '{ "term" : { "category" : "A" }}');
+   CREATE ROLE bob WITH PASSWORD = 'bob' AND LOGIN = true;
+   GRANT group_a TO bob;
+
+Don't forget to refresh the privileges cache by issuing the following command :
+
+.. code::
    
    POST /_aaa_clear_privilege_cache
 
@@ -1312,6 +1326,6 @@ If you try to insert an unsupported query in ``elastic_admin.privileges.query``,
 
 .. code::
 
-   cassandra@cqlsh> insert into elastic_admin."privileges" (role,actions,indices,query) VALUES ('blogger','indices:data/read/.*','blog','{ "has_parent":{"parent_type":"blog","query":{"term":{"tag":"something"}}}}');
+   cassandra@cqlsh> insert into elastic_admin."privileges" (role,actions,indices,query) VALUES ('blogger','indices:data/read/.*','blog','{"query":{ "has_parent":{"parent_type":"blog","query":{"term":{"tag":"something"}}}}}');
    SyntaxException: Unsupported query for content-based filtering
    
