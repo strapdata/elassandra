@@ -1,4 +1,4 @@
-5.5.0.23 - 2018-10-02
+5.5.0.23 - 2018-10-09
   * Improve index rebuild performance
   * Fix missing hotspot_compiler
   
