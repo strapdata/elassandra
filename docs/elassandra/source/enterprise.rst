@@ -806,7 +806,6 @@ To be effective, these settings must be the same on all nodes of a Cassandra dat
 
    Elasticsearch **user authentication requires HTTPS**. (User authentication without HTTPS is not supported).
 
-
 In order to grant an Elasticsearch request, Elassandra checks two levels of access rights :
 
 #. First, Elassandra looks up for a **privilege** matching your elasticsearch request in the Cassandra table ``elastic_admin.privileges``.
@@ -1089,31 +1088,8 @@ Don't forget to refresh the privileges cache by issuing the following command :
 
 .. code::
 
-Kibana and Content-Based Security
-.................................
-
-As explain in the `cassandra documentation <http://cassandra.apache.org/doc/latest/cql/security.html#database-roles>`_, you can grant a role to another role and create a hierarchy of roles.
-Then you can gives some elasticsearch privileges to a base role inherited by some user roles allowed to login, and specify a query filter or field-level filter to this base role.
-
-In the following example, the base role *group_a* have read access to index *my_index* with a document-level filter defined by a term query.
-Then the user role *bob* (allowed to log in) inherits of the privileges from the base role *group_a* to read the kibana configuration and the index *my_index* only for documents where *category* is *A*.
-
-.. code::
-
-   REVOKE SELECT ON KEYSPACE my_index FROM kibana;
-   CREATE ROLE group_a WITH LOGIN = false;
-   GRANT SELECT ON KEYSPACE "_kibana" to group_a;
-   INSERT INTO elastic_admin.privileges (role, actions, indices, query) VALUES('group_a','indices:data/read/.*','my_index', '{ "term" : { "category" : "A" }}');
-   CREATE ROLE bob WITH PASSWORD = 'bob' AND LOGIN = true;
-   GRANT group_a TO bob;
-
-Don't forget to refresh the privileges cache by issuing the following command :
-
-.. code::
-   
    POST /_aaa_clear_privilege_cache
 
-   
 Elasticsearch Spark connector
 .............................
 
