@@ -204,6 +204,14 @@ configure(distributions) {
       MavenFilteringHack.filter(it, expansions)
     }
 
+    cassandraBinFiles = copySpec {
+      from '../../core/cassandra/bin'
+      exclude 'cassandra.in.sh'
+      exclude 'cassandra'
+      eachFile { it.setMode(0755) }
+      MavenFilteringHack.filter(it, expansions)
+    }
+
     homebinFiles = copySpec {
       from '../src/main/packaging/homebin'
       eachFile { it.setMode(0755) }
@@ -284,6 +292,7 @@ configure(distributions.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.n
         with configFiles
       }
       into('bin') {
+        with cassandraBinFiles
         with copySpec {
           with binFiles
           from('../src/main/resources/bin2') {
@@ -553,6 +562,7 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
       user 'root'
       permissionGroup 'root'
       with copySpec {
+        with cassandraBinFiles
         with binFiles
         exclude '*.bat'
         exclude '*.exe'
