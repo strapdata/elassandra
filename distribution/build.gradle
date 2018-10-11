@@ -37,7 +37,7 @@ buildscript {
     }
   }
   dependencies {
-    classpath 'com.netflix.nebula:gradle-ospackage-plugin:3.4.0'
+    classpath 'com.netflix.nebula:gradle-ospackage-plugin:3.6.0'
   }
 }
 
@@ -515,11 +515,13 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
     if (project.name == 'rpm') {
       requires('/bin/bash')
       requires('python', '2.7', GREATER | EQUAL)
+      requires('jre', "1.8.0", GREATER | EQUAL)
       recommends('ntp')
       conflicts('cassandra')
     } else if (project.name == 'deb') {
       requires('bash')
       requires('python', '2.7', GREATER | EQUAL)
+      requires('openjdk-8-jre-headless').or("java8-runtime")
       recommends('ntp')
       conflicts('cassandra')
     }
