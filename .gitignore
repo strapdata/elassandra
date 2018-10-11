@@ -44,3 +44,5 @@ html_docs
 /tmp/
 eclipse-build
 /private/
+
+docker

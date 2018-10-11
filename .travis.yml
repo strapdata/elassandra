@@ -1,5 +1,10 @@
 dist: trusty
 sudo: required
+env:
+  global:
+    # this variable determine when docker images are tagged 'latest'
+    - LATEST_VERSION=6.2.3
+
 language: 
   - java
   - bash
@@ -71,6 +76,6 @@ deploy:
 
   - provider: script
     skip_cleanup: true
-    script: bash docker/build.sh
+    script: bash ./docker-ci.sh
     on:
       tags: true
