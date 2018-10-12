@@ -14,6 +14,7 @@ if [ "$TRAVIS" = "true" ]; then
 
   export REPO_NAME=${TRAVIS_REPO_SLUG}
   export REPO_DIR=${TRAVIS_BUILD_DIR}
+  export ELASSANDRA_COMMIT=${TRAVIS_COMMIT}
 
   if [ -n "$TRAVIS_TAG" ]; then
     # publish to docker hub when a tag is set
