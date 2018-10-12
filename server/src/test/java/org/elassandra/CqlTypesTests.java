@@ -614,39 +614,5 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(resp.getHits().getTotalHits(), equalTo(2L));
         assertThat(resp.getFailedShards(), equalTo(0));
     }
-    
-    
-    /**
-     * Test indexing dynamically an empty document (pk-only)
-     */
-    @Test
-    public void testPkOnlyDocument() throws InterruptedException {
-        createIndex("test1");
-        ensureGreen("test1");
-        
-        // insert two empty documents, generating a mapping update
-        assertThat(client().prepareIndex("test1", "pk_only", "1").setSource("{}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
-        assertThat(client().prepareIndex("test1", "pk_only", "2").setSource("{}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
-    
-    
-        // get the first record from CQL
-        UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT * FROM test1.pk_only WHERE \"_id\" = '1'");
-
-        // assert only one row
-        assertEquals(1, rs.size());
-        // assert only one column
-        assertEquals(1, rs.metadata().size());
-        // assert the name is of the column is "_id"
-        assertThat(rs.metadata().get(0).name.toString(), equalTo("_id"));
-        // ensure the value is correct
-        assertThat(rs.one().getString("_id"), equalTo("1"));
-        
-        
-        // ensure elasticsearch can query this records
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
-        GetResponse resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("1").get();
-        assertTrue(resp.isExists());
-        assertTrue(resp.getSource().isEmpty());
-    }
 }
 

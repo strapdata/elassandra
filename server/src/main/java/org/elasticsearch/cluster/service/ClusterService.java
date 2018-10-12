@@ -1754,7 +1754,9 @@ public class ClusterService extends BaseClusterService {
         }
         if (query.length() == prefixLength) {
             // no column match or requiredColumn is empty, add _id to avoid CQL syntax error...
-            query.append("\"_id\"");
+            query.append( (metadata.partitionKeyColumns().size() > 1) ? "toJsonArray(" : "toString(" )
+                .append(cqlFragment.ptCols)
+                .append(") as \"_id\"");
         }
         query.append(" FROM \"").append(indexService.keyspace()).append("\".\"").append(cfName)
              .append("\" WHERE ").append((forStaticDocument) ? cqlFragment.ptWhere : cqlFragment.pkWhere )
@@ -2094,7 +2096,9 @@ public class ClusterService extends BaseClusterService {
         
         // normalize the _id and may find some column value in _id.
         // if the provided columns does not contains all the primary key columns, parse the _id to populate the columns in map.
-        parseElasticId(indexService, cfName, request.id(), sourceMap);
+        final Map<String, Object> idMap = new HashMap<>();
+        parseElasticId(indexService, cfName, request.id(), idMap);
+        sourceMap.putAll(idMap);
         
         // workaround because ParentFieldMapper.value() and UidFieldMapper.value() create an Uid.
         if (sourceMap.get(ParentFieldMapper.NAME) != null && ((String)sourceMap.get(ParentFieldMapper.NAME)).indexOf(Uid.DELIMITER) < 0) {
@@ -2111,7 +2115,7 @@ public class ClusterService extends BaseClusterService {
             Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMappers.get(field);
             ByteBuffer colName;
             if (mapper == null) {
-                if (indexService.mapperService().dynamic())
+                if (indexService.mapperService().dynamic() && !idMap.containsKey(field))
                     throw new MapperException("Unmapped field ["+field+"]");
                 colName = ByteBufferUtil.bytes(field);
             } else {
