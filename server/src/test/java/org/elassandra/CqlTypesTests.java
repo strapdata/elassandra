@@ -17,9 +17,6 @@ package org.elassandra;
 
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import com.google.common.net.InetAddresses;
-
-import org.apache.cassandra.cql3.ResultSet;
-import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.TupleType;
@@ -27,10 +24,8 @@ import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.lucene.search.join.ScoreMode;
-import org.elasticsearch.action.ActionRequestBuilder;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
-import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.geo.GeoPoint;
@@ -47,11 +42,7 @@ import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
