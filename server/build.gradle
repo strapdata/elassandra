@@ -224,7 +224,6 @@ test {
     exclude 'org/elasticsearch/index/translog/**'
     exclude 'org/elasticsearch/index/seqno/**'
     exclude 'org/elasticsearch/indices/IndicesLifecycleListenerSingleNodeTests*'
-    exclude 'org/elasticsearch/ingest/**'
     exclude 'org/elasticsearch/gateway/**'
     exclude 'org/elasticsearch/recovery/**'
     exclude 'org/elasticsearch/repositories/**'
