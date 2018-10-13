@@ -1,5 +1,5 @@
-Elasticsearch
-Copyright 2009-2017 Elasticsearch
+Strapdata
+Copyright 2006-2018 Strapdata
 
 This product includes software developed by The Apache Software
-Foundation (http://www.apache.org/).
+Foundation (http://www.apache.org/) and Elasticsearch ("http://www.elastic.co").

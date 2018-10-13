@@ -236,6 +236,10 @@ configure(distributions) {
       MavenFilteringHack.filter(it, expansions)
     }
 
+	cassandraLicenseFiles = copySpec {
+      from '../../server/cassandra/lib/licenses'
+    }
+    
     sigarFiles = copySpec {
       from '../../server/cassandra/lib/sigar-bin'
       eachFile { it.setMode(0755) }
@@ -253,7 +257,13 @@ configure(distributions) {
     commonFiles = copySpec {
       from rootProject.projectDir
       include 'LICENSE.txt'
-      include 'README.textile'
+      include 'CHANGES.txt'
+      include 'README.md'
+    }
+    
+    licenseFiles = copySpec {
+    	from rootProject.buildDir.path + '/licenses'
+    	include '**'
     }
 
     noticeFile = copySpec {
@@ -336,6 +346,11 @@ configure(distributions.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.n
       into('lib') {
          into('sigar-bin') {
             with sigarFiles
+         }
+         into('licenses') {
+            dirMode 0755
+      		with cassandraLicenseFiles
+      		with licenseFiles
          }
       }
       into('tools') {
@@ -556,6 +571,11 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
           with sigarFiles
           exclude '*.dll'
         }
+      }
+      into('lib/licenses') {
+         dirMode 0755
+         with cassandraLicenseFiles
+         with licenseFiles
       }
       into('tools') {
         with copySpec {
