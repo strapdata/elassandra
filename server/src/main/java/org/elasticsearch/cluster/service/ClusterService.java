@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -285,14 +285,14 @@ public class ClusterService extends BaseClusterService {
     public static final String TOKEN_RANGES_BITSET_CACHE    = "token_ranges_bitset_cache";
     
     /**
-     * Expiration time for unused cached token_ranges queries. 
+     * Expiration time for unused cached token_ranges queries.
      */
     public static final String TOKEN_RANGES_QUERY_EXPIRE = "token_ranges_query_expire";
     
     /**
      * Add static columns to indexed documents (default is false).
      */
-    public static final String INDEX_STATIC_COLUMNS = "index_static_columns"; 
+    public static final String INDEX_STATIC_COLUMNS = "index_static_columns";
     
     /**
      * Index only static columns (one document per partition row, ex: timeseries tags).
@@ -318,7 +318,7 @@ public class ClusterService extends BaseClusterService {
     public static final String SETTING_SYSTEM_SYNCHRONOUS_REFRESH = SYSTEM_PREFIX+SYNCHRONOUS_REFRESH;
     public static final String SETTING_SYSTEM_DROP_ON_DELETE_INDEX = SYSTEM_PREFIX+DROP_ON_DELETE_INDEX;
     public static final String SETTING_SYSTEM_SNAPSHOT_WITH_SSTABLE = SYSTEM_PREFIX+SNAPSHOT_WITH_SSTABLE;
-    public static final String SETTING_SYSTEM_VERSION_LESS_ENGINE = SYSTEM_PREFIX+VERSION_LESS_ENGINE; 
+    public static final String SETTING_SYSTEM_VERSION_LESS_ENGINE = SYSTEM_PREFIX+VERSION_LESS_ENGINE;
     public static final String SETTING_SYSTEM_TOKEN_PRECISION_STEP = SYSTEM_PREFIX+TOKEN_PRECISION_STEP;
     public static final String SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE = SYSTEM_PREFIX+TOKEN_RANGES_BITSET_CACHE;
     public static final String SETTING_SYSTEM_TOKEN_RANGES_QUERY_EXPIRE = SYSTEM_PREFIX+TOKEN_RANGES_QUERY_EXPIRE;
@@ -332,7 +332,7 @@ public class ClusterService extends BaseClusterService {
     public static final String SETTING_CLUSTER_SYNCHRONOUS_REFRESH = CLUSTER_PREFIX+SYNCHRONOUS_REFRESH;
     public static final String SETTING_CLUSTER_DROP_ON_DELETE_INDEX = CLUSTER_PREFIX+DROP_ON_DELETE_INDEX;
     public static final String SETTING_CLUSTER_SNAPSHOT_WITH_SSTABLE = CLUSTER_PREFIX+SNAPSHOT_WITH_SSTABLE;
-    public static final String SETTING_CLUSTER_VERSION_LESS_ENGINE = CLUSTER_PREFIX+VERSION_LESS_ENGINE; 
+    public static final String SETTING_CLUSTER_VERSION_LESS_ENGINE = CLUSTER_PREFIX+VERSION_LESS_ENGINE;
     public static final String SETTING_CLUSTER_TOKEN_PRECISION_STEP = CLUSTER_PREFIX+TOKEN_PRECISION_STEP;
     public static final String SETTING_CLUSTER_TOKEN_RANGES_BITSET_CACHE = CLUSTER_PREFIX+TOKEN_RANGES_BITSET_CACHE;
     
@@ -404,7 +404,7 @@ public class ClusterService extends BaseClusterService {
     protected final PrimaryFirstSearchStrategy primaryFirstSearchStrategy = new PrimaryFirstSearchStrategy();
     protected final Map<String, AbstractSearchStrategy> strategies = new ConcurrentHashMap<String, AbstractSearchStrategy>();
     protected final Map<String, AbstractSearchStrategy.Router> routers = new ConcurrentHashMap<String, AbstractSearchStrategy.Router>();
-     
+    
     private final ConsistencyLevel metadataWriteCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.write.cl","QUORUM"));
     private final ConsistencyLevel metadataReadCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.read.cl","QUORUM"));
     private final ConsistencyLevel metadataSerialCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.serial.cl","SERIAL"));
@@ -417,7 +417,7 @@ public class ClusterService extends BaseClusterService {
     
     
     @Inject
-    public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool, 
+    public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool,
             Map<String, java.util.function.Supplier<ClusterState.Custom>> initialClusterStateCustoms) {
         super(settings, clusterSettings, threadPool, initialClusterStateCustoms);
         this.operationRouting = new OperationRouting(settings, clusterSettings, this);
@@ -488,8 +488,8 @@ public class ClusterService extends BaseClusterService {
     
     public Class<? extends AbstractSearchStrategy> searchStrategyClass(IndexMetaData indexMetaData, ClusterState state) {
         try {
-            return AbstractSearchStrategy.getSearchStrategyClass( 
-                    indexMetaData.getSettings().get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS, 
+            return AbstractSearchStrategy.getSearchStrategyClass(
+                    indexMetaData.getSettings().get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS,
                     state.metaData().settings().get(ClusterService.SETTING_CLUSTER_SEARCH_STRATEGY_CLASS,PrimaryFirstSearchStrategy.class.getName()))
                     );
         } catch(ConfigurationException e) {
@@ -534,27 +534,27 @@ public class ClusterService extends BaseClusterService {
         return router;
     }
     
-    public UntypedResultSet process(final ConsistencyLevel cl, final String query) 
+    public UntypedResultSet process(final ConsistencyLevel cl, final String query)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return process(cl, null, query, new Long(0), new Object[] {});
     }
     
-    public UntypedResultSet process(final ConsistencyLevel cl, ClientState clientState, final String query) 
+    public UntypedResultSet process(final ConsistencyLevel cl, ClientState clientState, final String query)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return process(cl, null, clientState, query, new Long(0), new Object[] {});
     }
 
-    public UntypedResultSet process(final ConsistencyLevel cl, ClientState clientState, final String query, Object... values) 
+    public UntypedResultSet process(final ConsistencyLevel cl, ClientState clientState, final String query, Object... values)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return process(cl, null, clientState, query, new Long(0), values);
     }
     
-    public UntypedResultSet process(final ConsistencyLevel cl, final String query, Object... values) 
+    public UntypedResultSet process(final ConsistencyLevel cl, final String query, Object... values)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return process(cl, null, query, new Long(0), values);
     }
    
-    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, final Object... values) 
+    public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, final String query, final Object... values)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return process(cl, serialConsistencyLevel, query, new Long(0), values);
     }
@@ -565,7 +565,7 @@ public class ClusterService extends BaseClusterService {
     
     public UntypedResultSet process(final ConsistencyLevel cl, final ConsistencyLevel serialConsistencyLevel, ClientState clientState, final String query, Long writetime, final Object... values)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
-        if (logger.isDebugEnabled()) 
+        if (logger.isDebugEnabled())
             logger.debug("processing CL={} SERIAL_CL={} query={}", cl, serialConsistencyLevel, query);
         
         // retreive prepared
@@ -591,7 +591,7 @@ public class ClusterService extends BaseClusterService {
         return processWriteConditional(cl, serialCl, ClientState.forInternalCalls(), query, values);
     }
     
-    public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, ClientState clientState, final String query, Object... values) 
+    public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, ClientState clientState, final String query, Object... values)
             throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         try {
             UntypedResultSet result = process(cl, serialCl, clientState, query, new Long(0), values);
@@ -638,8 +638,8 @@ public class ClusterService extends BaseClusterService {
                 replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(replicationFactor));
                 for(Map.Entry<String, Integer> entry : replicationMap.entrySet())
                     replication.put(entry.getKey(), Integer.toString(entry.getValue()));
-                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
-                    String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s", 
+                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(),
+                    String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s",
                             ksname,  FBUtilities.json(replication).replaceAll("\"", "'")));
             }
         } catch (Throwable e) {
@@ -660,7 +660,7 @@ public class ClusterService extends BaseClusterService {
 
     public static Pair<List<String>, List<String>> getUDTInfo(final String ksName, final String typeName) {
         try {
-            UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT field_names, field_types FROM system_schema.types WHERE keyspace_name = ? AND type_name = ?", 
+            UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT field_names, field_types FROM system_schema.types WHERE keyspace_name = ? AND type_name = ?",
                     new Object[] { ksName, typeName });
             Row row = result.one();
             if ((row != null) && row.has("field_names")) {
@@ -674,7 +674,7 @@ public class ClusterService extends BaseClusterService {
     }
     
     // see https://docs.datastax.com/en/cql/3.0/cql/cql_reference/keywords_r.html
-    public static final Pattern keywordsPattern = Pattern.compile("(ADD|ALLOW|ALTER|AND|ANY|APPLY|ASC|AUTHORIZE|BATCH|BEGIN|BY|COLUMNFAMILY|CREATE|DELETE|DESC|DROP|EACH_QUORUM|GRANT|IN|INDEX|INET|INSERT|INTO|KEYSPACE|KEYSPACES|LIMIT|LOCAL_ONE|LOCAL_QUORUM|MODIFY|NOT|NORECURSIVE|OF|ON|ONE|ORDER|PASSWORD|PRIMARY|QUORUM|RENAME|REVOKE|SCHEMA|SELECT|SET|TABLE|TO|TOKEN|THREE|TRUNCATE|TWO|UNLOGGED|UPDATE|USE|USING|WHERE|WITH)"); 
+    public static final Pattern keywordsPattern = Pattern.compile("(ADD|ALLOW|ALTER|AND|ANY|APPLY|ASC|AUTHORIZE|BATCH|BEGIN|BY|COLUMNFAMILY|CREATE|DELETE|DESC|DROP|EACH_QUORUM|GRANT|IN|INDEX|INET|INSERT|INTO|KEYSPACE|KEYSPACES|LIMIT|LOCAL_ONE|LOCAL_QUORUM|MODIFY|NOT|NORECURSIVE|OF|ON|ONE|ORDER|PASSWORD|PRIMARY|QUORUM|RENAME|REVOKE|SCHEMA|SELECT|SET|TABLE|TO|TOKEN|THREE|TRUNCATE|TWO|UNLOGGED|UPDATE|USE|USING|WHERE|WITH)");
     
     public static boolean isReservedKeyword(String identifier) {
         return keywordsPattern.matcher(identifier.toUpperCase(Locale.ROOT)).matches();
@@ -741,13 +741,13 @@ public class ClusterService extends BaseClusterService {
     public static void toXContent(XContentBuilder builder, Mapper mapper, String field, Object value) throws IOException {
         if (value instanceof Collection) {
            if (field == null) {
-               builder.startArray(); 
+               builder.startArray();
            } else {
                builder.startArray(field);
            }
            for(Iterator<Object> i = ((Collection)value).iterator(); i.hasNext(); ) {
                toXContent(builder, mapper, null, i.next());
-           } 
+           }
            builder.endArray();
         } else if (value instanceof Map) {
            Map<String, Object> map = (Map<String,Object>)value;
@@ -777,7 +777,7 @@ public class ClusterService extends BaseClusterService {
                            case org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LAT:
                                toXContent(builder, it.next(), org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LAT, map.get(org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LAT));
                                break;
-                           case org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LON: 
+                           case org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LON:
                                it.next();
                                toXContent(builder, it.next(), org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LON, map.get(org.elasticsearch.index.mapper.BaseGeoPointFieldMapper.Names.LON));
                                break;
@@ -787,7 +787,7 @@ public class ClusterService extends BaseClusterService {
                            // TODO: support geohashing
                            builder.field(subField, subValue);
                        }
-                   } 
+                   }
                    */
                    else {
                        builder.field(subField, subValue);
@@ -821,7 +821,7 @@ public class ClusterService extends BaseClusterService {
     public static XContentBuilder buildDocument(DocumentMapper documentMapper, Map<String, Object> docMap, boolean humanReadable) throws IOException {
         return buildDocument(documentMapper, docMap, humanReadable, false);
     }
-        
+    
     public static XContentBuilder buildDocument(DocumentMapper documentMapper, Map<String, Object> docMap, boolean humanReadable, boolean forStaticDocument) throws IOException {
         XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON).humanReadable(true);
         builder.startObject();
@@ -829,13 +829,13 @@ public class ClusterService extends BaseClusterService {
             if (field.equals(ParentFieldMapper.NAME)) continue;
             FieldMapper fieldMapper = documentMapper.mappers().smartNameFieldMapper(field);
             if (fieldMapper != null) {
-                if (forStaticDocument && !isStaticOrPartitionKey(fieldMapper)) 
+                if (forStaticDocument && !isStaticOrPartitionKey(fieldMapper))
                     continue;
                 toXContent(builder, fieldMapper, field, docMap.get(field));
             } else {
                 ObjectMapper objectMapper = documentMapper.objectMappers().get(field);
                 if (objectMapper != null) {
-                     if (forStaticDocument && !isStaticOrPartitionKey(objectMapper)) 
+                     if (forStaticDocument && !isStaticOrPartitionKey(objectMapper))
                          continue;
                      toXContent(builder, objectMapper, field, docMap.get(field));
                 } else {
@@ -917,7 +917,7 @@ public class ClusterService extends BaseClusterService {
                 buildCql(ksName, cfName, mapper.simpleName(), (ObjectMapper) mapper);
             } else if (mapper instanceof GeoPointFieldMapper) {
                 buildGeoPointType(ksName);
-            } 
+            }
         }
 
         Pair<List<String>, List<String>> udt = getUDTInfo(ksName, typeName);
@@ -944,7 +944,7 @@ public class ClusterService extends BaseClusterService {
                 
                 create.append('\"').append(shortName).append("\" ");
                 if (mapper instanceof ObjectMapper) {
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                         create.append(mapper.cqlCollectionTag()).append("<");
                     create.append("frozen<")
                         .append(ColumnIdentifier.maybeQuote(cfName+'_'+((ObjectMapper) mapper).fullPath().replace('.', '_')))
@@ -952,16 +952,16 @@ public class ClusterService extends BaseClusterService {
                     if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                         create.append(">");
                 } else if (mapper instanceof GeoPointFieldMapper) {
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                         create.append(mapper.cqlCollectionTag()).append("<");
                         create.append("frozen<").append(GEO_POINT_TYPE).append(">");
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                         create.append(">");
                 } else if (mapper instanceof GeoShapeFieldMapper) {
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                         create.append(mapper.cqlCollectionTag()).append("<");
                     create.append("text");
-                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                    if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                         create.append(">");
                 } else {
                     String cqlType = mapper.cqlType();
@@ -1001,20 +1001,20 @@ public class ClusterService extends BaseClusterService {
                 StringBuilder update = new StringBuilder(String.format(Locale.ROOT, "ALTER TYPE \"%s\".\"%s\" ADD \"%s\" ", ksName, typeName, shortName));
                 if (!udt.left.contains(shortName)) {
                     if (mapper instanceof ObjectMapper) {
-                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                             update.append(mapper.cqlCollectionTag()).append("<");
                         update.append("frozen<")
                             .append(cfName).append('_').append(((ObjectMapper) mapper).fullPath().replace('.', '_'))
                             .append(">");
-                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                             update.append(">");
                     } else if (mapper instanceof GeoPointFieldMapper) {
-                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                             update.append(mapper.cqlCollectionTag()).append("<");
                         update.append("frozen<")
                             .append(GEO_POINT_TYPE)
                             .append(">");
-                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON)) 
+                        if (!mapper.cqlCollection().equals(CqlCollection.SINGLETON))
                             update.append(">");
                     } else {
                         String cqlType = mapper.cqlType();
@@ -1043,7 +1043,7 @@ public class ClusterService extends BaseClusterService {
     public static final String COMPLETION_TYPE = "completion";
     
     private void buildGeoPointType(String ksName) throws RequestExecutionException {
-        String query = String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( %s double, %s double)", 
+        String query = String.format(Locale.ROOT, "CREATE TYPE IF NOT EXISTS \"%s\".\"%s\" ( %s double, %s double)",
                 ksName, GEO_POINT_TYPE,org.elasticsearch.common.geo.GeoUtils.LATITUDE, org.elasticsearch.common.geo.GeoUtils.LONGITUDE);
         QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
     }
@@ -1064,9 +1064,9 @@ public class ClusterService extends BaseClusterService {
             int rf = replicationStrategy.getReplicationFactor();
             if (replicationStrategy instanceof NetworkTopologyStrategy) {
                 rf = ((NetworkTopologyStrategy)replicationStrategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter());
-            } 
+            }
             return rf;
-        } 
+        }
         return 0;
     }
     
@@ -1163,9 +1163,9 @@ public class ClusterService extends BaseClusterService {
             Map<String, Object> mappingMap = mappingMd.sourceAsMap();
             
             Set<String> columns = new HashSet();
-            if (docMapper.sourceMapper().enabled()) 
+            if (docMapper.sourceMapper().enabled())
                 columns.add(SourceFieldMapper.NAME);
-            if (mappingMap.get("properties") != null) 
+            if (mappingMap.get("properties") != null)
                 columns.addAll( ((Map<String, Object>)mappingMap.get("properties")).keySet() );
             
             logger.debug("Updating CQL3 schema {}.{} columns={}", ksName, cfName, columns);
@@ -1181,7 +1181,7 @@ public class ClusterService extends BaseClusterService {
                 if (column.equals(TokenFieldMapper.NAME))
                     continue; // ignore pseudo column known by Elasticsearch
                 
-                if (columnsList.length() > 0) 
+                if (columnsList.length() > 0)
                     columnsList.append(',');
                 
                 String cqlType = null;
@@ -1321,12 +1321,12 @@ public class ClusterService extends BaseClusterService {
                                     if (!(existingCqlType.equals("text") || existingCqlType.equals("frozen<geo_point>"))) {
                                         throw new IOException("geo_point cannot be mapped to column ["+column+"] with CQL type ["+cqlType+"]. ");
                                     }
-                                } else 
+                                } else
                                     // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
-                                    if (!existingCqlType.equals(cqlType) && 
+                                    if (!existingCqlType.equals(cqlType) &&
                                         !cqlType.equals("frozen<"+existingCqlType+">") &&
                                         !(existingCqlType.endsWith("uuid") && cqlType.equals("text")) && // #74 uuid is mapped as keyword
-                                        !(existingCqlType.equals("timeuuid") && (cqlType.equals("timestamp") || cqlType.equals("text"))) && 
+                                        !(existingCqlType.equals("timeuuid") && (cqlType.equals("timestamp") || cqlType.equals("text"))) &&
                                         !(existingCqlType.equals("date") && cqlType.equals("timestamp")) &&
                                         !(existingCqlType.equals("time") && cqlType.equals("bigint"))
                                         ) // timeuuid can be mapped to date
@@ -1342,7 +1342,7 @@ public class ClusterService extends BaseClusterService {
             if (docMapper.parentFieldMapper().active() && docMapper.parentFieldMapper().pkColumns() == null) {
                 if (newTable) {
                     // _parent is a JSON array representation of the parent PK.
-                    if (columnsList.length() > 0) 
+                    if (columnsList.length() > 0)
                         columnsList.append(", ");
                     columnsList.append("\"_parent\" text");
                 } else {
@@ -1374,7 +1374,7 @@ public class ClusterService extends BaseClusterService {
                     if ( i == partitionKeyLength -1) primaryKey.append(")");
                     if (i+1 < primaryKeyLength )   primaryKey.append(",");
                 }
-                String query = String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".\"%s\" ( %s, PRIMARY KEY (%s) ) WITH COMMENT='Auto-created by Elassandra'", 
+                String query = String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".\"%s\" ( %s, PRIMARY KEY (%s) ) WITH COMMENT='Auto-created by Elassandra'",
                         ksName, cfName, columnsList.toString(), primaryKey.toString());
                 logger.debug(query);
                 QueryProcessor.process(query, ConsistencyLevel.LOCAL_ONE);
@@ -1396,8 +1396,8 @@ public class ClusterService extends BaseClusterService {
         
         // start a thread for asynchronous CQL schema update, always the last update.
         Runnable task = new Runnable() {
-            @Override 
-            public void run() { 
+            @Override
+            public void run() {
                 while (true) {
                     try{
                         ClusterService.this.metadataToSaveSemaphore.acquire();
@@ -1418,7 +1418,7 @@ public class ClusterService extends BaseClusterService {
                                 cfm.params( attrs.asAlteredTableParams(cfm.params) );
                                 MigrationManager.announceColumnFamilyUpdate(cfm, null, false, metadataSchemaUpdate.timestamp);
                                 /*
-                                QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'", 
+                                QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "ALTER TABLE \"%s\".\"%s\" WITH COMMENT = '%s'",
                                         elasticAdminKeyspaceName,  ELASTIC_ADMIN_METADATA_TABLE, metadataSchemaUpdate.metaDataString));
                                 */
                             }
@@ -1427,7 +1427,7 @@ public class ClusterService extends BaseClusterService {
                         logger.warn("Failed to update CQL schema",e);
                     }
                 }
-            } 
+            }
         };
         new Thread(task, "metadataSchemaUpdater").start();
     }
@@ -1498,7 +1498,7 @@ public class ClusterService extends BaseClusterService {
                 if (className != null && className.endsWith("ElasticSecondaryIndex")) {
                     logger.debug("DROP INDEX IF EXISTS {}.{}", cfMetaData.ksName, idx.name);
                     QueryProcessor.process(String.format(Locale.ROOT, "DROP INDEX IF EXISTS \"%s\".\"%s\"",
-                            cfMetaData.ksName, idx.name), 
+                            cfMetaData.ksName, idx.name),
                             ConsistencyLevel.LOCAL_ONE);
                 }
             }
@@ -1626,7 +1626,7 @@ public class ClusterService extends BaseClusterService {
     
     
     
-    public boolean rowExists(final IndexService indexService, final String type, final String id) 
+    public boolean rowExists(final IndexService indexService, final String type, final String id)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
         DocPrimaryKey docPk = parseElasticId(indexService, type, id);
         return process(ConsistencyLevel.LOCAL_ONE, buildExistsQuery(indexService.mapperService().documentMapper(type), indexService.keyspace(), typeToCfName(indexService.keyspace(), type), id), docPk.values).size() > 0;
@@ -1666,7 +1666,7 @@ public class ClusterService extends BaseClusterService {
             Map<String, Object> sourceMap = rowAsMap(indexService, type, result.one());
             BytesReference source = XContentFactory.contentBuilder(XContentType.JSON).map(sourceMap).bytes();
             */
-            return new Engine.GetResult(true, 1L, new DocIdAndVersion(0, 1L, null), null); 
+            return new Engine.GetResult(true, 1L, new DocIdAndVersion(0, 1L, null), null);
         }
         return Engine.GetResult.NOT_EXISTS;
     }
@@ -1702,8 +1702,8 @@ public class ClusterService extends BaseClusterService {
         return null;
     }
     
-    public String buildFetchQuery(final IndexService indexService, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs) 
-            throws IndexNotFoundException, IOException 
+    public String buildFetchQuery(final IndexService indexService, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs)
+            throws IndexNotFoundException, IOException
     {
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
         String cfName = typeToCfName(indexService.keyspace(), type);
@@ -1716,11 +1716,11 @@ public class ClusterService extends BaseClusterService {
         
         for (String c : requiredColumns) {
             switch(c){
-            case TokenFieldMapper.NAME: 
+            case TokenFieldMapper.NAME:
                 query.append(query.length() > 7 ? ',':' ')
                     .append("token(")
                     .append(cqlFragment.ptCols)
-                    .append(") as \"_token\""); 
+                    .append(") as \"_token\"");
                 break;
             case RoutingFieldMapper.NAME:
                 query.append(query.length() > 7 ? ',':' ')
@@ -1754,7 +1754,9 @@ public class ClusterService extends BaseClusterService {
         }
         if (query.length() == prefixLength) {
             // no column match or requiredColumn is empty, add _id to avoid CQL syntax error...
-            query.append("\"_id\"");
+            query.append( (metadata.partitionKeyColumns().size() > 1) ? "toJsonArray(" : "toString(" )
+                .append(cqlFragment.ptCols)
+                .append(") as \"_id\"");
         }
         query.append(" FROM \"").append(indexService.keyspace()).append("\".\"").append(cfName)
              .append("\" WHERE ").append((forStaticDocument) ? cqlFragment.ptWhere : cqlFragment.pkWhere )
@@ -1884,8 +1886,8 @@ public class ClusterService extends BaseClusterService {
                     values[i] = value(fieldMapper, row.getFloat(columnName), valueForSearch);
                     break;
                 case BLOB:
-                    values[i] = value(fieldMapper, 
-                            row.getBlob(columnName), 
+                    values[i] = value(fieldMapper,
+                            row.getBlob(columnName),
                             valueForSearch);
                     break;
                 case BOOLEAN:
@@ -2008,7 +2010,7 @@ public class ClusterService extends BaseClusterService {
     }
 
     /**
-     * CQL schema update must be asynchronous when triggered by a new dynamic field (see #91) 
+     * CQL schema update must be asynchronous when triggered by a new dynamic field (see #91)
      * @param indexService
      * @param type
      * @param source
@@ -2026,7 +2028,7 @@ public class ClusterService extends BaseClusterService {
                 .masterNodeTimeout(timeout);
         metaDataMappingService.putMapping(putRequest, mappingUpdateListener);
         mappingUpdateListener.waitForUpdate(timeout);
-        logger.debug("Cluster state successfully updated for index=[{}], type=[{}], source=[{}] metadata.version={}/{}", 
+        logger.debug("Cluster state successfully updated for index=[{}], type=[{}], source=[{}] metadata.version={}/{}",
                 indexService.index().getName(), type, source, state().metaData().clusterUUID(), state().metaData().version());
     }
     
@@ -2058,10 +2060,15 @@ public class ClusterService extends BaseClusterService {
         
         ParsedDocument doc = docMapper.parse(sourceToParse);
         Mapping mappingUpdate = doc.dynamicMappingsUpdate();
+        
+        if (mappingUpdate == null && !indexService.mapperService().hasMapping(request.type())) {
+            mappingUpdate = docMapper.mapping();
+        }
+        
         if (mappingUpdate != null && indexService.mapperService().dynamic()) {
             doc.addDynamicMappingsUpdate(mappingUpdate);
-            if (logger.isDebugEnabled()) 
-                logger.debug("Document source={} require a blocking mapping update of [{}] mapping={}", 
+            if (logger.isDebugEnabled())
+                logger.debug("Document source={} require a blocking mapping update of [{}] mapping={}",
                         request.sourceAsMap(), indexService.index().getName(), mappingUpdate);
             // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
             blockingMappingUpdate(indexService, request.type(), mappingUpdate.toString());
@@ -2074,27 +2081,29 @@ public class ClusterService extends BaseClusterService {
         final DocumentFieldMappers fieldMappers = docMapper.mappers();
 
         
-        if (logger.isTraceEnabled()) 
+        if (logger.isTraceEnabled())
             logger.trace("Insert metadata.version={} index=[{}] table=[{}] id=[{}] source={} consistency={}",
                 state().metaData().version(),
-                indexService.index().getName(), cfName, request.id(), sourceMap, 
+                indexService.index().getName(), cfName, request.id(), sourceMap,
                 request.waitForActiveShards().toCassandraConsistencyLevel());
 
         final CFMetaData metadata = getCFMetaData(keyspaceName, cfName);
         
         String id = request.id();
         Map<String, ByteBuffer> map = new HashMap<String, ByteBuffer>();
-        if (request.parent() != null) 
+        if (request.parent() != null)
             sourceMap.put(ParentFieldMapper.NAME, request.parent());
         
         // normalize the _id and may find some column value in _id.
         // if the provided columns does not contains all the primary key columns, parse the _id to populate the columns in map.
-        parseElasticId(indexService, cfName, request.id(), sourceMap);
+        final Map<String, Object> idMap = new HashMap<>();
+        parseElasticId(indexService, cfName, request.id(), idMap);
+        sourceMap.putAll(idMap);
         
         // workaround because ParentFieldMapper.value() and UidFieldMapper.value() create an Uid.
         if (sourceMap.get(ParentFieldMapper.NAME) != null && ((String)sourceMap.get(ParentFieldMapper.NAME)).indexOf(Uid.DELIMITER) < 0) {
             sourceMap.put(ParentFieldMapper.NAME, request.type() + Uid.DELIMITER + sourceMap.get(ParentFieldMapper.NAME));
-        } 
+        }
        
         if (docMapper.sourceMapper().enabled()) {
             sourceMap.put(SourceFieldMapper.NAME, request.source());
@@ -2106,7 +2115,7 @@ public class ClusterService extends BaseClusterService {
             Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMappers.get(field);
             ByteBuffer colName;
             if (mapper == null) {
-                if (indexService.mapperService().dynamic())
+                if (indexService.mapperService().dynamic() && !idMap.containsKey(field))
                     throw new MapperException("Unmapped field ["+field+"]");
                 colName = ByteBufferUtil.bytes(field);
             } else {
@@ -2121,14 +2130,14 @@ public class ClusterService extends BaseClusterService {
                         if (cd.type.isCollection()) {
                             switch (((CollectionType<?>)cd.type).kind) {
                             case LIST :
-                            case SET : 
-                                map.put(field, CollectionSerializer.pack(Collections.emptyList(), 0, ProtocolVersion.CURRENT)); 
+                            case SET :
+                                map.put(field, CollectionSerializer.pack(Collections.emptyList(), 0, ProtocolVersion.CURRENT));
                                 break;
                             case MAP :
                                 break;
                             }
                         } else {
-                            map.put(field, null); 
+                            map.put(field, null);
                         }
                         continue;
                     }
@@ -2143,20 +2152,20 @@ public class ClusterService extends BaseClusterService {
                             switch (((CollectionType<?>)cd.type).kind) {
                             case LIST :
                                 if ( ((ListType)cd.type).getElementsType().asCQL3Type().equals(CQL3Type.Native.TEXT) && !(fieldValue instanceof String)) {
-                                    // opaque list of objects serialized to JSON text 
+                                    // opaque list of objects serialized to JSON text
                                     fieldValue = Collections.singletonList( stringify(fieldValue) );
                                 }
                                 break;
                             case SET :
                                 if ( ((SetType)cd.type).getElementsType().asCQL3Type().equals(CQL3Type.Native.TEXT) &&  !(fieldValue instanceof String)) {
-                                    // opaque set of objects serialized to JSON text 
+                                    // opaque set of objects serialized to JSON text
                                     fieldValue = Collections.singleton( stringify(fieldValue) );
                                 }
                                 break;
                             }
                         } else {
                             if (cd.type.asCQL3Type().equals(CQL3Type.Native.TEXT) && !(fieldValue instanceof String)) {
-                                // opaque singleton object serialized to JSON text 
+                                // opaque singleton object serialized to JSON text
                                 fieldValue = stringify(fieldValue);
                             }
                         }
@@ -2174,8 +2183,8 @@ public class ClusterService extends BaseClusterService {
         ByteBuffer[] values;
         if (request.opType() == DocWriteRequest.OpType.CREATE) {
             values = new ByteBuffer[map.size()];
-            query = buildInsertQuery(keyspaceName, cfName, map, id, 
-                    true,                
+            query = buildInsertQuery(keyspaceName, cfName, map, id,
+                    true,
                     values, 0);
             final boolean applied = processWriteConditional(request.waitForActiveShards().toCassandraConsistencyLevel(), ConsistencyLevel.LOCAL_SERIAL, query, (Object[])values);
             if (!applied)
@@ -2184,7 +2193,7 @@ public class ClusterService extends BaseClusterService {
             // set empty top-level fields to null to overwrite existing columns.
             for(FieldMapper m : fieldMappers) {
                 String fullname = m.name();
-                if (map.get(fullname) == null && !fullname.startsWith("_") && fullname.indexOf('.') == -1 && metadata.getColumnDefinition(m.cqlName()) != null) 
+                if (map.get(fullname) == null && !fullname.startsWith("_") && fullname.indexOf('.') == -1 && metadata.getColumnDefinition(m.cqlName()) != null)
                     map.put(fullname, null);
             }
             for(String m : objectMappers.keySet()) {
@@ -2192,21 +2201,21 @@ public class ClusterService extends BaseClusterService {
                     map.put(m, null);
             }
             values = new ByteBuffer[map.size()];
-            query = buildInsertQuery(keyspaceName, cfName, map, id, 
-                    false,      
+            query = buildInsertQuery(keyspaceName, cfName, map, id,
+                    false,
                     values, 0);
             process(request.waitForActiveShards().toCassandraConsistencyLevel(), query, (Object[])values);
         }
     }
 
-    public String buildInsertQuery(final String ksName, final String cfName, Map<String, ByteBuffer> map, String id, final boolean ifNotExists, 
+    public String buildInsertQuery(final String ksName, final String cfName, Map<String, ByteBuffer> map, String id, final boolean ifNotExists,
             ByteBuffer[] values, int valuesOffset) throws Exception {
         final StringBuilder questionsMarks = new StringBuilder();
         final StringBuilder columnNames = new StringBuilder();
         
         int i=0;
         for (Entry<String,ByteBuffer> entry : map.entrySet()) {
-            if (entry.getKey().equals(TokenFieldMapper.NAME)) 
+            if (entry.getKey().equals(TokenFieldMapper.NAME))
                 continue;
             
             if (columnNames.length() > 0) {
@@ -2233,7 +2242,7 @@ public class ClusterService extends BaseClusterService {
             ByteBuffer bb = (ByteBuffer) sourceAsMap.get(SourceFieldMapper.NAME);
             if (bb != null)
                return new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
-        } 
+        }
         // rebuild _source from all cassandra columns.
         XContentBuilder builder = buildDocument(docMapper, sourceAsMap, true, isStaticDocument(indexService, uid));
         builder.humanReadable(true);
@@ -2268,7 +2277,7 @@ public class ClusterService extends BaseClusterService {
             Object[] elements = jsonMapper.readValue(id, Object[].class);
             Object[] values = (map != null) ? null : new Object[elements.length];
             String[] names = (map != null) ? null : new String[elements.length];
-            if (elements.length > ptLen + clusteringColumns.size()) 
+            if (elements.length > ptLen + clusteringColumns.size())
                 throw new JsonMappingException("_id="+id+" longer than the primary key size="+(ptLen+clusteringColumns.size()) );
             
             for(int i=0; i < elements.length; i++) {
@@ -2306,7 +2315,7 @@ public class ClusterService extends BaseClusterService {
             Object[] elements = jsonMapper.readValue(routing, Object[].class);
             Object[] values = new Object[elements.length];
             String[] names = new String[elements.length];
-            if (elements.length != ptLen) 
+            if (elements.length != ptLen)
                 throw new JsonMappingException("_routing="+routing+" does not match the partition key size="+ptLen);
             
             for(int i=0; i < elements.length; i++) {
@@ -2403,7 +2412,7 @@ public class ClusterService extends BaseClusterService {
     public void writeMetaDataAsComment(MetaData metaData) throws ConfigurationException, IOException {
         writeMetaDataAsComment( MetaData.Builder.toXContent(metaData, MetaData.CASSANDRA_FORMAT_PARAMS), metaData.version());
     }
-        
+    
     public void writeMetaDataAsComment(String metaDataString, long version) throws ConfigurationException, IOException {
         // Issue #91, update C* schema asynchronously to avoid inter-locking with map column as nested object.
         logger.trace("Submit asynchronous CQL schema update for metadata={}", metaDataString);
@@ -2417,7 +2426,7 @@ public class ClusterService extends BaseClusterService {
     
     public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException {
         try {
-            String query = String.format(Locale.ROOT, "SELECT comment FROM system_schema.tables WHERE keyspace_name='%s' AND table_name='%s'", 
+            String query = String.format(Locale.ROOT, "SELECT comment FROM system_schema.tables WHERE keyspace_name='%s' AND table_name='%s'",
                 this.elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
             UntypedResultSet result = QueryProcessor.executeInternal(query);
             if (result.isEmpty())
@@ -2442,8 +2451,8 @@ public class ClusterService extends BaseClusterService {
                     for(ObjectCursor<MappingMetaData> mappingCursor :  indexCursor.value.getMappings().values()) {
                         String cfName = typeToCfName(indexCursor.value.keyspace(), mappingCursor.value.type());
                         if (logger.isDebugEnabled())
-                            logger.debug("keyspace.table={}.{} registred for elasticsearch index.type={}.{}", 
-		           indexCursor.value.keyspace(), cfName, indexCursor.value.getIndex().getName(), mappingCursor.value.type()); 
+                            logger.debug("keyspace.table={}.{} registred for elasticsearch index.type={}.{}",
+		           indexCursor.value.keyspace(), cfName, indexCursor.value.getIndex().getName(), mappingCursor.value.type());
                     }
                 }
             } catch (Exception e) {
@@ -2532,7 +2541,7 @@ public class ClusterService extends BaseClusterService {
     }
     
     public int getLocalDataCenterSize() {
-        int count = 1; 
+        int count = 1;
         for (UntypedResultSet.Row row : executeInternal("SELECT data_center, rpc_address FROM system." + SystemKeyspace.PEERS))
             if (row.has("rpc_address") && row.has("data_center") && DatabaseDescriptor.getLocalDataCenter().equals(row.getString("data_center")))
                 count++;
@@ -2633,7 +2642,7 @@ public class ClusterService extends BaseClusterService {
      */
     
     public void createOrUpdateElasticAdminKeyspace()  {
-        UntypedResultSet result = QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name='%s'", elasticAdminKeyspaceName)); 
+        UntypedResultSet result = QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name='%s'", elasticAdminKeyspaceName));
         if (result.isEmpty()) {
             MetaData metadata = state().metaData();
             try {
@@ -2672,7 +2681,7 @@ public class ClusterService extends BaseClusterService {
             if (targetRF != currentRF) {
                 replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(targetRF));
                 try {
-                    String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s", 
+                    String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s",
                             elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
                     logger.info(query);
                     process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
@@ -2720,7 +2729,7 @@ public class ClusterService extends BaseClusterService {
             writeMetaDataAsComment(metaDataString, newMetaData.version());
             return;
         } else {
-            logger.warn("PAXOS Failed to update metadata oldMetadata={}/{} currentMetaData={}/{} in cluster {}", 
+            logger.warn("PAXOS Failed to update metadata oldMetadata={}/{} currentMetaData={}/{} in cluster {}",
                     oldMetaData.clusterUUID(), oldMetaData.version(), localNode().getId(), newMetaData.version(), DatabaseDescriptor.getClusterName());
             throw new ConcurrentMetaDataUpdateException(owner, newMetaData.version());
         }
@@ -2782,7 +2791,7 @@ public class ClusterService extends BaseClusterService {
     /**
      * Serialize a cassandra typed object.
      */
-    public static ByteBuffer serialize(final String ksName, final String cfName, final AbstractType type, final String name, final Object value, final Mapper mapper) 
+    public static ByteBuffer serialize(final String ksName, final String cfName, final AbstractType type, final String name, final Object value, final Mapper mapper)
             throws SyntaxException, ConfigurationException, JsonGenerationException, JsonMappingException, IOException {
         if (value == null) {
             return null;
@@ -2838,7 +2847,7 @@ public class ClusterService extends BaseClusterService {
                 };
                 ByteBuffer geo_point = TupleType.buildValue(elements);
                 return CollectionSerializer.pack(ImmutableList.of(geo_point), 1, ProtocolVersion.CURRENT);
-            } 
+            }
             
             if (value instanceof Collection) {
                 // list of elementType
@@ -2852,7 +2861,7 @@ public class ClusterService extends BaseClusterService {
                 // singleton list
                 ByteBuffer bb = serialize(ksName, cfName, elementType, name, value, mapper);
                 return CollectionSerializer.pack(ImmutableList.of(bb), 1, ProtocolVersion.CURRENT);
-            } 
+            }
         } else {
             // Native cassandra type, encoded with mapper if available.
             if (mapper != null) {
@@ -2867,7 +2876,7 @@ public class ClusterService extends BaseClusterService {
                     }
                     return type.decompose( value );
                 }
-            } 
+            }
             return type.decompose( value );
         }
     }
@@ -2883,9 +2892,9 @@ public class ClusterService extends BaseClusterService {
             ByteBuffer[] components = udt.split(bb);
             
             if (GEO_POINT_TYPE.equals(ByteBufferUtil.string(udt.name))) {
-                if (components[0] != null) 
+                if (components[0] != null)
                     mapValue.put(org.elasticsearch.common.geo.GeoUtils.LATITUDE, deserialize(udt.type(0), components[0], null));
-                if (components[1] != null) 
+                if (components[1] != null)
                     mapValue.put(org.elasticsearch.common.geo.GeoUtils.LONGITUDE, deserialize(udt.type(1), components[1], null));
             } else {
                 for (int i = 0; i < components.length; i++) {

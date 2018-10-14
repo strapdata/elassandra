@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -17,7 +17,6 @@ package org.elassandra;
 
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import com.google.common.net.InetAddresses;
-
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.TupleType;
@@ -43,11 +42,7 @@ import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -205,7 +200,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         for(int i=0; i < types.length; i++) {
             String type = types[i];
             String name = names[i];
-            String mapping = name.equals("timeuuid2") ? 
+            String mapping = name.equals("timeuuid2") ?
                     String.format(Locale.ROOT,"{ \"discover\" : \"^((?!pktimeuuid2).*)\", \"properties\":{ \"pktimeuuid2\":{ \"type\":\"date\", \"cql_collection\":\"singleton\",\"cql_partition_key\":true,\"cql_primary_key_order\":0}}}") :
                     String.format(Locale.ROOT,"{ \"discover\" : \".*\" }");
             System.out.println("discover index=ks"+i+" pk name="+name+" type="+type+" mapping="+mapping);
@@ -319,7 +314,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .setSource("{ \"event_test\" : { \"discover\" : \".*\", "+
                         "\"dynamic_templates\": [ "+
                             "{ \"strings_template\": { "+
-                                "\"match\": \"strings.*\", "+ 
+                                "\"match\": \"strings.*\", "+
                                 "\"mapping\": { "+
                                     "\"type\": \"text\"" +
                                 "}"+
@@ -446,17 +441,17 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test").setTypes("make_models").setQuery(QueryBuilders.nestedQuery("models", QueryBuilders.termQuery("models.name", "galaxie"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
     }
     
-    // #197 Deletion of a List element removes the document on ES 
+    // #197 Deletion of a List element removes the document on ES
     public void testDeleteInUDTList() throws Exception {
         createIndex("test");
         ensureGreen("test");
         
         process(ConsistencyLevel.ONE, "CREATE TYPE test.type_test (id text);");
-        process(ConsistencyLevel.ONE, "CREATE TABLE test.table_test (" + 
-                "    id1 text," + 
-                "    id2 text," + 
-                "    list list<frozen<type_test>>," + 
-                "    PRIMARY KEY (id1, id2)" + 
+        process(ConsistencyLevel.ONE, "CREATE TABLE test.table_test (" +
+                "    id1 text," +
+                "    id2 text," +
+                "    list list<frozen<type_test>>," +
+                "    PRIMARY KEY (id1, id2)" +
                 ");");
         
         XContentBuilder mapping = XContentFactory.jsonBuilder()
@@ -497,12 +492,12 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         createIndex("test");
         ensureGreen("test");
         
-        process(ConsistencyLevel.ONE, "CREATE TABLE test.t1 (" + 
-                "    id1 text," + 
-                "    id2 text," + 
-                "    id3 text," + 
-                "    id4 text," + 
-                "    PRIMARY KEY (id1, id2)" + 
+        process(ConsistencyLevel.ONE, "CREATE TABLE test.t1 (" +
+                "    id1 text," +
+                "    id2 text," +
+                "    id3 text," +
+                "    id4 text," +
+                "    PRIMARY KEY (id1, id2)" +
                 ");");
         
         XContentBuilder mapping = XContentFactory.jsonBuilder()
@@ -544,7 +539,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         UUID end = UUIDGen.getTimeUUID(instant.toEpochMilli());
         UUID start = UUIDGen.getTimeUUID();
         
-        process(ConsistencyLevel.ONE,"INSERT INTO test.event_test (id , start , end, day, hour) VALUES (?,?,?,?,?)", 
+        process(ConsistencyLevel.ONE,"INSERT INTO test.event_test (id , start , end, day, hour) VALUES (?,?,?,?,?)",
                 "1", start, end, SimpleDateSerializer.dateStringToDays("2010-10-10"), 10*3600*1000000000L);
         
         SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("day:2010-10-10")).get();
