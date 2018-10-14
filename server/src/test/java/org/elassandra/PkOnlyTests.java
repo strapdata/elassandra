@@ -77,30 +77,6 @@ public class PkOnlyTests extends ESSingleNodeTestCase {
     }
     
     /**
-     * Test indexing dynamically an empty document (pk-only), mapping an existing CQL table, with clustering keys.
-     */
-    @Test
-    public void testPkOnlyDocumentWithClusteringKey() {
-        createIndex("test1");
-        ensureGreen("test1");
-        
-        process(ConsistencyLevel.ONE,"CREATE TABLE test1.pk_only (id text, a text, b text, primary key (id, a, b))");
-        testCompositePrimaryKey();
-    }
-    
-    /**
-     * Test indexing dynamically an empty document (pk-only), mapping an existing CQL table, with composite Partition key and one clustering key.
-     */
-    @Test
-    public void testPkOnlyDocumentWithCompositePartitionKey() {
-        createIndex("test1");
-        ensureGreen("test1");
-        
-        process(ConsistencyLevel.ONE,"CREATE TABLE test1.pk_only (id text, a text, b text, primary key ((id, a), b))");
-        testCompositePrimaryKey();
-    }
-    
-    /**
      * Test empty pk-only document with an explicit mapping where pk columns are indexed
      */
     @Test
@@ -190,14 +166,64 @@ public class PkOnlyTests extends ESSingleNodeTestCase {
         assertThat(resp.getSource().get("new_field"), equalTo("test"));
     }
     
+    /**
+     * Test indexing dynamically an empty document (pk-only), mapping an existing CQL table, with 2 clustering keys.
+     */
+    @Test
+    public void testPkOnlyDocument1() {
+        createIndex("test1");
+        ensureGreen("test1");
+        
+        process(ConsistencyLevel.ONE,"CREATE TABLE test1.pk_only (id text, a text, b text, primary key (id, a, b))");
+        testCompositePrimaryKey();
+        
+        GetResponse resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("[\"3\", \"33\", \"333\"]").setStoredFields("_routing").get();
+        assertTrue(resp.isExists());
+        assertThat(resp.getId(), equalTo("[\"3\",\"33\",\"333\"]")); // _id canonical form
+        assertThat(resp.getField("_routing").getValue(), equalTo("3"));
+    }
+    
+    /**
+     * Test indexing dynamically an empty document (pk-only), mapping an existing CQL table, with composite Partition key and one clustering key.
+     */
+    @Test
+    public void testPkOnlyDocument2() {
+        createIndex("test1");
+        ensureGreen("test1");
+        
+        process(ConsistencyLevel.ONE,"CREATE TABLE test1.pk_only (id text, a text, b text, primary key ((id, a), b))");
+        testCompositePrimaryKey();
+        
+        GetResponse resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("[\"3\", \"33\", \"333\"]").setStoredFields("_routing").get();
+        assertTrue(resp.isExists());
+        assertThat(resp.getId(), equalTo("[\"3\",\"33\",\"333\"]")); // _id canonical form
+        assertThat(resp.getField("_routing").getValue(), equalTo("[\"3\",\"33\"]"));
+    }
+    
+    /**
+     * Test indexing dynamically an empty document (pk-only), mapping an existing CQL table, with composite Partition key and no clustering key.
+     */
+    @Test
+    public void testPkOnlyDocument3() {
+        createIndex("test1");
+        ensureGreen("test1");
+        
+        process(ConsistencyLevel.ONE,"CREATE TABLE test1.pk_only (id text, a text, b text, primary key ((id, a, b)))");
+        testCompositePrimaryKey();
+        
+        GetResponse resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("[\"3\", \"33\", \"333\"]").setStoredFields("_routing").get();
+        assertTrue(resp.isExists());
+        assertThat(resp.getId(), equalTo("[\"3\",\"33\",\"333\"]")); // _id canonical form
+        assertThat(resp.getField("_routing").getValue(), equalTo("[\"3\",\"33\",\"333\"]"));
+    }
+    
     private void testCompositePrimaryKey() {
         UntypedResultSet rs;
         GetResponse resp;
         
         // insert two empty documents, generating a mapping update
         assertThat(client().prepareIndex("test1", "pk_only", "[\"1\", \"11\", \"111\"]").setSource("{}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
-        assertThat(client().prepareIndex("test1", "pk_only", "[\"2\", \"22\", \"222\"]").setSource("{}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
-        
+        process(ConsistencyLevel.ONE, "INSERT INTO  test1.pk_only (id, a, b) VALUES (?,?,?)", "2", "22", "222");
         
         // get the first record from CQL
         rs = process(ConsistencyLevel.ONE, "SELECT * FROM test1.pk_only WHERE id = '1' AND a = '11' AND b = '111'");
@@ -218,10 +244,17 @@ public class PkOnlyTests extends ESSingleNodeTestCase {
         
         
         // ensure elasticsearch can query this records
+        // check for spaces between fields in PK
         assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
         resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("[\"1\", \"11\", \"111\"]").get();
         assertTrue(resp.isExists());
         assertTrue(resp.getSource().isEmpty());
+        assertThat(resp.getId(), equalTo("[\"1\",\"11\",\"111\"]"));
+        
+        resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("[\"2\",\"22\",\"222\"]").get();
+        assertTrue(resp.isExists());
+        assertTrue(resp.getSource().isEmpty());
+        assertThat(resp.getId(), equalTo("[\"2\",\"22\",\"222\"]"));
         
         // now add some fields to check it continue to works
         assertThat(client().prepareIndex("test1", "pk_only", "[\"3\", \"33\", \"333\"]").setSource("{ \"new_field\": \"test\" }", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
@@ -249,6 +282,7 @@ public class PkOnlyTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(3L));
         resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("[\"3\", \"33\", \"333\"]").get();
         assertTrue(resp.isExists());
+        assertThat(resp.getId(), equalTo("[\"3\",\"33\",\"333\"]"));
         assertThat(resp.getSource().size(), equalTo(1));
         assertThat(resp.getSource().get("new_field"), equalTo("test"));
     }

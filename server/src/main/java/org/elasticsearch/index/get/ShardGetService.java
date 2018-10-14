@@ -152,13 +152,20 @@ public final class ShardGetService extends AbstractIndexShardComponent {
     }
 
     private GetResult innerGet(String type, String id, String[] gFields, boolean realtime, long version, VersionType versionType, FetchSourceContext fetchSourceContext) {
-        fetchSourceContext = normalizeFetchSourceContent(fetchSourceContext, gFields);
+        DocPrimaryKey docPk;
+        try {
+            docPk = clusterService.parseElasticId(indexService, type, id);
+            id = docPk.toString(); // rewrite the id parameter to its canonical form
+        } catch(IOException e) {
+            throw new ElasticsearchException("Cannot parse type [" + type + "] and id [" + id + "]", e);
+        }
+        
         final Collection<String> types;
         if (type == null || type.equals("_all")) {
             try {
                 for (String typeX : mapperService.types() ) {
                     // search for the matching type (table)
-                    if (clusterService.rowExists(indexService, typeX, id)) {
+                    if (clusterService.rowExists(indexService, typeX, docPk)) {
                         type = typeX;
                         break;
                     }
@@ -206,8 +213,7 @@ public final class ShardGetService extends AbstractIndexShardComponent {
         
         // In elassandra, Engine does not store the source any more, but fetch it from cassandra.
         try {
-            String ksName = mapperService.keyspace();
-            UntypedResultSet result = clusterService.fetchRow(this.indexService, type, id, columns.toArray(new String[columns.size()]), 
+            UntypedResultSet result = clusterService.fetchRow(this.indexService, type, docPk, columns.toArray(new String[columns.size()]), 
                     docMapper.getColumnDefinitions());
             if (result.isEmpty()) {
                 return new GetResult(shardId.getIndexName(), type, id, -1, false, null, null);

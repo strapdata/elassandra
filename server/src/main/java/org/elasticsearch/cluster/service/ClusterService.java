@@ -364,6 +364,11 @@ public class ClusterService extends BaseClusterService {
             }
             return boundValues;
         }
+        
+        @Override
+        public String toString() {
+            return ClusterService.stringify(values, values.length);
+        }
     }
     
     
@@ -1625,33 +1630,21 @@ public class ClusterService extends BaseClusterService {
     }
     
     
-    
-    public boolean rowExists(final IndexService indexService, final String type, final String id)
+    public boolean rowExists(final IndexService indexService, final String type, final DocPrimaryKey docPk)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        DocPrimaryKey docPk = parseElasticId(indexService, type, id);
-        return process(ConsistencyLevel.LOCAL_ONE, buildExistsQuery(indexService.mapperService().documentMapper(type), indexService.keyspace(), typeToCfName(indexService.keyspace(), type), id), docPk.values).size() > 0;
+        return process(ConsistencyLevel.LOCAL_ONE, buildExistsQuery(indexService.mapperService().documentMapper(type), indexService.keyspace(), typeToCfName(indexService.keyspace(), type)), docPk.values).size() > 0;
     }
     
-    
-    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final String id, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException, RequestExecutionException,
-            RequestValidationException, IOException {
-        return fetchRow(indexService, type, id, columns, ConsistencyLevel.LOCAL_ONE, columnDefs);
+    /**
+     * Fetch from the coordinator node.
+     */
+    public UntypedResultSet fetchRow(final IndexService indexService, final String type, DocPrimaryKey docPk, final String[] columns, Map<String,ColumnDefinition> columnDefs) 
+            throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
+        return fetchRow(indexService, type, docPk, columns, ConsistencyLevel.LOCAL_ONE, columnDefs);
     }
 
-    /**
-     * Fetch from the coordinator node.
-     */
-    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final String id, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException,
-            RequestExecutionException, RequestValidationException, IOException {
-        DocPrimaryKey docPk = parseElasticId(indexService, type, id);
-        return fetchRow(indexService, type, docPk, columns, cl, columnDefs);
-    }
-    
-    /**
-     * Fetch from the coordinator node.
-     */
-    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) throws InvalidRequestException,
-            RequestExecutionException, RequestValidationException, IOException {
+    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs) 
+    		throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
         return process(cl, buildFetchQuery(indexService, type, columns, docPk.isStaticDocument, columnDefs), docPk. values);
     }
     
@@ -1661,19 +1654,9 @@ public class ClusterService extends BaseClusterService {
         UntypedResultSet result = fetchRowInternal(indexService, type, docPk, columnDefs.keySet().toArray(new String[columnDefs.size()]), columnDefs);
         onRefresh.accept(System.nanoTime() - time);
         if (!result.isEmpty()) {
-            // build termVector form the Cassandra doc.
-            /*
-            Map<String, Object> sourceMap = rowAsMap(indexService, type, result.one());
-            BytesReference source = XContentFactory.contentBuilder(XContentType.JSON).map(sourceMap).bytes();
-            */
             return new Engine.GetResult(true, 1L, new DocIdAndVersion(0, 1L, null), null);
         }
         return Engine.GetResult.NOT_EXISTS;
-    }
-
-    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String id, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
-        DocPrimaryKey docPk = parseElasticId(indexService, cfName, id);
-        return fetchRowInternal(indexService, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
     }
 
     public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final  DocPrimaryKey docPk, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
@@ -1764,11 +1747,11 @@ public class ClusterService extends BaseClusterService {
         return query.toString();
     }
     
-    public static String buildDeleteQuery(final DocumentMapper docMapper, final String ksName, final String cfName, final String id) {
+    public static String buildDeleteQuery(final DocumentMapper docMapper, final String ksName, final String cfName) {
         return "DELETE FROM \""+ksName+"\".\""+cfName+"\" WHERE "+ docMapper.getCqlFragments().pkWhere;
     }
     
-    public static String buildExistsQuery(final DocumentMapper docMapper, final String ksName, final String cfName, final String id) {
+    public static String buildExistsQuery(final DocumentMapper docMapper, final String ksName, final String cfName) {
         return "SELECT "+docMapper.getCqlFragments().pkCols+" FROM \""+ksName+"\".\""+cfName+"\" WHERE "+ docMapper.getCqlFragments().pkWhere;
     }
 
@@ -1777,7 +1760,7 @@ public class ClusterService extends BaseClusterService {
             IOException {
         String cfName = typeToCfName(indexService.keyspace(), type);
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
-        process(cl, buildDeleteQuery(docMapper, indexService.keyspace(), cfName, id), parseElasticId(indexService, type, id).values);
+        process(cl, buildDeleteQuery(docMapper, indexService.keyspace(), cfName), parseElasticId(indexService, type, id).values);
     }
     
     
