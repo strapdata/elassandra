@@ -1,3 +1,8 @@
+5.5.0.24 - 2018-10-15
+  * Improve license notice
+  * Index document with empty mapping
+  * Move docker image build to docker-ci.sh based on debian packaging
+
 5.5.0.23 - 2018-10-09
   * Improve index rebuild performance
   * Fix missing hotspot_compiler
