@@ -1,0 +1,55 @@
+/**
+ * Copyright 2018 Evgeny Naumenko <jk.vc@mail.ru>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+{
+  "bundles" : [
+    { "bundleName" : "apache1", "licenseName" : "Apache Software License, Version 1.1", "licenseUrl" : "https://www.apache.org/licenses/LICENSE-1.1" },
+    { "bundleName" : "apache2", "licenseName" : "Apache License, Version 2.0", "licenseUrl" : "https://www.apache.org/licenses/LICENSE-2.0" },
+    { "bundleName" : "bsd-2",   "licenseName" : "The 2-Clause BSD License", "licenseUrl" : "https://opensource.org/licenses/BSD-2-Clause" },
+    { "bundleName" : "bsd-3",   "licenseName" : "The 3-Clause BSD License", "licenseUrl" : "https://opensource.org/licenses/BSD-3-Clause" },
+    { "bundleName" : "cc0",     "licenseName" : "Creative Commons Legal Code", "licenseUrl" : "https://repository.jboss.org/licenses/cc0-1.0.txt" },
+    { "bundleName" : "cddl1",   "licenseName" : "COMMON DEVELOPMENT AND DISTRIBUTION LICENSE (CDDL), Version 1.0", "licenseUrl" : "https://oss.oracle.com/licenses/CDDL" },
+    { "bundleName" : "cddl1.1", "licenseName" : "COMMON DEVELOPMENT AND DISTRIBUTION LICENSE (CDDL) Version 1.1", "licenseUrl" : "https://oss.oracle.com/licenses/CDDL-1.1" },
+    { "bundleName" : "cpl-1.0", "licenseName" : "Common Public License - v 1.0", "licenseUrl" : "https://www.eclipse.org/legal/cpl-v10.html" },
+    { "bundleName" : "epl1",    "licenseName" : "Eclipse Public License - v 1.0", "licenseUrl" : "http://www.eclipse.org/legal/epl-v10.html" },
+    { "bundleName" : "epl2",    "licenseName" : "Eclipse Public License - v 2.0", "licenseUrl" : "https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.txt" },
+    { "bundleName" : "gpl1",    "licenseName" : "GNU GENERAL PUBLIC LICENSE, Version 1", "licenseUrl" : "https://www.gnu.org/licenses/gpl-1.0" },
+    { "bundleName" : "gpl2",    "licenseName" : "GNU GENERAL PUBLIC LICENSE, Version 2", "licenseUrl" : "https://www.gnu.org/licenses/gpl-2.0" },
+    { "bundleName" : "gpl3",    "licenseName" : "GNU GENERAL PUBLIC LICENSE, Version 3", "licenseUrl" : "https://www.gnu.org/licenses/gpl-3.0" },
+    { "bundleName" : "lgpl2.1", "licenseName" : "GNU LESSER GENERAL PUBLIC LICENSE, Version 2.1", "licenseUrl" : "https://www.gnu.org/licenses/lgpl-2.1" },
+    { "bundleName" : "lgpl3",   "licenseName" : "GNU LESSER GENERAL PUBLIC LICENSE, Version 3", "licenseUrl" : "https://www.gnu.org/licenses/lgpl-3.0" },
+    { "bundleName" : "mit",     "licenseName" : "MIT License", "licenseUrl" : "https://opensource.org/licenses/MIT" },
+    { "bundleName" : "mpl1.1",  "licenseName" : "Mozilla Public License Version 1.1", "licenseUrl" : "https://www.mozilla.org/en-US/MPL/1.1" },
+    { "bundleName" : "mpl2",    "licenseName" : "Mozilla Public License, Version 2.0", "licenseUrl" : "https://www.mozilla.org/en-US/MPL/2.0" }
+  ],
+  "transformationRules" : [
+    { "bundleName" : "apache2", "licenseNamePattern" : ".*The Apache Software License, Version 2.0.*" },
+    { "bundleName" : "apache2", "licenseNamePattern" : ".*The Apache Software License 2.0.*" },
+    { "bundleName" : "apache2", "licenseNamePattern" : "Apache 2.*" },
+    { "bundleName" : "apache2", "licenseNamePattern" : "ASL 2.0" },
+    { "bundleName" : "apache2", "licenseFileContentPattern" : ".*Apache License, Version 2.0.*" },
+    { "bundleName" : "apache1", "licenseFileContentPattern" : ".*Apache Software License, Version 1.1.*" },
+    { "bundleName" : "apache2", "licenseUrlPattern" : ".*www.apache.org/licenses/LICENSE-2.0.*" },
+    { "bundleName" : "lgpl2.1", "licenseUrlPattern" : ".*www.gnu.org/licenses/old-licenses/lgpl-2.1.*" },
+    { "bundleName" : "lgpl2.1", "licenseUrlPattern" : ".*www.gnu.org/licenses/lgpl-2.1.*" },
+    { "bundleName" : "lgpl2.1", "licenseUrlPattern" : ".*repository.jboss.org/licenses/lgpl-2.1.*" },
+    { "bundleName" : "lgpl2.1", "licenseNamePattern" : "GNU Lesser General Public License, version 2.1" },
+    { "bundleName" : "mit",     "licenseUrlPattern" : ".*www.opensource.org/licenses/mit-license.php" },
+    { "bundleName" : "bsd-2", "licenseNamePattern" : ".*opensource.org/licenses/BSD-2-Clause" },
+    { "bundleName" : "bsd-3", "licenseNamePattern" : ".*opensource.org/licenses/BSD-3-Clause" },
+    { "bundleName" : "epl1", "licenseNamePattern" : "Eclipse Public License v1.0" },
+    { "bundleName" : "cddl1",   "licenseFileContentPattern" : ".*CDDL.*1.0" }
+  ]
+}

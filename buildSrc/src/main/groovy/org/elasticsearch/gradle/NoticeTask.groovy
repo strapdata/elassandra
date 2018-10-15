@@ -25,6 +25,7 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
+import java.nio.file.Files;
 
 /**
  * A task to create a notice file which includes dependencies' notices.
@@ -76,12 +77,19 @@ public class NoticeTask extends DefaultTask {
                 }
             }
         }
+        
+        File rootLicenseDir = new File(project.rootProject.buildDir, 'licenses')
+        if (!rootLicenseDir.exists())
+            rootLicenseDir.mkdirs()
         for (Map.Entry<String, File> entry : seen.entrySet()) {
             String name = entry.getKey()
             File file = entry.getValue()
             appendFile(file, name, 'NOTICE', output)
             appendFile(new File(file.parentFile, "${name}-LICENSE.txt"), name, 'LICENSE', output)
+            Files.copy(file.toPath(), new File(rootLicenseDir, "${name}-LICENSE.txt").toPath(), 
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.COPY_ATTRIBUTES)
         }
+        appendFile(project.rootProject.file('core/cassandra/NOTICE.txt'), 'Apache Cassandra dependencies', 'NOTICE', output)
         outputFile.setText(output.toString(), 'UTF-8')
     }
 

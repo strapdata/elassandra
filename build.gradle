@@ -25,7 +25,22 @@ import org.gradle.plugins.ide.eclipse.model.SourceFolder
 import org.apache.tools.ant.taskdefs.condition.Os
 import org.elasticsearch.gradle.VersionProperties
 import org.elasticsearch.gradle.Version
+import com.github.jk1.license.render.*;
+import com.github.jk1.license.filter.*;
 
+plugins {
+  id 'com.github.jk1.dependency-license-report' version '1.2'
+}
+
+apply plugin: 'com.github.jk1.dependency-license-report'
+
+licenseReport {
+  renderers = [new CsvReportRenderer(separator:';'), new TextReportRenderer(), new InventoryHtmlReportRenderer('index.html', 'Elassandra License Report')]
+  filters = [new LicenseBundleNormalizer('buildSrc/src/main/resources/license-normalizer-bundle.json', true)]
+  //projects = [project] + project.subprojects.findAll { !it.name.contains('plugin') && !it.name.contains('qa') }
+  projects = [project] + project.subprojects
+  excludes = [ 'com.strapdata.elasticsearch:elasticsearch-core' ]
+}
 // common maven publishing configuration
 subprojects {
   group = 'com.strapdata.elasticsearch'
