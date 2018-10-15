@@ -153,14 +153,20 @@ public final class ShardGetService extends AbstractIndexShardComponent {
     }
 
     private GetResult innerGet(String type, String id, String[] gFields, boolean realtime, long version, VersionType versionType, FetchSourceContext fetchSourceContext) {
-        fetchSourceContext = normalizeFetchSourceContent(fetchSourceContext, gFields);
+        DocPrimaryKey docPk;
+        try {
+            docPk = clusterService.parseElasticId(indexService, type, id);
+            id = docPk.toString(); // rewrite the id parameter to its canonical form
+        } catch(IOException e) {
+            throw new ElasticsearchException("Cannot parse type [" + type + "] and id [" + id + "]", e);
+        }
       
         //Engine.GetResult get = null;
         if (type == null || type.equals("_all")) {
             try {
                 for (String typeX : mapperService.types() ) {
                     // search for the matching type (table)
-                    if (clusterService.rowExists(indexService, typeX, id)) {
+                    if (clusterService.rowExists(indexService, typeX, docPk)) {
                         type = typeX;
                         break;
                     }
@@ -214,9 +220,8 @@ public final class ShardGetService extends AbstractIndexShardComponent {
         
         // In elassandra, Engine does not store the source any more, but fetch it from cassandra.
         try {
-            String ksName = mapperService.keyspace();
-            UntypedResultSet result = clusterService.fetchRow(this.indexService, type, id, columns.toArray(new String[columns.size()]), 
-                    docMapper.getColumnDefinitions());
+            UntypedResultSet result = clusterService.fetchRow(this.indexService, type, docPk, columns.toArray(new String[0]),
+                docMapper.getColumnDefinitions());
             if (result.isEmpty()) {
                 return new GetResult(shardId.getIndexName(), type, id, -1, false, null, null);
             }
@@ -277,9 +282,9 @@ public final class ShardGetService extends AbstractIndexShardComponent {
                 DocPrimaryKey docPk = clusterService.parseElasticId(this.indexService, type, id);
                 String cfName = ClusterService.typeToCfName(this.indexService.keyspace(), type);
                 Map<String, ColumnDefinition> columnDefs = mapperService.documentMapper(type).getColumnDefinitions();
-                UntypedResultSet result = clusterService.fetchRow(this.indexService, 
-                        cfName, docPk, 
-                        columnDefs.keySet().toArray(new String[columnDefs.size()]), 
+                UntypedResultSet result = clusterService.fetchRow(this.indexService,
+                        cfName, docPk,
+                        columnDefs.keySet().toArray(new String[columnDefs.size()]),
                         ConsistencyLevel.LOCAL_ONE,
                         columnDefs);
                 Map<String, Object> sourceMap = clusterService.rowAsMap(this.indexService, type, result.one());
