@@ -74,7 +74,7 @@ under_travis() {
   # publish to gcloud registry
   gcloud_install
   gcloud_auth || return 1
-  DOCKER_REGISTRY=gcr.io/ REPO_NAME=${GCLOUD_REPO_NAME:-strapdata-docker-registry/elassandra} build_with_retry
+  DOCKER_REGISTRY=gcr.io/ REPO_NAME=${GCLOUD_REPO_NAME:-strapdata-factory/elassandra} BASE_IMAGE=launcher.gcr.io/google/debian9:latest build_with_retry
 }
 
 manual_run() {
