@@ -1,3 +1,9 @@
+6.2.3.7 - 2018-10-15
+  * Improve license notice
+  * Index document with empty mapping
+  * Add support for ingest feature
+  * Move docker image build to docker-ci.sh based on debian packaging 
+
 6.2.3.6 - 2018-10-09
   * Improve index rebuild performance
   * Fix missing hotspot_compiler
