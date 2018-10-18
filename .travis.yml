@@ -3,6 +3,8 @@ env:
   global:
     # this variable determine when docker images are tagged 'latest'
     - LATEST_VERSION=6.2.3
+    # Make sure gcloud command is on our PATH and the App Engine SDK is in the Python path
+    - GAE_PYTHONPATH=${HOME}/.cache/google_appengine PATH=$PATH:${HOME}/google-cloud-sdk/bin PYTHONPATH=${PYTHONPATH}:${GAE_PYTHONPATH} CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
 language: 
   - java
@@ -21,10 +23,18 @@ cache:
   directories:
     - $HOME/.gradle/caches/
     - $HOME/.gradle/wrapper/
+    # Cache our Gcloud SDK between commands
+    - $HOME/google-cloud-sdk/
 
-install: gradle assemble -Dbuild.snapshot=false
+before_install:
+  # solves gpg server problems
+  - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
 
-script: gradle core:test -Dbuild.snapshot=false
+install: gradle --version
+
+script: 
+- gradle core:test -Dbuild.snapshot=false
+- gradle assemble -Dbuild.snapshot=false
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)

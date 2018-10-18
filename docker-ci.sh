@@ -3,13 +3,53 @@
 # fails on error and trace execution
 set -ex
 
-# shallow clone of the elassandra docker repository
-rm -rf docker
-git clone --depth 1 https://github.com/strapdata/docker-elassandra.git docker
-cd docker
+init() {
+  # shallow clone of the elassandra docker repository
+  rm -rf docker
+  git clone --depth 1 https://github.com/strapdata/docker-elassandra.git docker
+  cd docker
+}
 
-# set parameters
-if [ "$TRAVIS" = "true" ]; then
+build_with_retry() {
+  # try 5 times, because gpg servers suck
+  n=0
+  until [ $n -ge 5 ]
+  do
+    echo "build try number $n"
+    # build and publish the docker image
+    ./build.sh && break
+    n=$[$n+1]
+    sleep 1
+  done
+  if [ $n -eq 5 ]; then
+    echo "failed to build image"
+    exit 1
+  fi
+}
+
+gcloud_install() {
+  # If the SDK is not already cached, download it and unpack it
+  if [ ! -d ${HOME}/google-cloud-sdk ]; then
+    curl https://sdk.cloud.google.com | bash;
+    gcloud -v
+  fi
+}
+
+gcloud_auth() {
+  if [ -z "$GCLOUD_SECRET_KEY" ]; then
+    echo "GCLOUD_SECRET_KEY is not set. Can't authenticate with gcloud"
+    return 1
+  else
+    echo "$GCLOUD_SECRET_KEY" | base64 -d > gcloud-secret.json
+    gcloud auth activate-service-account --key-file gcloud-secret.json
+
+    # does not work for docker 17.x
+    # gcloud beta auth configure-docker
+    cat gcloud-secret.json | docker login -u _json_key --password-stdin https://gcr.io
+  fi
+}
+
+under_travis() {
   # Special branching to be ran under travis
 
   export REPO_NAME=${TRAVIS_REPO_SLUG}
@@ -27,26 +67,37 @@ if [ "$TRAVIS" = "true" ]; then
     fi
   fi
 
-else
+  # publish to docker hub
+  build_with_retry
+
+
+  # publish to gcloud registry
+  gcloud_install
+  gcloud_auth || return 1
+  DOCKER_REGISTRY=gcr.io/ REPO_NAME=${GCLOUD_REPO_NAME:-strapdata-docker-registry/elassandra} build_with_retry
+}
+
+manual_run() {
   export REPO_DIR=../
-fi
+  build_with_retry
+}
 
-# try 5 times, because gpg servers suck
-n=0
-until [ $n -ge 5 ]
-do
-  echo "build try number $n"
-  # build and publish the docker image
-  ./build.sh && break
-  n=$[$n+1]
-  sleep 1
-done
-if [ $n -eq 5 ]; then
-  echo "failed to build image"
-  exit 1
-fi
+cleanup() {
+  # clean up
+  cd ../
+  rm -rf docker
+}
 
+main() {
+  init
 
-# clean up
-cd ../
-rm -rf docker
+  if [ "$TRAVIS" = "true" ]; then
+    under_travis
+  else
+    manual_run
+  fi
+
+  cleanup
+}
+
+main
