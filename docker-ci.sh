@@ -55,6 +55,8 @@ under_travis() {
   export REPO_NAME=${TRAVIS_REPO_SLUG}
   export REPO_DIR=${TRAVIS_BUILD_DIR}
   export ELASSANDRA_COMMIT=${TRAVIS_COMMIT}
+  export DOCKER_MAJOR_LATEST=true
+  export DOCKER_RUN_TESTS=true
 
   if [ -n "$TRAVIS_TAG" ]; then
     # publish to docker hub when a tag is set
