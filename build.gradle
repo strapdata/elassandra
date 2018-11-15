@@ -59,6 +59,11 @@ ext.enableArtifactSigning = !version.endsWith("SNAPSHOT") && project.hasProperty
 ext.repoUsername = { project.hasProperty("repoUsername") ? getProperty("repoUsername") : "" }
 ext.repoPassword = { project.hasProperty("repoPassword") ? getProperty("repoPassword") : "" }
 
+// added by strapdata to publish artifact on an internal nexus
+if (!project.hasProperty("strapdataNexusUrl")) { ext.strapdataNexusUrl = "" }
+if (!project.hasProperty("strapdataNexusUsername")) { ext.strapdataNexusUsername = "" }
+if (!project.hasProperty("strapdataNexusPassword")) { ext.strapdataNexusPassword = "" }
+
 Path rootPath = rootDir.toPath()
 // setup pom license info, but only for artifacts that are part of elasticsearch
 configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
@@ -76,6 +81,16 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
   // we only use maven publish to add tasks for pom generation
   plugins.withType(MavenPublishPlugin).whenPluginAdded {
     publishing {
+      repositories {
+        maven {
+          name "deploy"
+          url strapdataNexusUrl
+          credentials {
+            username = strapdataNexusUsername
+            password = strapdataNexusPassword
+          }
+        }
+      }
       publications {
         // add license information to generated poms
         all {
