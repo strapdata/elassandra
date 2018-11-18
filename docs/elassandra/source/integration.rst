@@ -4,7 +4,7 @@ Integration
 Integration with an existing cassandra cluster
 ----------------------------------------------
 
-Elassandra include a modified version of cassandra, available at `strapdata-cassandra repro <https://github.com/strapdata/cassandra>`_, 
+Elassandra includes a modified version of cassandra, available at `strapdata-cassandra repro <https://github.com/strapdata/cassandra>`_, 
 so **all nodes of a cluster should run elassandra binaries**. However, you can start a node with or without 
 the elasticsearch support.  Obviously, all nodes of a datacenter should run cassandra only or cassandra with 
 elasticsearch.
@@ -12,20 +12,20 @@ elasticsearch.
 Rolling upgrade to elassandra
 .............................
 
-Before starting any elassandra node with elasticsearch enable, do a rolling replace of the cassandra binaries by the elassandra ones. For each node :
+Before starting any elassandra node with elasticsearch enabled, do a rolling replace of the cassandra binaries with the elassandra ones. For each node :
 
 * Install elassandra.
-* Replace the elassandra configuration files by the one from your existing cluster (cassandra.yml and snitch configuration file) 
+* Replace the elassandra configuration files (cassandra.yml and snitch configuration file) with the ones from your existing cluster 
 * Stop your cassandra node.
-* Restart cassandra ``elassandra bin/cassandra`` or cassandra with elasticsearch enable ``elassandra bin/cassandra -e``
+* Restart cassandra ``elassandra bin/cassandra`` or cassandra with elasticsearch enabled ``elassandra bin/cassandra -e``
 
 
 Create a new elassandra datacenter
 ..................................
 
-The overall procedure is similar the cassandra one describe on `Adding a datacenter to a cluster <https://docs.datastax.com/en/cassandra/3.0/cassandra/operations/opsAddDCToCluster.html#opsAddDCToCluster>`_.
+The overall procedure is similar to the cassandra one described in `Adding a datacenter to a cluster <https://docs.datastax.com/en/cassandra/3.0/cassandra/operations/opsAddDCToCluster.html#opsAddDCToCluster>`_.
 
-For earch nodes in your new datacenter :
+For each node in your new datacenter :
 
 * Install elassandra.
 * Set ``auto_bootstrap: false`` in your **conf/cassandra.yaml**.
@@ -35,20 +35,20 @@ For earch nodes in your new datacenter :
 
    bin/cassandra
 
-* Restart all nodes in your new datacenter with elasticsearch enable. You should see started shards but empty indices.
+* Restart all nodes in your new datacenter with elasticsearch enabled. You should see started shards but empty indices.
 
 .. code::
 
    bin/cassandra -e
 
 * Set the replication factor of indexed keyspaces to one or more in your new datacenter.
-* Pull data from your existaing datacenter. 
+* Pull data from your existing datacenter. 
 
 .. code::
    
    nodetool rebuild <source-datacenter-name>
 
-After rebuild on all your new nodes, you should see the same number of document for each indices in your new and existing datacenters.
+After rebuilding all of your new nodes, you should see the same number of documents for each index in your new and existing datacenters.
 
 * Set ``auto_bootstrap: true`` (default value) in your **conf/cassandra.yaml**
 * Create new elasticsearch index or map some existing cassandra tables.
@@ -127,9 +127,9 @@ Running Spark with Elassandra
 -----------------------------
 
 For elassandra 5.5, a modified version of the `elasticsearch-hadoop <https://github.com/elastic/elasticsearch-hadoop>`_ connector is available for elassandra on the `strapdata repository <https://github.com/strapdata/elasticsearch-hadoop>`_. 
-This connector works with spark as describe in the elasticsearch documentation available at `elasticsearch/hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/index.html>`_.
+This connector works with spark as described in the elasticsearch documentation available at `elasticsearch/hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/index.html>`_.
 
-For example, in order to submit a spark job in client mode.
+For example, in order to submit a spark job in client mode:
 
 .. code:: java
 
