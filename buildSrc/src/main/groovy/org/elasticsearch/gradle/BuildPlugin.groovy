@@ -319,7 +319,20 @@ class BuildPlugin implements Plugin<Project> {
             // such that we don't have to pass hardcoded files to gradle
             repos.mavenLocal()
         }
-        repos.mavenCentral()
+
+        if (System.getProperty("strapdata.mavenMirror") != null) {
+            repos.maven {
+                url System.getenv("NEXUS_URL")
+                credentials {
+                    username System.getenv("NEXUS_USER")
+                    password System.getenv("NEXUS_PASSWORD")
+                }
+            }
+        }
+        else {
+            repos.mavenCentral()
+        }
+
         String luceneVersion = VersionProperties.lucene
         if (luceneVersion.contains('-snapshot')) {
             // extract the revision number from the version with a regex matcher
