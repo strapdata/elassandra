@@ -4,7 +4,7 @@ Configuration
 Directory Layout
 ----------------
 
-Elassandra merge the cassandra and elasticsearch directories as follow :
+Elassandra merges the Cassandra and Elasticsearch directories as follow :
 
 * ``conf`` : Cassandra configuration directory + elasticsearch.yml default configuration file.
 * ``bin`` : Cassandra scripts + elasticsearch plugin script.
@@ -26,10 +26,9 @@ Elasticsearch paths are set according to the following environement variables an
 Configuration
 -------------
 
-Elasticsearch configuration rely on cassandra configuration file **conf/cassandra.yaml** for the following parameters.
+Elasticsearch configuration relies on Cassandra configuration file **conf/cassandra.yaml** for the following parameters.
 
 .. cssclass:: table-bordered
-
 +---------------------------+----------------------------+---------------------------------------------------------------------------------------+
 | Cassandra                 | Elasticsearch              | Description                                                                           |
 +===========================+============================+=======================================================================================+
@@ -51,7 +50,7 @@ You can overload these default settings by defining Elasticsearch network settin
 a another interface).
 
 By default, Elasticsearch transport publish address is the Cassandra broadcast address. However, in some network configurations (including multi-cloud deployment), the Cassandra broadcast adress is a public address managed by a firewall, and
-it would involve a network overhead for elasticsearch inter-node communication. In such case, you can set the system property ``es.use_internal_address=true`` to use the Cassandra  ``listen_address`` as the elasticsearch transport published address.
+it would involve network overhead for Elasticsearch inter-node communication. In such a case, you can set the system property ``es.use_internal_address=true`` to use the Cassandra  ``listen_address`` as the Elasticsearch transport published address.
 
 .. CAUTION::
    If you use the `GossipingPropertyFile <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureSnitchGossipPF_c.html>`_ Snitch to configure your cassandra datacenter and rack properties in **conf/cassandra-rackdc.properties**, keep
@@ -62,7 +61,7 @@ it would involve a network overhead for elasticsearch inter-node communication. 
 Logging configuration
 ---------------------
 
-The cassandra logs in ``logs/system.log`` includes elasticsearch logs according to the your ``conf/logback.conf`` settings.
+The Cassandra logs in ``logs/system.log`` includes elasticsearch logs according to the your ``conf/logback.conf`` settings.
 See `cassandra logging configuration <https://docs.datastax.com/en/cassandra/2.1/cassandra/configuration/configLoggingLevels_r.html>`_.
 
 Per keyspace (or per table) logging level can be configured using the logger name ``org.elassandra.index.ExtendedElasticSecondaryIndex.<keyspace>.<table>``.
@@ -71,14 +70,14 @@ Per keyspace (or per table) logging level can be configured using the logger nam
 Multi datacenter configuration
 ------------------------------
 
-By default, all elassandra datacenters share the same Elasticsearch cluster name and mapping. This mapping is stored in the ``elastic_admin`` keyspace.
+By default, all Elassandra datacenters share the same Elasticsearch cluster name and mapping. This mapping is stored in the ``elastic_admin`` keyspace.
 
 .. image:: images/elassandra-datacenter-replication.jpg
 
 |
 
-If you want to manage distinct Elasticsearch clusters inside a cassandra cluster (when indexing differents tables in different datacenter), you can set a ``datacenter.group`` in **conf/elasticsearch.yml** and thus, all elassandra datacenters sharing the same datacenter group name will share the same mapping.
-Those elasticsearch clusters will be named <cluster_name>@<datacenter.group> and mapping will be stored in a dedicated keyspace.table ``elastic_admin_<datacenter.group>.metadata``.
+If you want to manage distinct Elasticsearch clusters inside a Cassandra cluster (when indexing different tables in different datacenters), you can set a ``datacenter.group`` in **conf/elasticsearch.yml** and thus, all elassandra datacenters sharing the same datacenter group name will share the same mapping.
+Those elasticsearch clusters will be named <cluster_name>@<datacenter.group> and mappings will be stored in a dedicated keyspace.table ``elastic_admin_<datacenter.group>.metadata``.
 
 All ``elastic_admin[_<datacenter.group>]`` keyspaces are configured with **NetworkReplicationStrategy** (see `data replication <https://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html>`_).
 where the replication factor is automatically set to the number of nodes in each datacenter. This ensure maximum availibility for the elaticsearch metadata. When removing a node from an elassandra datacenter, you should manually decrease the ``elastic_admin[_<datacenter.group>]`` replication factor to the number of nodes.
@@ -89,7 +88,7 @@ It also involve cross-datacenter network latency for each mapping update.
 
 
 .. TIP::
-   Cassandra cross-datacenter writes are not sent directly to each replica; instead, they are sent to a single replica with a parameter telling that replica to forward to the other replicas in that datacenter; those replicas will respond diectly to the original coordinator. This reduces network trafic between datacenters when having many replica.
+   Cassandra cross-datacenter writes are not sent directly to each replica. Instead, they are sent to a single replica with a parameter telling that replica to forward to the other replicas in that datacenter. Those replicas will respond directly to the original coordinator. This reduces network traffic between datacenters when having many replicas.
 
 
 Elassandra Settings
@@ -102,14 +101,14 @@ Most of the settings can be set at variuous levels :
 * At index level, setting is *index.<property_name>*
 * At table level, setting is configured as a *_meta:{ "<property_name> : <value> }* for a document type.
 
-For exemple, ``drop_on_delete_index`` can be :
+For example, ``drop_on_delete_index`` can be :
 
 * set as a system property ``es.drop_on_delete_index`` for all created indices.
 * set at the cluster level with the ``cluster.default_drop_on_delete_index`` dynamic settings,
 * set at the index level with the ``index.drop_on_delete_index`` dynamic index settings,
 * set as the Elasticsearch document type level with ``_meta : { "drop_on_delete_index":true }`` in the document type mapping.
 
-When a settings is dynamic, it's relevant only for cluster, index and document type setting levels, system settings defined by a JVM property are immutables.
+When a setting is dynamic, it's relevant only for cluster, index and document type setting levels, system settings defined by a JVM property are immutable.
 
 
 +-------------------------------+---------+------------------------------+------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -161,10 +160,10 @@ When a settings is dynamic, it's relevant only for cluster, index and document t
 | ``index_static_columns``      | dynamic | type, index                  | **false**                                | If true and index_static_only is false, indexes static columns in the elasticsearch documents, otherwise, ignore static columns.                                                                                            |
 +-------------------------------+---------+------------------------------+------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-Sizing and tunning
+Sizing and tuning
 ------------------
 
-Basically, Elassandra requires much CPU than standelone Cassandra or Elasticsearch and Elassandra write throughput should be half the cassandra write throughput if you index all columns. If you only index a subset of columns, write performances would be better.
+Basically, Elassandra requires much CPU than standalone Cassandra or Elasticsearch and Elassandra write throughput should be half the Cassandra write throughput if you index all columns. If you only index a subset of columns, write performance would be better.
 
 Design recommendations :
 
@@ -179,8 +178,8 @@ System recommendations :
 * Set -Xms to the same value as -Xmx.
 * Ensure JNA and jemalloc are correctly installed and enabled.
 
-Write performances
-..................
+Write performance
+.................
 
 * By default, Elasticsearch analyzes the input data of all fields in a special **_all** field. If you don't need it, disable it.
 * By default, Elasticsearch all fields names in a special **_field_names** field. If you don't need it, disable it (elasticsearch-hadoop requires **_field_names** to be enabled).
@@ -189,8 +188,8 @@ Write performances
 * Disable ``index_on_compaction`` (Default is *false*) to avoid the Lucene segments merge overhead when compacting SSTables.
 * Index partitioning may increase write throughput by writing to several Elasticsearch indexes in parallel, but choose an efficient partition function implementation. For exemple, *String.format()* is much more faster that *Message.format()*.
 
-Search performances
-...................
+Search performance
+..................
 
 * Use 16 to 64 vnodes per node to reduce the complexity of the token_ranges filter.
 * Use the *RandomSearchStrategy* and increase the Cassandra Replication Factor to reduce the number of nodes requires for a search request.
