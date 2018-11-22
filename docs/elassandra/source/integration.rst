@@ -1,57 +1,57 @@
 Integration
 ===========
 
-Integration with an existing cassandra cluster
+Integration with an existing Cassandra cluster
 ----------------------------------------------
 
-Elassandra include a modified version of cassandra, available at `strapdata-cassandra repro <https://github.com/strapdata/cassandra>`_, 
-so **all nodes of a cluster should run elassandra binaries**. However, you can start a node with or without 
-the elasticsearch support.  Obviously, all nodes of a datacenter should run cassandra only or cassandra with 
-elasticsearch.
+Elassandra includes a modified version of Cassandra, available at `strapdata-cassandra repro <https://github.com/strapdata/cassandra>`_, 
+so **all nodes of a cluster should run Elassandra binaries**. However, you can start a node with or without 
+the Elasticsearch support.  Obviously, all nodes of a datacenter should run Cassandra only or Cassandra with 
+Elasticsearch.
 
-Rolling upgrade to elassandra
+Rolling upgrade to Elassandra
 .............................
 
-Before starting any elassandra node with elasticsearch enable, do a rolling replace of the cassandra binaries by the elassandra ones. For each node :
+Before starting any Elassandra node with Elasticsearch enabled, do a rolling replace of the Cassandra binaries with the Elassandra ones. For each node :
 
-* Install elassandra.
-* Replace the elassandra configuration files by the one from your existing cluster (cassandra.yml and snitch configuration file) 
-* Stop your cassandra node.
-* Restart cassandra ``elassandra bin/cassandra`` or cassandra with elasticsearch enable ``elassandra bin/cassandra -e``
+* Install Elassandra.
+* Replace the Elassandra configuration files (cassandra.yml and snitch configuration file) with the ones from your existing cluster 
+* Stop your Cassandra node.
+* Restart Cassandra ``elassandra bin/cassandra`` or Cassandra with Elasticsearch enabled ``elassandra bin/cassandra -e``
 
 
-Create a new elassandra datacenter
+Create a new Elassandra datacenter
 ..................................
 
-The overall procedure is similar the cassandra one describe on `Adding a datacenter to a cluster <https://docs.datastax.com/en/cassandra/3.0/cassandra/operations/opsAddDCToCluster.html#opsAddDCToCluster>`_.
+The overall procedure is similar to the Cassandra one described in `Adding a datacenter to a cluster <https://docs.datastax.com/en/cassandra/3.0/cassandra/operations/opsAddDCToCluster.html#opsAddDCToCluster>`_.
 
-For earch nodes in your new datacenter :
+For each node in your new datacenter :
 
-* Install elassandra.
+* Install Elassandra.
 * Set ``auto_bootstrap: false`` in your **conf/cassandra.yaml**.
-* Start cassandra-only nodes in your new datacenter and check that all nodes join the cluster.
+* Start Cassandra-only nodes in your new datacenter and check that all nodes join the cluster.
 
 .. code::
 
    bin/cassandra
 
-* Restart all nodes in your new datacenter with elasticsearch enable. You should see started shards but empty indices.
+* Restart all nodes in your new datacenter with Elasticsearch enabled. You should see started shards but empty indices.
 
 .. code::
 
    bin/cassandra -e
 
 * Set the replication factor of indexed keyspaces to one or more in your new datacenter.
-* Pull data from your existaing datacenter. 
+* Pull data from your existing datacenter. 
 
 .. code::
    
    nodetool rebuild <source-datacenter-name>
 
-After rebuild on all your new nodes, you should see the same number of document for each indices in your new and existing datacenters.
+After rebuilding all of your new nodes, you should see the same number of documents for each index in your new and existing datacenters.
 
 * Set ``auto_bootstrap: true`` (default value) in your **conf/cassandra.yaml**
-* Create new elasticsearch index or map some existing cassandra tables.
+* Create new Elasticsearch index or map some existing Cassandra tables.
 
 .. TIP::
    If you need to replay this procedure for a node :
@@ -61,10 +61,10 @@ After rebuild on all your new nodes, you should see the same number of document 
    * clear data, commitlogs and saved_cache directories.
 
 
-Installing an Elasticsearch plugins
+Installing Elasticsearch plugins
 -----------------------------------
 
-Elasticsearch plugin installation remains unchanged, see elasticsearch `plugin installation <https://www.elastic.co/guide/en/elasticsearch/plugins/5.5/installation.html>`_.
+Elasticsearch plugin installation remains unchanged, see Elasticsearch `plugin installation <https://www.elastic.co/guide/en/elasticsearch/plugins/5.5/installation.html>`_.
 
 * bin/plugin install <url>
 
@@ -72,7 +72,7 @@ Elasticsearch plugin installation remains unchanged, see elasticsearch `plugin i
 Running Kibana with Elassandra
 ------------------------------
 
-`Kibana <https://www.elastic.co/guide/en/kibana/5.5/introduction.html>`_ can run with Elassandra, providing a visualization tool for cassandra and elasticsearch data.
+`Kibana <https://www.elastic.co/guide/en/kibana/5.5/introduction.html>`_ can run with Elassandra, providing a visualization tool for Cassandra and Elasticsearch data.
 
 * If you want to load sample data from the `Kibana Getting started <https://www.elastic.co/guide/en/kibana/current/getting-started.html>`_, apply the following changes to logstash.jsonl with a sed command.
 
@@ -105,7 +105,7 @@ Running Kibana with Elassandra
 JDBC Driver sql4es + Elassandra
 -------------------------------
 
-The `Elasticsearch JDBC driver <https://github.com/Anchormen/sql4es>`_. can be used with elassandra. Here is a code example :
+The `Elasticsearch JDBC driver <https://github.com/Anchormen/sql4es>`_. can be used with Elassandra. Here is a code example :
 
 .. code:: java
 
@@ -126,10 +126,10 @@ The `Elasticsearch JDBC driver <https://github.com/Anchormen/sql4es>`_. can be u
 Running Spark with Elassandra
 -----------------------------
 
-For elassandra 5.5, a modified version of the `elasticsearch-hadoop <https://github.com/elastic/elasticsearch-hadoop>`_ connector is available for elassandra on the `strapdata repository <https://github.com/strapdata/elasticsearch-hadoop>`_. 
-This connector works with spark as describe in the elasticsearch documentation available at `elasticsearch/hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/index.html>`_.
+For Elassandra 5.5, a modified version of the `elasticsearch-hadoop <https://github.com/elastic/elasticsearch-hadoop>`_ connector is available for Elassandra on the `strapdata repository <https://github.com/strapdata/elasticsearch-hadoop>`_. 
+This connector works with spark as described in the Elasticsearch documentation available at `elasticsearch/hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/index.html>`_.
 
-For example, in order to submit a spark job in client mode.
+For example, in order to submit a spark job in client mode:
 
 .. code:: java
 

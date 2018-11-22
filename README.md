@@ -4,7 +4,7 @@
 
 ## [http://www.elassandra.io/](http://www.elassandra.io/)
 
-Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run as a plugin for [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serve as an Elasticsearch data and configuration store.
+Elassandra is a fork of [Elasticsearch](https://github.com/elastic/elasticsearch) modified to run as a plugin for [Apache Cassandra](http://cassandra.apache.org) in a scalable and resilient peer-to-peer architecture. Elasticsearch code is embedded in Cassanda nodes providing advanced search features on Cassandra tables and Cassandra serves as an Elasticsearch data and configuration store.
 
 ![Elassandra architecture](/docs/elassandra/source/images/elassandra1.jpg)
 
@@ -15,31 +15,30 @@ Project documentation is available at [doc.elassandra.io](http://doc.elassandra.
 ## Benefits of Elassandra
 
 For Cassandra users, elassandra provides Elasticsearch features :
-* Cassandra update are indexed in Elasticsearch.
+* Cassandra updates are indexed in Elasticsearch.
 * Full-text and spatial search on your Cassandra data.
 * Real-time aggregation (does not require Spark or Hadoop to GROUP BY)
 * Provide search on multiple keyspaces and tables in one query.
-* Provide automatic schema creation and support nested document using [User Defined Types](https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
-* Provide a read/write JSON REST access to Cassandra data.
+* Provide automatic schema creation and support nested documents using [User Defined Types](https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
+* Provide read/write JSON REST access to Cassandra data.
 * Numerous Elasticsearch plugins and products like [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html).
 
 For Elasticsearch users, elassandra provides useful features :
-* Elassandra is masterless, cluster state is managed through a [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
-* Elassandra is a sharded multi-master database, where Elasticsearch is sharded master-slave, Thus, Elassandra has no Single Point Of Write, helping to achieve high availability.
-* Elassandra inherits Cassandra data repair mechanisms (hinted handoff, read repair and nodetool repair) allowing to support **cross datacenter replication**.
+* Elassandra is masterless. Cluster state is managed through [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
+* Elassandra is a sharded multi-master database, where Elasticsearch is sharded master-slave. Thus, Elassandra has no Single Point Of Write, helping to achieve high availability.
+* Elassandra inherits Cassandra data repair mechanisms (hinted handoff, read repair and nodetool repair) providing support for **cross datacenter replication**.
 * When adding a node to an Elassandra cluster, only data pulled from existing nodes are re-indexed in Elasticsearch.
-* Cassandra could be your unique datastore for indexed and non-indexed data, it's easier to manage and secure. Source documents are now stored in Cassandra, reducing disk space if you need a NoSQL database and Elasticsearch.
-* Write operations are not more restricted to one primary shards, but distributed on all Cassandra nodes in a virtual datacenter. Number of shards does not limit your write throughput, just add some elassandra nodes to increase both read and write throughput.
-* Elasticsearch indices can be replicated between many Cassandra datacenters, allowing to write to the closest datacenter and search globally.
+* Cassandra could be your unique datastore for indexed and non-indexed data. It's easier to manage and secure. Source documents are now stored in Cassandra, reducing disk space if you need a NoSQL database and Elasticsearch.
+* Write operations are not restricted to one primary shard, but distributed across all Cassandra nodes in a virtual datacenter. The number of shards does not limit your write throughput. Adding elassandra nodes increases both read and write throughput.
+* Elasticsearch indices can be replicated among many Cassandra datacenters, allowing write to the closest datacenter and search globally.
 * The [cassandra driver](http://www.planetcassandra.org/client-drivers-tools/) is Datacenter and Token aware, providing automatic load-balancing and failover.
 
 ## Quick start
 
 #### Elasticsearch 6.x changes
 
-* Elasticsearch now supports only one document type per index backed by one Cassandra table. Unless you specify an elasticsearch type name in your mapping, data are stored in a cassandra table named **"_doc"**. If you want to search in many cassandra tables, you now need to create and search in many indices.
-* Elasticsearch 6.x manages shards consistency through several metadata fields (_primary_term, _seq_no, _version) that are not more used in elassandra because replication is fully managed by cassandra.
-
+* Elasticsearch now supports only one document type per index backed by one Cassandra table. Unless you specify an elasticsearch type name in your mapping, data is stored in a cassandra table named **"_doc"**. If you want to search many cassandra tables, you now need to create and search many indices.
+* Elasticsearch 6.x manages shard consistency through several metadata fields (_primary_term, _seq_no, _version) that are not used in elassandra because replication is fully managed by cassandra.
 
 #### Requirements
 
@@ -69,7 +68,7 @@ Then look-up in Cassandra:
 ```bash
 bin/cqlsh -c "SELECT * from twitter.\"_doc\""
 ```
-Behind the scene, Elassandra has created a new Keyspace `twitter` and table `_doc`.
+Behind the scenes, Elassandra has created a new Keyspace `twitter` and table `_doc`.
 
 Now, insert a row with CQL :
 ```CQL

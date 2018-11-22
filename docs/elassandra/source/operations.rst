@@ -40,19 +40,19 @@ You now have two rows in the Cassandra **twitter.tweet** table.
    (2 rows)
    
 
-Apache Cassandra is a column store that only support upsert operation. This means that deleting a cell or a row invovles the creation of a tombestone (insert a null) kept until
-the compaction later removes both the obsolete data and the tombstone (See this blog about `Cassandra tombstone <http://thelastpickle.com/blog/2016/07/27/about-deletes-and-tombstones.html>`_).
+Apache Cassandra is a column store that only support upsert operation. This means that deleting a cell or a row involves the creation of a tombstone (insert a null) kept until
+the compaction later removes both the obsolete data and the tombstone (See this blog about `Cassandra tombstones <http://thelastpickle.com/blog/2016/07/27/about-deletes-and-tombstones.html>`_).
 
-By default, when using the Elasticsearch API to replace a document by a new one,
-Elassandra insert a row corresponding to the new document including null for unset fields.
+By default, when using the Elasticsearch API to replace a document with a new one,
+Elassandra inserts a row corresponding to the new document including null for unset fields.
 Without these null (cell tombstones), old fields not present in the new document would be kept at the Cassandra level as zombie cells.
 
-Moreover, indexing with ``op_type=create`` (See `Elasticsearch indexing <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#operation-type>`_ ) require a Cassandra PAXOS transaction
-to check if the document exists in the underlying datacenter. This comes with useless performance cost if you use automatic generated
+Moreover, indexing with ``op_type=create`` (See `Elasticsearch indexing <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#operation-type>`_ ) requires a Cassandra PAXOS transaction
+to check if the document exists in the underlying datacenter. This comes with an unnecessary performance cost if you use an automatically generated
 document ID (See `Automatic ID generation <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#_automatic_id_generation>`_.
 ), as this ID will be the Cassandra primary key.
 
-Depending on *op_type* and document ID, CQL requests are issued as follow when indexing with the Elasticsearch API :
+Depending on the *op_type* and document ID, CQL requests are issued as follows when indexing with the Elasticsearch API:
 
 .. cssclass:: table-bordered
 
@@ -80,8 +80,8 @@ Now, let's see if the information was added by GETting it:
    curl -XGET 'http://localhost:9200/twitter/tweet/1?pretty=true'
    curl -XGET 'http://localhost:9200/twitter/tweet/2?pretty=true'
 
-Elasticsearch state now show reflect the new twitter index. Because we are currently running on one node, the **token_ranges** routing
-attribute match 100% of the ring from Long.MIN_VALUE to Long.MAX_VALUE.
+Elasticsearch state now reflects the new twitter index. Because we are currently running on one node, the **token_ranges** routing
+attribute matches 100% of the ring from Long.MIN_VALUE to Long.MAX_VALUE.
 
 .. code::
 
@@ -185,9 +185,9 @@ Updates
 _______
 
 In Cassandra, an update is an upsert operation (if the row does not exists, it's an insert).
-As Elasticsearch, Elassandra issue a GET operation before any update.
-Then, to keep the same semantic as Elasticsearch, update operations are converted to upsert with the ALL consistency level. Thus, later get operations are consistent.
-(You should consider `CQL UPDATE <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/update_r.html>`_ operation to avoid this performance cost)
+As Elasticsearch, Elassandra issues a GET operation before any update.
+Then, to keep the same semantics as Elasticsearch, update operations are converted to upserts with the ALL consistency level. Thus, later GET operations are consistent.
+(You should consider the `CQL UPDATE <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/update_r.html>`_ operation to avoid this performance cost)
 
 Scripted updates, upsert (scripted_upsert and doc_as_upsert) are also supported.
 
@@ -211,9 +211,9 @@ We can also use the JSON query language Elasticsearch provides instead of a quer
        }
    }'
 
-To avoid duplicates results when the Cassandra replication factor is greater than one, Elassandra adds a token_ranges filter to every queries distributed to all nodes. Because every document contains
-a _token fields computed at index-time, this ensure that a node only retrieves documents for the requested token ranges.
-The ``token_ranges`` parameter is a conjunction of Lucene `NumericRangeQuery <https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html>`_ build from the Elasticsearch routing tables to cover the entire Cassandra ring.
+To avoid duplicate results when the Cassandra replication factor is greater than one, Elassandra adds a token_ranges filter to every query distributed to all nodes. Because every document contains
+a _token fields computed at index-time, this ensures that a node only retrieves documents for the requested token ranges.
+The ``token_ranges`` parameter is a conjunction of Lucene `NumericRangeQuery <https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html>`_ built from the Elasticsearch routing tables to cover the entire Cassandra ring.
 .. code::
 
    curl -XGET 'http://localhost:9200/twitter/tweet/_search?pretty=true&token_ranges=(0,9223372036854775807)' -d '
@@ -223,7 +223,7 @@ The ``token_ranges`` parameter is a conjunction of Lucene `NumericRangeQuery <ht
        }
    }'
 
-Of course, if the token range filter cover all ranges (Long.MIN_VALUE to Long.MAX_VALUE), Elassandra automatically remove the useless filter.
+Of course, if the token range filter covers all ranges (Long.MIN_VALUE to Long.MAX_VALUE), Elassandra automatically removes the useless filter.
 
 Finally, you can restrict a query to the coordinator node with *preference=_only_local* parameter, for all token_ranges as shown below :
 
@@ -247,8 +247,8 @@ Elassandra supports various search strategies to distribute a search request ove
 +-----------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
 | Strategy                                                                    | Description                                                                                                                        |
 +=============================================================================+====================================================================================================================================+
-| ``org.elassandra.cluster.routing.PrimaryFirstSearchStrategy`` (**Default**) | Search on all alive nodes in the datacenter. All alive nodes responds for their primary token ranges, and for replica token ranges |
-|                                                                             | when there is some unavailable nodes. This strategy is always used to build the routing table in the cluster state.                |
+| ``org.elassandra.cluster.routing.PrimaryFirstSearchStrategy`` (**Default**) | Search on all alive nodes in the datacenter. All alive nodes respond for their primary token ranges, and for replica token ranges |
+|                                                                             | when there are some unavailable nodes. This strategy is always used to build the routing table in the cluster state.                |
 +-----------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
 | ``org.elassandra.cluster.routing.RandomSearchStrategy``                     | For each query, randomly distribute a search request to a minimum of nodes to reduce the network traffic.                          |
 |                                                                             | For example, if your underlying keyspace replication factor is N, a search only invloves 1/N of the nodes.                         |
@@ -265,7 +265,7 @@ You can create an index with the ``RandomSearchStrategy`` as shown below (or cha
    }'
 
 .. TIP::
-   When changing a keyspace replication factor, you can force an Elasticsearch routing table update by closing and re-opening all associated elasticsearch indices.
+   When changing a keyspace replication factor, you can force an Elasticsearch routing table update by closing and re-opening all associated Elasticsearch indices.
    To troubleshoot search request routing, set the logging level to **DEBUG** for **class org.elassandra.cluster.routing** in the **conf/logback.xml** file.  
 
 Caching features
@@ -276,16 +276,16 @@ Compared to Elasticsearch, Elassandra adds to each query a token ranges filter a
 Token Ranges Query Cache
 ........................
 
-Token ranges filter depends on the node or vnodes configuration, are quite stable and shared for all keyspaces having the same replication factor. These filters only change when the datacenter topology changes, for example when a node is temporary down or when a node is added to the datacenter.
-So, Elassandra use a cache to keep these queries, a conjunction of Lucene `NumericRangeQuery <https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html>`_ often reused for every search requests.
+Token ranges filter depends on the node or vnodes configuration, are quite stable and shared for all keyspaces having the same replication factor. These filters only change when the datacenter topology changes, for example when a node is temporarily down or when a node is added to the datacenter.
+So, Elassandra uses a cache to keep these queries, a conjunction of Lucene `NumericRangeQuery <https://lucene.apache.org/core/5_2_1/core/org/apache/lucene/search/NumericRangeQuery.html>`_ often reused for every search requests.
 
 As a classic caching strategy, the ``token_ranges_query_expire`` controls the expiration time of useless token ranges filter queries into memory. The default is 5 minutes.
 
 Token Ranges Bitset Cache
 .........................
 
-When enabled, the token ranges bitset cache keeps into memory the results of the token range filter for each Lucene segment. This in-memory bitset, acting as the liveDocs Lucene thumbstones mechanism, is then reused for subsequent Lucene search queries.
-For each Lucene segment, this document bitset is updated when the Lucene thumbstones count increase (it's a bitwise AND between the actual Lucene thumbstones and the token range filter result), or removed if the corresponding token ranges query is removed because unused from the token range query cache.
+When enabled, the token ranges bitset cache keeps in memory the results of the token range filter for each Lucene segment. This in-memory bitset, acting as the liveDocs Lucene tombstones mechanism, is then reused for subsequent Lucene search queries.
+For each Lucene segment, this document bitset is updated when the Lucene tombstones count increases (it's a bitwise AND between the actual Lucene thumbstones and the token range filter result), or removed if the corresponding token ranges query is removed because unused from the token range query cache.
 
 You can enable the token range bitset cache at index level by setting ``index.token_ranges_bitset_cache`` to *true* (Default is *false*), or configure the its default value for newly created indices at cluster or system levels.
 
@@ -320,7 +320,7 @@ Finally, you can check the in-memory size of the token ranges bitset cache with 
 Cassandra Key and Row Cache
 ...........................
 
-To improve CQL fetch requests response time, Cassandra provides key and row caching features configured for each Cassandra table as follow :
+To improve CQL fetch requests response time, Cassandra provides key and row caching features configured for each Cassandra table as follows :
 
 .. code::
 
@@ -330,12 +330,12 @@ To enable Cassandra row caching, set the ``row_cache_size_in_mb`` parameter in y
 
 .. TIP::
 
-   Elasticsearch also provides a Lucene query cache, used for segments having more than 10k documents, and for some frequent queries (queries done more than 5 or 20 times depending of the nature of the query). The shard request cache, can also be enable if the token range bitset cache is disabled. 
+   Elasticsearch also provides a Lucene query cache, used for segments having more than 10k documents, and for some frequent queries (queries done more than 5 or 20 times depending of the nature of the query). The shard request cache, can also be enabled if the token range bitset cache is disabled. 
 
 Create, delete and rebuild index
 ________________________________
 
-In order to create an Elasticsearch index from an existing Cassandra table, you can specify the underlying keyspace. In the following example, all columns but *message* is automatically mapped
+In order to create an Elasticsearch index from an existing Cassandra table, you can specify the underlying keyspace. In the following example, all columns but *message* are automatically mapped
 with the default mapping, and the *message* is explicitly mapped with a custom mapping.
 
 .. code::
@@ -355,24 +355,24 @@ with the default mapping, and the *message* is explicitly mapped with a custom m
 
 .. CAUTION::
 
-   Elassandra requires keyspaces configured with the *NetworkTopologyStrategy* in order to map the elasticsearch *index.number_of_replicas* to the cassandra replication factor minus one. You
-   can change your cassandra replication factor as explained `here <https://docs.datastax.com/en/cassandra/3.0/cassandra/operations/opsChangeKSStrategy.html>`_.
+   Elassandra requires keyspaces configured with the *NetworkTopologyStrategy* in order to map the Elasticsearch *index.number_of_replicas* to the cassandra replication factor minus one. You
+   can change your Cassandra replication factor as explained `here <https://docs.datastax.com/en/cassandra/3.0/cassandra/operations/opsChangeKSStrategy.html>`_.
 
 .. TIP::
 
-   By default, as the standard elasticsearch, index creation only returns a response to the client when all primary shards have been started, or the request times out (default is 30 seconds).
-   To emulate the elasticsearch routing table, shards hosted by dead nodes are primary or not according to the underlying Cassandra replication factor.
-   So, when there are some dead nodes, if the number of dead nodes is lower than the number of replicas in your create index request, index creation succeed immediately with shards_acknowledged=true and index status is yellow, 
-   otherwise, index creation timeouts, shards_acknowledged=false and the index status is red, meaning that search requests will be inconsistent. Finally, 
-   the elasticsearch parameter `wait_for_active_shards <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#index-wait-for-active-shards>`_ is useless in elassandra, because Cassandra ensure write consistency.
+   By default, as the standard Elasticsearch, index creation only returns a response to the client when all primary shards have been started, or the request times out (default is 30 seconds).
+   To emulate the Elasticsearch routing table, shards hosted by dead nodes are primary or not according to the underlying Cassandra replication factor.
+   So, when there are some dead nodes, if the number of dead nodes is lower than the number of replicas in your create index request, index creation succeeds immediately with shards_acknowledged=true and index status is yellow, 
+   otherwise, index creation times out, shards_acknowledged=false and the index status is red, meaning that search requests will be inconsistent. Finally, 
+   the Elasticsearch parameter `wait_for_active_shards <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#index-wait-for-active-shards>`_ is useless in Elassandra, because Cassandra ensurea write consistency.
 
-Deleting an Elasticsearch index does not remove any Cassandra data, it keeps the underlying Cassandra tables but remove Elasticsearch index files.
+Deleting an Elasticsearch index does not remove any Cassandra data, it keeps the underlying Cassandra tables but removes Elasticsearch index files.
 
 .. code::
 
    curl -XDELETE 'http://localhost:9200/twitter_index'
 
-To re-index your existing data, for example after a mapping change to index a new column, run a **nodetool rebuild_index** as follow :
+To re-index your existing data, for example after a mapping change to index a new column, run a **nodetool rebuild_index** as follows :
 
 .. code::
 
@@ -380,9 +380,9 @@ To re-index your existing data, for example after a mapping change to index a ne
 
 .. TIP::
    By default, rebuild index runs on a single thread. In order to improve re-indexing performance, Elassandra comes with a multi-threaded rebuild_index implementation. The **--threads** parameter allows to specify the number of threads dedicated to re-index a Cassandra table.
-   Number of indexing threads should be tuned carefully to avoid CPU exhaustion. Moreover, indexing throughput is limited by locking at the lucene level, but this limit can be exceeded by using a partitioned index invloving many independant shards. 
+   Number of indexing threads should be tuned carefully to avoid CPU exhaustion. Moreover, indexing throughput is limited by locking at the lucene level, but this limit can be exceeded by using a partitioned index invloving many independent shards.
 
-Re-index existing data rely on the Cassandra compaction manager. You can trigger a `Cassandra compaction <http://docs.datastax.com/en/cassandra/2.0/cassandra/operations/ops_configure_compaction_t.html>`_ when :
+Re-index existing data relies on the Cassandra compaction manager. You can trigger a `Cassandra compaction <http://docs.datastax.com/en/cassandra/2.0/cassandra/operations/ops_configure_compaction_t.html>`_ when :
 
 * Creating the first Elasticsearch index on a Cassandra table with existing data automatically involves an index rebuild executed by the compaction manager,
 * Running a `nodetool rebuild_index <https://docs.datastax.com/en/cassandra/2.1/cassandra/tools/toolsRebuildIndex.html>`_  command,
@@ -403,8 +403,8 @@ To stop a compaction task (including a rebuild index task), you can either use a
 Open, close index
 _________________
 
-Open and close operations allow to close and open an Elasticsearch index. Even if the Cassandra secondary index remains in the CQL schema while the index is closed, it has no overhead, it's just a dummy function call.
-Obviously, when several Elasticsearch indices are associated to the same Cassandra table, data are indexed in opened indices, but not in closed ones.
+Open and close operations allow an Elasticsearch index to be opened and closed. Even if the Cassandra secondary index remains in the CQL schema while the index is closed, it has no overhead. It's just a dummy function call.
+Obviously, when several Elasticsearch indices are associated with the same Cassandra table, data is indexed in opened indices, but not in closed ones.
 
 .. code::
 
@@ -415,21 +415,21 @@ Obviously, when several Elasticsearch indices are associated to the same Cassand
 .. warning::
 
    Elasticsearch `translog <https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-translog.html>`_ is disabled in Elassandra, 
-   so you might loose some indexed documents when closing an index if ``index.flush_on_close`` is *false*.
+   so you might lose some indexed documents when closing an index if ``index.flush_on_close`` is *false*.
 
 Flush, refresh index
 ____________________
 
 A refresh makes all index updates performed since the last refresh available for search. By default, refresh is scheduled every second. By design, setting refresh=true on a index operation
-has no effect with Elassandra, because write operations are converted to CQL queries and documents are indexed later by a custom secondary index. So, the per-index refresh interval should be set carfully according to your needs.
+has no effect with Elassandra, because write operations are converted to CQL queries and documents are indexed later by a custom secondary index. So, the per-index refresh interval should be set carefully according to your needs.
 
 .. code::
 
       curl -XPOST 'localhost:9200/my_index/_refresh'
       
-A flush basically write a lucene index on disk. Because document **_source** is stored in Cassandra table in elassandra, it make sense to execute
+A flush basically write a lucene index to disk. Because document **_source** is stored in the Cassandra table in Elassandra, it make sense to execute
 a ``nodetool flush <keyspace> <table>`` to flush both Cassandra Memtables to SSTables and lucene files for all associated Elasticsearch indices.
-Moreover, remember that a ``nodetool snapshot``  also involve a flush before creating a snapshot.
+Moreover, remember that a ``nodetool snapshot``  also involves a flush before creating a snapshot.
 
 .. code::
 
@@ -455,8 +455,8 @@ Because cleanup involves by a Delete-by-query in Elasticsearch indices, it is re
 Backup and restore
 __________________
 
-By design, Elassandra synchronously update Elasticsearch indices on Cassandra write path and flushing a Cassandra table invlove a flush of all associated elasticsearch indices. Therefore,
-elassandra can backup data by taking a snapshot of Cassandra SSTables and Elasticsearch Lucene files on the same time on each node, as follow :
+By design, Elassandra synchronously updates Elasticsearch indices on the Cassandra write path. Flushing a Cassandra table involves a flush of all associated Elasticsearch indices. Therefore,
+Elassandra can backup data by taking a snapshot of Cassandra SSTables and Elasticsearch Lucene files on the same time on each node, as follows :
 
 1. ``nodetool snapshot --tag <snapshot_name> <keyspace_name>``
 2. For all indices associated to <keyspace_name>
@@ -468,27 +468,27 @@ Of course, rebuilding Elasticsearch indices after a Cassandra restore is another
 Restoring a snapshot
 --------------------
 
-Restoring Cassandra SSTable and Elasticsearch Lucene files allow to recover a keyspace and its associated Elasticsearch indices without stopping any node.
-(but it is not intended to duplicate data to another virtual datacenter or cluster)
+Restoring Cassandra SSTable and Elasticsearch Lucene files allows recovery of a keyspace and its associated Elasticsearch indices without stopping any node
+(but it is not intended to duplicate data to another virtual datacenter or cluster).
 
 To perform a hot restore of Cassandra keyspace and its Elasticsearch indices :
 
-1. Close all Elasticsearch indices associated to the keyspace
-2. Trunacte all Cassandra tables of the keyspace (because of delete operation later than the snapshot)
+1. Close all Elasticsearch indices associated with the keyspace
+2. Truncate all Cassandra tables of the keyspace (because of delete operation later than the snapshot)
 3. Restore the Cassandra table with your snapshot on each node
-4. Restore Elasticsearch snapshot on each nodes (if ES index is open during nodetool refresh, this cause Elasticsearch index rebuild by the compaction manager, usually 2 threads).
+4. Restore Elasticsearch snapshot on each node (if ES index is open during nodetool refresh, this causes Elasticsearch index rebuild by the compaction manager, usually 2 threads).
 5. Load restored SSTables with a ``nodetool refresh``
 6. Open all indices associated to the keyspace
 
 Point in time recovery
 ----------------------
 
-Point-in-time recovery is intended to recover the data at any time. This require a restore of the last available Cassandra and Elasticsearch snapshot before your recovery point and then apply
-the commitlogs from this restore point to the recovery point. In this case, replaying commitlogs on startup also re-index data in Elasticsearch indices, ensuring consistency at the recovery point.
+Point-in-time recovery is intended to recover the data at any time. This requires a restore of the last available Cassandra and Elasticsearch snapshot before your recovery point and then applies
+the commitlogs from this restore point to the recovery point. In this case, replaying commitlogs on startup also re-indexes data in Elasticsearch indices, ensuring consistency at the recovery point.
 
-Of course, when stopping a production cluster is not possible, you should restore on a temporary cluster, make a full snapshot, and restore it on your production cluster as describe by the hot restore procedure.
+Of course, when stopping a production cluster is not possible, you should restore on a temporary cluster, make a full snapshot, and restore it on your production cluster as described by the hot restore procedure.
 
-To perform a point-in-time-recovery of a Cassandra keyspace and its Elasticsearch indices, for all nodes in the same time :
+To perform a point-in-time-recovery of a Cassandra keyspace and its Elasticsearch indices, for all nodes at the same time :
 
 1. Stop all the datacenter nodes.
 2. Restore the last Cassandra snapshot before the restore point and commitlogs from that point to the restore point
@@ -505,11 +505,11 @@ It is possible to restore a Cassandra keyspace and its associated Elasticsearch 
 
 If you are restoring into a new cluster having the same number of nodes, configure it with the same token ranges
 (see https://docs.datastax.com/en/Cassandra/2.1/cassandra/operations/ops_snapshot_restore_new_cluster.html). In this case,
-you can restore from Cassandra and Elasticsearch snapshots as describe in step 1, 3 and 4 of the snapshot restore procedure.
+you can restore from Cassandra and Elasticsearch snapshots as described in steps 1, 3 and 4 of the snapshot restore procedure.
 
-Otherwise, when the number of node and the token ranges from the source and desination cluster does not match, use the sstableloader to restore your Cassandra snapshots
-(see https://docs.datastax.com/en/cassandra/2.0/cassandra/tools/toolsBulkloader_t.html ). This approach is much time-and-io-consuming because all rows
-are read from the sstables and injected into the Cassandra cluster, causing an full Elasticsearch index rebuild.
+Otherwise, when the number of nodes and the token ranges from the source and destination cluster do not match, use the sstableloader to restore your Cassandra snapshots
+(see https://docs.datastax.com/en/cassandra/2.0/cassandra/tools/toolsBulkloader_t.html ). This approach is very time-and-io-consuming because all rows
+are read from the sstables and injected into the Cassandra cluster, causing a full Elasticsearch index rebuild.
 
 Data migration
 ______________
@@ -517,9 +517,9 @@ ______________
 Migrating from Cassandra to Elassandra
 --------------------------------------
 
-Because Elassandra is Cassandra, you can upgrade an exiting Cassandra cluster or just a datacenter to Elassandra, as soon as your Cassandra version is compatible with the Elassandra one :
+Because Elassandra is Cassandra, you can upgrade an existing Cassandra cluster or just a datacenter to Elassandra, as soon as your Cassandra version is compatible with the Elassandra one :
 
-* Stop you cassandra nodes.
+* Stop your Cassandra nodes.
 * Start Elassandra with your existing data directory (containing data, commitlog, saved_caches).
 
 Before creating your first Elasticsearch index, deploy the following classes in a jar on all your Cassandra-only nodes to avoid a ClassNotFoundException. 
@@ -528,27 +528,27 @@ You can extract these classes from *lib/elasticsearch-<version>.jar* :
 * org/elassandra/index/ExtendedElasticSecondaryIndex$DummySecondaryIndex.class
 * org/elassandra/index/ExtendedElasticSecondaryIndex.class
 
-You can move back to standard Cassandra by restarting on cassandra binaries or just start Cassandra from your Elassandra installation:
+You can move back to standard Cassandra by restarting Cassandra binaries or just starting Cassandra from your Elassandra installation:
 
-* For tarball installation, run bin/cassandra (don't use the *-e* flag to enable elasticsearch)
+* For tarball installation, run bin/cassandra (don't use the *-e* flag to enable Elasticsearch)
 * For APT installation, set CASSANDRA_DAEMON in /etc/default/cassandra
 * For RPM installation, set CASSANDRA_DAEMON in /etc/sysconfig/cassandra
 
-Cassandra automatically build new secondary indices with one thread. If you want to rebuild faster, stop the on-going rebuild on each nodes 
+Cassandra automatically builds new secondary indices with one thread. If you want to rebuild faster, stop the on-going rebuild on each node 
 and restart it with the desired number of threads.
 
 Migrating from Elasticsearch to Elassandra
 ------------------------------------------
 
-Because of data distribution and because Elassandra store the _source document in Cassandra SSTablen, restoring an Elasticsearch snapshot won't work. In order
+Because of data distribution and because Elassandra stores the _source document in Cassandra SSTables, restoring an Elasticsearch snapshot won't work. In order
 to import data from an existing Elasticsearch cluster to Elassandra, you can use the `logstash elasticsearch input plugin <https://www.elastic.co/guide/en/logstash/5.5/plugins-inputs-elasticsearch.html>`_ 
 and the `cassandra output plugin <https://github.com/PerimeterX/logstash-output-cassandra>`_. 
 
-How to change the elassandra cluster name
+How to change the Elassandra cluster name
 _________________________________________
 
-Because the cluster name is a part of the Elasticsearch directory structure, managing snapshots with shell scripts could be a nightmare when cluster name contains space caracters.
-Therfore, it is recommanded to avoid space caraters in your elassandra cluster name.
+Because the cluster name is part of the Elasticsearch directory structure, managing snapshots with shell scripts could be a nightmare when the cluster name contains space caracters.
+Therefore, it is recommended to avoid space characters in your Elassandra cluster name.
 
 On all nodes:
 
