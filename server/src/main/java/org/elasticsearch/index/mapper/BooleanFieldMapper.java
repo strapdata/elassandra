@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.index.IndexOptions;
@@ -222,11 +224,6 @@ public class BooleanFieldMapper extends FieldMapper {
                 upperTerm == null ? null : indexedValueForSearch(upperTerm),
                 includeLower, includeUpper);
         }
-        
-        @Override
-        public String cqlType() {
-            return "boolean";
-        }
     }
 
     protected BooleanFieldMapper(String simpleName, MappedFieldType fieldType, MappedFieldType defaultFieldType,
@@ -313,9 +310,9 @@ public class BooleanFieldMapper extends FieldMapper {
             builder.field("null_value", fieldType().nullValue());
         }
     }
-    
+
     @Override
-    public String cqlType() {
-        return "boolean";
+    public CQL3Type CQL3Type() {
+        return CQL3Type.Native.BOOLEAN;
     }
 }

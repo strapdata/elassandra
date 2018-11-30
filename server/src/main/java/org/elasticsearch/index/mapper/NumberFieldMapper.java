@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.lucene.document.DoublePoint;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FloatPoint;
@@ -262,13 +264,12 @@ public class NumberFieldMapper extends FieldMapper {
                     throw new IllegalArgumentException("[half_float] supports only finite values, but got [" + value + "]");
                 }
             }
-            
 
             @Override
-            String cqlType() {
-                return "float";
+            public CQL3Type CQL3Type() {
+                return CQL3Type.Native.FLOAT;
             }
-            
+
             @Override
             Object cqlValue(Object value) {
                 return ((Number)value).floatValue();
@@ -363,12 +364,12 @@ public class NumberFieldMapper extends FieldMapper {
                     throw new IllegalArgumentException("[float] supports only finite values, but got [" + value + "]");
                 }
             }
-            
+
             @Override
-            String cqlType() {
-                return "float";
+            public CQL3Type CQL3Type() {
+                return CQL3Type.Native.FLOAT;
             }
-            
+
             @Override
             Object cqlValue(Object value) {
                 return ((Number)value).floatValue();
@@ -454,12 +455,12 @@ public class NumberFieldMapper extends FieldMapper {
                     throw new IllegalArgumentException("[double] supports only finite values, but got [" + value + "]");
                 }
             }
-            
+
             @Override
-            String cqlType() {
-                return "double";
+            public CQL3Type CQL3Type() {
+                return CQL3Type.Native.DOUBLE;
             }
-            
+
             @Override
             Object cqlValue(Object value) {
                 return ((Number)value).doubleValue();
@@ -520,12 +521,12 @@ public class NumberFieldMapper extends FieldMapper {
             Number valueForSearch(Number value) {
                 return value.byteValue();
             }
-            
+
             @Override
-            String cqlType() {
-                return "tinyint";
+            public CQL3Type CQL3Type() {
+                return CQL3Type.Native.TINYINT;
             }
-            
+
             @Override
             Object cqlValue(Object value) {
                 return ((Number)value).byteValue();
@@ -582,12 +583,12 @@ public class NumberFieldMapper extends FieldMapper {
             Number valueForSearch(Number value) {
                 return value.shortValue();
             }
-            
+
             @Override
-            String cqlType() {
-                return "smallint";
+            public CQL3Type CQL3Type() {
+                return CQL3Type.Native.SMALLINT;
             }
-            
+
             @Override
             Object cqlValue(Object value) {
                 return ((Number)value).shortValue();
@@ -703,10 +704,10 @@ public class NumberFieldMapper extends FieldMapper {
                 }
                 return fields;
             }
-            
+
             @Override
-            String cqlType() {
-                return "int";
+            public CQL3Type CQL3Type() {
+                return CQL3Type.Native.INT;
             }
         },
         LONG("long", NumericType.LONG) {
@@ -822,10 +823,10 @@ public class NumberFieldMapper extends FieldMapper {
                 }
                 return fields;
             }
-            
+
             @Override
-            String cqlType() {
-                return "bigint";
+            public CQL3Type CQL3Type() {
+                return CQL3Type.Native.BIGINT;
             }
 
             @Override
@@ -863,8 +864,8 @@ public class NumberFieldMapper extends FieldMapper {
             return value;
         }
 
-        abstract String cqlType();
-        
+        abstract CQL3Type CQL3Type();
+
         Object cqlValue(Object value) {
             return ((Number)value).intValue();
         }
@@ -1009,15 +1010,15 @@ public class NumberFieldMapper extends FieldMapper {
                 return new DocValueFormat.Decimal(format);
             }
         }
-        
+
         @Override
         public Object cqlValue(Object value) {
             return type.cqlValue(value);
         }
-        
+
         @Override
-        public String cqlType() {
-            return this.type.cqlType();
+        public CQL3Type CQL3Type() {
+            return this.type.CQL3Type();
         }
     }
 
@@ -1118,7 +1119,7 @@ public class NumberFieldMapper extends FieldMapper {
     @Override
     public void createField(ParseContext context, Object value) throws IOException {
         final boolean includeInAll = context.includeInAll(this.includeInAll, this);
-        
+
         Number numericValue = null;
         if (value != null) {
             try {
@@ -1140,7 +1141,7 @@ public class NumberFieldMapper extends FieldMapper {
         if (value == null) {
             return;
         }
-        
+
         if (includeInAll) {
             context.allEntries().addText(fieldType().name(), value.toString(), fieldType().boost());
         }
@@ -1154,7 +1155,7 @@ public class NumberFieldMapper extends FieldMapper {
             createFieldNamesField(context, context.doc().getFields());
         }
     }
-    
+
     @Override
     protected void doMerge(Mapper mergeWith, boolean updateAllTypes) {
         super.doMerge(mergeWith, updateAllTypes);
@@ -1189,9 +1190,10 @@ public class NumberFieldMapper extends FieldMapper {
             builder.field("include_in_all", false);
         }
     }
-    
+
     @Override
-    public String cqlType() {
-        return fieldType().type.cqlType();
+    public CQL3Type CQL3Type() {
+        return fieldType().type.CQL3Type();
     }
+
 }

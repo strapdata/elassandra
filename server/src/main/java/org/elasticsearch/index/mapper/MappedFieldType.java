@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexOptions;
@@ -77,8 +78,9 @@ public abstract class MappedFieldType extends FieldType {
     private boolean cqlPartialUpdate = true;
     private boolean cqlPartitionKey = false;
     private boolean cqlStaticColumn = false;
+    private boolean cqlClusteringKeyDesc = false;
     private int cqlPrimaryKeyOrder = -1;
-    
+
     protected MappedFieldType(MappedFieldType ref) {
         super(ref);
         this.name = ref.name();
@@ -91,13 +93,14 @@ public abstract class MappedFieldType extends FieldType {
         this.nullValue = ref.nullValue();
         this.nullValueAsString = ref.nullValueAsString();
         this.eagerGlobalOrdinals = ref.eagerGlobalOrdinals;
-        
+
         this.cqlCollection = ref.cqlCollection;
         this.cqlStruct = ref.cqlStruct;
         this.cqlPartialUpdate = ref.cqlPartialUpdate;
         this.cqlPartitionKey = ref.cqlPartitionKey;
         this.cqlStaticColumn = ref.cqlStaticColumn;
         this.cqlPrimaryKeyOrder = ref.cqlPrimaryKeyOrder;
+        this.cqlClusteringKeyDesc = ref.cqlClusteringKeyDesc;
     }
 
     public MappedFieldType() {
@@ -153,13 +156,14 @@ public abstract class MappedFieldType extends FieldType {
             Objects.equals(cqlPartialUpdate, fieldType.cqlPartialUpdate) &&
             Objects.equals(cqlPartitionKey, fieldType.cqlPartitionKey) &&
             Objects.equals(cqlStaticColumn, fieldType.cqlStaticColumn) &&
+            Objects.equals(cqlClusteringKeyDesc, fieldType.cqlClusteringKeyDesc) &&
             Objects.equals(cqlPrimaryKeyOrder, fieldType.cqlPrimaryKeyOrder);
     }
 
     public CqlCollection cqlCollection() {
         return this.cqlCollection;
     }
-    
+
     public void cqlCollection(CqlCollection cqlCollection) {
         this.cqlCollection = cqlCollection;
     }
@@ -169,7 +173,7 @@ public abstract class MappedFieldType extends FieldType {
         if (this.cqlCollection.equals(CqlCollection.SET)) return "set";
         return "";
     }
-    
+
 
     public CqlStruct cqlStruct() {
         return this.cqlStruct;
@@ -182,35 +186,43 @@ public abstract class MappedFieldType extends FieldType {
     public boolean cqlPartialUpdate() {
         return this.cqlPartialUpdate;
     }
-    
+
     public void cqlPartialUpdate(boolean cqlPartialUpdate) {
         this.cqlPartialUpdate = cqlPartialUpdate;
     }
-    
+
     public boolean cqlPartitionKey() {
         return this.cqlPartitionKey;
     }
-    
+
     public void cqlPartitionKey(boolean cqlPartitionKey) {
         this.cqlPartitionKey = cqlPartitionKey;
     }
-    
+
     public boolean cqlStaticColumn() {
         return this.cqlStaticColumn;
     }
-    
+
     public void cqlStaticColumn(boolean cqlStaticColumn) {
         this.cqlStaticColumn = cqlStaticColumn;
     }
-    
+
     public int cqlPrimaryKeyOrder() {
         return this.cqlPrimaryKeyOrder;
     }
-    
+
     public void cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
         this.cqlPrimaryKeyOrder = cqlPrimaryKeyOrder;
     }
-    
+
+    public boolean cqlClusteringKeyDesc() {
+        return cqlClusteringKeyDesc;
+    }
+
+    public void cqlClusteringKeyDesc(boolean cqlClusteringKeyDesc) {
+        this.cqlClusteringKeyDesc = cqlClusteringKeyDesc;
+    }
+
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), name, boost, docValues, indexAnalyzer, searchAnalyzer, searchQuoteAnalyzer,
@@ -392,19 +404,20 @@ public abstract class MappedFieldType extends FieldType {
         return value;
     }
 
-    
+
     public Object cqlValue(Object value, AbstractType atype) {
         return cqlValue(value);
     }
 
+
     public Object cqlValue(Object value) {
         return value;
     }
-    
-    public String cqlType() {
-        return "text";
+
+    public CQL3Type CQL3Type() {
+        return CQL3Type.Native.TEXT;
     }
-    
+
     /** Returns true if the field is searchable.
      *
      */

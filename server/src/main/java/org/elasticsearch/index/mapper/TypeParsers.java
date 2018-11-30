@@ -59,6 +59,7 @@ public class TypeParsers {
     public static final String CQL_UDT_NAME = "cql_udt_name";
     public static final String CQL_MANDATORY = "cql_mandatory";
     public static final String CQL_STATIC_COLUMN = "cql_static_column";
+    public static final String CQL_CLUSTERING_KEY_DESC = "cql_clustering_key_desc";
     public static final String CQL_PARTITION_KEY = "cql_partition_key";
     public static final String CQL_PRIMARY_KEY_ORDER = "cql_primary_key_order";
 
@@ -268,6 +269,9 @@ public class TypeParsers {
             } else if (propName.equals(CQL_PRIMARY_KEY_ORDER)) {
                 builder.cqlPrimaryKeyOrder(nodeIntegerValue(propNode));
                 iterator.remove();
+            } else if (propName.equals(CQL_CLUSTERING_KEY_DESC)) {
+                builder.cqlClusteringKeyDesc(nodeBooleanValue(name, CQL_CLUSTERING_KEY_DESC, propNode, parserContext));
+                iterator.remove();
             } else if (propName.equals(TypeParsers.CQL_COLLECTION)) {
                 String value = StringUtils.lowerCase(propNode.toString());
                 switch (value) {
@@ -321,6 +325,7 @@ public class TypeParsers {
                 iterator.remove();
             }
         }
+        builder.cqlCheck();
     }
 
     public static boolean parseMultiField(FieldMapper.Builder builder, String name, Mapper.TypeParser.ParserContext parserContext,

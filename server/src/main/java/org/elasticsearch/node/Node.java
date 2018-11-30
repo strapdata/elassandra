@@ -228,11 +228,11 @@ public class Node implements Closeable {
     private final LocalNodeFactory localNodeFactory;
     private final NodeService nodeService;
     private final NamedXContentRegistry xContentRegistry;
-    
+
     private final ClusterService clusterService;
     private TransportService transportService;
     private CassandraDiscovery discovery;
-    
+
     /**
      * Constructs a node with the given settings.
      *
@@ -390,16 +390,16 @@ public class Node implements Closeable {
                 ClusterModule.getNamedXWriteables().stream())
                 .flatMap(Function.identity()).collect(toList()));
             //modules.add(new RepositoriesModule(this.environment, pluginsService.filterPlugins(RepositoryPlugin.class), xContentRegistry));
-            final MetaStateService metaStateService = new MetaStateService(settings, nodeEnvironment, xContentRegistry);
+            final MetaStateService metaStateService = new MetaStateService(settings, nodeEnvironment, xContentRegistry, clusterService);
             clusterService.setMetaStateService(metaStateService);
-            
+
             final IndicesService indicesService = new IndicesService(settings, pluginsService, nodeEnvironment, xContentRegistry,
                     analysisModule.getAnalysisRegistry(),
                 clusterModule.getIndexNameExpressionResolver(), indicesModule.getMapperRegistry(), namedWriteableRegistry,
                 threadPool, settingsModule.getIndexScopedSettings(), circuitBreakerService, bigArrays, scriptModule.getScriptService(),
                 clusterService, client, metaStateService);
             clusterService.setIndicesService(indicesService);
-            
+
             Collection<Object> pluginComponents = pluginsService.filterPlugins(Plugin.class).stream()
                 .flatMap(p -> p.createComponents(client, clusterService, threadPool, resourceWatcherService,
                                                  scriptModule.getScriptService(), xContentRegistry, environment, nodeEnvironment,
@@ -605,14 +605,14 @@ public class Node implements Closeable {
         transportService = injector.getInstance(TransportService.class);
         transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
         transportService.start();
-        
+
         discovery = (CassandraDiscovery) injector.getInstance(Discovery.class);
         final ClusterState initialClusterState = discovery.initClusterState(transportService.getLocalNode());
-        
+
         final NodeConnectionsService nodeConnectionsService = injector.getInstance(NodeConnectionsService.class);
         nodeConnectionsService.start();
         clusterService.setNodeConnectionsService(nodeConnectionsService);
-        
+
         clusterService.start();
 
         injector.getInstance(IndicesService.class).start();
@@ -631,7 +631,7 @@ public class Node implements Closeable {
     public Node start() throws NodeValidationException {
         Logger logger = Loggers.getLogger(Node.class, NODE_NAME_SETTING.get(settings));
         logger.info("starting ...");
-        
+
         // hack around dependency injection problem (for now...)
         pluginLifecycleComponents.forEach(LifecycleComponent::start);
 
@@ -645,7 +645,7 @@ public class Node implements Closeable {
         nodeService.getMonitorService().start();
 
         injector.getInstance(ResourceWatcherService.class).start();
-        
+
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
         /*
         TransportService transportService = injector.getInstance(TransportService.class);
@@ -679,7 +679,7 @@ public class Node implements Closeable {
 
         assert clusterService.localNode().equals(localNodeFactory.getNode())
             : "clusterService has a different local node than the factory provided";
-        
+
         discovery.startInitialJoin();
         /*
         // tribe nodes don't have a master so we shouldn't register an observer         s
@@ -719,12 +719,12 @@ public class Node implements Closeable {
 
         // create elastic_admin if not exists after joining the ring and before allowing metadata update.
         clusterService().createOrUpdateElasticAdminKeyspace();
-        
+
         // Cassandra started => release metadata update blocks.
         gatewayService().enableMetaDataPersictency();
-        
+
         transportService.acceptIncomingRequests();
-        
+
         if (NetworkModule.HTTP_ENABLED.get(settings)) {
             injector.getInstance(HttpServerTransport.class).start();
         }
@@ -739,10 +739,10 @@ public class Node implements Closeable {
         }
 
         logger.info("Elasticsearch started state={}", clusterService.state().toString());
-        
+
         // Added for esrally when started in foreground.
-        System.out.println("Elassandra started"); 
-        
+        System.out.println("Elassandra started");
+
         logger.info("started");
 
         pluginsService.filterPlugins(ClusterPlugin.class).forEach(ClusterPlugin::onNodeStarted);
@@ -930,11 +930,11 @@ public class Node implements Closeable {
     public synchronized ClusterService clusterService() {
         return this.clusterService;
     }
-   
+
     public synchronized CassandraGatewayService gatewayService() {
         return this.injector.getInstance(CassandraGatewayService.class);
     }
-   
+
     /**
      * Creates a new {@link CircuitBreakerService} based on the settings provided.
      * @see #BREAKER_TYPE_KEY
@@ -1019,7 +1019,7 @@ public class Node implements Closeable {
             return localNode.get();
         }
     }
-    
+
     public NamedXContentRegistry getNamedXContentRegistry() {
         return xContentRegistry;
     }

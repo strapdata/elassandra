@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.common.geo.ShapeRelation;
 import org.elasticsearch.common.joda.DateMathParser;
@@ -61,7 +63,7 @@ public abstract class SimpleMappedFieldType extends MappedFieldType {
     }
 
     @Override
-    public String cqlType() {
-        return "text";
+    public CQL3Type CQL3Type() {
+        return CQL3Type.Native.TEXT;
     }
 }

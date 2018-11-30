@@ -26,6 +26,8 @@ import com.google.common.collect.Maps;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.config.ColumnDefinition.ClusteringOrder;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.CQLFragmentParser;
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -40,16 +42,17 @@ import org.apache.cassandra.db.marshal.SetType;
 import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.DelegatingAnalyzerWrapper;
 import org.apache.lucene.index.Term;
+import org.elassandra.cluster.SchemaManager;
 import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.ElasticsearchGenerationException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.logging.DeprecationLogger;
@@ -193,19 +196,23 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
     public String keyspace() {
         return getIndexSettings().getKeyspace();
     }
-    
+
     public String table() {
         return getIndexSettings().getTable();
     }
-    
+
+    public String tableOptions() {
+        return getIndexSettings().getTableOptions();
+    }
+
     public boolean dynamic() {
         return this.dynamic;
     }
-    
+
     private void buildNativeOrUdtMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
         CQL3Type cql3type = type.asCQL3Type();
         if (cql3type instanceof CQL3Type.Native) {
-            String esType = ClusterService.cqlMapping.get(cql3type.toString());
+            String esType = SchemaManager.cqlMapping.get(cql3type.toString());
             if (esType != null) {
                 mapping.put("type", esType);
             } else {
@@ -227,8 +234,8 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
             mapping.put("properties", properties);
         }
     }
-        
-     
+
+
     private void buildCollectionMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
         if (type.isCollection()) {
             if (type instanceof ListType) {
@@ -253,15 +260,15 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
             buildNativeOrUdtMapping(mapping, type );
         }
     }
-    
+
     /**
      * Mapping property to discover mapping from CQL schema for columns matching the provided regular expression.
      */
     public static String DISCOVER = "discover";
-    
+
     public Map<String, Object> discoverTableMapping(final String type, Map<String, Object> mapping) throws IOException, SyntaxException, ConfigurationException {
         final String columnRegexp = (String)mapping.get(DISCOVER);
-        final String cfName = ClusterService.typeToCfName(keyspace(), type);
+        final String cfName = SchemaManager.typeToCfName(keyspace(), type);
         if (columnRegexp != null) {
             mapping.remove(DISCOVER);
             Pattern pattern =  Pattern.compile(columnRegexp);
@@ -271,19 +278,20 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                 mapping.put("properties", properties);
             }
             String ksName = keyspace();
+            KeyspaceMetadata ksm = Schema.instance.getKSMetaDataSafe(ksName);
             try {
-                CFMetaData metadata = ClusterService.getCFMetaData(ksName, cfName);
+                CFMetaData metadata = SchemaManager.getCFMetaData(ksName, cfName);
                 List<String> pkColNames = new ArrayList<String>(metadata.partitionKeyColumns().size() + metadata.clusteringColumns().size());
                 for(ColumnDefinition cd: Iterables.concat(metadata.partitionKeyColumns(), metadata.clusteringColumns())) {
                     pkColNames.add(cd.name.toString());
                 }
-                
-                UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT column_name, type FROM system_schema.columns WHERE keyspace_name=? and table_name=?", 
+
+                UntypedResultSet result = QueryProcessor.executeOnceInternal("SELECT column_name, type FROM system_schema.columns WHERE keyspace_name=? and table_name=?",
                         new Object[] { keyspace(), cfName });
                 for (Row row : result) {
                     String columnName = row.getString("column_name");
-                    if (row.has("type") && 
-                        pattern.matcher(columnName).matches() && 
+                    if (row.has("type") &&
+                        pattern.matcher(columnName).matches() &&
                        !columnName.startsWith("_") &&
                        !ElasticSecondaryIndex.ES_QUERY.equals(columnName) &&
                        !ElasticSecondaryIndex.ES_OPTIONS.equals(columnName)) {
@@ -299,16 +307,19 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                                 props.put(TypeParsers.CQL_PARTITION_KEY, true);
                             }
                         }
-                        if (metadata.getColumnDefinition(new ColumnIdentifier(columnName, true)).isStatic()) {
+                        ColumnDefinition colDef = metadata.getColumnDefinition(new ColumnIdentifier(columnName, true));
+                        if (colDef.isStatic()) {
                             props.put(TypeParsers.CQL_STATIC_COLUMN, true);
                         }
-                        
+                        if (colDef.clusteringOrder() == ClusteringOrder.DESC) {
+                            props.put(TypeParsers.CQL_CLUSTERING_KEY_DESC, true);
+                        }
                         CQL3Type.Raw rawType = CQLFragmentParser.parseAny(CqlParser::comparatorType, row.getString("type"), "CQL type");
-                        AbstractType<?> atype =  rawType.prepare(ksName).getType();
+                        AbstractType<?> atype =  rawType.prepare(ksm).getType();
                         buildCollectionMapping(props, atype);
                     }
                 }
-                if (logger.isDebugEnabled()) 
+                if (logger.isDebugEnabled())
                     logger.debug("mapping {} : {}", cfName, mapping);
                 return mapping;
             } catch (IOException | SyntaxException | ConfigurationException e) {
@@ -318,7 +329,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
         }
         return mapping;
     }
-    
+
     public boolean hasNested() {
         return this.hasNested;
     }

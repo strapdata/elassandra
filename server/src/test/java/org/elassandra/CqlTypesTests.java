@@ -17,6 +17,7 @@ package org.elassandra;
 
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import com.google.common.net.InetAddresses;
+
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.TupleType;
@@ -24,10 +25,10 @@ import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.lucene.search.join.ScoreMode;
+import org.elassandra.cluster.Serializer;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.geo.GeoUtils;
 import org.elasticsearch.common.settings.Settings;
@@ -42,7 +43,11 @@ import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.*;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -140,8 +145,8 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         createIndex("ks");
         ensureGreen("ks");
 
-        String[] types = new String[] { "text","int","smallint","tinyint","bigint","double","float","boolean","blob","timestamp","inet","uuid" };
-        Object[] values = new Object[] { "foo", 1, (short)1, (byte)1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID() };
+        String[] types = new String[] { "text","int","smallint","tinyint","bigint","double","float","boolean","blob","timestamp","date","inet","uuid" };
+        Object[] values = new Object[] { "foo", 1, (short)1, (byte)1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), (int)LocalDate.now().toEpochDay(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID() };
         for(int i=0; i < types.length; i++) {
             String type = types[i];
             Object value = values[i];
@@ -182,9 +187,9 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         ensureGreen("ks");
 
         Date now = new Date();
-        String[] types = new String[] { "text", "int","smallint","tinyint", "bigint","double","float","boolean","blob","timestamp","inet","uuid","timeuuid","timeuuid" };
-        String[] names = new String[] { "text", "int","smallint","tinyint", "bigint","double","float","boolean","blob","timestamp","inet","uuid","timeuuid","timeuuid2" };
-        Object[] values = new Object[] { "foo", 1, (short)1, (byte)1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID(), UUIDGen.getTimeUUID(now.getTime()), UUIDGen.getTimeUUID(now.getTime()) };
+        String[] types = new String[] { "text", "int","smallint","tinyint", "bigint","double","float","boolean","blob","timestamp","date", "inet","uuid","timeuuid","timeuuid" };
+        String[] names = new String[] { "text", "int","smallint","tinyint", "bigint","double","float","boolean","blob","timestamp","date2", "inet","uuid","timeuuid","timeuuid2" };
+        Object[] values = new Object[] { "foo", 1, (short)1, (byte)1, 2L, new Double(3.14), new Float(3.14), true, ByteBuffer.wrap("toto".getBytes("UTF-8")), new Date(), (int)LocalDate.now().toEpochDay(), InetAddresses.forString("127.0.0.1"), UUID.randomUUID(), UUIDGen.getTimeUUID(now.getTime()), UUIDGen.getTimeUUID(now.getTime()) };
         int randomCk = randomInt(types.length-1);
         int randomVal= randomInt(types.length-1);
         for(int i=0; i < types.length; i++) {
@@ -228,14 +233,16 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         for(int i=0; i < types.length; i++) {
             String type = types[i];
             String name = names[i];
-            System.out.println("delete pk name="+name+" type="+type+" value="+values[i]+" ck type="+types[randomCk]+" value="+values[randomCk]);
-            process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"DELETE FROM ks.t%s WHERE pk%s = ? AND ck >= ?", name, name), values[i], values[randomCk]);
-            if (!type.equals("blob") && !types[randomCk].equals("blob")) // blob not supported for delete by query
+            if (!type.equals("blob") && !types[randomCk].equals("blob")) {
+                System.out.println("delete pk name="+name+" type="+type+" value="+values[i]+" ck type="+types[randomCk]+" value="+values[randomCk]);
+                process(ConsistencyLevel.ONE,String.format(Locale.ROOT,"DELETE FROM ks.t%s WHERE pk%s = ? AND ck >= ?", name, name), values[i], values[randomCk]);
+                // blob not supported for delete by query
                 assertThat(client().prepareSearch()
                     .setIndices("ks"+i)
                     .setTypes(String.format(Locale.ROOT,"t%s", name))
                     .setQuery(QueryBuilders.matchAllQuery())
                     .get().getHits().getTotalHits(), equalTo(0L));
+            }
         }
     }
     
@@ -251,8 +258,8 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
 
         GeoPoint geo_point = new GeoPoint(-25.068403, 29.411767);
         ByteBuffer[] elements = new ByteBuffer[] {
-                ClusterService.serialize("test", "geoloc", DoubleType.instance, GeoUtils.LATITUDE, -25.068403, null),
-                ClusterService.serialize("test", "geoloc", DoubleType.instance, GeoUtils.LONGITUDE, 29.411767, null)
+                Serializer.serialize("test", "geoloc", DoubleType.instance, GeoUtils.LATITUDE, -25.068403, null),
+                Serializer.serialize("test", "geoloc", DoubleType.instance, GeoUtils.LONGITUDE, 29.411767, null)
         };
         process(ConsistencyLevel.ONE,"INSERT INTO test.geoloc (geohash, id, coord, comment) VALUES (?,?,?,?)",
                 geo_point.geohash(), UUID.randomUUID(), TupleType.buildValue(elements), "blabla");
@@ -605,5 +612,19 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(resp.getHits().getTotalHits(), equalTo(2L));
         assertThat(resp.getFailedShards(), equalTo(0));
     }
+    
+    // #222 test
+    @Test
+    public void testDateInPartitionKey() throws Exception {
+        createIndex("example");
+        ensureGreen("example");
+        
+        process(ConsistencyLevel.ONE,"CREATE TABLE example.sessions ( id timeuuid, project_id uuid, day date, PRIMARY KEY ((project_id, day), id)) WITH CLUSTERING ORDER BY (id DESC);");
+        assertAcked(client().admin().indices().preparePutMapping("example").setType("sessions").setSource("{ \"sessions\" : { \"discover\" : \".*\"}}", XContentType.JSON).get());
+        process(ConsistencyLevel.ONE,"INSERT INTO example.sessions (id, project_id, day) VALUES (now(), uuid(), toDate(now()));");
+        
+        SearchResponse resp = client().prepareSearch().setIndices("example").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+     }
 }
 

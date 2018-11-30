@@ -19,6 +19,8 @@
 
 package org.elasticsearch.cluster.metadata;
 
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
@@ -27,6 +29,7 @@ import org.elasticsearch.action.admin.indices.open.OpenIndexClusterStateUpdateRe
 import org.elasticsearch.action.support.ActiveShardsObserver;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.ack.OpenIndexClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlock;
@@ -48,6 +51,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -92,12 +96,17 @@ public class MetaDataIndexStateService extends AbstractComponent {
             }
 
             @Override
-            public boolean doPresistMetaData() {
-                return true;
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
             }
-            
+
             @Override
-            public ClusterState execute(ClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) throws Exception {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
                 Set<IndexMetaData> indicesToClose = new HashSet<>();
                 for (Index index : request.indices()) {
                     final IndexMetaData indexMetaData = currentState.metaData().getIndexSafe(index);
@@ -175,12 +184,17 @@ public class MetaDataIndexStateService extends AbstractComponent {
             }
 
             @Override
-            public boolean doPresistMetaData() {
-                return true;
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
             }
-            
+
             @Override
-            public ClusterState execute(ClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) throws Exception {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
                 List<IndexMetaData> indicesToOpen = new ArrayList<>();
                 for (Index index : request.indices()) {
                     final IndexMetaData indexMetaData = currentState.metaData().getIndexSafe(index);

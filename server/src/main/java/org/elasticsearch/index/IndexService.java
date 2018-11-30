@@ -261,6 +261,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         return this.mapperService.getIndexAnalyzers();
     }
 
+    @Override
     public MapperService mapperService() {
         return mapperService;
     }

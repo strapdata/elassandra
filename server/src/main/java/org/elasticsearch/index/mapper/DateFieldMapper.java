@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.SimpleDateType;
 import org.apache.cassandra.serializers.SimpleDateSerializer;
@@ -406,7 +408,7 @@ public class DateFieldMapper extends FieldMapper {
             }
             return date;
         }
-        
+
         @Override
         public Object cqlValue(Object value) {
             if (value == null) {
@@ -423,7 +425,7 @@ public class DateFieldMapper extends FieldMapper {
             }
             return dateTimeFormatter.parser().parseDateTime(value.toString()).toDate();
         }
-        
+
         @Override
         public DocValueFormat docValueFormat(@Nullable String format, DateTimeZone timeZone) {
             FormatDateTimeFormatter dateTimeFormatter = this.dateTimeFormatter;
@@ -434,11 +436,6 @@ public class DateFieldMapper extends FieldMapper {
                 timeZone = DateTimeZone.UTC;
             }
             return new DocValueFormat.DateTime(dateTimeFormatter, timeZone);
-        }
-        
-        @Override
-        public String cqlType() {
-            return "timestamp";
         }
     }
 
@@ -557,7 +554,7 @@ public class DateFieldMapper extends FieldMapper {
                 context.allEntries().addText(fieldType().name(), dateAsString, boost);
             }
         }
-        
+
         if (fieldType().indexOptions() != IndexOptions.NONE) {
             context.doc().add(new LongPoint(fieldType().name(), value));
         }
@@ -571,7 +568,7 @@ public class DateFieldMapper extends FieldMapper {
         }
         super.createField(context, object);
     }
-    
+
     @Override
     protected void doMerge(Mapper mergeWith, boolean updateAllTypes) {
         super.doMerge(mergeWith, updateAllTypes);
@@ -608,9 +605,9 @@ public class DateFieldMapper extends FieldMapper {
             builder.field("locale", fieldType().dateTimeFormatter().locale());
         }
     }
-    
+
     @Override
-    public String cqlType() {
-        return "timestamp";
+    public CQL3Type CQL3Type() {
+        return CQL3Type.Native.TIMESTAMP;
     }
 }

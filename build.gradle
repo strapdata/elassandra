@@ -36,15 +36,14 @@ import com.github.jk1.license.render.*;
 import com.github.jk1.license.filter.*;
 
 plugins {
-  id 'com.github.jk1.dependency-license-report' version '1.2'
+  id 'com.github.jk1.dependency-license-report' version '1.3'
 }
 
 apply plugin: 'com.github.jk1.dependency-license-report'
 
 licenseReport {
     renderers = [new CsvReportRenderer(separator:';'), new TextReportRenderer(), new InventoryHtmlReportRenderer('index.html', 'Elassandra License Report')]
-    filters = [new LicenseBundleNormalizer('buildSrc/src/main/resources/license-normalizer-bundle.json', true)]
-    //projects = [project] + project.subprojects.findAll { !it.name.contains('plugin') && !it.name.contains('qa') }
+    filters = [new LicenseBundleNormalizer(bundlePath: rootProject.file('buildSrc/src/main/resources/license-normalizer-bundle.json'))]
     projects = [project] + project.subprojects
     excludes = [ 'com.strapdata.elasticsearch:elasticsearch-core' ]
 }

@@ -73,9 +73,24 @@ public enum ShardRoutingState {
                 throw new IllegalStateException("No routing state mapped for [" + value + "]");
         }
     }
-    
-    
-    
+
+    @Override
+    public String toString() {
+        switch (this.value) {
+        case 1:
+            return "UNASSIGNED";
+        case 2:
+            return "INITIALIZING";
+        case 3:
+            return "STARTED";
+        case 4:
+            return "RELOCATING";
+        default:
+            return "UNKNOWN";
+        }
+    }
+
+
     @JsonCreator
     public static ShardRoutingState fromJsonValue(Integer value) {
         return fromValue(value.byteValue());

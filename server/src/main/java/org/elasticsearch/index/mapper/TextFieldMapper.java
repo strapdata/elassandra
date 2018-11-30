@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
@@ -369,7 +370,7 @@ public class TextFieldMapper extends FieldMapper {
         if (value == null) {
             return;
         }
-        
+
         if (context.includeInAll(includeInAll, this)) {
             context.allEntries().addText(fieldType().name(), value, fieldType().boost());
         }
@@ -381,10 +382,10 @@ public class TextFieldMapper extends FieldMapper {
                 createFieldNamesField(context, context.doc().getFields());
             }
         }
-        
+
         super.createField(context, object); // for multi fields.
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -440,7 +441,7 @@ public class TextFieldMapper extends FieldMapper {
     }
 
     @Override
-    public String cqlType() {
-        return "text";
+    public CQL3Type CQL3Type() {
+        return CQL3Type.Native.TEXT;
     }
 }

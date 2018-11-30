@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.UUIDType;
@@ -261,11 +262,11 @@ public final class KeywordFieldMapper extends FieldMapper {
             }
             if (atype instanceof UUIDType || atype instanceof TimeUUIDType) {
                 // #74 workaround
-                return UUID.fromString(value.toString()); 
+                return UUID.fromString(value.toString());
             }
             return value.toString();
         }
-        
+
         @Override
         public Object cqlValue(Object value) {
             if (value == null) {
@@ -273,7 +274,7 @@ public final class KeywordFieldMapper extends FieldMapper {
             }
             return value.toString();
         }
-        
+
         @Override
         protected BytesRef indexedValueForSearch(Object value) {
             if (searchAnalyzer() == Lucene.KEYWORD_ANALYZER) {
@@ -391,11 +392,11 @@ public final class KeywordFieldMapper extends FieldMapper {
         String value = (object instanceof UUID) ? object.toString() : (String) object; // #74 uuid stored as string
         if (value == null)
             value = fieldType().nullValueAsString();
-        
+
         if (value == null || value.length() > ignoreAbove) {
             return;
         }
-        
+
         final NamedAnalyzer normalizer = fieldType().normalizer();
         if (normalizer != null) {
             try (TokenStream ts = normalizer.tokenStream(name(), value)) {
@@ -434,7 +435,7 @@ public final class KeywordFieldMapper extends FieldMapper {
         }
         super.createField(context, object);
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -471,10 +472,9 @@ public final class KeywordFieldMapper extends FieldMapper {
             builder.nullField("normalizer");
         }
     }
-    
-    
+
     @Override
-    public String cqlType() {
-        return "text";
+    public CQL3Type CQL3Type() {
+        return org.apache.cassandra.cql3.CQL3Type.Native.TEXT;
     }
 }

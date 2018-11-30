@@ -33,8 +33,10 @@ import org.elasticsearch.cluster.NamedDiffable;
 import org.elasticsearch.cluster.NamedDiffableValueSerializer;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
+import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.HppcMaps;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -93,7 +95,10 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         GATEWAY,
 
         /* Custom metadata should be stored as part of a snapshot */
-        SNAPSHOT
+        SNAPSHOT,
+
+        /* Custom metadata should be stored as port of the cassandra schema */
+        CQL
     }
 
     /**
@@ -139,11 +144,15 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     public static final MetaData EMPTY_META_DATA = builder().build();
 
     public static final String CONTEXT_MODE_PARAM = "context_mode";
+
     public static final String CONTEXT_CASSANDRA_PARAM = "cassandra_mode";
-    
+
+    public static final String CONTEXT_CQL_PARAM = XContentContext.CQL.toString();
+
     public static final String CONTEXT_MODE_SNAPSHOT = XContentContext.SNAPSHOT.toString();
 
     public static final String CONTEXT_MODE_GATEWAY = XContentContext.GATEWAY.toString();
+
 
     public static final String GLOBAL_STATE_FILE_PREFIX = "global-";
 
@@ -204,6 +213,11 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
 
     public String clusterUUID() {
         return this.clusterUUID;
+    }
+
+    @Override
+    public String toString() {
+        return this.clusterUUID+"/"+this.version;
     }
 
     /**
@@ -857,7 +871,13 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
 
         public Builder put(IndexMetaData.Builder indexMetaDataBuilder) {
             // we know its a new one, increment the version and store
-            indexMetaDataBuilder.version(indexMetaDataBuilder.version() + 1);
+            return put(indexMetaDataBuilder, true);
+        }
+
+        public Builder put(IndexMetaData.Builder indexMetaDataBuilder, boolean incrementVersion) {
+            if (incrementVersion) {
+                indexMetaDataBuilder.version(indexMetaDataBuilder.version() + 1);
+            }
             IndexMetaData indexMetaData = indexMetaDataBuilder.build();
             indices.put(indexMetaData.getIndex().getName(), indexMetaData);
             return this;
@@ -1011,7 +1031,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             this.clusterUUID = clusterUUID;
             return this;
         }
-        
+
         public Builder incrementVersion() {
             this.version = version + 1;
             this.clusterUUID = SystemKeyspace.getLocalHostId().toString();
@@ -1097,13 +1117,21 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         public static String toXContent(MetaData metaData) throws IOException {
             return toXContent(metaData, ToXContent.EMPTY_PARAMS);
         }
-        
+
         public static String toXContent(MetaData metaData, ToXContent.Params params) throws IOException {
             XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
             builder.startObject();
             toXContent(metaData, builder, params);
             builder.endObject();
             return builder.string();
+        }
+
+        public static byte[] toBytes(MetaData metaData, ToXContent.Params params) throws IOException {
+            XContentBuilder builder = XContentFactory.contentBuilder(XContentType.SMILE);
+            builder.startObject();
+            toXContent(metaData, builder, params);
+            builder.endObject();
+            return BytesReference.toBytes(builder.bytes());
         }
 
         public static void toXContent(MetaData metaData, XContentBuilder builder, ToXContent.Params params) throws IOException {
@@ -1132,7 +1160,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             }
             builder.endObject();
 
-            if ((context == XContentContext.API || params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) && !metaData.indices().isEmpty()) {
+            if ((context == XContentContext.API || context == XContentContext.CQL || params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) && !metaData.indices().isEmpty()) {
                 builder.startObject("indices");
                 for (IndexMetaData indexMetaData : metaData) {
                     IndexMetaData.Builder.toXContent(indexMetaData, builder, params);
@@ -1240,8 +1268,8 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             return Builder.fromXContent(parser);
         }
     };
-    
-    
+
+
     public static final ToXContent.Params CASSANDRA_FORMAT_PARAMS;
     static {
         Map<String, String> params = new HashMap<>(2);
@@ -1249,7 +1277,15 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         params.put(CONTEXT_CASSANDRA_PARAM, "true");
         CASSANDRA_FORMAT_PARAMS = new MapParams(params);
     }
-    
+
+    public static final ToXContent.Params CQL_FORMAT_PARAMS;
+    static {
+        Map<String, String> params = new HashMap<>(2);
+        params.put("binary", "false");
+        params.put(CONTEXT_CQL_PARAM, "true");
+        CQL_FORMAT_PARAMS = new MapParams(params);
+    }
+
     /**
      * State format for {@link MetaData} to write to and load from cassandra
      */
@@ -1265,4 +1301,19 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             return Builder.fromXContent(parser);
         }
     };
+
+    public static final MetaDataStateFormat<MetaData> CQL_FORMAT = new MetaDataStateFormat<MetaData>(XContentType.SMILE, "cql-global-") {
+
+        @Override
+        public void toXContent(XContentBuilder builder, MetaData state) throws IOException {
+            Builder.toXContent(state, builder, CQL_FORMAT_PARAMS);
+        }
+
+        @Override
+        public MetaData fromXContent(XContentParser parser) throws IOException {
+            return Builder.fromXContent(parser);
+        }
+    };
+
+
 }

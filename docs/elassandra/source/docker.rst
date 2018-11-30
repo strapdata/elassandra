@@ -89,9 +89,12 @@ When you start the Elassandra image, you can adjust the configuration of the Ela
 Files locations
 ...............
 
-- ``/opt/elassandra-|release|``: elassandra installation
+Docker elassanra image is based on the debian package installation:
+
+- ``/etc/cassandra``: elassandra configuration
+- ``/usr/share/cassandra``: elassandra installation
 - ``/var/lib/cassandra``: data (sstables, lucene segment, commitlogs, ...)
-- ``var/log/cassandra``: logs files.
+- ``/var/log/cassandra``: logs files.
 
 ``/var/lib/cassandra`` is automatically managed as a docker volume. But it's a good target to bind mount from the host filesystem.
 

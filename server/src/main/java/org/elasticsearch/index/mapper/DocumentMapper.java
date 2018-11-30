@@ -26,10 +26,11 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
+import org.elassandra.cluster.QueryManager;
+import org.elassandra.cluster.SchemaManager;
 import org.elassandra.index.mapper.internal.NodeFieldMapper;
 import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.ElasticsearchGenerationException;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.text.Text;
@@ -135,7 +136,7 @@ public class DocumentMapper implements ToXContentFragment {
         if (this.cqlFragments == null) {
             synchronized(this) {
                 if (this.cqlFragments == null)
-                    this.cqlFragments = new CqlFragments(ClusterService.getCFMetaData(mapperService.keyspace(), ClusterService.typeToCfName(mapperService.keyspace(), type)));
+                    this.cqlFragments = new CqlFragments(SchemaManager.getCFMetaData(mapperService.keyspace(), SchemaManager.typeToCfName(mapperService.keyspace(), type)));
             }
         }
         return this.cqlFragments;
@@ -183,7 +184,7 @@ public class DocumentMapper implements ToXContentFragment {
         if (this.columnDefs == null) {
             synchronized(this) {
                 if (this.columnDefs == null) {
-                    CFMetaData metadata = ClusterService.getCFMetaData(mapperService.keyspace(), ClusterService.typeToCfName(mapperService.keyspace(), type));
+                    CFMetaData metadata = SchemaManager.getCFMetaData(mapperService.keyspace(), SchemaManager.typeToCfName(mapperService.keyspace(), type));
                     this.columnDefs = new HashMap<String, ColumnDefinition>();
                     for(Mapper fieldMapper : fieldMappers) {
                         if (fieldMapper.name().indexOf('.') == -1) {

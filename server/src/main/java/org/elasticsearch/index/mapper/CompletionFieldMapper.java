@@ -18,6 +18,7 @@
  */
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.index.IndexableField;
@@ -31,8 +32,8 @@ import org.apache.lucene.search.suggest.document.FuzzyCompletionQuery;
 import org.apache.lucene.search.suggest.document.PrefixCompletionQuery;
 import org.apache.lucene.search.suggest.document.RegexCompletionQuery;
 import org.apache.lucene.search.suggest.document.SuggestField;
+import org.elassandra.cluster.SchemaManager;
 import org.elasticsearch.Version;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.ParsingException;
 import org.elasticsearch.common.settings.Settings;
@@ -326,11 +327,6 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         public String typeName() {
             return CONTENT_TYPE;
         }
-        
-        @Override
-        public String cqlType() {
-            return ClusterService.COMPLETION_TYPE;
-        }
 
         @Override
         public void checkCompatibility(MappedFieldType fieldType, List<String> conflicts, boolean strict) {
@@ -616,7 +612,7 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         Map<String, Set<CharSequence>> contextsMap = new HashMap<>();
         Set<String> inputs = new HashSet<>();
         int weight = 1;
-        
+
         if (value instanceof String) {
             inputs.add((String)value);
         } else {
@@ -626,10 +622,10 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
                 for (String input : (List<String>)map.get("input"))
                     inputs.add(input);
             }
-            
+
             if (map.get("weight") != null)
                 weight = (Integer)map.get("weight");
-            
+
             if (map.get("contexts") != null) {
                 if (fieldType().hasContextMappings() == false) {
                     throw new IllegalArgumentException("contexts field is not supported for field: [" + fieldType().name() + "]");
@@ -656,14 +652,14 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
                 }
             }
         }
-        
+
         Map<String, CompletionInputMetaData> inputMap = new HashMap<>();
         for (String input : inputs) {
             if (inputMap.containsKey(input) == false || inputMap.get(input).weight < weight) {
                 inputMap.put(input, new CompletionInputMetaData(contextsMap, weight));
             }
         }
-        
+
         // index
         for (Map.Entry<String, CompletionInputMetaData> completionInput : inputMap.entrySet()) {
             String input = completionInput.getKey();
@@ -691,7 +687,7 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         }
         super.createField(context,value);
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -703,9 +699,9 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         CompletionFieldMapper fieldMergeWith = (CompletionFieldMapper) mergeWith;
         this.maxInputLength = fieldMergeWith.maxInputLength;
     }
-    
+
     @Override
-    public String cqlType() {
-        return ClusterService.COMPLETION_TYPE;
+    public CQL3Type CQL3Type() {
+        throw new UnsupportedOperationException();
     }
 }

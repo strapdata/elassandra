@@ -281,4 +281,47 @@ queries using the same token_range filter. This drastically improves search perf
 
 Finally, the CQL fetch overhead can be mitigated by using keys and rows Cassandra caching, eventually using the off-heap caching features of Cassandra.
 
+Mapping and CQL schema management
+---------------------------------
 
+Elassandra has no master node to manage the elasticsearch mapping and all nodes can update the elasticsearch mapping. When such a mapping update occurs, 
+elassandra updates the elasticsearch mapping stored as a row in the cassandra table **elastic_admin.metadata** by playing a PAXOS transaction to ensure no concurrent update occurs.
+When the PAXOS transaction succeed, the coordinator node updates and broadcasts its gossip fields X2 with its *host_id*/*version_number*. Version number increase on each mapping update. 
+Then, all other nodes catch this X2 change, reload their mapping and annonce the same X2 once the new elasticsearch mapping is applied. As the result, all nodes sharing the same elasticsearch mapping should
+have the same X2 value and you can check this with **nodetool gossipinfo**, as show here with X2 = e5df0651-8608-4590-92e1-4e523e4582b9/1.
+
+.. code::
+
+    nodetool gossipinfo
+    127.0.0.2/127.0.0.2
+      generation:1440659838
+      heartbeat:396197
+      DC:DC1
+      NET_VERSION:8
+      SEVERITY:-1.3877787807814457E-17
+      X1:{"twitter":3}
+      X2:e5df0651-8608-4590-92e1-4e523e4582b9/1
+      RELEASE_VERSION:2.1.8
+      RACK:RAC2
+      STATUS:NORMAL,-8879901672822909480
+      SCHEMA:ce6febf4-571d-30d2-afeb-b8db9d578fd1
+      INTERNAL_IP:127.0.0.2
+      RPC_ADDRESS:127.0.0.2
+      LOAD:131314.0
+      HOST_ID:e5df0651-8608-4590-92e1-4e523e4582b9
+    localhost/127.0.0.1
+      generation:1440659739
+      heartbeat:396550
+      DC:DC1
+      NET_VERSION:8
+      SEVERITY:2.220446049250313E-16
+      X1:{"twitter":3}
+      X2:e5df0651-8608-4590-92e1-4e523e4582b9/1
+      RELEASE_VERSION:2.1.8
+      RACK:RAC1
+      STATUS:NORMAL,-4318747828927358946
+      SCHEMA:ce6febf4-571d-30d2-afeb-b8db9d578fd1
+      RPC_ADDRESS:127.0.0.1
+      INTERNAL_IP:127.0.0.1
+      LOAD:154824.0
+      HOST_ID:74ae1629-0149-4e65-b790-cd25c7406675

@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper;
 
 import com.carrotsearch.hppc.ObjectArrayList;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
@@ -147,7 +148,7 @@ public class BinaryFieldMapper extends FieldMapper {
         public Query termQuery(Object value, QueryShardContext context) {
             throw new QueryShardException(context, "Binary fields do not support searching");
         }
-        
+
         @Override
         public Object cqlValue(Object value) {
             if (value == null) {
@@ -155,11 +156,6 @@ public class BinaryFieldMapper extends FieldMapper {
             }
             BytesReference br = valueForDisplay(value);
             return ByteBuffer.wrap(BytesReference.toBytes(br));
-        }
-
-        @Override
-        public String cqlType() {
-            return "blob";
         }
     }
 
@@ -214,7 +210,7 @@ public class BinaryFieldMapper extends FieldMapper {
         if (value == null) {
             return;
         }
-        
+
         if (fieldType().stored()) {
             context.doc().add(new Field(fieldType().name(), value, fieldType()));
         }
@@ -235,7 +231,7 @@ public class BinaryFieldMapper extends FieldMapper {
         }
         super.createField(context,value);
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -281,8 +277,7 @@ public class BinaryFieldMapper extends FieldMapper {
     }
 
     @Override
-    public String cqlType() {
-        return "blob";
+    public CQL3Type CQL3Type() {
+        return CQL3Type.Native.BLOB;
     }
-
 }

@@ -67,7 +67,7 @@ author = u'Strapdata'
 # The short X.Y version.
 version = u'6.2.3'
 # The full version, including alpha/beta/rc tags.
-release = u'6.2.3.7'
+release = u'6.2.3.8'
 
 tgz_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.tar.gz".format(release)
 deb_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.deb".format(release)
@@ -128,6 +128,9 @@ pygments_style = 'sphinx'
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
 
+# Add custom javascript
+def setup(app):
+    app.add_javascript('custom.js')
 
 # -- Options for HTML output ----------------------------------------------
 

@@ -301,8 +301,9 @@ public final class IndexSettings {
 
     private final String keyspace;
     private final String table;
+    private final String tableOptions;
     private volatile boolean tokenRangesBitsetCache;
-    
+
     /**
      * The maximum number of refresh listeners allows on this shard.
      */
@@ -389,10 +390,11 @@ public final class IndexSettings {
         this.queryStringAllowLeadingWildcard = QUERY_STRING_ALLOW_LEADING_WILDCARD.get(nodeSettings);
         this.defaultAllowUnmappedFields = scopedSettings.get(ALLOW_UNMAPPED);
         this.durability = scopedSettings.get(INDEX_TRANSLOG_DURABILITY_SETTING);
-        
+
         this.keyspace = indexMetaData.keyspace();
         this.table = indexMetaData.table();
-        
+        this.tableOptions = indexMetaData.tableOptions();
+
         defaultFields = scopedSettings.get(DEFAULT_FIELD_SETTING);
         syncInterval = INDEX_TRANSLOG_SYNC_INTERVAL_SETTING.get(settings);
         refreshInterval = scopedSettings.get(INDEX_REFRESH_INTERVAL_SETTING);
@@ -460,7 +462,7 @@ public final class IndexSettings {
         scopedSettings.addSettingsUpdateConsumer(MAX_TERMS_COUNT_SETTING, this::setMaxTermsCount);
         scopedSettings.addSettingsUpdateConsumer(MAX_SLICES_PER_SCROLL, this::setMaxSlicesPerScroll);
         scopedSettings.addSettingsUpdateConsumer(DEFAULT_FIELD_SETTING, this::setDefaultFields);
-        
+
         scopedSettings.addSettingsUpdateConsumer(IndexMetaData.INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING, this::setTokenRangesBitsetCache);
     }
 
@@ -491,15 +493,19 @@ public final class IndexSettings {
     private void setTokenRangesBitsetCache(Boolean enable) {
         this.tokenRangesBitsetCache = enable;
     }
-    
+
     public String getKeyspace() {
         return this.keyspace;
     }
-    
+
     public String getTable() {
         return this.table;
     }
-    
+
+    public String getTableOptions() {
+        return this.tableOptions;
+    }
+
     /**
      * Returns the settings for this index. These settings contain the node and index level settings where
      * settings that are specified on both index and node level are overwritten by the index settings.

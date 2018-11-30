@@ -425,7 +425,7 @@ public class FetchPhase implements SearchPhase {
                     requiredColumns.add(SourceFieldMapper.NAME);
                 }
                 if (requiredColumns.size() > 0) {
-                    String query = clusterService.buildFetchQuery(
+                    String query = clusterService.getQueryManager().buildFetchQuery(
                             indexService, fieldVisitor.uid().type(),
                             requiredColumns.toArray(new String[requiredColumns.size()]), staticDocument, docMapper.getColumnDefinitions());
                     Logger logger = Loggers.getLogger(FetchPhase.class);
@@ -443,20 +443,20 @@ public class FetchPhase implements SearchPhase {
         UntypedResultSet rs = UntypedResultSet.create(resultSet);
         if (!rs.isEmpty()) {
             Row row = rs.one();
-            Map<String, Object> mapObject = clusterService.rowAsMap(indexService, fieldVisitor.uid().type(), row);
+            Map<String, Object> mapObject = clusterService.getQueryManager().rowAsMap(indexService, fieldVisitor.uid().type(), row);
             if (searchContext.includeNode()) {
                 mapObject.put(NodeFieldMapper.NAME, clusterService.state().nodes().getLocalNodeId());
             }
             if (fieldVisitor.requestedFields() != null && fieldVisitor.requestedFields().size() > 0) {
                 Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
-                clusterService.flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);
+                clusterService.getQueryManager().flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);
                 for (String field :  fieldVisitor.requestedFields()) {
                     if (flatMap.get(field) != null && field != IdFieldMapper.NAME) 
                         fieldVisitor.setValues(field, flatMap.get(field));
                 }
             }
             if (fieldVisitor.loadSource()) {
-                fieldVisitor.source( clusterService.source(indexService, searchContext.mapperService().documentMapper(fieldVisitor.uid().type()), mapObject, fieldVisitor.uid()) );
+                fieldVisitor.source( clusterService.getQueryManager().source(indexService, searchContext.mapperService().documentMapper(fieldVisitor.uid().type()), mapObject, fieldVisitor.uid()) );
             }
         }
     }
@@ -473,7 +473,7 @@ public class FetchPhase implements SearchPhase {
         IndexService indexService = searchContext.indexShard().indexService();
         try {
             fieldVisitor.postProcess(indexService.mapperService());
-            DocPrimaryKey docPk = clusterService.parseElasticId(indexService, fieldVisitor.uid().type(), fieldVisitor.uid().id());
+            DocPrimaryKey docPk = clusterService.getQueryManager().parseElasticId(indexService, fieldVisitor.uid().type(), fieldVisitor.uid().id());
             String typeKey = fieldVisitor.uid().type();
             if (docPk.isStaticDocument) 
                 typeKey += "_static";

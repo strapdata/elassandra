@@ -44,10 +44,20 @@ public interface ClusterStateTaskConfig {
      */
     Priority priority();
 
-    default boolean doPresistMetaData() {
-        return false;
+    enum SchemaUpdate {
+        NO_UPDATE,
+        UPDATE,
+        UPDATE_ASYNCHRONOUS;
+
+        public boolean update() {
+            return this.ordinal() != 0;
+        }
     }
-    
+
+    default SchemaUpdate schemaUpdate() {
+        return SchemaUpdate.NO_UPDATE;
+    }
+
     /**
      * Build a cluster state update task configuration with the
      * specified {@link Priority} and no timeout.
@@ -74,15 +84,15 @@ public interface ClusterStateTaskConfig {
         return new Basic(priority, timeout);
     }
 
-    static ClusterStateTaskConfig build(Priority priority, boolean presistMetaData) {
-        return new Basic(priority, null) {
+    static ClusterStateTaskConfig build(Priority priority,  TimeValue timeout, SchemaUpdate schemaUpdate) {
+        return new Basic(priority, timeout) {
             @Override
-            public boolean doPresistMetaData() {
-                return presistMetaData;
+            public SchemaUpdate schemaUpdate() {
+                return schemaUpdate;
             }
         };
     }
-    
+
     class Basic implements ClusterStateTaskConfig {
         final TimeValue timeout;
         final Priority priority;
@@ -100,11 +110,6 @@ public interface ClusterStateTaskConfig {
         @Override
         public Priority priority() {
             return priority;
-        }
-              
-        @Override
-        public boolean doPresistMetaData() {
-            return false;
         }
     }
 }

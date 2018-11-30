@@ -108,12 +108,12 @@ public class TransportClusterUpdateSettingsAction extends
                     super.onAllNodesAcked(e);
                 }
             }
-            
+
             @Override
-            public boolean doPresistMetaData() {
-                return true;
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
             }
-            
+
 
             @Override
             public void onAckTimeout() {
