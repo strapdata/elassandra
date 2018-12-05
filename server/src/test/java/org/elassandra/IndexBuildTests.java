@@ -26,7 +26,10 @@ import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -82,8 +85,8 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
 
         // rebuild_index
-        //assertThat(client().admin().indices().prepareRebuild("test").setNumThreads(2).get().getFailedShards(), equalTo(0));
-        StorageService.instance.rebuildSecondaryIndex(2, "test", "t1", "elastic_t1_idx");
+        StorageService.instance.rebuildSecondaryIndex(3, "test", "t1", "elastic_t1_idx");
+        assertTrue(waitIndexRebuilt("test", Collections.singletonList("t1"), 15000));
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
     }
 
@@ -101,9 +104,7 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         StorageService.instance.forceKeyspaceFlush("test","t1");
 
         assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(discoverMapping("t1")).get());
-        // wait for index rebuild by the compaction manager thread
-        while (!SystemKeyspace.isIndexBuilt("test", "elastic_t1_idx"))
-            Thread.sleep(500);
+        assertTrue(waitIndexRebuilt("test", Collections.singletonList("t1"), 15000));
 
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
     }

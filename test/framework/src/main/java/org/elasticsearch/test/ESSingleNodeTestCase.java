@@ -24,6 +24,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
@@ -84,6 +85,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
@@ -399,6 +401,15 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         return clusterService().process(cl, clientState, query, values);
     }
 
+    // wait for cassandra to rebuild indices on compaction manager threads.
+    public boolean waitIndexRebuilt(String keyspace, List<String> types, long timeout) throws InterruptedException {
+        for(int i = 0; i < timeout; i+=200) {
+            if (types.stream().filter(t -> !SystemKeyspace.isIndexBuilt(keyspace, String.format(Locale.ROOT, "elastic_%s_idx", t))).count() == 0)
+               return true;
+            Thread.sleep(200);
+        }
+        return false;
+    }
 
     public XContentBuilder discoverMapping(String type) throws IOException {
         return XContentFactory.jsonBuilder().startObject().startObject(type).field("discover", ".*").endObject().endObject();
