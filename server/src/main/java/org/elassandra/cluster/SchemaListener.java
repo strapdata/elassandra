@@ -20,8 +20,7 @@
 package org.elassandra.cluster;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
+import com.google.common.collect.ImmutableListMultimap;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -30,7 +29,6 @@ import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.service.MigrationListener;
-import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.logging.log4j.Logger;
 import org.elassandra.index.ElasticSecondaryIndex;
@@ -43,7 +41,6 @@ import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.logging.ServerLoggers;
 import org.elasticsearch.common.settings.Settings;
 
@@ -60,7 +57,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     final Logger logger;
 
     MetaData metaData = null;
-    final ListMultimap<String, MappingMetaData> mappings = ArrayListMultimap.create(); // indexName -> mappings
+    ImmutableListMultimap.Builder<String, MappingMetaData> mappingsBuilder; // indexName -> mappings
 
     public SchemaListener(Settings settings, ClusterService clusterService) {
         this.clusterService = clusterService;
@@ -71,7 +68,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     @Override
     public void onBeginTransaction()
     {
-        mappings.clear();
+        mappingsBuilder = ImmutableListMultimap.builder();
         metaData = null;
     }
 
@@ -81,58 +78,51 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     @Override
     public void onEndTransaction()
     {
-        if (metaData != null) {
-            long versionGap = metaData.version() - clusterService.state().metaData().version();
+        if (metaData != null && !metaData.clusterUUID().equals(SystemKeyspace.getLocalHostId().toString())) {
+            final MetaData newMetadata = metaData;
+            final ImmutableListMultimap<String, MappingMetaData> newMappings = (mappingsBuilder == null) ? null : mappingsBuilder.build();
 
-            final MetaData newMetadata;
-            if (versionGap > 1) {
-                // read all metadata to bridge the gap between previous metadata
-                logger.trace("metadata={} mappings={} versionGap={}", metaData, mappings, versionGap);
-                newMetadata = this.clusterService.readMetaDataFromTableExtensions(true);
-            } else if (!metaData.clusterUUID().equals(SystemKeyspace.getLocalHostId().toString())) {
-                logger.trace("metadata={} mappings={} versionGap={}", metaData, mappings, versionGap);
-                // read changed table extensions.
-                MetaData.Builder metadataBuilder = MetaData.builder(metaData);
-                for(ObjectCursor<IndexMetaData> imdCursor : metaData.indices().values()) {
-                    IndexMetaData imd = imdCursor.value;
-                    IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(imd);
-                    mappings.get(imd.getIndex().getName()).forEach(m -> indexMetaDataBuilder.putMapping(m));
-                    metadataBuilder.put(indexMetaDataBuilder, false);
+            clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask() {
+                @Override
+                public ClusterState execute(ClusterState currentState) {
+                    ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
+                    ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
+
+                    // update blocks
+                    if (newMetadata.settings().getAsBoolean("cluster.blocks.read_only", false))
+                        blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
+
+                    MetaData.Builder metaDataBuilder = MetaData.builder(newMetadata);
+                    for(ObjectCursor<IndexMetaData> imdCursor : newMetadata.indices().values()) {
+                        IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(imdCursor.value);
+
+                        // add old mappings
+                        IndexMetaData oldIndexMetaData = currentState.metaData().index(imdCursor.value.getIndex());
+                        if (oldIndexMetaData != null) {
+                            for(ObjectCursor<MappingMetaData> mmdCursor : oldIndexMetaData.getMappings().values())
+                                indexMetaDataBuilder.putMapping(mmdCursor.value);
+                        }
+                        // add new mappings
+                        if (newMappings != null)
+                            newMappings.get(imdCursor.value.getIndex().getName()).forEach(mmd ->  indexMetaDataBuilder.putMapping( mmd ));
+
+                        metaDataBuilder.put(indexMetaDataBuilder);
+                    }
+
+                    // update indices block.
+                    for (IndexMetaData indexMetaData : newMetadata)
+                        blocks.updateBlocks(indexMetaData);
+
+                    return newStateBuilder.metaData(metaDataBuilder).blocks(blocks).build();
                 }
-                newMetadata = metadataBuilder.build();
-            } else {
-                // ignore self schema update
-                logger.trace("ignore local update metadata={} mappings={} versionGap={}", metaData, mappings, versionGap);
-                newMetadata = null;
-            }
 
-            if (newMetadata != null) {
-                clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask() {
-                    @Override
-                    public ClusterState execute(ClusterState currentState) {
-                        ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
-                        ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
+                @Override
+                public void onFailure(String source, Exception t) {
+                    logger.error("unexpected failure during [{}]", t, source);
+                }
+            });
 
-                        // update blocks
-                        if (newMetadata.settings().getAsBoolean("cluster.blocks.read_only", false))
-                            blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
-
-                        newStateBuilder.metaData(newMetadata);
-
-                        // update indices block.
-                        for (IndexMetaData indexMetaData : newMetadata)
-                            blocks.updateBlocks(indexMetaData);
-
-                        return newStateBuilder.blocks(blocks).build();
-                    }
-
-                    @Override
-                    public void onFailure(String source, Exception t) {
-                        logger.error("unexpected failure during [{}]", t, source);
-                    }
-                });
-            }
-            mappings.clear();
+            mappingsBuilder = null;
             metaData = null;
         }
     }
@@ -202,17 +192,6 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
                 ClusterService.ELASTIC_ADMIN_METADATA_TABLE.equals(cfName));
     }
 
-    boolean hasElasticSecondaryIndex(String ksName, String cfName) {
-        KeyspaceMetadata ksm = Schema.instance.getKSMetaData(ksName);
-        if (ksm != null) {
-            CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
-            if (cfm != null) {
-                return cfm.getIndexes().has(SchemaManager.buildIndexName(cfName));
-            }
-        }
-        return false;
-    }
-
     void updateElasticsearchMapping(KeyspaceMetadata ksm, CFMetaData cfm) {
         boolean hasSecondaryIndex = cfm.getIndexes().has(SchemaManager.buildIndexName(cfm.cfName));
         for(Map.Entry<String, ByteBuffer> e : cfm.params.extensions.entrySet()) {
@@ -220,7 +199,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
                 try {
                     String indexName = clusterService.getIndexNameFromExtensionName(e.getKey());
                     MappingMetaData mappingMd = clusterService.getTypeExtension(e.getValue());
-                    mappings.put(indexName, mappingMd);
+                    mappingsBuilder.put(indexName, mappingMd);
 
                     if (hasSecondaryIndex) {
                         SchemaManager.typeToCfName(ksm.name, mappingMd.type());
