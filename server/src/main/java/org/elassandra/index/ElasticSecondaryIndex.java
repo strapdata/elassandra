@@ -488,7 +488,7 @@ public class ElasticSecondaryIndex implements Index {
                                 }
                             }
                         } else {
-                            logger.error("Unexpected subfield={} for field={} column type={}, ignoring value={}",
+                            logger.error("Unexpected index={} subfield={} for field={} column type={}, ignoring value={}", indexInfo.name,
                                 entry.getKey(), mapper != null ? mapper.name() : null, cd != null && cd.type != null ? cd.type.asCQL3Type().toString() : null, entry.getValue());
                         }
                     }
@@ -497,7 +497,7 @@ public class ElasticSecondaryIndex implements Index {
                         if (subMapper != null) {
                             ElasticSecondaryIndex.this.addField(context, indexInfo, subMapper, entry.getValue());
                         } else {
-                            logger.error("submapper not found for nested field [{}]", entry.getKey());
+                            logger.error("submapper not found for nested field [{}] in index [{}]", entry.getKey(), indexInfo.name);
                         }
                     } finally {
                         if (mapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
