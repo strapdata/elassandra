@@ -49,7 +49,7 @@ import java.nio.ByteBuffer;
 import java.util.Map;
 
 /**
- * Listen for cassandra schema and elasticsearch cluster state changes.
+ * Listen for cassandra schema changes and elasticsearch cluster state changes.
  */
 public class SchemaListener extends MigrationListener implements ClusterStateListener
 {
@@ -65,6 +65,9 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
         this.logger = ServerLoggers.getLogger(getClass(), settings);
     }
 
+    /**
+     * Not called when resulting from a cluster state update invloving a CQL update (see inhibited MigrationListeners in MigrationManager.announce()).
+     */
     @Override
     public void onBeginTransaction()
     {
@@ -73,58 +76,58 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     }
 
     /**
+     * Not called when resulting from a cluster state update invloving a CQL update (see inhibited MigrationListeners in MigrationManager.announce()).
      * Rebuild MetaData from per transaction updated extensions and submit a clusterState update task.
      */
     @Override
     public void onEndTransaction()
     {
-        if (metaData != null && !metaData.clusterUUID().equals(SystemKeyspace.getLocalHostId().toString())) {
-            final MetaData newMetadata = metaData;
-            final ImmutableListMultimap<String, MappingMetaData> newMappings = (mappingsBuilder == null) ? null : mappingsBuilder.build();
+        final MetaData metaData2 = metaData;
+        final ImmutableListMultimap<String, MappingMetaData> newMappings = (mappingsBuilder == null) ? null : mappingsBuilder.build();
 
-            clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask() {
-                @Override
-                public ClusterState execute(ClusterState currentState) {
-                    ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
-                    ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
+        clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask() {
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+                ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
+                ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
 
-                    // update blocks
-                    if (newMetadata.settings().getAsBoolean("cluster.blocks.read_only", false))
-                        blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
+                MetaData newMetadata = (metaData2 == null) ? currentState.metaData() : metaData2;
+                MetaData.Builder metaDataBuilder = MetaData.builder(newMetadata);
+                for(ObjectCursor<IndexMetaData> imdCursor : newMetadata.indices().values()) {
+                    IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(imdCursor.value);
 
-                    MetaData.Builder metaDataBuilder = MetaData.builder(newMetadata);
-                    for(ObjectCursor<IndexMetaData> imdCursor : newMetadata.indices().values()) {
-                        IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(imdCursor.value);
-
-                        // add old mappings
-                        IndexMetaData oldIndexMetaData = currentState.metaData().index(imdCursor.value.getIndex());
-                        if (oldIndexMetaData != null) {
-                            for(ObjectCursor<MappingMetaData> mmdCursor : oldIndexMetaData.getMappings().values())
-                                indexMetaDataBuilder.putMapping(mmdCursor.value);
-                        }
-                        // add new mappings
-                        if (newMappings != null)
-                            newMappings.get(imdCursor.value.getIndex().getName()).forEach(mmd ->  indexMetaDataBuilder.putMapping( mmd ));
-
-                        metaDataBuilder.put(indexMetaDataBuilder);
+                    // add old mappings
+                    IndexMetaData oldIndexMetaData = currentState.metaData().index(imdCursor.value.getIndex());
+                    if (oldIndexMetaData != null) {
+                        for(ObjectCursor<MappingMetaData> mmdCursor : oldIndexMetaData.getMappings().values())
+                            indexMetaDataBuilder.putMapping(mmdCursor.value);
                     }
+                    // add new mappings
+                    if (newMappings != null)
+                        newMappings.get(imdCursor.value.getIndex().getName()).forEach(mmd ->  indexMetaDataBuilder.putMapping( mmd ));
 
-                    // update indices block.
-                    for (IndexMetaData indexMetaData : newMetadata)
-                        blocks.updateBlocks(indexMetaData);
-
-                    return newStateBuilder.metaData(metaDataBuilder).blocks(blocks).build();
+                    metaDataBuilder.put(indexMetaDataBuilder);
                 }
 
-                @Override
-                public void onFailure(String source, Exception t) {
-                    logger.error("unexpected failure during [{}]", t, source);
-                }
-            });
+                // update blocks
+                if (newMetadata.settings().getAsBoolean("cluster.blocks.read_only", false))
+                    blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
 
-            mappingsBuilder = null;
-            metaData = null;
-        }
+                // update indices block.
+                for (IndexMetaData indexMetaData : newMetadata)
+                    blocks.updateBlocks(indexMetaData);
+
+                return newStateBuilder.metaData(metaDataBuilder).blocks(blocks).build();
+            }
+
+            @Override
+            public void onFailure(String source, Exception t) {
+                logger.error("unexpected failure during [{}]", t, source);
+            }
+        });
+
+        mappingsBuilder = null;
+        metaData = null;
     }
 
     @Override
@@ -199,11 +202,11 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
                 try {
                     String indexName = clusterService.getIndexNameFromExtensionName(e.getKey());
                     MappingMetaData mappingMd = clusterService.getTypeExtension(e.getValue());
-                    mappingsBuilder.put(indexName, mappingMd);
+                    if (mappingsBuilder != null)
+                        mappingsBuilder.put(indexName, mappingMd);
 
-                    if (hasSecondaryIndex) {
+                    if (hasSecondaryIndex)
                         SchemaManager.typeToCfName(ksm.name, mappingMd.type());
-                    }
                 } catch (IOException e1) {
                     logger.error("Failed to parse mapping in {}.{} extension {}", ksm.name, cfm.cfName, e.getKey());
                 }

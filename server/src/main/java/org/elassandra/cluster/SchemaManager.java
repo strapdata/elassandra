@@ -67,6 +67,7 @@ import org.apache.cassandra.schema.SchemaKeyspace;
 import org.apache.cassandra.schema.TableParams;
 import org.apache.cassandra.schema.Views;
 import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.service.MigrationListener;
 import org.apache.cassandra.thrift.ThriftValidation;
 import org.apache.cassandra.transport.Event;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -115,6 +116,11 @@ import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF
 public class SchemaManager extends AbstractComponent {
     final ClusterService clusterService;
     final SchemaListener schemaListener;
+
+    /**
+     * Inhibited MigrationListener avoid loops when applying new cluster state in CQL schema.
+     */
+    private final Collection<MigrationListener> inhibitedSchemaListeners;
 
     public static final String GEO_POINT_TYPE = "geo_point";
     public static final ColumnIdentifier GEO_POINT_NAME = new ColumnIdentifier(GEO_POINT_TYPE, true);
@@ -172,10 +178,15 @@ public class SchemaManager extends AbstractComponent {
         super(settings);
         this.clusterService = clusterService;
         this.schemaListener = new SchemaListener(settings, clusterService);
+        this.inhibitedSchemaListeners = Collections.singletonList(this.schemaListener);
     }
 
-    public SchemaListener schemaListener() {
+    public SchemaListener getSchemaListener() {
         return schemaListener;
+    }
+
+    public Collection<MigrationListener> getInhibitedSchemaListeners() {
+        return inhibitedSchemaListeners;
     }
 
     public boolean isNativeCql3Type(String cqlType) {

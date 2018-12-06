@@ -380,12 +380,12 @@ public class ClusterService extends BaseClusterService {
     @Override
     protected synchronized void doStart() {
         super.doStart();
-        MigrationManager.instance.register(schemaManager.schemaListener());
+        MigrationManager.instance.register(schemaManager.getSchemaListener());
     }
 
     @Override
     protected synchronized void doStop() {
-        MigrationManager.instance.unregister(schemaManager.schemaListener());
+        MigrationManager.instance.unregister(schemaManager.getSchemaListener());
         super.doStop();
     }
 
@@ -1103,7 +1103,7 @@ public class ClusterService extends BaseClusterService {
                     Collection<SchemaChange> events = new ArrayList<>();
                     convertMetadataToSchemaMutations(state().metaData(), mutations, events);
                     logger.debug("Applying initial elasticsearch mapping mutations={}", mutations);
-                    MigrationManager.announce(mutations);
+                    MigrationManager.announce(mutations, this.getSchemaManager().getInhibitedSchemaListeners());
                 } catch (IOException e) {
                     logger.error("Failed to write metadata as comment", e);
                 }

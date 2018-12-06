@@ -120,7 +120,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private final NamedWriteableRegistry namedWriteableRegistry;
 
     private final AtomicReference<MetaDataVersionAckListener> metaDataVersionAckListenerRef = new AtomicReference<>(null);
-    private final AtomicLong maxMetaDataVersion = new AtomicLong(-1);
 
     private final ClusterGroup clusterGroup;
 
@@ -910,7 +909,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         logger.debug("Applying CQL schema mutations={}", mutations);
 
                         // unless update is UPDATE_ASYNCHRONOUS, block until schema is applied.
-                        Future<?> future = MigrationManager.announce(mutations);
+                        Future<?> future = MigrationManager.announce(mutations, this.clusterService.getSchemaManager().getInhibitedSchemaListeners());
                         if (!SchemaUpdate.UPDATE_ASYNCHRONOUS.equals(clusterChangedEvent.schemaUpdate()))
                             FBUtilities.waitOnFuture(future);
 
