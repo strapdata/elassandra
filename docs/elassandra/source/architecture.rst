@@ -284,11 +284,11 @@ Finally, the CQL fetch overhead can be mitigated by using keys and rows Cassandr
 Mapping and CQL schema management
 ---------------------------------
 
-Elassandra has no master node to manage the elasticsearch mapping and all nodes can update the elasticsearch mapping. When such a mapping update occurs, 
-elassandra updates the elasticsearch mapping stored as a row in the cassandra table **elastic_admin.metadata** by playing a PAXOS transaction to ensure no concurrent update occurs.
-When the PAXOS transaction succeed, the coordinator node updates and broadcasts its gossip fields X2 with its *host_id*/*version_number*. Version number increase on each mapping update. 
-Then, all other nodes catch this X2 change, reload their mapping and annonce the same X2 once the new elasticsearch mapping is applied. As the result, all nodes sharing the same elasticsearch mapping should
-have the same X2 value and you can check this with **nodetool gossipinfo**, as show here with X2 = e5df0651-8608-4590-92e1-4e523e4582b9/1.
+Elassandra has no master node to manage the elasticsearch mapping and all nodes can update the elasticsearch mapping. In order to manage concurrent simultaneous mapping and CQL schema changes, 
+elassandra plays a PAXOS transaction to update the current elasticsearch metadata version in the cassandra table **elastic_admin.metadata**. Once the PAXOS transaction
+succeed, elassandra coordinator node applies n batched-atomic (1) CQL schema update boadcasted to all nodes, update and broadcast its gossip fields X2 with its *host_id*/*version_number*.
+Version number increase by one on each mapping update. Then, non-coordinator nodes catch the CQL schema change, reload their mapping and annonce the same X2 once the new elasticsearch mapping is applied. 
+As the result, all nodes sharing the same elasticsearch mapping should have the same X2 value and you can check this with **nodetool gossipinfo**, as show here with X2 = e5df0651-8608-4590-92e1-4e523e4582b9/1.  
 
 .. code::
 
@@ -325,3 +325,31 @@ have the same X2 value and you can check this with **nodetool gossipinfo**, as s
       INTERNAL_IP:127.0.0.1
       LOAD:154824.0
       HOST_ID:74ae1629-0149-4e65-b790-cd25c7406675
+
+(1) All CQL changes invloved by the elasticsearch mapping update (CQL types and tables create/update) and the new elasticsearch cluster state are applied in a *SINGLE* CQL schema update.
+The elasticsearch metadata are stored in a binary format in the CQL schema as table extensions, stored in **system_schema.tables**, column **extensions** of type *frozen<map<text, blob>>*. 
+
+Elasticsearch metadata (indices, templates, aliases, ingest pipelines...) without document mapping is stored in **elastic_admin.metdata** table extensions:
+ 
+.. code::
+
+   admin@cqlsh> select keyspace_name, table_name, extensions from system_schema.tables where keyspace_name='elastic_admin';
+
+    keyspace_name | table_name | extensions
+   ---------------+------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    elastic_admin |   metadata | {'metadata': 0x3a290a05fa886d6574612d64617461fa8676657273696f6ec88b636c75737465725f757569646366303561333634362d636536662d346466642d396437642d3539323539336231656565658874656d706c61746573fafb86696e6469636573fa866d79696e646578fa41c4847374617465436f70656e8773657474696e6773fa92696e6465782e6372656174696f6e5f646174654c3135343431373539313438353992696e6465782e70726f76696465645f6e616d65466d79696e64657889696e6465782e75756964556e6f4336395237345162714e7147466f6f636965755194696e6465782e76657273696f6e2e637265617465644636303230333939fb86616c6961736573fafbfb83746f746ffa41c446436f70656e47fa484c313534343133353832303437354943746f746f4a554b59336f534a675a54364f48686e51396d676f5557514b4636303230333939fb4cfafbfbfb8e696e6465782d677261766579617264fa89746f6d6273746f6e6573f8f9fbfbfb, 'owner': 0xf05a3646ce6f4dfd9d7d592593b1eeee, 'version': 0x0000000000000004}
+   
+   (1 rows)
+
+For each document mapping backed by a cassandra table, document mapping is store as an extension, where extension key is elastic_admin/<index_name> :
+
+.. code::
+
+   admin@cqlsh> select keyspace_name, table_name, extensions from system_schema.tables where keyspace_name='myindex';
+   
+    keyspace_name | table_name | extensions
+   ---------------+------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+          myindex |     mytype | {'elastic_admin/myindex': 0x44464c00aa56caad2ca92c4855b2aa562a28ca2f482d2ac94c2d06f1d2f2f341144452a924b5a2444947292d333527052c9d9d5a599e5f9482a40426a2a394999e975f941a9f98945f06d46b646a560b0600000000ffff0300}
+  
+
+
