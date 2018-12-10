@@ -60,7 +60,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.VersionConflictEngineException;
@@ -358,7 +357,7 @@ public class QueryManager extends AbstractComponent {
         return fetchRowInternal(indexService, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
     }
 
-    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String[] columns, final Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException, IndexNotFoundException  {
+    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String[] columns, final Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
         return QueryProcessor.executeInternal(buildFetchQuery(indexService, cfName, columns, forStaticDocument, columnDefs), pkColumns);
     }
 
@@ -381,7 +380,7 @@ public class QueryManager extends AbstractComponent {
     }
 
     public String buildFetchQuery(final IndexService indexService, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs)
-            throws IndexNotFoundException, IOException
+            throws IOException
     {
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
         String cfName = SchemaManager.typeToCfName(indexService.keyspace(), type);
