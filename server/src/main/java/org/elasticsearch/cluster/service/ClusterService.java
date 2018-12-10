@@ -22,6 +22,8 @@ import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.joran.spi.JoranException;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ListMultimap;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -95,14 +97,17 @@ import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.SuppressForbidden;
-import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.discovery.Discovery;
+import org.elasticsearch.gateway.GatewayException;
 import org.elasticsearch.gateway.MetaStateService;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
@@ -112,6 +117,7 @@ import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
@@ -131,7 +137,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import javax.management.JMX;
 import javax.management.MalformedObjectNameException;
@@ -777,25 +782,6 @@ public class ClusterService extends BaseClusterService {
         }
     }
 
-    /**
-     * Try to read fresher metadata from cassandra.
-     */
-    public MetaData checkForNewMetaData(Long expectedVersion) throws NoPersistedMetaDataException {
-        KeyspaceMetadata ksm = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
-        if (ksm == null)
-            return null;
-
-        CFMetaData cfm = ksm.getTableOrViewNullable(ELASTIC_ADMIN_METADATA_TABLE);
-        if (cfm != null && cfm.params.extensions != null && cfm.params.extensions.get(ELASTIC_EXTENSION_VERSION) != null) {
-            long version = ByteBufferUtil.toLong(cfm.params.extensions.get(ELASTIC_EXTENSION_VERSION));
-            if (version > expectedVersion) {
-                return readMetaDataFromTableExtensions(true);
-            }
-            return null;
-        }
-        throw new NoPersistedMetaDataException("No extension found for table "+this.elasticAdminKeyspaceName+"."+ELASTIC_ADMIN_METADATA_TABLE);
-    }
-
     public Pair<UUID, Long> readUUIDAndVersion() throws NoPersistedMetaDataException {
         KeyspaceMetadata ksm = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
         if (ksm == null)
@@ -828,16 +814,35 @@ public class ClusterService extends BaseClusterService {
                 null;
     }
 
-    public void putTypeExtension(String indexName, MappingMetaData mapping, Map<String, ByteBuffer> extensions) {
-        extensions.put(getElasticAdminKeyspaceName() + "/" + indexName, ByteBuffer.wrap(mapping.source().compressed()));
+    public void putIndexMetaDataExtension(IndexMetaData indexMetaData, Map<String, ByteBuffer> extensions) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            XContentBuilder builder;
+            builder = XContentFactory.contentBuilder(XContentType.SMILE, baos);
+            builder.startObject();
+            IndexMetaData.Builder.toXContent(indexMetaData, builder, MetaData.CASSANDRA_FORMAT_PARAMS);
+            builder.endObject();
+            builder.close();
+            baos.close();
+            extensions.put(getElasticAdminKeyspaceName() + "/" + indexMetaData.getIndex().getName(), ByteBuffer.wrap( baos.toByteArray() ));
+        } catch (IOException e) {
+            throw new GatewayException("Failed to write index metadata in table exetension", e);
+        }
+
     }
 
-    public MappingMetaData getTypeExtension(ByteBuffer value) throws IOException {
-        return new MappingMetaData(new CompressedXContent(ByteBufferUtil.getArray(value)));
+    public IndexMetaData getIndexMetaDataFromExtension(ByteBuffer value) throws IOException {
+        return metaStateService.loadIndexState(ByteBufferUtil.getArray(value));
     }
 
     /**
-     * read cluster metadata from CQL table extensions.
+     * read cluster metadata from CQL table extensions:
+     * - global metadata is located in elastic_admin.metadata extensions, with key = "metadata".
+     *   The global metadata contains indices definition with no mapping (no keep index definition with no mapping).
+     * - each indexed table have an extension with a SMILE serialized IndexMetaData having only one mapping.
+     * When reloading an index table extension from the schema, mapping is added to the global index entry.
+     * If no global index entry exists, the one from the table level is used (when restoring CQL table with index+mapping definition)
+     *
      * @return
      * @throws NoPersistedMetaDataException
      */
@@ -854,50 +859,53 @@ public class ClusterService extends BaseClusterService {
                 logger.trace("metadata.version={}", metaData.version());
 
                 if (full) {
-                    // load table extensions for tables having an elastic 2i index
-                    Map<String, IndexMetaData.Builder> imdBuilders = new HashMap<>();
-                    for(ObjectCursor<IndexMetaData> imdCursor : metaData.indices().values()) {
-                        KeyspaceMetadata ksmx = Schema.instance.getKSMetaData(imdCursor.value.keyspace());
-                        logger.trace("ksmx={} indices={}", ksmx.name, ksmx.existingIndexNames(null));
-                        for(String indexName : ksmx.existingIndexNames(null)) {
-                            Optional<CFMetaData> cfmOption = ksmx.findIndexedTable(indexName);
-                            if (indexName.startsWith("elastic_") && cfmOption.isPresent()) {
-                                CFMetaData cfmx = cfmOption.get();
-                                if (cfmx.params.extensions != null) {
-                                    logger.trace("ks.cf={} metadata.version={} extensions={}", ksmx.name, cfmx.cfName, metaData.version(), cfmx.params.extensions);
-                                    for(Map.Entry<String, ByteBuffer> entry : cfmx.params.extensions.entrySet()) {
-                                        if (isValidTypeExtension(entry.getKey())) {
-                                            String esIndexName = getIndexNameFromExtensionName(entry.getKey());
-                                            final IndexMetaData imd = metaData.index(esIndexName);
-                                            final MappingMetaData mappingMd = getTypeExtension(entry.getValue());
-                                            logger.debug("Loading cql_index=[{}], es_index=[{}] type=[{}] mapping={}", indexName, esIndexName, mappingMd.type(), mappingMd.getSourceAsMap());
-                                            IndexMetaData.Builder builder = imdBuilders.computeIfAbsent(esIndexName, k -> {
-                                                return imd == null ? IndexMetaData.builder(esIndexName) : IndexMetaData.builder(imd);
-                                            });
-                                            builder.putMapping(mappingMd);
+                    // load table extensions for tables having an elastic 2i index and having a valide table extension.
+                    ListMultimap<String, IndexMetaData> indexMetaDataMap = ArrayListMultimap.create();
+                    for(String keyspace : Schema.instance.getUserKeyspaces()) {
+                        KeyspaceMetadata ksmx = Schema.instance.getKSMetaData(keyspace);
+                        if (ksmx != null) {
+                            logger.trace("ksmx={} indices={}", ksmx.name, ksmx.existingIndexNames(null));
+                            for(String indexName : ksmx.existingIndexNames(null)) {
+                                Optional<CFMetaData> cfmOption = ksmx.findIndexedTable(indexName);
+                                if (indexName.startsWith("elastic_") && cfmOption.isPresent()) {
+                                    CFMetaData cfmx = cfmOption.get();
+                                    if (cfmx.params.extensions != null) {
+                                        logger.trace("ks.cf={} metadata.version={} extensions={}", ksmx.name, cfmx.cfName, metaData.version(), cfmx.params.extensions);
+                                        for(Map.Entry<String, ByteBuffer> entry : cfmx.params.extensions.entrySet()) {
+                                            if (isValidTypeExtension(entry.getKey())) {
+                                                IndexMetaData indexMetaData = getIndexMetaDataFromExtension(entry.getValue());
+                                                indexMetaDataMap.put(indexMetaData.getIndex().getName(), indexMetaData);
 
-                                            // initialize typeToCfName map for later reverse lookup in ElasticSecondaryIndex
-                                            String cfName = SchemaManager.typeToCfName(imdCursor.value.keyspace(), cfmx.cfName);
-                                            if (logger.isDebugEnabled())
-                                                logger.debug("keyspace.table={}.{} registred for elasticsearch index.type={}.{}",
-                                                        imdCursor.value.keyspace(), cfName, imdCursor.value.getIndex().getName(), cfmx.cfName);
+                                                // initialize typeToCfName map for later reverse lookup in ElasticSecondaryIndex
+                                                schemaManager.typeToCfName(cfmx, keyspace, false);
+                                            }
                                         }
+                                    } else {
+                                        logger.warn("No extentions for index.type={}.{}", keyspace, cfmx.cfName);
                                     }
-                                } else {
-                                    logger.warn("No extentions for index.type={}.{}", imdCursor.value.keyspace(), cfmx.cfName);
                                 }
                             }
                         }
                     }
-                    if (imdBuilders.size() > 0) {
-                        MetaData.Builder metadataBuilder = MetaData.builder(metaData);
-                        for(IndexMetaData.Builder indexMetaDataBuilder : imdBuilders.values())
-                            metadataBuilder.put(indexMetaDataBuilder, false);
-                        metaData = metadataBuilder.build();
+                    if (indexMetaDataMap.size() > 0) {
+                        MetaData.Builder metaDataBuilder = MetaData.builder(metaData);
+                        for(String indexName : indexMetaDataMap.keySet()) {
+                            // merge all IndexMetadata for single type to a multi-typed IndexMetaData (for baward compatibility with version 5)
+                            IndexMetaData indexMetaData = metaDataBuilder.get(indexName);  // reuse first the global IndexMetaData defeintion with no mapping
+                            if (indexMetaData == null)
+                                indexMetaData = indexMetaDataMap.get(indexName).get(0); // fall-back to the table level index definition
+
+                            IndexMetaData.Builder indexMetaDataBuilder = new IndexMetaData.Builder(indexMetaData);
+                            for(IndexMetaData imd : indexMetaDataMap.get(indexName)) {
+                                for(ObjectCursor<MappingMetaData> m : imd.getMappings().values())
+                                    indexMetaDataBuilder.putMapping(m.value);
+                            }
+                            metaDataBuilder.put(indexMetaDataBuilder);
+                        }
+                        metaData = metaDataBuilder.build();
                     }
                 }
             } catch (Exception e) {
-                logger.error("Failed to parse metadata extensions", e);
                 throw new NoPersistedMetaDataException("Failed to parse metadata extentions", e);
             }
             logger.info("Elasticsearch metadata succesfully loaded from CQL table extensions metadata.version={}", metaData.version());

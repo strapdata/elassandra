@@ -65,7 +65,7 @@ public final class IndexGraveyard implements MetaData.Custom {
      * missed index deletions that it may need to process.
      */
     public static final Setting<Integer> SETTING_MAX_TOMBSTONES = Setting.intSetting("cluster.indices.tombstones.size",
-                                                                                     500, // the default maximum number of tombstones
+                                                                                     0, // the default maximum number of tombstones
                                                                                      Setting.Property.NodeScope);
 
     public static final String TYPE = "index-graveyard";

@@ -81,6 +81,7 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.index.mapper.CompletionFieldMapper;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.FieldMapper;
@@ -88,9 +89,11 @@ import org.elasticsearch.index.mapper.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.GeoShapeFieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.Mapper.CqlStruct;
+import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ObjectMapper;
 import org.elasticsearch.index.mapper.SourceFieldMapper;
+import org.elasticsearch.indices.IndexCreationException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -216,6 +219,13 @@ public class SchemaManager extends AbstractComponent {
         return typeName;
     }
 
+    public String typeToCfName(CFMetaData cfm, String typeName, boolean remove) {
+        if (logger.isDebugEnabled())
+            logger.debug("keyspace.table={}.{} registred for elasticsearch keyspace.type={}.{}",
+                    cfm.ksName, cfm.cfName, cfm.ksName, typeName);
+        return SchemaManager.typeToCfName(cfm.ksName, typeName);
+    }
+
     public static String cfNameToType(String keyspaceName, String cfName) {
         if (cfName.indexOf('_') >= 0) {
             String type = cfNameToType.get(keyspaceName+"."+cfName);
@@ -329,13 +339,13 @@ public class SchemaManager extends AbstractComponent {
             final int replicationFactor,
             final Map<String, Integer> replicationMap,
             final Collection<Mutation> mutations,
-            final Collection<Event.SchemaChange> events) throws IOException {
+            final Collection<Event.SchemaChange> events) {
         KeyspaceMetadata ksm;
         Keyspace ks = null;
         try {
             ks = Keyspace.open(ksName);
             if (ks != null && !(ks.getReplicationStrategy() instanceof NetworkTopologyStrategy)) {
-                throw new IOException("Cannot create index, underlying keyspace requires the NetworkTopologyStrategy.");
+                throw new SettingsException("Cannot create index, underlying keyspace requires the NetworkTopologyStrategy.");
             }
         } catch(AssertionError | NullPointerException e) {
         }
@@ -366,7 +376,7 @@ public class SchemaManager extends AbstractComponent {
     public KeyspaceMetadata createTable(final KeyspaceMetadata ksm, String cfName, String indexName,
             List<ColumnDescriptor> columns,
             String tableOptions,
-            final MappingMetaData mappingMd,
+            final IndexMetaData indexMetaData,
             final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) throws IOException, RecognitionException {
         CFName cfn = new CFName();
@@ -403,7 +413,7 @@ public class SchemaManager extends AbstractComponent {
 
         Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
         SchemaKeyspace.addTableToSchemaMutation(cfm, true, builder);
-        addTableExtensionsToMutationBuilder(cfm, indexName, mappingMd, builder);
+        addTableExtensionsToMutationBuilder(cfm, indexName, indexMetaData, builder);
         mutations.add(builder.build());
         events.add(new Event.SchemaChange(Event.SchemaChange.Change.CREATED, Event.SchemaChange.Target.TABLE, cts.keyspace(), cts.columnFamily()));
         return ksm.withSwapped(ksm.tables.with(cfm));
@@ -413,9 +423,9 @@ public class SchemaManager extends AbstractComponent {
     public KeyspaceMetadata updateTable(final KeyspaceMetadata ksm, String cfName, String indexName,
             List<ColumnDescriptor> columns,
             TableAttributes tableAttrs,
-            final MappingMetaData mappingMd,
+            final IndexMetaData indexMetaData,
             final Collection<Mutation> mutations,
-            final Collection<Event.SchemaChange> events) throws IOException {
+            final Collection<Event.SchemaChange> events) {
         KeyspaceMetadata ksm2 = ksm;
         CFMetaData cfm = ThriftValidation.validateColumnFamily(ksm, cfName);
         CFName cfn = new CFName();
@@ -437,39 +447,28 @@ public class SchemaManager extends AbstractComponent {
             changed = true;
         }
 
-        ByteBuffer existingMapping = x.left.params.extensions.get(mappingMd.type());
-        boolean addExtension = true;
-        if (existingMapping != null) {
-            MappingMetaData mmd = clusterService.getTypeExtension(existingMapping);
-            if (mappingMd.equals(mmd))
-                addExtension = false;
-        }
-        if (addExtension) {
-            logger.debug("table {}.{} add extensions  for index {}", ksm.name, cfName, indexName);
-            Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
-            x = Pair.create(addTableExtensionsToMutationBuilder(x.left, indexName, mappingMd, builder), x.right);
-            mutations.add(builder.build());
-        }
+        logger.debug("table {}.{} set extensions for index {}", ksm.name, cfName, indexName);
+        Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
+        x = Pair.create(addTableExtensionsToMutationBuilder(x.left, indexName, indexMetaData, builder), x.right);
+        mutations.add(builder.build());
 
-        if (changed || addExtension) {
-            ksm2 = ksm.withSwapped(ksm.tables.without(cfm.cfName).with(x.left));
-            if (x.right != null && x.right.size() > 0) {
-                ksm2 = ksm2.withSwapped(Views.builder().add(ksm2.views).add(x.right).build());
-                for(ViewDefinition view : x.right) {
-                    Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
-                    mutations.add(SchemaKeyspace.makeUpdateViewMutation(builder, ksm2.views.getNullable(view.viewName), view).build());
-                }
+        ksm2 = ksm.withSwapped(ksm.tables.without(cfm.cfName).with(x.left));
+        if (x.right != null && x.right.size() > 0) {
+            ksm2 = ksm2.withSwapped(Views.builder().add(ksm2.views).add(x.right).build());
+            for(ViewDefinition view : x.right) {
+                builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
+                mutations.add(SchemaKeyspace.makeUpdateViewMutation(builder, ksm2.views.getNullable(view.viewName), view).build());
             }
-            events.add(new Event.SchemaChange(Event.SchemaChange.Change.UPDATED, Event.SchemaChange.Target.TABLE, ksm.name, cfName));
         }
+        events.add(new Event.SchemaChange(Event.SchemaChange.Change.UPDATED, Event.SchemaChange.Target.TABLE, ksm.name, cfName));
         return ksm2;
     }
 
-    private CFMetaData addTableExtensionsToMutationBuilder(CFMetaData cfm, String indexName, final MappingMetaData mappingMd, Mutation.SimpleBuilder builder) {
+    private CFMetaData addTableExtensionsToMutationBuilder(CFMetaData cfm, String indexName, final IndexMetaData indexMetaData, Mutation.SimpleBuilder builder) {
         Map<String, ByteBuffer> extensions = new LinkedHashMap<String, ByteBuffer>();
         if (cfm.params.extensions != null)
             extensions.putAll(cfm.params.extensions);
-        clusterService.putTypeExtension(indexName, mappingMd, extensions);
+        clusterService.putIndexMetaDataExtension(indexMetaData, extensions);
         CFMetaData cfm2 = cfm.copy();
         cfm2.extensions(extensions);
         SchemaKeyspace.addTableExtensionsToSchemaMutation(cfm2, extensions, builder);
@@ -544,7 +543,6 @@ public class SchemaManager extends AbstractComponent {
         }
     }
 
-
     public void dropIndexKeyspace(final String ksName,
             final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) throws ConfigurationException {
@@ -558,13 +556,31 @@ public class SchemaManager extends AbstractComponent {
         events.add(new Event.SchemaChange(Event.SchemaChange.Change.DROPPED, ksName));
     }
 
-    public void updateTableSchema(final MapperService mapperService, final MappingMetaData mappingMd, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws IOException {
-        KeyspaceMetadata ksm = createOrUpdateKeyspace(mapperService.keyspace(), settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1, mapperService.getIndexSettings().getIndexMetaData().replication(), mutations, events);
-        updateTableSchema(ksm, mapperService, mappingMd, mutations, events);
+    /**
+     * Update table extensions when index settings change. This allow to get index settings+mappings in the CQL backup of the table.
+     * @param indexMetaData
+     * @param mutations
+     * @param events
+     * @throws IOException
+     */
+    public void updateTableExtensions(final IndexMetaData indexMetaData, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
+        for(ObjectCursor<MappingMetaData> mappingMd : indexMetaData.getMappings().values()) {
+            final String cfName = typeToCfName(indexMetaData.keyspace(), mappingMd.value.type());
+            final CFMetaData cfm = Schema.instance.getCFMetaData(indexMetaData.keyspace(), cfName);
+            logger.debug("table {}.{} set extensions for index {}", indexMetaData.keyspace(), cfName, indexMetaData.getIndex().getName());
+            Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(indexMetaData.keyspace(), FBUtilities.timestampMicros());
+            addTableExtensionsToMutationBuilder(cfm,  indexMetaData.getIndex().getName(), indexMetaData, builder);
+            mutations.add(builder.build());
+        }
     }
 
-    public KeyspaceMetadata updateTableSchema(KeyspaceMetadata ksm, final MapperService mapperService, final MappingMetaData mappingMd,
-            final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws IOException {
+    public void updateTableSchema(final MapperService mapperService, final IndexMetaData indexMetaData, final MappingMetaData mappingMd, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws IOException {
+        KeyspaceMetadata ksm = createOrUpdateKeyspace(mapperService.keyspace(), settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1, mapperService.getIndexSettings().getIndexMetaData().replication(), mutations, events);
+        updateTableSchema(ksm, mapperService, indexMetaData, mappingMd, mutations, events);
+    }
+
+    public KeyspaceMetadata updateTableSchema(KeyspaceMetadata ksm, final MapperService mapperService, final IndexMetaData indexMetaData, final MappingMetaData mappingMd,
+            final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
         String query = null;
         try {
             Set<ColumnIdentifier> addedColumns = new HashSet<>();
@@ -699,6 +715,11 @@ public class SchemaManager extends AbstractComponent {
             if (docMapper.parentFieldMapper().active() && docMapper.parentFieldMapper().pkColumns() == null)
                 columnsList.add(new ColumnDescriptor("_parent", CQL3Type.Raw.from(CQL3Type.Native.TEXT)));
 
+            // table extension contains IndexMetaData for a simple type associated to the table, but the provided IndexMetaData may contains multiple types.
+            IndexMetaData.Builder singleTypeIndexMetaDataBuilder = new IndexMetaData.Builder(indexMetaData);
+            singleTypeIndexMetaDataBuilder.removeAllMapping();
+            singleTypeIndexMetaDataBuilder.putMapping(mappingMd);
+
             if (newTable) {
                 boolean hasPartitionKey = false;
                 for(ColumnDescriptor cd : columnsList) {
@@ -709,13 +730,13 @@ public class SchemaManager extends AbstractComponent {
                 }
                 if (!hasPartitionKey)
                     columnsList.add(new ColumnDescriptor(ELASTIC_ID_COLUMN_NAME, CQL3Type.Raw.from(CQL3Type.Native.TEXT), Kind.PARTITION_KEY, 0));
-                ksm = createTable(ksm, cfName, mapperService.index().getName(), columnsList, mapperService.tableOptions(), mappingMd, mutations, events);
+                ksm = createTable(ksm, cfName, mapperService.index().getName(), columnsList, mapperService.tableOptions(), singleTypeIndexMetaDataBuilder.build(), mutations, events);
             } else {
                 // check column properties matches existing ones, or add it to columnsDefinitions
                 for(ColumnDescriptor cd : columnsList)
                     cd.validate(ksm, cfm);
                 TableAttributes tableAttrs = new TableAttributes();
-                ksm = updateTable(ksm, cfName, mapperService.index().getName(), columnsList, tableAttrs, mappingMd, mutations, events);
+                ksm = updateTable(ksm, cfName, mapperService.index().getName(), columnsList, tableAttrs, singleTypeIndexMetaDataBuilder.build(), mutations, events);
             }
 
             ksm = createSecondaryIndexIfNotExists(ksm, mappingMd,
@@ -725,9 +746,9 @@ public class SchemaManager extends AbstractComponent {
                     mutations, events);
             return ksm;
         } catch (AssertionError | RequestValidationException e) {
-            throw new IOException("Failed to execute query:" + query + " : "+e.getMessage(), e);
+            throw new MapperParsingException("Failed to execute query:" + query + " : "+e.getMessage(), e);
         } catch (Throwable e) {
-            throw new IOException(e.getMessage(), e);
+            throw new MapperParsingException(e.getMessage(), e);
         }
     }
 
@@ -742,7 +763,7 @@ public class SchemaManager extends AbstractComponent {
             final MappingMetaData mapping,
             final String className,
             final Collection<Mutation> mutations,
-            final Collection<Event.SchemaChange> events) throws IOException {
+            final Collection<Event.SchemaChange> events) {
     	KeyspaceMetadata ksm2 = ksm;
         String tableName = SchemaManager.typeToCfName(ksm.name, mapping.type());
         CFMetaData cfm0 = ksm.getTableOrViewNullable(tableName);

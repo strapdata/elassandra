@@ -25,7 +25,6 @@ import com.google.common.collect.ImmutableListMultimap;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.service.MigrationListener;
@@ -57,7 +56,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     final Logger logger;
 
     MetaData metaData = null;
-    ImmutableListMultimap.Builder<String, MappingMetaData> mappingsBuilder; // indexName -> mappings
+    ImmutableListMultimap.Builder<String, IndexMetaData> indexMetaDataBuilder; // indexName -> List of IndexMetaData with a single mapping
 
     public SchemaListener(Settings settings, ClusterService clusterService) {
         this.clusterService = clusterService;
@@ -71,7 +70,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     @Override
     public void onBeginTransaction()
     {
-        mappingsBuilder = ImmutableListMultimap.builder();
+        indexMetaDataBuilder = ImmutableListMultimap.builder();
         metaData = null;
     }
 
@@ -83,50 +82,50 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     public void onEndTransaction()
     {
         final MetaData metaData2 = metaData;
-        final ImmutableListMultimap<String, MappingMetaData> newMappings = (mappingsBuilder == null) ? null : mappingsBuilder.build();
+        final ImmutableListMultimap<String, IndexMetaData> newIndexMetaData = (indexMetaDataBuilder == null) ? null : indexMetaDataBuilder.build();
 
-        clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask() {
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
-                ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
+        if (metaData != null || newIndexMetaData != null) {
+            clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask() {
+                @Override
+                public ClusterState execute(ClusterState currentState) {
+                    ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
+                    ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
 
-                MetaData newMetadata = (metaData2 == null) ? currentState.metaData() : metaData2;
-                MetaData.Builder metaDataBuilder = MetaData.builder(newMetadata);
-                for(ObjectCursor<IndexMetaData> imdCursor : newMetadata.indices().values()) {
-                    IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(imdCursor.value);
+                    MetaData newMetadata = (metaData2 == null) ? currentState.metaData() : metaData2;
+                    MetaData.Builder metaDataBuilder = MetaData.builder(newMetadata);
+                    for(String indexName : newIndexMetaData.keySet()) {
+                        // merge all IndexMetadata for single type to a multi-typed IndexMetaData (for baward compatibility with version 5)
+                        IndexMetaData indexMetaData = metaDataBuilder.get(indexName);
+                        if (indexMetaData == null)
+                            indexMetaData = newIndexMetaData.get(indexName).get(0);
 
-                    // add old mappings
-                    IndexMetaData oldIndexMetaData = currentState.metaData().index(imdCursor.value.getIndex());
-                    if (oldIndexMetaData != null) {
-                        for(ObjectCursor<MappingMetaData> mmdCursor : oldIndexMetaData.getMappings().values())
-                            indexMetaDataBuilder.putMapping(mmdCursor.value);
+                        IndexMetaData.Builder indexMetaDataBuilder = new IndexMetaData.Builder(indexMetaData);
+                        for(IndexMetaData imd : newIndexMetaData.get(indexName)) {
+                            for(ObjectCursor<MappingMetaData> m : imd.getMappings().values())
+                                indexMetaDataBuilder.putMapping(m.value);
+                        }
+                        metaDataBuilder.put(indexMetaDataBuilder);
                     }
-                    // add new mappings
-                    if (newMappings != null)
-                        newMappings.get(imdCursor.value.getIndex().getName()).forEach(mmd ->  indexMetaDataBuilder.putMapping( mmd ));
 
-                    metaDataBuilder.put(indexMetaDataBuilder);
+                    // update blocks
+                    if (newMetadata.settings().getAsBoolean("cluster.blocks.read_only", false))
+                        blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
+
+                    // update indices block.
+                    for (IndexMetaData indexMetaData : newMetadata)
+                        blocks.updateBlocks(indexMetaData);
+
+                    return newStateBuilder.metaData(metaDataBuilder).blocks(blocks).build();
                 }
 
-                // update blocks
-                if (newMetadata.settings().getAsBoolean("cluster.blocks.read_only", false))
-                    blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
+                @Override
+                public void onFailure(String source, Exception t) {
+                    logger.error("unexpected failure during [{}]", t, source);
+                }
+            });
+        }
 
-                // update indices block.
-                for (IndexMetaData indexMetaData : newMetadata)
-                    blocks.updateBlocks(indexMetaData);
-
-                return newStateBuilder.metaData(metaDataBuilder).blocks(blocks).build();
-            }
-
-            @Override
-            public void onFailure(String source, Exception t) {
-                logger.error("unexpected failure during [{}]", t, source);
-            }
-        });
-
-        mappingsBuilder = null;
+        indexMetaDataBuilder = null;
         metaData = null;
     }
 
@@ -200,13 +199,12 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
         for(Map.Entry<String, ByteBuffer> e : cfm.params.extensions.entrySet()) {
             if (clusterService.isValidTypeExtension(e.getKey())) {
                 try {
-                    String indexName = clusterService.getIndexNameFromExtensionName(e.getKey());
-                    MappingMetaData mappingMd = clusterService.getTypeExtension(e.getValue());
-                    if (mappingsBuilder != null)
-                        mappingsBuilder.put(indexName, mappingMd);
+                    IndexMetaData indexMetaData = clusterService.getIndexMetaDataFromExtension(e.getValue());
+                    if (indexMetaDataBuilder != null)
+                        indexMetaDataBuilder.put(indexMetaData.getIndex().getName(), indexMetaData);
 
                     if (hasSecondaryIndex)
-                        SchemaManager.typeToCfName(ksm.name, mappingMd.type());
+                        indexMetaData.getMappings().forEach( m -> SchemaManager.typeToCfName(ksm.name, m.value.type()) );
                 } catch (IOException e1) {
                     logger.error("Failed to parse mapping in {}.{} extension {}", ksm.name, cfm.cfName, e.getKey());
                 }

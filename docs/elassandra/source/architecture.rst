@@ -341,7 +341,7 @@ Elasticsearch metadata (indices, templates, aliases, ingest pipelines...) withou
    
    (1 rows)
 
-For each document mapping backed by a cassandra table, document mapping is store as an extension, where extension key is elastic_admin/<index_name> :
+For each document type backed by a cassandra table, index metadata including the mapping is stored as an extension, where extension key is elastic_admin/<index_name> :
 
 .. code::
 
@@ -352,4 +352,6 @@ For each document mapping backed by a cassandra table, document mapping is store
           myindex |     mytype | {'elastic_admin/myindex': 0x44464c00aa56caad2ca92c4855b2aa562a28ca2f482d2ac94c2d06f1d2f2f341144452a924b5a2444947292d333527052c9d9d5a599e5f9482a40426a2a394999e975f941a9f98945f06d46b646a560b0600000000ffff0300}
   
 
+When snapshoting a keyspace or a table (ex: nodetool snapshot keyspace), Cassandra also backups the CQL schema (in <snapshot_dir>/schema.cql) including the elasticsearch index metadata and mapping, and thus, 
+restoring the CQL schema for an indexed table also restore the associated elasticsearch index definition in the current cluster state.
 

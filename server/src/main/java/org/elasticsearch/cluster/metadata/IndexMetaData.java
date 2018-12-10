@@ -1091,6 +1091,11 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             return this;
         }
 
+        public Builder removeAllMapping() {
+            mappings.clear();
+            return this;
+        }
+
         public Builder state(State state) {
             this.state = state;
             return this;

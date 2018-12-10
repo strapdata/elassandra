@@ -89,6 +89,11 @@ public class MetaStateService extends AbstractComponent {
         return IndexMetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, nodeEnv.indexPaths(index));
     }
 
+    @Nullable
+    public IndexMetaData loadIndexState(byte[] indexMetaData) throws IOException {
+        return IndexMetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, indexMetaData);
+    }
+
     /**
      * Loads all indices states available on disk
      */

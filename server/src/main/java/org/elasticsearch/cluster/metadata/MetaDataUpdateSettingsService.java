@@ -21,6 +21,7 @@ package org.elasticsearch.cluster.metadata;
 
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.transport.Event;
+import org.apache.cassandra.utils.FBUtilities;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsClusterStateUpdateRequest;
@@ -49,6 +50,7 @@ import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -239,7 +241,10 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                         if (indexMetaData == null) {
                             throw new IndexNotFoundException(index);
                         }
-                        clusterService.alterKeyspaceReplicationFactor(indexMetaData.keyspace(), updatedNumberOfReplicas+1);
+
+                        String keyspaceName = indexMetaData.keyspace();
+                        logger.debug("updating keyspace {} with RF={}", keyspaceName, updatedNumberOfReplicas+1);
+                        clusterService.getSchemaManager().createOrUpdateKeyspace(keyspaceName, updatedNumberOfReplicas + 1, indexMetaData.replication(), mutations, events);
                     }
                 }
 
@@ -249,6 +254,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                 maybeUpdateClusterBlock(actualIndices, blocks, IndexMetaData.INDEX_METADATA_BLOCK, IndexMetaData.INDEX_BLOCKS_METADATA_SETTING, openSettings);
                 maybeUpdateClusterBlock(actualIndices, blocks, IndexMetaData.INDEX_WRITE_BLOCK, IndexMetaData.INDEX_BLOCKS_WRITE_SETTING, openSettings);
                 maybeUpdateClusterBlock(actualIndices, blocks, IndexMetaData.INDEX_READ_BLOCK, IndexMetaData.INDEX_BLOCKS_READ_SETTING, openSettings);
+
 
                 if (!openIndices.isEmpty()) {
                     for (Index index : openIndices) {
@@ -261,7 +267,9 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                             }
                             Settings finalSettings = indexSettings.build();
                             indexScopedSettings.validate(finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false), true);
-                            metaDataBuilder.put(IndexMetaData.builder(indexMetaData).settings(finalSettings));
+                            IndexMetaData newIndexMetaData = IndexMetaData.builder(indexMetaData).settings(finalSettings).build();
+                            clusterService.getSchemaManager().updateTableExtensions(newIndexMetaData, mutations, events);
+                            metaDataBuilder.put(newIndexMetaData, true);
                         }
                     }
                 }
@@ -277,7 +285,9 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                             }
                             Settings finalSettings = indexSettings.build();
                             indexScopedSettings.validate(finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false), true);
-                            metaDataBuilder.put(IndexMetaData.builder(indexMetaData).settings(finalSettings));
+                            IndexMetaData newIndexMetaData = IndexMetaData.builder(indexMetaData).settings(finalSettings).build();
+                            clusterService.getSchemaManager().updateTableExtensions(newIndexMetaData, mutations, events);
+                            metaDataBuilder.put(newIndexMetaData, true);
                         }
                     }
                 }

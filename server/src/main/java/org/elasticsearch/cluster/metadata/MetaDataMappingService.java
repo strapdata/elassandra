@@ -187,14 +187,14 @@ public class MetaDataMappingService extends AbstractComponent {
                     // don't apply the default mapping, it has been applied when the mapping was created
                     DocumentMapper docMapper = indexService.mapperService().merge(metaData.value.type(), metaData.value.source(), MapperService.MergeReason.MAPPING_RECOVERY, true);
                     if (!metaData.value.type().equals(MapperService.DEFAULT_MAPPING)) {
-                        clusterService.getSchemaManager().updateTableSchema(indexService.mapperService(), metaData.value, mutations, events);
+                        clusterService.getSchemaManager().updateTableSchema(indexService.mapperService(), indexMetaData, metaData.value, mutations, events);
                     }
                 }
             }
 
             IndexMetaData.Builder builder = IndexMetaData.builder(indexMetaData);
             try {
-                boolean indexDirty = refreshIndexMapping(indexService, builder, mutations, events);
+                boolean indexDirty = refreshIndexMapping(indexService, indexMetaData, builder, mutations, events);
                 if (indexDirty) {
                     mdBuilder.put(builder);
                     dirty = true;
@@ -212,7 +212,7 @@ public class MetaDataMappingService extends AbstractComponent {
         return ClusterState.builder(currentState).incrementVersion().metaData(mdBuilder).build();
     }
 
-    private boolean refreshIndexMapping(IndexService indexService, IndexMetaData.Builder builder,
+    private boolean refreshIndexMapping(IndexService indexService, IndexMetaData currentIndexMetaData,  IndexMetaData.Builder builder,
             Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
         boolean dirty = false;
         String index = indexService.index().getName();
@@ -234,7 +234,7 @@ public class MetaDataMappingService extends AbstractComponent {
                     builder.putMapping(mappingMetaData2);
 
                     if (!mappingMetaData2.type().equals(MapperService.DEFAULT_MAPPING)) {
-                        clusterService.getSchemaManager().updateTableSchema(indexService.mapperService(), mappingMetaData2, mutations, events);
+                        clusterService.getSchemaManager().updateTableSchema(indexService.mapperService(), currentIndexMetaData, mappingMetaData2, mutations, events);
                     }
                 }
             }
@@ -401,7 +401,7 @@ public class MetaDataMappingService extends AbstractComponent {
 
                     // update CQL schema.
                     if (mappingMd.type().equals(mappingType) && !mappingMd.type().equals(MapperService.DEFAULT_MAPPING)) {
-                        clusterService.getSchemaManager().updateTableSchema(mapperService, mappingMd, mutations, events);
+                        clusterService.getSchemaManager().updateTableSchema(mapperService, indexMetaData, mappingMd, mutations, events);
                     }
                 }
                 builder.put(indexMetaDataBuilder);

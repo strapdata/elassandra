@@ -568,7 +568,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         for (ObjectObjectCursor<String,MappingMetaData> cursor : indexMetaData.getMappings()) {
                             MappingMetaData mappingMd = cursor.value;
                             if (mappingMd.type() != null && !mappingMd.type().equals(MapperService.DEFAULT_MAPPING)) {
-                                ksm = clusterService.getSchemaManager().updateTableSchema(ksm, indexService.mapperService(), mappingMd, mutations, events);
+                                ksm = clusterService.getSchemaManager().updateTableSchema(ksm, indexService.mapperService(), indexMetaData, mappingMd, mutations, events);
                             }
                         }
                     } else {
