@@ -35,16 +35,28 @@ For Elasticsearch users, elassandra provides useful features :
 
 ## Quick start
 
-#### Elasticsearch 6.x changes
+* [Deploy Elassandra by launching a Google Kubernetes Engine](./docs/google-kubernetes-tutorial.md):
+
+  [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.png)](https://console.cloud.google.com/cloudshell/open?git_repo=https://github.com/strapdata/elassandra-google-k8s-marketplace&tutorial=docs/google-kubernetes-tutorial.md)
+  
+## Upgrade Instructions
+
+#### Elassandra 6.2.3.8+
+
+Elassandra 6.2.3.8+ fully manages the elasticsearch mapping in the CQL schema through the use of CQL schema extensions (see *system_schema.tables*, column *extensions*). These table extensions and the CQL schema updates resulting of elasticsearch index creation/modification are updated in batched atomic schema updates to ensure consistency when concurrent updates occurs. Moreover, these extensions are stored in binary and support partial updates to be more efficient. As the result, the elasticsearch mapping is not more stored in the *elastic_admin.metadata* table and once all your nodes have been upgraded to 6.2.3.8+, apply the following CQL statements to remove useless elasticsearch metadata:
+```bash
+ALTER TABLE elastic_admin.metadata DROP metadata;
+ALTER TABLE elastic_admin.metadata WITH comment = '';
+```
+
+#### Elassandra 6.x changes
 
 * Elasticsearch now supports only one document type per index backed by one Cassandra table. Unless you specify an elasticsearch type name in your mapping, data is stored in a cassandra table named **"_doc"**. If you want to search many cassandra tables, you now need to create and search many indices.
 * Elasticsearch 6.x manages shard consistency through several metadata fields (_primary_term, _seq_no, _version) that are not used in elassandra because replication is fully managed by cassandra.
 
-#### Requirements
+## Installation
 
 Ensure Java 8 is installed and `JAVA_HOME` points to the correct location.
-
-#### Installation
 
 * [Download](https://github.com/strapdata/elassandra/releases) and extract the distribution tarball
 * Define the CASSANDRA_HOME environment variable : `export CASSANDRA_HOME=<extracted_directory>`
