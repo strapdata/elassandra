@@ -890,7 +890,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
                 try {
                     // TODO: track change to update CQL schema when really needed
-                    clusterService.convertMetadataToSchemaMutations(newClusterState.metaData(), mutations, events);
+                    clusterService.writeMetadataToSchemaMutations(newClusterState.metaData(), mutations, events);
                 } catch (ConfigurationException | IOException e1) {
                     throw new RuntimeException(e1);
                 }

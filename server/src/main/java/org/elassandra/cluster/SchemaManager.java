@@ -299,12 +299,13 @@ public class SchemaManager extends AbstractComponent {
         } else {
             UserType userType = userTypeOption.get();
             UTName name = new UTName(new ColumnIdentifier(ksm.name, true), ci);
-            logger.trace("update type keyspace=[{}] name=[{}] fields={}", ksm.name, typeName, fields);
+            logger.trace("update keyspace.type=[{}].[{}] fields={}", ksm.name, typeName, fields);
             for(Map.Entry<String, CQL3Type.Raw> field : fields.entrySet()) {
                 FieldIdentifier fieldIdentifier = FieldIdentifier.forInternalString(field.getKey());
                 int i = userType.fieldPosition(fieldIdentifier);
                 if (i == -1) {
                     // add missing field
+                    logger.trace("add field to keyspace.type=[{}].[{}] field={}", ksm.name, typeName, fieldIdentifier);
                     AlterTypeStatement ats = AlterTypeStatement.addition(name, fieldIdentifier, field.getValue());
                     userType = ats.updateUserType(ksm, mutations, events);
                 } else {

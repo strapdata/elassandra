@@ -18,9 +18,12 @@ package org.elassandra;
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import com.google.common.net.InetAddresses;
 
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.TupleType;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.UUIDGen;
@@ -59,9 +62,9 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  *
  */
-//mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
 public class CqlTypesTests extends ESSingleNodeTestCase {
 
+    @Test
     public void testTest() throws Exception {
         createIndex("cmdb");
         ensureGreen("cmdb");
@@ -632,5 +635,30 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         SearchResponse resp = client().prepareSearch().setIndices("example").setQuery(QueryBuilders.matchAllQuery()).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(1L));
      }
+
+    @Test
+    public void testNestedMappingUpdate() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+
+        assertThat(client().prepareIndex("test", "my_type", "1")
+                .setSource("{\"event_info\": {}}", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "my_type", "2")
+                .setSource("{\"event_info\": {\"foo\":\"bar\"}}", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test", "my_type", "3")
+                .setSource("{\"event_info\": {\"foo2\":\"bar2\"}}", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+
+        UntypedResultSet rs = process(ConsistencyLevel.ONE,"select * from system_schema.types WHERE keyspace_name='test' and type_name='my_type_event_info';");
+        assertThat(rs.size(), equalTo(1));
+        Row row = rs.one();
+        assertTrue(row.has("field_names"));
+        List<String> filed_names = row.getList("field_names", UTF8Type.instance);
+        System.out.println("filed_names=" + filed_names);
+        assertTrue(filed_names.contains("foo"));
+        assertTrue(filed_names.contains("foo2"));
+    }
 }
 

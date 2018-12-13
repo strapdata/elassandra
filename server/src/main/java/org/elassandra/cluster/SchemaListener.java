@@ -20,7 +20,8 @@
 package org.elassandra.cluster;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.google.common.collect.ImmutableListMultimap;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ListMultimap;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -45,6 +46,7 @@ import org.elasticsearch.common.settings.Settings;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -55,8 +57,10 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     final ClusterService clusterService;
     final Logger logger;
 
-    MetaData metaData = null;
-    ImmutableListMultimap.Builder<String, IndexMetaData> indexMetaDataBuilder; // indexName -> List of IndexMetaData with a single mapping
+    // record per transaction changes (
+    boolean record = false;
+    MetaData recordedMetaData = null;
+    ListMultimap<String, IndexMetaData> recordedIndexMetaData = ArrayListMultimap.create(); // indexName -> List of IndexMetaData with a single mapping
 
     public SchemaListener(Settings settings, ClusterService clusterService) {
         this.clusterService = clusterService;
@@ -65,54 +69,44 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     }
 
     /**
-     * Not called when resulting from a cluster state update invloving a CQL update (see inhibited MigrationListeners in MigrationManager.announce()).
+     * Not called when resulting from a cluster state update involving a CQL update (see inhibited MigrationListeners in MigrationManager.announce()).
      */
     @Override
-    public void onBeginTransaction()
-    {
-        indexMetaDataBuilder = ImmutableListMultimap.builder();
-        metaData = null;
+    public void onBeginTransaction() {
+        record = true;
+        recordedIndexMetaData.clear();
+        recordedMetaData = null;
     }
 
     /**
-     * Not called when resulting from a cluster state update invloving a CQL update (see inhibited MigrationListeners in MigrationManager.announce()).
      * Rebuild MetaData from per transaction updated extensions and submit a clusterState update task.
      */
     @Override
-    public void onEndTransaction()
-    {
-        final MetaData metaData2 = metaData;
-        final ImmutableListMultimap<String, IndexMetaData> newIndexMetaData = (indexMetaDataBuilder == null) ? null : indexMetaDataBuilder.build();
+    public void onEndTransaction() {
+        if (recordedMetaData != null || recordedIndexMetaData != null) {
+            final MetaData recordedMetaData2 = recordedMetaData;
 
-        if (metaData != null || newIndexMetaData != null) {
             clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
                     ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-
-                    MetaData newMetadata = (metaData2 == null) ? currentState.metaData() : metaData2;
-                    MetaData.Builder metaDataBuilder = MetaData.builder(newMetadata);
-                    for(String indexName : newIndexMetaData.keySet()) {
-                        // merge all IndexMetadata for single type to a multi-typed IndexMetaData (for baward compatibility with version 5)
-                        IndexMetaData indexMetaData = metaDataBuilder.get(indexName);
-                        if (indexMetaData == null)
-                            indexMetaData = newIndexMetaData.get(indexName).get(0);
-
-                        IndexMetaData.Builder indexMetaDataBuilder = new IndexMetaData.Builder(indexMetaData);
-                        for(IndexMetaData imd : newIndexMetaData.get(indexName)) {
-                            for(ObjectCursor<MappingMetaData> m : imd.getMappings().values())
-                                indexMetaDataBuilder.putMapping(m.value);
-                        }
-                        metaDataBuilder.put(indexMetaDataBuilder);
+                    final MetaData sourceMetaData = (recordedMetaData2 == null) ? currentState.metaData() : recordedMetaData2;
+                    final MetaData.Builder metaDataBuilder = MetaData.builder(sourceMetaData);
+                    if (recordedMetaData2 == null) {
+                        // add collected mappings coming from a CQL update (table schema restoration)
+                        recordedIndexMetaData.keySet().forEach( i -> clusterService.mergeIndexMetaData(metaDataBuilder, i, recordedIndexMetaData.get(i)));
+                    } else {
+                        // add all mappings from table extensions
+                        clusterService.mergeWithTableExtensions(metaDataBuilder);
                     }
 
                     // update blocks
-                    if (newMetadata.settings().getAsBoolean("cluster.blocks.read_only", false))
+                    if (sourceMetaData.settings().getAsBoolean("cluster.blocks.read_only", false))
                         blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
 
                     // update indices block.
-                    for (IndexMetaData indexMetaData : newMetadata)
+                    for (IndexMetaData indexMetaData : sourceMetaData)
                         blocks.updateBlocks(indexMetaData);
 
                     return newStateBuilder.metaData(metaDataBuilder).blocks(blocks).build();
@@ -125,13 +119,16 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
             });
         }
 
-        indexMetaDataBuilder = null;
-        metaData = null;
+        record = false;
+        recordedIndexMetaData.clear();
+        recordedMetaData = null;
     }
 
     @Override
-    public void onCreateColumnFamily(KeyspaceMetadata ksm, CFMetaData cfm)
-    {
+    public void onCreateColumnFamily(KeyspaceMetadata ksm, CFMetaData cfm) {
+        if (!record)
+            return;
+
         logger.trace("{}.{}", ksm.name, cfm.cfName);
         if (!isElasticAdmin(ksm.name, cfm.cfName)) {
             updateElasticsearchMapping(ksm, cfm);
@@ -143,11 +140,13 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
      * then trigger 2i mapping update and a clusterState update.
      */
     @Override
-    public void onUpdateColumnFamily(KeyspaceMetadata ksm, CFMetaData cfm, boolean affectsStatements)
-    {
+    public void onUpdateColumnFamily(KeyspaceMetadata ksm, CFMetaData cfm, boolean affectsStatements) {
+        if (!record)
+            return;
+
         logger.trace("{}.{}", ksm.name, cfm.cfName);
         if (isElasticAdmin(ksm.name, cfm.cfName)) {
-            updateElasticsearchMetaData(ksm, cfm);
+            recordedMetaData =  clusterService.readMetaData(cfm);
         } else {
             updateElasticsearchMapping(ksm, cfm);
         }
@@ -157,8 +156,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
      * Update number of shards if replication map changed
      */
     @Override
-    public void onUpdateKeyspace(final String ksName)
-    {
+    public void onUpdateKeyspace(final String ksName) {
         logger.trace("{}", ksName);
         MetaData metadata = this.clusterService.state().metaData();
         for(ObjectCursor<IndexMetaData> imdCursor : metadata.indices().values()) {
@@ -184,8 +182,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
 
     // TODO: drop associated indices
     @Override
-    public void onDropKeyspace(String ksName)
-    {
+    public void onDropKeyspace(String ksName) {
         logger.trace("{}", ksName);
     }
 
@@ -198,25 +195,13 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
         boolean hasSecondaryIndex = cfm.getIndexes().has(SchemaManager.buildIndexName(cfm.cfName));
         for(Map.Entry<String, ByteBuffer> e : cfm.params.extensions.entrySet()) {
             if (clusterService.isValidTypeExtension(e.getKey())) {
-                try {
                     IndexMetaData indexMetaData = clusterService.getIndexMetaDataFromExtension(e.getValue());
-                    if (indexMetaDataBuilder != null)
-                        indexMetaDataBuilder.put(indexMetaData.getIndex().getName(), indexMetaData);
+                    if (recordedIndexMetaData != null)
+                        recordedIndexMetaData.put(indexMetaData.getIndex().getName(), indexMetaData);
 
                     if (hasSecondaryIndex)
                         indexMetaData.getMappings().forEach( m -> SchemaManager.typeToCfName(ksm.name, m.value.type()) );
-                } catch (IOException e1) {
-                    logger.error("Failed to parse mapping in {}.{} extension {}", ksm.name, cfm.cfName, e.getKey());
-                }
             }
-        }
-    }
-
-    void updateElasticsearchMetaData(KeyspaceMetadata ksm, CFMetaData cfm) {
-        try {
-            metaData =  clusterService.readMetaData(cfm);
-        } catch (IOException e) {
-            logger.error("Failed to parse metadata from elastic_admin.metadata table", e);
         }
     }
 

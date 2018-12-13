@@ -1283,6 +1283,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         Map<String, String> params = new HashMap<>(2);
         params.put("binary", "false");
         params.put(CONTEXT_CQL_PARAM, "true");
+        params.put(MetaData.CONTEXT_MODE_PARAM, MetaData.CONTEXT_CQL_PARAM);
         CQL_FORMAT_PARAMS = new MapParams(params);
     }
 
