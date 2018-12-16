@@ -32,6 +32,7 @@ import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.Event;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
 import org.codehaus.jackson.JsonGenerationException;
@@ -43,6 +44,8 @@ import org.elassandra.PaxosMetaDataUpdateException;
 import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
+import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.client.transport.NoNodeAvailableException;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
@@ -66,34 +69,37 @@ import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.network.NetworkAddress;
+import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.discovery.AckClusterStatePublishResponseHandler;
 import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.discovery.DiscoveryStats;
-import org.elasticsearch.node.NodeClosedException;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.transport.TransportService;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -102,24 +108,29 @@ import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;
 
 /**
+ * https://www.elastic.co/guide/en/elasticsearch/reference/6.3/modules-discovery-zen.html
+ *
  * Discover the cluster topology from cassandra snitch and settings, mappings, blocks from the elastic_admin keyspace.
  * Publishing is just a notification to refresh in memory configuration from the cassandra table.
  * @author vroyer
  *
  */
-public class CassandraDiscovery extends AbstractLifecycleComponent implements Discovery, IEndpointStateChangeSubscriber {
+public class CassandraDiscovery extends AbstractLifecycleComponent implements Discovery, IEndpointStateChangeSubscriber, AppliedClusterStateAction.AppliedClusterStateListener {
     private static final EnumSet CASSANDRA_ROLES = EnumSet.of(Role.MASTER,Role.DATA);
     private final TransportService transportService;
 
     private final ClusterService clusterService;
     private final ClusterApplier clusterApplier;
-    private volatile ClusterState clusterState;
+    private final AtomicReference<ClusterState> committedState; // last committed cluster state
 
     private final ClusterName clusterName;
     private final DiscoverySettings discoverySettings;
     private final NamedWriteableRegistry namedWriteableRegistry;
 
-    private final AtomicReference<MetaDataVersionAckListener> metaDataVersionAckListenerRef = new AtomicReference<>(null);
+    private final PendingClusterStatesQueue pendingStatesQueue;
+    private final AppliedClusterStateAction appliedClusterStateAction;
+    private final AtomicReference<AckClusterStatePublishResponseHandler> handlerRef = new AtomicReference<>();
+    private final Object stateMutex = new Object();
 
     private final ClusterGroup clusterGroup;
 
@@ -140,6 +151,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      */
     private final AtomicBoolean autoEnableSearch = new AtomicBoolean(System.getProperty("es.auto_enable_search") == null || Boolean.getBoolean("es.auto_enable_search"));
 
+    public static final Setting<Integer> MAX_PENDING_CLUSTER_STATES_SETTING =
+            Setting.intSetting("discovery.cassandra.publish.max_pending_cluster_states", 25, 1, Property.NodeScope);
 
     public CassandraDiscovery(Settings settings,
             TransportService transportService,
@@ -154,14 +167,21 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         this.transportService = transportService;
         this.clusterName = clusterService.getClusterName();
 
+        this.committedState = new AtomicReference<>();
         this.clusterService.setDiscovery(this);
-        this.clusterService.getMasterService().setClusterStateSupplier(() -> clusterState);
+        this.clusterService.getMasterService().setClusterStateSupplier(() -> committedState.get());
         this.clusterService.getMasterService().setClusterStatePublisher(this::publish);
 
         this.localAddress = FBUtilities.getBroadcastAddress();
         this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());
 
         this.clusterGroup = new ClusterGroup();
+        this.pendingStatesQueue = new PendingClusterStatesQueue(logger, MAX_PENDING_CLUSTER_STATES_SETTING.get(settings));
+        this.appliedClusterStateAction = new AppliedClusterStateAction(settings, transportService, this, discoverySettings);
+    }
+
+    public PendingClusterStatesQueue pendingStatesQueue() {
+        return this.pendingStatesQueue;
     }
 
     public static String buildNodeName(InetAddress addr) {
@@ -207,13 +227,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             }
         }
 
-        publishX2(clusterState);
         updateRoutingTable("starting-cassandra-discovery", true);
     }
 
     public ClusterState initClusterState(DiscoveryNode localNode) {
         ClusterState.Builder builder = clusterApplier.newClusterStateBuilder();
-        this.clusterState = builder.nodes(DiscoveryNodes.builder().add(localNode)
+        ClusterState clusterState = builder.nodes(DiscoveryNodes.builder().add(localNode)
                 .localNodeId(localNode.getId())
                 .masterNodeId(localNode.getId())
                 .build())
@@ -221,8 +240,24 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 .addGlobalBlock(STATE_NOT_RECOVERED_BLOCK)
                 .addGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK))
             .build();
-        this.clusterApplier.setInitialState(this.clusterState);
-        return this.clusterState;
+        setCommittedState(clusterState);
+        this.clusterApplier.setInitialState(clusterState);
+        return clusterState;
+    }
+
+    /**
+     * Update the shardState map and trigger a cluster state routing table update if changed.
+     * @param remoteNode
+     * @param shardsStateMap
+     * @param source
+     */
+    private void updateShardRouting(final UUID remoteNode, final Map<String, ShardRoutingState> shardsStateMap, String source) {
+        this.remoteShardRoutingStateMap.compute(remoteNode, (k, v) -> {
+            if (v == null) return shardsStateMap;
+            if (!v.equals(shardsStateMap))
+                updateRoutingTable(source, false);
+            return shardsStateMap;
+        });
     }
 
     private void updateRoutingTable(String source, boolean nodesUpdate) {
@@ -247,7 +282,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     }
                     clusterStateBuilder.metaData(metaDataBuilder.build());
                 }
-                return clusterStateBuilder.incrementVersion().build();
+                return clusterStateBuilder.build();
             }
 
             @Override
@@ -285,10 +320,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     if (epState.getApplicationState(ApplicationState.X1) != null) {
                         VersionedValue x1 = epState.getApplicationState(ApplicationState.X1);
                         if (!this.localNode().getId().equals(hostId)) {
-                            Map<String, ShardRoutingState> shardsStateMap;
                             try {
-                                shardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
-                                this.remoteShardRoutingStateMap.put(Gossiper.instance.getHostId(endpoint), shardsStateMap);
+                                Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(x1.value, indexShardStateTypeReference);
+                                updateShardRouting(Gossiper.instance.getHostId(endpoint), shardsStateMap, "X1-"+endpoint);
                             } catch (IOException e) {
                                 logger.error("Failed to parse X1 for node [{}]", hostId);
                             }
@@ -359,104 +393,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         return false;
     }
 
-    public Optional<CassandraDiscovery.MetaDataVersionAckListener> getMetaDataVersionAckListener() {
-        return Optional.ofNullable(metaDataVersionAckListenerRef.get());
-    }
-
-    public MetaDataVersionAckListener newMetaDataVersionAckListener(long version, Discovery.AckListener ackListener, ClusterState clusterState) {
-        MetaDataVersionAckListener prevListener = metaDataVersionAckListenerRef.getAndSet(new MetaDataVersionAckListener(version, ackListener, clusterState));
-        assert prevListener == null : "metaDataVersionAckListener should be null";
-        return metaDataVersionAckListenerRef.get();
-    }
-
-    public class MetaDataVersionAckListener implements Closeable  {
-        final long expectedVersion;
-        final Discovery.AckListener ackListener;
-        final ClusterState clusterState;
-        final CountDownLatch countDownLatch = new CountDownLatch(1);
-        final ConcurrentMap<String, DiscoveryNode> attendees;
-
-        private MetaDataVersionAckListener(long version, Discovery.AckListener ackListener, ClusterState clusterState) {
-            this.expectedVersion = version;
-            this.ackListener = ackListener;
-            this.clusterState = clusterState;
-            this.attendees = new ConcurrentHashMap<String, DiscoveryNode>(clusterState.nodes().getSize());
-
-            clusterState.nodes().forEach((n) -> {
-                if (!localNode().getId().equals(n.getId()) &&
-                    n.status() == DiscoveryNodeStatus.ALIVE &&
-                    isNormal(n))
-                    attendees.put(n.getId(), n);
-                });
-            logger.debug("new MetaDataVersionAckListener version={} attendees={}", expectedVersion, this.attendees.keySet());
-            if (attendees.size() == 0)
-                countDownLatch.countDown();
-        }
-
-        public long version() {
-            return this.expectedVersion;
-        }
-
-        public Discovery.AckListener ackListener() {
-            return this.ackListener;
-        }
-
-        // called by the clusterService thread, block until remote nodes have applied a metadata younger than expectedVersion.
-        // unlocked be the C* gossiper thread calling checkMetaDataVersion().
-        public boolean await(long timeout, TimeUnit unit) {
-            boolean done = false;
-            try {
-               logger.debug("MetaDataVersionAckListener awaiting metadata={} from {} nodes", this.clusterState.metaData(), countDownLatch.getCount());
-               done = countDownLatch.await(timeout, unit);
-            } catch (InterruptedException e) {
-
-            }
-            logger.debug("MetaDataVersionAckListener version={} {}", expectedVersion, done ? "applied by all alive nodes" : "timeout");
-            metaDataVersionAckListenerRef.set(null);
-            return done;
-        }
-
-        public void close() {
-            logger.debug("MetaDataVersionAckListener abort on metadata={}", this.clusterState.metaData());
-            metaDataVersionAckListenerRef.set(null);
-        }
-
-        /**
-         * Release the listener when all attendees have reached the expected version or become down.
-         * Called by the cassandra gossiper thread from onChange() or onDead() or onRemove().
-         */
-        public void notify(EndpointState endPointState) {
-            VersionedValue hostIdValue = endPointState.getApplicationState(ApplicationState.HOST_ID);
-            if (hostIdValue == null)
-                return; // happen when we are removing a node while updating the mapping
-
-            String hostId = hostIdValue.value;
-            if (hostId == null || localNode().getId().equals(hostId) || !attendees.containsKey(hostId))
-                return;
-
-            if (!endPointState.isAlive() || !endPointState.getStatus().equals("NORMAL")) {
-                // node was removed from the gossiper, down or leaving, acknowledge to avoid locking.
-                DiscoveryNode node = attendees.remove(hostId);
-                if (node != null) {
-                    logger.debug("nack node={} version={} remaining attendees={}", node.getId(), version(), attendees.keySet());
-                    ackListener.onNodeAck(node, new NodeClosedException(node));
-                }
-            } else {
-                VersionedValue vv = endPointState.getApplicationState(ApplicationState.X2);
-                if (vv != null && getMetadataVersion(vv) >= version()) {
-                    DiscoveryNode node = attendees.remove(hostId);
-                    if (node != null) {
-                        // acknowledge node having the right metadata version number.
-                        logger.debug("ack node={} version={} remaining attendees={}", node.getId(), version(), attendees.keySet());
-                        ackListener.onNodeAck(node, null);
-                    }
-                }
-            }
-            if (attendees.size() == 0)
-                countDownLatch.countDown();
-        }
-    }
-
     private boolean isLocal(InetAddress endpoint) {
         return DatabaseDescriptor.getEndpointSnitch().getDatacenter(endpoint).equals(localDc);
     }
@@ -469,7 +405,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * #183 lookup EndpointState with the node name = cassandra broadcast address.
      * ES RPC adress can be different from the cassandra broadcast address.
      */
-    private boolean isNormal(DiscoveryNode node) {
+    public boolean isNormal(DiscoveryNode node) {
         // endpoint address = C* broadcast address = Elasticsearch node name (transport may be bound to C* internal or C* RPC broadcast)
         EndpointState state = Gossiper.instance.getEndpointStateForEndpoint(InetAddresses.forString(node.getName()));
         if (state == null) {
@@ -511,7 +447,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     updateNode(endpoint, epState);
                 } else {
                     // node probably down, notify metaDataVersionAckListener..
-                    getMetaDataVersionAckListener().ifPresent(listener -> listener.notify(Gossiper.instance.getEndpointStateForEndpoint(endpoint)));
+                    notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
                 }
                 break;
 
@@ -522,9 +458,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                         if (logger.isTraceEnabled())
                             logger.trace("Endpoint={} X1={} => updating routing table", endpoint, versionValue);
 
-                        Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(versionValue.value, indexShardStateTypeReference);
-                        this.remoteShardRoutingStateMap.put(Gossiper.instance.getHostId(endpoint), shardsStateMap);
-                        updateRoutingTable("X1-" + endpoint, false);
+                        final Map<String, ShardRoutingState> shardsStateMap = jsonMapper.readValue(versionValue.value, indexShardStateTypeReference);
+                        final UUID remoteNode = Gossiper.instance.getHostId(endpoint);
+                        updateShardRouting(remoteNode, shardsStateMap, "X1-" + endpoint);
                     }
                 } catch (Exception e) {
                     logger.warn("Failed to parse gossip index shard state", e);
@@ -538,11 +474,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 break;
 
             }
-        }
-
-        // metadata version update from a datacenter sharing our cluster state.
-        if (state == ApplicationState.X2 && !this.localAddress.equals(endpoint) && clusterService.isDatacenterGroupMember(endpoint)) {
-            getMetaDataVersionAckListener().ifPresent(listener -> listener.notify(epState));
         }
 
         // self status update.
@@ -562,7 +493,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                             logger.error("Failed to enable search",e);
                         }
                     }
-                    publishX2(this.clusterState, true);
+                    publishX2(this.committedState.get(), true);
                  } else {
                     // node is leaving or whatever, disabling search.
                     if (this.searchEnabled.get()) {
@@ -595,7 +526,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     public void onDead(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
             logger.debug("Endpoint={}  ApplicationState={} isAlive={} => update node + disconnecting", endpoint, epState, epState.isAlive());
-            getMetaDataVersionAckListener().ifPresent(listener -> listener.notify(Gossiper.instance.getEndpointStateForEndpoint(endpoint)));
+            notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
             updateNode(endpoint, epState);
         }
     }
@@ -631,9 +562,35 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             DiscoveryNode removedNode = this.nodes().findByInetAddress(endpoint);
             if (removedNode != null  && !this.localNode().getId().equals(removedNode.getId())) {
                 logger.warn("Removing node ip={} node={}  => disconnecting", endpoint, removedNode);
-                getMetaDataVersionAckListener().ifPresent(listener -> listener.notify(Gossiper.instance.getEndpointStateForEndpoint(endpoint)));
+                notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
                 this.clusterGroup.remove(removedNode.getId());
                 updateRoutingTable("node-removed-"+endpoint, true);
+            }
+        }
+    }
+
+    /**
+     * Release the listener when all attendees have reached the expected version or become down.
+     * Called by the cassandra gossiper thread from onChange() or onDead() or onRemove().
+     */
+    public void notifyHandler(EndpointState endPointState) {
+        VersionedValue hostIdValue = endPointState.getApplicationState(ApplicationState.HOST_ID);
+        if (hostIdValue == null)
+            return; // happen when we are removing a node while updating the mapping
+
+        String hostId = hostIdValue.value;
+        if (hostId == null || localNode().getId().equals(hostId))
+            return;
+
+        if (!endPointState.isAlive() || !endPointState.getStatus().equals("NORMAL")) {
+            // node was removed from the gossiper, down or leaving, acknowledge to avoid locking.
+            AckClusterStatePublishResponseHandler handler = handlerRef.get();
+            if (handler != null) {
+                DiscoveryNode node = nodes().get(hostId);
+                if (node != null) {
+                    logger.debug("nack node={}", node.getId());
+                    handler.onFailure(node, new NoNodeAvailableException("Node "+hostId+" unavailable"));
+                }
             }
         }
     }
@@ -721,11 +678,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
 
     public void publishX2(ClusterState clusterState, boolean force) {
-        String clusterStateSting = clusterState.metaData().clusterUUID() + '/' + clusterState.metaData().version();
         if (Gossiper.instance.isEnabled() || force) {
-            Gossiper.instance.addLocalApplicationState(ELASTIC_META_DATA, StorageService.instance.valueFactory.datacenter(clusterStateSting));
+            Gossiper.instance.addLocalApplicationState(ELASTIC_META_DATA, StorageService.instance.valueFactory.datacenter(clusterState.metaData().x2()));
             if (logger.isTraceEnabled())
-                logger.trace("X2={} published in gossip state", clusterStateSting);
+                logger.trace("X2={} published in gossip state", clusterState.metaData().x2());
         }
     }
 
@@ -734,10 +690,23 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         Gossiper.instance.unregister(this);
     }
 
+    public ClusterState clusterState() {
+        ClusterState clusterState = committedState.get();
+        assert clusterState != null : "accessing cluster state before it is set";
+        return clusterState;
+    }
+
+    // visible for testing
+    void setCommittedState(ClusterState clusterState) {
+        synchronized (stateMutex) {
+            committedState.set(clusterState);
+            publishX2(clusterState);
+        }
+    }
+
     public DiscoveryNode localNode() {
         return this.transportService.getLocalNode();
     }
-
 
     public String nodeDescription() {
         return clusterName.value() + "/" + localNode().getId();
@@ -863,31 +832,43 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     @Override
     public void startInitialJoin() {
-        // TODO Auto-generated method stub
+        publishX2(this.committedState.get());
     }
 
+    /**
+     * Publish all the changes to the cluster from the master (can be called just by the master). The publish
+     * process should apply this state to the master as well!
+     *
+     * The {@link AckListener} allows to keep track of the ack received from nodes, and verify whether
+     * they updated their own cluster state or not.
+     *
+     * The method is guaranteed to throw a {@link FailedToCommitClusterStateException} if the change is not committed and should be rejected.
+     * Any other exception signals the something wrong happened but the change is committed.
+     *
+     * Strapdata NOTES:
+     * Publish is blocking until change is apply locally, but not while waiting remote nodes.
+     * When the last remote node acknowledge a metadata version, this finally acknowledge the calling task.
+     */
     @Override
-    public synchronized void publish(ClusterChangedEvent clusterChangedEvent, Discovery.AckListener ackListener) {
+    public void publish(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener) {
         ClusterState previousClusterState = clusterChangedEvent.previousState();
         ClusterState newClusterState = clusterChangedEvent.state();
+        DiscoveryNodes nodes = clusterChangedEvent.state().nodes();
+        DiscoveryNode localNode = nodes.getLocalNode();
 
         long startTimeNS = System.nanoTime();
-        SchemaUpdate schemaUpdate = SchemaUpdate.NO_UPDATE;
         try {
-            String newClusterStateMetaDataString = MetaData.Builder.toXContent(newClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
-            String previousClusterStateMetaDataString = MetaData.Builder.toXContent(previousClusterState.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
-            if (!newClusterStateMetaDataString.equals(previousClusterStateMetaDataString) && !newClusterState.blocks().disableStatePersistence() && clusterChangedEvent.schemaUpdate().update()) {
-                // update MeteData.version+cluster_uuid
-                schemaUpdate = clusterChangedEvent.schemaUpdate();
+            if (clusterChangedEvent.schemaUpdate().update() &&
+                !newClusterState.blocks().disableStatePersistence() &&
+                !ClusterService.metaDataAsString(newClusterState).equals(ClusterService.metaDataAsString(previousClusterState))) {
+                logger.debug("Distributed clusterState update version={} source=[{}]", clusterChangedEvent.state().version(), clusterChangedEvent.source());
 
                 newClusterState = ClusterState.builder(newClusterState)
                                     .metaData(MetaData.builder(newClusterState.metaData()).incrementVersion().build())
-                                    .incrementVersion()
                                     .build();
 
                 Collection<Mutation> mutations = clusterChangedEvent.mutations() == null ? new ArrayList<>() : clusterChangedEvent.mutations();
                 Collection<Event.SchemaChange> events = clusterChangedEvent.events() == null ? new ArrayList<>() : clusterChangedEvent.events();
-
                 try {
                     // TODO: track change to update CQL schema when really needed
                     clusterService.writeMetadataToSchemaMutations(newClusterState.metaData(), mutations, events);
@@ -895,18 +876,24 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                     throw new RuntimeException(e1);
                 }
 
-                // try to persist new metadata in cassandra.
-                if (schemaUpdate.update() && newClusterState.nodes().getSize() > 1) {
-                    // register the X2 listener before publishing to avoid dead locks !
-                    newMetaDataVersionAckListener(newClusterState.metaData().version(), ackListener, newClusterState);
-                }
                 try {
                     // PAXOS schema update commit
                     clusterService.commitMetaData(previousClusterState.metaData(), newClusterState.metaData(), clusterChangedEvent.source());
 
+                    // compute alive node for awaiting applied acknowledgment
+                    long publishingStartInNanos = System.nanoTime();
+                    Set<DiscoveryNode> nodesToPublishTo = new HashSet<>(nodes.getSize());
+                    for (final DiscoveryNode node : nodes) {
+                        if (node.status() == DiscoveryNodeStatus.ALIVE && isNormal(node))
+                            nodesToPublishTo.add(node);
+                    }
+                    logger.trace("new coordinator handler for nodes={}", nodesToPublishTo);
+                    final AckClusterStatePublishResponseHandler handler = new AckClusterStatePublishResponseHandler(nodesToPublishTo, ackListener);
+                    handlerRef.set(handler);
+
                     // apply new CQL schema
                     if (mutations != null && mutations.size() > 0) {
-                        logger.debug("Applying CQL schema mutations={}", mutations);
+                        logger.debug("Applying CQL schema update={} mutations={} ", clusterChangedEvent.schemaUpdate(), mutations);
 
                         // unless update is UPDATE_ASYNCHRONOUS, block until schema is applied.
                         Future<?> future = MigrationManager.announce(mutations, this.clusterService.getSchemaManager().getInhibitedSchemaListeners());
@@ -918,11 +905,59 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                                 .routingTable(RoutingTable.build(this.clusterService, newClusterState))
                                 .build();
                         logger.info("CQL SchemaChanges={}", events);
-                    } else {
-                        logger.debug("No CQL mutation to apply");
                     }
 
-                    publishX2(newClusterState);
+                    // add new cluster state into the pending-to-apply cluster states queue, listening ack from remote nodes.
+                    final AtomicBoolean processedOrFailed = new AtomicBoolean();
+                    pendingStatesQueue.addPending(newClusterState, new PendingClusterStatesQueue.StateProcessedListener() {
+                        @Override
+                        public void onNewClusterStateProcessed() {
+                            processedOrFailed.set(true);
+                            handler.onResponse(localNode);
+                        }
+
+                        @Override
+                        public void onNewClusterStateFailed(Exception e) {
+                            processedOrFailed.set(true);
+                            handler.onFailure(localNode, e);
+                            logger.warn(
+                                (org.apache.logging.log4j.util.Supplier<?>) () -> new ParameterizedMessage(
+                                    "failed while applying cluster state locally [{}]",
+                                    clusterChangedEvent.source()),
+                                e);
+                        }
+                    });
+
+                    // apply the next-to-process cluster state.
+                    synchronized (stateMutex) {
+                        if (clusterChangedEvent.previousState() != this.committedState.get()) {
+                            throw new FailedToCommitClusterStateException("local state was mutated while CS update was published to other nodes");
+                        }
+
+                        boolean sentToApplier = processNextCommittedClusterState(
+                                "committed version [" + newClusterState.metaData().x2() + "] source [" + clusterChangedEvent.source() + "]");
+                        if (sentToApplier == false && processedOrFailed.get() == false) {
+                            logger.warn("cluster state with version [{}] that is published locally has neither been processed nor failed",
+                                    newClusterState.metaData().x2());
+                            assert false : "cluster state published locally neither processed nor failed: " + newClusterState;
+                            return;
+                        }
+                    }
+
+                    // wait all nodes are applied.
+                    final TimeValue publishTimeout = discoverySettings.getPublishTimeout();
+                    long timeLeftInNanos = Math.max(0, publishTimeout.nanos() - (System.nanoTime() - publishingStartInNanos));
+                    if (!handler.awaitAllNodes(TimeValue.timeValueNanos(timeLeftInNanos))) {
+                        logger.info("commit state [{}] timeout with pending nodes={}",
+                                newClusterState.metaData().x2(), Arrays.toString(handler.pendingNodes()));
+                    } else {
+                        logger.debug("commit state [{}] applied succefully on nodes={}",
+                                newClusterState.metaData().x2(), nodesToPublishTo);
+                    }
+
+                    // acknowledge local master
+                    ackListener.onNodeAck(localNode, null);
+
                 } catch (ConcurrentMetaDataUpdateException e) {
                     // should replay the task later when current cluster state will match the expected metadata uuid and version
                     logger.warn("PAXOS schema update failed because schema has changed, will resubmit task when metadata.version > {}", previousClusterState.metaData().version());
@@ -937,7 +972,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                                 ClusterStateTaskConfig config;
                                 Map<Object, ClusterStateTaskListener> map = clusterChangedEvent.taskInputs().updateTasksToMap(priority, lostTimeMillis);
                                 logger.warn("metadata={} => resubmit delayed update source={} tasks={} priority={} remaing timeout={}",
-                                        clusterState.metaData(), clusterChangedEvent.source(), clusterChangedEvent.taskInputs().updateTasks, priority, timeout);
+                                        event.state().metaData(), clusterChangedEvent.source(), clusterChangedEvent.taskInputs().updateTasks, priority, timeout);
                                 clusterService.submitStateUpdateTasks(clusterChangedEvent.source(), map, ClusterStateTaskConfig.build(priority, timeout), clusterChangedEvent.taskInputs().executor);
                                 clusterService.removeListener(this); // replay only once.
                             }
@@ -947,16 +982,62 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 } catch(UnavailableException e) {
                     logger.warn("PAXOS schema update failed:", e);
                     throw new PaxosMetaDataUpdateException(e);
+                } finally {
+                    handlerRef.set(null);
                 }
+            } else {
+                // non persisted cluster state change (local update) into the PendingClusterStatesQueue.
+                logger.debug("Local clusterState update version={} source=[{}]", clusterChangedEvent.state().version(), clusterChangedEvent.source());
+                final CountDownLatch latch = new CountDownLatch(1);
+                final AtomicBoolean processedOrFailed = new AtomicBoolean();
+                pendingStatesQueue.addPending(newClusterState,
+                    new PendingClusterStatesQueue.StateProcessedListener() {
+                        @Override
+                        public void onNewClusterStateProcessed() {
+                            processedOrFailed.set(true);
+                            latch.countDown();
+                            // simulate ack from all nodes, elassandra only update the local clusterState here.
+                            clusterChangedEvent.state().nodes().forEach(node -> ackListener.onNodeAck(node, null));
+                        }
 
-                // wait for X2 acknowledgment on coordinator node only
-                if (schemaUpdate.update() && newClusterState.nodes().getSize() > 1) {
-                    try {
-                        getMetaDataVersionAckListener().ifPresent(listener -> listener.await(30L, TimeUnit.SECONDS));
-                    } catch (Throwable e) {
-                        final long version = newClusterState.metaData().version();
-                        logger.error((Supplier<?>) () -> new ParameterizedMessage("Interruped while waiting MetaData.version = {}", version), e);
+                        @Override
+                        public void onNewClusterStateFailed(Exception e) {
+                            processedOrFailed.set(true);
+                            latch.countDown();
+                            // simulate nack from all nodes, elassandra only update the local clusterState here.
+                            clusterChangedEvent.state().nodes().forEach(node -> ackListener.onNodeAck(node, e));
+                            logger.warn(
+                                (org.apache.logging.log4j.util.Supplier<?>) () -> new ParameterizedMessage(
+                                    "failed while applying cluster state locally [{}]",
+                                    clusterChangedEvent.source()),
+                                e);
+                        }
+                    });
+                // apply the next-to-process cluster state.
+                synchronized (stateMutex) {
+                    if (clusterChangedEvent.previousState() != this.committedState.get()) {
+                        throw new FailedToCommitClusterStateException("local state was mutated while CS update was published to other nodes");
                     }
+
+                    boolean sentToApplier = processNextCommittedClusterState(
+                            "committed version [" + newClusterState.metaData().x2() + "] source [" + clusterChangedEvent.source() + "]");
+                    if (sentToApplier == false && processedOrFailed.get() == false) {
+                        logger.warn("cluster state with version [{}] that is published locally has neither been processed nor failed",
+                                newClusterState.metaData().x2());
+                        assert false : "cluster state published locally neither processed nor failed: " + newClusterState;
+                        return;
+                    }
+                }
+                // indefinitely wait for cluster state to be applied locally
+                try {
+                    latch.await();
+                } catch (InterruptedException e) {
+                    logger.debug(
+                        (org.apache.logging.log4j.util.Supplier<?>) () -> new ParameterizedMessage(
+                            "interrupted while applying cluster state locally [{}]",
+                            clusterChangedEvent.source()),
+                        e);
+                    Thread.currentThread().interrupt();
                 }
             }
         } catch (PaxosMetaDataUpdateException e) {
@@ -975,29 +1056,189 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             }
             throw new ElasticsearchException(e);
             //throw new Discovery.FailedToCommitClusterStateException("Failed to commit metadata", e);
-        } finally {
-            getMetaDataVersionAckListener().ifPresent(listener -> listener.close());
+        }
+    }
+
+    // send applied message to the coordinator when applied locally the ClusterApplierService.
+    public void publish(ClusterState clusterState, String reason) {
+        final DiscoveryNode coordinatorNode = clusterState.nodes().get(clusterState.metaData().clusterUUID());
+        logger.trace("add pending cluster state [{}] reason={} coordinator={}", clusterState.metaData().x2(), reason, coordinatorNode);
+        this.pendingStatesQueue.addPending(clusterState,  new PendingClusterStatesQueue.StateProcessedListener() {
+            @Override
+            public void onNewClusterStateProcessed() {
+                if (coordinatorNode != null) {
+                    logger.trace("sending applied state=[{}] to coordinator={} reason={}",
+                            clusterState.metaData().x2(), coordinatorNode, reason);
+                    CassandraDiscovery.this.appliedClusterStateAction.sendAppliedToNode(coordinatorNode, clusterState, null);
+                }
+            }
+
+            @Override
+            public void onNewClusterStateFailed(Exception e) {
+                if (coordinatorNode != null) {
+                    logger.trace("sending failed state=[{}] to coordinator={} reason={} exception={}",
+                            clusterState.metaData().x2(), coordinatorNode, reason, e.toString());
+                    CassandraDiscovery.this.appliedClusterStateAction.sendAppliedToNode(coordinatorNode, clusterState, e);
+                }
+            }
+        });
+        // apply the next-to-process cluster state.
+        synchronized (stateMutex) {
+            boolean sentToApplier = processNextCommittedClusterState(
+                    "committed version [" + clusterState.metaData().x2() + "] source [" + reason + "]");
+            if (sentToApplier == false) {
+                assert false : "cluster state published locally neither processed nor failed: " + clusterState;
+                logger.warn("cluster state with version [{}] that is published locally has neither been processed nor failed",
+                        clusterState.metaData().x2());
+                return;
+            }
+        }
+    }
+
+    // receive ack from remote nodes when cluster state applied.
+    @Override
+    public void onClusterStateApplied(String nodeId, String x2, Exception e, ActionListener<Void> processedListener) {
+        logger.trace("received state=[{}] applied from={}", x2, nodeId);
+        try {
+            AckClusterStatePublishResponseHandler handler = this.handlerRef.get();
+            DiscoveryNode node = this.committedState.get().nodes().get(nodeId);
+            if (handler != null && node != null) {
+                if (e != null) {
+                    logger.trace("state=[{}] apply failed from node={}", x2, nodeId);
+                    handler.onFailure(node, e);
+                } else {
+                    logger.trace("state=[{}] apply from node={}", x2, nodeId);
+                    handler.onResponse(node);
+                }
+            }
+            processedListener.onResponse(null);
+        } catch(Exception ex) {
+            processedListener.onFailure(ex);
+        }
+    }
+
+
+    // return true if state has been sent to applier
+    boolean processNextCommittedClusterState(String reason) {
+        assert Thread.holdsLock(stateMutex);
+
+        final ClusterState newClusterState = pendingStatesQueue.getNextClusterStateToProcess();
+        final ClusterState currentState = committedState.get();
+        // all pending states have been processed
+        if (newClusterState == null) {
+            return false;
         }
 
-        // apply new cluster state
-        this.clusterState = newClusterState;
-        ClusterStateTaskListener listener = new ClusterStateTaskListener() {
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                ackListener.onNodeAck(transportService.getLocalNode(), null);
-            }
+        assert newClusterState.nodes().getMasterNode() != null : "received a cluster state without a master";
+        assert !newClusterState.blocks().hasGlobalBlock(discoverySettings.getNoMasterBlock()) : "received a cluster state with a master block";
 
-            @Override
-            public void onFailure(String source, Exception e) {
-                ackListener.onNodeAck(transportService.getLocalNode(), e);
-                logger.warn(
-                    (org.apache.logging.log4j.util.Supplier<?>) () -> new ParameterizedMessage(
-                        "failed while applying cluster state locally [{}]",
-                        clusterChangedEvent.source()),
-                    e);
+        try {
+            if (shouldIgnoreOrRejectNewClusterState(logger, currentState, newClusterState)) {
+                String message = String.format(
+                    Locale.ROOT,
+                    "rejecting cluster state version [%d] uuid [%s] received from [%s]",
+                    newClusterState.version(),
+                    newClusterState.stateUUID(),
+                    newClusterState.nodes().getMasterNodeId()
+                );
+                throw new IllegalStateException(message);
             }
-        };
-        clusterApplier.onNewClusterState("apply-locally-on-node[" + clusterChangedEvent.source() + "]", () -> this.clusterState, listener);
+        } catch (Exception e) {
+            try {
+                pendingStatesQueue.markAsFailed(newClusterState, e);
+            } catch (Exception inner) {
+                inner.addSuppressed(e);
+                logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected exception while failing [{}]", reason), inner);
+            }
+            return false;
+        }
+
+        if (currentState.blocks().hasGlobalBlock(discoverySettings.getNoMasterBlock())) {
+            // its a fresh update from the master as we transition from a start of not having a master to having one
+            logger.debug("got first state from fresh master [{}]", newClusterState.nodes().getMasterNodeId());
+        }
+
+        if (currentState == newClusterState) {
+            return false;
+        }
+
+        committedState.set(newClusterState);
+
+        clusterApplier.onNewClusterState("apply cluster state (from " + newClusterState.metaData().clusterUUID() + "[" + reason + "])",
+            this::clusterState,
+            new ClusterStateTaskListener() {
+                @Override
+                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+                    try {
+                        pendingStatesQueue.markAsProcessed(newClusterState);
+                    } catch (Exception e) {
+                        onFailure(source, e);
+                    }
+                }
+
+                @Override
+                public void onFailure(String source, Exception e) {
+                    logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected failure applying [{}]", reason), e);
+                    try {
+                        // TODO: use cluster state uuid instead of full cluster state so that we don't keep reference to CS around
+                        // for too long.
+                        pendingStatesQueue.markAsFailed(newClusterState, e);
+                    } catch (Exception inner) {
+                        inner.addSuppressed(e);
+                        logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected exception while failing [{}]", reason), inner);
+                    }
+                }
+            });
+
+        return true;
+    }
+
+    public static boolean shouldIgnoreOrRejectNewClusterState(Logger logger, ClusterState currentState, ClusterState newClusterState) {
+        if (newClusterState.version() < currentState.version()) {
+            logger.debug("received a cluster state that is not newer than the current one, ignoring (received {}, current {})",
+                    newClusterState.version(), currentState.version());
+            return true;
+        }
+        if (newClusterState.metaData().version() < currentState.metaData().version()) {
+            logger.debug("received a cluster state metadata.verson that is not newer than the current one, ignoring (received {}, current {})",
+                    newClusterState.metaData().version(), currentState.metaData().version());
+            return true;
+        }
+        if (!newClusterState.metaData().clusterUUID().equals(currentState.metaData().clusterUUID()) &&
+             newClusterState.metaData().version() == currentState.metaData().version() &&
+             currentState.metaData().version() > 0)  {
+            logger.debug("received a remote cluster state with same metadata.version, ignoring (received {}, current {})", newClusterState.metaData().version(), currentState.metaData().version());
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * does simple sanity check of the incoming cluster state. Throws an exception on rejections.
+     */
+    static void validateIncomingState(Logger logger, ClusterState incomingState, ClusterState lastState) {
+        final ClusterName incomingClusterName = incomingState.getClusterName();
+        if (!incomingClusterName.equals(lastState.getClusterName())) {
+            logger.warn("received cluster state from [{}] which is also master but with a different cluster name [{}]",
+                incomingState.nodes().getMasterNode(), incomingClusterName);
+            throw new IllegalStateException("received state from a node that is not part of the cluster");
+        }
+        if (lastState.nodes().getLocalNode().equals(incomingState.nodes().getLocalNode()) == false) {
+            logger.warn("received a cluster state from [{}] and not part of the cluster, should not happen",
+                incomingState.nodes().getMasterNode());
+            throw new IllegalStateException("received state with a local node that does not match the current local node");
+        }
+
+        if (shouldIgnoreOrRejectNewClusterState(logger, lastState, incomingState)) {
+            String message = String.format(
+                Locale.ROOT,
+                "rejecting cluster state version [%d] received from [%s]",
+                incomingState.metaData().x2(),
+                incomingState.nodes().getMasterNodeId()
+            );
+            logger.warn(message);
+            throw new IllegalStateException(message);
+        }
     }
 
     @Override

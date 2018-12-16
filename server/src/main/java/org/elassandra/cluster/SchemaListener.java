@@ -38,15 +38,14 @@ import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.logging.ServerLoggers;
 import org.elasticsearch.common.settings.Settings;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -83,40 +82,34 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
      */
     @Override
     public void onEndTransaction() {
-        if (recordedMetaData != null || recordedIndexMetaData != null) {
-            final MetaData recordedMetaData2 = recordedMetaData;
+        if (recordedMetaData != null || !recordedIndexMetaData.isEmpty()) {
+            ClusterState currentState = this.clusterService.state();
+            ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
+            ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
+            final MetaData sourceMetaData = (recordedMetaData == null) ? currentState.metaData() : recordedMetaData;
+            final MetaData.Builder metaDataBuilder = MetaData.builder(sourceMetaData);
+            if (recordedMetaData == null) {
+                // add collected mappings coming from a CQL update (table schema restoration)
+                recordedIndexMetaData.keySet().forEach( i -> clusterService.mergeIndexMetaData(metaDataBuilder, i, recordedIndexMetaData.get(i)));
+            } else {
+                // add all mappings from table extensions
+                clusterService.mergeWithTableExtensions(metaDataBuilder);
+            }
 
-            clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask() {
-                @Override
-                public ClusterState execute(ClusterState currentState) {
-                    ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
-                    ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                    final MetaData sourceMetaData = (recordedMetaData2 == null) ? currentState.metaData() : recordedMetaData2;
-                    final MetaData.Builder metaDataBuilder = MetaData.builder(sourceMetaData);
-                    if (recordedMetaData2 == null) {
-                        // add collected mappings coming from a CQL update (table schema restoration)
-                        recordedIndexMetaData.keySet().forEach( i -> clusterService.mergeIndexMetaData(metaDataBuilder, i, recordedIndexMetaData.get(i)));
-                    } else {
-                        // add all mappings from table extensions
-                        clusterService.mergeWithTableExtensions(metaDataBuilder);
-                    }
+            // update blocks
+            if (sourceMetaData.settings().getAsBoolean("cluster.blocks.read_only", false))
+                blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
 
-                    // update blocks
-                    if (sourceMetaData.settings().getAsBoolean("cluster.blocks.read_only", false))
-                        blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
+            // update indices block.
+            for (IndexMetaData indexMetaData : sourceMetaData)
+                blocks.updateBlocks(indexMetaData);
 
-                    // update indices block.
-                    for (IndexMetaData indexMetaData : sourceMetaData)
-                        blocks.updateBlocks(indexMetaData);
-
-                    return newStateBuilder.metaData(metaDataBuilder).blocks(blocks).build();
-                }
-
-                @Override
-                public void onFailure(String source, Exception t) {
-                    logger.error("unexpected failure during [{}]", t, source);
-                }
-            });
+            // update routing table and return new cluster state.
+            ClusterState newClusterState = newStateBuilder.incrementVersion().metaData(metaDataBuilder).blocks(blocks).build();
+            newClusterState = ClusterState.builder(newClusterState)
+                    .routingTable(RoutingTable.build(SchemaListener.this.clusterService, newClusterState))
+                    .build();
+            clusterService.getCassandraDiscovery().publish(newClusterState, "cql-schema-mapping-update");
         }
 
         record = false;

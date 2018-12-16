@@ -71,6 +71,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
@@ -488,7 +489,7 @@ public class ElasticSecondaryIndex implements Index {
                                 }
                             }
                         } else {
-                            logger.error("Unexpected index={} subfield={} for field={} column type={}, ignoring value={}", indexInfo.name,
+                            logger.error("metadata.version={} index={} unknown subfield={} of field={} column type={}, ignoring value={}",  indexInfo.getImmutableMappingInfo().metadataVersion, indexInfo.name,
                                 entry.getKey(), mapper != null ? mapper.name() : null, cd != null && cd.type != null ? cd.type.asCQL3Type().toString() : null, entry.getValue());
                         }
                     }
@@ -859,6 +860,10 @@ public class ElasticSecondaryIndex implements Index {
                         }
                     }
                 }
+            }
+
+            public ImmutableMappingInfo getImmutableMappingInfo() {
+                return ImmutableMappingInfo.this;
             }
 
             // get _meta, index, cluster or system settings.
@@ -2487,7 +2492,8 @@ public class ElasticSecondaryIndex implements Index {
 
     private void startRebuildIfNeeded() {
         ImmutableMappingInfo mappingInfo = mappingInfoRef.get();
-        if (!isBuilt() &&
+        if (!StorageService.instance.isJoining() &&                     // avoid to rebuild before C* streaming, should be launched by StreamReceiveTask.
+            !isBuilt() &&
             !this.baseCfs.indexManager.isIndexBuilding(indexMetadata.name) &&
             mappingInfo != null &&
             mappingInfo.hasAllShardStarted() &&

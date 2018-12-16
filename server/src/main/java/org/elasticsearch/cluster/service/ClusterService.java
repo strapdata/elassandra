@@ -80,6 +80,7 @@ import org.elassandra.index.ExtendedElasticSecondaryIndex;
 import org.elassandra.index.search.TokenRangesService;
 import org.elassandra.shard.CassandraShardStartedBarrier;
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.ElasticsearchGenerationException;
 import org.elasticsearch.ElasticsearchTimeoutException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingClusterStateUpdateRequest;
@@ -97,7 +98,6 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.cluster.routing.OperationRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
-import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.inject.Inject;
@@ -110,7 +110,6 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.discovery.Discovery;
-import org.elasticsearch.gateway.GatewayException;
 import org.elasticsearch.gateway.MetaStateService;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
@@ -628,20 +627,6 @@ public class ClusterService extends BaseClusterService {
         });
     }
 
-    public void updateRoutingTable() {
-        submitStateUpdateTask("Update-routing-table" , new ClusterStateUpdateTask() {
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                 return ClusterState.builder(currentState).incrementVersion().build();
-            }
-
-            @Override
-            public void onFailure(String source, Exception t) {
-                logger.error((Supplier<?>) () -> new ParameterizedMessage("unexpected failure during [{}]", source), t);
-            }
-        });
-    }
-
     public static class BlockingActionListener implements ActionListener<ClusterStateUpdateResponse> {
         private final CountDownLatch latch = new CountDownLatch(1);
         private volatile Throwable error = null;
@@ -783,6 +768,14 @@ public class ClusterService extends BaseClusterService {
             return parseMetaDataString( metadataString );
         } catch (RequestValidationException | RequestExecutionException e) {
             throw new NoPersistedMetaDataException("Failed to read comment from "+elasticAdminKeyspaceName+"+"+ELASTIC_ADMIN_METADATA_TABLE, e);
+        }
+    }
+
+    public static String metaDataAsString(ClusterState state) {
+        try {
+            return MetaData.Builder.toXContent(state.metaData(), MetaData.CASSANDRA_FORMAT_PARAMS);
+        } catch (IOException e) {
+            throw new ElasticsearchGenerationException("Failed covert metadata to JSON", e);
         }
     }
 

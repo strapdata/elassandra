@@ -135,7 +135,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
                     .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
                     .put(Node.NODE_DATA_SETTING.getKey(), true)
                     .put(NodeEnvironment.NODE_ID_SEED_SETTING.getKey(), random().nextLong())
-                    .put("node.name", "node_s_0")
+                    .put("node.name", "127.0.0.1")
                     .put(ScriptService.SCRIPT_MAX_COMPILATIONS_RATE.getKey(), "1000/1m")
                     //.put(EsExecutors.PROCESSORS_SETTING.getKey(), 1) // limit the number of threads created
                     //.put("script.inline", "on")

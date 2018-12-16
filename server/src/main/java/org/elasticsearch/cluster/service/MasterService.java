@@ -55,6 +55,7 @@ import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.util.concurrent.FutureUtils;
 import org.elasticsearch.common.util.concurrent.PrioritizedEsThreadPoolExecutor;
 import org.elasticsearch.discovery.Discovery;
+import org.elasticsearch.discovery.Discovery.AckListener;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.util.ArrayList;
@@ -204,7 +205,11 @@ public class MasterService extends AbstractLifecycleComponent {
         }
 
         logger.debug("processing [{}]: execute", summary);
-        final ClusterState previousClusterState = state();
+        // get the most recent cluster state that will be applied by the ClusterApplierService if available.
+        final ClusterState nextClusterState = (clusterService == null || clusterService.getCassandraDiscovery() == null) ?
+                null :
+                this.clusterService.getCassandraDiscovery().pendingStatesQueue().getNextClusterStateToProcess();
+        final ClusterState previousClusterState = nextClusterState == null ? state() : nextClusterState;
 
         if (!previousClusterState.nodes().isLocalNodeElectedMaster() && taskInputs.runOnlyWhenMaster()) {
             logger.debug("failing [{}]: local node is no longer master", summary);
@@ -241,8 +246,7 @@ public class MasterService extends AbstractLifecycleComponent {
                     }
                 }
 
-                logger.debug("publishing cluster state version [{}] metadata.version=[{}]",
-                        taskOutputs.newClusterState.version(),  taskOutputs.newClusterState.metaData().clusterUUID()+"/"+taskOutputs.newClusterState.metaData().version());
+                logger.debug("publishing cluster state metadata=[{}]", taskOutputs.newClusterState.metaData());
                 try {
                     clusterStatePublisher.accept(clusterChangedEvent, taskOutputs.createAckListener(threadPool, taskOutputs.newClusterState));
                 } catch (Discovery.FailedToCommitClusterStateException t) {
@@ -266,7 +270,6 @@ public class MasterService extends AbstractLifecycleComponent {
                             summary),
                         e);
                 }
-
                 TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(currentTimeInNanos() - startTimeNS)));
                 logger.debug("processing [{}]: took [{}] done publishing updated cluster state (version: {}, uuid: {}) metadata (version: {}, uuid: {})", summary,
                     executionTime, newClusterState.version(), newClusterState.stateUUID(), newClusterState.metaData().version(), newClusterState.metaData().clusterUUID());
@@ -295,8 +298,7 @@ public class MasterService extends AbstractLifecycleComponent {
 
     public TaskOutputs calculateTaskOutputs(TaskInputs taskInputs, ClusterState previousClusterState, long startTimeNS) {
         ClusterTasksResult<Object> clusterTasksResult = executeTasks(taskInputs, startTimeNS, previousClusterState);
-        // With Elassandra, only metadata.version is global and increased only when persisting the new metadata in CassandraDiscovery.publish()
-        ClusterState newClusterState = clusterTasksResult.resultingState;
+        ClusterState newClusterState = patchVersions(previousClusterState, clusterTasksResult);
         return new TaskOutputs(taskInputs, previousClusterState, newClusterState, getNonFailedTasks(taskInputs, clusterTasksResult),
             clusterTasksResult.executionResults, clusterTasksResult.schemaUpdate, clusterTasksResult.mutations, clusterTasksResult.events);
     }
@@ -310,9 +312,6 @@ public class MasterService extends AbstractLifecycleComponent {
             if (previousClusterState.routingTable() != newClusterState.routingTable()) {
                 builder.routingTable(RoutingTable.builder(newClusterState.routingTable())
                     .version(newClusterState.routingTable().version() + 1).build());
-            }
-            if (previousClusterState.metaData() != newClusterState.metaData()) {
-                builder.metaData(MetaData.builder(newClusterState.metaData()).version(newClusterState.metaData().version() + 1));
             }
 
             newClusterState = builder.build();

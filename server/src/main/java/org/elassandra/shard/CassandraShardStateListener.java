@@ -68,7 +68,7 @@ public class CassandraShardStateListener extends AbstractComponent implements In
                 @Override
                 public ClusterState execute(ClusterState currentState) {
                     RoutingTable routingTable = RoutingTable.build(clusterService, currentState);
-                    return ClusterState.builder(currentState).incrementVersion().routingTable(routingTable).build();
+                    return ClusterState.builder(currentState).routingTable(routingTable).build();
                 }
 
                 @Override

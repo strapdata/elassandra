@@ -31,6 +31,7 @@ import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateApplier;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
@@ -468,6 +469,11 @@ public class ScriptService extends AbstractComponent implements Closeable, Clust
 
                 return ClusterState.builder(currentState).metaData(mdb).build();
             }
+
+            @Override
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
+            }
         });
     }
 
@@ -488,6 +494,11 @@ public class ScriptService extends AbstractComponent implements Closeable, Clust
                 MetaData.Builder mdb = MetaData.builder(currentState.getMetaData()).putCustom(ScriptMetaData.TYPE, smd);
 
                 return ClusterState.builder(currentState).metaData(mdb).build();
+            }
+
+            @Override
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
             }
         });
     }

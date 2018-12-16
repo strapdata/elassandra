@@ -209,7 +209,7 @@ public class MetaDataMappingService extends AbstractComponent {
         if (!dirty) {
             return currentState;
         }
-        return ClusterState.builder(currentState).incrementVersion().metaData(mdBuilder).build();
+        return ClusterState.builder(currentState).metaData(mdBuilder).build();
     }
 
     private boolean refreshIndexMapping(IndexService indexService, IndexMetaData currentIndexMetaData,  IndexMetaData.Builder builder,

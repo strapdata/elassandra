@@ -215,6 +215,10 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         return this.clusterUUID;
     }
 
+    public String x2() {
+        return this.clusterUUID+"/"+this.version;
+    }
+
     @Override
     public String toString() {
         return this.clusterUUID+"/"+this.version;

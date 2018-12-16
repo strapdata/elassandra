@@ -148,7 +148,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
                         "indices closed [" + indicesAsString + "]");
                 */
                 RoutingTable routingTable = RoutingTable.build(MetaDataIndexStateService.this.clusterService, updatedState);
-                return ClusterState.builder(updatedState).incrementVersion().routingTable(routingTable).build();
+                return ClusterState.builder(updatedState).routingTable(routingTable).build();
             }
         });
     }
@@ -244,7 +244,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
                         "indices opened [" + indicesAsString + "]");
                 */
                 RoutingTable routingTable = RoutingTable.build(MetaDataIndexStateService.this.clusterService, updatedState);
-                return ClusterState.builder(updatedState).incrementVersion().routingTable(routingTable).build();
+                return ClusterState.builder(updatedState).routingTable(routingTable).build();
             }
         });
     }

@@ -598,7 +598,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                 }
                 blocks.updateBlocks(indexMetaData);
 
-                ClusterState updatedState = ClusterState.builder(currentState).incrementVersion()
+                ClusterState updatedState = ClusterState.builder(currentState)
                         .blocks(blocks)
                         .metaData(newMetaData)
                         .build();
