@@ -28,28 +28,28 @@ import org.joda.time.format.ISODateTimeFormat;
 import java.util.Locale;
 import java.util.function.Function;
 
-enum DateFormat {
+public enum DateFormat {
     Iso8601 {
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             return ISODateTimeFormat.dateTimeParser().withZone(timezone)::parseDateTime;
         }
     },
     Unix {
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             return (date) -> new DateTime((long)(Double.parseDouble(date) * 1000), timezone);
         }
     },
     UnixMs {
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             return (date) -> new DateTime(Long.parseLong(date), timezone);
         }
     },
     Tai64n {
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public  Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             return (date) -> new DateTime(parseMillis(date), timezone);
         }
 
@@ -65,15 +65,15 @@ enum DateFormat {
     },
     Joda {
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             DateTimeFormatter parser = DateTimeFormat.forPattern(format).withZone(timezone).withLocale(locale);
             return text -> parser.withDefaultYear((new DateTime(DateTimeZone.UTC)).getYear()).parseDateTime(text);
         }
     };
 
-    abstract Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale);
+    public abstract Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale);
 
-    static DateFormat fromString(String format) {
+    public static DateFormat fromString(String format) {
         switch (format) {
             case "ISO8601":
                 return Iso8601;
