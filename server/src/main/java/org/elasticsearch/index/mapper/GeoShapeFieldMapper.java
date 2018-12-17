@@ -582,9 +582,4 @@ public class GeoShapeFieldMapper extends FieldMapper {
     protected String contentType() {
         return CONTENT_TYPE;
     }
-
-    @Override
-    public CQL3Type CQL3Type() {
-        return CQL3Type.Native.TEXT;
-    }
 }

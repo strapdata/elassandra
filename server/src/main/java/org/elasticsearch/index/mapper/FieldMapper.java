@@ -113,6 +113,11 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
             return builder;
         }
 
+        public T cqlType(CQL3Type cql3Type) {
+            this.fieldType.CQL3Type(cql3Type);
+            return builder;
+        }
+
         public T cqlPartialUpdate(boolean cqlPartialUpdate) {
             this.fieldType.cqlPartialUpdate(cqlPartialUpdate);
             return builder;
@@ -487,6 +492,9 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
                 builder.field(TypeParsers.CQL_STRUCT, "tuple");
             }
         }
+        if (includeDefaults || fieldType().CQL3Type() != defaultFieldType.CQL3Type()) {
+            builder.field(TypeParsers.CQL_TYPE, fieldType().CQL3Type().toString());
+        }
         if (includeDefaults || fieldType().cqlPartialUpdate() != defaultFieldType.cqlPartialUpdate()) {
             builder.field(TypeParsers.CQL_MANDATORY, fieldType().cqlPartialUpdate());
         }
@@ -793,7 +801,6 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
         return this.fieldType().cqlCollection();
     }
 
-
     public String cqlCollectionTag() {
         return this.fieldType().cqlCollectionTag();
     }
@@ -833,6 +840,6 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
     }
 
     public CQL3Type CQL3Type() {
-        return null;
+        return this.fieldType().CQL3Type();
     }
 }

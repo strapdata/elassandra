@@ -439,9 +439,4 @@ public class TextFieldMapper extends FieldMapper {
             }
         }
     }
-
-    @Override
-    public CQL3Type CQL3Type() {
-        return CQL3Type.Native.TEXT;
-    }
 }

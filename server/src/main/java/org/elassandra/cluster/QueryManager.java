@@ -525,8 +525,7 @@ public class QueryManager extends AbstractComponent {
                     }
                     break;
                 case TIMEUUID:
-                    if (fieldMapper instanceof DateFieldMapper) {
-                        // Timeuuid can be mapped to date rather than keyword.
+                    if (fieldMapper instanceof DateFieldMapper && fieldMapper.CQL3Type().equals(CQL3Type.Native.TIMESTAMP)) {
                         values[i] = value(fieldMapper, UUIDGen.unixTimestamp(row.getUUID(columnName)), valueForSearch);
                         break;
                     }

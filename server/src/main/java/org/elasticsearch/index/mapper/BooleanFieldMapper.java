@@ -125,7 +125,10 @@ public class BooleanFieldMapper extends FieldMapper {
 
     public static final class BooleanFieldType extends TermBasedFieldType {
 
-        public BooleanFieldType() {}
+        public BooleanFieldType() {
+            super();
+            CQL3Type(CQL3Type.Native.BOOLEAN);
+        }
 
         protected BooleanFieldType(BooleanFieldType ref) {
             super(ref);
@@ -309,10 +312,5 @@ public class BooleanFieldMapper extends FieldMapper {
         if (includeDefaults || fieldType().nullValue() != null) {
             builder.field("null_value", fieldType().nullValue());
         }
-    }
-
-    @Override
-    public CQL3Type CQL3Type() {
-        return CQL3Type.Native.BOOLEAN;
     }
 }

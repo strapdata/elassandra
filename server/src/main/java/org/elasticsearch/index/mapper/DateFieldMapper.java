@@ -198,6 +198,7 @@ public class DateFieldMapper extends FieldMapper {
             setHasDocValues(true);
             setOmitNorms(true);
             setDateTimeFormatter(DEFAULT_DATE_TIME_FORMATTER);
+            CQL3Type(CQL3Type.Native.TIMESTAMP);
         }
 
         DateFieldType(DateFieldType other) {
@@ -255,7 +256,9 @@ public class DateFieldMapper extends FieldMapper {
         }
 
         long parse(String value) {
-            return dateTimeFormatter().parser().parseMillis(value);
+            return (CQL3Type().equals(CQL3Type.Native.TIMEUUID))  ?
+                    UUIDGen.unixTimestamp(UUID.fromString(value)) :
+                    dateTimeFormatter().parser().parseMillis(value);
         }
 
         @Override
@@ -402,17 +405,20 @@ public class DateFieldMapper extends FieldMapper {
 
         @Override
         public Object cqlValue(Object value, AbstractType atype) {
-            Date date = (Date)cqlValue(value);
-            if (atype instanceof SimpleDateType) {
-                return (int)SimpleDateSerializer.timeInMillisToDay(date.getTime());
+            Object val = cqlValue(value);
+            if (val instanceof Date && atype instanceof SimpleDateType) {
+                return (int)SimpleDateSerializer.timeInMillisToDay(((Date)val).getTime());
             }
-            return date;
+            return val;
         }
 
         @Override
         public Object cqlValue(Object value) {
             if (value == null) {
                 return null;
+            }
+            if (this.CQL3Type() == CQL3Type.Native.TIMEUUID) {
+                return UUID.fromString(value.toString());
             }
             if (value instanceof Date) {
                 return (Date)value;
@@ -604,10 +610,5 @@ public class DateFieldMapper extends FieldMapper {
                 || fieldType().dateTimeFormatter().locale() != Locale.ROOT) {
             builder.field("locale", fieldType().dateTimeFormatter().locale());
         }
-    }
-
-    @Override
-    public CQL3Type CQL3Type() {
-        return CQL3Type.Native.TIMESTAMP;
     }
 }

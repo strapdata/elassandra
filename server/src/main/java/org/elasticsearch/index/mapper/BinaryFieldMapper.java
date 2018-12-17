@@ -89,7 +89,10 @@ public class BinaryFieldMapper extends FieldMapper {
 
     static final class BinaryFieldType extends MappedFieldType {
 
-        BinaryFieldType() {}
+        BinaryFieldType() {
+            super();
+            CQL3Type(CQL3Type.Native.BLOB);
+        }
 
         protected BinaryFieldType(BinaryFieldType ref) {
             super(ref);
@@ -274,10 +277,5 @@ public class BinaryFieldMapper extends FieldMapper {
             }
 
         }
-    }
-
-    @Override
-    public CQL3Type CQL3Type() {
-        return CQL3Type.Native.BLOB;
     }
 }

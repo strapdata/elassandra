@@ -61,9 +61,4 @@ public abstract class SimpleMappedFieldType extends MappedFieldType {
             QueryShardContext context) {
         throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] does not support range queries");
     }
-
-    @Override
-    public CQL3Type CQL3Type() {
-        return CQL3Type.Native.TEXT;
-    }
 }

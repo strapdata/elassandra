@@ -19,6 +19,30 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.CQLFragmentParser;
+import org.apache.cassandra.cql3.CqlParser;
+import org.apache.cassandra.db.marshal.AsciiType;
+import org.apache.cassandra.db.marshal.BooleanType;
+import org.apache.cassandra.db.marshal.ByteType;
+import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.CounterColumnType;
+import org.apache.cassandra.db.marshal.DecimalType;
+import org.apache.cassandra.db.marshal.DoubleType;
+import org.apache.cassandra.db.marshal.DurationType;
+import org.apache.cassandra.db.marshal.EmptyType;
+import org.apache.cassandra.db.marshal.FloatType;
+import org.apache.cassandra.db.marshal.InetAddressType;
+import org.apache.cassandra.db.marshal.Int32Type;
+import org.apache.cassandra.db.marshal.IntegerType;
+import org.apache.cassandra.db.marshal.LongType;
+import org.apache.cassandra.db.marshal.ShortType;
+import org.apache.cassandra.db.marshal.SimpleDateType;
+import org.apache.cassandra.db.marshal.TimeType;
+import org.apache.cassandra.db.marshal.TimeUUIDType;
+import org.apache.cassandra.db.marshal.TimestampType;
+import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.index.IndexOptions;
 import org.elasticsearch.ElasticsearchParseException;
@@ -56,6 +80,7 @@ public class TypeParsers {
 
     public static final String CQL_COLLECTION = "cql_collection";
     public static final String CQL_STRUCT = "cql_struct";
+    public static final String CQL_TYPE = "cql_type";
     public static final String CQL_UDT_NAME = "cql_udt_name";
     public static final String CQL_MANDATORY = "cql_mandatory";
     public static final String CQL_STATIC_COLUMN = "cql_static_column";
@@ -255,6 +280,7 @@ public class TypeParsers {
                 case "map" : builder.cqlStruct(CqlStruct.MAP); break;
                 case "udt" : builder.cqlStruct(CqlStruct.UDT); break;
                 case "tuple" : builder.cqlStruct(CqlStruct.TUPLE); break;
+                default: throw new MapperParsingException("Unsupported CQL struct [" + propNode.toString() + "], should be in map, udt or tuple.");
                 }
                 iterator.remove();
             } else if (propName.equals(CQL_MANDATORY)) {
@@ -278,6 +304,33 @@ public class TypeParsers {
                 case "list": builder.cqlCollection(CqlCollection.LIST); break;
                 case "set": builder.cqlCollection(CqlCollection.SET); break;
                 case "singleton": builder.cqlCollection(CqlCollection.SINGLETON); break;
+                default: throw new MapperParsingException("Unsupported CQL collection [" + value + "], should be in list, set or singleton.");
+                }
+                iterator.remove();
+            } else if (propName.equals(TypeParsers.CQL_TYPE)) {
+                String value = StringUtils.lowerCase(propNode.toString());
+                switch (value) {
+                case "ascii": builder.cqlType(CQL3Type.Native.ASCII); break;
+                case "bigint": builder.cqlType(CQL3Type.Native.BIGINT); break;
+                case "blob": builder.cqlType(CQL3Type.Native.BLOB); break;
+                case "boolean": builder.cqlType(CQL3Type.Native.BOOLEAN); break;
+                case "date": builder.cqlType(CQL3Type.Native.DATE); break;
+                case "decimal": builder.cqlType(CQL3Type.Native.DECIMAL); break;
+                case "double": builder.cqlType(CQL3Type.Native.DOUBLE); break;
+                case "duration": builder.cqlType(CQL3Type.Native.DURATION); break;
+                case "float": builder.cqlType(CQL3Type.Native.FLOAT); break;
+                case "inet": builder.cqlType(CQL3Type.Native.INET); break;
+                case "int": builder.cqlType(CQL3Type.Native.INT); break;
+                case "smallint": builder.cqlType(CQL3Type.Native.SMALLINT); break;
+                case "text": builder.cqlType(CQL3Type.Native.TEXT); break;
+                case "time": builder.cqlType(CQL3Type.Native.TIME); break;
+                case "timestamp": builder.cqlType(CQL3Type.Native.TIMESTAMP); break;
+                case "timeuuid": builder.cqlType(CQL3Type.Native.TIMEUUID); break;
+                case "tinyint": builder.cqlType(CQL3Type.Native.TINYINT); break;
+                case "uuid": builder.cqlType(CQL3Type.Native.UUID); break;
+                case "varchar": builder.cqlType(CQL3Type.Native.VARCHAR); break;
+                case "varint": builder.cqlType(CQL3Type.Native.VARINT); break;
+                default: throw new MapperParsingException("Unsupported CQL type [" + value+"].");
                 }
                 iterator.remove();
             } else if (parserContext.indexVersionCreated().before(Version.V_5_0_0_alpha1)

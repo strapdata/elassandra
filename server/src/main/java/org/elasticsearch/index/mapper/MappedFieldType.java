@@ -75,6 +75,7 @@ public abstract class MappedFieldType extends FieldType {
 
     private CqlCollection cqlCollection = CqlCollection.LIST;
     private CqlStruct cqlStruct = CqlStruct.UDT;
+    private CQL3Type cql3Type = CQL3Type.Native.TEXT;
     private boolean cqlPartialUpdate = true;
     private boolean cqlPartitionKey = false;
     private boolean cqlStaticColumn = false;
@@ -96,6 +97,7 @@ public abstract class MappedFieldType extends FieldType {
 
         this.cqlCollection = ref.cqlCollection;
         this.cqlStruct = ref.cqlStruct;
+        this.cql3Type = ref.cql3Type;
         this.cqlPartialUpdate = ref.cqlPartialUpdate;
         this.cqlPartitionKey = ref.cqlPartitionKey;
         this.cqlStaticColumn = ref.cqlStaticColumn;
@@ -153,6 +155,7 @@ public abstract class MappedFieldType extends FieldType {
             Objects.equals(nullValueAsString, fieldType.nullValueAsString) &&
             Objects.equals(cqlCollection, fieldType.cqlCollection) &&
             Objects.equals(cqlStruct, fieldType.cqlStruct) &&
+            Objects.equals(cql3Type, fieldType.cql3Type) &&
             Objects.equals(cqlPartialUpdate, fieldType.cqlPartialUpdate) &&
             Objects.equals(cqlPartitionKey, fieldType.cqlPartitionKey) &&
             Objects.equals(cqlStaticColumn, fieldType.cqlStaticColumn) &&
@@ -174,13 +177,20 @@ public abstract class MappedFieldType extends FieldType {
         return "";
     }
 
-
     public CqlStruct cqlStruct() {
         return this.cqlStruct;
     }
 
     public void cqlStruct(CqlStruct cqlStruct) {
         this.cqlStruct = cqlStruct;
+    }
+
+    public CQL3Type CQL3Type() {
+        return this.cql3Type;
+    }
+
+    public void CQL3Type(CQL3Type type) {
+        this.cql3Type = type;
     }
 
     public boolean cqlPartialUpdate() {
@@ -227,7 +237,7 @@ public abstract class MappedFieldType extends FieldType {
     public int hashCode() {
         return Objects.hash(super.hashCode(), name, boost, docValues, indexAnalyzer, searchAnalyzer, searchQuoteAnalyzer,
             eagerGlobalOrdinals, similarity == null ? null : similarity.name(), nullValue, nullValueAsString,
-                    cqlCollection, cqlStruct, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder);
+                    cqlCollection, cqlStruct, cql3Type, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder);
     }
 
     // TODO: we need to override freeze() and add safety checks that all settings are actually set
@@ -409,13 +419,8 @@ public abstract class MappedFieldType extends FieldType {
         return cqlValue(value);
     }
 
-
     public Object cqlValue(Object value) {
         return value;
-    }
-
-    public CQL3Type CQL3Type() {
-        return CQL3Type.Native.TEXT;
     }
 
     /** Returns true if the field is searchable.

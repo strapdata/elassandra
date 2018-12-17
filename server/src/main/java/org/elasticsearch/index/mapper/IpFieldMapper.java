@@ -132,6 +132,7 @@ public class IpFieldMapper extends FieldMapper {
             super();
             setTokenized(false);
             setHasDocValues(true);
+            CQL3Type(CQL3Type.Native.INET);
         }
 
         IpFieldType(IpFieldType other) {
@@ -484,10 +485,5 @@ public class IpFieldMapper extends FieldMapper {
         } else if (includeDefaults) {
             builder.field("include_in_all", false);
         }
-    }
-
-    @Override
-    public CQL3Type CQL3Type() {
-        return CQL3Type.Native.INET;
     }
 }

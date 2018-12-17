@@ -472,9 +472,4 @@ public final class KeywordFieldMapper extends FieldMapper {
             builder.nullField("normalizer");
         }
     }
-
-    @Override
-    public CQL3Type CQL3Type() {
-        return org.apache.cassandra.cql3.CQL3Type.Native.TEXT;
-    }
 }
