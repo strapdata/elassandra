@@ -160,7 +160,7 @@ When a setting is dynamic, it's relevant only for cluster, index and document ty
 | ``index_static_columns``      | dynamic | type, index                  | **false**                                | If true and index_static_only is false, indexes static columns in the elasticsearch documents, otherwise, ignore static columns.                                                                                            |
 +-------------------------------+---------+------------------------------+------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-Sizing and tuning
+Sizing and tuningds
 ------------------
 
 Basically, Elassandra requires much CPU than standalone Cassandra or Elasticsearch and Elassandra write throughput should be half the Cassandra write throughput if you index all columns. If you only index a subset of columns, write performance would be better.
