@@ -1,7 +1,7 @@
 Configuration
 =============
 
-Directory Layout
+Directory Layout 2
 ----------------
 
 Elassandra merges the Cassandra and Elasticsearch directories as follow :
