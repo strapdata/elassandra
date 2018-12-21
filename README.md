@@ -54,6 +54,14 @@ ALTER TABLE elastic_admin.metadata DROP metadata;
 ALTER TABLE elastic_admin.metadata WITH comment = '';
 ```
 
+WARNING: Due to CQL table extensions used by Elassandra, some old versions of **cqlsh** may lead to the following error message **"'module' object has no attribute 'viewkeys'."**. This comes from the old python cassandra driver embedded in Cassandra and has been reported in [CASSANDRA-14942](https://issues.apache.org/jira/browse/CASSANDRA-14942). Possible workarounds:
+* Use the **cqlsh** embedded with Elassandra
+* Install a recent version of the  **cqlsh** utility (*pip install cqlsh*) or run it from a docker image:
+
+```bash
+docker run -it --rm strapdata/cqlsh:0.1 node.example.com
+```
+
 #### Elassandra 6.x changes
 
 * Elasticsearch now supports only one document type per index backed by one Cassandra table. Unless you specify an elasticsearch type name in your mapping, data is stored in a cassandra table named **"_doc"**. If you want to search many cassandra tables, you now need to create and search many indices.
