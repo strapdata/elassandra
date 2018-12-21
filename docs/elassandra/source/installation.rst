@@ -8,8 +8,8 @@ Elassandra is based on Cassandra and ElasticSearch, thus it will be easier if yo
 Tarball
 -------
 
-Elassandra requires at least Java 8. Oracle JDK is the recommended version, but OpenJDK should work as well.
-You can check which version is installed on your computer::
+Elassandra requires at least Java 8. Oracle JDK is the recommended version, but OpenJDK should also work as well.
+You need to check which version is installed on your computer::
 
     $ java -version
     java version "1.8.0_121"
@@ -32,7 +32,7 @@ Go to the extracted directory:
 .. parsed-literal::
   cd elassandra-|release|
 
-Configure ``conf/cassandra.yaml`` if necessary, then run::
+Configure ``conf/cassandra.yaml`` if necessary, and then run::
 
   bin/cassandra -e
 
@@ -52,7 +52,7 @@ Check the elasticsearch API::
 
   curl -X GET http://localhost:9200/
 
-You should get something like:
+You should get something like this:
 
 .. parsed-literal::
   {
@@ -71,17 +71,17 @@ You should get something like:
 
 You're done !
 
-On a production environment, it's better to modify some system settings like disabling swap. This `guide <http://docs.datastax.com/en/landing_page/doc/landing_page/recommendedSettings.html>`_ shows you how to.
-On linux, consider installing `jemalloc <http://jemalloc.net/>`_.
+On a production environment, we recommand to to modify some system settings such as disabling swap. This `guide <http://docs.datastax.com/en/landing_page/doc/landing_page/recommendedSettings.html>`_ shows you how to do it.
+On linux, you should instal `jemalloc <http://jemalloc.net/>`_.
 
 
 deb
------------
+---
 
 .. include:: adhoc_deb.rst
 
 rpm
------------
+---
 
 .. include:: adhoc_rpm.rst
 
@@ -118,7 +118,7 @@ or to build only the tgz tarball for a release version :
 
    gradle assemble distribution:tar:assemble -Dbuild.snapshot=false
 
-It's gonna take a while, you might go for a cup of tea. If everything succeed, tarballs will be built in:
+It's going to take a little while so, you may want to go for a cuppa ! If all goes well, tarballs will be built in:
 
 .. parsed-literal::
   distribution/(tar|zip|rpm|deb)/build/distributions/

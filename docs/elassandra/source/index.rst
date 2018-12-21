@@ -6,7 +6,7 @@
 Elassandra documentation
 ========================
 
-*Elassandra* tightly integrates `Elasticsearch`_ in `Cassandra`_.
+*Elassandra* closely integrates `Elasticsearch`_ in `Cassandra`_.
 
    
 Contents:
