@@ -7,23 +7,23 @@ Most of these tests work with Elassandra to ensure compatibility between Elastic
 Testing environnement
 ---------------------
 
-By default, JUnit creates one instance of each test class and executes each *@Test* method in parallel in many threads. Because Cassandra use many static variables,
+By default, JUnit creates one instance for each test class and executes each *@Test* method in parallel with many threads. Because Cassandra uses many static variables,
 concurrent testing is not possible, so each test is executed sequentially (using a semaphore to serialize tests) on a single node Elassandra cluster listening on localhost, 
 see `ESSingleNodeTestCase] <https://github.com/strapdata/elassandra/blob/v5.5.0-strapdata/test/framework/src/main/java/org/elasticsearch/test/ESSingleNodeTestCase.java>`_).
 Test configuration is located in **core/src/test/resources/conf**, data and logs are generated in **core/build/testrun/test/J0**.
 
-Between each test, all indices (and underlying keyspaces and tables) are removed to have idempotent testings and avoid conflicts on index names.
+Between each test, all indices (and underlying keyspaces and tables) are removed to have idempotent testings and avoid conflicts with index names.
 System settings ``es.synchronous_refresh``  and ``es.drop_on_delete_index`` are set to *true* in the parent *pom.xml*.
 
-Finally, the testing framework randomizes the locale settings representing a specific geographical, political, or cultural region, but Apache Cassandra does not
+Finally, the testing framework randomizes the local settings representing a specific geographical, political, or cultural region, but Apache Cassandra does not
 support such setting because string manipulation are implemented with the default locale settings (see CASSANDRA-12334).
 For exemple, *String.format("SELECT %s FROM ...",...)* is computed as *String.format(Local.getDefault(),"SELECT %s FROM ...",...)*, involving errors for some Locale setting.
-As a workaround, a javassit byte-code manipulation in the Ant build step adds a *Locale.ROOT* argument to weak method calls in all Cassandra classes.
+As a workaround, a javassit byte-code manipulation in the Ant build step adds a *Locale.ROOT* argument to weak the method calls in all Cassandra classes.
 
 Elassandra unit test
 --------------------
 
-Elassandra unit test allows to use both the Elasticsearch API and CQL requests as shown in the following sample.
+Elassandra unit test allows using both the Elasticsearch API and CQL requests as shown in the following example.
 
 .. code::
    
