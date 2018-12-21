@@ -15,9 +15,9 @@ See `strapdata <http://www.strapdata.com/products>`_ for more details.
 License management
 ------------------
 
-Enterprise plugin requires a valid license. When you start your first a node with the Enterprise plugin enabled, a 30 days license is generated with all features enabled.
-If you need more time to evaluate the product, you can request for a free another 30 days trail license or purchase a souscription
-including technical support for Elassandra. If your license expires, the enterprise plugin operates in a restricted mode until a valid
+Enterprise plugin requires a valid license. When you start your first node with the Enterprise plugin enabled, a 30 days license is generated with all features enabled.
+If you need more time to evaluate the product, you can request another 30 day license free of charge or purchase a souscription
+including technical support for Elassandra. If your license has expired, the enterprise plugin will operate in a restricted mode until a valid
 license is installed.
 
 .. cssclass:: table-bordered
@@ -25,7 +25,7 @@ license is installed.
 +---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
 | Feature | Description                                                        | Restricted mode                                                                 |
 +=========+====================================================================+=================================================================================+
-| CQL     | Elasticsearch query through CQL directly from the cassandra driver | Disabled on restart following license expiration.                               |
+| CQL     | Elasticsearch query through CQL directly from the cassandra driver | Disabled on restart following the license expiration.                               |
 +---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
 | JMX     | JMX monotoring of Elasticsearch indices                            | Node restart required to see new index metrics, JMX attributes become read-only |
 +---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
@@ -38,7 +38,7 @@ license is installed.
 
 .. CAUTION::
 
-   If the number of nodes of licensed datacenters becomes greater than your license maximum number of nodes, the license becomes invalid on all your nodes.
+   If the number of nodes of licensed datacenters becomes greater than your license maximum number of nodes, then the license becomes invalid on all your nodes.
    
 License installation
 ....................
@@ -57,7 +57,7 @@ Licenses are stored in a Cassandra table ``elastic_admin.licenses``. You can als
 Checking your license
 .....................
 
-You can use the REST license API to check the currenly active license. If your current configuration requires SSL encryption and user authentication,
+You can use the REST license API to check the currently active license. If your current configuration requires SSL encryption and user authentication,
 you must provide a valid login, password and root CA certificate.
 
 .. code::
@@ -98,7 +98,7 @@ You can update your licence by inserting additional license row in the Cassandra
 
    cassandra@cqlsh> INSERT INTO elastic_admin.licenses JSON '{"id":"bb0a181c-dbc6-4255-8d69-67b6e1d276ce","issuer":"Strapdata","company":"thecorp","email":"contact@thecorp","type":"TRIAL","features":["JMX","SSL","AAA"],"production":false,"generated":"2017-09-26 09:10:15.604Z","start":"2017-09-25 22:00:00.000Z","expire":"2018-09-25 22:00:00.000Z","clustername":"TestCluster","datacenters":["DC1"],"maxnodes":1,"signature":"0x302d02140b49e8c00b3606c66fe22378acb1ab781410460d02150092b666041dd97887b7d624fd6a12bbd434a955ed"}';
 
-Then reload the license with a POST REST request as shown below, each nodes returns its active license If you have several licenses in ``elastic_admin.licenses``, the **most recenlty generated valid** license is used.
+Then reload the license with a POST REST request as shown below, each node returns to its active license If you have several licenses in ``elastic_admin.licenses``, the **most recenlty generated valid** license will be used.
 
 .. code::
 
@@ -125,7 +125,7 @@ Then reload the license with a POST REST request as shown below, each nodes retu
 
 .. TIP::
 
-   If you have several Elasticsearch clusters in your Cassandra cluster, reload the license on each datacenter where Elasticsearch is enabled.
+   If you have several Elasticsearch clusters in your Cassandra cluster, reload the license for each datacenter where Elasticsearch has been enabled.
 
 Search through CQL
 ------------------
@@ -146,7 +146,7 @@ To enable Elasticsearch query over CQL:
    ALTER TABLE twitter.tweet ADD es_query text;
    ALTER TABLE twitter.tweet ADD es_options text;
 
-Then you can query the associated Elasticsearch index directly in a CQL SELECT request like this (document *_type* is the cassandra table name).
+Then you can query the associated Elasticsearch index directly into a CQL SELECT request such as (document *_type* is the cassandra table name).
 
 .. code::
 
@@ -181,10 +181,10 @@ By default, an elasticsearch query returns the first 10 results, but you can req
    
    (3 rows)
 
-If `paging <https://docs.datastax.com/en/developer/java-driver/3.3/manual/paging/>`_ is enabled on your Cassandra driver and you request more 
-results than your page size, Elassandra use an elasticsearch scrolled search request to retreive all results. Default scoll timeout is 60 seconds.
+If `paging <https://docs.datastax.com/en/developer/java-driver/3.3/manual/paging/>`_ is enabled on your Cassandra driver and you request additional 
+results than your page size, Elassandra will use an Elasticsearch scrolled search request to retreive all the results. Default scoll timeout is 60 seconds.
 
-If all partition key columns are set in the where clause, elasticsearch query is directly sent to a node hosting the data (no fan out).
+If all partition key columns are set in the where clause, the Elasticsearch query will be directly sent to a node hosting the data (no fan out).
 
 .. code::
 
@@ -217,7 +217,7 @@ Cassandra functions and User Defined Functions can be used in the CQL projection
    
    (10 rows)
 
-If your target index does not have the same name as the underlying keyspace, you can specify targeted indices names in ``es_options``.
+If your target index does not have the same name as the underlying keyspace one, you can specify targeted indices names in ``es_options``.
 
 .. code::
 
@@ -227,11 +227,11 @@ If your target index does not have the same name as the underlying keyspace, you
 Elasticsearch aggregations through CQL
 ......................................
 
-Elassandra supports elasticsearch aggregation only in **regular CQL statement**. In this case :
+Elassandra supports the elasticsearch aggregation only in **regular CQL statement**. In this case :
 
 * Returned columns are named with aggregations names.
 * CQL functions are not supported.
-* CQL projection clause, limit and pagination are ignored. This also implies that aggregation results must fit into the available memory.
+* CQL projection clause, limit and pagination are ignored. It also implies that aggregation results must fit into the available memory.
 
 .. code::
 
@@ -247,7 +247,7 @@ Elassandra supports elasticsearch aggregation only in **regular CQL statement**.
    (4 rows)
 
 When requesting multiple sibling aggregations, the tree result is flattened. 
-In the following example, there is two top level aggregations named *sales_per_month* and *sum_monthly_sales*.
+In the following example, there are two top level aggregations named *sales_per_month* and *sum_monthly_sales*.
 
 .. code::
 
@@ -269,9 +269,9 @@ In the following example, there is two top level aggregations named *sales_per_m
 Distributed Elasticsearch aggregation with Apach Spark
 ......................................................
 
-In order to use Elasticsearch aggregation capabilities from Apache Spark, you must request Elassandra with a projection clause having the same CQL types
-as the returned aggregation results. Moreover, don't reuse the same column name more than once, otherwise you could get an **IndexOutOfBoundsException** while Apache Spark parse the result.
-In the following exemple, we used dummy columns count2, dc_power1, dc_power2 and dc_power3 to fit the aggregation results :
+In order to use the Elasticsearch aggregation capabilities from Apache Spark, you must request Elassandra with a projection clause having the same CQL types
+as the returned aggregation results. Moreover, do not re-use the same column name more than once, otherwise you will get an **IndexOutOfBoundsException** while Apache Spark parses the result.
+In the following example, we used dummy columns count2, dc_power1, dc_power2 and dc_power3 to fit the aggregation results :
 
 .. code::
 
@@ -326,7 +326,7 @@ In the following exemple, we used dummy columns count2, dc_power1, dc_power2 and
    CassandraRow{ts: 2017-12-31 00:00:00+0100, count: 204, dc_power: 0.0, dc_power1: null, dc_power2: 331.2608198139219, count2: 17, dc_power3: 0.0}
    CassandraRow{ts: 2017-12-31 00:00:00+0100, count: 204, dc_power: 0.0, dc_power1: null, dc_power2: 336.2944302705681, count2: 17, dc_power3: 0.0}
 
-Alternatively, you can request Apache Spark to get aggregation results as JSON objects by adding the option **json=true** to the query ``es_options`` as follow :
+Alternatively, you can request an Apache Spark to get the aggregation results as JSON objects by adding the option **json=true** to the query ``es_options`` as follow :
 
 .. code::
 
@@ -340,7 +340,7 @@ Alternatively, you can request Apache Spark to get aggregation results as JSON o
 CQL Driver integration
 ......................
 
-For better performances, you can use a CQL prepared statement to submit Elasticsearch queries as shown bellow in java. 
+For better performance, you can use a CQL prepared statement to submit the Elasticsearch queries as shown below in java. 
 You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total** and **_shards.failed** 
 from the result `custom payload <https://docs.datastax.com/en/developer/java-driver/3.2/manual/custom_payloads/>`_.
 
@@ -368,7 +368,7 @@ CQL Tracing
 ...........
 
 Elasticsearch search request may invlove CQL requests to requested fields from the underlying Cassandra table. When searching through CQL,
-you can use `Cassandra tracing <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/cqlshTracing.html>`_ capabilities to troubleshoot Cassandra performance problems.
+you can use `Cassandra tracing <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/cqlshTracing.html>`_ capabilities to troubleshoot the Cassandra performance problems.
 
 .. code::
 
@@ -445,7 +445,7 @@ you can use `Cassandra tracing <https://docs.datastax.com/en/cql/3.3/cql/cql_ref
                                             Read 1 live and 0 tombstone cells [elasticsearch[127.0.0.2][search][T#10]] | 2017-11-11 13:04:44.556000 | 127.0.0.2 |           1362 | 127.0.0.1
                                                                                                       Request complete | 2017-11-11 13:04:44.563745 | 127.0.0.1 |          19745 | 127.0.0.1
 
-You can then retreive tracing information stored in the system_traces keyspace for 24 hours like this.
+You can then retreive tracing information stored into the system_traces keyspace for 24 hours as demonstrated below.
 
 .. code::
 
@@ -526,8 +526,8 @@ With the JMX feature, you can manage and monitor both Cassandra and Elasticsearc
 JMX Monitoring
 ..............
 
-The JMX feature expose Elasticsearch metrcis over JMX, allowing to monitor Elasticsearch cluster, index shards, threadpool and networks activities.
-You can browse these metrics with various JMX clients like `VisualVM <https://visualvm.github.io/>`_ or `jmxterm <http://wiki.cyclopsgroup.org/jmxterm/>`_.
+The JMX feature exposes Elasticsearch metrcis over JMX, allowing monitoring the Elasticsearch cluster, index shards, threadpool and networks activities.
+You can browse these metrics with various JMX clients lsuch as `VisualVM <https://visualvm.github.io/>`_ or `jmxterm <http://wiki.cyclopsgroup.org/jmxterm/>`_.
 
 JMXTerm example :
 
@@ -557,7 +557,7 @@ JMXTerm example :
 These metrcis can be pulled, or pushed to various tools (`graphite <http://graphite.readthedocs.io/en/latest/>`_, 
 `ganglia <http://ganglia.info/>`_ or `influxdb <https://www.influxdata.com/>`_) using the popular `Metrics Library <http://metrics.dropwizard.io/3.2.3/getting-started.html>`_ embedded in Apache Cassandra.
 
-Here is a sample configuration located in **conf/influxdb-reporting.yaml** sending JMX metrics to an influxdb database named *elassandra*. 
+Below is a sample configuration located in **conf/influxdb-reporting.yaml** sending JMX metrics to an influxdb database named *elassandra*. 
 
 .. code::
 
@@ -596,7 +596,7 @@ Then configure Grafana to build your Elassandra dashboard.
 Enable/Disable search on a node
 ...............................
 
-The JMX feature allows to exclude/include a node from distributed search while still receiving CQL write, repairing or rebuilding its elasticsearch indices, by
+The JMX feature allows excluding/including a node from distributed search while still receiving CQL write, repairing or rebuilding its elasticsearch indices, by
 setting the following attributes on the JMX Bean ``org.elasticsearch.node:type=node``
 
 .. cssclass:: table-bordered
@@ -626,16 +626,16 @@ The SSL Feature provides trafic encryption for both HTTP and Elasticsearch trans
 .. note::
 
    Elasticsearch transport protocol is the native binary protocol used for Elasticsearch node-to-node communication. You can also use the 
-   transport protocol from a client application written in java, as describe in the `elasticsearch documentation <https://www.elastic.co/guide/en/elasticsearch/client/java-api/5.5/transport-client.html>`_.
+   transport protocol from a client application written in java, as described in the `elasticsearch documentation <https://www.elastic.co/guide/en/elasticsearch/client/java-api/5.5/transport-client.html>`_.
 
 SSL configuration is defined in your **conf/cassandra.yaml** for both Cassandra and Elasticsearch :
 
-* Server options defines node-to-node encryption for both Cassandra and Elasticsearch. Obviously, Elasticsearch transport connections are encrypted when *internode_encryption* is set to **all** or **rack** (there is no elasticsearch cross-datacenter traffic).
-* Client options defines client-to-node encryption to request both Cassandra and Elasticsearch. If *optional* is **true**, Elasticsearch still accepts clear connections for HTTP and transport request.
+* Server options define node-to-node encryption for both Cassandra and Elasticsearch. Obviously, Elasticsearch transport connections are encrypted when *internode_encryption* is set to **all** or **rack** (there is no elasticsearch cross-datacenter traffic).
+* Client options define client-to-node encryption to request both Cassandra and Elasticsearch. If *optional* is **true**, Elasticsearch will accept the clear connections for HTTP and transport request.
 
 To ensure support for all encryption algorithms, it is highly recommended to install the `JCE Unlimited Strength Jurisdiction policy files <http://www.oracle.com/technetwork/java/javase/downloads/jce8-download-2133166.html>`_ on all nodes.
 
-Here an SSL configuration in your **conf/cassandra.yaml** file :
+Here an illustrattion of a SSL configuration in your **conf/cassandra.yaml** file :
 
 .. code::
 
@@ -686,7 +686,7 @@ Here an SSL configuration in your **conf/cassandra.yaml** file :
 
 .. CAUTION::
 
-      If paths to keystores are relative, you could faced an issue when starting elassandra from another directory than the install directory. You should use absolute keystore paths to avoid such issues.
+      If paths to keystores are relative, you could faced an issue when starting Elassandra from another directory than the installed directory. You should use the absolute keystore paths to avoid such an issue.
 
 
 
@@ -705,7 +705,7 @@ SSL for Elasticsearch is actived according to the following settings in your **c
 | ``ssl.transport.enabled`` | false   | Enable SSL on Elastisearch transport connections (node-to-node connections) |
 +---------------------------+---------+-----------------------------------------------------------------------------+
 
-Once HTTPS is enabled, accessing your elasticsearch cluster requires the HTTPS protocol and a trusted certificate to validate the server side certificate :
+Once HTTPS is enabled, accessing your Elasticsearch cluster requires the HTTPS protocol and a trusted certificate to validate the server side certificate :
 
 .. code::
 
@@ -741,14 +741,14 @@ Enable SSL for JMX by setting the following parameters.
    JVM_OPTS="$JVM_OPTS -Djavax.net.ssl.trustStore=<install_dir>/cassandra/conf/server-truststore.jks"
    JVM_OPTS="$JVM_OPTS -Djavax.net.ssl.trustStorePassword=changeit"
 
-Once SSL is enabled on JMX, ``nodetool`` utility requires the *--ssl* option.
+Once SSL is enabled on JMX, ``nodetool`` utility will require the *--ssl* option.
 
 Authentication and Authorization
 --------------------------------
 
-Elasticsearch authentifcation and autorization is based on Cassandra internal 
-`Authentication and Role-Based Access Control <https://www.datastax.com/dev/blog/role-based-access-control-in-cassandra>`_, allowing to 
-get an homogeneous security policy.
+Elasticsearch authentifcation and autorization are based on the Cassandra internal 
+`Authentication and Role-Based Access Control <https://www.datastax.com/dev/blog/role-based-access-control-in-cassandra>`_, allowing 
+getting an homogeneous security policy.
 
 Cassandra internal authentication
 .................................
@@ -760,8 +760,8 @@ To enable Cassandra authentication, set the following settings in your **conf/ca
    authenticator: PasswordAuthenticator
    authorizer: CassandraAuthorizer
 
-Once authentication is enabled, create a new Cassandra superuser to avoid issue with the default "cassandra" superuser 
-(Authentication with the cassandra superuser require QUORUM nodes to be available in your cluster), and change the default cassandra password.
+Once the authentication is enabled, create a new Cassandra superuser to avoid issue with the default "Cassandra" superuser 
+(Authentication with the Cassandra superuser requires QUORUM nodes to be available in your cluster), and change the default Cassandra password.
 
 .. code::
 
@@ -775,7 +775,7 @@ Elasticsearch Authentication, Authorization and Content-Based Security
 ......................................................................
 
 Elasticsearch authentication settings are defined in **conf/elasticsearch.yml**. 
-To be effective, these settings must be the same on all nodes of a Cassandra datacenter.
+To be effective, these settings must be the same on all the nodes of a Cassandra datacenter.
 
 .. cssclass:: table-bordered
 
@@ -791,7 +791,7 @@ To be effective, these settings must be the same on all nodes of a Cassandra dat
 +------------------------+---------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
 | ``aaa.user_header``    |                                             | When user is already authenticated by an HTTP proxy, you can define                                                    |
 |                        |                                             | the HTTP header name used to carry the cassandra user's name used to execute an elasticsearch request.                 |
-|                        |                                             | To avoid security breach, you should properly restric unauthenticated access to elassandra when using such mecanism.   |
+|                        |                                             | To avoid security breach, you should properly restrict unauthenticated access to Elassandra when using such mechanism.   |
 +------------------------+---------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
 | ``aaa.anonymous_user`` |                                             | Defines the cassandra user's name used to execute unauthenticated request.                                             |
 |                        |                                             | If undefined, unauthenticated requests are rejected.                                                                   |
@@ -806,10 +806,10 @@ To be effective, these settings must be the same on all nodes of a Cassandra dat
 
    Elasticsearch **user authentication requires HTTPS**. (User authentication without HTTPS is not supported).
 
-In order to grant an Elasticsearch request, Elassandra checks two levels of access rights :
+In order to grant an Elasticsearch request, Elassandra will check two levels of access rights :
 
-#. First, Elassandra looks up for a **privilege** matching your elasticsearch request in the Cassandra table ``elastic_admin.privileges``.
-#. If no privilege matches and request is related to indices, Elassandra looks up for a Cassandra **permission** associated to the user's roles.
+#. First, Elassandra will look for a **privilege** matching your Elasticsearch request in the Cassandra table ``elastic_admin.privileges``.
+#. If no privilege matches and request is related to indices, Elassandra will look for a Cassandra **permission** associated with the user's roles.
 
 Privileges
 ..........
@@ -830,13 +830,13 @@ Privileges are defined in the Cassandra table ``elastic_admin.privileges``.
 * ``role``: The user's role.
 * ``actions``: Regular expression defining the authorized actions.
 * ``indices``: Regular expression defining the authorized target indices. If null, all indices backed by keyspaces associated to the role.
-* ``fields``: List of visible fields of documents when Content-Base Security is enabled. Supports wilcards, for exemple foo* will match all fields starting by *foo*. If your request matches multiple privileges, returned document may contains all associated fields.
+* ``fields``: List of visible fields of documents when the Content-Base Security is enabled. The support wilcards, for example foo* will match all fields starting by *foo*. If your request matches multiple privileges, returned document will contain all associated fields.
 * ``query``: Filter query when Content-Base Security is enabled. If your request matches multiple privileges, returned document are filtered with all queries.
 
 .. IMPORTANT::
 
    * Cassandra roles with *superuser* = **true** have full access to Elasticsearch.
-   * All cluster-level access should be granted using privileges.
+   * All cluster-level access should be granted the user privileges.
    * Content-Based Security should be used with read-only accounts.
 
 Permissions
@@ -862,7 +862,7 @@ Cassandra permission associated to a role are `granted <https://docs.datastax.co
    cassandra@cqlsh> REVOKE SELECT ON KEYSPACE sales FROM sales;
     
 
-Cassandra permissions associated to a role are mapped to Elasticserach Document and Indices APIs as follow.
+Cassandra permissions associated to a role are mapped into Elasticserach Document and Indices APIs as follows.
 
 .. cssclass:: table-bordered
 
@@ -878,7 +878,7 @@ Cassandra permissions associated to a role are mapped to Elasticserach Document 
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
 | DROP                | DROP KEYSPACE and DROP TABLE in any keyspace.     | indices:admin/delete              | Delete Index             |
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
-| EXECUTE             | Execute operations on any elasticsearch indices   | indices:admin/refresh             | Refresh                  |
+| EXECUTE             | Execute operations on any Elasticsearch indices   | indices:admin/refresh             | Refresh                  |
 |                     | associated to the granted keyspaces.              | indices:admin/flush               | Flush                    |
 |                     |                                                   | indices:admin/optimize            | Force Merge              |
 |                     |                                                   | indices:admin/open                | Open Index               |
@@ -886,8 +886,8 @@ Cassandra permissions associated to a role are mapped to Elasticserach Document 
 |                     |                                                   | indices:admin/cache/clear         | Clear Cache              |
 |                     |                                                   | indices:admin/analyze             | Analyze                  |
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
-| DESCRIBE            | Retrieve stats about elasticsearch indices        | indices:monitor/stats             | Indices Stats            |
-|                     | associated to the granted mbeans.                 | indices:monitor/segments          | Indices Segments         |
+| DESCRIBE            | Retrieve stats about Elasticsearch indices        | indices:monitor/stats             | Indices Stats            |
+|                     | associated with the granted mbeans.                 | indices:monitor/segments          | Indices Segments         |
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
 | SELECT              | SELECT on any table.                              | indices:data/read/.*              | All document reading API |
 |                     |                                                   | indices:admin/get                 | Get Index                |
@@ -903,7 +903,7 @@ Cassandra permissions associated to a role are mapped to Elasticserach Document 
 Privilege caching
 .................
 
-For performance reasons, the elasticsearch privilege table is cached into memory, according the the following settings in **conf/elasticsearch.yml** :
+For performance reasons, the Elasticsearch privilege table is cached into the memory, according the following settings in **conf/elasticsearch.yml** :
 
 .. cssclass:: table-bordered
 
@@ -937,7 +937,7 @@ When changing a privilege in ``elastic_admin.privileges``, you should clear the 
      }
    }
 
-If you just want to invalidate the privilege cache for some roles, you can specify roles :
+If you just want to invalidate the privilege cache for some roles, you can just specify the roles :
 
 .. code::
 
@@ -945,7 +945,7 @@ If you just want to invalidate the privilege cache for some roles, you can speci
 
 .. TIP::
 
-   If you are running multiple Elasticsearch cluster in your Cassandra cluster, you should clear privilege cache on each datacenter where Elasticsearch is enabled.
+   If you are running multiple Elasticsearch cluster in your Cassandra cluster, you should clear the privilege cache on each datacenter where Elasticsearch has been enabled.
 
 Integration
 -----------
@@ -953,12 +953,12 @@ Integration
 Secured Transport Client
 ........................
 
-The elasticsearch transport protocol used for inter-node communication can be used directly from your java application. It is very efficient as it does not have to deal with JSON serialzation.
+The elasticsearch transport protocol used for the inter-node communication can be used directly from your java application. It is very efficient as it does not have to deal with the JSON serialzation.
 Strapdata provides a SSL transport client to work with a secured Elassandra cluster :
 
 #. If your Elassandra cluster requires user authentification, check that your user have access to the cluster topology with the *Nodes Info API* (action **cluster:monitor/nodes/info**).
 #. Add the **ssl-transport-client.jar** and its dependencies in your CLASSPATH.
-#. Add the desired configuration to your client settings, including SSL settings as shown in the following exemple.
+#. Add the desired configuration to your client settings, including SSL settings as shown in the following example.
 #. Add an ``ssl.transport_client_credential`` containing *username*:*password* to monitor the cluster state. This account must be authorized to do ``cluster:monitor/state`` and ``cluster:monitor/nodes/liveness`` in the ``elastic_admin.privileges`` table.
 
 .. code ::
@@ -967,7 +967,7 @@ Strapdata provides a SSL transport client to work with a secured Elassandra clus
    INSERT INTO elastic_admin.privileges (role, actions,indices) VALUES('monitor','cluster:monitor/state','.*');
    INSERT INTO elastic_admin.privileges (role, actions,indices) VALUES('monitor','cluster:monitor/nodes/liveness','.*');
 
-#. Add an **Authorization** header to your client containing your based-64 encoded login and password. This account must have 
+#. Add an **Authorization** header to your client containing your based-64 encoded login and password. This account must have the 
 appropriate `Cassandra permissions <https://docs.datastax.com/en/cql/3.3/cql/cql_using/useSecurePermission.html>`_ or privileges in the ``elastic_admin.privileges`` table.
 
 .. code::
@@ -986,7 +986,7 @@ appropriate `Cassandra permissions <https://docs.datastax.com/en/cql/3.3/cql/cql
         .build())
     .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName("localhost"), 9300))
     
-    // Add user credential to request elasticsearch
+    // Add user credential to request Elasticsearch
     client.filterWithHeader(Collections.singletonMap("Authorization", PreBuiltSslTransportClient.encodeBasicHeader("bob","password")));
     
 Available security settings for the secured transport client for Elassandra :
@@ -1026,7 +1026,7 @@ Available security settings for the secured transport client for Elassandra :
 Multi-user Kibana configuration
 ...............................
 
-Kibana needs a dedicated kibana account to manage kibana configuration, with the CREATE, ALTER, MODIFY, SELECT cassandra permissions.
+Kibana needs a dedicated kibana account to manage the kibana configuration, with the CREATE, ALTER, MODIFY, SELECT cassandra permissions.
 
 .. code::
 
@@ -1045,7 +1045,7 @@ Kibana needs a dedicated kibana account to manage kibana configuration, with the
     kibana |   kibana | <keyspace _kibana> |     SELECT
     kibana |   kibana | <keyspace _kibana> |     MODIFY
 
-Add cluster monitoring access rights to the *kibana* user, and refresh the privileges cache.
+Add cluster monitoring the access rights to the *kibana* user, and refresh the privileges cache.
 
 .. code::
 
@@ -1059,21 +1059,21 @@ Add cluster monitoring access rights to the *kibana* user, and refresh the privi
 Finally, Kibana user accounts must have :
 
 * the SELECT permission on vizualized indices, especially on your default kibana index.
-* the SELECT permission on the kibana keyspace to read kibana configuration.
-* the MODIFY permission on the kibana keyspace to store kibana configuration if authorized to create/update kibana objects.
+* the SELECT permission on the Kibana keyspace to read kibana configuration.
+* the MODIFY permission on the Kibana keyspace to store kibana configuration if authorized to create/update Kibana objects.
 
 .. TIP::
 
-   Once a user if authenticated by kibana, kibana keeps this information. In order to logout from your browser, clear cookies and data associated to your kibana server.
+   Once a user has been authenticated by Kibana, Kibana will keep this information. In order to logout from your browser, clear the cookies and data associated with your Kibana server.
 
 Kibana and Content-Based Security
 .................................
 
-As explain in the `cassandra documentation <http://cassandra.apache.org/doc/latest/cql/security.html#database-roles>`_, you can grant a role to another role and create a hierarchy of roles.
-Then you can gives some elasticsearch privileges to a base role inherited by some user roles allowed to login, and specify a query filter or field-level filter to this base role.
+As explained in the `cassandra documentation <http://cassandra.apache.org/doc/latest/cql/security.html#database-roles>`_, you can grant a role to another role and create a hierarchy of roles.
+Next, you can give some elasticsearch privileges to a base role inherited by some user roles allowed to login, and specify a query filter or field-level filter to this base role.
 
-In the following example, the base role *group_a* have read access to index *my_index* with a document-level filter defined by a term query.
-Then the user role *bob* (allowed to log in) inherits of the privileges from the base role *group_a* to read the kibana configuration and the index *my_index* only for documents where *category* is *A*.
+In the following example, the base role *group_a* has a read access to index *my_index* with a document-level filter defined by a term query.
+Thereafter, the user role *bob* (allowed to log in) will inherit of the privileges from the base role *group_a* to read the kibana configuration and the index *my_index* only for documents where *category* is *A*.
 
 .. code::
 
@@ -1094,8 +1094,8 @@ Elasticsearch Spark connector
 .............................
 
 The `elasticsearch-hadoop <https://github.com/strapdata/elasticsearch-hadoop>`_ connector can access a secured Elassandra cluster by providing the 
-sames SSL/TLS and Username/Pasword authentication parameters as the orginal `elasticsearch-hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/security.html>`_ connector.
-Here is an example with a spark-shell.
+same SSL/TLS and Username/Pasword authentication parameters as the orginal `elasticsearch-hadoop <https://www.elastic.co/guide/en/elasticsearch/hadoop/current/security.html>`_ connector.
+Below is an example of a spark-shell.
 
 .. code::
 
@@ -1108,9 +1108,9 @@ Here is an example with a spark-shell.
    
    bin/spark-shell --driver-class-path path/to/elasticsearch-hadoop-5.5.0.jar $ES_OPTS
 
-In order to works, the elasticsearch spark connector requires privileges to monitor your cluster and request for availables shards for search. 
-You can associate these privileges to a dedicated cassandra role *spark*, and grant this role to the account used in your spark application.
-The *spark* role have no cassandra permission, but user *john* inherits its privileges from the ``elastic_admin.privileges`` table.
+In order to work, the Elasticsearch spark connector will require some privileges to monitor your cluster and request for availables shards for search. 
+You can associate these privileges to a dedicated Cassandra role *spark*, and grant this role to the account used in your spark application.
+The *spark* role has no Cassandra permission, but user *john* inherits its privileges from the ``elastic_admin.privileges`` table.
 
 .. code::
 
@@ -1145,7 +1145,7 @@ The `cassandra-spark-connector <https://github.com/datastax/spark-cassandra-conn
 Elasticsearch Auditing
 ----------------------
 
-Elasticsearch auditing tracks security events with the following fields :
+Elasticsearch auditing tracks security events using the following fields :
 
 .. cssclass:: table-bordered
 
@@ -1176,7 +1176,7 @@ Audits events are recorded in a Cassandra table or in a log file configured as a
 +=============================+===========+===============================================================================================+
 | ``aaa.audit.enabled``       | **false** | Enable or disable Elasticsearch auditing.                                                     |
 +-----------------------------+-----------+-----------------------------------------------------------------------------------------------+
-| ``aaa.audit.appender``      | **none**  | Audits events are recorded in a Cassandra table (**cql**) or in a logback appender (**log**). |
+| ``aaa.audit.appender``      | **none**  | Audit events are recorded in a Cassandra table (**cql**) or in a logback appender (**log**). |
 +-----------------------------+-----------+-----------------------------------------------------------------------------------------------+
 | ``aaa.audit.include_login`` |           | Comma separated list of logins to audit                                                       |
 +-----------------------------+-----------+-----------------------------------------------------------------------------------------------+
@@ -1213,7 +1213,7 @@ And add a logger named **LogbackAuditor** with additiviy set to **false** :
         <appender-ref ref="AUDIT" />
    </logger>
 
-Here an exemple of audit logs in the **logs/audit.log** file :
+Below is an exemple of audit logs in the **logs/audit.log** file :
 
 .. code::
 
@@ -1256,7 +1256,7 @@ If you want to have multiple copies of audit events in your cluster, you can alt
 | ``aaa.audit.cql.cl`` | **LOCAL_ONE** | Write *Consistency Level* for audit events.                                       |
 +----------------------+---------------+-----------------------------------------------------------------------------------+
 
-You can index with elasticsearch the ``elastic_audit.events`` table with the following mapping, where the *event* timeuuid column is explicitly mapped to a date :
+You can index with Elasticsearch the ``elastic_audit.events`` table using the following mapping, where the *event* timeuuid column is explicitly mapped to a date :
 
 .. code::
 
@@ -1275,14 +1275,14 @@ You can index with elasticsearch the ``elastic_audit.events`` table with the fol
       }
    }'
 
-Then you can build you audit trail kibana report.
+Next, you can build your audit trail Kibana report.
 
 .. image:: images/elastic_audit_events_kibana_report.png
 
 .. TIP::
 
-   Keep in mind that CQL audit trail involves a network overhead because each node send some events to all other nodes. For better performances, 
-   you should use the Logback audit and collect events with Beat+Logstash into a dedicated elassandra cluster. 
+   Keep in mind that CQL audit trail involves a network overhead because each node sends some events to all other nodes. For better performance, 
+   you should use the Logback audit and collect the events with Beat+Logstash into a dedicated Elassandra cluster. 
    
 Limitations
 -----------
@@ -1298,7 +1298,7 @@ Content-Based Security Limitations
    * **Geo Shape** queries without inline shape definition.
    * **Percolate** queries.
 
-If you try to insert an unsupported query in ``elastic_admin.privileges.query``, you will get a syntax error as show bellow :
+If you try to insert an unsupported query in ``elastic_admin.privileges.query``, you will get a syntax error as shown below :
 
 .. code::
 
