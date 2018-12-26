@@ -145,6 +145,7 @@ alias settings='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/settings
 alias tasks='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_tasks?pretty'
 alias aliases='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/aliases?v'
 alias templates='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_template?pretty'
+alias pipelines='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_ingest/pipeline?pretty
 
 alias nodes='curl -XGET $CREDENTIAL "$PROTOCOL://$NODE:9200/_nodes?pretty"'
 
