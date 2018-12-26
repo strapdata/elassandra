@@ -25,6 +25,7 @@ import org.apache.cassandra.dht.Murmur3Partitioner.LongToken;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.gms.VersionedValue;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.service.StorageService;
@@ -41,7 +42,6 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.logging.Loggers;
-import org.elasticsearch.common.network.InetAddresses;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
@@ -197,7 +197,7 @@ public abstract class AbstractSearchStrategy {
         }
 
         public boolean isRoutable(ClusterState state) {
-           return !state.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK);
+           return VersionedValue.STATUS_NORMAL.equals(StorageService.instance.getOperationMode()) && !state.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK);
         }
 
         public ShardRoutingState getShardRoutingState(DiscoveryNode node) {
