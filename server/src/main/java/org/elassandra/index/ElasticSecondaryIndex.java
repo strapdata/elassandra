@@ -42,11 +42,13 @@ import org.apache.cassandra.db.SinglePartitionReadCommand;
 import org.apache.cassandra.db.Slice;
 import org.apache.cassandra.db.Slices;
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.filter.ClusteringIndexNamesFilter;
 import org.apache.cassandra.db.filter.ClusteringIndexSliceFilter;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.filter.DataLimits;
 import org.apache.cassandra.db.filter.RowFilter;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CollectionType;
 import org.apache.cassandra.db.marshal.CompositeType;
@@ -62,21 +64,27 @@ import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterators;
+import org.apache.cassandra.db.view.View;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.index.IndexRegistry;
+import org.apache.cassandra.index.SecondaryIndexBuilder;
+import org.apache.cassandra.index.internal.CollatedViewIndexBuilder;
 import org.apache.cassandra.index.transactions.IndexTransaction;
 import org.apache.cassandra.index.transactions.IndexTransaction.Type;
+import org.apache.cassandra.io.sstable.ReducingKeyIterator;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.ElassandraDaemon;
-import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.OpOrder.Group;
+import org.apache.cassandra.utils.concurrent.Refs;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -253,7 +261,7 @@ public class ElasticSecondaryIndex implements Index {
 
     // updated when create/open/close/remove an ES index.
     protected final ReadWriteLock mappingInfoLock = new ReentrantReadWriteLock();
-    protected final AtomicReference<ImmutableMappingInfo> mappingInfoRef = new AtomicReference<>(null);
+    protected final AtomicReference<ImmutableMappingInfo> mappingInfoRef;
     protected final ClusterService clusterService;
 
     protected final ColumnFamilyStore baseCfs;
@@ -270,6 +278,12 @@ public class ElasticSecondaryIndex implements Index {
         this.logger = Loggers.getLogger(this.getClass().getName() + "." + baseCfs.keyspace.getName() + "." + baseCfs.name);
 
         this.clusterService = ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class);
+        ClusterState state = null;
+        try {
+            state = (clusterService == null) ? null : clusterService.state();
+        } catch(java.lang.AssertionError e) {
+        }
+        this.mappingInfoRef = new AtomicReference<>( state != null ? new ImmutableMappingInfo(state) : null);
         this.needBuild = new AtomicBoolean(!isBuilt());
     }
 
@@ -821,6 +835,7 @@ public class ElasticSecondaryIndex implements Index {
             final boolean versionLessEngine;
             final boolean insert_only;
             final boolean opaque_storage;
+            final long version;
 
             Mapper[] mappers;   // inititalized in the ImmutableMappingInfo constructor.
             ReadWriteLock dynamicMappingUpdateLock;
@@ -837,6 +852,7 @@ public class ElasticSecondaryIndex implements Index {
                 Map<String, Object> mappingMap = mappingMetaData.getSourceAsMap();
                 Map<String, Object> metaMap = (mappingMap == null) ? null : (Map<String, Object>) mappingMap.get("_meta");
 
+                this.version = indexService.getMetaData().getVersion();
                 this.refresh = getMetaSettings(metadata.settings(), metaMap, IndexMetaData.INDEX_SYNCHRONOUS_REFRESH_SETTING) || synchronousRefreshPattern.matcher(name).matches();
                 logger.debug("index.type=[{}.{}] {}=[{}]", name, this.type, IndexMetaData.INDEX_SYNCHRONOUS_REFRESH_SETTING.getKey(), refresh);
 
@@ -2428,16 +2444,19 @@ public class ElasticSecondaryIndex implements Index {
         } else {
             for (ObjectCursor<IndexMetaData> cursor : event.state().metaData().indices().values()) {
                 IndexMetaData indexMetaData = cursor.value;
-                if (indexMetaData.keyspace().equals(this.baseCfs.metadata.ksName) &&
-                    indexMetaData.mapping(this.typeName) != null &&
-                    !indexMetaData.equals(event.previousState().metaData().index(indexMetaData.getIndex().getName()))) {
+                if (!indexMetaData.keyspace().equals(this.baseCfs.metadata.ksName) || indexMetaData.mapping(this.typeName) == null)
+                    continue;
+
+                if (mappingInfo.indexToIdx == null ||
+                    !mappingInfo.indexToIdx.containsKey(indexMetaData.getIndex().getName()) ||
+                     mappingInfo.indices[mappingInfo.indexToIdx.get(indexMetaData.getIndex().getName())].version != indexMetaData.getVersion()) {
                     updateMapping = true;
                     break;
                 }
             }
         }
         if (updateMapping) {
-        	updateMappingInfo(event.state());
+            updateMappingInfo(event.state());
         }
     }
 
@@ -2461,8 +2480,7 @@ public class ElasticSecondaryIndex implements Index {
     public boolean delayInitializationTask()
     {
         ImmutableMappingInfo mappingInfo = mappingInfoRef.get();
-        needBuild.set(!isBuilt() && (mappingInfo == null || !mappingInfo.hasAllShardStarted()));
-        return needBuild.get();
+        return mappingInfo == null || !mappingInfo.hasAllShardStarted();
     }
 
     /**
@@ -2474,8 +2492,14 @@ public class ElasticSecondaryIndex implements Index {
     @Override
     public Callable<?> getInitializationTask()
     {
+        return isBuilt() || isBuilding() || baseCfs.isEmpty() ? null : getBuildIndexTask();
+    }
+
+    private Callable<?> getBuildIndexTask()
+    {
+        needBuild.set(false);
         return () -> {
-            baseCfs.indexManager.buildIndexBlocking(this);
+            this.baseCfs.indexManager.buildIndex(this);
             return null;
         };
     }
@@ -2490,22 +2514,28 @@ public class ElasticSecondaryIndex implements Index {
         startRebuildIfNeeded();
     }
 
+    /**
+     * Rebuild 2i index if needed.
+     */
     private void startRebuildIfNeeded() {
         ImmutableMappingInfo mappingInfo = mappingInfoRef.get();
-        if (!StorageService.instance.isJoining() &&                     // avoid to rebuild before C* streaming, should be launched by StreamReceiveTask.
-            !isBuilt() &&
-            !this.baseCfs.indexManager.isIndexBuilding(indexMetadata.name) &&
+        if (!isBuilt() &&
+            !isBuilding() &&
             mappingInfo != null &&
             mappingInfo.hasAllShardStarted() &&
             needBuild.compareAndSet(true, false))
         {
             logger.info("start building secondary {}.{}.{}", baseCfs.keyspace.getName(), baseCfs.metadata.cfName, indexMetadata.name);
-            Future<?> future = baseCfs.indexManager.buildIndex(this);
+            baseCfs.indexManager.buildIndexBlocking(this);
         }
     }
 
     private boolean isBuilt() {
         return SystemKeyspace.isIndexBuilt(baseCfs.keyspace.getName(), this.indexMetadata.name);
+    }
+
+    private boolean isBuilding() {
+        return baseCfs.indexManager.isIndexBuilding(this.indexMetadata.name);
     }
 
     @Override

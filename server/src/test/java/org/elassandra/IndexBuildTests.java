@@ -121,4 +121,25 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         assertThat(replication.get("DC1"), equalTo("1"));
         assertThat(replication.get("DC2"), equalTo("2"));
     }
+
+    @Test
+    public void testDelayedIndexBuild() throws Exception {
+        process(ConsistencyLevel.ONE,"CREATE KEYSPACE IF NOT EXISTS test WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', 'DC1':'1' }");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.t1 ( a int,b text, primary key (a) )");
+        int i=0;
+        for(int j=0 ; j < N; j++) {
+            i++;
+            process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", i, "x"+i);
+        }
+
+        process(ConsistencyLevel.ONE,"CREATE CUSTOM INDEX elastic_t1_idx ON test.t1 () USING 'org.elassandra.index.ExtendedElasticSecondaryIndex';");
+        assertFalse(waitIndexRebuilt("test", Collections.singletonList("t1"), 5000));
+
+        createIndex("test");
+        ensureGreen("test");
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(discoverMapping("t1")).get());
+
+        assertTrue(waitIndexRebuilt("test", Collections.singletonList("t1"), 15000));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+    }
 }
