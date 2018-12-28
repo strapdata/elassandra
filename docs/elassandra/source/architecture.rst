@@ -3,7 +3,7 @@ Architecture
 
 Elassandra closely integrates Elasticsearch within Apache Cassandra as a secondary index, allowing near-realtime search with all existing Elasticsearch APIs, plugins and tools like Kibana.
 
-When you index a document, the JSON document is stored as a row in a Cassandra table and synchronously indexed in elasticsearch.
+When you index a document, the JSON document is stored as a row in a Cassandra table and synchronously indexed in Elasticsearch.
 
 .. image:: images/elassandra1.jpg
 
@@ -17,18 +17,18 @@ Concepts Mapping
     +========================+====================+==========================================================================+
     | Cluster                | Virtual Datacenter | All nodes of a datacenter forms an Elasticsearch cluster                 |
     +------------------------+--------------------+--------------------------------------------------------------------------+
-    | Shard                  | Node               | Each cassandra node is an elasticsearch shard for each indexed keyspace  |
+    | Shard                  | Node               | Each Cassandra node is an Elasticsearch shard for each indexed keyspace  |
     +------------------------+--------------------+--------------------------------------------------------------------------+
-    | Index                  | Keyspace           | An elasticsearch index is backed by a keyspace                           |
+    | Index                  | Keyspace           | An Elasticsearch index is backed by a keyspace                           |
     +------------------------+--------------------+--------------------------------------------------------------------------+
-    | Type                   | Table              | Each elasticsearch document type is backed by a cassandra table.         |
+    | Type                   | Table              | Each Elasticsearch document type is backed by a Cassandra table.         |
     |                        |                    | Elasticsearch 6+ support only one document type, named "_doc" by default.|
     +------------------------+--------------------+--------------------------------------------------------------------------+
-    | Document               | Row                | An elasticsearch document is backed by a cassandra row                   |
+    | Document               | Row                | An Elasticsearch document is backed by a Cassandra row                   |
     +------------------------+--------------------+--------------------------------------------------------------------------+
-    | Field                  | Cell               | Each indexed field is backed by a cassandra cell (row x column)          |
+    | Field                  | Cell               | Each indexed field is backed by a Cassandra cell (row x column)          |
     +------------------------+--------------------+--------------------------------------------------------------------------+
-    | Object or nested field | User Defined Type  | Automatically create a User Defined Type to store elasticsearch object   |
+    | Object or nested field | User Defined Type  | Automatically create a User Defined Type to store an Elasticsearch object   |
     +------------------------+--------------------+--------------------------------------------------------------------------+
 
 From an Elasticsearch perspective :
@@ -36,14 +36,14 @@ From an Elasticsearch perspective :
 * An Elasticsearch cluster is a Cassandra virtual datacenter.
 * Every Elassandra node is a master primary data node.
 * Each node only index local data and acts as a primary local shard.
-* Elasticsearch data is no longer stored in Lucene indices, but in cassandra tables.
+* Elasticsearch data is no longer stored in Lucene indices, but in Cassandra tables.
 
-  * An Elasticsearch index is mapped to a cassandra keyspace,
-  * Elasticsearch document type is mapped to a cassandra table. Elasticsearch 6+ support only one document type, named "_doc" by default.
-  * Elasticsearch document *_id* is a string representation of the cassandra primary key.
+  * An Elasticsearch index is mapped to a Cassandra keyspace,
+  * Elasticsearch document type is mapped to a Cassandra table. Elasticsearch 6+ support only one document type, named "_doc" by default.
+  * Elasticsearch document *_id* is a string representation of the Cassandra primary key.
 
 * Elasticsearch discovery now relies on the cassandra `gossip protocol <https://wiki.apache.org/cassandra/ArchitectureGossip>`_. When a node joins or leaves the cluster, or when a schema change occurs, each node updates the nodes status and its local routing table.
-* Elasticsearch `gateway <https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html>`_ now store metadata in a cassandra table and in the cassandra schema. Metadata updates are played sequentially through a `cassandra lightweight transaction <http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html>`_. Metadata UUID is the cassandra hostId of the last modifier node.
+* Elasticsearch `gateway <https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html>`_ now store metadata in a Cassandra table and in the Cassandra schema. Metadata updates are played sequentially through a `cassandra lightweight transaction <http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_ltweight_transaction_t.html>`_. Metadata UUID is the cassandra hostId of the last modifier node.
 * Elasticsearch REST and java API remain unchanged.
 * Logging is now based on `logback <http://logback.qos.ch/>`_ as in Cassandra.
 
@@ -57,8 +57,8 @@ From a Cassandra perspective :
 Durability
 ----------
 
-All writes to a cassandra node are recorded both in a memory table and in a commit log. When a memtable flush occurs, it flushes the elasticsearch secondary index on disk.
-When restarting after a failure, cassandra replays commitlogs and re-indexes elasticsearch documents that were no flushed by elasticsearch.
+All writes to a Cassandra node are recorded both in a memory table and in a commit log. When a memtable flush occurs, it flushes the elasticsearch secondary index on disk.
+When restarting after a failure, Cassandra replays commitlogs and re-indexes elasticsearch documents that were not flushed by Elasticsearch.
 This is the reason why `elasticsearch translog <https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-translog.html#index-modules-translog>`_ is disabled in Elassandra.
 
 Shards and Replicas
@@ -66,11 +66,11 @@ Shards and Replicas
 
 Unlike Elasticsearch, sharding depends on the number of nodes in the datacenter, and the number of replica is defined by your keyspace `Replication Factor <http://docs.datastax.com/en/cassandra/2.0/cassandra/architecture/architectureDataDistributeReplication_c.html>`_ . Elasticsearch *numberOfShards* is just information about the number of nodes.
 
-* When adding a new elassandra node, the cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data are automatically indexed and each node update its routing table to distribute search requests according to the ring topology.
+* When adding a new Elassandra node, the Cassandra boostrap process gets some token ranges from the existing ring and pull the corresponding data. Pulled data is automatically indexed and each node update its routing table to distribute search requests according to the ring topology.
 * When updating the Replication Factor, you will need to run a `nodetool repair <keyspace> <http://docs.datastax.com/en/cql/3.0/cql/cql_using/update_ks_rf_t.html>`_ on the new node to effectively copy and index the data.
-* If a node becomes unavailable, the routing table is updated on all nodes in order to route search requests on available nodes. The actual default strategy routes search requests on primary token ranges' owner first, then to replica nodes if available. If some token ranges become unreachable, the cluster status is in red, otherwise cluster status is in yellow.
+* If a node becomes unavailable, the routing table is updated on all nodes to route search requests on available nodes. The current default strategy routes search requests on primary token ranges' owner first, then to replica nodes when available. If some token ranges become unreachable, the cluster status is in red, otherwise cluster status is in yellow.
 
-After starting a new Elassandra node, data and elasticsearch indices are distributed on 2 nodes (with no replication).
+After starting a new Elassandra node, data and Elasticsearch indices are distributed on 2 nodes (with no replication).
 
 .. code::
 
@@ -83,7 +83,7 @@ After starting a new Elassandra node, data and elasticsearch indices are distrib
     UN  127.0.0.1  156,9 KB   2       70,3%             74ae1629-0149-4e65-b790-cd25c7406675  RAC1
     UN  127.0.0.2  129,01 KB  2       29,7%             e5df0651-8608-4590-92e1-4e523e4582b9  RAC2
 
-The routing table now distributes search request on 2 elassandra nodes covering 100% of the ring.
+The routing table now distributes search request on 2 Elassandra nodes covering 100% of the ring.
 
 .. code::
 
@@ -255,23 +255,23 @@ Write path
 ----------
 
 Write operations (Elasticsearch index, update, delete and bulk operations) are converted into CQL write requests managed by the coordinator node.
-The elasticsearch document *_id* is converted into an underlying primary key, and the corresponding row is stored on many nodes according to the Cassandra replication factor.
+The Elasticsearch document *_id* is converted into an underlying primary key, and the corresponding row is stored on many nodes according to the Cassandra replication factor.
 Then, on each node hosting this row, an Elasticsearch document is indexed through a Cassandra custom secondary index. Every document includes a _token fields used when for searching.
 
 .. image:: images/write-path.png
 
-At index time, every nodes directly generates lucene fields without any JSON parsing overhead, and Lucene files does not contains any version number, because version-based concurrency management becomes meaningless in a multi-master database like Cassandra.
+At index time, every node directly generates the Lucene fields without any JSON parsing overhead, and  the Lucene files do not contain any version number, because the version-based concurrency management becomes meaningless in a multi-master database like Cassandra.
 
 Search path
 -----------
 
-Search request is done in two phases. In the query phase, the coordinator node adds a token_ranges filter to the query and broadcasts a search request to all nodes. This token_ranges filter covers the entire Cassandra ring and avoids duplicate results.
-Then, in the fetch phases, the coordinator fetches the required fields by issuing a CQL request in the underlying Cassandra table, and builds the final JSON response.
+Search request is done in two phases. First, the query phase, the coordinator node adds a token_ranges filter to the query and broadcasts a search request to all nodes. This token_ranges filter covers the entire Cassandra ring and avoids duplicating results.
+Secondly, in the fetch phases, the coordinator fetches the required fields by issuing a CQL request in the underlying Cassandra table, and builds the final JSON response.
 
 .. image:: images/search-path.png
 
 Elassandra provides a random search strategy requesting the minimum of nodes to cover the whole Cassandra ring. 
-For example, if you have a datacenter with four nodes and a replication factor of two, it will request only two nodes
+For example, if you have a datacenter with four nodes and a replication factor of two, only two nodes will be requested
 with simplified token_ranges filters (adjacent token ranges are automatically merged).
 
 Additionally, as these token_ranges filters only change when the datacenter topology changes (for example when a node is down or when adding a new node), 
@@ -284,11 +284,11 @@ Finally, the CQL fetch overhead can be mitigated by using keys and rows Cassandr
 Mapping and CQL schema management
 ---------------------------------
 
-Elassandra has no master node to manage the elasticsearch mapping and all nodes can update the elasticsearch mapping. In order to manage concurrent simultaneous mapping and CQL schema changes, 
-elassandra plays a PAXOS transaction to update the current elasticsearch metadata version in the cassandra table **elastic_admin.metadata**. Once the PAXOS transaction
-succeed, elassandra coordinator node applies n batched-atomic (1) CQL schema update boadcasted to all nodes, update and broadcast its gossip fields X2 with its *host_id*/*version_number*.
-Version number increase by one on each mapping update. Then, non-coordinator nodes catch the CQL schema change, reload their mapping and annonce the same X2 once the new elasticsearch mapping is applied. 
-As the result, all nodes sharing the same elasticsearch mapping should have the same X2 value and you can check this with **nodetool gossipinfo**, as show here with X2 = e5df0651-8608-4590-92e1-4e523e4582b9/1.  
+Elassandra has no master node to manage the Elasticsearch mapping and all nodes can update the Elasticsearch mapping. In order to manage concurrent simultaneous mapping and CQL schema changes, 
+Elassandra plays a PAXOS transaction to update the current Elasticsearch metadata version in the Cassandra table **elastic_admin.metadata**. Once the PAXOS transaction
+succeed, Elassandra coordinator node applies n batched-atomic (1) CQL schema update boadcasted to all nodes, update and broadcast its gossip fields X2 with its *host_id*/*version_number*.
+Version number increase by one on each mapping update. Then, non-coordinator nodes catch the CQL schema change, reload their mapping and annonce the same X2 once the new Elasticsearch mapping is applied. 
+As the result, all nodes sharing the same Elasticsearch mapping should have the same X2 value and you can check this with **nodetool gossipinfo**, as show here with X2 = e5df0651-8608-4590-92e1-4e523e4582b9/1.  
 
 .. code::
 
@@ -326,8 +326,8 @@ As the result, all nodes sharing the same elasticsearch mapping should have the 
       LOAD:154824.0
       HOST_ID:74ae1629-0149-4e65-b790-cd25c7406675
 
-(1) All CQL changes invloved by the elasticsearch mapping update (CQL types and tables create/update) and the new elasticsearch cluster state are applied in a *SINGLE* CQL schema update.
-The elasticsearch metadata are stored in a binary format in the CQL schema as table extensions, stored in **system_schema.tables**, column **extensions** of type *frozen<map<text, blob>>*. 
+(1) All CQL changes invloved by the Elasticsearch mapping update (CQL types and tables create/update) and the new Elasticsearch cluster state are applied in a *SINGLE* CQL schema update.
+The Elasticsearch metadata are stored in a binary format in the CQL schema as table extensions, stored in **system_schema.tables**, column **extensions** of type *frozen<map<text, blob>>*. 
 
 Elasticsearch metadata (indices, templates, aliases, ingest pipelines...) without document mapping is stored in **elastic_admin.metdata** table extensions:
  
@@ -341,7 +341,7 @@ Elasticsearch metadata (indices, templates, aliases, ingest pipelines...) withou
    
    (1 rows)
 
-For each document type backed by a cassandra table, index metadata including the mapping is stored as an extension, where extension key is elastic_admin/<index_name> :
+For each document type backed by a Cassandra table, index metadata including the mapping is stored as an extension, where extension key is elastic_admin/<index_name> :
 
 .. code::
 
