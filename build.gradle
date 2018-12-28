@@ -36,15 +36,14 @@ import com.github.jk1.license.render.*;
 import com.github.jk1.license.filter.*;
 
 plugins {
-  id 'com.github.jk1.dependency-license-report' version '1.2'
+  id 'com.github.jk1.dependency-license-report' version '1.3'
 }
 
 apply plugin: 'com.github.jk1.dependency-license-report'
 
 licenseReport {
     renderers = [new CsvReportRenderer(separator:';'), new TextReportRenderer(), new InventoryHtmlReportRenderer('index.html', 'Elassandra License Report')]
-    filters = [new LicenseBundleNormalizer('buildSrc/src/main/resources/license-normalizer-bundle.json', true)]
-    //projects = [project] + project.subprojects.findAll { !it.name.contains('plugin') && !it.name.contains('qa') }
+    filters = [new LicenseBundleNormalizer(bundlePath: rootProject.file('buildSrc/src/main/resources/license-normalizer-bundle.json'))]
     projects = [project] + project.subprojects
     excludes = [ 'com.strapdata.elasticsearch:elasticsearch-core' ]
 }
@@ -59,6 +58,11 @@ subprojects {
 ext.enableArtifactSigning = !version.endsWith("SNAPSHOT") && project.hasProperty("repoUsername")
 ext.repoUsername = { project.hasProperty("repoUsername") ? getProperty("repoUsername") : "" }
 ext.repoPassword = { project.hasProperty("repoPassword") ? getProperty("repoPassword") : "" }
+
+// added by strapdata to publish artifact on an internal nexus
+if (!project.hasProperty("strapdataNexusUrl")) { ext.strapdataNexusUrl = "" }
+if (!project.hasProperty("strapdataNexusUsername")) { ext.strapdataNexusUsername = "" }
+if (!project.hasProperty("strapdataNexusPassword")) { ext.strapdataNexusPassword = "" }
 
 Path rootPath = rootDir.toPath()
 // setup pom license info, but only for artifacts that are part of elasticsearch
@@ -77,6 +81,16 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
   // we only use maven publish to add tasks for pom generation
   plugins.withType(MavenPublishPlugin).whenPluginAdded {
     publishing {
+      repositories {
+        maven {
+          name "deploy"
+          url strapdataNexusUrl
+          credentials {
+            username = strapdataNexusUsername
+            password = strapdataNexusPassword
+          }
+        }
+      }
       publications {
         // add license information to generated poms
         all {

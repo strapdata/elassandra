@@ -200,11 +200,6 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
                     "terms query on the _field_names field is deprecated and will be removed, use exists query instead");
             return super.termQuery(value, context);
         }
-        
-        @Override
-        public String cqlType() {
-            return "text";
-        }
     }
 
     private FieldNamesFieldMapper(Settings indexSettings, MappedFieldType existing) {

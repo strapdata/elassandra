@@ -19,19 +19,7 @@
 
 package org.elasticsearch.ingest.common;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
-
+import org.elassandra.ingest.common.TimeuuidProcessor;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
@@ -46,6 +34,19 @@ import org.elasticsearch.plugins.IngestPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 
 public class IngestCommonPlugin extends Plugin implements ActionPlugin, IngestPlugin {
 
@@ -92,6 +93,7 @@ public class IngestCommonPlugin extends Plugin implements ActionPlugin, IngestPl
         processors.put(JsonProcessor.TYPE, new JsonProcessor.Factory());
         processors.put(KeyValueProcessor.TYPE, new KeyValueProcessor.Factory());
         processors.put(URLDecodeProcessor.TYPE, new URLDecodeProcessor.Factory());
+        processors.put(TimeuuidProcessor.TYPE, new TimeuuidProcessor.Factory(parameters.scriptService));
         return Collections.unmodifiableMap(processors);
     }
 

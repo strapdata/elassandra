@@ -21,8 +21,10 @@ package org.elasticsearch.gateway;
 
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
+import org.elassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.Settings;
@@ -42,11 +44,17 @@ public class MetaStateService extends AbstractComponent {
 
     private final NodeEnvironment nodeEnv;
     private final NamedXContentRegistry namedXContentRegistry;
+    private final ClusterService clusterService;
 
     public MetaStateService(Settings settings, NodeEnvironment nodeEnv, NamedXContentRegistry namedXContentRegistry) {
+        this(settings, nodeEnv, namedXContentRegistry, null);
+    }
+
+    public MetaStateService(Settings settings, NodeEnvironment nodeEnv, NamedXContentRegistry namedXContentRegistry, ClusterService clusterService) {
         super(settings);
         this.nodeEnv = nodeEnv;
         this.namedXContentRegistry = namedXContentRegistry;
+        this.clusterService = clusterService;
     }
 
     /**
@@ -81,6 +89,11 @@ public class MetaStateService extends AbstractComponent {
         return IndexMetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, nodeEnv.indexPaths(index));
     }
 
+    @Nullable
+    public IndexMetaData loadIndexState(byte[] indexMetaData) throws IOException {
+        return IndexMetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, indexMetaData);
+    }
+
     /**
      * Loads all indices states available on disk
      */
@@ -110,10 +123,14 @@ public class MetaStateService extends AbstractComponent {
      * Loads the global state, *without* index state, see {@link #loadFullState()} for that.
      */
     MetaData loadGlobalState() throws IOException {
-        return MetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, nodeEnv.nodeDataPaths());
+        try {
+            return clusterService.loadGlobalState();
+        } catch (NoPersistedMetaDataException e) {
+            return MetaData.EMPTY_META_DATA;
+        }
     }
 
-    
+
     /**
      * Decode global state from a string.
      * @param stringMetaData
@@ -122,6 +139,10 @@ public class MetaStateService extends AbstractComponent {
      */
     public MetaData loadGlobalState(String stringMetaData) throws IOException {
         return MetaData.CASSANDRA_FORMAT.loadLatestState(logger, namedXContentRegistry, stringMetaData);
+    }
+
+    public MetaData loadGlobalState(byte[] metadata) throws IOException {
+        return MetaData.CQL_FORMAT.loadLatestState(logger, namedXContentRegistry, metadata);
     }
 
     /**

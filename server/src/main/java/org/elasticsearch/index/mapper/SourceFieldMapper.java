@@ -204,11 +204,6 @@ public class SourceFieldMapper extends MetadataFieldMapper {
             }
             return ByteBuffer.wrap(BytesReference.toBytes(br));
         }
-        
-        @Override
-        public String cqlType() {
-            return "blob";
-        }
     }
 
     private final boolean enabled;
@@ -269,7 +264,7 @@ public class SourceFieldMapper extends MetadataFieldMapper {
     public void createField(ParseContext context, Object value) throws IOException {
         // Nothing to, _source should be disabled in elassandra.
     }
-    
+
     @Override
     protected void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException {
         if (!enabled) {

@@ -97,11 +97,6 @@ public class VersionFieldMapper extends MetadataFieldMapper {
         public Query termQuery(Object value, QueryShardContext context) {
             throw new QueryShardException(context, "The _version field is not searchable");
         }
-        
-        @Override
-        public String cqlType() {
-            return "bigint";
-        }
     }
 
     private VersionFieldMapper(Settings indexSettings) {
@@ -142,11 +137,11 @@ public class VersionFieldMapper extends MetadataFieldMapper {
     @Override
     public void createField(ParseContext context, Object value) throws IOException {
     }
-    
+
     @Override
     public void postCreate(ParseContext context) throws IOException {
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

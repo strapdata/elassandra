@@ -1,3 +1,15 @@
+6.2.3.8 - 2018-12-17
+  * Fix cluster settings
+  * Fix date field in primary key #222
+  * Refactor mapping management to ensure atomic and sequential CQL schema updates.
+  * Add a boolean cql_clustering_key_desc mapping attribute
+  * Add a index.table_options to properly configure cassandra tables
+  * Add support for opaque storage of document _source
+  * Improve index_insert_only mode by using cassandra UNSET_BYTE_BUFFER
+  * Fix cqlsh help pages result in 404 errors #241
+  * Add a Timeuuid processor
+  * Add support for custom cql_type in mapping
+  
 6.2.3.7 - 2018-10-15
   * Improve license notice
   * Index document with empty mapping

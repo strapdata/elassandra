@@ -111,7 +111,7 @@ public final class ActiveShardCount implements Writeable {
         }
         return ConsistencyLevel.LOCAL_ONE;
     }
-    
+
     @Override
     public void writeTo(final StreamOutput out) throws IOException {
         out.writeInt(value);
@@ -178,7 +178,7 @@ public final class ActiveShardCount implements Writeable {
                 continue;
             }
             final IndexRoutingTable indexRoutingTable = clusterState.routingTable().index(indexName);
-            assert indexRoutingTable != null;
+            assert indexRoutingTable != null : "No routing table for index " + indexName;
             if (indexRoutingTable.allPrimaryShardsActive() == false) {
                 // all primary shards aren't active yet
                 return false;

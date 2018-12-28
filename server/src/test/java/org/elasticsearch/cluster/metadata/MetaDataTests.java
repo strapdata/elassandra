@@ -203,10 +203,10 @@ public class MetaDataTests extends ESTestCase {
     public void testMetaDataGlobalStateChangesOnIndexDeletions() {
         IndexGraveyard.Builder builder = IndexGraveyard.builder();
         builder.addTombstone(new Index("idx1", UUIDs.randomBase64UUID()));
-        final MetaData metaData1 = MetaData.builder().indexGraveyard(builder.build()).build();
+        final MetaData metaData1 = MetaData.builder().indexGraveyard(builder.build(Settings.builder().put(IndexGraveyard.SETTING_MAX_TOMBSTONES.getKey(), 500).build())).build();
         builder = IndexGraveyard.builder(metaData1.indexGraveyard());
         builder.addTombstone(new Index("idx2", UUIDs.randomBase64UUID()));
-        final MetaData metaData2 = MetaData.builder(metaData1).indexGraveyard(builder.build()).build();
+        final MetaData metaData2 = MetaData.builder(metaData1).indexGraveyard(builder.build(Settings.builder().put(IndexGraveyard.SETTING_MAX_TOMBSTONES.getKey(), 500).build())).build();
         assertFalse("metadata not equal after adding index deletions", MetaData.isGlobalStateEquals(metaData1, metaData2));
         final MetaData metaData3 = MetaData.builder(metaData2).build();
         assertTrue("metadata equal when not adding index deletions", MetaData.isGlobalStateEquals(metaData2, metaData3));

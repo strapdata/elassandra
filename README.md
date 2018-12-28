@@ -22,6 +22,8 @@ For Cassandra users, elassandra provides Elasticsearch features :
 * Provide automatic schema creation and support nested documents using [User Defined Types](https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html).
 * Provide read/write JSON REST access to Cassandra data.
 * Numerous Elasticsearch plugins and products like [Kibana](https://www.elastic.co/guide/en/kibana/current/introduction.html).
+* Manage concurrent elasticsearch mappings changes and applies batched atomic CQL schema changes.
+* Support [Elasticsearch ingest processors](https://www.elastic.co/guide/en/elasticsearch/reference/master/ingest.html) allowing to transform input data.
 
 For Elasticsearch users, elassandra provides useful features :
 * Elassandra is masterless. Cluster state is managed through [cassandra lightweight transactions](http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0).
@@ -32,19 +34,34 @@ For Elasticsearch users, elassandra provides useful features :
 * Write operations are not restricted to one primary shard, but distributed across all Cassandra nodes in a virtual datacenter. The number of shards does not limit your write throughput. Adding elassandra nodes increases both read and write throughput.
 * Elasticsearch indices can be replicated among many Cassandra datacenters, allowing write to the closest datacenter and search globally.
 * The [cassandra driver](http://www.planetcassandra.org/client-drivers-tools/) is Datacenter and Token aware, providing automatic load-balancing and failover.
+* Elassandra efficiently stores Elasticsearch documents in binary SSTables without any JSON overhead.
 
 ## Quick start
 
-#### Elasticsearch 6.x changes
+* [Deploy Elassandra by launching a Google Kubernetes Engine](./docs/google-kubernetes-tutorial.md):
+
+  [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.png)](https://console.cloud.google.com/cloudshell/open?git_repo=https://github.com/strapdata/elassandra-google-k8s-marketplace&tutorial=docs/google-kubernetes-tutorial.md)
+  
+## Upgrade Instructions
+
+#### Elassandra 6.2.3.8+
+
+Elassandra 6.2.3.8+ now fully manages the elasticsearch mapping in the CQL schema through the use of CQL schema extensions (see *system_schema.tables*, column *extensions*). These table extensions and the CQL schema updates resulting of elasticsearch index creation/modification are updated in batched atomic schema updates to ensure consistency when concurrent updates occurs. Moreover, these extensions are stored in binary and support partial updates to be more efficient. As the result, the elasticsearch mapping is not more stored in the *elastic_admin.metadata* table. 
+
+WARNING: During the rolling upgrade, elasticserach mapping changes are not propagated between nodes running the new and the old versions, so don't change your mapping while you're upgrading. Once all your nodes have been upgraded to 6.2.3.8+ and validated, apply the following CQL statements to remove useless elasticsearch metadata:
+```bash
+ALTER TABLE elastic_admin.metadata DROP metadata;
+ALTER TABLE elastic_admin.metadata WITH comment = '';
+```
+
+#### Elassandra 6.x changes
 
 * Elasticsearch now supports only one document type per index backed by one Cassandra table. Unless you specify an elasticsearch type name in your mapping, data is stored in a cassandra table named **"_doc"**. If you want to search many cassandra tables, you now need to create and search many indices.
 * Elasticsearch 6.x manages shard consistency through several metadata fields (_primary_term, _seq_no, _version) that are not used in elassandra because replication is fully managed by cassandra.
 
-#### Requirements
+## Installation
 
 Ensure Java 8 is installed and `JAVA_HOME` points to the correct location.
-
-#### Installation
 
 * [Download](https://github.com/strapdata/elassandra/releases) and extract the distribution tarball
 * Define the CASSANDRA_HOME environment variable : `export CASSANDRA_HOME=<extracted_directory>`

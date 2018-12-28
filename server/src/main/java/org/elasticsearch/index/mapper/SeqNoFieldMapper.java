@@ -84,7 +84,7 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
                     new NumericDocValuesField(NAME, SequenceNumbers.UNASSIGNED_SEQ_NO),
                     new NumericDocValuesField(PRIMARY_TERM_NAME, 0));
         }
-        
+
         public static NumericDocValuesField PRIMARY_TERM_ZERO = new NumericDocValuesField(PRIMARY_TERM_NAME, 0);
     }
 
@@ -217,11 +217,6 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
             failIfNoDocValues();
             return new DocValuesIndexFieldData.Builder().numericType(NumericType.LONG);
         }
-
-        @Override
-        public String cqlType() {
-            return "bigint";
-        }
     }
 
     public SeqNoFieldMapper(Settings indexSettings) {
@@ -272,7 +267,7 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
             }
         }
     }
-    
+
     @Override
     public void createField(ParseContext context, Object object) throws IOException {
         // _primary_term in parent doc only.
@@ -298,7 +293,7 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
             }
         }
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

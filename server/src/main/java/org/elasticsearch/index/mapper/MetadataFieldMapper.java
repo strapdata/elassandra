@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.elasticsearch.common.settings.Settings;
 
 import java.io.IOException;
@@ -66,24 +67,24 @@ public abstract class MetadataFieldMapper extends FieldMapper {
      */
     public abstract void postParse(ParseContext context) throws IOException;
 
-    
+
     /**
      * Called before {@link FieldMapper#createField(ParseContext, Object)} on the {@link RootObjectMapper}.
      */
     public void preCreate(ParseContext context) throws IOException {
     }
-    
+
     /**
      * Called after {@link FieldMapper#parse(ParseContext)} on the {@link RootObjectMapper}.
      */
     public void postCreate(ParseContext context) throws IOException {
     }
-    
+
     @Override
-    public String cqlType() {
-        return null;
+    public CQL3Type CQL3Type() {
+        throw new UnsupportedOperationException();
     }
-    
+
     @Override
     public MetadataFieldMapper merge(Mapper mergeWith, boolean updateAllTypes) {
         return (MetadataFieldMapper) super.merge(mergeWith, updateAllTypes);

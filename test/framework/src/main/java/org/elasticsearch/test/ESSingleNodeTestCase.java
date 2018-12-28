@@ -21,8 +21,10 @@ package org.elasticsearch.test;
 import com.carrotsearch.randomizedtesting.RandomizedContext;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
@@ -82,9 +84,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
+import java.util.stream.Collectors;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -97,7 +102,7 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 public abstract class ESSingleNodeTestCase extends ESTestCase {
 
     private static final Semaphore testMutex = new Semaphore(1);
-    
+
     public static synchronized void initElassandraDeamon(Settings testSettings, Collection<Class<? extends Plugin>> classpathPlugins)  {
         if (ElassandraDaemon.instance == null) {
             System.out.println("working.dir="+System.getProperty("user.dir"));
@@ -108,10 +113,10 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             System.out.println("cassandra-rackdc.properties="+System.getProperty("cassandra-rackdc.properties"));
             System.out.println("cassandra.storagedir="+System.getProperty("cassandra.storagedir"));
             System.out.println("logback.configurationFile="+System.getProperty("logback.configurationFile"));
-            
+
             DatabaseDescriptor.daemonInitialization();
             DatabaseDescriptor.createAllDirectories();
-                
+
             CountDownLatch startLatch = new CountDownLatch(1);
             ElassandraDaemon.instance = new ElassandraDaemon(InternalSettingsPreparer.prepareEnvironment(Settings.builder()
                     .put(Environment.PATH_HOME_SETTING.getKey(), System.getProperty("cassandra.home"))
@@ -130,7 +135,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
                     .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
                     .put(Node.NODE_DATA_SETTING.getKey(), true)
                     .put(NodeEnvironment.NODE_ID_SEED_SETTING.getKey(), random().nextLong())
-                    .put("node.name", "node_s_0")
+                    .put("node.name", "127.0.0.1")
                     .put(ScriptService.SCRIPT_MAX_COMPILATIONS_RATE.getKey(), "1000/1m")
                     //.put(EsExecutors.PROCESSORS_SETTING.getKey(), 1) // limit the number of threads created
                     //.put("script.inline", "on")
@@ -138,21 +143,21 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
                     //.put(EsExecutors.PROCESSORS, 1) // limit the number of threads created
                     .put("client.type", "node")
                     //.put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
-                    
+
                     .put(settings)
                     .build();
                 }
-                
+
                 @Override
                 public void ringReady() {
                     startLatch.countDown();
                 }
             };
-            
+
             Settings elassandraSettings = ElassandraDaemon.instance.nodeSettings(testSettings);
             Path confPath = Paths.get(System.getProperty("cassandra.config.dir"));
             ElassandraDaemon.instance.activate(false, false,  elassandraSettings, new Environment(elassandraSettings, confPath), classpathPlugins);
-            
+
             // wait cassandra start.
             try {
                 startLatch.await();
@@ -160,12 +165,12 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             }
         }
     }
-    
+
     public ESSingleNodeTestCase() {
         super();
         initElassandraDeamon(nodeSettings(1), getPlugins());
     }
-    
+
     /**
      * Iff this returns true mock transport implementations are used for the test runs. Otherwise not mock transport impls are used.
      * The default is <tt>true</tt>
@@ -173,7 +178,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     protected boolean addMockTransportService() {
         return true;
     }
-    
+
     /**
      * A boolean value to enable or disable mock modules. This is useful to test the
      * system without asserting modules that to make sure they don't hide any bugs in
@@ -183,7 +188,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
      */
     public static final String TESTS_ENABLE_MOCK_MODULES = "tests.enable_mock_modules";
     private static final boolean MOCK_MODULES_ENABLED = "true".equals(System.getProperty(TESTS_ENABLE_MOCK_MODULES, "true"));
-    
+
     /** Return the mock plugins the cluster should use */
     protected Collection<Class<? extends Plugin>> getMockPlugins() {
         final ArrayList<Class<? extends Plugin>> mocks = new ArrayList<>();
@@ -218,15 +223,15 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         mocks.add(TestSeedPlugin.class);
         return Collections.unmodifiableList(mocks);
     }
-    
+
     // override this to initialize the single node cluster.
     protected Settings nodeSettings(int nodeOrdinal) {
         return Settings.EMPTY;
     }
-    
+
     static void reset() {
     }
-    
+
     static void cleanup(boolean resetNode) {
         if (ElassandraDaemon.instance.node() != null) {
             DeleteIndexRequestBuilder builder = ElassandraDaemon.instance.node().client().admin().indices().prepareDelete("*");
@@ -239,7 +244,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     public static String encodeBasicHeader(final String username, final String password) {
         return java.util.Base64.getEncoder().encodeToString((username + ":" + Objects.requireNonNull(password)).getBytes(StandardCharsets.UTF_8));
     }
-    
+
     private Node newNode() {
         ArrayList<Class<? extends Plugin>> plugins = new ArrayList<>(getPlugins());
         plugins.addAll(getMockPlugins());
@@ -262,7 +267,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         closeAfterTest(node.getNodeEnvironment());
         return node;
     }
-    
+
     protected void startNode(long seed) throws Exception {
         ElassandraDaemon.instance.node(RandomizedContext.current().runWithPrivateRandomness(seed, this::newNode));
         // we must wait for the node to actually be up and running. otherwise the node might have started,
@@ -271,13 +276,15 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         ClusterAdminClient clusterAdminClient = client().admin().cluster();
         ClusterHealthRequestBuilder builder = clusterAdminClient.prepareHealth();
         ClusterHealthResponse clusterHealthResponse = builder.setWaitForGreenStatus().get();
-        
+
         assertFalse(clusterHealthResponse.isTimedOut());
     }
 
     private static void stopNode() throws IOException {
         if (ElassandraDaemon.instance != null) {
             Node node = ElassandraDaemon.instance.node();
+            if (node != null)
+                node.stop();
             ElassandraDaemon.instance.node(null);
             IOUtils.close(node);
         }
@@ -291,7 +298,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         super.setUp();
         // Create the node lazily, on the first test. This is ok because we do not randomize any settings,
         // only the cluster name. This allows us to have overridden properties for plugins and the version to use.
-        
+
         if (ElassandraDaemon.instance.node() == null) {
             //the seed has to be created regardless of whether it will be used or not, for repeatability
             long seed = random().nextLong();
@@ -306,12 +313,16 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         try {
             DeleteIndexRequestBuilder builder = ElassandraDaemon.instance.node().client().admin().indices().prepareDelete("*");
             assertAcked(builder.get());
-            
+
             MetaData metaData = client().admin().cluster().prepareState().get().getState().getMetaData();
             assertThat("test leaves persistent cluster metadata behind: " + metaData.persistentSettings().getAsGroups(),
                     metaData.persistentSettings().size(), equalTo(0));
             assertThat("test leaves transient cluster metadata behind: " + metaData.transientSettings().getAsGroups(),
                     metaData.transientSettings().size(), equalTo(0));
+
+            List<String> userKeyspaces = Schema.instance.getUserKeyspaces();
+            userKeyspaces.remove(this.clusterService().getElasticAdminKeyspaceName());
+            assertThat("test leaves a user keyspace behind:" + userKeyspaces, userKeyspaces.size(), equalTo(0));
         } catch(Exception e) {
             logger.warn("[{}#{}]: failed to clean indices and metadata: error="+e, getTestClass().getSimpleName(), getTestName());
         } finally {
@@ -369,32 +380,41 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     protected Node node() {
         return ElassandraDaemon.instance.node();
     }
-    
+
     public ClusterService clusterService() {
         return ElassandraDaemon.instance.node().clusterService();
     }
-    
+
     public UntypedResultSet process(ConsistencyLevel cl, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return clusterService().process(cl, query);
     }
-    
+
     public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return clusterService().process(cl, clientState, query);
     }
-    
+
     public UntypedResultSet process(ConsistencyLevel cl, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return clusterService().process(cl, query, values);
     }
-    
+
     public UntypedResultSet process(ConsistencyLevel cl, ClientState clientState, String query, Object... values) throws RequestExecutionException, RequestValidationException, InvalidRequestException {
         return clusterService().process(cl, clientState, query, values);
     }
-    
+
+    // wait for cassandra to rebuild indices on compaction manager threads.
+    public boolean waitIndexRebuilt(String keyspace, List<String> types, long timeout) throws InterruptedException {
+        for(int i = 0; i < timeout; i+=200) {
+            if (types.stream().filter(t -> !SystemKeyspace.isIndexBuilt(keyspace, String.format(Locale.ROOT, "elastic_%s_idx", t))).count() == 0)
+               return true;
+            Thread.sleep(200);
+        }
+        return false;
+    }
 
     public XContentBuilder discoverMapping(String type) throws IOException {
         return XContentFactory.jsonBuilder().startObject().startObject(type).field("discover", ".*").endObject().endObject();
     }
-    
+
     /**
      * Get an instance for a particular class using the injector of the singleton node.
      */
@@ -447,7 +467,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             .setWaitForEvents(Priority.LANGUID)
             .setWaitForNoRelocatingShards(true);
         ClusterHealthResponse health = builder.get();
-        
+
         assertThat(health.getStatus(), lessThanOrEqualTo(ClusterHealthStatus.YELLOW));
         assertThat("Cluster must be a single node cluster", health.getNumberOfDataNodes(), equalTo(1));
         IndicesService instanceFromNode = getInstanceFromNode(IndicesService.class);
@@ -457,7 +477,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     protected static org.elasticsearch.index.engine.Engine engine(IndexService service) {
         return service.getShard(0).getEngine();
     }
-    
+
     public Index resolveIndex(String index) {
         GetIndexResponse getIndexResponse = client().admin().indices().prepareGetIndex().setIndices(index).get();
         assertTrue("index " + index + " not found", getIndexResponse.getSettings().containsKey(index));
@@ -498,7 +518,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             .setWaitForEvents(Priority.LANGUID)
             .setWaitForNoRelocatingShards(true);
         ClusterHealthResponse actionGet = builder.get();
-        
+
         if (actionGet.isTimedOut()) {
             logger.info("ensureGreen timed out, cluster state:\n{}\n{}", client().admin().cluster().prepareState().get().getState(),
                 client().admin().cluster().preparePendingClusterTasks().get());

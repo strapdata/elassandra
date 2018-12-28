@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -43,13 +43,13 @@ public class CassandraGatewayService extends GatewayService {
     public static final ClusterBlock NO_CASSANDRA_RING_BLOCK = new ClusterBlock(12, "no cassandra ring", true, true, true, RestStatus.SERVICE_UNAVAILABLE, EnumSet.of(ClusterBlockLevel.READ));
 
     private final ClusterService clusterService;
-    
+
     private final AtomicBoolean recovered = new AtomicBoolean();
-    
+
     @Inject
-    public CassandraGatewayService(Settings settings, 
-            AllocationService allocationService, 
-            ClusterService clusterService, 
+    public CassandraGatewayService(Settings settings,
+            AllocationService allocationService,
+            ClusterService clusterService,
             ThreadPool threadPool,
             GatewayMetaState metaState,
             TransportNodesListGatewayMetaState listGatewayMetaState,
@@ -59,7 +59,7 @@ public class CassandraGatewayService extends GatewayService {
     }
 
     /**
-     * release the NO_CASSANDRA_RING_BLOCK and update routingTable since the node'state = NORMAL (i.e a member of the ring) 
+     * release the NO_CASSANDRA_RING_BLOCK and update routingTable since the node'state = NORMAL (i.e a member of the ring)
      * (may be update when replaying the cassandra logs)
      */
     public void enableMetaDataPersictency() {
@@ -67,12 +67,12 @@ public class CassandraGatewayService extends GatewayService {
             @Override
             public ClusterState execute(ClusterState currentState) {
                 logger.debug("releasing the cassandra ring block...");
-                
+
                 // remove the block, since we recovered from gateway
                 ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks()).removeGlobalBlock(NO_CASSANDRA_RING_BLOCK);
-                
-                // update the state to reflect 
-                ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).incrementVersion().build();
+
+                // update the state to reflect
+                ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).build();
                 return updatedState;
             }
 
@@ -87,7 +87,7 @@ public class CassandraGatewayService extends GatewayService {
             }
         });
     }
-    
+
     @Override
     protected void performStateRecovery(boolean enforceRecoverAfterTime, String reason) {
         final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener();
@@ -103,7 +103,7 @@ public class CassandraGatewayService extends GatewayService {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
                     assert currentState.metaData().indices().isEmpty();
-                    
+
                     // remove the block, since we recovered from gateway
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder()
                             .blocks(currentState.blocks())
@@ -129,7 +129,7 @@ public class CassandraGatewayService extends GatewayService {
                             .metaData(metaDataBuilder)
                             .build();
                     RoutingTable newRoutingTable = RoutingTable.build(CassandraGatewayService.this.clusterService, updatedState);
-                    return ClusterState.builder(updatedState).incrementVersion().routingTable(newRoutingTable).build();
+                    return ClusterState.builder(updatedState).routingTable(newRoutingTable).build();
                 }
 
                 @Override
@@ -140,7 +140,7 @@ public class CassandraGatewayService extends GatewayService {
 
                 @Override
                 public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                    logger.info("Recovered [{}] indices into cluster_state metadata={}/{}", 
+                    logger.info("Recovered [{}] indices into cluster_state metadata={}/{}",
                             newState.metaData().indices().size(), newState.metaData().clusterUUID(), newState.metaData().version());
                 }
             });

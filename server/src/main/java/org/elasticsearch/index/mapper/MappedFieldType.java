@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexOptions;
@@ -74,11 +75,13 @@ public abstract class MappedFieldType extends FieldType {
 
     private CqlCollection cqlCollection = CqlCollection.LIST;
     private CqlStruct cqlStruct = CqlStruct.UDT;
+    private CQL3Type cql3Type = CQL3Type.Native.TEXT;
     private boolean cqlPartialUpdate = true;
     private boolean cqlPartitionKey = false;
     private boolean cqlStaticColumn = false;
+    private boolean cqlClusteringKeyDesc = false;
     private int cqlPrimaryKeyOrder = -1;
-    
+
     protected MappedFieldType(MappedFieldType ref) {
         super(ref);
         this.name = ref.name();
@@ -91,13 +94,15 @@ public abstract class MappedFieldType extends FieldType {
         this.nullValue = ref.nullValue();
         this.nullValueAsString = ref.nullValueAsString();
         this.eagerGlobalOrdinals = ref.eagerGlobalOrdinals;
-        
+
         this.cqlCollection = ref.cqlCollection;
         this.cqlStruct = ref.cqlStruct;
+        this.cql3Type = ref.cql3Type;
         this.cqlPartialUpdate = ref.cqlPartialUpdate;
         this.cqlPartitionKey = ref.cqlPartitionKey;
         this.cqlStaticColumn = ref.cqlStaticColumn;
         this.cqlPrimaryKeyOrder = ref.cqlPrimaryKeyOrder;
+        this.cqlClusteringKeyDesc = ref.cqlClusteringKeyDesc;
     }
 
     public MappedFieldType() {
@@ -150,16 +155,18 @@ public abstract class MappedFieldType extends FieldType {
             Objects.equals(nullValueAsString, fieldType.nullValueAsString) &&
             Objects.equals(cqlCollection, fieldType.cqlCollection) &&
             Objects.equals(cqlStruct, fieldType.cqlStruct) &&
+            Objects.equals(cql3Type, fieldType.cql3Type) &&
             Objects.equals(cqlPartialUpdate, fieldType.cqlPartialUpdate) &&
             Objects.equals(cqlPartitionKey, fieldType.cqlPartitionKey) &&
             Objects.equals(cqlStaticColumn, fieldType.cqlStaticColumn) &&
+            Objects.equals(cqlClusteringKeyDesc, fieldType.cqlClusteringKeyDesc) &&
             Objects.equals(cqlPrimaryKeyOrder, fieldType.cqlPrimaryKeyOrder);
     }
 
     public CqlCollection cqlCollection() {
         return this.cqlCollection;
     }
-    
+
     public void cqlCollection(CqlCollection cqlCollection) {
         this.cqlCollection = cqlCollection;
     }
@@ -169,7 +176,6 @@ public abstract class MappedFieldType extends FieldType {
         if (this.cqlCollection.equals(CqlCollection.SET)) return "set";
         return "";
     }
-    
 
     public CqlStruct cqlStruct() {
         return this.cqlStruct;
@@ -179,43 +185,59 @@ public abstract class MappedFieldType extends FieldType {
         this.cqlStruct = cqlStruct;
     }
 
+    public CQL3Type CQL3Type() {
+        return this.cql3Type;
+    }
+
+    public void CQL3Type(CQL3Type type) {
+        this.cql3Type = type;
+    }
+
     public boolean cqlPartialUpdate() {
         return this.cqlPartialUpdate;
     }
-    
+
     public void cqlPartialUpdate(boolean cqlPartialUpdate) {
         this.cqlPartialUpdate = cqlPartialUpdate;
     }
-    
+
     public boolean cqlPartitionKey() {
         return this.cqlPartitionKey;
     }
-    
+
     public void cqlPartitionKey(boolean cqlPartitionKey) {
         this.cqlPartitionKey = cqlPartitionKey;
     }
-    
+
     public boolean cqlStaticColumn() {
         return this.cqlStaticColumn;
     }
-    
+
     public void cqlStaticColumn(boolean cqlStaticColumn) {
         this.cqlStaticColumn = cqlStaticColumn;
     }
-    
+
     public int cqlPrimaryKeyOrder() {
         return this.cqlPrimaryKeyOrder;
     }
-    
+
     public void cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
         this.cqlPrimaryKeyOrder = cqlPrimaryKeyOrder;
     }
-    
+
+    public boolean cqlClusteringKeyDesc() {
+        return cqlClusteringKeyDesc;
+    }
+
+    public void cqlClusteringKeyDesc(boolean cqlClusteringKeyDesc) {
+        this.cqlClusteringKeyDesc = cqlClusteringKeyDesc;
+    }
+
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), name, boost, docValues, indexAnalyzer, searchAnalyzer, searchQuoteAnalyzer,
             eagerGlobalOrdinals, similarity == null ? null : similarity.name(), nullValue, nullValueAsString,
-                    cqlCollection, cqlStruct, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder);
+                    cqlCollection, cqlStruct, cql3Type, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder);
     }
 
     // TODO: we need to override freeze() and add safety checks that all settings are actually set
@@ -392,7 +414,7 @@ public abstract class MappedFieldType extends FieldType {
         return value;
     }
 
-    
+
     public Object cqlValue(Object value, AbstractType atype) {
         return cqlValue(value);
     }
@@ -400,11 +422,7 @@ public abstract class MappedFieldType extends FieldType {
     public Object cqlValue(Object value) {
         return value;
     }
-    
-    public String cqlType() {
-        return "text";
-    }
-    
+
     /** Returns true if the field is searchable.
      *
      */

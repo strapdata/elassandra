@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -52,19 +52,20 @@ import org.slf4j.LoggerFactory;
  */
 public class ExtendedElasticSecondaryIndex implements Index {
     private static final Logger logger = LoggerFactory.getLogger(SystemKeyspace.class);
-    
+
     final Index elasticSecondaryIndex;
     final IndexMetadata indexDef;
-    
+
     public ExtendedElasticSecondaryIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         this.indexDef = indexDef;
         this.elasticSecondaryIndex = newIndex(baseCfs, indexDef);
     }
-    
+
     private Index newIndex(ColumnFamilyStore baseCfs, IndexMetadata indexDef) {
         try {
+            // use reflexion to support vanilla cassandra on some datacenters.
             Class indexClass = Class.forName("org.elassandra.index.ElasticSecondaryIndex");
-            Method method = indexClass.getMethod("newElasticSecondaryIndex",ColumnFamilyStore.class, IndexMetadata.class);
+            Method method = indexClass.getMethod("newElasticSecondaryIndex", ColumnFamilyStore.class, IndexMetadata.class);
             return (Index) method.invoke(null, baseCfs, indexDef);
         } catch (ClassNotFoundException e) {
             logger.warn("Class org.elassandra.index.ElasticSecondaryIndex not found, using a dummy secondary index.");
@@ -77,7 +78,12 @@ public class ExtendedElasticSecondaryIndex implements Index {
     public static Map<String, String> validateOptions(Map<String, String> options, CFMetaData cfm) {
         return Collections.EMPTY_MAP;
     }
-    
+
+    @Override
+    public boolean delayInitializationTask() {
+        return elasticSecondaryIndex.delayInitializationTask();
+    }
+
     @Override
     public Callable<?> getInitializationTask() {
         return elasticSecondaryIndex.getInitializationTask();
@@ -122,7 +128,7 @@ public class ExtendedElasticSecondaryIndex implements Index {
     public Callable<?> getSnapshotWithoutFlushTask(String snapshotName) {
         return this.elasticSecondaryIndex.getSnapshotWithoutFlushTask(snapshotName);
     }
-    
+
     @Override
     public boolean shouldBuildBlocking() {
         return elasticSecondaryIndex.shouldBuildBlocking();
@@ -163,7 +169,7 @@ public class ExtendedElasticSecondaryIndex implements Index {
         return elasticSecondaryIndex.indexerFor(key, columns, nowInSec, opGroup, transactionType);
     }
 
-    
+
     @Override
     public Searcher searcherFor(ReadCommand command) {
         return elasticSecondaryIndex.searcherFor(command);
@@ -173,12 +179,12 @@ public class ExtendedElasticSecondaryIndex implements Index {
     public BiFunction<PartitionIterator, ReadCommand, PartitionIterator> postProcessorFor(ReadCommand command) {
         return elasticSecondaryIndex.postProcessorFor(command);
     }
-    
+
     @Override
     public int hashCode() {
         return this.elasticSecondaryIndex.hashCode();
     }
-    
+
     @Override
     public boolean equals(Object o) {
         if (o != null && o instanceof ExtendedElasticSecondaryIndex) {
@@ -206,7 +212,7 @@ public class ExtendedElasticSecondaryIndex implements Index {
 
         @Override
         public void register(IndexRegistry registry) {
-            
+
         }
 
         @Override
@@ -266,7 +272,7 @@ public class ExtendedElasticSecondaryIndex implements Index {
 
         @Override
         public void validate(PartitionUpdate update) throws InvalidRequestException {
-            
+
         }
 
         @Override

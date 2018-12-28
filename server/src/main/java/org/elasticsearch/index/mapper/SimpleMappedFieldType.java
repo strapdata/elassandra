@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.common.geo.ShapeRelation;
 import org.elasticsearch.common.joda.DateMathParser;
@@ -58,10 +60,5 @@ public abstract class SimpleMappedFieldType extends MappedFieldType {
     protected Query rangeQuery(Object lowerTerm, Object upperTerm, boolean includeLower, boolean includeUpper,
             QueryShardContext context) {
         throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] does not support range queries");
-    }
-
-    @Override
-    public String cqlType() {
-        return "text";
     }
 }

@@ -62,6 +62,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Represents the current state of the cluster.
@@ -106,6 +107,11 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
     public static final String UNKNOWN_UUID = "_na_";
 
     public static final long UNKNOWN_VERSION = -1;
+
+    /**
+     * ClusterState version number unique generator
+     */
+    private static final AtomicLong versionGenerator = new AtomicLong(0);
 
     private final long version;
 
@@ -266,8 +272,7 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
      * In essence that means that all the changes from the other cluster state are also reflected by the current one
      */
     public boolean supersedes(ClusterState other) {
-        return this.nodes().getMasterNodeId() != null && this.nodes().getMasterNodeId().equals(other.nodes().getMasterNodeId())
-            && this.version() > other.version();
+        return this.version() > other.version();
 
     }
 
@@ -598,7 +603,7 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
         }
 
         public Builder incrementVersion() {
-            this.version = version + 1;
+            this.version = versionGenerator.incrementAndGet();
             this.uuid = UNKNOWN_UUID;
             return this;
         }
@@ -681,7 +686,7 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
     public static Diff<ClusterState> diff(ClusterState before, ClusterState after) {
         return new ClusterStateDiff(before, after);
     }
-    
+
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         clusterName.writeTo(out);

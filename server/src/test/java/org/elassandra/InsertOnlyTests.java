@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -31,7 +31,7 @@ import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcke
 import static org.hamcrest.Matchers.equalTo;
 
 /**
- * Cassandra may write events not properly time-ordered. 
+ * Cassandra may write events not properly time-ordered.
  * This could lead to index in elasticsearch the last write and not the last event.
  * @author vroyer
  *
@@ -59,17 +59,17 @@ public class InsertOnlyTests extends ESSingleNodeTestCase {
                 .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("t1", mapping));
         ensureGreen("test");
-        
+
         long now = new Date().getTime();
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id, f1) VALUES ('1',1) USING TIMESTAMP %d", now - 1000));
         SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(1L));
-        
+
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id, f1) VALUES ('2',2) USING TIMESTAMP %d", now));
         SearchResponse resp2 = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
         assertThat(resp2.getHits().getTotalHits(), equalTo(2L));
     }
-    
+
     @Test
     public void testWideTimeDisordered() throws Exception {
         XContentBuilder mapping = XContentFactory.jsonBuilder()
@@ -96,18 +96,18 @@ public class InsertOnlyTests extends ESSingleNodeTestCase {
                 .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("t1", mapping));
         ensureGreen("test");
-        
+
         long now = new Date().getTime();
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1) VALUES ('1',0,0) USING TIMESTAMP %d", now));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1) VALUES ('1',1,1) USING TIMESTAMP %d", now - 2000));
         SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(2L));
-        
+
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1) VALUES ('2',1,1) USING TIMESTAMP %d", now));
         SearchResponse resp2 = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
         assertThat(resp2.getHits().getTotalHits(), equalTo(3L));
     }
-    
+
     @Test
     public void testWideWithStaticTimeDisordered() throws Exception {
         XContentBuilder mappingStaticCol = XContentFactory.jsonBuilder()
@@ -140,7 +140,7 @@ public class InsertOnlyTests extends ESSingleNodeTestCase {
                         .field("index_insert_only", true)
                     .endObject()
                 .endObject();
-        
+
         XContentBuilder mappingStaticDoc = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -171,7 +171,7 @@ public class InsertOnlyTests extends ESSingleNodeTestCase {
                         .field("index_insert_only", true)
                     .endObject()
                 .endObject();
-        
+
         XContentBuilder mappingStaticDocAndCol = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -203,7 +203,7 @@ public class InsertOnlyTests extends ESSingleNodeTestCase {
                         .field("index_insert_only", true)
                     .endObject()
                 .endObject();
-        
+
         XContentBuilder mappingStaticDocOnly= XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -234,7 +234,7 @@ public class InsertOnlyTests extends ESSingleNodeTestCase {
                         .field("index_static_document", true)
                     .endObject()
                 .endObject();
-        
+
         assertAcked(client().admin().indices().prepareCreate("test1")
                 .setSettings(Settings.builder().put("index.keyspace","test").build())
                 .addMapping("t1", mappingStaticCol));
@@ -247,34 +247,35 @@ public class InsertOnlyTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareCreate("test4")
                 .setSettings(Settings.builder().put("index.keyspace","test").build())
                 .addMapping("t1", mappingStaticDocOnly));
-        
+
         ensureGreen("test1");
         ensureGreen("test2");
         ensureGreen("test3");
         ensureGreen("test4");
-        
+
         long now = new Date().getTime();
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1,s1) VALUES ('1',0,0,0)"));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1,s1) VALUES ('1',1,1,0)"));
-        
+
         assertThat( client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(2L));
         assertThat( client().prepareSearch().setIndices("test2").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(3L));
         assertThat( client().prepareSearch().setIndices("test3").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(3L));
         assertThat( client().prepareSearch().setIndices("test4").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(1L));
-        
+
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1,s1) VALUES ('2',1,1,0)"));
-        
+
         assertThat( client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(3L));
         assertThat( client().prepareSearch().setIndices("test2").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(5L));
         assertThat( client().prepareSearch().setIndices("test3").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(5L));
         assertThat( client().prepareSearch().setIndices("test4").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(2L));
-        
+
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1,s1) VALUES ('2',2,1,null)"));
-        
+
         assertThat( client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(3L));
         assertThat( client().prepareSearch().setIndices("test2").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(4L));
         assertThat( client().prepareSearch().setIndices("test3").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(4L));
         assertThat( client().prepareSearch().setIndices("test4").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(1L));
     }
+
 }
 

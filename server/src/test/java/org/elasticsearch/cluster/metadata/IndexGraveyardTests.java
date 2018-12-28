@@ -49,10 +49,10 @@ public class IndexGraveyardTests extends ESTestCase {
 
     public void testEquals() {
         final IndexGraveyard graveyard = createRandom();
-        assertThat(graveyard, equalTo(IndexGraveyard.builder(graveyard).build()));
+        assertThat(graveyard, equalTo(IndexGraveyard.builder(graveyard).build(settingsWithMaxTombstones(500))));
         final IndexGraveyard.Builder newGraveyard = IndexGraveyard.builder(graveyard);
         newGraveyard.addTombstone(new Index(randomAlphaOfLengthBetween(4, 15), UUIDs.randomBase64UUID()));
-        assertThat(newGraveyard.build(), not(graveyard));
+        assertThat(newGraveyard.build(settingsWithMaxTombstones(500)), not(graveyard));
     }
 
     public void testSerialization() throws IOException {
@@ -85,7 +85,7 @@ public class IndexGraveyardTests extends ESTestCase {
         for (int j = 0; j < numAdds; j++) {
             graveyardBuidler.addTombstone(new Index("nidx-" + j, UUIDs.randomBase64UUID()));
         }
-        final IndexGraveyard graveyard2 = graveyardBuidler.build();
+        final IndexGraveyard graveyard2 = graveyardBuidler.build(settingsWithMaxTombstones(500));
         if (numAdds == 0) {
             assertThat(graveyard2, equalTo(graveyard1));
         } else {
@@ -115,7 +115,7 @@ public class IndexGraveyardTests extends ESTestCase {
         for (int i = 0; i < numTombstones; i++) {
             graveyardBuilder.addTombstone(new Index("idx-" + i, UUIDs.randomBase64UUID()));
         }
-        final IndexGraveyard graveyard1 = graveyardBuilder.build();
+        final IndexGraveyard graveyard1 = graveyardBuilder.build(settingsWithMaxTombstones(500));
         graveyardBuilder = IndexGraveyard.builder(graveyard1);
         final int numToAdd = randomIntBetween(0, 4);
         final List<Index> additions = new ArrayList<>();
@@ -143,7 +143,7 @@ public class IndexGraveyardTests extends ESTestCase {
         for (final Index index : indices) {
             graveyard.addTombstone(index);
         }
-        final IndexGraveyard indexGraveyard = graveyard.build();
+        final IndexGraveyard indexGraveyard = graveyard.build(settingsWithMaxTombstones(500));
         for (final Index index : indices) {
             assertTrue(indexGraveyard.containsIndex(index));
         }

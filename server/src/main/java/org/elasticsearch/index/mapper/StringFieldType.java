@@ -93,10 +93,4 @@ public abstract class StringFieldType extends TermBasedFieldType {
             upperTerm == null ? null : indexedValueForSearch(upperTerm),
             includeLower, includeUpper);
     }
-    
-
-    @Override
-    public String cqlType() {
-        return "text";
-    }
 }

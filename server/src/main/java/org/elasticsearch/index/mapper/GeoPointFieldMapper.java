@@ -18,6 +18,7 @@
  */
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.lucene.document.LatLonDocValuesField;
 import org.apache.lucene.document.LatLonPoint;
 import org.apache.lucene.document.StoredField;
@@ -27,8 +28,8 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.search.DocValuesFieldExistsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.elassandra.cluster.SchemaManager;
 import org.elasticsearch.ElasticsearchParseException;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.geo.GeoUtils;
@@ -172,11 +173,6 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
         @Override
         public String typeName() {
             return CONTENT_TYPE;
-        }
-        
-        @Override
-        public String cqlType() {
-            return ClusterService.GEO_POINT_TYPE;
         }
 
         @Override
@@ -325,7 +321,7 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
     }
 
     @Override
-    public String cqlType() {
-        return "geo_point";
+    public CQL3Type CQL3Type() {
+        throw new UnsupportedOperationException();
     }
 }

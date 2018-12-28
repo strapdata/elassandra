@@ -213,11 +213,6 @@ public class IdFieldMapper extends MetadataFieldMapper {
                 }
             };
         }
-        
-        @Override
-        public String cqlType() {
-            return "text";
-        }
     }
 
     private static AtomicFieldData wrap(AtomicFieldData in) {
@@ -319,7 +314,7 @@ public class IdFieldMapper extends MetadataFieldMapper {
             }
         }
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

@@ -22,6 +22,9 @@ package org.elasticsearch.cluster;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.metadata.IndexGraveyard;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
@@ -32,6 +35,7 @@ import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.index.Index;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -53,12 +57,19 @@ public class ClusterChangedEvent {
     private final DiscoveryNodes.Delta nodesDelta;
 
     // added to avoid to save a just recovered cluster state.
-    
+
     private final TaskInputs taskInputs;
-    
-    private final boolean peristMetaData;
-    
-    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState, boolean peristMetaData, TaskInputs taskInputs) {
+
+    private final SchemaUpdate schemaUpdate;
+
+    private final Collection<Mutation> mutations;
+
+    private final Collection<Event.SchemaChange> events;
+
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState, SchemaUpdate schemaUpdate,
+            final Collection<Mutation> mutations,
+            final Collection<Event.SchemaChange> events,
+            TaskInputs taskInputs) {
         Objects.requireNonNull(source, "source must not be null");
         Objects.requireNonNull(state, "state must not be null");
         Objects.requireNonNull(previousState, "previousState must not be null");
@@ -66,22 +77,36 @@ public class ClusterChangedEvent {
         this.state = state;
         this.previousState = previousState;
         this.nodesDelta = state.nodes().delta(previousState.nodes());
-        this.peristMetaData = peristMetaData;
+        this.schemaUpdate = schemaUpdate;
+        this.mutations = mutations;
+        this.events = events;
         this.taskInputs = taskInputs;
     }
 
+    public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState, SchemaUpdate schemaUpdate, TaskInputs taskInputs) {
+        this(source, state, previousState, schemaUpdate, null, null, taskInputs);
+    }
+
     public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState, TaskInputs taskInputs) {
-        this(source, state, previousState, false, taskInputs);
+        this(source, state, previousState, SchemaUpdate.NO_UPDATE, null, null, taskInputs);
     }
-    
+
     public ClusterChangedEvent(String source, ClusterState state, ClusterState previousState) {
-        this(source, state, previousState, false, null);
+        this(source, state, previousState, SchemaUpdate.NO_UPDATE, null, null, null);
     }
-    
-    public boolean peristMetaData() {
-        return peristMetaData;
+
+    public SchemaUpdate schemaUpdate() {
+        return schemaUpdate;
     }
-    
+
+    public Collection<Mutation> mutations() {
+        return mutations;
+    }
+
+    public Collection<Event.SchemaChange> events() {
+        return events;
+    }
+
     /**
      * The source that caused this cluster event to be raised.
      */
@@ -99,7 +124,7 @@ public class ClusterChangedEvent {
     public TaskInputs taskInputs() {
         return this.taskInputs;
     }
-    
+
     /**
      * The previous cluster state for this change event.
      */

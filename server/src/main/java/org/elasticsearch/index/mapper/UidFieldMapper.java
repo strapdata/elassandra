@@ -120,12 +120,7 @@ public class UidFieldMapper extends MetadataFieldMapper {
             }
             return Uid.createUid(value.toString()).id();
         }
-        
-        @Override
-        public String cqlType() {
-            return "text";
-        }
-        
+
         @Override
         public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName) {
             if (indexOptions() == IndexOptions.NONE) {
@@ -258,7 +253,7 @@ public class UidFieldMapper extends MetadataFieldMapper {
             }
         }
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -267,7 +262,7 @@ public class UidFieldMapper extends MetadataFieldMapper {
     public Term term(String uid) {
         return new Term(fieldType().name(), BytesRefs.toBytesRef(uid));
     }
-    
+
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         return builder;

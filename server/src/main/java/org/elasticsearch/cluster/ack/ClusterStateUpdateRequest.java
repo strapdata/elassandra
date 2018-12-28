@@ -19,6 +19,7 @@
 
 package org.elasticsearch.cluster.ack;
 
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.common.unit.TimeValue;
 
 /**
@@ -29,6 +30,7 @@ public abstract class ClusterStateUpdateRequest<T extends ClusterStateUpdateRequ
 
     private TimeValue ackTimeout;
     private TimeValue masterNodeTimeout;
+    private SchemaUpdate schemaUpdate = SchemaUpdate.NO_UPDATE;
 
     /**
      * Returns the maximum time interval to wait for acknowledgements
@@ -62,6 +64,23 @@ public abstract class ClusterStateUpdateRequest<T extends ClusterStateUpdateRequ
     @SuppressWarnings("unchecked")
     public T masterNodeTimeout(TimeValue masterNodeTimeout) {
         this.masterNodeTimeout = masterNodeTimeout;
+        return (T) this;
+    }
+
+    /**
+     * Returns the maximum time interval to wait for the request to
+     * be completed on the master node
+     */
+    public SchemaUpdate schemaUpdate() {
+        return schemaUpdate;
+    }
+
+    /**
+     * Sets the master node timeout
+     */
+    @SuppressWarnings("unchecked")
+    public T schemaUpdate(SchemaUpdate schemaUpdate) {
+        this.schemaUpdate = schemaUpdate;
         return (T) this;
     }
 }

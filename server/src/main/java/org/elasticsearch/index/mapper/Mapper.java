@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.settings.Settings;
@@ -38,11 +40,11 @@ public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
     public static enum CqlCollection {
         LIST, SET, SINGLETON
     }
-    
+
     public static enum CqlStruct {
         UDT, MAP, TUPLE
     }
-    
+
     public static class BuilderContext {
         private final Settings indexSettings;
         private final ContentPath contentPath;
@@ -169,7 +171,7 @@ public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
 
     private final String simpleName;
     private ByteBuffer   cqlName;
-    
+
     public Mapper(String simpleName) {
         Objects.requireNonNull(simpleName);
         this.simpleName = simpleName;
@@ -194,8 +196,8 @@ public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
      * so that the current mapper is not modified.
      */
     public abstract Mapper updateFieldType(Map<String, MappedFieldType> fullNameToFieldType);
-    
-    
+
+
 
     /**
      * @return cql column name as a ByteBuffer
@@ -208,22 +210,33 @@ public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
     }
 
     public abstract CqlCollection cqlCollection();
-    
+
     public abstract String cqlCollectionTag();
 
     public abstract CqlStruct cqlStruct();
-    
+
     public abstract boolean cqlPartialUpdate();
-    
+
     public abstract boolean cqlPartitionKey();
-    
+
     public abstract boolean cqlStaticColumn();
-    
+
     public abstract int cqlPrimaryKeyOrder();
-    
+
+    public abstract boolean cqlClusteringKeyDesc();
+
     public abstract boolean hasField();
-    
-    public String cqlType() {
-        return "text";
+
+    public abstract CQL3Type CQL3Type();
+
+    public CQL3Type.Raw collection(CQL3Type.Raw rawType) {
+        switch(cqlCollection()) {
+        case LIST:
+            return CQL3Type.Raw.list( rawType );
+        case SET:
+            return CQL3Type.Raw.set( rawType );
+        default:
+            return rawType;
+        }
     }
 }

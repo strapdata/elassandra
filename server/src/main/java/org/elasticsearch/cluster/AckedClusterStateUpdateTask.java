@@ -18,6 +18,12 @@
  */
 package org.elasticsearch.cluster;
 
+import com.google.common.net.InetAddresses;
+
+import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.gms.EndpointState;
+import org.apache.cassandra.gms.Gossiper;
+import org.apache.cassandra.gms.VersionedValue;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.ack.AckedRequest;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -65,7 +71,7 @@ public abstract class AckedClusterStateUpdateTask<Response> extends ClusterState
     public void onAllNodesAcked(@Nullable Exception e) {
         if (e != null)
             listener.onFailure(e);
-        else 
+        else
             listener.onResponse(newResponse(true));
     }
 

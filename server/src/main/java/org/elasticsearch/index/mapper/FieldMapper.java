@@ -22,6 +22,7 @@ package org.elasticsearch.index.mapper;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexOptions;
@@ -106,9 +107,14 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
             this.fieldType.cqlCollection(cqlCollection);
             return builder;
         }
-        
+
         public T cqlStruct(CqlStruct cqlStruct) {
             this.fieldType.cqlStruct(cqlStruct);
+            return builder;
+        }
+
+        public T cqlType(CQL3Type cql3Type) {
+            this.fieldType.CQL3Type(cql3Type);
             return builder;
         }
 
@@ -116,20 +122,40 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
             this.fieldType.cqlPartialUpdate(cqlPartialUpdate);
             return builder;
         }
-        
+
         public T cqlPartitionKey(boolean cqlPartitionKey) {
             this.fieldType.cqlPartitionKey(cqlPartitionKey);
             return builder;
         }
-        
+
         public T cqlStaticColumn(boolean cqlStaticColumn) {
             this.fieldType.cqlStaticColumn(cqlStaticColumn);
             return builder;
         }
-        
+
         public T cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
             this.fieldType.cqlPrimaryKeyOrder(cqlPrimaryKeyOrder);
             return builder;
+        }
+
+        public T cqlClusteringKeyDesc(boolean cqlClusteringKeyDesc) {
+            this.fieldType.cqlClusteringKeyDesc(cqlClusteringKeyDesc);
+            return builder;
+        }
+
+        public void cqlCheck() {
+            if (this.fieldType.cqlPartitionKey() && this.fieldType.cqlPrimaryKeyOrder() < 0) {
+                throw new MapperParsingException("Partition key ["
+                        + name + "] has no primary key order, please set " + TypeParsers.CQL_PRIMARY_KEY_ORDER + ".");
+            }
+            if (this.fieldType.cqlStaticColumn() && (this.fieldType.cqlPrimaryKeyOrder() > 0 || this.fieldType.cqlPartitionKey())) {
+                throw new MapperParsingException("Static column ["
+                        + name + "] cannot be part of the primary key.");
+            }
+            if (this.fieldType.cqlClusteringKeyDesc() && (this.fieldType.cqlPartitionKey() || this.fieldType.cqlPrimaryKeyOrder() < 0)) {
+                throw new MapperParsingException("Clustering column ["
+                        + name + "] cannot be part of the partition key and shoud have a primary key order.");
+            }
         }
 
         protected IndexOptions getDefaultIndexOption() {
@@ -348,7 +374,7 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
     public void createField(ParseContext context, Object value) throws IOException {
         multiFields.create(this, context, value);
     }
-    
+
     protected void createFieldNamesField(ParseContext context, List<IndexableField> fields) {
         FieldNamesFieldType fieldNamesFieldType = (FieldNamesFieldMapper.FieldNamesFieldType) context.docMapper()
                 .metadataMapper(FieldNamesFieldMapper.class).fieldType();
@@ -447,7 +473,7 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
             builder.field("store", fieldType().stored());
         }
         doXContentDocValues(builder, includeDefaults);
-        
+
         if (includeDefaults || fieldType().cqlCollection() != defaultFieldType.cqlCollection()) {
             if (fieldType().cqlCollection().equals(CqlCollection.LIST)) {
                 builder.field(TypeParsers.CQL_COLLECTION, "list");
@@ -466,6 +492,9 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
                 builder.field(TypeParsers.CQL_STRUCT, "tuple");
             }
         }
+        if (includeDefaults || fieldType().CQL3Type() != defaultFieldType.CQL3Type()) {
+            builder.field(TypeParsers.CQL_TYPE, fieldType().CQL3Type().toString());
+        }
         if (includeDefaults || fieldType().cqlPartialUpdate() != defaultFieldType.cqlPartialUpdate()) {
             builder.field(TypeParsers.CQL_MANDATORY, fieldType().cqlPartialUpdate());
         }
@@ -478,7 +507,10 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
         if (includeDefaults || fieldType().cqlPrimaryKeyOrder() != defaultFieldType.cqlPrimaryKeyOrder()) {
             builder.field(TypeParsers.CQL_PRIMARY_KEY_ORDER, fieldType().cqlPrimaryKeyOrder());
         }
-        
+        if (includeDefaults || fieldType().cqlClusteringKeyDesc() != defaultFieldType.cqlClusteringKeyDesc()) {
+            builder.field(TypeParsers.CQL_CLUSTERING_KEY_DESC, fieldType().cqlClusteringKeyDesc());
+        }
+
         if (includeDefaults || fieldType().storeTermVectors() != defaultFieldType.storeTermVectors()) {
             builder.field("term_vector", termVectorOptionsToString(fieldType()));
         }
@@ -652,7 +684,7 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
             }
             context.path().remove();
         }
-        
+
         public MultiFields merge(MultiFields mergeWith) {
             ImmutableOpenMap.Builder<String, FieldMapper> newMappersBuilder = ImmutableOpenMap.builder(mappers);
 
@@ -768,12 +800,11 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
     public CqlCollection cqlCollection() {
         return this.fieldType().cqlCollection();
     }
-    
 
     public String cqlCollectionTag() {
         return this.fieldType().cqlCollectionTag();
     }
-    
+
 
     public CqlStruct cqlStruct() {
         return this.fieldType().cqlStruct();
@@ -783,20 +814,32 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
     public boolean cqlPartialUpdate() {
         return this.fieldType().cqlPartialUpdate();
     }
-    
+
     public boolean cqlStaticColumn() {
         return this.fieldType().cqlStaticColumn();
     }
-    
+
     public boolean cqlPartitionKey() {
         return this.fieldType().cqlPartitionKey();
     }
-    
+
     public int cqlPrimaryKeyOrder() {
         return this.fieldType().cqlPrimaryKeyOrder();
     }
-    
+
+    public boolean cqlClusteringKeyDesc() {
+        return this.fieldType().cqlClusteringKeyDesc();
+    }
+
     public boolean hasField() {
         return true;
+    }
+
+    public CQL3Type.Raw rawType() {
+        return CQL3Type.Raw.from(CQL3Type());
+    }
+
+    public CQL3Type CQL3Type() {
+        return this.fieldType().CQL3Type();
     }
 }

@@ -19,11 +19,7 @@
 
 package org.elasticsearch.gateway;
 
-import org.apache.cassandra.db.ConsistencyLevel;
-import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.service.StorageService;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.logging.log4j.util.Supplier;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -53,128 +49,12 @@ public class Gateway extends AbstractComponent {
         this.minimumMasterNodes = ElectMasterService.DISCOVERY_ZEN_MINIMUM_MASTER_NODES_SETTING.get(settings);
     }
 
-    /*
-    public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
-        String[] nodesIds = clusterService.state().nodes().getMasterNodes().keys().toArray(String.class);
-        logger.trace("performing state recovery from {}", Arrays.toString(nodesIds));
-        TransportNodesListGatewayMetaState.NodesGatewayMetaState nodesState = listGatewayMetaState.list(nodesIds, null).actionGet();
-
-
-        int requiredAllocation = Math.max(1, minimumMasterNodes);
-
-
-        if (nodesState.hasFailures()) {
-            for (FailedNodeException failedNodeException : nodesState.failures()) {
-                logger.warn("failed to fetch state from node", failedNodeException);
-            }
-        }
-
-        ObjectFloatHashMap<Index> indices = new ObjectFloatHashMap<>();
-        MetaData electedGlobalState = null;
-        int found = 0;
-        for (TransportNodesListGatewayMetaState.NodeGatewayMetaState nodeState : nodesState.getNodes()) {
-            if (nodeState.metaData() == null) {
-                continue;
-            }
-            found++;
-            if (electedGlobalState == null) {
-                electedGlobalState = nodeState.metaData();
-            } else if (nodeState.metaData().version() > electedGlobalState.version()) {
-                electedGlobalState = nodeState.metaData();
-            }
-            for (ObjectCursor<IndexMetaData> cursor : nodeState.metaData().indices().values()) {
-                indices.addTo(cursor.value.getIndex(), 1);
-            }
-        }
-        if (found < requiredAllocation) {
-            listener.onFailure("found [" + found + "] metadata states, required [" + requiredAllocation + "]");
-            return;
-        }
-        // update the global state, and clean the indices, we elect them in the next phase
-        MetaData.Builder metaDataBuilder = MetaData.builder(electedGlobalState).removeAllIndices();
-
-        assert !indices.containsKey(null);
-        final Object[] keys = indices.keys;
-        for (int i = 0; i < keys.length; i++) {
-            if (keys[i] != null) {
-                Index index = (Index) keys[i];
-                IndexMetaData electedIndexMetaData = null;
-                int indexMetaDataCount = 0;
-                for (TransportNodesListGatewayMetaState.NodeGatewayMetaState nodeState : nodesState.getNodes()) {
-                    if (nodeState.metaData() == null) {
-                        continue;
-                    }
-                    IndexMetaData indexMetaData = nodeState.metaData().index(index);
-                    if (indexMetaData == null) {
-                        continue;
-                    }
-                    if (electedIndexMetaData == null) {
-                        electedIndexMetaData = indexMetaData;
-                    } else if (indexMetaData.getVersion() > electedIndexMetaData.getVersion()) {
-                        electedIndexMetaData = indexMetaData;
-                    }
-                    indexMetaDataCount++;
-                }
-                if (electedIndexMetaData != null) {
-                    if (indexMetaDataCount < requiredAllocation) {
-                        logger.debug("[{}] found [{}], required [{}], not adding", index, indexMetaDataCount, requiredAllocation);
-                    } // TODO if this logging statement is correct then we are missing an else here
-                    try {
-                        if (electedIndexMetaData.getState() == IndexMetaData.State.OPEN) {
-                            // verify that we can actually create this index - if not we recover it as closed with lots of warn logs
-                            indicesService.verifyIndexMetadata(electedIndexMetaData, electedIndexMetaData);
-                        }
-                    } catch (Exception e) {
-                        final Index electedIndex = electedIndexMetaData.getIndex();
-                        logger.warn(
-                            (org.apache.logging.log4j.util.Supplier<?>)
-                                () -> new ParameterizedMessage("recovering index {} failed - recovering as closed", electedIndex), e);
-                        electedIndexMetaData = IndexMetaData.builder(electedIndexMetaData).state(IndexMetaData.State.CLOSE).build();
-                    }
-
-                    metaDataBuilder.put(electedIndexMetaData, false);
-                }
-            }
-        }
-        final ClusterSettings clusterSettings = clusterService.getClusterSettings();
-        metaDataBuilder.persistentSettings(
-            clusterSettings.archiveUnknownOrInvalidSettings(
-                metaDataBuilder.persistentSettings(),
-                e -> logUnknownSetting("persistent", e),
-                (e, ex) -> logInvalidSetting("persistent", e, ex)));
-        metaDataBuilder.transientSettings(
-            clusterSettings.archiveUnknownOrInvalidSettings(
-                metaDataBuilder.transientSettings(),
-                e -> logUnknownSetting("transient", e),
-                (e, ex) -> logInvalidSetting("transient", e, ex)));
-        ClusterState.Builder builder = clusterService.newClusterStateBuilder();
-        builder.metaData(metaDataBuilder);
-        listener.onSuccess(builder.build());
-    }
-    */
-    
     public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
         ClusterState.Builder builder = ClusterState.builder(clusterService.state());
-        
+
         MetaData metadata = null;
-        if (Keyspace.isInitialized()) {
-            // try recover from elastic_admin.metadata
-            try {
-                if (StorageService.instance.isJoined()) {
-                    metadata = clusterService.readMetaDataAsRow(ConsistencyLevel.ONE);
-                    if (metadata != null) {
-                        logger.info("Successfull cluster state recovery from metadata table version={}/{}", metadata.clusterUUID(), metadata.version());
-                        listener.onSuccess( builder.metaData(metadata).build() );
-                        return;
-                    }
-                } 
-            } catch (Exception e) {
-            }
-        }
-        
-        // fallback to CQL schema
         try {
-            metadata = clusterService.readMetaDataAsComment();
+            metadata = clusterService.loadGlobalState();
             logger.info("Successfull cluster state recovery from CQL schema version={}/{}", metadata.clusterUUID(), metadata.version());
             listener.onSuccess( builder.metaData(metadata).build() );
             return;
@@ -187,7 +67,7 @@ public class Gateway extends AbstractComponent {
             listener.onSuccess( builder.metaData(metadata).build() );
         }
     }
-    
+
     private void logUnknownSetting(String settingType, Map.Entry<String, String> e) {
         logger.warn("ignoring unknown {} setting: [{}] with value [{}]; archiving", settingType, e.getKey(), e.getValue());
     }

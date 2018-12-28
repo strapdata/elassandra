@@ -42,6 +42,7 @@ import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
+import org.elasticsearch.common.xcontent.smile.SmileXContent;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -253,9 +254,15 @@ public abstract class MetaDataStateFormat<T> {
         return maxId;
     }
 
-    
+
     public  T loadLatestState(Logger logger, NamedXContentRegistry namedXContentRegistry, String stringMetaData) throws IOException {
         try (XContentParser parser = JsonXContent.jsonXContent.createParser(namedXContentRegistry, stringMetaData)) {
+            return fromXContent(parser);
+        }
+    }
+
+    public  T loadLatestState(Logger logger, NamedXContentRegistry namedXContentRegistry, byte[] metadata) throws IOException {
+        try (XContentParser parser = SmileXContent.smileXContent.createParser(namedXContentRegistry, metadata)) {
             return fromXContent(parser);
         }
     }

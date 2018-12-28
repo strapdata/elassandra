@@ -19,6 +19,8 @@
 
 package org.elasticsearch.ingest;
 
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.ResourceNotFoundException;
@@ -30,6 +32,7 @@ import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateApplier;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -40,6 +43,7 @@ import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.gateway.GatewayService;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -134,6 +138,11 @@ public class PipelineStore extends AbstractComponent implements ClusterStateAppl
             public ClusterState execute(ClusterState currentState) throws Exception {
                 return innerDelete(request, currentState);
             }
+
+            @Override
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
+            }
         });
     }
 
@@ -183,6 +192,11 @@ public class PipelineStore extends AbstractComponent implements ClusterStateAppl
             @Override
             public ClusterState execute(ClusterState currentState) throws Exception {
                 return innerPut(request, currentState);
+            }
+
+            @Override
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
             }
         });
     }

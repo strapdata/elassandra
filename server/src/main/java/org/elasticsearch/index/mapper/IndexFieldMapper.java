@@ -164,11 +164,6 @@ public class IndexFieldMapper extends MetadataFieldMapper {
         public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName) {
             return new ConstantIndexFieldData.Builder(mapperService -> fullyQualifiedIndexName);
         }
-        
-        @Override
-        public String cqlType() {
-            return "text";
-        }
     }
 
     private IndexFieldMapper(Settings indexSettings, MappedFieldType existing) {
@@ -192,7 +187,7 @@ public class IndexFieldMapper extends MetadataFieldMapper {
     public void createField(ParseContext context, Object value) throws IOException {
         context.doc().add(new Field(fieldType().name(), (String)value, fieldType()));
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

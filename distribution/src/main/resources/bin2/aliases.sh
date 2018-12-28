@@ -139,12 +139,12 @@ alias threads='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/thread_pool?v
 alias hotthreads='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_nodes/hot_threads'
 alias pending_tasks='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/pending_tasks?v'
 alias segments='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/segments?v'
-alias allocation='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/allocation?v'
 alias nodec='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/nodes?h=id,ip,heapPercent,ramPercent,fileDescriptorPercent,segmentsCount,segmentsMemory'
 alias nodes='curl -XGET  $CREDENTIAL "$PROTOCOL://$NODE:9200/_nodes?pretty"'
 alias settings='curl -XGET  $CREDENTIAL $PROTOCOL://$NODE:9200/_cluster/settings?pretty'
 alias tasks='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_tasks?pretty'
 alias aliases='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_cat/aliases?v'
+alias templates='curl  $CREDENTIAL $PROTOCOL://$NODE:9200/_template?pretty'
 
 alias nodes='curl -XGET $CREDENTIAL "$PROTOCOL://$NODE:9200/_nodes?pretty"'
 

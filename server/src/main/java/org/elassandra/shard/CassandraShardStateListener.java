@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -15,6 +15,8 @@
  */
 package org.elassandra.shard;
 
+import org.elassandra.cluster.SchemaManager;
+import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.routing.RoutingTable;
@@ -24,9 +26,11 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.shard.IndexEventListener;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
 
 /**
  * Post applied cluster state service to update gossip X1 shards state.
@@ -37,9 +41,9 @@ import java.io.IOException;
  * Publish local ShardRouting state in the gossip state X1.
  */
 public class CassandraShardStateListener extends AbstractComponent implements IndexEventListener {
-    
+
     private final ClusterService clusterService;
-    
+
     @Inject
     public CassandraShardStateListener(Settings settings, ClusterService clusterService) {
         super(settings);
@@ -52,12 +56,19 @@ public class CassandraShardStateListener extends AbstractComponent implements In
     @Override
     public void afterIndexShardStarted(IndexShard indexShard) {
         try {
+            logger.info("shard [{}][0] started", indexShard.shardId().getIndexName());
+            String keyspace = indexShard.indexService().keyspace();
+            for(String type : indexShard.indexService().mapperService().types()) {
+                ElasticSecondaryIndex esi = ElasticSecondaryIndex.elasticSecondayIndices.get(keyspace + "." + SchemaManager.typeToCfName(keyspace, type));
+                if (esi != null)
+                    esi.onShardStarted(indexShard);
+            }
             clusterService.publishShardRoutingState(indexShard.shardId().getIndexName(), ShardRoutingState.STARTED);
             clusterService.submitStateUpdateTask("shard-started-update-routing", new ClusterStateUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
                     RoutingTable routingTable = RoutingTable.build(clusterService, currentState);
-                    return ClusterState.builder(currentState).incrementVersion().routingTable(routingTable).build();
+                    return ClusterState.builder(currentState).routingTable(routingTable).build();
                 }
 
                 @Override
@@ -69,7 +80,7 @@ public class CassandraShardStateListener extends AbstractComponent implements In
             logger.error("Unexpected error", e);
         }
     }
-    
+
     /**
      * Called before the index shard gets closed.
      * @param indexShard The index shard
@@ -82,7 +93,7 @@ public class CassandraShardStateListener extends AbstractComponent implements In
             logger.error("Unexpected error", e);
         }
     }
-    
+
     /**
      * Called after the index shard has been deleted from disk.
      *
@@ -100,4 +111,10 @@ public class CassandraShardStateListener extends AbstractComponent implements In
         }
     }
 
+    @Override
+    public void beforeIndexRemoved(IndexService indexService, IndexRemovalReason reason) {
+        for(String type : indexService.mapperService().types()) {
+            SchemaManager.typeToCfName(indexService.keyspace(), type, true);
+        }
+    }
 }

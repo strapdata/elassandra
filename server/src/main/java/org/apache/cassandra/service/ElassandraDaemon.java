@@ -30,6 +30,7 @@ import org.apache.cassandra.utils.WindowsTimer;
 import org.apache.logging.log4j.Logger;
 import org.elassandra.NoPersistedMetaDataException;
 import org.elassandra.discovery.CassandraDiscovery;
+import org.elassandra.env.EnvironmentLoader;
 import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
@@ -92,30 +93,29 @@ public class ElassandraDaemon extends CassandraDaemon {
 
     public static ElassandraDaemon instance;
     public static boolean hasWorkloadColumn = false;
-    
+
     protected volatile Node node = null;
     protected Environment env;
-    
-    private boolean needsMappingFromSchema = false;
+
     private boolean activated = false;
-    
+
     private MetaData systemMetadata = null;
     private List<SetupListener> setupListeners = new CopyOnWriteArrayList();
-    
+
     public ElassandraDaemon(Environment env) {
         super(true);
         this.env = env;
     }
-    
+
     public Node node() {
         return this.node;
     }
-    
+
     public Node node(Node node) {
         this.node = node;
         return node;
     }
-    
+
     public void activate(boolean addShutdownHook, boolean createNode, Settings settings, Environment env, Collection<Class<? extends Plugin>> pluginList) {
         try
         {
@@ -130,20 +130,20 @@ public class ElassandraDaemon extends CassandraDaemon {
             System.err.flush();
             System.exit(3);
         }
-        
+
         if (FBUtilities.isWindows)
         {
             // We need to adjust the system timer on windows from the default 15ms down to the minimum of 1ms as this
             // impacts timer intervals, thread scheduling, driver interrupts, etc.
             WindowsTimer.startTimerPeriod(DatabaseDescriptor.getWindowsTimerInterval());
         }
-        
+
         String pidFile = System.getProperty("cassandra-pidfile");
         if (pidFile != null)
         {
             new File(pidFile).deleteOnExit();
         }
-        
+
         // look for jar hell
         /*
         try {
@@ -152,10 +152,10 @@ public class ElassandraDaemon extends CassandraDaemon {
             logger.error(e.getMessage(),e);
         }
          */
-        
+
         // #202 Initialize NativeLibrary.jnaLockable for correct Node initialization.
         NativeLibrary.tryMlockall();
-        
+
         //setup(addShutdownHook, settings, env, pluginList);
         org.elasticsearch.bootstrap.Bootstrap.initializeNatives(
                 env.tmpFile(),
@@ -165,7 +165,7 @@ public class ElassandraDaemon extends CassandraDaemon {
 
         // initialize probes before the security manager is installed
         org.elasticsearch.bootstrap.Bootstrap.initializeProbes();
-        
+
         if (addShutdownHook) {
           Runtime.getRuntime().addShutdownHook(new Thread() {
               @Override
@@ -180,17 +180,17 @@ public class ElassandraDaemon extends CassandraDaemon {
               }
           });
         }
-        
+
         // install SM after natives, shutdown hooks, etc.
         //org.elasticsearch.bootstrap.Bootstrap.setupSecurity(settings, environment);
-    
+
         if (createNode) {
             this.node = new Node(getSettings(), pluginList);
         }
-        
+
         //enable indexing in cassandra.
         ElasticSecondaryIndex.runsElassandra = true;
-        
+
         try {
             MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
             mbs.registerMBean(new StandardMBean(new NativeAccess(), NativeAccessMBean.class), new ObjectName(MBEAN_NAME));
@@ -198,38 +198,20 @@ public class ElassandraDaemon extends CassandraDaemon {
             logger.error("error registering MBean {}", MBEAN_NAME, e);
             // Allow the server to start even if the bean can't be registered
         }
-        
+
         if (FBUtilities.isWindows)
         {
             // We need to adjust the system timer on windows from the default 15ms down to the minimum of 1ms as this
             // impacts timer intervals, thread scheduling, driver interrupts, etc.
             WindowsTimer.startTimerPeriod(DatabaseDescriptor.getWindowsTimerInterval());
         }
-        
-        // Set workload it to "elasticsearch" if column workload exists.
-        try {
-            ColumnIdentifier workload = new ColumnIdentifier("workload",false);
-            CFMetaData local = SystemKeyspace.metadata().getTableOrViewNullable(SystemKeyspace.LOCAL);
-            if (local.getColumnDefinition(workload) != null) {
-                QueryProcessor.executeOnceInternal("INSERT INTO system.local (key, workload) VALUES (?,?)" , new Object[] { "local","elasticsearch" });
-                logger.info("Internal workload set to elasticsearch");
-                
-                CFMetaData system = SystemKeyspace.metadata().getTableOrViewNullable(SystemKeyspace.LOCAL);
-                hasWorkloadColumn = system.getColumnDefinition(workload) != null;
-            }
-        } catch (Exception e1) {
-            logger.error("Failed to set the workload to elasticsearch.",e1);
-        }
-        
+
         super.setup(); // start bootstrap CassandraDaemon
         super.start(); // start Thrift+RPC service
 
-        
-        if (this.needsMappingFromSchema)
-            this.node.clusterService().submitNumberOfShardsAndReplicasUpdate("user-keyspaces-bootstraped");
-        
         if (this.node != null) {
             try {
+                this.node.clusterService().submitNumberOfShardsAndReplicasUpdate("user-keyspaces-bootstraped");
                 this.node.start();
             } catch (NodeValidationException e) {
                 throw new RuntimeException(e);
@@ -242,99 +224,71 @@ public class ElassandraDaemon extends CassandraDaemon {
      */
     @Override
     public void systemKeyspaceInitialized() {
-        if (node != null) {
+        if (node != null && SystemKeyspace.bootstrapComplete()) {
             try {
-                systemMetadata = this.node.clusterService().readMetaDataAsComment();
+                systemMetadata = this.node.clusterService().loadGlobalState();
                 if (systemMetadata != null) {
                     activateAndWaitShards("before opening user keyspaces");
                 }
             } catch(NoPersistedMetaDataException e) {
-                this.needsMappingFromSchema = true;
                 logger.info("Elasticsearch activation delayed after boostraping, no mapping available");
             } catch(Throwable e) {
                 logger.warn("Unexpected error",e);
             }
         }
     }
-    
+
     @Override
     public void userKeyspaceInitialized() {
-        if (node != null && !needsMappingFromSchema) {
-            // try to read a newer metadata from the local elastic_admin.metadata table.
-            MetaData metaData = this.node.clusterService().readInternalMetaDataAsRow();
-            if (metaData != null && metaData.version() > systemMetadata.version()) {
-                try {
-                    logger.warn("Refreshing newer metadata found in {}.{} metaData uuid={} version={}", 
-                            ClusterService.ELASTIC_ADMIN_KEYSPACE, ClusterService.ELASTIC_ADMIN_METADATA_TABLE,
-                            metaData.clusterUUID(), metaData.version());
-                    node.clusterService().submitRefreshMetaData(metaData, "metadatarefresh");
-                    
-                    if (metaData.clusterUUID() == this.node.clusterService().localNode().getId()) {
-                        logger.warn("Saving the new metadata metaData.uuid={} version={} in the CQL schema",
-                                metaData.clusterUUID(), metaData.version());
-                        node.clusterService().writeMetaDataAsComment(metaData);
-                    }
-                } catch (Exception e) {
-                    logger.error("Unexpected error",e);
-                }
-            }
-            
-            node.clusterService().submitNumberOfShardsAndReplicasUpdate("user-keyspaces-initialized");
-        }
     }
-    
-    public interface SetupListener {
-        public void onComplete();
-    }
-    
-    public void register(SetupListener listener) {
-        setupListeners.add(listener);
-    }
-    
-    public void completeSetup() 
-    {
-        super.completeSetup();
-        /*
-        if (this.node != null && this.node.clusterService() != null) 
-            this.node.clusterService().publishGossipStates();
-        */
-        for(SetupListener listener : setupListeners)
-            listener.onComplete();
-    }
-    
+
     /**
-     * Called just before boostraping, and after CQL schema is complete, 
+     * Called just before boostraping, and after CQL schema is complete,
      * so elasticsearch mapping may be available from the CQL schema.
      */
     @Override
     public void beforeBootstrap() {
-        if (node != null && needsMappingFromSchema)
-        {
-            try 
-            {
+        if (node != null) {
+            try {
                 // load mapping from schema jsut before bootstrapping C*
-                systemMetadata = this.node.clusterService().readMetaDataAsComment();
+                systemMetadata = this.node.clusterService().loadGlobalState();
                 activateAndWaitShards("before cassandra boostraping");
-            } catch(Throwable e) 
-            {
+            } catch(Throwable e) {
                 logger.error("Failed to load Elasticsearch mapping from CQL schema before bootstraping:", e);
             }
         }
     }
-    
+
+    public interface SetupListener {
+        public void onComplete();
+    }
+
+    public void register(SetupListener listener) {
+        setupListeners.add(listener);
+    }
+
+    @Override
+    public void completeSetup()
+    {
+        super.completeSetup();
+        for(SetupListener listener : setupListeners)
+            listener.onComplete();
+    }
+
     /**
      * Called when C* does not bootstrap, and before CQL schema is completed.
      * If we don't have yet found the elasticsearch mapping from the CQL schema, wait for the CQL schema to complete before trying to start elasticsearch.
      * Obviously, the first seed node will wait (30s by default) for nothing (or use cassandra.ring_delay_ms=0).
      */
-    public void ringReady() 
+    @Override
+    public void ringReady()
     {
-        if (node != null) 
+        if (node != null)
         {
             // wait for schema before starting elasticsearch node
-            if (needsMappingFromSchema && !activated)  
+            if (!activated)
             {
-                try 
+                try
                 {
                     logger.info("waiting "+StorageService.RING_DELAY+"ms for CQL schema to get the elasticsearch mapping");
                     // first sleep the delay to make sure we see all our peers
@@ -348,15 +302,15 @@ public class ElassandraDaemon extends CassandraDaemon {
                         }
                         Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
                     }
-                    
+
                     // if our schema hasn't matched yet, wait until it has
                     if (!MigrationManager.isReadyForBootstrap())
                     {
                         logger.info("waiting for schema information to complete");
                         MigrationManager.waitUntilReadyForBootstrap();
                     }
-                    systemMetadata = this.node.clusterService().readMetaDataAsComment();
-                } catch(Throwable e) 
+                    systemMetadata = this.node.clusterService().loadGlobalState();
+                } catch(Throwable e)
                 {
                     logger.warn("Failed to load elasticsearch mapping from CQL schema after after joining without boostraping:", e);
                 }
@@ -364,14 +318,13 @@ public class ElassandraDaemon extends CassandraDaemon {
             activateAndWaitShards((systemMetadata == null) ? "with empty elasticsearch mapping" : "after getting the elasticsearch mapping from CQL schema");
         }
     }
-    
-    public void activateAndWaitShards(String source) 
+
+    public void activateAndWaitShards(String source)
     {
         if (!activated) {
             activated = true;
             logger.info("Activating Elasticsearch, shards starting "+source);
             node.activate();
-            node.clusterService().addShardStartedBarrier();
             node.clusterService().blockUntilShardsStarted();
             logger.info("Elasticsearch shards started, ready to go on.");
         }
@@ -398,6 +351,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     /**
      * hook for JSVC
      */
+    @Override
     public void init(String[] args) {
 
     }
@@ -405,14 +359,16 @@ public class ElassandraDaemon extends CassandraDaemon {
     /**
      * hook for JSVC
      */
+    @Override
     public void activate() {
         if (node != null)
             node.activate();
     }
-    
+
     /**
      * hook for JSVC
      */
+    @Override
     public void destroy() {
         super.destroy();
         if (node != null) {
@@ -433,11 +389,11 @@ public class ElassandraDaemon extends CassandraDaemon {
         this.node = new Node(nodeSettings, classpathPlugins);
         return this.node;
     }
-   
+
     public Settings getSettings() {
         return nodeSettings(env.settings());
     }
-    
+
     public Settings nodeSettings(Settings settings) {
         return Settings.builder()
                  // overloadable settings from elasticsearch.yml
@@ -458,7 +414,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                 .put("cluster.name", ClusterService.getElasticsearchClusterName(env.settings()))
                 .build();
     }
-    
+
     public static Client client() {
         if ((instance.node != null) && (!instance.node.isClosed()))
             return instance.node.client();
@@ -480,7 +436,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
         return cassandra_home;
     }
-    
+
     public static String getConfigDir() {
         String cassandra_conf = System.getenv("CASSANDRA_CONF");
         if (cassandra_conf == null) {
@@ -488,12 +444,12 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
         return cassandra_conf;
     }
-    
+
     public static String getElasticsearchDataDir() {
         String cassandra_storage = System.getProperty("cassandra.storagedir", getHomeDir() + File.separator + "data");
         return cassandra_storage + File.separator + "elasticsearch.data";
     }
-    
+
     public static void main(String[] args) {
         try
         {
@@ -508,14 +464,14 @@ public class ElassandraDaemon extends CassandraDaemon {
             System.err.flush();
             System.exit(3);
         }
-        
+
         boolean foreground = System.getProperty("cassandra-foreground") != null;
         // handle the wrapper system property, if its a service, don't run as a
         // service
         if (System.getProperty("wrapper.service", "XXX").equalsIgnoreCase("true")) {
             foreground = false;
         }
-        
+
         if (System.getProperty("es.max-open-files", "false").equals("true")) {
             Logger logger = Loggers.getLogger(Bootstrap.class);
             logger.info("max_open_files [{}]", ProcessProbe.getInstance().getMaxFileDescriptorCount());
@@ -526,7 +482,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             Logger logger = Loggers.getLogger(Bootstrap.class);
             logger.warn("jvm uses the client vm, make sure to run `java` with the server vm for best performance by adding `-server` to the command line");
         }
-        
+
         // disable netty setAvailableProcessors by Elasticsearch (set by Cassandra).
         AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
@@ -535,22 +491,33 @@ public class ElassandraDaemon extends CassandraDaemon {
                 return null;
             }
         });
-        
+
         String stage = "Initialization";
+
 
         try {
             if (!foreground) {
                 System.out.close();
             }
-            instance = new ElassandraDaemon(InternalSettingsPreparer.prepareEnvironment(
-                    Settings.builder()
-                    .put("node.name","node0")
-                    .put("path.home",getHomeDir())
-                    .build(),
-                    foreground ? Terminal.DEFAULT : null,
-                    Collections.EMPTY_MAP, 
-                    Paths.get(getConfigDir())));
-            
+
+            String envLoaderClass = System.getProperty("elasticsearch.config.loader");
+            EnvironmentLoader envloader = envLoaderClass == null
+                                           ? new EnvironmentLoader() {
+                                                @Override
+                                                public Environment loadEnvironment(boolean foreground, String homeDir, String configDir) {
+                                                    return InternalSettingsPreparer.prepareEnvironment(
+                                                            Settings.builder()
+                                                            .put("node.name","node0")
+                                                            .put("path.home", homeDir)
+                                                            .build(),
+                                                            foreground ? Terminal.DEFAULT : null,
+                                                            Collections.EMPTY_MAP,
+                                                            Paths.get(configDir));
+                                                }
+                                            }
+                                           : FBUtilities.<EnvironmentLoader>construct(envLoaderClass, "elasticsearch environment loader");
+            instance = new ElassandraDaemon(envloader.loadEnvironment(foreground, getHomeDir(), getConfigDir()));
+
             instance.activate(true, true, instance.env.settings(), instance.env,  Collections.<Class<? extends Plugin>>emptyList());
             if (!foreground) {
                 System.err.close();

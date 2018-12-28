@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.SimpleDateType;
 import org.apache.cassandra.serializers.SimpleDateSerializer;
@@ -196,6 +198,7 @@ public class DateFieldMapper extends FieldMapper {
             setHasDocValues(true);
             setOmitNorms(true);
             setDateTimeFormatter(DEFAULT_DATE_TIME_FORMATTER);
+            CQL3Type(CQL3Type.Native.TIMESTAMP);
         }
 
         DateFieldType(DateFieldType other) {
@@ -253,7 +256,9 @@ public class DateFieldMapper extends FieldMapper {
         }
 
         long parse(String value) {
-            return dateTimeFormatter().parser().parseMillis(value);
+            return (CQL3Type().equals(CQL3Type.Native.TIMEUUID))  ?
+                    UUIDGen.unixTimestamp(UUID.fromString(value)) :
+                    dateTimeFormatter().parser().parseMillis(value);
         }
 
         @Override
@@ -400,17 +405,20 @@ public class DateFieldMapper extends FieldMapper {
 
         @Override
         public Object cqlValue(Object value, AbstractType atype) {
-            Date date = (Date)cqlValue(value);
-            if (atype instanceof SimpleDateType) {
-                return (int)SimpleDateSerializer.timeInMillisToDay(date.getTime());
+            Object val = cqlValue(value);
+            if (val instanceof Date && atype instanceof SimpleDateType) {
+                return (int)SimpleDateSerializer.timeInMillisToDay(((Date)val).getTime());
             }
-            return date;
+            return val;
         }
-        
+
         @Override
         public Object cqlValue(Object value) {
             if (value == null) {
                 return null;
+            }
+            if (this.CQL3Type() == CQL3Type.Native.TIMEUUID) {
+                return UUID.fromString(value.toString());
             }
             if (value instanceof Date) {
                 return (Date)value;
@@ -423,7 +431,7 @@ public class DateFieldMapper extends FieldMapper {
             }
             return dateTimeFormatter.parser().parseDateTime(value.toString()).toDate();
         }
-        
+
         @Override
         public DocValueFormat docValueFormat(@Nullable String format, DateTimeZone timeZone) {
             FormatDateTimeFormatter dateTimeFormatter = this.dateTimeFormatter;
@@ -434,11 +442,6 @@ public class DateFieldMapper extends FieldMapper {
                 timeZone = DateTimeZone.UTC;
             }
             return new DocValueFormat.DateTime(dateTimeFormatter, timeZone);
-        }
-        
-        @Override
-        public String cqlType() {
-            return "timestamp";
         }
     }
 
@@ -557,7 +560,7 @@ public class DateFieldMapper extends FieldMapper {
                 context.allEntries().addText(fieldType().name(), dateAsString, boost);
             }
         }
-        
+
         if (fieldType().indexOptions() != IndexOptions.NONE) {
             context.doc().add(new LongPoint(fieldType().name(), value));
         }
@@ -571,7 +574,7 @@ public class DateFieldMapper extends FieldMapper {
         }
         super.createField(context, object);
     }
-    
+
     @Override
     protected void doMerge(Mapper mergeWith, boolean updateAllTypes) {
         super.doMerge(mergeWith, updateAllTypes);
@@ -607,10 +610,5 @@ public class DateFieldMapper extends FieldMapper {
                 || fieldType().dateTimeFormatter().locale() != Locale.ROOT) {
             builder.field("locale", fieldType().dateTimeFormatter().locale());
         }
-    }
-    
-    @Override
-    public String cqlType() {
-        return "timestamp";
     }
 }

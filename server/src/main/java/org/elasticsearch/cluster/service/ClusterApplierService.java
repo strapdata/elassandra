@@ -28,6 +28,7 @@ import org.elasticsearch.cluster.ClusterStateApplier;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.ClusterStateTaskConfig;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
 import org.elasticsearch.cluster.LocalNodeMasterListener;
 import org.elasticsearch.cluster.NodeConnectionsService;
@@ -102,7 +103,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     private Supplier<ClusterState.Builder> stateBuilderSupplier;
 
     private ClusterService clusterService;
-    
+
     public ClusterApplierService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool, Supplier<ClusterState
         .Builder> stateBuilderSupplier) {
         super(settings);
@@ -117,7 +118,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     public void setClusterService(ClusterService clusterService) {
         this.clusterService = clusterService;
     }
-    
+
     public void setSlowTaskLoggingThreshold(TimeValue slowTaskLoggingThreshold) {
         this.slowTaskLoggingThreshold = slowTaskLoggingThreshold;
     }
@@ -151,15 +152,15 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     class UpdateTask extends SourcePrioritizedRunnable implements Function<ClusterState, ClusterState> {
         final ClusterStateTaskListener listener;
         final Function<ClusterState, ClusterState> updateFunction;
-        final boolean doPersistMetadata;
-        
+        final SchemaUpdate schemaUpdate;
+
         UpdateTask(Priority priority, String source, ClusterStateTaskListener listener,
-                   Function<ClusterState, ClusterState> updateFunction, 
-                   boolean doPersistMetadata) {
+                   Function<ClusterState, ClusterState> updateFunction,
+                   SchemaUpdate schemaUpdate) {
             super(priority, source);
             this.listener = listener;
             this.updateFunction = updateFunction;
-            this.doPersistMetadata = doPersistMetadata;
+            this.schemaUpdate = schemaUpdate;
         }
 
         @Override
@@ -171,9 +172,9 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         public void run() {
             runTask(this);
         }
-        
-        public boolean doPersistMetadata() {
-            return this.doPersistMetadata;
+
+        public SchemaUpdate schemaUpdate() {
+            return this.schemaUpdate;
         }
     }
 
@@ -341,7 +342,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
                 return currentState;
             }
         };
-        submitStateUpdateTask(source, ClusterStateTaskConfig.build(Priority.HIGH), applyFunction, listener);
+        submitStateUpdateTask(source, ClusterStateTaskConfig.build(Priority.HIGH, null), applyFunction, listener);
     }
 
     private void submitStateUpdateTask(final String source, final ClusterStateTaskConfig config,
@@ -351,7 +352,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             return;
         }
         try {
-            UpdateTask updateTask = new UpdateTask(config.priority(), source, new SafeClusterStateTaskListener(listener, logger), executor, config.doPresistMetaData());
+            UpdateTask updateTask = new UpdateTask(config.priority(), source, new SafeClusterStateTaskListener(listener, logger), executor, config.schemaUpdate());
             if (config.timeout() != null) {
                 threadPoolExecutor.execute(updateTask, config.timeout(),
                     () -> threadPool.generic().execute(
@@ -472,8 +473,8 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     private void applyChanges(UpdateTask task, ClusterState previousClusterState, ClusterState newClusterState) {
         // update routing table.
         newClusterState = ClusterState.builder(newClusterState).routingTable(RoutingTable.build(clusterService, newClusterState)).build();
-        
-        ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.doPersistMetadata, null);
+
+        ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.schemaUpdate, null);
         // new cluster state, notify all listeners
         final DiscoveryNodes.Delta nodesDelta = clusterChangedEvent.nodesDelta();
         if (nodesDelta.hasChanges() && logger.isInfoEnabled()) {
@@ -485,7 +486,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
 
         nodeConnectionsService.connectToNodes(newClusterState.nodes());
 
-        logger.debug("applying cluster state version {}", newClusterState.version());
+        logger.debug("applying cluster state version {} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
         try {
             // nothing to do until we actually recover from the gateway or any other block indicates we need to disable persistency
             if (clusterChangedEvent.state().blocks().disableStatePersistence() == false && clusterChangedEvent.metaDataChanged()) {
@@ -500,30 +501,30 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
 
         // notify highPriorityStateAppliers, including IndicesClusterStateService to start shards and update mapperServices.
         callClusterStateAppliersHighPriority(clusterChangedEvent);
-       
+
         // update cluster state routing table
         // TODO: update the routing table only for updated indices.
         newClusterState = ClusterState.builder(newClusterState).routingTable(RoutingTable.build(this.clusterService, newClusterState)).build();
-        clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.doPersistMetadata, null);
+        clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.schemaUpdate, null);
         logger.debug("set locally applied cluster state to version {}", newClusterState.version());
         final ClusterState newClusterState3 = newClusterState;
         state.set(newClusterState3);
-        
-        // notify normalPriorityStateAppliers with the new cluster state, 
+
+        // notify normalPriorityStateAppliers with the new cluster state,
         // including CassandraSecondaryIndicesApplier to create new C* 2i instances when newClusterState is applied by all nodes.
         callClusterStateAppliersNormalPriority(clusterChangedEvent);
 
         // non-coordinator node
-        if (!task.doPersistMetadata() && newClusterState.metaData().version() > previousClusterState.metaData().version()) {
+        if (!task.schemaUpdate().update() && newClusterState.metaData().version() > previousClusterState.metaData().version()) {
             // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
             // after mapping change have been applied to secondary index in normalPriorityStateAppliers
             this.clusterService.publishX2(newClusterState);
         }
-        
-        callClusterStateAppliersLowPriority(clusterChangedEvent);
-        
+
         callClusterStateListeners(clusterChangedEvent);
-        
+
+        callClusterStateAppliersLowPriority(clusterChangedEvent);
+
         task.listener.clusterStateProcessed(task.source, previousClusterState, newClusterState);
     }
 
@@ -537,7 +538,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             }
         });
     }
-    
+
     private void callClusterStateAppliersNormalPriority(ClusterChangedEvent clusterChangedEvent) {
         normalPriorityStateAppliers.forEach(applier -> {
             try {
@@ -548,7 +549,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             }
         });
     }
-    
+
     private void callClusterStateAppliersLowPriority(ClusterChangedEvent clusterChangedEvent) {
         lowPriorityStateAppliers.forEach(applier -> {
             try {
@@ -559,12 +560,12 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             }
         });
     }
-    
-    
+
+
     private void callClusterStateListeners(ClusterChangedEvent clusterChangedEvent) {
         Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
             try {
-                logger.trace("calling [{}] with change to version [{}] metadata.version=[{}]", 
+                logger.trace("calling [{}] with change to version [{}] metadata.version=[{}]",
                         listener, clusterChangedEvent.state().version(), clusterChangedEvent.state().metaData().version());
                 listener.clusterChanged(clusterChangedEvent);
             } catch (Exception ex) {

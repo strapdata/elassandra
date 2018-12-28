@@ -130,11 +130,6 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
         public Query existsQuery(QueryShardContext context) {
             return new TermQuery(new Term(FieldNamesFieldMapper.NAME, name()));
         }
-        
-        @Override
-        public String cqlType() {
-            return "text";
-        }
     }
 
     private boolean required;
@@ -184,7 +179,7 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
             }
         }
     }
-    
+
     @Override
     protected void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException {
         String routing = context.sourceToParse().routing();

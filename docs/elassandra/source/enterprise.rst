@@ -15,7 +15,7 @@ See `strapdata <http://www.strapdata.com/products>`_ for more details.
 License management
 ------------------
 
-Enterprise plugin require a valid license. When you start your first a node with the Enterprise plugin enabled, a 30 day license is generated with all feature enabled.
+Enterprise plugin requires a valid license. When you start your first a node with the Enterprise plugin enabled, a 30 days license is generated with all features enabled.
 If you need more time to evaluate the product, you can request for a free another 30 days trail license or purchase a souscription
 including technical support for Elassandra. If your license expires, the enterprise plugin operates in a restricted mode until a valid
 license is installed.
@@ -57,7 +57,7 @@ Licenses are stored in a Cassandra table ``elastic_admin.licenses``. You can als
 Checking your license
 .....................
 
-You can use the REST license API to check the currenly active license. If your current configuration require SSL encryption and user authentication,
+You can use the REST license API to check the currenly active license. If your current configuration requires SSL encryption and user authentication,
 you must provide a valid login, password and root CA certificate.
 
 .. code::
@@ -230,7 +230,7 @@ Elasticsearch aggregations through CQL
 Elassandra supports elasticsearch aggregation only in **regular CQL statement**. In this case :
 
 * Returned columns are named with aggregations names.
-* CQL function are not supported.
+* CQL functions are not supported.
 * CQL projection clause, limit and pagination are ignored. This also implies that aggregation results must fit into the available memory.
 
 .. code::

@@ -251,4 +251,9 @@ public class ExternalMapper extends FieldMapper {
     protected String contentType() {
         return mapperName;
     }
+
+    @Override
+    public org.apache.cassandra.cql3.CQL3Type CQL3Type() {
+        return null;
+    }
 }

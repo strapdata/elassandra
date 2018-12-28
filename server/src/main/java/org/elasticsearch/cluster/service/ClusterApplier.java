@@ -38,6 +38,10 @@ public interface ClusterApplier {
      * @param clusterStateSupplier the cluster state supplier which provides the latest cluster state to apply
      * @param listener callback that is invoked after cluster state is applied
      */
+    default void onNewClusterState(String source, Supplier<ClusterState> clusterStateSupplier, ClusterStateTaskListener listener, boolean updateCqlSchema) {
+        onNewClusterState(source, clusterStateSupplier, listener, false);
+    }
+
     void onNewClusterState(String source, Supplier<ClusterState> clusterStateSupplier, ClusterStateTaskListener listener);
 
     /**

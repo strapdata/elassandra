@@ -23,6 +23,10 @@ import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.transport.Event;
+import org.apache.cassandra.utils.Pair;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
@@ -87,6 +91,7 @@ import org.joda.time.DateTimeZone;
 import java.io.UnsupportedEncodingException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -271,12 +276,18 @@ public class MetaDataCreateIndexService extends AbstractComponent {
         }
 
         @Override
-        public boolean doPresistMetaData() {
-            return true;
+        public SchemaUpdate schemaUpdate() {
+            return SchemaUpdate.UPDATE;
         }
-        
+
         @Override
         public ClusterState execute(ClusterState currentState) throws Exception {
+            // dummy cluster state update for test purpose (does not apply CQL schema mutations)
+            return execute(currentState, new ArrayList<Mutation>(), new ArrayList<Event.SchemaChange>());
+        }
+
+        @Override
+        public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws Exception {
             Index createdIndex = null;
             String removalExtraInfo = null;
             IndexRemovalReason removalReason = IndexRemovalReason.FAILURE;
@@ -370,12 +381,12 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                 // now, put the request settings, so they override templates
                 indexSettingsBuilder.put(request.settings());
                 indexSettingsBuilder.put(SETTING_NUMBER_OF_SHARDS, clusterService.state().nodes().getSize());
-                
+
                 String keyspace = indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE);
                 if (keyspace == null) {
                     keyspace = ClusterService.indexToKsName(request.index());
                     if (!keyspace.equals(request.index())) {
-                        logger.warn("index [{}] automatically mapped to keyspace [{}]", request.index(), keyspace);
+                        logger.info("index [{}] automatically mapped to keyspace [{}]", request.index(), keyspace);
                         indexSettingsBuilder.put(IndexMetaData.SETTING_KEYSPACE, keyspace);
                     }
                 } else {
@@ -383,18 +394,21 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         throw new InvalidIndexNameException(null, keyspace, "Invalid cassandra keyspace name");
                     }
                 }
-                
+
                 if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
                     indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
                 } else {
                     int number_of_replicas = Math.min( request.settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0)) , clusterService.state().nodes().getSize()-1);
                     indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, number_of_replicas);
                 }
-                
+
+                // check that we can instanciate the search strategy
                 if (indexSettingsBuilder.get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS) != null) {
-                    // check that we can instanciate the search strategy
                     AbstractSearchStrategy.getSearchStrategyClass(indexSettingsBuilder.get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS)).newInstance();
+                } else {
+                    AbstractSearchStrategy.getSearchStrategyClass(clusterService.getClusterSettings().get(ClusterService.CLUSTER_SEARCH_STRATEGY_CLASS_SETTING)).newInstance();
                 }
+
                 /*
                 if (indexSettingsBuilder.get(SETTING_NUMBER_OF_SHARDS) == null) {
                     indexSettingsBuilder.put(SETTING_NUMBER_OF_SHARDS, settings.getAsInt(SETTING_NUMBER_OF_SHARDS, 5));
@@ -406,7 +420,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     indexSettingsBuilder.put(SETTING_AUTO_EXPAND_REPLICAS, settings.get(SETTING_AUTO_EXPAND_REPLICAS));
                 }
                 */
-                
+
                 if (indexSettingsBuilder.get(SETTING_VERSION_CREATED) == null) {
                     DiscoveryNodes nodes = currentState.nodes();
                     final Version createdVersion = Version.min(Version.CURRENT, nodes.getSmallestNonClientNodeVersion());
@@ -543,18 +557,18 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                 final IndexMetaData indexMetaData;
                 try {
                     indexMetaData = indexMetaDataBuilder.build();
-                    
+
                     if (!currentState.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK)) {
                         // don't create a keyspace while cassandra is not fully started.
                         String keyspaceName = indexMetaData.keyspace();
                         logger.debug("creating if not exists keyspace {} with RF={}", keyspaceName, indexMetaData.getNumberOfReplicas()+1);
-                        clusterService.createIndexKeyspace(keyspaceName, indexMetaData.getNumberOfReplicas()+1, indexMetaData.replication());
-                        
+                        KeyspaceMetadata ksm  = clusterService.getSchemaManager().createOrUpdateKeyspace(keyspaceName, indexMetaData.getNumberOfReplicas()+1, indexMetaData.replication(), mutations, events);
+
                         // create a cassandra table per type.
                         for (ObjectObjectCursor<String,MappingMetaData> cursor : indexMetaData.getMappings()) {
                             MappingMetaData mappingMd = cursor.value;
                             if (mappingMd.type() != null && !mappingMd.type().equals(MapperService.DEFAULT_MAPPING)) {
-                                clusterService.updateTableSchema(indicesService.indexService(indexMetaData.getIndex()).mapperService(), mappingMd);
+                                ksm = clusterService.getSchemaManager().updateTableSchema(ksm, indexService.mapperService(), indexMetaData, mappingMd, mutations, events);
                             }
                         }
                     } else {
@@ -584,7 +598,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                 }
                 blocks.updateBlocks(indexMetaData);
 
-                ClusterState updatedState = ClusterState.builder(currentState).incrementVersion()
+                ClusterState updatedState = ClusterState.builder(currentState)
                         .blocks(blocks)
                         .metaData(newMetaData)
                         .build();

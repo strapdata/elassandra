@@ -320,80 +320,88 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public static final String SETTING_KEYSPACE = "index.keyspace";
     public static final Setting<String> INDEX_SETTING_KEYSPACE_SETTING =
             Setting.simpleString(SETTING_KEYSPACE, Property.Final, Property.IndexScope);
-    
+
     public static final String SETTING_TABLE = "index.table";
     public static final Setting<String> INDEX_SETTING_TABLE_SETTING =
             Setting.simpleString(SETTING_TABLE, Property.Final, Property.IndexScope);
-    
+
+    public static final String SETTING_TABLE_OPTIONS = "index.table_options";
+    public static final Setting<String> INDEX_SETTING_TABLE_OPTIONS_SETTING =
+            Setting.simpleString(SETTING_TABLE_OPTIONS, Property.Final, Property.IndexScope);
+
     public static final String SETTING_REPLICATION = "index.replication";
     public static final Pattern dcReplicationPattern = Pattern.compile("^[_A-Za-z][_A-Za-z0-9]+:\\d++$");
     public static final Setting<List<String>> INDEX_SETTING_REPLICATION_SETTING =
-            Setting.listSetting(SETTING_REPLICATION, Collections.EMPTY_LIST, (s) -> { 
-                if (!dcReplicationPattern.matcher(s).matches()) 
+            Setting.listSetting(SETTING_REPLICATION, Collections.EMPTY_LIST, (s) -> {
+                if (!dcReplicationPattern.matcher(s).matches())
                     throw new IllegalArgumentException("Expecting a valid keyspace replication expression");
-                return s; 
+                return s;
             }, Property.Final, Property.IndexScope);
-    
-    public static final String SETTING_SECONDARY_INDEX_CLASS = "index."+ClusterService.SECONDARY_INDEX_CLASS;
+
+    public static final String SETTING_SECONDARY_INDEX_CLASS = INDEX_SETTING_PREFIX+ClusterService.SECONDARY_INDEX_CLASS;
     public static final Setting<String> INDEX_SECONDARY_INDEX_CLASS_SETTING =
             Setting.simpleString(SETTING_SECONDARY_INDEX_CLASS, ExtendedElasticSecondaryIndex.class.getName(), Property.Final, Property.IndexScope);
-    
-    public static final String SETTING_SEARCH_STRATEGY_CLASS = "index."+ClusterService.SEARCH_STRATEGY_CLASS; 
+
+    public static final String SETTING_SEARCH_STRATEGY_CLASS = INDEX_SETTING_PREFIX+ClusterService.SEARCH_STRATEGY_CLASS;
     public static final Setting<Class<? extends AbstractSearchStrategy>> INDEX_SEARCH_STRATEGY_CLASS_SETTING =
             Setting.searchStrategy(SETTING_SEARCH_STRATEGY_CLASS, PrimaryFirstSearchStrategy.class.getName(), Property.Dynamic, Property.IndexScope);
-    
-    public static final String SETTING_PARTITION_FUNCTION = "index.partition_function";
+
+    public static final String SETTING_PARTITION_FUNCTION = INDEX_SETTING_PREFIX+"partition_function";
     public static final Setting<String> INDEX_PARTITION_FUNCTION_SETTING =
             Setting.simpleString(SETTING_PARTITION_FUNCTION, StringPartitionFunction.class.getName(), Property.Final, Property.IndexScope);
-    
-    public static final String SETTING_PARTITION_FUNCTION_CLASS = "index.partition_function_class"; 
+
+    public static final String SETTING_PARTITION_FUNCTION_CLASS = INDEX_SETTING_PREFIX+"partition_function_class";
     public static final Setting<String> INDEX_PARTITION_FUNCTION_CLASS_SETTING =
             Setting.simpleString(SETTING_PARTITION_FUNCTION_CLASS, MessageFormatPartitionFunction.class.getName(), Property.Final, Property.IndexScope);
-    
-    public static final String SETTING_INCLUDE_NODE_ID = "index."+ClusterService.INCLUDE_NODE_ID; 
+
+    public static final String SETTING_INCLUDE_NODE_ID = INDEX_SETTING_PREFIX+ClusterService.INCLUDE_NODE_ID;
     public static final Setting<Boolean> INDEX_INCLUDE_NODE_ID_SETTING =
             Setting.boolSetting(SETTING_INCLUDE_NODE_ID, false, Property.Final, Property.IndexScope);
-    
-    public static final String SETTING_INDEX_ON_COMPACTION = "index."+ClusterService.INDEX_ON_COMPACTION; 
+
+    public static final String SETTING_INDEX_ON_COMPACTION = INDEX_SETTING_PREFIX+ClusterService.INDEX_ON_COMPACTION;
     public static final Setting<Boolean> INDEX_INDEX_ON_COMPACTION_SETTING =
             Setting.boolSetting(SETTING_INDEX_ON_COMPACTION, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_ON_COMPACTION), Property.Dynamic, Property.IndexScope);
-    
-    public static final String SETTING_SYNCHRONOUS_REFRESH = "index."+ClusterService.SYNCHRONOUS_REFRESH; 
+
+    public static final String SETTING_SYNCHRONOUS_REFRESH = INDEX_SETTING_PREFIX+ClusterService.SYNCHRONOUS_REFRESH;
     public static final Setting<Boolean> INDEX_SYNCHRONOUS_REFRESH_SETTING =
             Setting.boolSetting(SETTING_SYNCHRONOUS_REFRESH, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_SYNCHRONOUS_REFRESH), Property.Dynamic, Property.IndexScope);
-    
-    public static final String SETTING_DROP_ON_DELETE_INDEX = "index."+ClusterService.DROP_ON_DELETE_INDEX; 
+
+    public static final String SETTING_DROP_ON_DELETE_INDEX = INDEX_SETTING_PREFIX+ClusterService.DROP_ON_DELETE_INDEX;
     public static final Setting<Boolean> INDEX_DROP_ON_DELETE_INDEX_SETTING =
             Setting.boolSetting(SETTING_DROP_ON_DELETE_INDEX, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_DROP_ON_DELETE_INDEX), Property.Dynamic, Property.IndexScope);
-    
-    public static final String SETTING_SNAPSHOT_WITH_SSTABLE = "index."+ClusterService.SNAPSHOT_WITH_SSTABLE; 
+
+    public static final String SETTING_SNAPSHOT_WITH_SSTABLE = INDEX_SETTING_PREFIX+ClusterService.SNAPSHOT_WITH_SSTABLE;
     public static final Setting<Boolean> INDEX_SNAPSHOT_WITH_SSTABLE_SETTING =
             Setting.boolSetting(SETTING_SNAPSHOT_WITH_SSTABLE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_SNAPSHOT_WITH_SSTABLE), Property.Dynamic, Property.IndexScope);
-    
-    public static final String SETTING_TOKEN_RANGES_BITSET_CACHE = "index."+ClusterService.TOKEN_RANGES_BITSET_CACHE; 
+
+    public static final String SETTING_TOKEN_RANGES_BITSET_CACHE = INDEX_SETTING_PREFIX+ClusterService.TOKEN_RANGES_BITSET_CACHE;
     public static final Setting<Boolean> INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING =
             Setting.boolSetting(SETTING_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE), Property.Dynamic, Property.IndexScope);
-    
-    public static final String SETTING_VERSION_LESS_ENGINE = "index."+ClusterService.VERSION_LESS_ENGINE; 
+
+    public static final String SETTING_VERSION_LESS_ENGINE = INDEX_SETTING_PREFIX+ClusterService.VERSION_LESS_ENGINE;
     public static final Setting<Boolean> INDEX_VERSION_LESS_ENGINE_SETTING =
             Setting.boolSetting(SETTING_VERSION_LESS_ENGINE, true, Property.Final, Property.IndexScope);
-    
-    public static final String SETTING_INDEX_STATIC_COLUMNS = "index."+ClusterService.INDEX_STATIC_COLUMNS; 
+
+    public static final String SETTING_INDEX_STATIC_COLUMNS = INDEX_SETTING_PREFIX+ClusterService.INDEX_STATIC_COLUMNS;
     public static final Setting<Boolean> INDEX_INDEX_STATIC_COLUMNS_SETTING =
             Setting.boolSetting(SETTING_INDEX_STATIC_COLUMNS, false, Property.Dynamic, Property.IndexScope);
-    
-    public static final String SETTING_INDEX_STATIC_ONLY = "index."+ClusterService.INDEX_STATIC_ONLY; 
+
+    public static final String SETTING_INDEX_STATIC_ONLY = INDEX_SETTING_PREFIX+ClusterService.INDEX_STATIC_ONLY;
     public static final Setting<Boolean> INDEX_INDEX_STATIC_ONLY_SETTING =
             Setting.boolSetting(SETTING_INDEX_STATIC_ONLY, false, Property.Dynamic, Property.IndexScope);
-    
-    public static final String SETTING_INDEX_STATIC_DOCUMENT = "index."+ClusterService.INDEX_STATIC_DOCUMENT; 
+
+    public static final String SETTING_INDEX_STATIC_DOCUMENT = INDEX_SETTING_PREFIX+ClusterService.INDEX_STATIC_DOCUMENT;
     public static final Setting<Boolean> INDEX_INDEX_STATIC_DOCUMENT_SETTING =
             Setting.boolSetting(SETTING_INDEX_STATIC_DOCUMENT, false, Property.Dynamic, Property.IndexScope);
-    
-    public static final String SETTING_INDEX_APPEND_ONLY = "index."+ClusterService.INDEX_INSERT_ONLY; 
+
+    public static final String SETTING_INDEX_APPEND_ONLY = INDEX_SETTING_PREFIX+ClusterService.INDEX_INSERT_ONLY;
     public static final Setting<Boolean> INDEX_INDEX_INSERT_ONLY_SETTING =
-            Setting.boolSetting(SETTING_INDEX_APPEND_ONLY, false, Property.Dynamic, Property.IndexScope);
-    
+            Setting.boolSetting(SETTING_INDEX_APPEND_ONLY, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_INSERT_ONLY), Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_INDEX_OPAQUE_STORAGE = INDEX_SETTING_PREFIX+ClusterService.INDEX_OPAQUE_STORAGE;
+    public static final Setting<Boolean> INDEX_INDEX_OPAQUE_STORAGE_SETTING =
+            Setting.boolSetting(SETTING_INDEX_OPAQUE_STORAGE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_OPAQUE_STORAGE), Property.Final, Property.IndexScope);
+
     // hard-coded hash function as of 2.0
     // older indices will read which hash function to use in their index settings
     //private static final HashFunction MURMUR3_HASH_FUNCTION = new Murmur3HashFunction();
@@ -448,7 +456,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
         if (numberOfReplicas < 0) {
             throw new IllegalArgumentException("must specify non-negative number of shards for index [" + index + "]");
         }
-        
+
         this.index = index;
         this.version = version;
         this.primaryTerms = primaryTerms;
@@ -482,7 +490,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public String uuid() {
         return getIndexUUID();
     }
-    
+
     public String getIndexUUID() {
         return index.getUUID();
     }
@@ -571,15 +579,26 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
         return settings;
     }
 
-    
+    public boolean isInsertOnly() {
+        return getSettings().getAsBoolean(IndexMetaData.SETTING_INDEX_APPEND_ONLY, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_INSERT_ONLY));
+    }
+
+    public boolean isOpaqueStorage() {
+        return getSettings().getAsBoolean(IndexMetaData.SETTING_INDEX_OPAQUE_STORAGE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_OPAQUE_STORAGE));
+    }
+
     public String keyspace() {
         return getSettings().get(IndexMetaData.SETTING_KEYSPACE, index.getName());
     }
-    
+
     public String table() {
         return getSettings().get(IndexMetaData.SETTING_TABLE, "_doc");
     }
-    
+
+    public String tableOptions() {
+        return getSettings().get(IndexMetaData.SETTING_TABLE_OPTIONS);
+    }
+
     public Map<String, Integer> replication() {
         Map<String, Integer> replicationMap = new HashMap<>();
         for(String s : settings.getAsList(IndexMetaData.SETTING_REPLICATION)) {
@@ -588,7 +607,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
         }
         return replicationMap;
     }
-    
+
     /**
      * name = partition function name.
      * pattern = MessageFormat (@see MessageFormat)
@@ -605,13 +624,13 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
         }
         return null;
     }
-    
+
     public PartitionFunction partitionFunctionClass() {
         String partFuncClass = getSettings().get(IndexMetaData.SETTING_PARTITION_FUNCTION_CLASS, MessageFormatPartitionFunction.class.getName());
         String partFuncClassName = partFuncClass.contains(".") ? partFuncClass : "org.elassandra.index." + partFuncClass;
         return FBUtilities.instanceOrConstruct(partFuncClassName, "PartitionFunction class used to generate index name from document fields");
     }
-    
+
     public ImmutableOpenMap<String, AliasMetaData> getAliases() {
         return this.aliases;
     }
@@ -785,7 +804,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public String toString() {
         return this.index.getName()+'/'+keyspace();
     }
-    
+
     private static class IndexMetaDataDiff implements Diff<IndexMetaData> {
 
         private final String index;
@@ -1072,6 +1091,11 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             return this;
         }
 
+        public Builder removeAllMapping() {
+            mappings.clear();
+            return this;
+        }
+
         public Builder state(State state) {
             this.state = state;
             return this;
@@ -1258,7 +1282,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             builder.startObject(indexMetaData.getIndex().getName());
 
             builder.field(KEY_VERSION, indexMetaData.getVersion());
-            if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) {
+            if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false) && !params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
                 builder.field(KEY_ROUTING_NUM_SHARDS, indexMetaData.getRoutingNumShards());
             }
             builder.field(KEY_STATE, indexMetaData.getState().toString().toLowerCase(Locale.ENGLISH));
@@ -1270,12 +1294,12 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             for (String key : indexMetaData.getSettings().keySet()) {
                 switch (key) {
                 case SETTING_NUMBER_OF_SHARDS:
-                    if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) {
+                    if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false) && !params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
                         builder.field(SETTING_NUMBER_OF_SHARDS, indexMetaData.getNumberOfShards());
                     }
                     break;
                 case SETTING_NUMBER_OF_REPLICAS:
-                    if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) {
+                    if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false) && !params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
                         builder.field(SETTING_NUMBER_OF_REPLICAS, indexMetaData.getNumberOfReplicas());
                     }
                     break;
@@ -1285,15 +1309,17 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             }
             builder.endObject();
 
-            builder.startArray(KEY_MAPPINGS);
-            for (ObjectObjectCursor<String, MappingMetaData> cursor : indexMetaData.getMappings()) {
-                if (binary) {
-                    builder.value(cursor.value.source().compressed());
-                } else {
-                    builder.map(XContentHelper.convertToMap(new BytesArray(cursor.value.source().uncompressed()), true).v2());
+            if (!params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
+                builder.startArray(KEY_MAPPINGS);
+                for (ObjectObjectCursor<String, MappingMetaData> cursor : indexMetaData.getMappings()) {
+                    if (binary) {
+                        builder.value(cursor.value.source().compressed());
+                    } else {
+                        builder.map(XContentHelper.convertToMap(new BytesArray(cursor.value.source().uncompressed()), true).v2());
+                    }
                 }
+                builder.endArray();
             }
-            builder.endArray();
 
             for (ObjectObjectCursor<String, Custom> cursor : indexMetaData.getCustoms()) {
                 builder.startObject(cursor.key);
@@ -1307,13 +1333,13 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             }
             builder.endObject();
 
-            if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) {
+            if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false) && !params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
                 builder.startArray(KEY_PRIMARY_TERMS);
                 for (int i = 0; i < indexMetaData.getNumberOfShards(); i++) {
                     builder.value(indexMetaData.primaryTerm(i));
                 }
                 builder.endArray();
-    
+
                 builder.startObject(KEY_IN_SYNC_ALLOCATIONS);
                 for (IntObjectCursor<Set<String>> cursor : indexMetaData.inSyncAllocationIds) {
                     builder.startArray(String.valueOf(cursor.key));
@@ -1324,7 +1350,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
                 }
                 builder.endObject();
             }
-            
+
             builder.endObject();
         }
 
@@ -1454,7 +1480,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public static boolean isIndexUsingVersionLessEngine(Settings settings) {
         return settings.getAsBoolean(SETTING_VERSION_LESS_ENGINE, true);
     }
-    
+
     /**
      * Adds human readable version and creation date settings.
      * This method is used to display the settings in a human readable format in REST API
