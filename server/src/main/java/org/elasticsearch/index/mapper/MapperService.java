@@ -209,7 +209,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
         return this.dynamic;
     }
 
-    private void buildNativeOrUdtMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
+    public void buildNativeOrUdtMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
         CQL3Type cql3type = type.asCQL3Type();
         if (cql3type instanceof CQL3Type.Native) {
             String esType = SchemaManager.cqlMapping.get(cql3type.toString());

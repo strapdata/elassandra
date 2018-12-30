@@ -319,6 +319,23 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
     }
 
+    @Test
+    public void testMapUDT() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+
+        process(ConsistencyLevel.ONE,"CREATE TYPE test.user (firstname text, lastname text);");
+        process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, users map<text, frozen<user>>, PRIMARY KEY (id));");
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test").setSource("{ \"event_test\" : { \"discover\" : \".*\"}}", XContentType.JSON).get());
+
+        long N = 10;
+        for(int i=0; i < N; i++)
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id, users) VALUES ('%d',{'key%d':{firstname:'user%d',lastname:'smith'}})", i, i, i));
+
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("users.key1", QueryBuilders.queryStringQuery("users.key1.firstname:user1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+    }
+
     // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testMapAsObjectWithDynamicMapping" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testMapAsObjectWithDynamicMapping() throws Exception {

@@ -450,7 +450,10 @@ public class ElasticSecondaryIndex implements Index {
                                 try {
                                     // Recheck objectMapper because another thread might have acquired write lock and changed state before we did.
                                     if ((subMapper = objectMapper.getMapper(entry.getKey())) == null) {
-                                        final String valueType = SchemaManager.cqlMapping.get(((MapType) ctype).getValuesType().asCQL3Type().toString());
+                                        final String esType = ((MapType) ctype).getValuesType().asCQL3Type().toString();
+                                        final Map<String, Object> esMapping = new HashMap<>();
+                                        indexInfo.indexService.mapperService().buildNativeOrUdtMapping(esMapping, ((MapType) ctype).getValuesType());
+
                                         final DynamicTemplate dynamicTemplate = context.docMapper().root().findTemplate(context.path(), objectMapper.name() + "." + entry.getKey(), null);
 
                                         // build a mapping update
@@ -468,9 +471,7 @@ public class ElasticSecondaryIndex implements Index {
                                                 for (String key2 : props.keySet()) {
                                                     builder.field(key2, props.get(key2));
                                                 }
-                                                builder.field(entry.getKey(), (dynamicTemplate != null) ? dynamicTemplate.mappingForName(entry.getKey(), valueType) : new HashMap<String, String>() {{
-                                                    put("type", valueType);
-                                                }});
+                                                builder.field(entry.getKey(), (dynamicTemplate != null) ? dynamicTemplate.mappingForName(entry.getKey(), esType) : esMapping);
                                                 builder.endObject();
                                                 hasProperties = true;
                                             } else {
@@ -479,9 +480,7 @@ public class ElasticSecondaryIndex implements Index {
                                         }
                                         if (!hasProperties) {
                                             builder.startObject("properties");
-                                            builder.field(entry.getKey(), (dynamicTemplate != null) ? dynamicTemplate.mappingForName(entry.getKey(), valueType) : new HashMap<String, String>() {{
-                                                put("type", valueType);
-                                            }});
+                                            builder.field(entry.getKey(), (dynamicTemplate != null) ? dynamicTemplate.mappingForName(entry.getKey(), esType) : esMapping);
                                             builder.endObject();
                                         }
                                         builder.endObject().endObject().endObject().endObject();
