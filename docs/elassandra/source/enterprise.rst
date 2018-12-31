@@ -25,7 +25,7 @@ license is installed.
 +---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
 | Feature | Description                                                        | Restricted mode                                                                 |
 +=========+====================================================================+=================================================================================+
-| CQL     | Elasticsearch query through CQL directly from the cassandra driver | Disabled on restart following the license expiration.                               |
+| CQL     | Elasticsearch query through CQL directly from the cassandra driver | Disabled on restart following the license expiration.                           |
 +---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
 | JMX     | JMX monotoring of Elasticsearch indices                            | Node restart required to see new index metrics, JMX attributes become read-only |
 +---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
@@ -341,7 +341,7 @@ CQL Driver integration
 ......................
 
 For better performance, you can use a CQL prepared statement to submit the Elasticsearch queries as shown below in java. 
-You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total** and **_shards.failed** 
+You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total**, **_shards.successful**, **_shards.skipped** and **_shards.failed** 
 from the result `custom payload <https://docs.datastax.com/en/developer/java-driver/3.2/manual/custom_payloads/>`_.
 
 .. code-block:: java
@@ -350,11 +350,15 @@ from the result `custom payload <https://docs.datastax.com/en/developer/java-dri
         public final long hitTotal;
         public final float hitMaxScore;
         public final int shardTotal;
+        public final int shardSuccessful;
+        public final int shardSkipped;
         public final int shardFailed;
         public IncomingPayload(Map<String,ByteBuffer> payload) {
             hitTotal = payload.get("hits.total").getLong();
             hitMaxScore = payload.get("hits.max_score").getFloat();
             shardTotal = payload.get("_shards.total").getInt();
+            shardSuccessful = payload.get("_shards.successful").getInt();
+            shardSkipped = payload.get("_shards.skipped").getInt();
             shardFailed = payload.get("_shards.failed").getInt();
         }
    }
@@ -364,6 +368,10 @@ from the result `custom payload <https://docs.datastax.com/en/developer/java-dri
    IncomingPayload payload = new IncomingPayload(rs.getExecutionInfo().getIncomingPayload());
    System.out.println("hits.total="+payload.hitTotal);
 
+.. TIP::
+
+   When sum of **_shards.successful**, **_shards.skipped** and **_shards.failed** is lower than **_shards.total**, it means the search is not consistent because of missing nodes. In such cases, index state is red.
+   
 CQL Tracing
 ...........
 
@@ -771,6 +779,85 @@ Once the authentication is enabled, create a new Cassandra superuser to avoid is
 Then configure the replication factor for the *system_auth* keyspace according to your cluster configuration (see `Configure Native Authentication <https://docs.datastax.com/en/cassandra/3.0/cassandra/configuration/secureConfigNativeAuth.html>`_).
 Finally, adjust roles and credential cache settings and disable JMX configuration of authentifcation and authorization cache.
 
+Cassandra LDAP authentication
+.............................
+
+The Cassandra LDAPAuthenticator provides external LDAP authentication for both Cassandra and Elasticsearch access.
+
+For performance reasons, the LDAPAuthenticator tries first to authenticate users through the Cassandra PasswordAuthenticator. If local authentication failed, 
+the Cassandra LDAPAuthenticator search for the username in the LDAP directory and tries to bind with the provided password.
+
+To enable Cassandra LDAP user authentication, set the following settings in your **conf/cassandra.yaml** :
+
+.. code::
+
+   authenticator: com.strapdata.cassandra.ldap.LDAPAuthenticator
+   authorizer: CassandraAuthorizer
+
+Update the **$CASSANDRA_CONF/ldap.properties** file according to your LDAP configuration:
+
+.. code::
+
+   # For extra settings, see https://docs.oracle.com/javase/7/docs/technotes/guides/jndi/jndi-ldap.html
+   # Ldap server URI including the base search DN. 
+   # Specify ldaps when using a secure LDAP port (strongly recommended)
+   # see https://docs.oracle.com/javase/jndi/tutorial/ldap/misc/url.html
+   ldap_uri: ldaps://localhost:636/
+   
+   # Service user distinguished name. This user will be a SUPERUSER and be used for looking up
+   # user details on authentication.
+   service_dn: cn=admin,dc=example,dc=org
+   service_password: password
+   
+   # User search base distinguished name and filter pattern
+   user_base_dn: dc=example,dc=org
+   user_filter: (cn={0})
+   
+   # When storing password in cache, store a hashed copy. Note this will have a performance impact as the password will need to be hashed on each authentication.
+   # If false, password will be stored in memory on the Cassandra server as plain text and you should ensure appropriate security controls to mitigate risk of compromise of LDAP passwords.
+   cache_hashed_password: true
+
+Add the following system property in your JVM options:
+
+.. code::
+
+   JVM_OPTS="$JVM_OPTS -Dldap.properties.file=$CASSANDRA_CONF/ldap.properties"
+
+Restart Elassandra nodes.
+
+When LDAP user authentication succeed, the associated Cassandra role is automatically created with the user distinguished name:
+
+.. code::
+
+   $ cqlsh -u alice -p *****
+   [cqlsh 5.0.1 | Cassandra 3.11.3.5 | CQL spec 3.4.4 | Native protocol v4]
+   Use HELP for help.
+   cassandra@cqlsh> list roles;
+   
+    role                       | super | login | options
+   ----------------------------+-------+-------+---------
+                     cassandra |  True |  True |        {}
+    cn=admin,dc=example,dc=org |  True |  True |        {}
+    cn=alice,dc=example,dc=org | False |  True |        {}
+
+Cassandra permissions or elasticsearch privileges (in table ``elastic_admin.privileges``) can be granted to these LDAP roles, but usually, it's preferable to assign permissions and privileges
+to a base role, and grant LDAP users to this role. In the following example, the role *logstash* is autorized to manage elasticsearch indicies matching the regex 'logstash-.*' and
+LDAP user *alice* inherits this role:
+
+.. code::
+
+   CREATE ROLE logstash WITH LOGIN = false;
+   INSERT INTO elastic_admin.privileges (role, actions, indices) VALUES ( 'logstash', 'indices:.*','logstash-.*');
+   GRANT logstash TO 'cn=alice,dc=example,dc=org';
+
+.. TIP::
+
+   By default, the LDAPAuthenticator relies on the JSSE (Java Socket Secure Extension) SSL implementation supporting some `customization <https://docs.oracle.com/javase/7/docs/technotes/guides/security/jsse/JSSERefGuide.html#Customization>`_.
+   You can specify the LDAP trusted root certificated by setting the system property ``javax.net.ssl.trustStore``. You can also specify your own *SSLSocketFactory* through 
+   the JNDI property ``java.naming.ldap.factory.socketjava.naming.ldap.factory.socket``. Strapdata provides a **com.strapdata.cassandra.ldap.TrustAllSSLSocketFactory** for tests purposes
+   allowing to accept any root certificates. For tests, hostname verification can also be disabled by setting the system property ``com.sun.jndi.ldap.object.disableEndpointIdentification`` to *true*.
+   
+   
 Elasticsearch Authentication, Authorization and Content-Based Security
 ......................................................................
 
@@ -791,7 +878,7 @@ To be effective, these settings must be the same on all the nodes of a Cassandra
 +------------------------+---------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
 | ``aaa.user_header``    |                                             | When user is already authenticated by an HTTP proxy, you can define                                                    |
 |                        |                                             | the HTTP header name used to carry the cassandra user's name used to execute an elasticsearch request.                 |
-|                        |                                             | To avoid security breach, you should properly restrict unauthenticated access to Elassandra when using such mechanism.   |
+|                        |                                             | To avoid security breach, you should properly restrict unauthenticated access to Elassandra when using such mechanism. |
 +------------------------+---------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
 | ``aaa.anonymous_user`` |                                             | Defines the cassandra user's name used to execute unauthenticated request.                                             |
 |                        |                                             | If undefined, unauthenticated requests are rejected.                                                                   |
@@ -887,7 +974,7 @@ Cassandra permissions associated to a role are mapped into Elasticserach Documen
 |                     |                                                   | indices:admin/analyze             | Analyze                  |
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
 | DESCRIBE            | Retrieve stats about Elasticsearch indices        | indices:monitor/stats             | Indices Stats            |
-|                     | associated with the granted mbeans.                 | indices:monitor/segments          | Indices Segments         |
+|                     | associated with the granted mbeans.               | indices:monitor/segments          | Indices Segments         |
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
 | SELECT              | SELECT on any table.                              | indices:data/read/.*              | All document reading API |
 |                     |                                                   | indices:admin/get                 | Get Index                |
@@ -1171,17 +1258,17 @@ Audits events are recorded in a Cassandra table or in a log file configured as a
 
 .. cssclass:: table-bordered
 
-+-----------------------------+-----------+-----------------------------------------------------------------------------------------------+
-| Setting                     | Default   | Description                                                                                   |
-+=============================+===========+===============================================================================================+
-| ``aaa.audit.enabled``       | **false** | Enable or disable Elasticsearch auditing.                                                     |
-+-----------------------------+-----------+-----------------------------------------------------------------------------------------------+
++-----------------------------+-----------+----------------------------------------------------------------------------------------------+
+| Setting                     | Default   | Description                                                                                  |
++=============================+===========+==============================================================================================+
+| ``aaa.audit.enabled``       | **false** | Enable or disable Elasticsearch auditing.                                                    |
++-----------------------------+-----------+----------------------------------------------------------------------------------------------+
 | ``aaa.audit.appender``      | **none**  | Audit events are recorded in a Cassandra table (**cql**) or in a logback appender (**log**). |
-+-----------------------------+-----------+-----------------------------------------------------------------------------------------------+
-| ``aaa.audit.include_login`` |           | Comma separated list of logins to audit                                                       |
-+-----------------------------+-----------+-----------------------------------------------------------------------------------------------+
-| ``aaa.audit.exclude_login`` |           | Comma separated list of logins not audited                                                    |
-+-----------------------------+-----------+-----------------------------------------------------------------------------------------------+
++-----------------------------+-----------+----------------------------------------------------------------------------------------------+
+| ``aaa.audit.include_login`` |           | Comma separated list of logins to audit                                                      |
++-----------------------------+-----------+----------------------------------------------------------------------------------------------+
+| ``aaa.audit.exclude_login`` |           | Comma separated list of logins not audited                                                   |
++-----------------------------+-----------+----------------------------------------------------------------------------------------------+
 
 Logback Audit
 .............
