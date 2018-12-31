@@ -731,6 +731,7 @@ public class SchemaManager extends AbstractComponent {
                 }
                 if (!hasPartitionKey)
                     columnsList.add(new ColumnDescriptor(ELASTIC_ID_COLUMN_NAME, CQL3Type.Raw.from(CQL3Type.Native.TEXT), Kind.PARTITION_KEY, 0));
+                Collections.sort(columnsList); // sort primary key columns
                 ksm = createTable(ksm, cfName, mapperService.index().getName(), columnsList, mapperService.tableOptions(), singleTypeIndexMetaDataBuilder.build(), mutations, events);
             } else {
                 // check column properties matches existing ones, or add it to columnsDefinitions

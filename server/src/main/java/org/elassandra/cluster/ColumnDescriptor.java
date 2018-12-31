@@ -28,7 +28,7 @@ import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.schema.KeyspaceMetadata;
 
-public class ColumnDescriptor {
+public class ColumnDescriptor implements Comparable<ColumnDescriptor> {
     public String name;
     public CQL3Type.Raw type;
     public ColumnDefinition.Kind kind;
@@ -95,5 +95,13 @@ public class ColumnDescriptor {
     @Override
     public String toString() {
         return this.kind + "[" + this.name + "/" + this.type + "/"+ this.position + ((kind==Kind.CLUSTERING) ? (desc ? "/DESC":"/ASC") : "") + "]";
+    }
+
+    @Override
+    public int compareTo(ColumnDescriptor o) {
+        if (this.position == -1)
+            return (o.position == -1) ? 0 : 1;
+
+        return (o.position == -1) ? -1 : this.position - o.position;
     }
 }
