@@ -16,6 +16,7 @@
 package org.elassandra;
 
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -106,6 +107,64 @@ public class InsertOnlyTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1) VALUES ('2',1,1) USING TIMESTAMP %d", now));
         SearchResponse resp2 = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
         assertThat(resp2.getHits().getTotalHits(), equalTo(3L));
+    }
+
+
+    @Test
+    public void testWideWithStaticUdt() throws Exception {
+        XContentBuilder mappingStaticCol = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("id")
+                            .field("type", "keyword")
+                            .field("cql_collection", "singleton")
+                            .field("cql_primary_key_order", 0)
+                            .field("cql_partition_key", true)
+                        .endObject()
+                        .startObject("c1")
+                            .field("type", "integer")
+                            .field("cql_collection", "singleton")
+                            .field("cql_primary_key_order", 1)
+                            .field("cql_partition_key", false)
+                        .endObject()
+                        .startObject("s1")
+                            .field("cql_collection", "singleton")
+                            .field("cql_static_column", true)
+                            .field("type", "nested")
+                            .startObject("properties")
+                                .startObject("last")
+                                    .field("type", "integer")
+                                    .field("cql_collection", "singleton")
+                                .endObject()
+                                .startObject("first")
+                                    .field("type", "integer")
+                                    .field("cql_collection", "singleton")
+                                .endObject()
+                            .endObject()
+                        .endObject()
+                        .startObject("f1")
+                            .field("type", "integer")
+                            .field("cql_collection", "singleton")
+                        .endObject()
+                    .endObject()
+                    .startObject("_meta")
+                        .field("index_static_columns", true)
+                        .field("index_insert_only", true)
+                    .endObject()
+                .endObject();
+
+        assertAcked(client().admin().indices().prepareCreate("test1")
+                .setSettings(Settings.builder().put("index.keyspace","test").build())
+                .addMapping("t1", mappingStaticCol));
+
+        ensureGreen("test1");
+
+        process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1,s1) VALUES ('1',0,0,{first:1,last:1})"));
+        process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id,c1,f1,s1) VALUES ('1',1,1,{first:1,last:2})"));
+
+        assertThat( client().prepareSearch().setIndices("test1").setTypes("t1")
+                .setQuery(QueryBuilders.nestedQuery("s1", QueryBuilders.queryStringQuery("s1.first:1"), ScoreMode.Avg))
+                .get().getHits().getTotalHits(), equalTo(2L));
     }
 
     @Test

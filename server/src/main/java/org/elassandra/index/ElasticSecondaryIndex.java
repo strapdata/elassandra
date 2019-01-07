@@ -1625,6 +1625,13 @@ public class ElasticSecondaryIndex implements Index {
 
                 if (ImmutableMappingInfo.this.indexInsertOnly) {
                     for (WideRowcument rowcument : rowcuments.values()) {
+                        if (indexSomeStaticColumnsOnWideRow && inStaticRow != null) {
+                            try {
+                                rowcument.readCellValues(inStaticRow); // add static fields
+                            } catch (IOException e) {
+                                logger.error("Unexpected error", e);
+                            }
+                        }
                         rowcument.write();
                     }
                 } else {
