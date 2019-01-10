@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -16,19 +16,27 @@
 package org.elassandra.index.mapper.internal;
 
 import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.document.SortedNumericDocValuesField;
+import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.search.DocValuesFieldExistsQuery;
+import org.apache.lucene.search.MatchNoDocsQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.util.BytesRef;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.index.fielddata.IndexFieldData;
+import org.elasticsearch.index.fielddata.IndexNumericFieldData.NumericType;
+import org.elasticsearch.index.fielddata.plain.DocValuesIndexFieldData;
 import org.elasticsearch.index.mapper.EnabledAttributeMapper;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
-import org.elasticsearch.index.mapper.NumberFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
+import org.elasticsearch.index.mapper.SimpleMappedFieldType;
+import org.elasticsearch.index.query.QueryShardContext;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -45,18 +53,14 @@ public class TokenFieldMapper extends MetadataFieldMapper {
     public static final String NAME = "_token";
     public static final String CONTENT_TYPE = "_token";
 
-    public static class Defaults extends NumberFieldMapper.Defaults {
+    public static class Defaults {
         public static final String NAME = TokenFieldMapper.NAME;
-        public static final TokenFieldType TOKEN_FIELD_TYPE = new TokenFieldType(NumberFieldMapper.NumberType.LONG);
+        public static final TokenFieldType TOKEN_FIELD_TYPE = new TokenFieldType();
 
         static {
-            TOKEN_FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
-            TOKEN_FIELD_TYPE.setStored(false);
-            TOKEN_FIELD_TYPE.setTokenized(false);
-            TOKEN_FIELD_TYPE.setOmitNorms(true);
-            TOKEN_FIELD_TYPE.setHasDocValues(true);
-            TOKEN_FIELD_TYPE.setDocValuesType(DocValuesType.SORTED_NUMERIC);
             TOKEN_FIELD_TYPE.setName(NAME);
+            TOKEN_FIELD_TYPE.setDocValuesType(DocValuesType.SORTED);
+            TOKEN_FIELD_TYPE.setHasDocValues(true);
             TOKEN_FIELD_TYPE.freeze();
         }
         public static final EnabledAttributeMapper ENABLED_STATE = EnabledAttributeMapper.ENABLED;
@@ -75,7 +79,7 @@ public class TokenFieldMapper extends MetadataFieldMapper {
             this.enabledState = enabled;
             return builder;
         }
-        
+
         @Override
         public TokenFieldMapper build(BuilderContext context) {
             setupFieldType(context);
@@ -107,38 +111,111 @@ public class TokenFieldMapper extends MetadataFieldMapper {
         }
     }
 
-    public static final class TokenFieldType extends NumberFieldMapper.NumberFieldType {
+    public static final class TokenFieldType extends SimpleMappedFieldType {
+
+        TokenFieldType() {
+        }
 
         protected TokenFieldType(TokenFieldType  ref) {
             super(ref);
         }
 
-        protected TokenFieldType(NumberFieldMapper.NumberType  type) {
-            super(type);
-        }
-        
         @Override
         public TokenFieldType clone() {
             return new TokenFieldType(this);
         }
-        
+
         @Override
         public String name() {
             return NAME;
         }
+
+        @Override
+        public String typeName() {
+            return CONTENT_TYPE;
+        }
+
+        private long parse(Object value) {
+            if (value instanceof Number) {
+                double doubleValue = ((Number) value).doubleValue();
+                if (doubleValue < Long.MIN_VALUE || doubleValue > Long.MAX_VALUE) {
+                    throw new IllegalArgumentException("Value [" + value + "] is out of range for a long");
+                }
+                if (doubleValue % 1 != 0) {
+                    throw new IllegalArgumentException("Value [" + value + "] has a decimal part");
+                }
+                return ((Number) value).longValue();
+            }
+            if (value instanceof BytesRef) {
+                value = ((BytesRef) value).utf8ToString();
+            }
+            return Long.parseLong(value.toString());
+        }
+
+        @Override
+        public Query existsQuery(QueryShardContext context) {
+            return new DocValuesFieldExistsQuery(name());
+        }
+
+        @Override
+        public Query termQuery(Object value, @Nullable QueryShardContext context) {
+            long v = parse(value);
+            return LongPoint.newExactQuery(name(), v);
+        }
+
+        @Override
+        public Query termsQuery(List<?> values, @Nullable QueryShardContext context) {
+            long[] v = new long[values.size()];
+            for (int i = 0; i < values.size(); ++i) {
+                v[i] = parse(values.get(i));
+            }
+            return LongPoint.newSetQuery(name(), v);
+        }
+
+        @Override
+        public Query rangeQuery(Object lowerTerm, Object upperTerm, boolean includeLower,
+                                boolean includeUpper, QueryShardContext context) {
+            long l = Long.MIN_VALUE;
+            long u = Long.MAX_VALUE;
+            if (lowerTerm != null) {
+                l = parse(lowerTerm);
+                if (includeLower == false) {
+                    if (l == Long.MAX_VALUE) {
+                        return new MatchNoDocsQuery();
+                    }
+                    ++l;
+                }
+            }
+            if (upperTerm != null) {
+                u = parse(upperTerm);
+                if (includeUpper == false) {
+                    if (u == Long.MIN_VALUE) {
+                        return new MatchNoDocsQuery();
+                    }
+                    --u;
+                }
+            }
+            return LongPoint.newRangeQuery(name(), l, u);
+        }
+
+        @Override
+        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName) {
+            failIfNoDocValues();
+            return new DocValuesIndexFieldData.Builder().numericType(NumericType.LONG);
+        }
     }
 
     private EnabledAttributeMapper enabledState;
-    
+
     private TokenFieldMapper(Settings indexSettings) {
-        this(Defaults.TOKEN_FIELD_TYPE.clone(), Defaults.ENABLED_STATE, Defaults.DEFAULT, indexSettings);
+        super(NAME, Defaults.TOKEN_FIELD_TYPE, Defaults.TOKEN_FIELD_TYPE, indexSettings);
     }
 
     private TokenFieldMapper(MappedFieldType fieldType, EnabledAttributeMapper enabled, long defaultToken, Settings indexSettings) {
         super(NAME, fieldType, Defaults.TOKEN_FIELD_TYPE, indexSettings);
         this.enabledState = enabled;
     }
-    
+
     @Override
     public void preParse(ParseContext context) throws IOException {
     }
@@ -158,22 +235,22 @@ public class TokenFieldMapper extends MetadataFieldMapper {
         Long token = (Long) object;
         if (token != null) {
             context.doc().add(new LongPoint(TokenFieldMapper.NAME, token));
-            context.doc().add(new SortedNumericDocValuesField(TokenFieldMapper.NAME, token)); 
+            context.doc().add(new NumericDocValuesField(TokenFieldMapper.NAME, token));
         }
     }
-    
+
     @Override
     protected void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException {
         if (context.sourceToParse().token() != null) {
             Long token = context.sourceToParse().token();
             if (token != null) {
                 fields.add(new LongPoint( TokenFieldMapper.NAME, token));
-                fields.add(new SortedNumericDocValuesField(TokenFieldMapper.NAME, token)); 
+                fields.add(new NumericDocValuesField(TokenFieldMapper.NAME, token));
             }
         }
     }
 
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
