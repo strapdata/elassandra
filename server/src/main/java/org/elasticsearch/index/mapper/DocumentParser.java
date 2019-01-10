@@ -433,7 +433,7 @@ public final class DocumentParser {
             }
         }
     }
-    
+
     public static ParseContext nestedContext(ParseContext context, ObjectMapper mapper) {
         context = context.createNestedContext(mapper.fullPath());
         ParseContext.Document nestedDoc = context.doc();
@@ -917,7 +917,7 @@ public final class DocumentParser {
     }
 
     // find what the dynamic setting is given the current parse context and parent
-    private static ObjectMapper.Dynamic dynamicOrDefault(ObjectMapper parentMapper, ParseContext context) {
+    public static ObjectMapper.Dynamic dynamicOrDefault(ObjectMapper parentMapper, ParseContext context) {
         ObjectMapper.Dynamic dynamic = parentMapper.dynamic();
         while (dynamic == null) {
             int lastDotNdx = parentMapper.name().lastIndexOf('.');

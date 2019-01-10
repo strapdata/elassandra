@@ -319,21 +319,47 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
     }
 
+    // #257 The index is still keeping dynamic update even that index mapping has configured dynamic: false
     @Test
-    public void testMapUDT() throws Exception {
-        createIndex("test");
-        ensureGreen("test");
+    public void testMapDynamicFalse() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("id")
+                            .field("type", "keyword")
+                            .field("cql_collection", "singleton")
+                            .field("cql_primary_key_order", 0)
+                            .field("cql_partition_key", true)
+                        .endObject()
+                        .startObject("name")
+                            .field("type", "keyword")
+                            .field("cql_collection", "singleton")
+                        .endObject()
+                        .startObject("counters")
+                            .field("type", "nested")
+                            .field("cql_struct", "map")
+                            .field("cql_collection", "singleton")
+                            .field("dynamic", false)
+                            .startObject("properties")
+                                .startObject("retry").field("type", "integer").endObject()
+                                .startObject("fail").field("type", "integer").endObject()
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("mytest").addMapping("mymaptable", mapping));
+        ensureGreen("mytest");
 
-        process(ConsistencyLevel.ONE,"CREATE TYPE test.user (firstname text, lastname text);");
-        process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, users map<text, frozen<user>>, PRIMARY KEY (id));");
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test").setSource("{ \"event_test\" : { \"discover\" : \".*\"}}", XContentType.JSON).get());
+        process(ConsistencyLevel.ONE,"insert into mytest.mymaptable (id, name, counters) values ('john.d', 'john', {'tps':1000, 'retry':1});");
+        process(ConsistencyLevel.ONE,"insert into mytest.mymaptable (id, name, counters) values ('Kelly.S', 'kelly', {'tps':1200, 'fail':2, 'pending':100}); ");
 
-        long N = 10;
-        for(int i=0; i < N; i++)
-            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id, users) VALUES ('%d',{'key%d':{firstname:'user%d',lastname:'smith'}})", i, i, i));
-
-        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("users.key1", QueryBuilders.queryStringQuery("users.key1.firstname:user1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("mytest").setTypes("mymaptable").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("mytest").setTypes("mymaptable").setQuery(QueryBuilders.nestedQuery("counters", QueryBuilders.queryStringQuery("counters.retry:1"),
+                RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("mytest").setTypes("mymaptable").setQuery(QueryBuilders.nestedQuery("counters", QueryBuilders.queryStringQuery("counters.fail:2"),
+                RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("mytest").setTypes("mymaptable").setQuery(QueryBuilders.nestedQuery("counters", QueryBuilders.queryStringQuery("counters.tps:1200"),
+                RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(0L));
     }
 
     // mvn test -Pdev -pl com.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testMapAsObjectWithDynamicMapping" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto

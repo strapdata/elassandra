@@ -440,10 +440,12 @@ public class ElasticSecondaryIndex implements Index {
                     if (subMapper == null) {
                         // dynamic field in top level map => update mapping and add the field.
                         ColumnDefinition cd = baseCfs.metadata.getColumnDefinition(mapper.cqlName());
-                        if (subMapper == null && cd != null && cd.type.isCollection() && cd.type instanceof MapType) {
-                            logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
+                        if (subMapper == null && cd != null && cd.type.isCollection() && cd.type instanceof MapType ) {
                             CollectionType ctype = (CollectionType) cd.type;
-                            if (ctype.kind == CollectionType.Kind.MAP && ((MapType) ctype).getKeysType().asCQL3Type().toString().equals("text")) {
+                            if (ctype.kind == CollectionType.Kind.MAP &&
+                                ((MapType) ctype).getKeysType().asCQL3Type().toString().equals("text") &&
+                                (DocumentParser.dynamicOrDefault(objectMapper, ctx) == ObjectMapper.Dynamic.TRUE)) {
+                                logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
                                 // upgrade to write lock
                                 indexInfo.dynamicMappingUpdateLock.readLock().unlock();
                                 indexInfo.dynamicMappingUpdateLock.writeLock().lock();
