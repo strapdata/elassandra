@@ -1,3 +1,10 @@
+6.2.3.10 - 2018-01-10
+  * Fix indexing a static UDT in insert only mode
+  * Fix partition key ordering issue when building CQL schema from the ES mapping
+  * Add indexing support for map<text, UDT>
+  * Add a new Base64 processor
+  * Optimize _routing field storage
+
 6.2.3.9 - 2018-12-27
   * Fix index rebuild when bootstraping
 
