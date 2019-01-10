@@ -1692,10 +1692,19 @@ public class ElasticSecondaryIndex implements Index {
             }
 
             @Override
-            public void deletePartition(IndexShard indexShard) throws IOException {
+            public void deletePartition(ImmutableMappingInfo.ImmutableIndexInfo indexInfo, IndexShard indexShard) throws IOException {
                 if (logger.isTraceEnabled())
                     logger.trace("deleting documents where _routing={} from index.type={}.{}", this.partitionKey, indexShard.shardId().getIndexName(), typeName);
-                TermQuery termQuery = new TermQuery(new Term(RoutingFieldMapper.NAME, this.partitionKey));
+
+                Query termQuery;
+                if ( baseCfs.metadata.partitionKeyColumns().size() == 1 ) {
+                    String ptName = baseCfs.metadata.partitionKeyColumns().get(0).name.toString();
+                    int mapperIdx = indexInfo.indexOf(ptName);
+                    FieldMapper ptMapper = (FieldMapper) indexInfo.mappers[mapperIdx];
+                    termQuery = ptMapper.fieldType().termQuery(this.pkCols[0], null);
+                } else {
+                    termQuery = new TermQuery(new Term(RoutingFieldMapper.NAME, this.partitionKey));
+                }
                 DeleteByQuery deleteByQuery = buildDeleteByQuery(indexShard.indexService(), termQuery);
                 indexShard.getEngine().delete(deleteByQuery);
             }
@@ -1778,7 +1787,7 @@ public class ElasticSecondaryIndex implements Index {
             }
 
             @Override
-            public void deletePartition(IndexShard indexShard) throws IOException {
+            public void deletePartition(ImmutableMappingInfo.ImmutableIndexInfo indexInfo, IndexShard indexShard) throws IOException {
                 Term termUid = termUid(indexShard.indexService(), this.partitionKey);
                 if (logger.isDebugEnabled())
                     logger.debug("indexer={} deleting document from index.type={}.{} id={} termUid={}",
@@ -1984,7 +1993,7 @@ public class ElasticSecondaryIndex implements Index {
                             if (!indexInfo.updated)
                                 indexInfo.updated = true;
                             try {
-                                deletePartition(indexShard);
+                                deletePartition(indexInfo, indexShard);
                             } catch (EngineException e) {
                                 logger.error("Document deletion error", e);
                             }
@@ -2000,7 +2009,7 @@ public class ElasticSecondaryIndex implements Index {
                 }
             }
 
-            public abstract void deletePartition(IndexShard indexShard) throws IOException;
+            public abstract void deletePartition(ImmutableMappingInfo.ImmutableIndexInfo indexInfo, IndexShard indexShard) throws IOException;
 
             public RowIterator read(SinglePartitionReadCommand command) {
                 try (ReadExecutionController control = command.executionController()) {
@@ -2167,7 +2176,7 @@ public class ElasticSecondaryIndex implements Index {
                     if (indexInfo.includeNodeId)
                         context.docMapper.nodeFieldMapper().createField(context, ImmutableMappingInfo.this.nodeId);
 
-                    if (this instanceof WideRowcument)
+                    if (this instanceof WideRowcument && baseCfs.metadata.partitionKeyColumns().size() > 1)
                         context.docMapper.routingFieldMapper().createField(context, partitionKey);
 
                     if (!indexInfo.versionLessEngine) {
