@@ -131,27 +131,11 @@ public class ElassandraDaemon extends CassandraDaemon {
             System.exit(3);
         }
 
-        if (FBUtilities.isWindows)
-        {
-            // We need to adjust the system timer on windows from the default 15ms down to the minimum of 1ms as this
-            // impacts timer intervals, thread scheduling, driver interrupts, etc.
-            WindowsTimer.startTimerPeriod(DatabaseDescriptor.getWindowsTimerInterval());
-        }
-
         String pidFile = System.getProperty("cassandra-pidfile");
         if (pidFile != null)
         {
             new File(pidFile).deleteOnExit();
         }
-
-        // look for jar hell
-        /*
-        try {
-            JarHell.checkJarHell();
-        } catch (Exception e) {
-            logger.error(e.getMessage(),e);
-        }
-         */
 
         // #202 Initialize NativeLibrary.jnaLockable for correct Node initialization.
         NativeLibrary.tryMlockall();
@@ -180,9 +164,6 @@ public class ElassandraDaemon extends CassandraDaemon {
               }
           });
         }
-
-        // install SM after natives, shutdown hooks, etc.
-        //org.elasticsearch.bootstrap.Bootstrap.setupSecurity(settings, environment);
 
         if (createNode) {
             this.node = new Node(getSettings(), pluginList);
