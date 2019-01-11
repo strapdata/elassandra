@@ -1192,8 +1192,7 @@ public class ClusterService extends BaseClusterService {
                     logger.info(query);
                     process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
                 } catch (Throwable e) {
-                    logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to alter keyspace [{}]", elasticAdminKeyspaceName),e);
-                    throw e;
+                    logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to alter keyspace [{}]", elasticAdminKeyspaceName), e);
                 }
             } else {
                 logger.info("Keep unchanged keyspace={} datacenter={} RF={}", elasticAdminKeyspaceName, DatabaseDescriptor.getLocalDataCenter(), targetRF);
