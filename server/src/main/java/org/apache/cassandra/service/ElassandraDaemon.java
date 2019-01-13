@@ -17,13 +17,11 @@ package org.apache.cassandra.service;
 
 import com.google.common.util.concurrent.Uninterruptibles;
 
-import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.config.SchemaConstants;
-import org.apache.cassandra.cql3.ColumnIdentifier;
-import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NativeLibrary;
 import org.apache.cassandra.utils.WindowsTimer;
@@ -240,6 +238,8 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
     }
 
+    public static final String ELASSANDRA_SETUP_CLASS="elassandra.setup.class";
+
     public interface SetupListener {
         public void onComplete();
     }
@@ -248,12 +248,15 @@ public class ElassandraDaemon extends CassandraDaemon {
         setupListeners.add(listener);
     }
 
-    @Override
-    public void completeSetup()
-    {
-        super.completeSetup();
-        for(SetupListener listener : setupListeners)
-            listener.onComplete();
+    public void onNodeStarted() {
+        for(SetupListener listener : ElassandraDaemon.instance.setupListeners) {
+            try {
+                listener.onComplete();
+                logger.info("Setup class ["+ listener.getClass().getName()+"] onComplete done");
+            } catch(Exception e) {
+                logger.error("Setup class ["+ listener.getClass().getName()+"] failed:", e);
+            }
+        }
     }
 
     /**
@@ -498,6 +501,17 @@ public class ElassandraDaemon extends CassandraDaemon {
                                             }
                                            : FBUtilities.<EnvironmentLoader>construct(envLoaderClass, "elasticsearch environment loader");
             instance = new ElassandraDaemon(envloader.loadEnvironment(foreground, getHomeDir(), getConfigDir()));
+
+            if (System.getProperty(ELASSANDRA_SETUP_CLASS) != null) {
+                // starter class must implement the SetupListener
+                Object starterObject = FBUtilities.instanceOrConstruct(System.getProperty(ELASSANDRA_SETUP_CLASS), "instanciate setup class");
+                if (starterObject instanceof SetupListener) {
+                    instance.register((SetupListener)starterObject);
+                    logger.info("Class {} registred for later call", System.getProperty(ELASSANDRA_SETUP_CLASS));
+                } else {
+                    throw new ConfigurationException(ELASSANDRA_SETUP_CLASS + "=" + System.getProperty(ELASSANDRA_SETUP_CLASS) + " does not implement the "+ SetupListener.class.getName()+" interface.");
+                }
+            }
 
             instance.activate(true, true, instance.env.settings(), instance.env,  Collections.<Class<? extends Plugin>>emptyList());
             if (!foreground) {

@@ -20,6 +20,8 @@
 package org.elasticsearch.node;
 
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.service.ElassandraDaemon.SetupListener;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.IOUtils;
@@ -117,10 +119,8 @@ import org.elasticsearch.plugins.MetaDataUpgrader;
 import org.elasticsearch.plugins.NetworkPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.PluginsService;
-import org.elasticsearch.plugins.RepositoryPlugin;
 import org.elasticsearch.plugins.ScriptPlugin;
 import org.elasticsearch.plugins.SearchPlugin;
-import org.elasticsearch.repositories.RepositoriesModule;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.script.ScriptModule;
 import org.elasticsearch.script.ScriptService;
@@ -746,6 +746,8 @@ public class Node implements Closeable {
         logger.info("started");
 
         pluginsService.filterPlugins(ClusterPlugin.class).forEach(ClusterPlugin::onNodeStarted);
+
+        ElassandraDaemon.instance.onNodeStarted();
 
         return this;
     }
