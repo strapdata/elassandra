@@ -534,7 +534,7 @@ With the JMX feature, you can manage and monitor both Cassandra and Elasticsearc
 JMX Monitoring
 ..............
 
-The JMX feature exposes Elasticsearch metrcis over JMX, allowing monitoring the Elasticsearch cluster, index shards, threadpool and networks activities.
+The JMX feature of Elassandra Enterprise exposes Elasticsearch stats over JMX, allowing monitoring the Elasticsearch cluster, index shards, threadpool and networks activities.
 You can browse these metrics with various JMX clients lsuch as `VisualVM <https://visualvm.github.io/>`_ or `jmxterm <http://wiki.cyclopsgroup.org/jmxterm/>`_.
 
 JMXTerm example :
@@ -565,7 +565,10 @@ JMXTerm example :
 These metrcis can be pulled, or pushed to various tools (`graphite <http://graphite.readthedocs.io/en/latest/>`_, 
 `ganglia <http://ganglia.info/>`_ or `influxdb <https://www.influxdata.com/>`_) using the popular `Metrics Library <http://metrics.dropwizard.io/3.2.3/getting-started.html>`_ embedded in Apache Cassandra.
 
-Below is a sample configuration located in **conf/influxdb-reporting.yaml** sending JMX metrics to an influxdb database named *elassandra*. 
+Monitoring Elassandra with InfluxDB
+...................................
+
+Below is a sample configuration located in **conf/influxdb-reporting.yaml** sending JMX metrics to an InfluxDB database named *elassandra*. 
 
 .. code::
 
@@ -596,10 +599,153 @@ To enable this configuration, add **JVM_OPTS="$JVM_OPTS -Dcassandra.metricsRepor
      * `metrics-influxdb-1.1.10-SNAPSHOT.jar <https://github.com/strapdata/dropwizard-metrics-influxdb/releases/download/v1.1.10-SNAPSHOT-strapdata/metrics-influxdb-1.1.10-SNAPSHOT.jar>`_
      * `dropwizard-metrics-influxdb-1.1.10-SNAPSHOT.jar <https://github.com/strapdata/dropwizard-metrics-influxdb/releases/download/v1.1.10-SNAPSHOT-strapdata/dropwizard-metrics-influxdb-1.1.10-SNAPSHOT.jar>`_
 
-Then configure Grafana to build your Elassandra dashboard.
+Then configure Grafana with an influxDB datasource and build your Elassandra dashboard.
 
-.. image:: images/grafana-dashboard.png
+.. image:: images/grafana-influxdb-dashboard.png
 
+
+Monitoring Elassandra with Prometheus
+.....................................
+
+`Prometheus <https://prometheus.io/>`_. can scrape both Elasticsearch and Cassandra JMX metrics through the standrard `Prometheus JMX Exporter https://github.com/prometheus/jmx_exporter>`_ running as a java agent. 
+To expose these metrics on TCP port 7500,  add the following in your environnment or in the conf/cassandra-env.sh:
+
+.. code ::
+
+   JVM_OPTS="$JVM_OPTS -javaagent:agents/jmx_prometheus_javaagent-0.3.1.jar=7500:conf/jmx_prometheus_exporter.yml"
+
+Here is the default JMX exporter configuration file **conf/jmx_prometheus_exporter.yml** for Elassandra.
+
+.. code::
+
+   lowercaseOutputName: true
+   lowercaseOutputLabelNames: true
+   whitelistObjectNames: [
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=RangeLatency,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=LiveSSTableCount,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=SSTablesPerReadHistogram,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=SpeculativeRetries,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=MemtableOnHeapSize,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=MemtableSwitchCount,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=MemtableLiveDataSize,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=MemtableColumnsCount,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=MemtableOffHeapSize,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=BloomFilterFalsePositives,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=BloomFilterFalseRatio,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=BloomFilterDiskSpaceUsed,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=BloomFilterOffHeapMemoryUsed,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=SnapshotsSize,*",
+   "org.apache.cassandra.metrics:type=ColumnFamily,name=TotalDiskSpaceUsed,*",
+   "org.apache.cassandra.metrics:type=CQL,name=RegularStatementsExecuted,*",
+   "org.apache.cassandra.metrics:type=CQL,name=PreparedStatementsExecuted,*",
+   "org.apache.cassandra.metrics:type=Compaction,name=PendingTasks,*",
+   "org.apache.cassandra.metrics:type=Compaction,name=CompletedTasks,*",
+   "org.apache.cassandra.metrics:type=Compaction,name=BytesCompacted,*",
+   "org.apache.cassandra.metrics:type=Compaction,name=TotalCompactionsCompleted,*",
+   "org.apache.cassandra.metrics:type=ClientRequest,name=Latency,*",
+   "org.apache.cassandra.metrics:type=ClientRequest,name=Unavailables,*",
+   "org.apache.cassandra.metrics:type=ClientRequest,name=Timeouts,*",
+   "org.apache.cassandra.metrics:type=Storage,name=Exceptions,*",
+   "org.apache.cassandra.metrics:type=Storage,name=TotalHints,*",
+   "org.apache.cassandra.metrics:type=Storage,name=TotalHintsInProgress,*",
+   "org.apache.cassandra.metrics:type=Storage,name=Load,*",
+   "org.apache.cassandra.metrics:type=Connection,name=TotalTimeouts,*",
+   "org.apache.cassandra.metrics:type=ThreadPools,name=CompletedTasks,*",
+   "org.apache.cassandra.metrics:type=ThreadPools,name=PendingTasks,*",
+   "org.apache.cassandra.metrics:type=ThreadPools,name=ActiveTasks,*",
+   "org.apache.cassandra.metrics:type=ThreadPools,name=TotalBlockedTasks,*",
+   "org.apache.cassandra.metrics:type=ThreadPools,name=CurrentlyBlockedTasks,*",
+   "org.apache.cassandra.metrics:type=DroppedMessage,name=Dropped,*",
+   "org.apache.cassandra.metrics:type=Cache,scope=KeyCache,name=HitRate,*",
+   "org.apache.cassandra.metrics:type=Cache,scope=KeyCache,name=Hits,*",
+   "org.apache.cassandra.metrics:type=Cache,scope=KeyCache,name=Requests,*",
+   "org.apache.cassandra.metrics:type=Cache,scope=KeyCache,name=Entries,*",
+   "org.apache.cassandra.metrics:type=Cache,scope=KeyCache,name=Size,*",
+   "org.apache.cassandra.metrics:type=Streaming,name=TotalIncomingBytes,*",
+   "org.apache.cassandra.metrics:type=Streaming,name=TotalOutgoingBytes,*",
+   "org.apache.cassandra.metrics:type=Client,name=connectedNativeClients,*",
+   "org.apache.cassandra.metrics:type=Client,name=connectedThriftClients,*",
+   "org.apache.cassandra.metrics:type=Table,name=WriteLatency,*",
+   "org.apache.cassandra.metrics:type=Table,name=ReadLatency,*",
+   "org.apache.cassandra.net:type=FailureDetector,*",
+   "org.elasticsearch.cluster:*",
+   "org.elasticsearch.node:*",
+   "org.elasticsearch.index:*"
+   ]
+   #blacklistObjectNames: ["org.apache.cassandra.metrics:type=ColumnFamily,*"]
+   rules:
+     - pattern: org.apache.cassandra.metrics<type=(Connection|Streaming), scope=(\S*), name=(\S*)><>(Count|Value)
+       name: cassandra_$1_$3
+       labels:
+         address: "$2"
+     - pattern: org.apache.cassandra.metrics<type=(ColumnFamily), name=(RangeLatency)><>(Mean)
+       name: cassandra_$1_$2_$3
+     - pattern: org.apache.cassandra.net<type=(FailureDetector)><>(DownEndpointCount)
+       name: cassandra_$1_$2
+     - pattern: org.apache.cassandra.metrics<type=(Keyspace), keyspace=(\S*), name=(\S*)><>(Count|Mean|95thPercentile)
+       name: cassandra_$1_$3_$4
+       labels:
+         "$1": "$2"
+     - pattern: org.apache.cassandra.metrics<type=(Table), keyspace=(\S*), scope=(\S*), name=(\S*)><>(Count|Mean|95thPercentile)
+       name: cassandra_$1_$4_$5
+       labels:
+         "keyspace": "$2"
+         "table": "$3"
+     - pattern: org.apache.cassandra.metrics<type=(ClientRequest), scope=(\S*), name=(\S*)><>(Count|Mean|95thPercentile)
+       name: cassandra_$1_$3_$4
+       labels:
+         "type": "$2"
+     - pattern: org.apache.cassandra.metrics<type=(\S*)(?:, ((?!scope)\S*)=(\S*))?(?:, scope=(\S*))?, name=(\S*)><>(Count|Value)
+       name: cassandra_$1_$5
+       labels:
+         "$1": "$4"
+         "$2": "$3"
+     - pattern: org.elasticsearch.cluster<name=([a-zA-Z_ 0-9]+)><>(MetadataVersion|ClusterStateVersion|NumberOfPendingTasks|MaxTaskWaitTimeMillis|AliveNodeCount|DeadNodeCount)
+       type: GAUGE
+       name: elasticsearch_cluster_$2
+     - pattern: org.elasticsearch.node<type=(transport)><>(\w*)
+       name: elasticsearch_node_$1_$2
+     - pattern: org.elasticsearch.node<type=(threadPool), name=(\S*)><>(\w*)
+       name: elasticsearch_node_$1_$3
+       type: GAUGE
+       labels:
+         "name": $2
+     - pattern: org.elasticsearch.node<type=(httpServer)><>(\w*)
+       type: COUNTER
+       name: elasticsearch_node_$1_$2
+       type: GAUGE
+     - pattern: org.elasticsearch.index<type=(Index), name=(\S*)><>(IndexStatusCode)
+       type: GAUGE
+       name: elasticsearch_$1_$3
+       labels:
+         "name": $2
+     - pattern: org.elasticsearch.index<type=(IndexShard), scope=(\S*)><>(\w*InBytes)
+       type: GAUGE
+       name: elasticsearch_$1_$3
+       labels:
+         "scope": $2
+     - pattern: org.elasticsearch.index<type=(IndexShard), scope=(\S*)><>(\w*)
+       type: COUNTER
+       name: elasticsearch_$1_$3
+       labels:
+         "scope": $2
+     - pattern: org.elasticsearch.index<type=(IndexShard), name=(\S*), scope=(\S*)><>(\w*InBytes)
+       type: GAUGE
+       name: elasticsearch_$1_$4
+       labels:
+         "index": $2
+         "scope": $3
+     - pattern: org.elasticsearch.index<type=(IndexShard), name=(\S*), scope=(\S*)><>(\w*)
+       type: COUNTER
+       name: elasticsearch_$1_$4
+       labels:
+         "index": $2
+         "scope": $3
+
+
+Then configure Grafana with a Prometheus datasource and build your Elassandra dashboard.
+
+.. image:: images/grafana-prometheus-dashboard.png
 
 Enable/Disable search on a node
 ...............................
@@ -791,8 +937,10 @@ To enable Cassandra LDAP user authentication, set the following settings in your
 
 .. code::
 
-   authenticator: com.strapdata.cassandra.ldap.LDAPAuthenticator
    authorizer: CassandraAuthorizer
+   authenticator: com.strapdata.cassandra.ldap.LDAPAuthenticator
+   role_manager: com.strapdata.cassandra.ldap.LDAPRoleManager
+   
 
 Update the **$CASSANDRA_CONF/ldap.properties** file according to your LDAP configuration:
 
@@ -926,6 +1074,14 @@ Privileges are defined in the Cassandra table ``elastic_admin.privileges``.
    * All cluster-level access should be granted the user privileges.
    * Content-Based Security should be used with read-only accounts.
 
+.. TIP::
+
+   To authorize Elasticsearch template and pipeline management and allow creation of indices with name **kubernetes_cluster.\*** for user fluentbit, add the following privileges:
+   
+   INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('fluentbit','cluster:monitor/nodes/info','.*');
+   INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('fluentbit','cluster:admin/ingest/pipeline/put','.*');
+   INSERT INTO elastic_admin.privileges (role,actions,indices) VALUES ('fluentbit','indices:.*','kubernetes_cluster.*');
+
 Permissions
 ...........
 
@@ -986,7 +1142,6 @@ Cassandra permissions associated to a role are mapped into Elasticserach Documen
 | MODIFY              | INSERT, UPDATE, DELETE on any table.              | indices:data/write/.*             | All document writing API |
 +---------------------+---------------------------------------------------+-----------------------------------+--------------------------+
 
-
 Privilege caching
 .................
 
@@ -1032,7 +1187,7 @@ If you just want to invalidate the privilege cache for some roles, you can just 
 
 .. TIP::
 
-   If you are running multiple Elasticsearch cluster in your Cassandra cluster, you should clear the privilege cache on each datacenter where Elasticsearch has been enabled.
+   If you are running multiple Elasticsearch clusters in your Cassandra cluster, you should clear the privilege cache on each datacenter where Elasticsearch has been enabled.
 
 Integration
 -----------
@@ -1152,7 +1307,7 @@ Finally, Kibana user accounts must have :
 .. TIP::
 
    Once a user has been authenticated by Kibana, Kibana will keep this information. In order to logout from your browser, clear the cookies and data associated with your Kibana server.
-
+        
 Kibana and Content-Based Security
 .................................
 

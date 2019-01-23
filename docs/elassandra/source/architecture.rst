@@ -28,7 +28,7 @@ Concepts Mapping
     +------------------------+--------------------+--------------------------------------------------------------------------+
     | Field                  | Cell               | Each indexed field is backed by a Cassandra cell (row x column)          |
     +------------------------+--------------------+--------------------------------------------------------------------------+
-    | Object or nested field | User Defined Type  | Automatically create a User Defined Type to store an Elasticsearch object   |
+    | Object or nested field | User Defined Type  | Automatically create a User Defined Type to store an Elasticsearch object|
     +------------------------+--------------------+--------------------------------------------------------------------------+
 
 From an Elasticsearch perspective :
