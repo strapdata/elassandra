@@ -19,13 +19,28 @@
 
 package org.elassandra.env;
 
+import org.elasticsearch.cli.Terminal;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
+import org.elasticsearch.node.InternalSettingsPreparer;
+
+import java.nio.file.Paths;
+import java.util.Collections;
 
 /**
  * Elasticsearch file configuration loader interface.
  */
 public interface EnvironmentLoader {
 
-    public Environment loadEnvironment(boolean foreground, String homeDir, String configDir);
+    default Environment loadEnvironment(boolean foreground, String homeDir, String configDir) {
+        return InternalSettingsPreparer.prepareEnvironment(
+            Settings.builder()
+                .put("node.name","node0")
+                .put("path.home", homeDir)
+                .build(),
+            foreground ? Terminal.DEFAULT : null,
+            Collections.EMPTY_MAP,
+            Paths.get(configDir));
+    }
 
 }
