@@ -15,6 +15,8 @@
  */
 package org.apache.cassandra.service;
 
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -35,11 +37,14 @@ import org.elasticsearch.Version;
 import org.elasticsearch.bootstrap.Bootstrap;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.NamedDiff;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Injector;
 import org.elasticsearch.common.inject.spi.Message;
+import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
@@ -48,6 +53,7 @@ import org.elasticsearch.monitor.process.ProcessProbe;
 import org.elasticsearch.node.InternalSettingsPreparer;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeValidationException;
+import org.elasticsearch.plugins.ClusterPlugin;
 import org.elasticsearch.plugins.Plugin;
 
 import java.io.File;
@@ -56,14 +62,17 @@ import java.lang.management.ManagementFactory;
 import java.nio.file.Paths;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -89,7 +98,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     private static volatile Thread keepAliveThread;
     private static volatile CountDownLatch keepAliveLatch;
 
-    public static ElassandraDaemon instance;
+    public static ElassandraDaemon instance = null;
     public static boolean hasWorkloadColumn = false;
 
     protected volatile Node node = null;
@@ -103,7 +112,10 @@ public class ElassandraDaemon extends CassandraDaemon {
     public ElassandraDaemon(Environment env) {
         super(true);
         this.env = env;
+        instance = this;
     }
+
+    public Environment getEnvironment() { return this.env; }
 
     public Node node() {
         return this.node;
@@ -164,7 +176,10 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
 
         if (createNode) {
-            this.node = new Node(getSettings(), pluginList);
+            // add ElassandraDaemon as a ClusterPlugin
+            List<Class<? extends Plugin>> pluginList2 = Lists.newArrayList(pluginList);
+            pluginList2.add(ElassandraPlugin.class);
+            this.node = new Node(getSettings(), pluginList2);
         }
 
         //enable indexing in cassandra.
@@ -249,13 +264,25 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
 
     public void onNodeStarted() {
-        for(SetupListener listener : ElassandraDaemon.instance.setupListeners) {
+        for(SetupListener listener : setupListeners) {
             try {
                 listener.onComplete();
                 logger.info("Setup class ["+ listener.getClass().getName()+"] onComplete done");
             } catch(Exception e) {
                 logger.error("Setup class ["+ listener.getClass().getName()+"] failed:", e);
             }
+        }
+    }
+
+    public static class ElassandraPlugin extends Plugin implements ClusterPlugin {
+
+        public ElassandraPlugin() {
+            super();
+        }
+
+        @Override
+        public void onNodeStarted() {
+            ElassandraDaemon.instance.onNodeStarted();
         }
     }
 
@@ -366,11 +393,17 @@ public class ElassandraDaemon extends CassandraDaemon {
             keepAliveLatch.countDown();
     }
 
+    // for tests only
     public Node newNode(Settings settings, Collection<Class<? extends Plugin>> classpathPlugins) {
         Settings nodeSettings = nodeSettings(settings);
         System.out.println("node settings="+nodeSettings.getAsGroups());
         System.out.println("node plugins="+classpathPlugins);
-        this.node = new Node(nodeSettings, classpathPlugins);
+
+        // add ElassandraDaemon as a ClusterPlugin
+        List<Class<? extends Plugin>> classpathPlugins2 = Lists.newArrayList(classpathPlugins);
+        classpathPlugins2.add(ElassandraPlugin.class);
+        this.node = new Node(nodeSettings, classpathPlugins2);
+
         return this.node;
     }
 

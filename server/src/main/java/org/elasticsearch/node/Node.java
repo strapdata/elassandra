@@ -747,8 +747,6 @@ public class Node implements Closeable {
 
         pluginsService.filterPlugins(ClusterPlugin.class).forEach(ClusterPlugin::onNodeStarted);
 
-        ElassandraDaemon.instance.onNodeStarted();
-
         return this;
     }
 
