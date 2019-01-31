@@ -72,7 +72,7 @@ public class ColumnDescriptor implements Comparable<ColumnDescriptor> {
                 String inferedCql = cql3Type.asCQL3Type().toString();
                 String existingCql3 = cd.type.asCQL3Type().toString();
                 // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
-                if (!cql3Type.isCompatibleWith(cd.type) &&
+                if (!existingCql3.equals(inferedCql) &&
                     !(existingCql3.endsWith("uuid") && inferedCql.equals("text")) && // #74 uuid is mapped as keyword
                     !(existingCql3.equals("timeuuid") && (inferedCql.equals("timestamp") || inferedCql.equals("text"))) &&
                     !(existingCql3.equals("date") && inferedCql.equals("timestamp")) &&
