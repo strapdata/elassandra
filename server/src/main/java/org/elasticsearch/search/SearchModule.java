@@ -21,6 +21,7 @@ package org.elasticsearch.search;
 
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.util.SetOnce;
+import org.elassandra.index.ElasticQueryHandler;
 import org.elassandra.search.aggregations.bucket.token.InternalTokenRange;
 import org.elassandra.search.aggregations.bucket.token.TokenRangeAggregationBuilder;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -225,6 +226,7 @@ import org.elasticsearch.search.aggregations.pipeline.movavg.models.MovAvgModel;
 import org.elasticsearch.search.aggregations.pipeline.movavg.models.SimpleModel;
 import org.elasticsearch.search.aggregations.pipeline.serialdiff.SerialDiffPipelineAggregationBuilder;
 import org.elasticsearch.search.aggregations.pipeline.serialdiff.SerialDiffPipelineAggregator;
+import org.elasticsearch.search.fetch.CqlFetchPhase;
 import org.elasticsearch.search.fetch.FetchPhase;
 import org.elasticsearch.search.fetch.FetchSubPhase;
 import org.elasticsearch.search.fetch.subphase.DocValueFieldsFetchSubPhase;
@@ -281,7 +283,7 @@ public class SearchModule {
 
     private final List<FetchSubPhase> fetchSubPhases = new ArrayList<>();
     private final SetOnce<BiFunction<List<FetchSubPhase>, ClusterService, FetchPhase>> fetchPhaseSupplier = new SetOnce<>();
-    
+
     private final Settings settings;
     private final ClusterService clusterService;
     private final List<NamedWriteableRegistry.Entry> namedWriteables = new ArrayList<>();
@@ -290,7 +292,7 @@ public class SearchModule {
     public SearchModule(Settings settings, boolean transportClient, List<SearchPlugin> plugins) {
         this(settings, transportClient, plugins, null);
     }
-    
+
     public SearchModule(Settings settings, boolean transportClient, List<SearchPlugin> plugins, ClusterService clusterService) {
         this.settings = settings;
         this.clusterService = clusterService;
@@ -320,7 +322,11 @@ public class SearchModule {
             }
         }
         if (fetchPhaseSupplier.get() == null) {
-            fetchPhaseSupplier.set((subPhases, clusterService) -> new FetchPhase(subPhases, clusterService));
+            if (ElasticQueryHandler.class.getName().equals(System.getProperty("cassandra.custom_query_handler_class"))) {
+                fetchPhaseSupplier.set((subPhases, clusterService) -> new CqlFetchPhase(subPhases, clusterService));
+            } else {
+                fetchPhaseSupplier.set((subPhases, clusterService) -> new FetchPhase(subPhases, clusterService));
+            }
         }
     }
 

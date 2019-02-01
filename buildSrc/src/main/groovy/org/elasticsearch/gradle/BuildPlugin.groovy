@@ -668,6 +668,7 @@ class BuildPlugin implements Plugin<Project> {
             systemProperty 'es.synchronous_refresh', 'true'
             systemProperty 'es.drop_on_delete_index', 'true'
             systemProperty 'tests.maven', 'true'
+            systemProperty 'cassandra.custom_query_handler_class', 'org.elassandra.index.ElasticQueryHandler'
             //systemProperty 'io.netty.tryReflectionSetAccessible', 'false'
             
             boolean assertionsEnabled = Boolean.parseBoolean(System.getProperty('tests.asserts', 'true'))
