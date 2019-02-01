@@ -53,6 +53,7 @@ if (snapshot) {
   // to indicate this being a snapshot build or a release build.
   version += "-SNAPSHOT"
   props.put("elasticsearch", version);
+  props.put("elasticsearch_vanilla", props.getProperty('elasticsearch_vanilla') + "-SNAPSHOT");
 }
 
 File tempPropertiesFile = new File(project.buildDir, "version.properties")

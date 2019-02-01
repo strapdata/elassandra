@@ -23,8 +23,8 @@ task buildDeb(type: Deb) {
   dependsOn preparePackagingFiles
   baseName 'elassandra' // this is what pom generation uses for artifactId
   // Follow elasticsearch's deb file naming convention
-  archiveName "${packageName}-${project.fullElassVersion}.deb"
-  version = project.fullElassVersion
+  archiveName "${packageName}-${project.version}.deb"
+  version = project.version
 
   packageGroup 'web'
   requires 'libc6'

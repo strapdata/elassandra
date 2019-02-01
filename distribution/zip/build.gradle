@@ -22,7 +22,7 @@ import org.elasticsearch.gradle.plugin.PluginBuildPlugin
 task buildZip(type: Zip) {
   dependsOn createLogDir, createPluginsDir, createDataDir, createLogDir
   baseName = 'elassandra'
-  version = fullElassVersion
+  version = version
   with archivesFiles
 }
 

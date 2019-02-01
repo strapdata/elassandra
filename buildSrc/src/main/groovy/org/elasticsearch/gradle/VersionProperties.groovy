@@ -23,9 +23,9 @@ package org.elasticsearch.gradle
  */
 class VersionProperties {
     static final String elasticsearch
+    static final String elasticsearch_vanilla
     static final String lucene
-    static final String elassandra
-    
+
     static final Map<String, String> versions = new HashMap<>()
     static {
         Properties props = new Properties()
@@ -35,8 +35,8 @@ class VersionProperties {
         }
         props.load(propsStream)
         elasticsearch = props.getProperty('elasticsearch')
+        elasticsearch_vanilla = props.getProperty('elasticsearch_vanilla')
         lucene = props.getProperty('lucene')
-        elassandra = props.getProperty('elassandra')
         for (String property : props.stringPropertyNames()) {
             versions.put(property, props.getProperty(property))
         }

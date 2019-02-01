@@ -306,7 +306,7 @@ configure(distributions.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.n
     dirMode 0755
   }
   project.ext.archivesFiles = copySpec {
-    into("elassandra-${project.fullElassVersion}") {
+    into("elassandra-${project.version}") {
       with libFiles
       into('conf') {
         dirMode 0750

@@ -212,7 +212,7 @@ class VagrantTestPlugin implements Plugin<Project> {
         Task createFullElassVersionFile = project.tasks.create('createFullElassVersionFile', FileContentsTask) {
             dependsOn createBatsDirsTask
             file "${batsDir}/archives/full_elass_version"
-            contents project.fullElassVersion
+            contents project.version
         }
         
         Task createUpgradeFromFile = project.tasks.create('createUpgradeFromFile', FileContentsTask) {

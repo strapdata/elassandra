@@ -186,9 +186,9 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
  * in a branch if there are only betas and rcs in the branch so we have
  * *something* to test against. */
 VersionCollection versions = new VersionCollection(file('server/src/main/java/org/elasticsearch/Version.java').readLines('UTF-8'))
-if (versions.currentVersion.toString() != VersionProperties.elasticsearch) {
+if (versions.currentVersion.toString() != VersionProperties.elasticsearch_vanilla) {
   throw new GradleException("The last version in Versions.java [${versions.currentVersion}] does not match " +
-          "VersionProperties.elasticsearch [${VersionProperties.elasticsearch}]")
+          "VersionProperties.elasticsearch [${VersionProperties.elasticsearch_vanilla}]")
 }
 
 // build metadata from previous build, contains eg hashes for bwc builds
@@ -212,18 +212,7 @@ allprojects {
     versionCollection = versions
 
     buildMetadata = buildMetadataMap
-    
-    
-    // elassandra adds a 4th digit to the version number
-    elassVersion = VersionProperties.elassandra
-    // full version number including the elassandra added digit, and taking care of eventual "-SNAPSHOT" suffix
 
-    if (version.endsWith("-SNAPSHOT")) {
-      fullElassVersion = "${version.minus('-SNAPSHOT')}.${elassVersion}-SNAPSHOT"
-    }
-    else {
-      fullElassVersion = "${version}.${elassVersion}"
-    }
   }
 }
 

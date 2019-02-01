@@ -55,7 +55,14 @@ public class Version {
     }
 
     public static Version fromString(String s) {
-        Matcher m = s =~ /(\d+)\.(\d+)\.(\d+)(-alpha\d+|-beta\d+|-rc\d+)?(-SNAPSHOT)?/
+        Matcher m = s =~ /(\d+)\.(\d+)\.(\d+)\.(\d+)(-alpha\d+|-beta\d+|-rc\d+)?(-SNAPSHOT)?/
+        if (m.matches()) {
+            // elassandra version => ignore last digit
+            return new Version(m.group(1) as int, m.group(2) as int,
+                    m.group(3) as int, m.group(5) ?: '', m.group(6) != null, null)
+        }
+
+        m = s =~ /(\d+)\.(\d+)\.(\d+)(-alpha\d+|-beta\d+|-rc\d+)?(-SNAPSHOT)?/
         if (m.matches() == false) {
             throw new InvalidUserDataException("Invalid version [${s}]")
         }

@@ -24,6 +24,9 @@ import org.gradle.api.Task
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.OutputFile
 
+import java.util.regex.Matcher
+import java.util.regex.Pattern
+
 /**
  * Creates a plugin descriptor.
  */
@@ -66,12 +69,23 @@ class PluginPropertiesTask extends Copy {
         }
     }
 
+    static final Pattern VERSION_PATTERN = Pattern.compile(/(\d+)\.(\d+)\.(\d+)\.(\d+)(.*)?/)
+
     Map<String, String> generateSubstitutions() {
         def stringSnap = { version ->
+            def v = version
             if (version.endsWith("-SNAPSHOT")) {
-               return version.substring(0, version.length() - 9)
+                v = version.substring(0, version.length() - 9)
             }
-            return version
+
+            // remove the last elassandra version digit to keep compat with elasticsearch plugins
+            Matcher matcher = VERSION_PATTERN.matcher(v)
+            if (matcher.matches()) {
+                v = "${matcher.group(1)}.${matcher.group(2)}.${matcher.group(3)}"
+                if (matcher.group(5) != null)
+                    v += matcher.group(5)
+            }
+            return v
         }
         return [
             'name': extension.name,
