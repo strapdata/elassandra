@@ -19,6 +19,7 @@ Contents:
    configuration
    mapping
    operations
+   search_over_cql
    enterprise
    integration
    testing
