@@ -52,31 +52,44 @@ gcloud_auth() {
 under_travis() {
   # Special branching to be ran under travis
 
-  export REPO_NAME=${TRAVIS_REPO_SLUG}
-  export REPO_DIR=${TRAVIS_BUILD_DIR}
-  export ELASSANDRA_COMMIT=${TRAVIS_COMMIT}
-  export DOCKER_MAJOR_LATEST=true
-  export DOCKER_RUN_TESTS=true
-
   if [ -n "$TRAVIS_TAG" ]; then
+    # this function is only called when there is a tag
+
+    export REPO_NAME=${TRAVIS_REPO_SLUG}
+
+    export REPO_DIR=${TRAVIS_BUILD_DIR}
+    export ELASSANDRA_COMMIT=${TRAVIS_COMMIT}
+    export DOCKER_RUN_TESTS=true
+
+    # extract the elasticsearch version
+    ELASTICSEARCH_VERSION=$(echo "$TRAVIS_TAG" | sed 's/v\([0-9]*\.[0-9]*.\.[0-9]*\)\.[0-9]*.*/\1/')
+
     # publish to docker hub when a tag is set
     export DOCKER_PUBLISH=true
 
-    # try to infer if the current build need to be tagged "latest"
-    ELASTICSEARCH_VERSION=$(echo "$TRAVIS_TAG" | sed 's/v\(.*\..*.\..*\)\..*/\1/')
-    if [ "$ELASTICSEARCH_VERSION" = "$LATEST_VERSION" ]; then
-      export DOCKER_LATEST=true
+    # add extra tags when on master branches
+    if is_main_branch; then
+      export DOCKER_MAJOR_LATEST=true
+      # try to infer if the current build need to be tagged "latest". LATEST_VERSION is defined in .travis.yaml
+      if [ "$ELASTICSEARCH_VERSION" = "$LATEST_VERSION" ]; then
+        export DOCKER_LATEST=true
+      fi
+    fi
+
+    # call the docker build+test+push script
+    build_with_retry
+
+    # publish to gcloud registry. DISABLED, the image is build from https://github.com/strapdata/elassandra-google-k8s-marketplace
+    #  gcloud_install
+    #  gcloud_auth || return 1
+    #  DOCKER_REGISTRY=gcr.io/ REPO_NAME=${GCLOUD_REPO_NAME:-strapdata-factory/elassandra} BASE_IMAGE=launcher.gcr.io/google/debian9:latest build_with_retry
+
+    # If tag = v6.2.3.x, construct the intermediate image for gke
+    if [[ ${TRAVIS_TAG} == v6.2.3.+([0-9]) ]]; then
+      # build a docker image based on google debian 9, used later as a base image in the elassandra gke marketplace
+      REPO_NAME=${REPO_NAME}-debian-gcr BASE_IMAGE=launcher.gcr.io/google/debian9:latest build_with_retry
     fi
   fi
-
-  # publish to docker hub
-  build_with_retry
-
-
-  # publish to gcloud registry
-  gcloud_install
-  gcloud_auth || return 1
-  DOCKER_REGISTRY=gcr.io/ REPO_NAME=${GCLOUD_REPO_NAME:-strapdata-factory/elassandra} BASE_IMAGE=launcher.gcr.io/google/debian9:latest build_with_retry
 }
 
 manual_run() {

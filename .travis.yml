@@ -41,8 +41,8 @@ matrix:
 install: ./gradlew --version
 
 script:
-- ./gradlew server:test -Dbuild.snapshot=false
-- ./gradlew assemble -Dbuild.snapshot=false
+  - ./gradlew server:test -Dbuild.snapshot=false
+  - ./gradlew assemble -Dbuild.snapshot=false
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
@@ -82,8 +82,17 @@ deploy:
       tags: true
       repo: strapdata/elassandra-rc
 
+  # build, test and push docker images
   - provider: script
     skip_cleanup: true
-    script: bash ./docker-ci.sh
+    script: bash ./ci/docker.sh
     on:
       tags: true
+
+  # bump and push to gke marketplace repo, build gke images, push to gcr.io
+  - provider: script
+    skip_cleanup: true
+    script: bash ./ci/gke-marketplace.sh
+    on:
+      tags: true
+      repo: strapdata/elassandra
