@@ -52,9 +52,18 @@ When cloning Elassandra, use **git clone --recurse-submodules https://github.com
 
 If you forgot the **--recurse-submodules** when cloning, you can also fetch the cassandra submodule with **git submodule update --init** and **git checkout cassandra-3.x-strapdata** to set the strapdata branch.
 
-Then, to build from sources:
-* Elassandra v5.x: run **mvn clean packages -DskipTests**.
-* Elassandra v6.x: run **gradle clean distribution:deb:assemble -Dbuild.snapshot=false**.
+Then, to build from sources: 
+
+* Elassandra v5.x:
+
+      gradle clean assemble -Dbuild.snapshot=false
+    
+    
+* Elassandra v6.x:
+      
+      export JAVA_HOME=/path/to/jdk-10
+      export CASSANDRA_JAVA_HOME=/path/to/jdk-8
+      ./gradlew clean assemble -Dbuild.snapshot=false
 
 Note: For elassandra v6.X, javadoc task failed due to [https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8194281](https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8194281).
 

@@ -133,7 +133,6 @@ task customClean(type: Delete) {
 }
 clean.dependsOn customClean
 
-
 configure(distributions) {
   /*****************************************************************************
    *                            Rest test config                               *
@@ -233,7 +232,6 @@ configure(distributions) {
 
     pylibFiles = copySpec {
       from '../../server/cassandra/pylib'
-      MavenFilteringHack.filter(it, expansions)
     }
 
 	cassandraLicenseFiles = copySpec {
@@ -242,17 +240,17 @@ configure(distributions) {
     
     sigarFiles = copySpec {
       from '../../server/cassandra/lib/sigar-bin'
-      eachFile { it.setMode(0755) }
-      MavenFilteringHack.filter(it, expansions)
     }
 
     toolsFiles = copySpec {
       from '../../server/cassandra/tools'
       exclude 'stress/**'
       eachFile { it.setMode(0755) }
-      MavenFilteringHack.filter(it, expansions)
     }
 
+    stressFiles = copySpec {
+      from '../../server/cassandra/build/tools'
+    }
 
     commonFiles = copySpec {
       from rootProject.projectDir
@@ -355,6 +353,7 @@ configure(distributions.findAll { ['zip', 'tar', 'integ-test-zip'].contains(it.n
       }
       into('tools') {
         with toolsFiles
+        with stressFiles
       }
       into('') {
         from {
@@ -580,6 +579,7 @@ configure(distributions.findAll { ['deb', 'rpm'].contains(it.name) }) {
       into('tools') {
         with copySpec {
           with toolsFiles
+          with stressFiles
           exclude 'bin/*.bat'
           exclude 'bin/*.exe'
           exclude 'bin/*.ps1'

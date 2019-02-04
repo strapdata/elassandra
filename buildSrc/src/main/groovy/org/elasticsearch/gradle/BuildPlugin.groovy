@@ -59,6 +59,9 @@ class BuildPlugin implements Plugin<Project> {
 
     static final JavaVersion minimumRuntimeVersion = JavaVersion.VERSION_1_8
     static final JavaVersion minimumCompilerVersion = JavaVersion.VERSION_1_9
+    static final JavaVersion minimumCassandraVersion = JavaVersion.VERSION_1_8
+    static final JavaVersion maximumCassandraVersion = JavaVersion.VERSION_1_8
+
 
     @Override
     void apply(Project project) {
@@ -86,6 +89,7 @@ class BuildPlugin implements Plugin<Project> {
         configureJavadoc(project)
         configureSourcesJar(project)
         configurePomGeneration(project)
+        configureCassandraStress(project)
 
         configureTest(project)
         configurePrecommit(project)
@@ -97,6 +101,7 @@ class BuildPlugin implements Plugin<Project> {
         if (project.rootProject.ext.has('buildChecksDone') == false) {
             String compilerJavaHome = findCompilerJavaHome()
             String runtimeJavaHome = findRuntimeJavaHome(compilerJavaHome)
+            String cassandraJavaHome = findCassandraJavaHome(runtimeJavaHome)
             File gradleJavaHome = Jvm.current().javaHome
             String javaVendor = System.getProperty('java.vendor')
             String javaVersion = System.getProperty('java.version')
@@ -117,19 +122,28 @@ class BuildPlugin implements Plugin<Project> {
                 runtimeJavaVersionEnum = JavaVersion.toVersion(findJavaSpecificationVersion(project, runtimeJavaHome))
             }
 
+            String cassandraJavaVersionDetails = gradleJavaVersionDetails
+            JavaVersion cassandraJavaVersionEnum = JavaVersion.current()
+            if (new File(cassandraJavaHome).canonicalPath != gradleJavaHome.canonicalPath) {
+                cassandraJavaVersionDetails = findJavaVersionDetails(project, cassandraJavaHome)
+                cassandraJavaVersionEnum = JavaVersion.toVersion(findJavaSpecificationVersion(project, cassandraJavaHome))
+            }
+
             // Build debugging info
             println '======================================='
             println 'Elasticsearch Build Hamster says Hello!'
             println '======================================='
             println "  Gradle Version        : ${project.gradle.gradleVersion}"
             println "  OS Info               : ${System.getProperty('os.name')} ${System.getProperty('os.version')} (${System.getProperty('os.arch')})"
-            if (gradleJavaVersionDetails != compilerJavaVersionDetails || gradleJavaVersionDetails != runtimeJavaVersionDetails) {
+            if (gradleJavaVersionDetails != compilerJavaVersionDetails || gradleJavaVersionDetails != runtimeJavaVersionDetails || gradleJavaVersionDetails != cassandraJavaVersionDetails) {
                 println "  JDK Version (gradle)  : ${gradleJavaVersionDetails}"
                 println "  JAVA_HOME (gradle)    : ${gradleJavaHome}"
                 println "  JDK Version (compile) : ${compilerJavaVersionDetails}"
                 println "  JAVA_HOME (compile)   : ${compilerJavaHome}"
                 println "  JDK Version (runtime) : ${runtimeJavaVersionDetails}"
                 println "  JAVA_HOME (runtime)   : ${runtimeJavaHome}"
+                println "  JDK Version (cassandra) : ${cassandraJavaVersionDetails}"
+                println "  JAVA_HOME (cassandra)   : ${cassandraJavaHome}"
             } else {
                 println "  JDK Version           : ${gradleJavaVersionDetails}"
                 println "  JAVA_HOME             : ${gradleJavaHome}"
@@ -153,10 +167,16 @@ class BuildPlugin implements Plugin<Project> {
                 throw new GradleException("Java ${minimumRuntimeVersion} or above is required to run Elasticsearch")
             }
 
+            if (cassandraJavaVersionEnum < minimumCassandraVersion || cassandraJavaVersionEnum > maximumCassandraVersion) {
+                throw new GradleException("Java ${minimumCassandraVersion} is required to build cassandra")
+            }
+
             project.rootProject.ext.compilerJavaHome = compilerJavaHome
             project.rootProject.ext.runtimeJavaHome = runtimeJavaHome
+            project.rootProject.ext.cassandraJavaHome = cassandraJavaHome
             project.rootProject.ext.compilerJavaVersion = compilerJavaVersionEnum
             project.rootProject.ext.runtimeJavaVersion = runtimeJavaVersionEnum
+            project.rootProject.ext.cassandraJavaVersion = cassandraJavaVersionEnum
             project.rootProject.ext.buildChecksDone = true
         }
 
@@ -187,6 +207,12 @@ class BuildPlugin implements Plugin<Project> {
         assert compilerJavaHome != null
         return System.getenv('RUNTIME_JAVA_HOME') ?: compilerJavaHome
     }
+
+    private static String findCassandraJavaHome(final String runtimeJavaHome) {
+        assert runtimeJavaHome != null
+        return System.getenv('CASSANDRA_JAVA_HOME') ?: runtimeJavaHome
+    }
+
 
     /** Finds printable java version of the given JAVA_HOME */
     private static String findJavaVersionDetails(Project project, String javaHome) {
@@ -517,6 +543,10 @@ class BuildPlugin implements Plugin<Project> {
         sourcesJarTask.description = 'Assembles a jar containing source files.'
         sourcesJarTask.from(project.sourceSets.main.allSource)
         project.assemble.dependsOn(sourcesJarTask)
+    }
+
+    static void configureCassandraStress(Project project) {
+      project.assemble.dependsOn(':cassandra-stress-jar')
     }
 
     /** Adds additional manifest info to jars */

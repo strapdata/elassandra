@@ -6,6 +6,8 @@ env:
     - LATEST_VERSION=6.2.3
     # Make sure gcloud command is on our PATH and the App Engine SDK is in the Python path
     - GAE_PYTHONPATH=${HOME}/.cache/google_appengine PATH=$PATH:${HOME}/google-cloud-sdk/bin PYTHONPATH=${PYTHONPATH}:${GAE_PYTHONPATH} CLOUDSDK_CORE_DISABLE_PROMPTS=1
+    # jdk used to build some cassandra artifacts
+    - CASSANDRA_JAVA_HOME=/usr/lib/jvm/java-8-oracle
 
 language: 
   - java
@@ -38,7 +40,7 @@ matrix:
 
 install: ./gradlew --version
 
-script: 
+script:
 - ./gradlew server:test -Dbuild.snapshot=false
 - ./gradlew assemble -Dbuild.snapshot=false
 
