@@ -115,7 +115,8 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
              from components.java
              artifacts {
                  archives sourcesJar
-                 archives javadocJar
+                 // disabling javadoc publication because javadoc fails to build with elassandra
+                 //archives javadocJar
              }
           }
         }
@@ -146,7 +147,6 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
                 snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
                     authentication(userName: repoUsername, password: repoPassword)
                 }
-                
                 pom.withXml { XmlProvider xml ->
                     Node node = xml.asNode()
                     node.appendNode('name',it.name)
