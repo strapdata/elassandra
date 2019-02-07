@@ -9,13 +9,14 @@ so **all nodes of a cluster should run Elassandra binaries**. However, you can s
 the Elasticsearch support.  Obviously, all nodes of a datacenter should run Cassandra only or Cassandra with 
 Elasticsearch.
 
-Rolling upgrade to Elassandra
-.............................
+Rolling upgrade from Cassandra to Elassandra
+............................................
 
 Before starting any Elassandra node with Elasticsearch enabled, do a rolling replace of the Cassandra binaries with the Elassandra ones. For each node :
 
 * Install Elassandra.
-* Replace the Elassandra configuration files (cassandra.yml and snitch configuration file) with the ones from your existing cluster 
+* Replace the Elassandra configuration files (cassandra.yaml and snitch configuration file) with the ones from your existing cluster.
+* Bind the Elassandra data folder to the existing Cassandra data folder
 * Stop your Cassandra node.
 * Restart Cassandra ``elassandra bin/cassandra`` or Cassandra with Elasticsearch enabled ``elassandra bin/cassandra -e``
 
