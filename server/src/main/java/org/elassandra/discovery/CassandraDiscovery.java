@@ -513,10 +513,24 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * Warning: IEndpointStateChangeSubscriber.onXXXX should not block (on connection timeout or clusterState update) to avoid gossip issues.
      */
 
+    private void traceEpState(InetAddress endpoint, EndpointState epState) {
+        if (logger.isTraceEnabled())
+            logger.trace("Endpoint={} isAlive={} STATUS={} HOST_ID={} INTERNAL_IP={} RPC_ADDRESS={} SCHEMA={} X1={} X2={}", endpoint,
+                    epState.isAlive(),
+                    epState.getStatus(),
+                    epState.getApplicationState(ApplicationState.HOST_ID),
+                    epState.getApplicationState(ApplicationState.INTERNAL_IP),
+                    epState.getApplicationState(ApplicationState.RPC_ADDRESS),
+                    epState.getApplicationState(ApplicationState.SCHEMA),
+                    epState.getApplicationState(ApplicationState.X1),
+                    epState.getApplicationState(ApplicationState.X2));
+    }
+
     @Override
     public void onAlive(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
-            logger.debug("Endpoint={} ApplicationState={} isAlive={} => update node + connecting", endpoint, epState, epState.isAlive());
+            traceEpState(endpoint, epState);
+            logger.debug("Endpoint={} isAlive={} => update node + connecting", endpoint, epState.isAlive());
             if (isNormal(epState))
                 updateNode(endpoint, epState);
         }
@@ -525,7 +539,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     @Override
     public void onDead(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
-            logger.debug("Endpoint={}  ApplicationState={} isAlive={} => update node + disconnecting", endpoint, epState, epState.isAlive());
+            traceEpState(endpoint, epState);
+            logger.debug("Endpoint={} isAlive={} => update node + disconnecting", endpoint, epState.isAlive());
             notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
             updateNode(endpoint, epState);
         }
@@ -534,8 +549,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     @Override
     public void onRestart(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
-            if (logger.isTraceEnabled())
-                logger.debug("Endpoint={}  ApplicationState={} isAlive={} status={}", endpoint, epState, epState.isAlive(), epState.getStatus());
+            traceEpState(endpoint, epState);
             if (isNormal(epState))
                 updateNode(endpoint, epState);
         }
@@ -544,8 +558,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     @Override
     public void onJoin(InetAddress endpoint, EndpointState epState) {
         if (isLocal(endpoint)) {
-            if (logger.isTraceEnabled())
-                logger.trace("Endpoint={} ApplicationState={} isAlive={} status={}", endpoint, epState, epState.isAlive(), epState.getStatus());
+            traceEpState(endpoint, epState);
             if (isNormal(epState))
                 updateNode(endpoint, epState);
         }
