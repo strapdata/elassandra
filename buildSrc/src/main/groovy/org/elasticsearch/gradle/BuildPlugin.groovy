@@ -168,7 +168,7 @@ class BuildPlugin implements Plugin<Project> {
             }
 
             if (cassandraJavaVersionEnum < minimumCassandraVersion || cassandraJavaVersionEnum > maximumCassandraVersion) {
-                throw new GradleException("Java ${minimumCassandraVersion} is required to build cassandra")
+                throw new GradleException("Java ${minimumCassandraVersion} is required to build cassandra, please set CASSANDRA_JAVA_HOME to java 8")
             }
 
             project.rootProject.ext.compilerJavaHome = compilerJavaHome
@@ -312,7 +312,7 @@ class BuildPlugin implements Plugin<Project> {
                  force 'io.dropwizard.metrics:metrics-core:3.1.0'
             }
             configuration.resolutionStrategy.failOnVersionConflict()
-            
+
         })
 
         // force all dependencies added directly to compile/testCompile to be non-transitive, except for ES itself
@@ -620,10 +620,10 @@ class BuildPlugin implements Plugin<Project> {
             File heapdumpDir = new File(project.buildDir, 'heapdump')
             heapdumpDir.mkdirs()
             jvmArg '-XX:HeapDumpPath=' + heapdumpDir
-            
+
             jvmArg '-Xdebug'
             jvmArg '-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4242'
-            
+
             argLine System.getProperty('tests.jvm.argline')
 
             // we use './temp' since this is per JVM and tests are forbidden from writing to CWD
@@ -631,7 +631,7 @@ class BuildPlugin implements Plugin<Project> {
             systemProperty 'cassandra.jmx.remote.port', "7199"
             systemProperty 'com.sun.management.jmxremote.ssl', "false"
             systemProperty 'com.sun.management.jmxremote.authenticate', "false"
-            
+
             systemProperty 'java.io.tmpdir', './temp'
             systemProperty 'java.awt.headless', 'true'
             systemProperty 'tests.gradle', 'true'
@@ -670,7 +670,7 @@ class BuildPlugin implements Plugin<Project> {
             systemProperty 'tests.maven', 'true'
             systemProperty 'cassandra.custom_query_handler_class', 'org.elassandra.index.ElasticQueryHandler'
             //systemProperty 'io.netty.tryReflectionSetAccessible', 'false'
-            
+
             boolean assertionsEnabled = Boolean.parseBoolean(System.getProperty('tests.asserts', 'true'))
             enableSystemAssertions assertionsEnabled
             enableAssertions assertionsEnabled
