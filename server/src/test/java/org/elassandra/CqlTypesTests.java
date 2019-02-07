@@ -703,5 +703,12 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertTrue(filed_names.contains("foo"));
         assertTrue(filed_names.contains("foo2"));
     }
+
+    @Test
+    public void testClusteringOrderColumnDiscover() throws Exception {
+        process(ConsistencyLevel.ONE, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1': 1};");
+        process(ConsistencyLevel.ONE, "CREATE TABLE ks.test (id int, timestamp timestamp, PRIMARY KEY (id, timestamp)) WITH CLUSTERING ORDER BY (timestamp DESC)");
+        assertAcked(client().admin().indices().prepareCreate("ks").addMapping("test", discoverMapping("test")));
+    }
 }
 
