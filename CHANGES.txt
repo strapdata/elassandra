@@ -1,3 +1,12 @@
+6.2.3.11 - 2018-02-07
+  * Add support for Elasticsearch query over CQL
+  * Ship cassandra-stress jar with elassandra #19 #261
+  * Manage elassandra artifacts with a 4 digits version number
+  * Do not publish javadoc to avoid issue with java 9
+  * Fix log corruption edge case when TOKENS= epState is printed to console #262
+  * Fix token mapper compatibility issue for existing indices
+  * Fix migration for indices created before 6.2.3.8
+  
 6.2.3.10 - 2018-01-10
   * Fix indexing a static UDT in insert only mode
   * Fix partition key ordering issue when building CQL schema from the ES mapping
