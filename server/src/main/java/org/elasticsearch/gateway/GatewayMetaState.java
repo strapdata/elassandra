@@ -82,6 +82,7 @@ public class GatewayMetaState extends AbstractComponent implements ClusterStateA
             nodeEnv.ensureAtomicMoveSupported();
         }
         if (DiscoveryNode.isMasterNode(settings) || DiscoveryNode.isDataNode(settings)) {
+            /* Disable metadata upgrade because cassandra not ready for schema update.
             try {
                 ensureNoPre019State();
                 IndexFolderUpgrader.upgradeIndicesIfNeeded(settings, nodeEnv);
@@ -107,6 +108,7 @@ public class GatewayMetaState extends AbstractComponent implements ClusterStateA
                 logger.error("failed to read local state, exiting...", e);
                 throw e;
             }
+            */
         }
     }
 
