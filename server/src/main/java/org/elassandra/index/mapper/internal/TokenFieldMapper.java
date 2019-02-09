@@ -17,6 +17,7 @@ package org.elassandra.index.mapper.internal;
 
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
+import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.DocValuesFieldExistsQuery;
@@ -59,7 +60,7 @@ public class TokenFieldMapper extends MetadataFieldMapper {
 
         static {
             TOKEN_FIELD_TYPE.setName(NAME);
-            TOKEN_FIELD_TYPE.setDocValuesType(DocValuesType.SORTED);
+            TOKEN_FIELD_TYPE.setDocValuesType(DocValuesType.SORTED_NUMERIC);
             TOKEN_FIELD_TYPE.setHasDocValues(true);
             TOKEN_FIELD_TYPE.freeze();
         }
@@ -235,7 +236,7 @@ public class TokenFieldMapper extends MetadataFieldMapper {
         Long token = (Long) object;
         if (token != null) {
             context.doc().add(new LongPoint(TokenFieldMapper.NAME, token));
-            context.doc().add(new NumericDocValuesField(TokenFieldMapper.NAME, token));
+            context.doc().add(new SortedNumericDocValuesField(TokenFieldMapper.NAME, token));
         }
     }
 
