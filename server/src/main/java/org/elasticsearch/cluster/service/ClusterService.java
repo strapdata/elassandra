@@ -136,7 +136,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import javax.management.JMX;
@@ -744,15 +747,40 @@ public class ClusterService extends BaseClusterService {
         events.add(new Event.SchemaChange(Event.SchemaChange.Change.UPDATED, Event.SchemaChange.Target.TABLE, elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE));
     }
 
-    // try to read metadata from table extension first, and fall back to comment.
+    // try to read metadata from table extension first, and fall back to comment if absent.
     public MetaData loadGlobalState() throws NoPersistedMetaDataException {
+        MetaData metadata;
         try {
-            return readMetaDataFromTableExtensions(true);
+            metadata = readMetaDataFromTableExtensions(true);
         } catch(NoPersistedMetaDataException e) {
             // for backward compatibility
             logger.info("Failed to read metadata from table extensions, falling back to table comment");
-            return readMetaDataAsComment();
+            metadata = readAndMigrateMetadata();
         }
+        return metadata;
+    }
+
+    // read metadata from elastic_admin.metadata comment and flush it as CQL table extensions
+    private AtomicBoolean migrated = new AtomicBoolean(false);
+    private MetaData readAndMigrateMetadata() throws NoPersistedMetaDataException {
+        MetaData metadata = readMetaDataAsComment();
+        if (migrated.compareAndSet(false, true)) {
+            logger.warn("Saving elasticsearch metadata from table comment into table extensions (This should happen only once when upgrading to 6.2.3.8+)");
+            try {
+                Collection<Mutation> mutations = new ArrayList<>();
+                Collection<SchemaChange> events = new ArrayList<>();
+                writeMetadataToSchemaMutations(metadata, mutations, events);
+                for(ObjectCursor<IndexMetaData> imd : metadata.indices().values())
+                    this.getSchemaManager().updateTableExtensions(imd.value, mutations, events);
+
+                //do not announce schema migration because gossip not yet ready.
+                SchemaKeyspace.mergeSchema(mutations, getSchemaManager().getInhibitedSchemaListeners());
+                logger.warn("Elasticsearch metadata migrated from comment to table extensions (This should happen only once when upgradin to 6.2.3.8+)");
+            } catch (IOException e) {
+                logger.error("Failed to migrate elasticsearch metadata from comment to table extension", e);
+            }
+        }
+        return metadata;
     }
 
     public MetaData readMetaDataAsComment() throws NoPersistedMetaDataException {
@@ -835,8 +863,13 @@ public class ClusterService extends BaseClusterService {
         }
     }
 
+    public boolean hasMetaDataTable() {
+        KeyspaceMetadata ksm = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
+        return ksm != null && ksm.getTableOrViewNullable(ELASTIC_ADMIN_METADATA_TABLE) != null;
+    }
+
     /**
-     * read cluster metadata from CQL table extensions:
+     * Scan CQL table extensions to build Elasticsearch metadata:
      * - global metadata is located in elastic_admin.metadata extensions, with key = "metadata".
      *   The global metadata contains indices definition with no mapping (no keep index definition with no mapping).
      * - each indexed table have an extension with a SMILE serialized IndexMetaData having only one mapping.
@@ -849,7 +882,7 @@ public class ClusterService extends BaseClusterService {
     public MetaData readMetaDataFromTableExtensions(boolean full) throws NoPersistedMetaDataException {
         KeyspaceMetadata ksm = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
         if (ksm == null)
-            throw new NoPersistedMetaDataException("Keyspace "+this.elasticAdminKeyspaceName+" does not exists");
+            throw new NoPersistedMetaDataException("Keyspace "+this.elasticAdminKeyspaceName+" metadata not available");
 
         CFMetaData cfm = ksm.getTableOrViewNullable(ELASTIC_ADMIN_METADATA_TABLE);
         if (cfm != null && cfm.params.extensions != null) {
@@ -1167,7 +1200,7 @@ public class ClusterService extends BaseClusterService {
                     logger.debug("Applying initial elasticsearch mapping mutations={}", mutations);
                     MigrationManager.announce(mutations, this.getSchemaManager().getInhibitedSchemaListeners());
                 } catch (IOException e) {
-                    logger.error("Failed to write metadata as comment", e);
+                    logger.error("Failed to write metadata as table extension", e);
                 }
             } catch (Throwable e) {
                 logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE),e);

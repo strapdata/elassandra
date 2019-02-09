@@ -105,8 +105,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     protected Environment env;
 
     private boolean activated = false;
-
-    private MetaData systemMetadata = null;
+    private boolean hasMetadata = false;
     private List<SetupListener> setupListeners = new CopyOnWriteArrayList();
 
     public ElassandraDaemon(Environment env) {
@@ -218,22 +217,22 @@ public class ElassandraDaemon extends CassandraDaemon {
      */
     @Override
     public void systemKeyspaceInitialized() {
-        if (node != null && SystemKeyspace.bootstrapComplete()) {
-            try {
-                systemMetadata = this.node.clusterService().loadGlobalState();
-                if (systemMetadata != null) {
-                    activateAndWaitShards("before opening user keyspaces");
-                }
-            } catch(NoPersistedMetaDataException e) {
-                logger.info("Elasticsearch activation delayed after boostraping, no mapping available");
-            } catch(Throwable e) {
-                logger.warn("Unexpected error",e);
-            }
-        }
+        logger.debug("System keyspaces initialized");
     }
 
     @Override
     public void userKeyspaceInitialized() {
+        logger.debug("User keyspaces initialized");
+        if (node != null && SystemKeyspace.bootstrapComplete()) {
+            try {
+                this.hasMetadata = this.node.clusterService().hasMetaDataTable();
+                if (this.hasMetadata) {
+                    activateAndWaitShards("before opening user keyspaces");
+                }
+            } catch(Throwable e) {
+                logger.warn("Unexpected error",e);
+            }
+        }
     }
 
     /**
@@ -245,7 +244,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         if (node != null) {
             try {
                 // load mapping from schema jsut before bootstrapping C*
-                systemMetadata = this.node.clusterService().loadGlobalState();
+                this.hasMetadata = this.node.clusterService().hasMetaDataTable();
                 activateAndWaitShards("before cassandra boostraping");
             } catch(Throwable e) {
                 logger.error("Failed to load Elasticsearch mapping from CQL schema before bootstraping:", e);
@@ -320,13 +319,13 @@ public class ElassandraDaemon extends CassandraDaemon {
                         logger.info("waiting for schema information to complete");
                         MigrationManager.waitUntilReadyForBootstrap();
                     }
-                    systemMetadata = this.node.clusterService().loadGlobalState();
+                    this.hasMetadata = this.node.clusterService().hasMetaDataTable();
                 } catch(Throwable e)
                 {
                     logger.warn("Failed to load elasticsearch mapping from CQL schema after after joining without boostraping:", e);
                 }
             }
-            activateAndWaitShards((systemMetadata == null) ? "with empty elasticsearch mapping" : "after getting the elasticsearch mapping from CQL schema");
+            activateAndWaitShards((hasMetadata) ? "after getting the elasticsearch mapping from CQL schema" : "with empty elasticsearch mapping");
         }
     }
 

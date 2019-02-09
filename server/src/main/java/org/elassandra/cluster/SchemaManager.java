@@ -220,9 +220,6 @@ public class SchemaManager extends AbstractComponent {
     }
 
     public String typeToCfName(CFMetaData cfm, String typeName, boolean remove) {
-        if (logger.isDebugEnabled())
-            logger.debug("keyspace.table={}.{} registred for elasticsearch keyspace.type={}.{}",
-                    cfm.ksName, cfm.cfName, cfm.ksName, typeName);
         return SchemaManager.typeToCfName(cfm.ksName, typeName);
     }
 
