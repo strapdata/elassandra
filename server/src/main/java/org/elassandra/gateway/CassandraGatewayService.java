@@ -102,8 +102,6 @@ public class CassandraGatewayService extends GatewayService {
             clusterService.submitStateUpdateTask("cassandra-gateway-recovery-state", new ClusterStateUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
-                    assert currentState.metaData().indices().isEmpty();
-
                     // remove the block, since we recovered from gateway
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder()
                             .blocks(currentState.blocks())

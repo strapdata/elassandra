@@ -136,7 +136,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
         }
 
         void removeUsedTables(IndexMetaData indexMetaData) {
-            assert this.keyspace == indexMetaData.keyspace();
+            assert this.keyspace.equals(indexMetaData.keyspace()) : "Keyspace does not match";
             for(ObjectCursor<MappingMetaData> type: indexMetaData.getMappings().values()) {
                 String tableName = SchemaManager.typeToCfName(indexMetaData.keyspace(), type.value.type());
                 droppableTables.remove(tableName);
