@@ -2,14 +2,21 @@
 Enterprise
 ==========
 
-Elassandra Enterprise plugin provides advanced features:
+Elassandra Enterprise is an Elasticsearch plugin installed on top of Elassandra community edition. Elassandra Enterprise plugin provides advanced features:
 
 * Elasticserach JMX management and monitoring.
 * SSL encryption for Elasticsearch connections.
 * Authentication, Authorization and Accounting for Elasticsearch.
 * Elasticsearch Content-Based security (document-level security and field-level security).
 
-See `strapdata <http://www.strapdata.com/products>`_ for more details.
+If you are currently running a Cassandra cluster, you can progressively switch to Elassandra Enterprise by upgrading and activating Elasticsearch features:
+
+* First switch to strapdata-cassandra, a fork of cassandra modified to support Elasticsearch.
+* Second, restart nodes with Elasticsearch enabled (change the java main class).
+* Third, create Elasticsearch indicies with a per table Elasticsearch mapping.
+* And finally, deploy the Elassandra Enterprise plugin on your nodes to enable enterprise grade features.
+
+.. image:: images/elassandra-deploy-process.png
 
 License management
 ------------------
@@ -21,17 +28,17 @@ license is installed.
 
 .. cssclass:: table-bordered
 
-+---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
-| Feature | Description                                                        | Restricted mode                                                                 |
-+=========+====================================================================+=================================================================================+
-| JMX     | JMX monotoring of Elasticsearch indices                            | Node restart required to see new index metrics, JMX attributes become read-only |
-+---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
-| SSL     | SSL encryption of Elasticsearch connections                        |                                                                                 |
-+---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
-| AAA     | User Authentication, Authorization and Audit                       | Node restart required to reload users'privileges, no more audit trails.         |
-+---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
-| CBS     | Content-Based Security rules                                       | Node restart required to reload users'privileges.                               |
-+---------+--------------------------------------------------------------------+---------------------------------------------------------------------------------+
++---------+----------------------------------------------+---------------------------------------------------------------------------------+
+| Feature | Description                                  | Restricted mode                                                                 |
++=========+==============================================+=================================================================================+
+| JMX     | JMX monotoring of Elasticsearch indices      | Node restart required to see new index metrics, JMX attributes become read-only |
++---------+----------------------------------------------+---------------------------------------------------------------------------------+
+| SSL     | SSL encryption of Elasticsearch connections  |                                                                                 |
++---------+----------------------------------------------+---------------------------------------------------------------------------------+
+| AAA     | User Authentication, Authorization and Audit | Node restart required to reload users'privileges, no more audit trails.         |
++---------+----------------------------------------------+---------------------------------------------------------------------------------+
+| CBS     | Content-Based Security rules                 | Node restart required to reload users'privileges.                               |
++---------+----------------------------------------------+---------------------------------------------------------------------------------+
 
 .. CAUTION::
 
@@ -813,15 +820,55 @@ Application UNIT Tests
 
 .. image:: images/elassandra-unit.png
 
-In order to use the Enterprise plugin with Elassandra unit :
+In order to execute authenticated Elasticsearch queries through CQL with Elassandra unit:
 
-* Add the Elassandra Enterprise plugin as a dependency to your project.
 * Set the system property ``cassandra.custom_query_handler_class`` to ``org.elassandra.index.EnterpriseElasticQueryHandler``.
+* Add the following test dependencies to your project.
+
+Maven configuration:
+
+.. code::
+
+   <dependency>
+      <groupId>com.strapdata.elasticsearch.plugin.enterprise</groupId>
+      <artifactId>strapdata-plugin</artifactId>
+      <version>${elassandra.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.strapdata.elasticsearch.plugin.enterprise</groupId>
+      <artifactId>strapdata-core</artifactId>
+      <version>${elassandra.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+   ...
+   <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.0.0-M3</version>
+        <configuration>
+          <systemPropertyVariables>
+            <cassandra.custom_query_handler_class>org.elassandra.index.EnterpriseElasticQueryHandler</cassandra.custom_query_handler_class>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+   </plugins>
+
+Gradle configuration:
+
+.. code::
+
+   dependencies {
+      test 'com.strapdata.elasticsearch.plugin:strapdata-plugin:${elassandra.version}'
+      test 'com.strapdata.elasticsearch.plugin:strapdata-core:${elassandra.version}'
+   }
 
 Secured Transport Client
 ........................
 
-The elasticsearch transport protocol used for the inter-node communication can be used directly from your java application. It is very efficient as it does not have to deal with the JSON serialzation.
+The elasticsearch transport protocol used for the inter-node communication can be used directly from your java application (deprecated). It is very efficient as it does not have to deal with the JSON serialzation.
 Strapdata provides a SSL transport client to work with a secured Elassandra cluster :
 
 #. If your Elassandra cluster requires user authentification, check that your user have access to the cluster topology with the *Nodes Info API* (action **cluster:monitor/nodes/info**).
