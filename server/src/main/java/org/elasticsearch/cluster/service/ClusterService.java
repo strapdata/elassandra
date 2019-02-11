@@ -153,7 +153,7 @@ import static org.elasticsearch.common.settings.Setting.listSetting;
 
 public class ClusterService extends BaseClusterService {
 
-    public static final String ELASTIC_ADMIN_KEYSPACE = "elastic_admin";
+    private static final String ELASTIC_ADMIN_KEYSPACE = "elastic_admin";
     public static final String ELASTIC_ADMIN_METADATA_TABLE = "metadata";
 
     public static final String ELASTIC_EXTENSION_METADATA = "metadata";
