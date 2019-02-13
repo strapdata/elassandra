@@ -559,7 +559,6 @@ public class SchemaManager extends AbstractComponent {
      * @param indexMetaData
      * @param mutations
      * @param events
-     * @throws IOException
      */
     public void updateTableExtensions(final IndexMetaData indexMetaData, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
         for(ObjectCursor<MappingMetaData> mappingMd : indexMetaData.getMappings().values()) {

@@ -517,7 +517,8 @@ class BuildPlugin implements Plugin<Project> {
 
     static void configureJavadoc(Project project) {
         project.tasks.withType(Javadoc) {
-            executable = new File(project.compilerJavaHome, 'bin/javadoc')
+            // build javadoc with jdk8
+            executable = new File(project.cassandraJavaHome, 'bin/javadoc')
         }
         configureJavadocJar(project)
         if (project.compilerJavaVersion == JavaVersion.VERSION_1_10) {
