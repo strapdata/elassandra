@@ -744,8 +744,6 @@ public class QueryManager extends AbstractComponent {
                 Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMappers.get(field);
                 ByteBuffer colName;
                 if (mapper == null) {
-                    if (dynamicMappingEnable && !idMap.containsKey(field))
-                        throw new MapperException("Unmapped field ["+field+"]");
                     colName = ByteBufferUtil.bytes(field);
                 } else {
                     colName = mapper.cqlName();    // cached ByteBuffer column name.

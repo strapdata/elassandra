@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -33,12 +33,35 @@ import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 /**
- * Elassandra paque field test.
+ * Elassandra opaque field test.
  * @author vroyer
  *
  */
 public class ObjectNotEnabledTests extends ESSingleNodeTestCase {
-    
+
+    @Test
+    public void testNullDynamicField() throws Exception {
+        XContentBuilder mapping1 = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("foo")
+                            .field("type", "keyword")
+                        .endObject()
+                    .endObject()
+                .endObject();
+
+        assertAcked(client().admin().indices().prepareCreate("my_index")
+                .addMapping("_doc", mapping1)
+                .get());
+        ensureGreen("my_index");
+
+        IndexResponse resp = client().prepareIndex("my_index", "_doc", "1").setSource("{\"foo\" : \"bar\"}", XContentType.JSON).get();
+        assertThat(resp.getResult(), equalTo(DocWriteResponse.Result.CREATED));
+
+        resp = client().prepareIndex("my_index", "_doc", "2").setSource("{\"foo\" : \"bar\", \"bar\":null }", XContentType.JSON).get();
+        assertThat(resp.getResult(), equalTo(DocWriteResponse.Result.CREATED));
+    }
+
     @Test
     public void testNotEnabled() throws Exception {
         XContentBuilder mapping1 = XContentFactory.jsonBuilder()
@@ -57,12 +80,12 @@ public class ObjectNotEnabledTests extends ESSingleNodeTestCase {
                         .endObject()
                     .endObject()
                 .endObject();
-        
+
         assertAcked(client().admin().indices().prepareCreate("my_index")
                 .addMapping("_doc", mapping1)
                 .get());
         ensureGreen("my_index");
-        
+
         assertThat(client().prepareIndex("my_index", "_doc", "session_1")
                 .setSource("{ \"user_id\": \"kimchy\"," +
                              "\"session_data\": { " +
@@ -72,19 +95,19 @@ public class ObjectNotEnabledTests extends ESSingleNodeTestCase {
                              "}," +
                             "\"last_updated\": \"2015-12-06T18:20:22\" }", XContentType.JSON)
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
-        
+
         SearchHits hits = client().prepareSearch().setIndices("my_index").setTypes("_doc")
                 .setQuery(QueryBuilders.queryStringQuery("user_id:kimchy"))
                 .get().getHits();
-        
+
         assertThat(hits.getTotalHits(), equalTo(1L));
         assertThat(XContentFactory.jsonBuilder().map((Map<String,Object>)hits.getHits()[0].getSourceAsMap().get("session_data")).string(), equalTo("{\"arbitrary_object\":{\"some_array\":[\"foo\",\"bar\",{\"baz\":2}]}}"));
-        
+
         UntypedResultSet results = process(ConsistencyLevel.ONE,"SELECT session_data FROM my_index.\"_doc\" WHERE \"_id\"='session_1';");
         assertThat(results.size(),equalTo(1));
         assertThat(results.one().getString("session_data"),equalTo("{\"arbitrary_object\":{\"some_array\":[\"foo\",\"bar\",{\"baz\":2}]}}"));
     }
-    
+
     // #146
     @Test
     public void testEmptyEnabledObject() throws Exception {
@@ -114,7 +137,7 @@ public class ObjectNotEnabledTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareCreate("test2").addMapping("_doc", mapping2));
         ensureGreen("test1");
         ensureGreen("test2");
-        
+
         IndexResponse resp = client().prepareIndex("test1", "_doc", "1").setSource("{ \"payload\":{\"foo\" : \"bar\"}}", XContentType.JSON).get();
         assertThat(resp.getResult(), equalTo(DocWriteResponse.Result.CREATED));
 
