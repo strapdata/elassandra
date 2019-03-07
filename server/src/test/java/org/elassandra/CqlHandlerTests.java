@@ -67,9 +67,8 @@ public class CqlHandlerTests extends ESSingleNodeTestCase {
         SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(queryBuilder);
         String esQuery = sourceBuilder.toString(ToXContent.EMPTY_PARAMS);
 
-        // default limit is 10
         UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT * FROM test.foo WHERE es_query=?",esQuery);
-        assertThat(rs.size(), equalTo(10));
+        assertThat(rs.size(), equalTo(100));
 
         // with function
         Date now = new Date();

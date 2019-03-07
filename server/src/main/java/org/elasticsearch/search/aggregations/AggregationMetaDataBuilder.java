@@ -21,23 +21,27 @@ import org.elasticsearch.search.aggregations.metrics.avg.AvgAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.max.MaxAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.min.MinAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.percentiles.PercentilesAggregationBuilder;
+import org.elasticsearch.search.aggregations.metrics.stats.StatsAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.sum.SumAggregationBuilder;
 
+/**
+ * Build Cassandra columns list for computed elasticsearch aggregations.
+ */
 public class AggregationMetaDataBuilder {
 
     final String keyspace;
     final String table;
     final boolean toJson;
-    
+
     List<ColumnSpecification> columns = new ArrayList<>();
     Map<String,Integer> name2idx = new HashMap<>();
-    
+
     public AggregationMetaDataBuilder(String ks, String table, boolean toJson) {
         this.keyspace = ks;
         this.table = table;
         this.toJson = toJson;
     }
-    
+
     int addColumn(String name, AbstractType<?> type) {
         Integer index = name2idx.get(name);
         if (index == null) {
@@ -47,29 +51,29 @@ public class AggregationMetaDataBuilder {
         }
         return index;
     }
-    
+
     public boolean toJson() {
         return this.toJson;
     }
-    
+
     public void setColumnType(int index, String name, AbstractType<?> type) {
         columns.set(index, new ColumnSpecification(keyspace, table, new ColumnIdentifier(name,true), type));
     }
-    
+
     public List<ColumnSpecification> getColumns() {
         return this.columns;
     }
-    
+
     public int getColumn(String name) {
         return (name2idx.containsKey(name)) ? name2idx.get(name) : -1;
     }
-    
+
     public int size() {
         return columns.size();
     }
-    
+
     public void build(String prefix, AggregatorFactories.Builder aggFactoriesBuilder, Selection selection) {
-        
+
         for(AggregationBuilder agg : aggFactoriesBuilder.getAggregatorFactories()) {
             String type = agg.getType();
             String baseName = prefix+agg.getName()+".";
@@ -77,8 +81,8 @@ public class AggregationMetaDataBuilder {
                 addColumn(agg.getName(), UTF8Type.instance);
             } else {
                 switch(type) {
-                case TermsAggregationBuilder.NAME: 
-                     // with term aggregation, term type could be string, long, double, 
+                case TermsAggregationBuilder.NAME:
+                     // with term aggregation, term type could be string, long, double,
                      // so use the provided projection column type.
                      if (selection.isWildcard()) {
                          addColumn(baseName+"key", UTF8Type.instance);
@@ -116,7 +120,7 @@ public class AggregationMetaDataBuilder {
                 build(baseName, agg.factoriesBuilder, selection);
             }
         }
-        
+
         if (!this.toJson) {
             for(PipelineAggregationBuilder agg : aggFactoriesBuilder.getPipelineAggregatorFactories()) {
                 addColumn(prefix+agg.getName(), DoubleType.instance);

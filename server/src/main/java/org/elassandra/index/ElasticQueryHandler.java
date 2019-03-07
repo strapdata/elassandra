@@ -25,6 +25,7 @@ import org.apache.cassandra.cql3.statements.SelectStatement;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.db.filter.DataLimits;
 import org.apache.cassandra.db.filter.RowFilter.Expression;
 import org.apache.cassandra.db.marshal.DoubleType;
 import org.apache.cassandra.db.marshal.LongType;
@@ -70,14 +71,28 @@ import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.aggregations.Aggregation;
 import org.elasticsearch.search.aggregations.AggregationMetaDataBuilder;
 import org.elasticsearch.search.aggregations.Aggregations;
+import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramAggregationBuilder;
+import org.elasticsearch.search.aggregations.bucket.histogram.HistogramAggregationBuilder;
 import org.elasticsearch.search.aggregations.bucket.histogram.InternalDateHistogram;
 import org.elasticsearch.search.aggregations.bucket.histogram.InternalHistogram;
+import org.elasticsearch.search.aggregations.bucket.terms.DoubleTerms;
+import org.elasticsearch.search.aggregations.bucket.terms.LongTerms;
+import org.elasticsearch.search.aggregations.bucket.terms.StringTerms;
 import org.elasticsearch.search.aggregations.bucket.terms.Terms;
 import org.elasticsearch.search.aggregations.metrics.avg.Avg;
+import org.elasticsearch.search.aggregations.metrics.avg.AvgAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.max.Max;
+import org.elasticsearch.search.aggregations.metrics.max.MaxAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.min.Min;
+import org.elasticsearch.search.aggregations.metrics.min.MinAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.percentiles.Percentile;
+import org.elasticsearch.search.aggregations.metrics.percentiles.Percentiles;
+import org.elasticsearch.search.aggregations.metrics.percentiles.hdr.InternalHDRPercentiles;
+import org.elasticsearch.search.aggregations.metrics.percentiles.tdigest.InternalTDigestPercentiles;
+import org.elasticsearch.search.aggregations.metrics.stats.Stats;
+import org.elasticsearch.search.aggregations.metrics.stats.StatsAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.sum.Sum;
+import org.elasticsearch.search.aggregations.metrics.sum.SumAggregationBuilder;
 import org.elasticsearch.search.aggregations.pipeline.InternalSimpleValue;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.fetch.CqlFetchPhase;
@@ -163,13 +178,15 @@ public class ElasticQueryHandler extends QueryProcessor  {
         ThreadContext context = client.threadPool().getThreadContext();
         Map<String, Object> extraParams = null;
         try (ThreadContext.StoredContext stashedContext = context.stashContext()) {
-            int limit = select.getLimit(options) == Integer.MAX_VALUE ? 10 : select.getLimit(options);
+            int limit = select.getLimit(options);
             PagingState paging = options.getPagingState();
             String scrollId = null;
             int remaining = limit;
             if (paging != null) {
                 scrollId = ByteBufferUtil.string(paging.partitionKey);
                 remaining = paging.remaining;
+                if (logger.isDebugEnabled())
+                    logger.debug("paging state scrollId={} remaining={}", scrollId, remaining);
             }
 
             if (Tracing.isTracing()) {
@@ -215,6 +232,9 @@ public class ElasticQueryHandler extends QueryProcessor  {
 
                 hasAgregation = ssb.aggregations() != null;
                 if (hasAgregation) {
+                    if (logger.isDebugEnabled())
+                        logger.debug("type={} es_query={} es_options={} toJson={} size=0 with aggregation",
+                                index.typeName, ssb.toString(), indices, toJson);
                     srb.setSize(0);
                     aggMetadataBuilder = new AggregationMetaDataBuilder(select.keyspace(), "aggs", toJson );
                     aggMetadataBuilder.build("", ssb.aggregations(), select.getSelection());
@@ -226,11 +246,17 @@ public class ElasticQueryHandler extends QueryProcessor  {
                     if (toJson)
                         extraParams.put("_json", "true");
 
-                    if (options.getPageSize() > 0 && limit > options.getPageSize()) {
-                        srb.setScroll(new Scroll(new TimeValue(300, TimeUnit.SECONDS)));
+                    if (options.getPageSize() > 0 &&  (limit > options.getPageSize())) {
+                        if (logger.isDebugEnabled())
+                            logger.debug("type={} es_query={} es_options={} toJson={} size={} with scrolling",
+                                    index.typeName, ssb.toString(), indices, toJson, options.getPageSize());
+                        srb.setScroll(new Scroll(new TimeValue(60, TimeUnit.SECONDS)));
                         srb.setSize(options.getPageSize());
                     } else {
-                        srb.setSize(limit);
+                        if (logger.isDebugEnabled())
+                            logger.debug("type={} es_query={} es_options={} toJson={} size={} with no scrolling",
+                                    index.typeName, ssb.toString(), indices, toJson, limit);
+                        srb.setSize(Math.min(limit, 10000)); // default index.max_result_window is 10000
                     }
                 }
                 handle(queryState, client);
@@ -240,10 +266,12 @@ public class ElasticQueryHandler extends QueryProcessor  {
                 scrollId = resp.getScrollId();
             } else {
                 SearchScrollRequestBuilder ssrb = client.prepareSearchScroll(scrollId);
+                ssrb.setScroll("1m"); // timeout for the next scroll fetch
                 handle(queryState, client);
                 if (extraParams != null)
                     ssrb.setExtraParams(extraParams);
                 resp = ssrb.get();
+                scrollId = resp.getScrollId(); // only the most recently received _scroll_id should be used
             }
 
             ResultSet.ResultMetadata resultMetadata = null;
@@ -272,6 +300,8 @@ public class ElasticQueryHandler extends QueryProcessor  {
                 }
             } else {
                 // add row results
+                if (logger.isDebugEnabled())
+                    logger.debug("scrollId={} hits={}", scrollId, resp.getHits().getHits().length);
                 for(SearchHit hit : resp.getHits().getHits()) {
                     if (hit.getValues() != null)
                         rows.add(hit.getValues());
@@ -279,13 +309,21 @@ public class ElasticQueryHandler extends QueryProcessor  {
                 resultMetadata = select.getResultMetadata().copy();
                 if (scrollId != null) {
                     // paging management
-                    remaining -= rows.size();
+                    if (remaining != DataLimits.NO_LIMIT)
+                        remaining -= rows.size();
+                    if (resp.getHits().getHits().length == 0)
+                        remaining = 0;
+
                     if ((options.getPageSize() > 0 && rows.size() < options.getPageSize()) || remaining <= 0) {
                         client.prepareClearScroll().addScrollId(scrollId).get();
+                        if (logger.isDebugEnabled())
+                            logger.debug("Clear scrollId={}", scrollId);
                         resultMetadata.setHasMorePages(null);
                     } else {
                         resultMetadata.setHasMorePages(new PagingState(
                            ByteBufferUtil.bytes(scrollId, Charset.forName("UTF-8")), (RowMark) null, remaining, remaining));
+                        if (logger.isDebugEnabled())
+                            logger.debug("new paging state scrollId={} remaining={}", scrollId, remaining);
                     }
                 }
             }
@@ -360,9 +398,9 @@ public class ElasticQueryHandler extends QueryProcessor  {
 
             if (amdb.toJson()) {
                 switch(type) {
-                case "dterms":
-                case "lterms":
-                case "sterms":
+                case DoubleTerms.NAME:
+                case LongTerms.NAME:
+                case StringTerms.NAME:
                     for (Terms.Bucket termBucket : ((Terms)agg).getBuckets()) {
                         XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
                         xContentBuilder.startObject();
@@ -371,7 +409,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(xContentBuilder.string()));
                     }
                     break;
-                case "date_histogram":
+                case DateHistogramAggregationBuilder.NAME:
                     for (InternalDateHistogram.Bucket histoBucket : ((InternalDateHistogram)agg).getBuckets()) {
                         XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
                         if (histoBucket.getKeyed())
@@ -382,14 +420,51 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(xContentBuilder.string()));
                     }
                     break;
+                case InternalTDigestPercentiles.NAME:
+                case InternalHDRPercentiles.NAME:
+                case Percentiles.TYPE_NAME: {
+                        XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
+                        xContentBuilder.startObject();
+                        xContentBuilder.startObject("values");
+                        for(Percentile percentile : (Percentiles)agg)
+                            xContentBuilder.field(Double.toString(percentile.getPercent()), percentile.getValue());
+                        xContentBuilder.endObject();
+                        xContentBuilder.endObject();
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(xContentBuilder.string()));
+                    }
+                    break;
+                case SumAggregationBuilder.NAME:
+                    setElement(getRow(amdb, level, rows), amdb.getColumn(baseName+"sum"), ByteBufferUtil.bytes((double)((Sum)agg).getValue()));
+                    break;
+                case AvgAggregationBuilder.NAME:
+                    setElement(getRow(amdb, level, rows), amdb.getColumn(baseName+"avg"), ByteBufferUtil.bytes((double)((Avg)agg).getValue()));
+                    break;
+                case MinAggregationBuilder.NAME:
+                    setElement(getRow(amdb, level, rows), amdb.getColumn(baseName+"min"), ByteBufferUtil.bytes((double)((Min)agg).getValue()));
+                    break;
+                case MaxAggregationBuilder.NAME:
+                    setElement(getRow(amdb, level, rows), amdb.getColumn(baseName+"max"), ByteBufferUtil.bytes((double)((Max)agg).getValue()));
+                    break;
+                case StatsAggregationBuilder.NAME: {
+                        Stats stats = (Stats)agg;
+                        XContentBuilder xContentBuilder = JsonXContent.contentBuilder();
+                        xContentBuilder.startObject();
+                        xContentBuilder.field("count", stats.getCount());
+                        xContentBuilder.field("min", stats.getMin());
+                        xContentBuilder.field("max", stats.getMax());
+                        xContentBuilder.field("avg", stats.getAvg());
+                        xContentBuilder.field("sum", stats.getSum());
+                        xContentBuilder.endObject();
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(xContentBuilder.string()));
+                    }
+                    break;
                 default:
                     logger.error("unsupported aggregation type=[{}] name=[{}]", type, agg.getName());
                     throw new IllegalArgumentException("unsupported aggregation type=["+type+"] name=["+agg.getName()+"]");
                 }
-
             } else {
                 switch(type) {
-                case "sterms": {
+                case StringTerms.NAME: {
                         int keyIdx = amdb.getColumn(baseName+"key");
                         int cntIdx = amdb.getColumn(baseName+"count");
                         boolean fistBucket = true;
@@ -403,7 +478,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         }
                     }
                     break;
-                case "lterms": {
+                case LongTerms.NAME: {
                         int keyIdx = amdb.getColumn(baseName+"key");
                         int cntIdx = amdb.getColumn(baseName+"count");
                         amdb.setColumnType(keyIdx, baseName+"key", LongType.instance);
@@ -418,7 +493,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         }
                     }
                     break;
-                case "dterms": {
+                case DoubleTerms.NAME: {
                     int keyIdx = amdb.getColumn(baseName+"key");
                     int cntIdx = amdb.getColumn(baseName+"count");
                     amdb.setColumnType(keyIdx, baseName+"key", DoubleType.instance);
@@ -433,7 +508,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         }
                     }
                     break;
-                case "date_histogram": {
+                case DateHistogramAggregationBuilder.NAME: {
                         int keyIdx = amdb.getColumn(baseName+"key");
                         int cntIdx = amdb.getColumn(baseName+"count");
                         boolean fistBucket = true;
@@ -447,7 +522,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         }
                     }
                     break;
-                case "histogram": {
+                case HistogramAggregationBuilder.NAME: {
                     int keyIdx = amdb.getColumn(baseName+"value");
                     int cntIdx = amdb.getColumn(baseName+"count");
                     boolean fistBucket = true;
@@ -461,37 +536,28 @@ public class ElasticQueryHandler extends QueryProcessor  {
                     }
                 }
                 break;
-                case "sum": {
+                case SumAggregationBuilder.NAME: {
                         Sum sum = (Sum)agg;
                         row = getRow(amdb, level, rows);
                         setElement(row, amdb.getColumn(baseName+"sum"), ByteBufferUtil.bytes((double)sum.getValue()));
                     }
                     break;
-                case "avg": {
+                case AvgAggregationBuilder.NAME: {
                         Avg avg = (Avg)agg;
                         row = getRow(amdb, level, rows);
                         setElement(row, amdb.getColumn(baseName+"avg"), ByteBufferUtil.bytes((double)avg.getValue()));
                     }
                     break;
-                case "min": {
+                case MinAggregationBuilder.NAME: {
                         Min min = (Min)agg;
                         row = getRow(amdb, level, rows);
                         setElement(row, amdb.getColumn(baseName+"min"), ByteBufferUtil.bytes((double)min.getValue()));
                     }
                     break;
-                case "max": {
+                case MaxAggregationBuilder.NAME: {
                         Max max = (Max)agg;
                         row = getRow(amdb, level, rows);
                         setElement(row, amdb.getColumn(baseName+"max"), ByteBufferUtil.bytes((double)max.getValue()));
-                    }
-                    break;
-                case "percentiles": {
-                        Percentile percentile = (Percentile)agg;
-                        int valIdx = amdb.getColumn(baseName+"value");
-                        int pctIdx = amdb.getColumn(baseName+"percent");
-                        row = getRow(amdb, level, rows);
-                        setElement(row, valIdx, ByteBufferUtil.bytes((double)percentile.getValue()));
-                        setElement(row, pctIdx, ByteBufferUtil.bytes((double)percentile.getPercent()));
                     }
                     break;
                 case "simple_value": {
