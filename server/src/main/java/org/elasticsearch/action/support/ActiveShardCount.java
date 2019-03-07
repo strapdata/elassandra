@@ -40,6 +40,7 @@ import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_WAIT_FOR_
  */
 public final class ActiveShardCount implements Writeable {
 
+    private static final int ACTIVE_SHARD_COUNT_EACH_QUORUM = -5;
     private static final int ACTIVE_SHARD_COUNT_QUORUM = -4;
     private static final int ACTIVE_SHARD_COUNT_LOCAL_QUORUM = -3;
     private static final int ACTIVE_SHARD_COUNT_DEFAULT = -2;
@@ -47,6 +48,9 @@ public final class ActiveShardCount implements Writeable {
 
     public static final ActiveShardCount DEFAULT = new ActiveShardCount(ACTIVE_SHARD_COUNT_DEFAULT);
     public static final ActiveShardCount ALL = new ActiveShardCount(ALL_ACTIVE_SHARDS);
+    public static final ActiveShardCount QUORUM = new ActiveShardCount(ACTIVE_SHARD_COUNT_QUORUM);
+    public static final ActiveShardCount LOCAL_QUORUM = new ActiveShardCount(ACTIVE_SHARD_COUNT_LOCAL_QUORUM);
+    public static final ActiveShardCount EACHL_QUORUM = new ActiveShardCount(ACTIVE_SHARD_COUNT_EACH_QUORUM);
     public static final ActiveShardCount NONE = new ActiveShardCount(0);
     public static final ActiveShardCount ONE = new ActiveShardCount(1);
 
@@ -95,9 +99,10 @@ public final class ActiveShardCount implements Writeable {
 
     public ConsistencyLevel toCassandraConsistencyLevel() {
         switch (value) {
-        case 1:
         case ACTIVE_SHARD_COUNT_DEFAULT:
             return ConsistencyLevel.LOCAL_ONE;
+        case 1:
+            return ConsistencyLevel.ONE;
         case 2:
             return ConsistencyLevel.TWO;
         case 3:
@@ -106,6 +111,8 @@ public final class ActiveShardCount implements Writeable {
             return ConsistencyLevel.LOCAL_QUORUM;
         case ACTIVE_SHARD_COUNT_QUORUM:
             return ConsistencyLevel.QUORUM;
+        case ACTIVE_SHARD_COUNT_EACH_QUORUM:
+            return ConsistencyLevel.EACH_QUORUM;
         case ALL_ACTIVE_SHARDS:
             return ConsistencyLevel.ALL;
         }
@@ -132,6 +139,12 @@ public final class ActiveShardCount implements Writeable {
             return ActiveShardCount.DEFAULT;
         } else if (str.equals("all")) {
             return ActiveShardCount.ALL;
+        } else if (str.equals("quorum")) {
+            return ActiveShardCount.QUORUM;
+        } else if (str.equals("local_quorum")) {
+            return ActiveShardCount.LOCAL_QUORUM;
+        } else if (str.equals("each_quorum")) {
+            return ActiveShardCount.EACHL_QUORUM;
         } else {
             int val;
             try {
