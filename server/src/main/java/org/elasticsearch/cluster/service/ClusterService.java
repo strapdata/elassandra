@@ -776,8 +776,8 @@ public class ClusterService extends BaseClusterService {
                 //do not announce schema migration because gossip not yet ready.
                 SchemaKeyspace.mergeSchema(mutations, getSchemaManager().getInhibitedSchemaListeners());
                 logger.warn("Elasticsearch metadata migrated from comment to table extensions (This should happen only once when upgradin to 6.2.3.8+)");
-            } catch (IOException e) {
-                logger.error("Failed to migrate elasticsearch metadata from comment to table extension", e);
+            } catch (Exception e) {
+                logger.error("Failed to migrate elasticsearch metadata from comment to table extension.", e);
             }
         }
         return metadata;
