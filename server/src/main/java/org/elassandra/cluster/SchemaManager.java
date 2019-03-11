@@ -464,7 +464,7 @@ public class SchemaManager extends AbstractComponent {
 
     private CFMetaData addTableExtensionsToMutationBuilder(CFMetaData cfm, String indexName, final IndexMetaData indexMetaData, Mutation.SimpleBuilder builder) {
         Map<String, ByteBuffer> extensions = new LinkedHashMap<String, ByteBuffer>();
-        if (cfm.params.extensions != null)
+        if (cfm.params != null && cfm.params.extensions != null)
             extensions.putAll(cfm.params.extensions);
         clusterService.putIndexMetaDataExtension(indexMetaData, extensions);
         CFMetaData cfm2 = cfm.copy();
@@ -564,10 +564,14 @@ public class SchemaManager extends AbstractComponent {
         for(ObjectCursor<MappingMetaData> mappingMd : indexMetaData.getMappings().values()) {
             final String cfName = typeToCfName(indexMetaData.keyspace(), mappingMd.value.type());
             final CFMetaData cfm = Schema.instance.getCFMetaData(indexMetaData.keyspace(), cfName);
-            logger.debug("table {}.{} set extensions for index {}", indexMetaData.keyspace(), cfName, indexMetaData.getIndex().getName());
-            Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(indexMetaData.keyspace(), FBUtilities.timestampMicros());
-            addTableExtensionsToMutationBuilder(cfm,  indexMetaData.getIndex().getName(), indexMetaData, builder);
-            mutations.add(builder.build());
+            if (cfm == null) {
+                logger.debug("table {}.{} does not exist in CQL schema, ignoring", indexMetaData.keyspace(), cfName);
+            } else {
+                logger.debug("table {}.{} set extensions for index {}", indexMetaData.keyspace(), cfName, indexMetaData.getIndex().getName());
+                Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(indexMetaData.keyspace(), FBUtilities.timestampMicros());
+                addTableExtensionsToMutationBuilder(cfm,  indexMetaData.getIndex().getName(), indexMetaData, builder);
+                mutations.add(builder.build());
+            }
         }
     }
 
