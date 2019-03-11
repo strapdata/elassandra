@@ -57,18 +57,21 @@ Depending on the *op_type* and document ID, CQL requests are issued as follows w
 
 .. cssclass:: table-bordered
 
-+------------+-----------------------------+-------------------------------------------------+--------------------------------------------+
-| *op_type*  | Generated ID                | Provided ID                                     | Comment                                    |
-+============+=============================+=================================================+============================================+
-| ``create`` | INSERT INTO ... VALUES(...) | INSERT INTO ... VALUES(...) IF NOT EXISTS *(1)* | Index a new document.                      |
-+------------+-----------------------------+-------------------------------------------------+--------------------------------------------+
-| ``index``  | INSERT INTO ... VALUES(...) | DELETE FROM ... WHERE ...                       | Replace a document that may already exists |
-|            |                             | INSERT INTO ... VALUES(...)                     |                                            |
-+------------+-----------------------------+-------------------------------------------------+--------------------------------------------+
++------------+-----------------------------+-------------------------------------------------+-------------------------------------+
+| *op_type*  | Generated ID                | Provided ID                                     | Comment                             |
++============+=============================+=================================================+=====================================+
+| ``create`` | INSERT INTO ... VALUES(...) | INSERT INTO ... VALUES(...) IF NOT EXISTS *(1)* | Index a new document if not exists. |
++------------+-----------------------------+-------------------------------------------------+-------------------------------------+
+| ``index``  | INSERT INTO ... VALUES(...) | INSERT INTO ... VALUES(...)                     |                                     |
++------------+-----------------------------+-------------------------------------------------+-------------------------------------+
 
 (1) The *IF NOT EXISTS* comes with the cost of the PAXOS transaction. If you don't need to check the uniqueness of the provided ID,
 add parameter ``check_unique_id=false``.
 
+Insert operations are done with `Cassandra Consistency Level <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/cqlshConsistency.html>`_ ``LOCAL_ONE`` by default. 
+If you want to insert or update with consistency level of ``ONE``, ``TWO``, ``THREE``, ``QUORUM``, ``LOCAL_QUORUM`` or ``EACH_QUORUM``, you can set the ``wait_for_active_shards`` parameter
+(index settings or request parameter, see `Wait For Active Shards <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#index-wait-for-active-shards>`_ ) 
+to ``1``, ``2``, ``3``, ``quorum``, ``local_quorum``, ``each_quorum``.
 
 GETing
 ______
@@ -186,9 +189,7 @@ Updates
 _______
 
 In Cassandra, an update is an upsert operation (if the row does not exists, it's an insert).
-As Elasticsearch, Elassandra issues a GET operation before any update.
-Then, to keep the same semantics as Elasticsearch, update operations are converted to upserts with the ALL consistency level. Thus, later GET operations are consistent.
-(You should consider the `CQL UPDATE <https://docs.datastax.com/en/cql/3.3/cql/cql_reference/update_r.html>`_ operation to avoid this performance cost)
+As Elasticsearch, Elassandra issues a read-before-write operation before any update to build a full document.
 
 Scripted updates, upsert (scripted_upsert and doc_as_upsert) are also supported.
 

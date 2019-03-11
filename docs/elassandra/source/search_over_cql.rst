@@ -4,15 +4,16 @@ Search through CQL
 Executing Elasticsearch queries through through the Cassandra CQL driver provides several benefits:
 
 * Eliminates the needs for an HTTP load balancer because the drivers are cluster aware and will load balance for you.
-* Simplify the development of your application.
+* Simplify the development of your application by using the same Data Access Objects for CQL and Elasticsearch requests.
 * Get integrated security with Cassandra authentication and TLS encryption.
+* Manage the Elasticsearch scrolling through the CQL paging.
 
 Configuration
 .............
 
 To enable Elasticsearch query over CQL:
 
-* Add the following system property to your cassandra-env.sh and restart your nodes :
+* Set the Cassandra CQL query handler with the system property ``cassandra.custom_query_handler_class`` in your cassandra-env.sh and restart your nodes:
 
 .. code::
 
@@ -50,7 +51,24 @@ Then you can query the associated Elasticsearch index directly into a CQL SELECT
    
    (10 rows)
 
-By default, an elasticsearch query returns the first 10 results, but you can request more or less results with the LIMIT clause.
+If your target index does not have the same name as the underlying keyspace one, you can specify targeted indices names in ``es_options``, 
+that must be followed by ``ALLOW FILTERING``.
+
+.. code::
+
+   cassandra@cqlsh> SELECT "_id",foo FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}' AND es_options='indices=twitter*' ALLOW FILTERING;
+
+Paging
+......
+
+By default, when the Cassandra driver paging is enabled, the CQL query handler open a 
+`scroll cursor <https://www.elastic.co/guide/en/elasticsearch/reference/current/search-request-scroll.html>`_ to retrieve 
+large numbers of results (or even all results). The scroll context is automatically released when fetching the last page. 
+The default scoll timeout is 60 seconds.
+
+If you only need the first N results, use the CQL LIMIT clause as shown below. When the resquested LIMIT is
+lower than the CQL page size (default is 5000, see `CQL Paging <https://docs.datastax.com/en/developer/java-driver/3.5/manual/paging/>`_), 
+the CQL query handler does not open a scroll cursor, but just set the elasticsearch query size.
 
 .. code::
 
@@ -64,8 +82,11 @@ By default, an elasticsearch query returns the first 10 results, but you can req
    
    (3 rows)
 
-If `paging <https://docs.datastax.com/en/developer/java-driver/3.3/manual/paging/>`_ is enabled on your Cassandra driver and you request additional 
-results than your page size, Elassandra will use an Elasticsearch scrolled search request to retreive all the results. Default scoll timeout is 60 seconds.
+If CQL paging is disabled and the LIMIT clause is absent, the CQL query handler execute a search request with an Elasticsearch query size limited to 10000, 
+as the default `index.max_result_window`` (see dynamic index settings <https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html#dynamic-index-settings>`_)
+
+Routing
+.......
 
 If all partition key columns are set in the where clause, the Elasticsearch query will be directly sent to a node hosting the data (no fan out).
 
@@ -78,6 +99,9 @@ If all partition key columns are set in the where clause, the Elasticsearch quer
       2 | bar2
    
    (1 rows)
+
+CQL Functions
+.............
 
 Cassandra functions and User Defined Functions can be used in the CQL projection clause.
 
@@ -99,13 +123,6 @@ Cassandra functions and User Defined Functions can be used in the CQL projection
      27 | bar27 |  9060526884622895268 | 1509275059645000
    
    (10 rows)
-
-If your target index does not have the same name as the underlying keyspace one, you can specify targeted indices names in ``es_options``.
-
-.. code::
-
-   cassandra@cqlsh> SELECT "_id",foo FROM twitter.tweet WHERE es_query='{"query":{"query_string":{"query":"bar2*"}}}' AND es_options='indices=twitter*';
-
 
 Elasticsearch aggregations through CQL
 ......................................
@@ -223,7 +240,14 @@ Alternatively, you can request an Apache Spark to get the aggregation results as
 CQL Driver integration
 ......................
 
-For better performance, you can use a CQL prepared statement to submit the Elasticsearch queries as shown below in java. 
+In order to build elasticsearch queries, `query builders and helpers <https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-query-builders.html>`_ from elastic can be 
+used as shown bellow and use it in a CQL prepared statement.
+
+.. code::
+
+   String esQuery = new SearchSourceBuilder().query(QueryBuilders.termQuery("user", "vince")).toString(ToXContent.EMPTY_PARAMS);
+   ResultSet results = cassandraCQLUnit.session.execute("SELECT * FROM users WHERE es_query = ? ALLOW FILTERING", esQuery);
+
 You can also retrieve the Elasticsearch results summary **hits.total**, **hits.max_score**, **_shards.total**, **_shards.successful**, **_shards.skipped** and **_shards.failed** 
 from the result `custom payload <https://docs.datastax.com/en/developer/java-driver/3.2/manual/custom_payloads/>`_.
 
@@ -282,16 +306,6 @@ Maven configuration:
         </configuration>
       </plugin>
    </plugins>
-
-Elasticsearch Query Builder
-...........................
-
-In order to build elasticsearch queries, `query builders and helpers<https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-query-builders.html>`_ from elastic can be used as shown bellow:
-
-.. code::
-
-   String esQuery = new SearchSourceBuilder().query(QueryBuilders.termQuery("user", "vince")).toString(ToXContent.EMPTY_PARAMS);
-   ResultSet results = cassandraCQLUnit.session.execute("SELECT * FROM users WHERE es_query = ? ALLOW FILTERING", esQuery);
 
 CQL Tracing
 ...........

@@ -210,11 +210,10 @@ Then configure Grafana with an influxDB datasource and build your Elassandra das
 
 .. image:: images/grafana-influxdb-dashboard.png
 
-
 Monitoring Elassandra with Prometheus
 .....................................
 
-`Prometheus <https://.io/>`_. can scrape both Elasticsearch and Cassandra JMX metrics through the standrard `Prometheus JMX Exporter <https://github.com/prometheus/jmx_exporter>`_ running as a java agent.
+`Prometheus <https://.io/>`_ can scrape both Elasticsearch and Cassandra JMX metrics through the standrard `Prometheus JMX Exporter <https://github.com/prometheus/jmx_exporter>`_ running as a java agent.
 To expose these metrics on TCP port 7500,  add the following in your environnment or in the conf/cassandra-env.sh:
 
 .. code ::
@@ -353,6 +352,66 @@ Here is the default JMX exporter configuration file **conf/jmx_prometheus_export
 Then configure Grafana with a Prometheus datasource and build your Elassandra dashboard.
 
 .. image:: images/grafana-prometheus-dashboard.png
+
+Monitoring Elassandra through the Prometheus Operator
+.....................................................
+
+When running Elassandra Enterprise under Kubernetes, you can use the Prometheus-Operator <https://coreos.com/operators/prometheus/docs/latest/>`_ to monitor your Elassandra PODs.
+
+Add the following annotations to automatically scrap Elassandra pods:
+
+.. code-block:: yaml
+
+   annotations.prometheus.io/scrape=true
+   annotations.prometheus.io/port=7500
+
+Add the following kubernetes labels to your Elassandra PODs:
+
+.. code-block:: yaml
+
+   release: "my-release"
+   cluster: "my-cluster"
+   datacenter: "DC1"
+
+If you deploy Elassandra through the Elassandra HELM chart <https://github.com/strapdata/helm-charts>`_, the **release** label is automatically added to your Elassandra PODs.
+
+In your Prometheus Operator (in HELM values.yaml, prometheusSpec.additionalScrapeConfigs), add the following scrap config to properly map Kubernetes pod's labels to Grafana dashboard variables:
+
+.. code-block:: yaml
+
+   prometheusSpec:
+     additionalScrapeConfigs:
+       - job_name: 'kubernetes-pods'
+         kubernetes_sd_configs:
+         - role: pod
+         relabel_configs:
+         - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+           action: keep
+           regex: true
+         - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+           action: replace
+           target_label: __metrics_path__
+           regex: (.+)
+         - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+           action: replace
+           regex: ([^:]+)(?::\d+)?;(\d+)
+           replacement: $1:$2
+           target_label: __address__
+         - action: labelmap
+           regex: __meta_kubernetes_pod_label_(.+)
+         - source_labels: [__meta_kubernetes_namespace]
+           action: replace
+           target_label: kubernetes_namespace
+         - source_labels: [__meta_kubernetes_pod_name]
+           action: replace
+           target_label: kubernetes_pod_name
+         - source_labels: [__meta_kubernetes_pod_name]
+           action: replace
+           target_label: instance
+
+As the result, check that your Elassandra PODs have the expected tags in your Prometheus targets (release, cluster, datacenter and instance).
+
+Finally, upload the `elassandra-kubernetes-dashborad.json <https://github.com/strapdata/elassandra-grafana-dashboard/blob/master/elassandra-kubernetes-dashboard.json>`_ through the `Grafana import wizard <http://docs.grafana.org/features/export_import/#import>`_.
 
 Enable/Disable search on a node
 ...............................

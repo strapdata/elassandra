@@ -29,6 +29,7 @@ Configuration
 Elasticsearch configuration relies on Cassandra configuration file **conf/cassandra.yaml** for the following parameters.
 
 .. cssclass:: table-bordered
+
 +---------------------------+----------------------------+---------------------------------------------------------------------------------------+
 | Cassandra                 | Elasticsearch              | Description                                                                           |
 +===========================+============================+=======================================================================================+
