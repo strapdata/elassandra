@@ -1,3 +1,9 @@
+6.2.3.12 - 2018-03-11
+  * Allow indexing through the ES API with consitency level QUORUM, LOCAL_QUORUM and EACH_QUORUM.
+  * Fix issue when migrating 6.2.3.8+ index with removed keyspaces
+  * Improve paging and aggregation support in the ElasticQueryHandler
+  * Silently ignore null fields with no mapping
+
 6.2.3.11 - 2018-02-07
   * Add support for Elasticsearch query over CQL
   * Ship cassandra-stress jar with elassandra #19 #261

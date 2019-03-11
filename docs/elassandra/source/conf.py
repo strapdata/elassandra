@@ -57,7 +57,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Elassandra'
-copyright = u'2016-2018, Strapdata'
+copyright = u'2016-2019, Strapdata'
 author = u'Strapdata'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -65,9 +65,9 @@ author = u'Strapdata'
 # built documents.
 #
 # The short X.Y version.
-version = u'6.2.3.11'
+version = u'6.2.3.12'
 # The full version, including alpha/beta/rc tags.
-release = u'6.2.3.11'
+release = u'6.2.3.12'
 
 tgz_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.tar.gz".format(release)
 deb_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.deb".format(release)
