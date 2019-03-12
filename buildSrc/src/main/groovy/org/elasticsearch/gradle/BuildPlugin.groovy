@@ -210,7 +210,7 @@ class BuildPlugin implements Plugin<Project> {
 
     private static String findCassandraJavaHome(final String runtimeJavaHome) {
         assert runtimeJavaHome != null
-        return System.getenv('CASSANDRA_JAVA_HOME') ?: runtimeJavaHome
+        return System.getenv('CASSANDRA_JAVA_HOME') ?: java.lang.System.getProperty("cassandra.java.home", runtimeJavaHome)
     }
 
 
