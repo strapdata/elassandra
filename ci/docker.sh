@@ -68,7 +68,7 @@ under_travis() {
     export DOCKER_PUBLISH=true
 
     # add extra tags when on master branches
-    if is_main_branch; then
+    if [[ ${TRAVIS_TAG} == v+([0-9]).+([0-9]).+([0-9]).+([0-9]) ]]; then
       export DOCKER_MAJOR_LATEST=true
       # try to infer if the current build need to be tagged "latest". LATEST_VERSION is defined in .travis.yaml
       if [ "$ELASTICSEARCH_VERSION" = "$LATEST_VERSION" ]; then
