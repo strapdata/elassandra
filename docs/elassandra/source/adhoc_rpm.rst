@@ -1,21 +1,22 @@
 
-Download the last rpm package from `github relases page <https://github.com/strapdata/elassandra/releases>`_
+Create a file called ``elassandra.repo`` in the ``/etc/yum.repos.d/`` directory or similar according to your distribution (RedHat, OpenSuSe...)::
 
-.. parsed-literal::
+  [elassandra]
+  name=elassandra
+  baseurl=https://nexus.repo.strapdata.com/repository/rpm-releases/
+  enabled=1
+  gpgcheck=0
+  priority=1
 
-  wget -O elassandra.rpm |rpm_url|
+And then install elassandra with::
 
-Install it with yum::
+  sudo yum install elassandra
 
-  sudo yum install elassandra.rpm
-
-
-
-To start elassandra, just run::
+Start Elassandra with Systemd::
 
   sudo systemctl start cassandra
 
-or::
+or SysV::
 
   sudo service cassandra start
 
@@ -25,5 +26,6 @@ Files locations:
 - ``/etc/cassandra`` and ``/etc/sysconfig/cassandra``: configurations
 - ``/var/lib/cassandra``: data
 - ``/var/log/cassandra``: logs
-- ``/usr/share/cassandra``: plugins, modules, libs, ...
+- ``/usr/share/cassandra``: plugins, modules, libs...
+- ``/usr/share/cassandra/tools``: cassandra-stress, sstabledump...
 - ``/usr/lib/python2.7/site-packages/cqlshlib/``: python library for cqlsh

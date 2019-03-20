@@ -1,21 +1,23 @@
 
-Download the last deb package from `github relases page <https://github.com/strapdata/elassandra/releases>`_
+You may need to install ``apt-transport-https`` and other utilities::
 
-.. parsed-literal::
+  sudo apt-get install software-properties-common apt-transport-https gnupg2
 
-  wget -O elassandra.deb |deb_url|
+Add our repository and gpg key::
 
-Install it with dpkg tool::
-
-  sudo dpkg -i elassandra.deb
-
+  sudo add-apt-repository 'deb [arch=all] https://nexus.repo.strapdata.com/repository/apt-releases/ stretch elassandra'
+  sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys B335A4DD
 
 
-To start elassandra, just run::
+And then install elassandra with::
+
+  sudo apt-get update && sudo apt-get install elassandra
+
+Start Elassandra with Systemd::
 
   sudo systemctl start cassandra
 
-or::
+or SysV::
 
   sudo service cassandra start
 
@@ -26,4 +28,5 @@ Files locations:
 - ``/var/lib/cassandra``: data
 - ``/var/log/cassandra``: logs
 - ``/usr/share/cassandra``: plugins, modules, libs, ...
+- ``/usr/share/cassandra/tools``: cassandra-stress, sstabledump...
 - ``/usr/lib/python2.7/dist-packages/cqlshlib/``: python library for cqlsh

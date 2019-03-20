@@ -1,7 +1,13 @@
 Installation
 ============
 
-There are a number of ways to install Elassandra: from the tarball_, with the `deb`_ or `rpm`_ package, with a `docker image`_, or even from :ref:`source <source>`.
+There are a number of ways to install Elassandra:
+
+- tarball_
+- `deb`_
+- `rpm`_
+- `docker image`_.
+- `helm chart`_ (kubernetes)
 
 Elassandra is based on Cassandra and ElasticSearch, thus it will be easier if you're already familiar with one on these technologies.
 
@@ -72,15 +78,14 @@ You should get something like this:
 You're done !
 
 On a production environment, we recommand to to modify some system settings such as disabling swap. This `guide <http://docs.datastax.com/en/landing_page/doc/landing_page/recommendedSettings.html>`_ shows you how to do it.
-On linux, you should instal `jemalloc <http://jemalloc.net/>`_.
+On linux, you should install `jemalloc <http://jemalloc.net/>`_.
 
-
-deb
+Deb
 ---
 
 .. include:: adhoc_deb.rst
 
-rpm
+Rpm
 ---
 
 .. include:: adhoc_rpm.rst
@@ -90,37 +95,7 @@ Docker image
 
 .. include:: docker.rst
 
-.. _source:
+Helm chart
+----------
 
-Build from source
------------------
-
-Requirements:
-  - Oracle JDK 1.8 or OpenJDK 8
-  - gradle >= 3.5
-
-Clone Elassandra repository and Cassandra sub-module:
-
-.. code::
-
-   git clone --recursive git@github.com:strapdata/elassandra.git
-   cd elassandra
-
-Elassandra 5.5+ uses `Gradle <https://gradle.org/>`_ for its build system. Simply run:
-
-.. code::
-
-   gradle assemble
-
-or to build only the tgz tarball for a release version : 
-
-.. code::
-
-   gradle assemble distribution:tar:assemble -Dbuild.snapshot=false
-
-It's going to take a little while so, you may want to go for a cuppa ! If all goes well, tarballs will be built in:
-
-.. parsed-literal::
-  distribution/(tar|zip|rpm|deb)/build/distributions/
-
-Then follow the instructions for `tarball`_ installation.
+.. include:: helm.rst
