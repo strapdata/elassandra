@@ -8,8 +8,11 @@ There are a number of ways to install Elassandra:
 - `rpm`_
 - `docker image`_.
 - `helm chart`_ (kubernetes)
+- `Google Kubernetes marketplace`_
 
 Elassandra is based on Cassandra and ElasticSearch, thus it will be easier if you're already familiar with one on these technologies.
+
+.. important:: Be aware that Elassandra is memory consuming and should be installed on machine with at least 4Gb of RAM.
 
 Tarball
 -------
@@ -99,3 +102,9 @@ Helm chart
 ----------
 
 .. include:: helm.rst
+
+
+Google Kubernetes Marketplace
+-----------------------------
+
+You can deploy an Elassandra cluster with a few clicks using our `Elassandra Kubernetes App <https://console.cloud.google.com/marketplace/details/strapdata/elassandra>`_ on the Google Cloud Marketplace.

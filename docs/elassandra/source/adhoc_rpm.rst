@@ -1,4 +1,9 @@
 
+.. important:: Cassandra and Elassandra packages conflict. You should remove Cassandra prior to install Elassandra.
+
+The Java runtime 1.8 must be installed in order to run Elassandra. You can install it yourself or let the package manager
+pull it automatically as a dependency.
+
 Create a file called ``elassandra.repo`` in the ``/etc/yum.repos.d/`` directory or similar according to your distribution (RedHat, OpenSuSe...)::
 
   [elassandra]

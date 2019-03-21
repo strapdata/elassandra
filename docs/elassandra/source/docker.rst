@@ -10,40 +10,22 @@ The source code is on github at `strapdata/docker-elassandra <https://github.com
 Start an Elassandra server instance
 ...................................
 
-Starting an Elassandra instance is pretty simple::
+Starting an Elassandra instance is pretty simple:
 
-  docker run --name some-elassandra -d strapdata/elassandra:tag
+.. parsed-literal::
+  docker run --name node0 -d strapdata/elassandra:|release|
 
-...where ``some-cassandra`` is the name you want to assign to your container and ``tag`` is the tag specifying the Elassandra version you want to use. Default is ``latest``.
+Run nodetool, cqlsh and curl::
 
-Run nodetool and cqlsh::
-
-  docker exec -it some-elassandra nodetool status
-  docker exec -it some-elassandra cqlsh
-
-
-Connect to Cassandra from an application in another Docker container
-....................................................................
-
-This image exposes the standard Cassandra and ElasticSearch ports,
-so container linking makes the Elassandra instance available to other application containers.
-Start your application container as shown below to link it to the Elassandra container::
-
-  docker run --name some-app --link some-elassandra:elassandra -d app-that-uses-elassandra
-
-For instance, consuming the elasticsearch API from another container can be done as follows::
-
-  docker run --link some-elassandra:elassandra -it strapdata/elassandra curl http//elassandra:9200
-
-
-... where ``strapdata/elassandra`` could be any image with ``curl`` installed.
+  docker exec -it node0 nodetool status
+  docker exec -it node0 cqlsh
+  docker exec -it node0 curl localhost:9200
 
 
 Environment Variables
 .....................
 
 When you start the Elassandra image, you can adjust the configuration of the Elassandra instance by passing one or more environment variables on the docker run command line.
-
 
 +-----------------------------+-----------------------------------------------------------------------------------------------------------------------+
 | Variable Name               | Description                                                                                                           |
@@ -89,7 +71,7 @@ When you start the Elassandra image, you can adjust the configuration of the Ela
 Files locations
 ...............
 
-Docker elassanra image is based on the debian package installation:
+Docker elassandra image is based on the debian package installation:
 
 - ``/etc/cassandra``: elassandra configuration
 - ``/usr/share/cassandra``: elassandra installation
@@ -117,5 +99,5 @@ In case there is only one elassandra instance per docker host, the easiest way i
 When using the host network is not an option, you could just map the necessary ports with ``-p 9042:9042``,  ``-p 9200:9200`` and so on... but you should be aware
 that docker default network will considerably slow down performances.
 
-Also, elassandra cluster can be fully managed over a swarm cluster. But this will basically require some more customization.
-Feel free to open an issue on our github repository to further discuss.
+.. note:: Creating a cluster from the standalone image is probably fine for testing environments. But if you plan to run long-lived Elassandra clusters on containers, Kubernetes is the way to go.
+

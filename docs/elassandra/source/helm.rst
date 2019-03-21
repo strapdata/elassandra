@@ -8,7 +8,7 @@ Add our helm repository::
 Then create a cluster with the following command:
 
 .. parsed-literal::
-    helm install -n elassandra --set image.tag=|release| strapdata/elassandra
+  helm install -n elassandra --set image.tag=|release| strapdata/elassandra
 
 After installation succeeds, you can get a status of chart::
 
