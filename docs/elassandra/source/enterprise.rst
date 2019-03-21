@@ -4,7 +4,7 @@ Enterprise
 
 Elassandra Enterprise is an Elasticsearch plugin installed on top of Elassandra community edition. Elassandra Enterprise plugin provides advanced features:
 
-* Elasticserach JMX management and monitoring.
+* Elasticsearch JMX management and monitoring.
 * SSL encryption for Elasticsearch connections.
 * Authentication, Authorization and Accounting for Elasticsearch.
 * Elasticsearch Content-Based security (document-level security and field-level security).
@@ -13,7 +13,7 @@ If you are currently running a Cassandra cluster, you can progressively switch t
 
 * First switch to strapdata-cassandra, a fork of cassandra modified to support Elasticsearch.
 * Second, restart nodes with Elasticsearch enabled (change the java main class).
-* Third, create Elasticsearch indicies with a per table Elasticsearch mapping.
+* Third, create Elasticsearch indices with a per table Elasticsearch mapping.
 * And finally, deploy the Elassandra Enterprise plugin on your nodes to enable enterprise grade features.
 
 .. image:: images/elassandra-deploy-process.png

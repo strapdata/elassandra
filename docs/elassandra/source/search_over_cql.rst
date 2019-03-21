@@ -166,7 +166,7 @@ In the following example, there are two top level aggregations named *sales_per_
    
    (5 rows)
 
-Distributed Elasticsearch aggregation with Apach Spark
+Distributed Elasticsearch aggregation with Apache Spark
 ......................................................
 
 In order to use the Elasticsearch aggregation capabilities from Apache Spark, you must request Elassandra with a projection clause having the same CQL types
