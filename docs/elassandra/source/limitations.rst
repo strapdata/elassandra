@@ -95,6 +95,7 @@ Elasticsearch unsupported features
 * Elasticsearch percolator, reindex and shrink API are not supported.
 * copy_to is not supported.
 * range field is not supported.
+* Parent-Child join is currently supported only in Elassandra version 5.5.x
 
 Cassandra limitations
 ---------------------

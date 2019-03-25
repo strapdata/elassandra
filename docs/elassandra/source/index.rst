@@ -15,6 +15,7 @@ Contents:
    :maxdepth: 3
 
    architecture
+   quickstart
    installation
    configuration
    mapping

@@ -20,10 +20,10 @@ support such setting because string manipulation are implemented with the defaul
 For exemple, *String.format("SELECT %s FROM ...",...)* is computed as *String.format(Local.getDefault(),"SELECT %s FROM ...",...)*, involving errors for some Locale setting.
 As a workaround, a javassit byte-code manipulation in the Ant build step adds a *Locale.ROOT* argument to weak the method calls in all Cassandra classes.
 
-Elassandra unit test
---------------------
+Elassandra build tests
+----------------------
 
-Elassandra unit test allows using both the Elasticsearch API and CQL requests as shown in the following example.
+Elassandra build unit tests allows using both the Elasticsearch API and CQL requests as shown in the following example.
 
 .. code::
    
@@ -58,11 +58,26 @@ To run this specific test :
 
 .. code::
 
-   $gradle :core:test -Dtests.seed=96A0B026F3E89763 -Dtests.class=org.elassandra.BasicTests  -Dtests.security.manager=false -Dtests.locale=it-IT -Dtests.timezone=Asia/Tomsk
+   $gradle :server:test -Dtests.seed=96A0B026F3E89763 -Dtests.class=org.elassandra.BasicTests  -Dtests.security.manager=false -Dtests.locale=it-IT -Dtests.timezone=Asia/Tomsk
 
 To run all core unit tests :
 
 .. code::
 
-   $gradle core:test
+   $gradle server:test
 
+
+Application tests with Elassandra-Unit
+--------------------------------------
+
+`Elassandra-Unit <https://github.com/strapdata/elassandra-unit>`_ helps you writing isolated JUnit tests in a Test Driven Development style with an embedded Elassandra instance.
+
+.. image:: images/elassandra-unit.png
+
+* Start an embedded Elassandra (including both Cassandra and Elasticsearch).
+* Create structure (keyspace and Column Families) and load data from an XML, JSON or YAML DataSet.
+* Execute a CQL script.
+* Query Cassandra through the `Cassandra driver <https://github.com/datastax/java-driver>`_.
+* Query Elasticsearch through the `Elasticsearch REST API <https://www.elastic.co/guide/en/elasticsearch/client/java-rest/6.5/java-rest-high.html>`_.
+
+See the `Elassandra-Unit <https://github.com/strapdata/elassandra-unit>`_ README for more information.

@@ -312,8 +312,13 @@ The resulting Cassandra user defined types and table.
 Dynamic mapping of Cassandra Map
 --------------------------------
 
-Nested document can be mapped to `User Defined Type <https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html>`_ or to CQL `map <http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_map_t.html#toc_pane>`_ having a *text* key.
-In the following example, the Cassandra map is automatically mapped with ``cql_mandatory:true``, so a partial CQL update causes a read of the whole map to re-index a document in the elasticsearch index.
+By default, nested document are be mapped to `User Defined Type <https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html>`_. 
+You can also use a CQL `map <http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_map_t.html#toc_pane>`_ 
+having a *text* key and value is a native or UDT type (using a collection in a map is not supported). 
+Thus, each new key in the map invlove an Elasticsearch mapping update to declare the key as a new field.
+Obivously, don't use such mapping when keys are versatile.
+
+In the following example, each new key entry in the map *attrs* is mapped as field.
 
 .. code::
 
