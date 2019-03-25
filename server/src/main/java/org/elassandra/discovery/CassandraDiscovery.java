@@ -351,7 +351,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             return settings.getAsInt("transport.netty.publish_port", settings.getAsInt("transport.publish_port",settings.getAsInt("transport.tcp.port", 9300)));
         } catch (SettingsException | NumberFormatException e) {
             String publishPort = settings.get("transport.netty.publish_port", settings.get("transport.publish_port",settings.get("transport.tcp.port", "9300")));
-            if (publishPort.indexOf("-") >0 ) {
+            if (publishPort.indexOf("-") > 0) {
                 return Integer.parseInt(publishPort.split("-")[0]);
             } else {
                 throw e;
@@ -540,7 +540,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     public void onDead(InetAddress endpoint, EndpointState epState) {
         if (isMember(endpoint)) {
             traceEpState(endpoint, epState);
-            logger.debug("Endpoint={} isAlive={} => update node + disconnecting", endpoint, epState.isAlive());
+            logger.warn("Endpoint={} isAlive={} => update node + disconnecting", endpoint, epState.isAlive());
             notifyHandler(Gossiper.instance.getEndpointStateForEndpoint(endpoint));
             updateNode(endpoint, epState);
         }
@@ -730,7 +730,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     }
 
     public DiscoveryNodeStatus discoveryNodeStatus(final EndpointState epState) {
-        if (epState == null) {
+        if (epState == null || !epState.isAlive()) {
             return DiscoveryNodeStatus.DEAD;
         }
         if (epState.getApplicationState(ApplicationState.X2) == null) {
