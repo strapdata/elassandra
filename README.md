@@ -38,6 +38,7 @@ For Elasticsearch users, elassandra provides useful features :
 
 ## Quick start
 
+* [Quick Start](http://doc.elassandra.io/en/latest/quickstart.html) guide to run a single node Elassandra cluster in docker.
 * [Deploy Elassandra by launching a Google Kubernetes Engine](./docs/google-kubernetes-tutorial.md):
 
   [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.png)](https://console.cloud.google.com/cloudshell/open?git_repo=https://github.com/strapdata/elassandra-google-k8s-marketplace&tutorial=docs/google-kubernetes-tutorial.md)
