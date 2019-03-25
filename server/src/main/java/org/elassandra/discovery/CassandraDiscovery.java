@@ -973,7 +973,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
                 } catch (ConcurrentMetaDataUpdateException e) {
                     // should replay the task later when current cluster state will match the expected metadata uuid and version
-                    logger.warn("PAXOS schema update failed because schema has changed, will resubmit task when metadata.version > {}", previousClusterState.metaData().version());
+                    logger.warn("PAXOS schema update failed because schema has changed source=[{}], will resubmit task when metadata.version > {}",
+                            clusterChangedEvent.source(), previousClusterState.metaData().version());
                     final long resubmitTimeMillis = System.currentTimeMillis();
                     clusterService.addListener(new ClusterStateListener() {
                         @Override
