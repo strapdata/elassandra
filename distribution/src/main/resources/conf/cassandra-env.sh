@@ -133,7 +133,7 @@ fi
 # starting cassandra.
 
 # Read user-defined JVM options from jvm.options file
-JVM_OPTS_FILE=$CASSANDRA_CONF/jvm.options
+JVM_OPTS_FILE=${JVM_OPTS_FILE:-"$CASSANDRA_CONF/jvm.options"}
 for opt in `grep "^-" $JVM_OPTS_FILE`
 do
   JVM_OPTS="$JVM_OPTS $opt"
