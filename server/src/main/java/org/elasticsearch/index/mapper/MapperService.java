@@ -246,7 +246,8 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                 buildNativeOrUdtMapping(mapping, ((SetType<?>)type).getElementsType() );
             } else if (type instanceof MapType) {
                 MapType<?,?> mtype = (MapType<?,?>)type;
-                if (mtype.getKeysType().asCQL3Type() == CQL3Type.Native.TEXT) {
+                if (mtype.getKeysType().asCQL3Type() == CQL3Type.Native.TEXT &&
+                   (mtype.getValuesType().isUDT() || !mtype.getValuesType().isCollection())) {
                    mapping.put(TypeParsers.CQL_COLLECTION, "singleton");
                    mapping.put(TypeParsers.CQL_STRUCT, "map");
                    mapping.put(TypeParsers.CQL_MANDATORY, Boolean.TRUE);
