@@ -150,7 +150,7 @@ public class MetaDataMappingService extends AbstractComponent {
         }
 
         boolean dirty = false;
-        MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
+        MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData()).setClusterUuid();
 
         for (Map.Entry<String, List<RefreshTask>> entry : tasksPerIndex.entrySet()) {
             IndexMetaData indexMetaData = mdBuilder.get(entry.getKey());
@@ -351,7 +351,7 @@ public class MetaDataMappingService extends AbstractComponent {
                     && mappingType.charAt(0) == '_') {
                 throw new InvalidTypeNameException("Document mapping type name can't start with '_', found: [" + mappingType + "]");
             }
-            MetaData.Builder builder = MetaData.builder(metaData);
+            MetaData.Builder builder = MetaData.builder(metaData).setClusterUuid();
             boolean updated = false;
             for (IndexMetaData indexMetaData : updateList) {
                 // do the actual merge here on the master, and update the mapping source

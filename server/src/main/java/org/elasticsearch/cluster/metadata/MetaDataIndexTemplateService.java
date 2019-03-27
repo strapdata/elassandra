@@ -129,7 +129,7 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
                     }
                     throw new IndexTemplateMissingException(request.name);
                 }
-                MetaData.Builder metaData = MetaData.builder(currentState.metaData());
+                MetaData.Builder metaData = MetaData.builder(currentState.metaData()).setClusterUuid();
                 for (String templateName : templateNames) {
                     metaData.removeTemplate(templateName);
                 }

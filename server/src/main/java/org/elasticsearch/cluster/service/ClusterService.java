@@ -383,7 +383,7 @@ public class ClusterService extends BaseClusterService {
         selectMetadataQuery = String.format(Locale.ROOT, "SELECT metadata,version,owner FROM \"%s\".\"%s\" WHERE cluster_name = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         selectVersionMetadataQuery = String.format(Locale.ROOT, "SELECT version FROM \"%s\".\"%s\" WHERE cluster_name = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
         insertMetadataQuery = String.format(Locale.ROOT, "INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version) VALUES (?,?,?) IF NOT EXISTS", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
-        updateMetaDataQuery = String.format(Locale.ROOT, "UPDATE \"%s\".\"%s\" SET owner = ?, version = ? WHERE cluster_name = ? IF version < ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        updateMetaDataQuery = String.format(Locale.ROOT, "UPDATE \"%s\".\"%s\" SET owner = ?, version = ? WHERE cluster_name = ? IF version = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
     }
 
     @Override
@@ -543,7 +543,7 @@ public class ClusterService extends BaseClusterService {
     }
 
     public boolean processWriteConditional(final ConsistencyLevel cl, final ConsistencyLevel serialCl, ClientState clientState, final String query, Object... values)
-            throws RequestExecutionException, RequestValidationException, InvalidRequestException {
+            throws RequestExecutionException, RequestValidationException, InvalidRequestException, WriteTimeoutException, UnavailableException  {
         try {
             UntypedResultSet result = process(cl, serialCl, clientState, query, new Long(0), values);
             if (serialCl == null)
@@ -557,13 +557,13 @@ public class ClusterService extends BaseClusterService {
             }
             return false;
         } catch (WriteTimeoutException e) {
-            logger.warn("PAXOS write failed query=" + query + " values=" + Arrays.toString(values), e);
-            return false;
+            logger.warn("PAXOS write timeout query=" + query + " values=" + Arrays.toString(values)+". Check your cluster load or increase the cas_contention_timeout_in_ms.", e);
+            throw e;
         } catch (UnavailableException e) {
-            logger.warn("PAXOS commit failed query=" + query + " values=" + Arrays.toString(values), e);
+            logger.warn("PAXOS quorum not reached query=" + query + " values=" + Arrays.toString(values)+". Check for unavailable nodes.", e);
             throw e;
         } catch (Exception e) {
-            logger.error("Failed to process query=" + query + " values=" + Arrays.toString(values), e);
+            logger.error("PAXOS failed query=" + query + " values=" + Arrays.toString(values), e);
             throw e;
         }
     }
@@ -1261,13 +1261,12 @@ public class ClusterService extends BaseClusterService {
                 this.metadataSerialCL,
                 ClientState.forInternalCalls(),
                 updateMetaDataQuery,
-                new Object[] { owner, newMetaData.version(), DatabaseDescriptor.getClusterName(), newMetaData.version() });
+                new Object[] { owner, newMetaData.version(), DatabaseDescriptor.getClusterName(), newMetaData.version() - 1 });
         if (applied) {
-            logger.debug("PAXOS Succefully update metadata source={} newMetaData={} in cluster {}", source, metaDataString, DatabaseDescriptor.getClusterName());
+            logger.debug("PAXOS Succefully update metadata source={} nextMetaData={}", source, newMetaData.x2());
             return;
         } else {
-            logger.warn("PAXOS Failed to update metadata oldMetadata={}/{} currentMetaData={}/{} in cluster {}",
-                    oldMetaData.clusterUUID(), oldMetaData.version(), localNode().getId(), newMetaData.version(), DatabaseDescriptor.getClusterName());
+            logger.warn("PAXOS Failed to update metadata source={} prevMetadata={} nextMetaData={}",source, oldMetaData.x2(), newMetaData.x2());
             throw new ConcurrentMetaDataUpdateException(owner, newMetaData.version());
         }
     }
@@ -1304,7 +1303,6 @@ public class ClusterService extends BaseClusterService {
 
         ch.qos.logback.classic.Level level = ch.qos.logback.classic.Level.toLevel(rawLevel);
         logBackLogger.setLevel(level);
-        //logger.info("set log level to {} for classes under '{}' (if the level doesn't look like '{}' then the logger couldn't parse '{}')", level, classQualifier, rawLevel, rawLevel);
     }
 
     private static boolean hasAppenders(ch.qos.logback.classic.Logger logger)

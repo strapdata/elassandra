@@ -81,7 +81,7 @@ public class PendingClusterStatesQueue {
 
     /** Add an incoming, not yet committed cluster state */
     public void addPending(ClusterState state, StateProcessedListener listener) {
-        logger.trace("adding [{}] state version={} metadata={}", state.version(), state.metaData().x2());
+        logger.trace("adding cluster state version={} metadata={}", state.version(), state.metaData().x2());
         StateProcessedListener previousListener = pendingStates.put(state, listener);
         assert previousListener == null : "ClusterState "+state.version()+" already pending";
 

@@ -583,6 +583,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     indexMetaData.getSettings());
 
                 MetaData newMetaData = MetaData.builder(currentState.metaData())
+                    .setClusterUuid()
                     .put(indexMetaData, false)
                     .build();
 

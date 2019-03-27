@@ -36,9 +36,12 @@ import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
@@ -46,6 +49,7 @@ import org.elasticsearch.common.logging.ServerLoggers;
 import org.elasticsearch.common.settings.Settings;
 
 import java.nio.ByteBuffer;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -83,9 +87,9 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     @Override
     public void onEndTransaction() {
         if (recordedMetaData != null || !recordedIndexMetaData.isEmpty()) {
-            ClusterState currentState = this.clusterService.state();
-            ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
-            ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
+            final ClusterState currentState = this.clusterService.state();
+            final ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
+            final ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
             final MetaData sourceMetaData = (recordedMetaData == null) ? currentState.metaData() : recordedMetaData;
             final MetaData.Builder metaDataBuilder = MetaData.builder(sourceMetaData);
             if (recordedMetaData == null) {
@@ -104,14 +108,29 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
             for (IndexMetaData indexMetaData : sourceMetaData)
                 blocks.updateBlocks(indexMetaData);
 
-            // update routing table and return new cluster state.
-            ClusterState newClusterState = newStateBuilder.incrementVersion().metaData(metaDataBuilder).blocks(blocks).build();
-            newClusterState = ClusterState.builder(newClusterState)
-                    .routingTable(RoutingTable.build(SchemaListener.this.clusterService, newClusterState))
-                    .build();
-            clusterService.getCassandraDiscovery().publish(newClusterState, "cql-schema-mapping-update");
-        }
+            // summit the new clusterState to the MasterService for a local update.
+            // keep the metadata.clusterUuid from the coordinator node.
+            clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask(Priority.URGENT) {
+                @Override
+                public ClusterState execute(ClusterState currentState) {
+                    ClusterState newClusterState = newStateBuilder.incrementVersion().metaData(metaDataBuilder).blocks(blocks).build();
+                    newClusterState = ClusterState.builder(newClusterState)
+                            .routingTable(RoutingTable.build(SchemaListener.this.clusterService, newClusterState))
+                            .build();
+                    return newClusterState;
+                }
 
+                @Override
+                public void onFailure(String source, Exception t) {
+                    logger.error("unexpected failure during [{}]", t, source);
+                }
+
+                @Override
+                public SchemaUpdate schemaUpdate() {
+                    return SchemaUpdate.UPDATE;
+                }
+            });
+        }
         record = false;
         recordedIndexMetaData.clear();
         recordedMetaData = null;

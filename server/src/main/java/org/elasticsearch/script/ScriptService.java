@@ -465,7 +465,7 @@ public class ScriptService extends AbstractComponent implements Closeable, Clust
             public ClusterState execute(ClusterState currentState) throws Exception {
                 ScriptMetaData smd = currentState.metaData().custom(ScriptMetaData.TYPE);
                 smd = ScriptMetaData.putStoredScript(smd, request.id(), source);
-                MetaData.Builder mdb = MetaData.builder(currentState.getMetaData()).putCustom(ScriptMetaData.TYPE, smd);
+                MetaData.Builder mdb = MetaData.builder(currentState.getMetaData()).setClusterUuid().putCustom(ScriptMetaData.TYPE, smd);
 
                 return ClusterState.builder(currentState).metaData(mdb).build();
             }
@@ -491,7 +491,7 @@ public class ScriptService extends AbstractComponent implements Closeable, Clust
             public ClusterState execute(ClusterState currentState) throws Exception {
                 ScriptMetaData smd = currentState.metaData().custom(ScriptMetaData.TYPE);
                 smd = ScriptMetaData.deleteStoredScript(smd, request.id());
-                MetaData.Builder mdb = MetaData.builder(currentState.getMetaData()).putCustom(ScriptMetaData.TYPE, smd);
+                MetaData.Builder mdb = MetaData.builder(currentState.getMetaData()).setClusterUuid().putCustom(ScriptMetaData.TYPE, smd);
 
                 return ClusterState.builder(currentState).metaData(mdb).build();
             }

@@ -1042,6 +1042,11 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             return this;
         }
 
+        public Builder setClusterUuid() {
+            this.clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            return this;
+        }
+
         public Builder generateClusterUuidIfNeeded() {
             return this;
         }

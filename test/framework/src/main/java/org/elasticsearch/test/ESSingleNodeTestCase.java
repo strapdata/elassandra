@@ -31,6 +31,7 @@ import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.lucene.util.IOUtils;
+import org.elassandra.discovery.CassandraDiscovery;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequestBuilder;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
@@ -66,6 +67,7 @@ import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.MockSearchService;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.test.ESIntegTestCase.TestSeedPlugin;
+import org.elasticsearch.test.discovery.MockCassandraDiscovery;
 import org.elasticsearch.test.store.MockFSIndexStore;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -89,7 +91,6 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
-import java.util.stream.Collectors;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -125,27 +126,28 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
                 @Override
                 public Settings nodeSettings(Settings settings) {
                     return Settings.builder()
-                    .put(Environment.PATH_HOME_SETTING.getKey(), System.getProperty("cassandra.home"))
-                    .put(Environment.PATH_DATA_SETTING.getKey(), DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
-                    .put(Environment.PATH_REPO_SETTING.getKey(), System.getProperty("cassandra.home")+"/repo")
-                    // TODO: use a consistent data path for custom paths
-                    // This needs to tie into the ESIntegTestCase#indexSettings() method
-                    .put(Environment.PATH_SHARED_DATA_SETTING.getKey(), DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
-                    .put(NetworkModule.HTTP_ENABLED.getKey(), false)
-                    .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
-                    .put(Node.NODE_DATA_SETTING.getKey(), true)
-                    .put(NodeEnvironment.NODE_ID_SEED_SETTING.getKey(), random().nextLong())
-                    .put("node.name", "127.0.0.1")
-                    .put(ScriptService.SCRIPT_MAX_COMPILATIONS_RATE.getKey(), "1000/1m")
-                    //.put(EsExecutors.PROCESSORS_SETTING.getKey(), 1) // limit the number of threads created
-                    //.put("script.inline", "on")
-                    //.put("script.indexed", "on")
-                    //.put(EsExecutors.PROCESSORS, 1) // limit the number of threads created
-                    .put("client.type", "node")
-                    //.put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
+                            .put("discovery.type", MockCassandraDiscovery.MOCK_CASSANDRA)
+                            .put(Environment.PATH_HOME_SETTING.getKey(), System.getProperty("cassandra.home"))
+                            .put(Environment.PATH_DATA_SETTING.getKey(), DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
+                            .put(Environment.PATH_REPO_SETTING.getKey(), System.getProperty("cassandra.home")+"/repo")
+                            // TODO: use a consistent data path for custom paths
+                            // This needs to tie into the ESIntegTestCase#indexSettings() method
+                            .put(Environment.PATH_SHARED_DATA_SETTING.getKey(), DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
+                            .put(NetworkModule.HTTP_ENABLED.getKey(), false)
+                            .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
+                            .put(Node.NODE_DATA_SETTING.getKey(), true)
+                            .put(NodeEnvironment.NODE_ID_SEED_SETTING.getKey(), random().nextLong())
+                            .put("node.name", "127.0.0.1")
+                            .put(ScriptService.SCRIPT_MAX_COMPILATIONS_RATE.getKey(), "1000/1m")
+                            //.put(EsExecutors.PROCESSORS_SETTING.getKey(), 1) // limit the number of threads created
+                            //.put("script.inline", "on")
+                            //.put("script.indexed", "on")
+                            //.put(EsExecutors.PROCESSORS, 1) // limit the number of threads created
+                            .put("client.type", "node")
+                            //.put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
 
-                    .put(settings)
-                    .build();
+                            .put(settings)
+                            .build();
                 }
 
                 @Override
@@ -221,7 +223,12 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         }
 
         mocks.add(TestSeedPlugin.class);
+        mocks.add(MockCassandraDiscovery.TestPlugin.class);
         return Collections.unmodifiableList(mocks);
+    }
+
+    public MockCassandraDiscovery getMockCassandraDiscovery() {
+        return (MockCassandraDiscovery) clusterService().getCassandraDiscovery();
     }
 
     // override this to initialize the single node cluster.

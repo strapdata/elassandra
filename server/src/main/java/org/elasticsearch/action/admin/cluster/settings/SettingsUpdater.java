@@ -69,6 +69,7 @@ final class SettingsUpdater {
             clusterSettings.validate(persistentFinalSettings, true);
 
             MetaData.Builder metaData = MetaData.builder(currentState.metaData())
+                    .setClusterUuid()
                     .persistentSettings(persistentFinalSettings)
                     .transientSettings(transientFinalSettings);
 

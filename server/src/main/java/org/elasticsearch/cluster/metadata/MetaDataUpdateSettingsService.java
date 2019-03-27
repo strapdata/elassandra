@@ -205,7 +205,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
             @Override
             public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
                 RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
-                MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
+                MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData()).setClusterUuid();
 
                 // allow to change any settings to a close index, and only allow dynamic settings to be changed
                 // on an open index

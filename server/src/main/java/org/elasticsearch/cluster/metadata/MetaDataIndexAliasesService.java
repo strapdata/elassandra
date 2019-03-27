@@ -135,7 +135,7 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
             if (changed) {
                 currentState = deleteIndexService.deleteIndices(currentState, indicesToDelete);
             }
-            MetaData.Builder metadata = MetaData.builder(currentState.metaData());
+            MetaData.Builder metadata = MetaData.builder(currentState.metaData()).setClusterUuid();
             // Run the remaining alias actions
             for (AliasAction action : actions) {
                 if (action.removeIndex()) {

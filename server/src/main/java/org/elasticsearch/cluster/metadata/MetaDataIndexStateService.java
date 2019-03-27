@@ -125,7 +125,7 @@ public class MetaDataIndexStateService extends AbstractComponent {
                 SnapshotsService.checkIndexClosing(currentState, indicesToClose);
                 logger.info("closing indices [{}]", indicesAsString);
 
-                MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
+                MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData()).setClusterUuid();
                 ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder()
                         .blocks(currentState.blocks());
                 for (IndexMetaData openIndexMetadata : indicesToClose) {

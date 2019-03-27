@@ -177,7 +177,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
         // Check if index deletion conflicts with any running snapshots
         SnapshotsService.checkIndexDeletion(currentState, metaDatas);
         //RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
-        MetaData.Builder metaDataBuilder = MetaData.builder(meta);
+        MetaData.Builder metaDataBuilder = MetaData.builder(meta).setClusterUuid();
         ClusterBlocks.Builder clusterBlocksBuilder = ClusterBlocks.builder().blocks(currentState.blocks());
 
         final IndexGraveyard.Builder graveyardBuilder = IndexGraveyard.builder(metaDataBuilder.indexGraveyard());
