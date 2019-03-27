@@ -167,7 +167,7 @@ In the following example, there are two top level aggregations named *sales_per_
    (5 rows)
 
 Distributed Elasticsearch aggregation with Apache Spark
-......................................................
+.......................................................
 
 In order to use the Elasticsearch aggregation capabilities from Apache Spark, you must request Elassandra with a projection clause having the same CQL types
 as the returned aggregation results. Moreover, do not re-use the same column name more than once, otherwise you will get an **IndexOutOfBoundsException** while Apache Spark parses the result.
