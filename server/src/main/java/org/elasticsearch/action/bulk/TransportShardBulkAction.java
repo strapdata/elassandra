@@ -286,7 +286,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
     static BulkItemResultHolder processUpdateResponse(final UpdateRequest updateRequest, final String concreteIndex,
                                                       final Engine.Result result, final UpdateHelper.Result translate,
                                                       final IndexShard primary, final int bulkReqId) throws Exception {
-        assert result.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO : "failed result should not have a sequence number";
+        //assert result.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO : "failed result should not have a sequence number";
 
         Engine.Operation.TYPE opType = result.getOperationType();
 
