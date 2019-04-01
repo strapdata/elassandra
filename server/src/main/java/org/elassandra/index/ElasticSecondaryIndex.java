@@ -1746,8 +1746,8 @@ public class ElasticSecondaryIndex implements Index {
                 try {
                     if (outRow != null || ImmutableMappingInfo.this.indexInsertOnly)
                         this.rowcument = new SkinnyRowcument(inRow, outRow);
-                } catch (IOException e) {
-                    logger.error("Unexpected error", e);
+                } catch (Throwable t) {
+                    logger.error("Unexpected error", t);
                 }
             }
 
@@ -1954,22 +1954,26 @@ public class ElasticSecondaryIndex implements Index {
              */
             @Override
             public void finish() {
-                if (ImmutableMappingInfo.this.indexInsertOnly) {
-                    update();
-                } else {
-                    // lock to protect concurrent updates on the same partition
-                    synchronized (getLock()) {
+                try {
+                    if (ImmutableMappingInfo.this.indexInsertOnly) {
                         update();
+                    } else {
+                        // lock to protect concurrent updates on the same partition
+                        synchronized (getLock()) {
+                            update();
+                        }
                     }
-                }
-                if (this.targets == null) {
-                    // refresh all associated indices.
-                    for (ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices)
-                        indexInfo.refresh();
-                } else {
-                    // only refresh updated partitionned indices.
-                    for (int i = targets.nextSetBit(0); i >= 0 && i < indices.length; i = targets.nextSetBit(i + 1))
-                        indices[i].refresh();
+                    if (this.targets == null) {
+                        // refresh all associated indices.
+                        for (ImmutableMappingInfo.ImmutableIndexInfo indexInfo : indices)
+                            indexInfo.refresh();
+                    } else {
+                        // only refresh updated partitionned indices.
+                        for (int i = targets.nextSetBit(0); i >= 0 && i < indices.length; i = targets.nextSetBit(i + 1))
+                            indices[i].refresh();
+                    }
+                } catch (Throwable t) {
+                    logger.error("Unexpected error", t);
                 }
             }
 
