@@ -18,6 +18,7 @@ package org.elassandra;
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import com.google.common.net.InetAddresses;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.ConsistencyLevel;
@@ -710,5 +711,27 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, "CREATE TABLE ks.test (id int, timestamp timestamp, PRIMARY KEY (id, timestamp)) WITH CLUSTERING ORDER BY (timestamp DESC)");
         assertAcked(client().admin().indices().prepareCreate("ks").addMapping("test", discoverMapping("test")));
     }
+
+    // Cannot create indexes in case the table has materialized views #274
+    @Test
+    public void testElasticIndexWithMaterializedView() throws Exception {
+        process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE test_keyspace WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}", DatabaseDescriptor.getLocalDataCenter()));
+        process(ConsistencyLevel.ONE,"CREATE TABLE test_keyspace.numbers(number text, account_uuid timeuuid, type int, state text, country_code text, purchase_date timestamp, release_date timestamp, status int, PRIMARY KEY(number));");
+        process(ConsistencyLevel.ONE,"CREATE MATERIALIZED VIEW test_keyspace.numbers_by_user AS SELECT * FROM numbers WHERE number IS NOT NULL AND account_uuid IS NOT NULL PRIMARY KEY (account_uuid, number);");
+
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("numbers")
+                        .startObject("_field_names").field("enabled", false).endObject()
+                        .field("discover", "(number|type|state|contry_code|status)")
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test_numbers")
+                .addMapping("numbers", mapping)
+                .setSettings(Settings.builder().put("keyspace", "test_keyspace").build())
+                .get());
+        ensureGreen("test_numbers");
+    }
+
 }
 

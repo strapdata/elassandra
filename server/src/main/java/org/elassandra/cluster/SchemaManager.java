@@ -452,7 +452,7 @@ public class SchemaManager extends AbstractComponent {
 
         ksm2 = ksm.withSwapped(ksm.tables.without(cfm.cfName).with(x.left));
         if (x.right != null && x.right.size() > 0) {
-            ksm2 = ksm2.withSwapped(Views.builder().add(ksm2.views).add(x.right).build());
+            ksm2 = ksm2.withSwapped(Views.builder().add(x.right).build());
             for(ViewDefinition view : x.right) {
                 builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
                 mutations.add(SchemaKeyspace.makeUpdateViewMutation(builder, ksm2.views.getNullable(view.viewName), view).build());
