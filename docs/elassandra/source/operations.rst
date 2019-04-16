@@ -469,13 +469,15 @@ Restoring a snapshot
 --------------------
 
 Restoring Cassandra SSTable and Elasticsearch Lucene files allows recovery of a keyspace and its associated Elasticsearch indices without stopping any node
-(but it is not intended to duplicate data to another virtual datacenter or cluster, this kind of operatio requires the sstableloader <https://docs.datastax.com/en/cassandra/3.0/cassandra/tools/toolsBulkloader.html>`_).
+(but it is not intended to duplicate data to another virtual datacenter or cluster, this kind of operatio requires the `sstableloader <https://docs.datastax.com/en/cassandra/3.0/cassandra/tools/toolsBulkloader.html>`_).
 
 To perform a hot restore of Cassandra keyspace and its Elasticsearch indices :
 
 1. Depending on your situation:
-* If you want to overwrite existing elasticsearch index, first truncate the underlying cassandra tables.
-* If you want to restore a deleted index or keyspace, first restore the CQL schema of the keyspace and lost tables by applying the **schema.cql** files from your snapshot. This re-creates empty elasticsearch indices.
+
+   * If you want to overwrite existing elasticsearch index, first truncate the underlying cassandra tables.
+   * If you want to restore a deleted index or keyspace, first restore the CQL schema of the keyspace and lost tables by applying the **schema.cql** files from your snapshot. This re-creates empty elasticsearch indices.
+
 2. Close the associated elasticsearch indices.
 3. Restore the Cassandra table with your snapshot on each node.
 4. Restore Elasticsearch snapshot data on each node (if ES index is open during nodetool refresh, this causes Elasticsearch index rebuild by the compaction manager, usually 2 threads).
