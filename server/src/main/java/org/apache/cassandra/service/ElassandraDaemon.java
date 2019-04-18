@@ -573,7 +573,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             keepAliveThread.start();
         } catch (Throwable e) {
             Logger logger = Loggers.getLogger(ElassandraDaemon.class);
-            if (instance.node != null) {
+            if (instance != null && instance.node != null) {
                 logger = Loggers.getLogger(ElassandraDaemon.class, instance.node.settings().get("name"));
             }
             String errorMessage = buildErrorMessage(stage, e);
