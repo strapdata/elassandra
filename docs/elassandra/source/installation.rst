@@ -107,4 +107,6 @@ Helm chart
 Google Kubernetes Marketplace
 -----------------------------
 
-You can deploy an Elassandra cluster with a few clicks using our `Elassandra Kubernetes App <https://console.cloud.google.com/marketplace/details/strapdata/elassandra>`_ on the Google Cloud Marketplace.
+You can deploy an Elassandra cluster on `GKE <https://cloud.google.com/kubernetes-engine/>`_ with a few clicks using our 
+`Elassandra Kubernetes App <https://console.cloud.google.com/marketplace/details/strapdata/elassandra>`_ 
+(require an existing GCP project and a running Google Kubernetes Cluster).
