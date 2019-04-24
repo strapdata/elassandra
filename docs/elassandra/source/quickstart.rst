@@ -22,6 +22,9 @@ Check the cassandra cluster status:
    UN  172.17.0.2  187.36 KiB  8            100.0%            25457162-c5ef-44fa-a46b-a96434aae319  r1
 
 
+Create an Elasticsearch index from a Cassandra table
+----------------------------------------------------
+
 Use the cassandra CQLSH to create a cassandra Keyspace, a User Defined Type, a Table and add two rows:
 
 .. code::
@@ -35,15 +38,73 @@ Use the cassandra CQLSH to create a cassandra Keyspace, a User Defined Type, a T
    EOF
 
 
-Create an Elasticsearch index from the Cassandra table schema:
+Create an Elasticsearch index from the Cassandra table schema by discovering the CQL schema:
 
 .. code::
    
    curl -XPUT -H 'Content-Type: application/json' http://localhost:9200/test -d'{"mappings":{"docs":{"discover":".*"}}}'
    {"acknowledged":true,"shards_acknowledged":true,"index":"test"}
 
+This command discovers all column matching the provided regular expression, and creates the Eslasticsearch index.
 
-Search a document:
+
+Create an Elasticsearch index from scratch
+------------------------------------------
+
+Elassandra automatically generates the underlying CQL schema when creating an index or updating the mapping with a new field.
+
+.. code::
+   
+   curl -XPUT -H 'Content-Type: application/json' http://localhost:9200/test2 -d'{
+      "mappings":{
+         "docs":{
+            "properties": {
+               "first": {
+                  "type":"text"
+               },
+               "last": {
+                  "type":"text",
+                  "cql_collection":"singleton"
+               }
+            }
+         }
+      }
+   }'
+
+Generated CQL schema:
+
+.. code::
+
+   cqlsh> desc KEYSPACE test2;
+   
+   CREATE KEYSPACE test2 WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1': '1'}  AND durable_writes = true;
+   
+   CREATE TABLE test2.docs (
+       "_id" text PRIMARY KEY,
+       first list<text>,
+       last text
+   ) WITH bloom_filter_fp_chance = 0.01
+       AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
+       AND comment = ''
+       AND compaction = {'class': 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy', 'max_threshold': '32', 'min_threshold': '4'}
+       AND compression = {'chunk_length_in_kb': '64', 'class': 'org.apache.cassandra.io.compress.LZ4Compressor'}
+       AND crc_check_chance = 1.0
+       AND dclocal_read_repair_chance = 0.1
+       AND default_time_to_live = 0
+       AND gc_grace_seconds = 864000
+       AND max_index_interval = 2048
+       AND memtable_flush_period_in_ms = 0
+       AND min_index_interval = 128
+       AND read_repair_chance = 0.0
+       AND speculative_retry = '99PERCENTILE';
+   CREATE CUSTOM INDEX elastic_docs_idx ON test2.docs () USING 'org.elassandra.index.ExtendedElasticSecondaryIndex';
+
+
+
+Search for a document
+---------------------
+
+Search for a document through the Elasticsearch API:
 
 .. code::
    
@@ -110,6 +171,9 @@ when index name does not match the keyspace name.
       
    (1 rows)
 
+
+Manage Elasticsearch indices
+----------------------------
 
 Get the Elasticsearch cluster state:
 
