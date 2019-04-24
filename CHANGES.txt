@@ -1,3 +1,10 @@
+6.2.3.14 - 2018-04-29
+  * Upgrade to cassandra 3.11.4
+  * Add support for Elasticsearch copyTo
+  * Fix create indexes in case the table has materialized views #274
+  * Fix _source including IP with bad format (#279)
+  * Fix missing docs when searching on an opaque storage index
+
 6.2.3.13 - 2018-03-25
   * Fix schema update race condition
   * Fix dead node detection issue
