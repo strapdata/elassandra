@@ -304,7 +304,8 @@ public class TypeParsers {
                 case "list": builder.cqlCollection(CqlCollection.LIST); break;
                 case "set": builder.cqlCollection(CqlCollection.SET); break;
                 case "singleton": builder.cqlCollection(CqlCollection.SINGLETON); break;
-                default: throw new MapperParsingException("Unsupported CQL collection [" + value + "], should be in list, set or singleton.");
+                case "none": builder.cqlCollection(CqlCollection.NONE); break;
+                default: throw new MapperParsingException("Unsupported CQL collection [" + value + "], should be in list, set, singleton or none.");
                 }
                 iterator.remove();
             } else if (propName.equals(TypeParsers.CQL_TYPE)) {

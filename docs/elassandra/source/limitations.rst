@@ -93,7 +93,6 @@ Elasticsearch unsupported features
 * Tribe node allows to query multiple Elasticsearch clusters. This feature is not currently supported by Elassandra.
 * Elasticsearch snapshot and restore operations are disabled (See Elassandra backup and restore in operations).
 * Elasticsearch percolator, reindex and shrink API are not supported.
-* copy_to is not supported.
 * range field is not supported.
 * Parent-Child join is currently supported only in Elassandra version 5.5.x
 

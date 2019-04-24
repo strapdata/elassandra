@@ -869,6 +869,50 @@ public final class DocumentParser {
         }
     }
 
+
+
+
+
+    /** Creates instances of the fields that the current field should be copied to */
+    public static void createCopyFields(ParseContext context, List<String> copyToFields, Object value) throws IOException {
+        if (!context.isWithinCopyTo() && copyToFields.isEmpty() == false) {
+            context = context.createCopyToContext();
+            for (String field : copyToFields) {
+                // In case of a hierarchy of nested documents, we need to figure out
+                // which document the field should go to
+                ParseContext.Document targetDoc = null;
+                for (ParseContext.Document doc = context.doc(); doc != null; doc = doc.getParent()) {
+                    if (field.startsWith(doc.getPrefix())) {
+                        targetDoc = doc;
+                        break;
+                    }
+                }
+                assert targetDoc != null;
+                final ParseContext copyToContext;
+                if (targetDoc == context.doc()) {
+                    copyToContext = context;
+                } else {
+                    copyToContext = context.switchDoc(targetDoc);
+                }
+                createCopy(field, copyToContext, value);
+            }
+        }
+    }
+
+    /** Creates an copy of the current field with given field name and boost */
+    private static void createCopy(String field, ParseContext context, Object value) throws IOException {
+        FieldMapper fieldMapper = context.docMapper().mappers().getMapper(field);
+        if (fieldMapper != null) {
+            fieldMapper.createField(context, value);
+        } else {
+            throw new IOException("CopyTo field " + field + " mapper not found");
+        }
+    }
+
+
+
+
+
     private static Tuple<Integer, ObjectMapper> getDynamicParentMapper(ParseContext context, final String[] paths,
             ObjectMapper currentParent) {
         ObjectMapper mapper = currentParent == null ? context.root() : currentParent;

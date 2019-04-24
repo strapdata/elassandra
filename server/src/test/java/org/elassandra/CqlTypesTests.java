@@ -39,6 +39,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.query.Operator;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
@@ -310,6 +311,23 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         ensureGreen("test");
 
         process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, strings map<text, text>, PRIMARY KEY (id));");
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test").setSource("{ \"event_test\" : { \"discover\" : \".*\"}}", XContentType.JSON).get());
+
+        long N = 10;
+        for(int i=0; i < N; i++)
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,strings) VALUES ('%d',{'key%d':'b%d'})", i, i, i));
+
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+    }
+
+    @Test
+    public void testMapAsObjectWithIndexCreation() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+
+        process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, foo text, strings map<text, text>, PRIMARY KEY (id));");
+        process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,foo) VALUES ('%d','bar')", 1));
         assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test").setSource("{ \"event_test\" : { \"discover\" : \".*\"}}", XContentType.JSON).get());
 
         long N = 10;
@@ -733,5 +751,86 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         ensureGreen("test_numbers");
     }
 
+    @Test
+    public void testCopyTo() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("id").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("first_name")
+                            .field("type", "text")
+                            .field("cql_collection", "singleton")
+                            .field("copy_to", "full_name")
+                        .endObject()
+                        .startObject("last_name")
+                            .field("type", "text")
+                            .field("cql_collection", "singleton")
+                            .field("copy_to", "full_name")
+                        .endObject()
+                        .startObject("full_name")
+                            .field("type", "text")
+                            .field("cql_collection", "none")
+                        .endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("my_type", mapping));
+        ensureGreen("test");
+
+        assertThat(client().prepareIndex("test", "my_type", "1")
+                .setSource("{ \"first_name\": \"John\", \"last_name\": \"Smith\"}", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+
+        SearchResponse resp = client().prepareSearch().setIndices("test")
+                .setQuery(QueryBuilders.matchQuery("first_name", "John")).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+
+        resp = client().prepareSearch().setIndices("test")
+                .setQuery(QueryBuilders.matchQuery("full_name", "John Smith").operator(Operator.AND)).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+    }
+
+    @Test
+    public void testCopyToNested() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("id").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("nest")
+                            .field("type", "nested")
+                            .field("cql_collection", "singleton")
+                            .startObject("properties")
+                                .startObject("first_name")
+                                    .field("type", "text")
+                                    .field("cql_collection", "singleton")
+                                    .field("copy_to", "nest.full_name")
+                                .endObject()
+                                .startObject("last_name")
+                                    .field("type", "text")
+                                    .field("cql_collection", "singleton")
+                                    .field("copy_to", "nest.full_name")
+                                .endObject()
+                                .startObject("full_name")
+                                    .field("type", "text")
+                                    .field("cql_collection", "none")
+                                .endObject()
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("copytest").addMapping("my_type", mapping));
+        ensureGreen("copytest");
+
+        assertThat(client().prepareIndex("copytest", "my_type", "1")
+                .setSource("{ \"nest\": { \"first_name\": \"John\", \"last_name\": \"Smith\"}}", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+
+        SearchResponse resp = client().prepareSearch().setIndices("copytest")
+                .setQuery(QueryBuilders.nestedQuery("nest", QueryBuilders.matchQuery("nest.first_name", "John"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+
+        resp = client().prepareSearch().setIndices("copytest")
+                .setQuery(QueryBuilders.nestedQuery("nest", QueryBuilders.matchQuery("nest.full_name", "John Smith").operator(Operator.AND), RandomPicks.randomFrom(random(), ScoreMode.values()))).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+    }
 }
 

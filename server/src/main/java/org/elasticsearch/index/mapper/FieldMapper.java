@@ -481,6 +481,8 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
                 builder.field(TypeParsers.CQL_COLLECTION, "set");
             } else if (fieldType().cqlCollection().equals(CqlCollection.SINGLETON)) {
                 builder.field(TypeParsers.CQL_COLLECTION, "singleton");
+            } else if (fieldType().cqlCollection().equals(CqlCollection.NONE)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "none");
             }
         }
         if (includeDefaults || fieldType().cqlStruct() != defaultFieldType.cqlStruct()) {

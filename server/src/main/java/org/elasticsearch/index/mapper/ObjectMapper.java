@@ -281,6 +281,7 @@ public class ObjectMapper extends Mapper implements Cloneable {
                 case "list": builder.cqlCollection(CqlCollection.LIST); break;
                 case "set": builder.cqlCollection(CqlCollection.SET); break;
                 case "singleton": builder.cqlCollection(CqlCollection.SINGLETON); break;
+                case "none": builder.cqlCollection(CqlCollection.NONE); break;
                 }
                 return true;
             } else if (fieldName.equals(TypeParsers.CQL_STRUCT)) {
@@ -672,6 +673,8 @@ public class ObjectMapper extends Mapper implements Cloneable {
                 builder.field(TypeParsers.CQL_COLLECTION, "list");
             } else if (cqlCollection.equals(CqlCollection.SINGLETON)) {
                 builder.field(TypeParsers.CQL_COLLECTION, "singleton");
+            } else if (cqlCollection.equals(CqlCollection.NONE)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "none");
             }
         }
         if (cqlUdtName != null) {

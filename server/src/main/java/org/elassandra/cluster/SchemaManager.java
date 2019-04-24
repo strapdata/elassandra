@@ -88,6 +88,7 @@ import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.GeoPointFieldMapper;
 import org.elasticsearch.index.mapper.GeoShapeFieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.Mapper.CqlCollection;
 import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.MapperService;
@@ -617,7 +618,9 @@ public class SchemaManager extends AbstractComponent {
                 ColumnDescriptor colDesc = new ColumnDescriptor(column);
                 FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
                 if (fieldMapper != null) {
-                    //boolean freeze = !fieldMapper.cqlCollection().equals(CqlCollection.SINGLETON);
+                    if (fieldMapper.cqlCollection().equals(CqlCollection.NONE))
+                        continue; // ignore field.
+
                     boolean freeze = true;
                     if (fieldMapper instanceof GeoPointFieldMapper) {
                         ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
@@ -670,6 +673,9 @@ public class SchemaManager extends AbstractComponent {
                        logger.warn("Cannot infer CQL type from object mapping for field [{}], ignoring", column);
                        continue;
                     }
+                    if (objectMapper.cqlCollection().equals(CqlCollection.NONE))
+                        continue; // ignore field
+
                     if (!objectMapper.isEnabled()) {
                         logger.debug("Object [{}] not enabled stored as text", column);
                         colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.TEXT);

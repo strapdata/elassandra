@@ -38,7 +38,7 @@ import java.util.function.Supplier;
 public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
 
     public static enum CqlCollection {
-        LIST, SET, SINGLETON
+        LIST, SET, SINGLETON, NONE
     }
 
     public static enum CqlStruct {

@@ -412,6 +412,7 @@ public class ElasticSecondaryIndex implements Index {
             }
         } else if (mapper instanceof FieldMapper) {
             ((FieldMapper) mapper).createField(context, value);
+            DocumentParser.createCopyFields(context, ((FieldMapper)mapper).copyTo().copyToFields(), value);
         } else if (mapper instanceof ObjectMapper) {
             final ObjectMapper objectMapper = (ObjectMapper) mapper;
             final ObjectMapper.Nested nested = objectMapper.nested();
