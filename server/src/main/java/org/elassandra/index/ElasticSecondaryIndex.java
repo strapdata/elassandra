@@ -2284,7 +2284,13 @@ public class ElasticSecondaryIndex implements Index {
                                 final DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(typeName);
                                 final ByteBuffer bb = (ByteBuffer) values[indexInfo.indexOf(SourceFieldMapper.NAME)];
                                 final BytesReference source = new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
-                                final ParsedDocument parsedDoc = docMapper.parse(SourceToParse.source(indexInfo.name, typeName, id, source, XContentType.JSON));
+
+                                final SourceToParse sourceToParse = SourceToParse.source(indexInfo.name, typeName, id, source, XContentType.JSON);
+                                sourceToParse.token((Long)key.getToken().getTokenValue());
+                                if (this instanceof WideRowcument && baseCfs.metadata.partitionKeyColumns().size() > 1)
+                                    sourceToParse.routing(partitionKey);
+
+                                final ParsedDocument parsedDoc = docMapper.parse(sourceToParse);
                                 indexParsedDocument(indexInfo, docMapper, parsedDoc, startTime, ttl);
                             } else {
                                 IndexingContext context = buildContext(indexInfo, isStatic());
