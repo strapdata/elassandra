@@ -28,7 +28,7 @@ cache:
     - $HOME/google-cloud-sdk/
 
 before_install:
-  - wget https://github.com/sormuras/bach/raw/master/install-jdk.sh
+  - wget https://github.com/strapdata/bach/raw/master/install-jdk.sh
   # solves gpg server problems
   - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
 
@@ -36,7 +36,7 @@ matrix:
   include:
 # Java 10 "Oracle JDK"
     - env: JDK='Oracle JDK 10'
-      install: . ./install-jdk.sh -F 10
+      install: . ./install-jdk.sh -v -f 9; keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -alias SFSRootCAG2x -file SFSRootCAG2.pem -noprompt
 
 install: ./gradlew --version
 
