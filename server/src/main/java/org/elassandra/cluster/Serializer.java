@@ -376,7 +376,7 @@ public class Serializer {
                FieldMapper fieldMapper = (FieldMapper)mapper;
                if (!(fieldMapper instanceof MetadataFieldMapper)) {
                    if (field != null) {
-                       builder.field(field, value);
+                       builder.field(field, fieldMapper.fieldType().valueForDisplay(value));
                    } else {
                        builder.value(value);
                    }

@@ -832,5 +832,31 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .setQuery(QueryBuilders.nestedQuery("nest", QueryBuilders.matchQuery("nest.full_name", "John Smith").operator(Operator.AND), RandomPicks.randomFrom(random(), ScoreMode.values()))).get();
         assertThat(resp.getHits().getTotalHits(), equalTo(1L));
     }
+
+    @Test
+    public void testOutputFormat() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("_field_names").field("enabled", false).endObject()
+                    .startObject("properties")
+                        .startObject("id").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("created_at").field("type","date").field("index", false).field("format","epoch_millis").field("cql_collection", "singleton").endObject()
+                        .startObject("ip").field("type","ip").field("cql_collection", "singleton").endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test1").addMapping("my_type", mapping));
+        ensureGreen("test1");
+
+        assertThat(client().prepareIndex("test1", "my_type", "1")
+                .setSource("{ \"created_at\": 1524002400000, \"ip\":\"127.0.0.1\" }", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+
+        SearchResponse resp = client().prepareSearch().setIndices("test1").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        String _source = resp.getHits().getHits()[0].getSourceAsString();
+        System.out.println(_source);
+        assertTrue(_source.contains("\"127.0.0.1\""));
+        assertTrue(_source.contains("1524002400000"));
+    }
 }
 
