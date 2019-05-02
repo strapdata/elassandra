@@ -282,6 +282,20 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(rsp.getHits().getTotalHits(),equalTo(1L));
     }
 
+    // #282
+    @Test
+    public void testGeoShapeMapping() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("_source").field("enabled", true).endObject()
+                    .startObject("properties")
+                        .startObject("geom").field("type", "geo_shape").field("cql_collection", "singleton").endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("my_type", mapping));
+        ensureGreen("test");
+    }
+
     // #74 test
     @Test
     public void testUUID() throws Exception {

@@ -247,6 +247,75 @@ public class TypeParsers {
         }
     }
 
+    public static void parseCqlFields(
+            FieldMapper.Builder builder,
+            String name,
+            Mapper.TypeParser.ParserContext parserContext,
+            Iterator<Map.Entry<String, Object>> iterator,
+            final String propName,
+            final Object propNode) {
+        if (propName.equals(CQL_STRUCT)) {
+            switch(StringUtils.lowerCase(propNode.toString())) {
+            case "map" : builder.cqlStruct(CqlStruct.MAP); break;
+            case "udt" : builder.cqlStruct(CqlStruct.UDT); break;
+            case "tuple" : builder.cqlStruct(CqlStruct.TUPLE); break;
+            default: throw new MapperParsingException("Unsupported CQL struct [" + propNode.toString() + "], should be in map, udt or tuple.");
+            }
+            iterator.remove();
+        } else if (propName.equals(CQL_MANDATORY)) {
+            builder.cqlPartialUpdate(nodeBooleanValue(name, CQL_MANDATORY, propNode, parserContext));
+            iterator.remove();
+        } else if (propName.equals(CQL_PARTITION_KEY)) {
+            builder.cqlPartitionKey(nodeBooleanValue(name, CQL_PARTITION_KEY, propNode, parserContext));
+            iterator.remove();
+        } else if (propName.equals(CQL_STATIC_COLUMN)) {
+            builder.cqlStaticColumn(nodeBooleanValue(name, CQL_STATIC_COLUMN, propNode, parserContext));
+            iterator.remove();
+        } else if (propName.equals(CQL_PRIMARY_KEY_ORDER)) {
+            builder.cqlPrimaryKeyOrder(nodeIntegerValue(propNode));
+            iterator.remove();
+        } else if (propName.equals(CQL_CLUSTERING_KEY_DESC)) {
+            builder.cqlClusteringKeyDesc(nodeBooleanValue(name, CQL_CLUSTERING_KEY_DESC, propNode, parserContext));
+            iterator.remove();
+        } else if (propName.equals(TypeParsers.CQL_COLLECTION)) {
+            String value = StringUtils.lowerCase(propNode.toString());
+            switch (value) {
+            case "list": builder.cqlCollection(CqlCollection.LIST); break;
+            case "set": builder.cqlCollection(CqlCollection.SET); break;
+            case "singleton": builder.cqlCollection(CqlCollection.SINGLETON); break;
+            case "none": builder.cqlCollection(CqlCollection.NONE); break;
+            default: throw new MapperParsingException("Unsupported CQL collection [" + value + "], should be in list, set, singleton or none.");
+            }
+            iterator.remove();
+        } else if (propName.equals(TypeParsers.CQL_TYPE)) {
+            String value = StringUtils.lowerCase(propNode.toString());
+            switch (value) {
+            case "ascii": builder.cqlType(CQL3Type.Native.ASCII); break;
+            case "bigint": builder.cqlType(CQL3Type.Native.BIGINT); break;
+            case "blob": builder.cqlType(CQL3Type.Native.BLOB); break;
+            case "boolean": builder.cqlType(CQL3Type.Native.BOOLEAN); break;
+            case "date": builder.cqlType(CQL3Type.Native.DATE); break;
+            case "decimal": builder.cqlType(CQL3Type.Native.DECIMAL); break;
+            case "double": builder.cqlType(CQL3Type.Native.DOUBLE); break;
+            case "duration": builder.cqlType(CQL3Type.Native.DURATION); break;
+            case "float": builder.cqlType(CQL3Type.Native.FLOAT); break;
+            case "inet": builder.cqlType(CQL3Type.Native.INET); break;
+            case "int": builder.cqlType(CQL3Type.Native.INT); break;
+            case "smallint": builder.cqlType(CQL3Type.Native.SMALLINT); break;
+            case "text": builder.cqlType(CQL3Type.Native.TEXT); break;
+            case "time": builder.cqlType(CQL3Type.Native.TIME); break;
+            case "timestamp": builder.cqlType(CQL3Type.Native.TIMESTAMP); break;
+            case "timeuuid": builder.cqlType(CQL3Type.Native.TIMEUUID); break;
+            case "tinyint": builder.cqlType(CQL3Type.Native.TINYINT); break;
+            case "uuid": builder.cqlType(CQL3Type.Native.UUID); break;
+            case "varchar": builder.cqlType(CQL3Type.Native.VARCHAR); break;
+            case "varint": builder.cqlType(CQL3Type.Native.VARINT); break;
+            default: throw new MapperParsingException("Unsupported CQL type [" + value+"].");
+            }
+            iterator.remove();
+        }
+    }
+
     /**
      * Parse common field attributes such as {@code doc_values} or {@code store}.
      */
@@ -274,65 +343,6 @@ public class TypeParsers {
                 iterator.remove();
             } else if (propName.equals("boost")) {
                 builder.boost(nodeFloatValue(propNode));
-                iterator.remove();
-            } else if (propName.equals(CQL_STRUCT)) {
-                switch(StringUtils.lowerCase(propNode.toString())) {
-                case "map" : builder.cqlStruct(CqlStruct.MAP); break;
-                case "udt" : builder.cqlStruct(CqlStruct.UDT); break;
-                case "tuple" : builder.cqlStruct(CqlStruct.TUPLE); break;
-                default: throw new MapperParsingException("Unsupported CQL struct [" + propNode.toString() + "], should be in map, udt or tuple.");
-                }
-                iterator.remove();
-            } else if (propName.equals(CQL_MANDATORY)) {
-                builder.cqlPartialUpdate(nodeBooleanValue(name, CQL_MANDATORY, propNode, parserContext));
-                iterator.remove();
-            } else if (propName.equals(CQL_PARTITION_KEY)) {
-                builder.cqlPartitionKey(nodeBooleanValue(name, CQL_PARTITION_KEY, propNode, parserContext));
-                iterator.remove();
-            } else if (propName.equals(CQL_STATIC_COLUMN)) {
-                builder.cqlStaticColumn(nodeBooleanValue(name, CQL_STATIC_COLUMN, propNode, parserContext));
-                iterator.remove();
-            } else if (propName.equals(CQL_PRIMARY_KEY_ORDER)) {
-                builder.cqlPrimaryKeyOrder(nodeIntegerValue(propNode));
-                iterator.remove();
-            } else if (propName.equals(CQL_CLUSTERING_KEY_DESC)) {
-                builder.cqlClusteringKeyDesc(nodeBooleanValue(name, CQL_CLUSTERING_KEY_DESC, propNode, parserContext));
-                iterator.remove();
-            } else if (propName.equals(TypeParsers.CQL_COLLECTION)) {
-                String value = StringUtils.lowerCase(propNode.toString());
-                switch (value) {
-                case "list": builder.cqlCollection(CqlCollection.LIST); break;
-                case "set": builder.cqlCollection(CqlCollection.SET); break;
-                case "singleton": builder.cqlCollection(CqlCollection.SINGLETON); break;
-                case "none": builder.cqlCollection(CqlCollection.NONE); break;
-                default: throw new MapperParsingException("Unsupported CQL collection [" + value + "], should be in list, set, singleton or none.");
-                }
-                iterator.remove();
-            } else if (propName.equals(TypeParsers.CQL_TYPE)) {
-                String value = StringUtils.lowerCase(propNode.toString());
-                switch (value) {
-                case "ascii": builder.cqlType(CQL3Type.Native.ASCII); break;
-                case "bigint": builder.cqlType(CQL3Type.Native.BIGINT); break;
-                case "blob": builder.cqlType(CQL3Type.Native.BLOB); break;
-                case "boolean": builder.cqlType(CQL3Type.Native.BOOLEAN); break;
-                case "date": builder.cqlType(CQL3Type.Native.DATE); break;
-                case "decimal": builder.cqlType(CQL3Type.Native.DECIMAL); break;
-                case "double": builder.cqlType(CQL3Type.Native.DOUBLE); break;
-                case "duration": builder.cqlType(CQL3Type.Native.DURATION); break;
-                case "float": builder.cqlType(CQL3Type.Native.FLOAT); break;
-                case "inet": builder.cqlType(CQL3Type.Native.INET); break;
-                case "int": builder.cqlType(CQL3Type.Native.INT); break;
-                case "smallint": builder.cqlType(CQL3Type.Native.SMALLINT); break;
-                case "text": builder.cqlType(CQL3Type.Native.TEXT); break;
-                case "time": builder.cqlType(CQL3Type.Native.TIME); break;
-                case "timestamp": builder.cqlType(CQL3Type.Native.TIMESTAMP); break;
-                case "timeuuid": builder.cqlType(CQL3Type.Native.TIMEUUID); break;
-                case "tinyint": builder.cqlType(CQL3Type.Native.TINYINT); break;
-                case "uuid": builder.cqlType(CQL3Type.Native.UUID); break;
-                case "varchar": builder.cqlType(CQL3Type.Native.VARCHAR); break;
-                case "varint": builder.cqlType(CQL3Type.Native.VARINT); break;
-                default: throw new MapperParsingException("Unsupported CQL type [" + value+"].");
-                }
                 iterator.remove();
             } else if (parserContext.indexVersionCreated().before(Version.V_5_0_0_alpha1)
                 && parseNorms(builder, name, propName, propNode, parserContext)) {
@@ -377,6 +387,8 @@ public class TypeParsers {
                     parseCopyFields(propNode, builder);
                 }
                 iterator.remove();
+            } else {
+                parseCqlFields(builder, name, parserContext, iterator, propName, propNode);
             }
         }
         builder.cqlCheck();

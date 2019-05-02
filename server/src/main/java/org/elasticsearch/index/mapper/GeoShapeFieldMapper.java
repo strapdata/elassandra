@@ -219,6 +219,8 @@ public class GeoShapeFieldMapper extends FieldMapper {
                     boolean pointsOnly = TypeParsers.nodeBooleanValue(fieldName, Names.STRATEGY_POINTS_ONLY, fieldNode, parserContext);
                     builder.fieldType().setPointsOnly(pointsOnly);
                     iterator.remove();
+                } else {
+                    TypeParsers.parseCqlFields(builder, name, parserContext, iterator, fieldName, fieldNode);
                 }
             }
             return builder;
