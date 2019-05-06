@@ -396,8 +396,10 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                 }
 
                 if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
-                    indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy().getReplicationFactor() - 1 );
+                    // read RF from keyspace definition
+                    indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, ClusterService.replicationFactor(keyspace) - 1 );
                 } else {
+                    // set number_of_replica from settings but lower to the number of nodes in the datacenter.
                     int number_of_replicas = Math.min( request.settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0)) , clusterService.state().nodes().getSize()-1);
                     indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, number_of_replicas);
                 }
