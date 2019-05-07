@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -15,13 +15,12 @@
  */
 package org.elassandra;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.equalTo;
-
-import java.util.Locale;
-
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -30,6 +29,13 @@ import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
+import java.nio.ByteBuffer;
+import java.util.Locale;
+import java.util.Map;
+
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.hamcrest.Matchers.equalTo;
+
 /**
  * Elassandra partitioned index tests.
  * @author vroyer
@@ -37,12 +43,12 @@ import org.junit.Test;
  */
 //mvn test -Pdev -pl om.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.PartitionedIndexTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
 public class PartitionedIndexTests extends ESSingleNodeTestCase {
-    
+
     @Test
     public void basicPartitionFunctionTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 ( name text, age int, primary key (name))");
-        
+
         for(long i=20; i < 30; i++) {
             createIndex("ks_"+i, Settings.builder().put("index.keyspace","ks")
                     .put("index.partition_function", "byage ks_{0,number,##} age")
@@ -53,16 +59,30 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
             for(int j=0; j < i; j++)
                 process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d-%d', %d)",i,j,i));
         }
-        
+
         for(long i=20; i < 30; i++)
             assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
+
+        // test index delete #286
+        for(long i=25; i < 30; i++) {
+            assertAcked(client().admin().indices().prepareDelete("ks_"+i).get());
+        }
+        UntypedResultSet rs = process(ConsistencyLevel.ONE,"SELECT extensions FROM system_schema.tables WHERE keyspace_name = ? AND table_name = ?", "ks", "t1");
+        for(Row row : rs) {
+            Map<String, ByteBuffer> extensions = row.getMap("extensions", UTF8Type.instance, BytesType.instance);
+            for(long i=20; i < 25; i++)
+                assertTrue(extensions.containsKey("elastic_admin/ks_"+i));
+            for(long i=25; i < 30; i++) {
+                assertFalse(extensions.containsKey("elastic_admin/ks_"+i));
+            }
+        }
     }
-    
+
     @Test
     public void basicStringPartitionFunctionTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 ( name text, age int, primary key (name))");
-        
+
         for(long i=20; i < 30; i++) {
             createIndex("ks_"+i, Settings.builder().put("index.keyspace","ks")
                     .put("index.partition_function", "byage ks_%d age")
@@ -74,16 +94,16 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
             for(int j=0; j < i; j++)
                 process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d-%d', %d)",i,j,i));
         }
-        
+
         for(long i=20; i < 30; i++)
             assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
     }
-    
+
     @Test
     public void basicStringPartitionFunctionWithDummyIndexTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 (name text, age int, primary key (name))");
-        
+
         XContentBuilder mappingt1 = XContentFactory.jsonBuilder().startObject()
                     .startObject("properties")
                        .startObject("name").field("type", "keyword").field("cql_collection", "singleton").field("index", false).endObject()
@@ -91,7 +111,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
                     .endObject()
               .endObject();
         assertAcked(client().admin().indices().prepareCreate("ks").addMapping("t1", mappingt1).get());
-        
+
         for(long i=20; i < 30; i++) {
             createIndex("ks_"+i, Settings.builder().put("index.keyspace","ks")
                     .put("index.partition_function", "byage ks_%d age")
@@ -109,19 +129,19 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
                 client().prepareIndex("ks", "t1", name).setSource(doc).get();
             }
         }
-        
+
         for(long i=20; i < 30; i++)
             assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
     }
-    
+
     @Test
     public void multipleMappingTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS fb WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE fb.messages ( conversation text, num int, author text, content text, date timestamp, recipients list<text>, PRIMARY KEY (conversation, num))");
-        
+
         createIndex("fb", Settings.builder().put("index.keyspace","fb").put("index.table","messages").build(),"messages", discoverMapping("messages"));
         ensureGreen("fb");
-        
+
         XContentBuilder mapping2 = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -134,7 +154,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
                 .endObject();
         createIndex("fb2", Settings.builder().put("index.keyspace","fb").put("index.table","messages").build(),"messages", mapping2);
         ensureGreen("fb2");
-        
+
         client().prepareIndex("fb", "messages","\"Lisa%20Revol\",201]")
         .setSource("{\"content\": \"ouais\", \"num\": 201, \"conversation\": \"Lisa\", \"author\": \"Barth\", \"date\": 1469968740000, \"recipients\": [\"Lisa\"]}", XContentType.JSON)
         .get();

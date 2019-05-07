@@ -849,10 +849,14 @@ public class ClusterService extends BaseClusterService {
             builder.startObject();
             IndexMetaData.Builder.toXContent(indexMetaData, builder, MetaData.CASSANDRA_FORMAT_PARAMS);
             builder.endObject();
-            extensions.put(getElasticAdminKeyspaceName() + "/" + indexMetaData.getIndex().getName(), ByteBuffer.wrap( BytesReference.toBytes(builder.bytes()) ));
+            extensions.put(getExtensionKey(indexMetaData), ByteBuffer.wrap( BytesReference.toBytes(builder.bytes()) ));
         } catch (IOException e) {
             throw new ElasticsearchException("Failed to serialize index metadata", e);
         }
+    }
+
+    public String getExtensionKey(IndexMetaData indexMetaData) {
+        return getElasticAdminKeyspaceName() + "/" + indexMetaData.getIndex().getName();
     }
 
     public IndexMetaData getIndexMetaDataFromExtension(ByteBuffer value) {

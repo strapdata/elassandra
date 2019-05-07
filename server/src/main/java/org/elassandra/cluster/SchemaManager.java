@@ -412,7 +412,7 @@ public class SchemaManager extends AbstractComponent {
 
         Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
         SchemaKeyspace.addTableToSchemaMutation(cfm, true, builder);
-        addTableExtensionsToMutationBuilder(cfm, indexName, indexMetaData, builder);
+        addTableExtensionsToMutationBuilder(cfm, indexMetaData, builder);
         mutations.add(builder.build());
         events.add(new Event.SchemaChange(Event.SchemaChange.Change.CREATED, Event.SchemaChange.Target.TABLE, cts.keyspace(), cts.columnFamily()));
         return ksm.withSwapped(ksm.tables.with(cfm));
@@ -448,7 +448,7 @@ public class SchemaManager extends AbstractComponent {
 
         logger.debug("table {}.{} set extensions for index {}", ksm.name, cfName, indexName);
         Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
-        x = Pair.create(addTableExtensionsToMutationBuilder(x.left, indexName, indexMetaData, builder), x.right);
+        x = Pair.create(addTableExtensionsToMutationBuilder(x.left, indexMetaData, builder), x.right);
         mutations.add(builder.build());
 
         ksm2 = ksm.withSwapped(ksm.tables.without(cfm.cfName).with(x.left));
@@ -463,12 +463,26 @@ public class SchemaManager extends AbstractComponent {
         return ksm2;
     }
 
-    private CFMetaData addTableExtensionsToMutationBuilder(CFMetaData cfm, String indexName, final IndexMetaData indexMetaData, Mutation.SimpleBuilder builder) {
+    private CFMetaData addTableExtensionsToMutationBuilder(CFMetaData cfm, final IndexMetaData indexMetaData, Mutation.SimpleBuilder builder) {
         Map<String, ByteBuffer> extensions = new LinkedHashMap<String, ByteBuffer>();
         if (cfm.params != null && cfm.params.extensions != null)
             extensions.putAll(cfm.params.extensions);
         clusterService.putIndexMetaDataExtension(indexMetaData, extensions);
         CFMetaData cfm2 = cfm.copy();
+        cfm2.extensions(extensions);
+        SchemaKeyspace.addTableExtensionsToSchemaMutation(cfm2, extensions, builder);
+        return cfm2;
+    }
+
+    public CFMetaData removeTableExtensionToMutationBuilder(CFMetaData cfm, final Set<IndexMetaData> indexMetaDataSet, Mutation.SimpleBuilder builder) {
+        CFMetaData cfm2 = cfm.copy();
+        Map<String, ByteBuffer> extensions = new LinkedHashMap<String, ByteBuffer>();
+        if (cfm.params != null && cfm.params.extensions != null) {
+            Set<String> toRemoveExtentsions = indexMetaDataSet.stream().map(imd -> clusterService.getExtensionKey(imd)).collect(Collectors.toSet());
+            extensions = cfm.params.extensions.entrySet().stream()
+                .filter( x -> !toRemoveExtentsions.contains(x.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
         cfm2.extensions(extensions);
         SchemaKeyspace.addTableExtensionsToSchemaMutation(cfm2, extensions, builder);
         return cfm2;
@@ -570,7 +584,7 @@ public class SchemaManager extends AbstractComponent {
             } else {
                 logger.debug("table {}.{} set extensions for index {}", indexMetaData.keyspace(), cfName, indexMetaData.getIndex().getName());
                 Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(indexMetaData.keyspace(), FBUtilities.timestampMicros());
-                addTableExtensionsToMutationBuilder(cfm,  indexMetaData.getIndex().getName(), indexMetaData, builder);
+                addTableExtensionsToMutationBuilder(cfm, indexMetaData, builder);
                 mutations.add(builder.build());
             }
         }

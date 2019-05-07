@@ -20,11 +20,16 @@
 package org.elasticsearch.cluster.metadata;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.SchemaKeyspace;
 import org.apache.cassandra.transport.Event;
+import org.apache.cassandra.utils.FBUtilities;
 import org.elassandra.cluster.SchemaManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexClusterStateUpdateRequest;
@@ -32,7 +37,6 @@ import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlocks;
-import org.elasticsearch.cluster.metadata.MetaDataDeleteIndexService.KeyspaceRemovalInfo;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -165,6 +169,23 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
             for(String table : unindexableTables) {
                 MetaDataDeleteIndexService.this.clusterService.getSchemaManager().dropSecondaryIndex(ksm, table, mutations, events);
             }
+
+            // remove table extensions from CQL schema
+            HashMultimap<String, IndexMetaData> tableExtensionToRemove = HashMultimap.create();
+            for(IndexMetaData indexMetaData : indices) {
+                for(ObjectCursor<MappingMetaData> type: indexMetaData.getMappings().values()) {
+                    String table = SchemaManager.typeToCfName(indexMetaData.keyspace(), type.value.type());
+                    if (!droppableTables.contains(table) && !unindexableTables.contains(table))
+                        tableExtensionToRemove.put(table, indexMetaData);
+                }
+            }
+            Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
+            for(String table : tableExtensionToRemove.keySet()) {
+                CFMetaData cfm = Schema.instance.getCFMetaData(this.keyspace, table);
+                MetaDataDeleteIndexService.this.clusterService.getSchemaManager().removeTableExtensionToMutationBuilder(cfm, tableExtensionToRemove.get(table), builder);
+            }
+            if (!builder.isEmpty())
+                mutations.add(builder.build());
         }
     }
 
