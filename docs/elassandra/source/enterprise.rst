@@ -13,10 +13,55 @@ If you are currently running a Cassandra cluster, you can progressively switch t
 
 * First switch to strapdata-cassandra, a fork of cassandra modified to support Elasticsearch.
 * Second, restart nodes with Elasticsearch enabled (change the java main class).
-* Third, create Elasticsearch indices with a per table Elasticsearch mapping.
+* Third, create Elasticsearch indicies with a per table Elasticsearch mapping.
 * And finally, deploy the Elassandra Enterprise plugin on your nodes to enable enterprise grade features.
 
 .. image:: images/elassandra-deploy-process.png
+
+Install
+-------
+
+The Elassandra Enterprise plugin must be installed on all Elassandra nodes:
+
+* Unzip the strapdata-enterprise-<version>.zip in a temporary directory.
+* If you have installed the elassandra tarball, set CASSANDRA_HOME to your install directory.
+* Run the install.sh script.
+* Enable some enterprise features in your conf/elasticsearch.yaml (For example add *jmx.enabled: true*)
+* Start (or restart) your node.
+
+To check that your *Strapdata Enterprise plugin* is active:
+
+.. code::
+
+   GET _nodes/plugins?pretty
+   ...
+   "plugins" : [
+        {
+          "name" : "org.apache.cassandra.service.ElassandraDaemon$ElassandraPlugin",
+          "version" : "NA",
+          "description" : "classpath plugin",
+          "classname" : "org.apache.cassandra.service.ElassandraDaemon$ElassandraPlugin",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "requires_keystore" : false
+        },
+        {
+          "name" : "strapdata-plugin",
+          "version" : "6.2.3.13",
+          "description" : "Strapdata Enterprise plugin version 6.2.3.13",
+          "classname" : "com.strapdata.elasticsearch.plugin.EnterprisePlugin",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "requires_keystore" : false
+        }
+      ],
+    ....
+
+.. TIP::
+
+   The Elassandra Enterprise plugin is active if at least one of its features is enabled in conf/elasticsearch.yml.
+
+If you run in a container, the `strapdata/elassandra-enterprise <https://hub.docker.com/r/strapdata/elassandra-enterprise>`_ docker image has the Enterprise plugin installed.
 
 License management
 ------------------

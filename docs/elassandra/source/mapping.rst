@@ -114,7 +114,22 @@ Columns matching the provided regular expression are mapped as Elasticsearch fie
    }'
 
 
-By default, all text columns are mapped with ``"type":"keyword"``.
+By default, all text columns are mapped with ``"type":"keyword"``. Moreover, the discovery regular expression must exclude explicitly mapped fields to avoid inconsistent mapping. 
+The following mapping update allows to discover all fields but the one named "name" and explicitly define its mapping.
+
+.. code::
+
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/my_keyspace/_mapping/my_table" -d '{
+       "my_table" : {
+           "discover" : "^((?!name).*)",
+           "properties" : {
+               "name" : {
+                   "type" : "text"
+               }
+           }
+       }
+   }'
+
 
 .. TIP::
    When creating the first Elasticsearch index for a given Cassandra table, Elassandra creates a custom CQL secondary index.
