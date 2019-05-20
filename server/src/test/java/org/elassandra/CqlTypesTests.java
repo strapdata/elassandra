@@ -48,6 +48,7 @@ import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -347,6 +348,27 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         long N = 10;
         for(int i=0; i < N; i++)
             process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,strings) VALUES ('%d',{'key%d':'b%d'})", i, i, i));
+
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+    }
+
+    @Test
+    public void testNonEmptyMapAsObjectWithIndexCreation() throws Exception {
+        createIndex("test");
+        ensureGreen("test");
+
+        process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, foo text, strings map<text, text>, PRIMARY KEY (id));");
+        process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,foo) VALUES ('%d','bar')", 1));
+
+        long N = 10;
+        for(int i=0; i < N; i++)
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,strings) VALUES ('%d',{'key%d':'b%d'})", i, i, i));
+
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test").setSource("{ \"event_test\" : { \"discover\" : \".*\"}}", XContentType.JSON).get());
+
+        // wait asynchronous index rebuild triggered by creating the index.
+        waitIndexRebuilt("test", Collections.singletonList("event_test"), 10000L);
 
         assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
         assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
