@@ -12,7 +12,7 @@ There are a number of ways to install Elassandra:
 
 Elassandra is based on Cassandra and ElasticSearch, thus it will be easier if you're already familiar with one on these technologies.
 
-.. important:: Be aware that Elassandra is memory consuming and should be installed on machine with at least 4Gb of RAM.
+.. important:: Be aware that Elassandra need more memory than Cassandra when Elasticsearch is used and should be installed on machine with at least 4Gb of RAM.
 
 Tarball
 -------
@@ -110,3 +110,10 @@ Google Kubernetes Marketplace
 You can deploy an Elassandra cluster on `GKE <https://cloud.google.com/kubernetes-engine/>`_ with a few clicks using our 
 `Elassandra Kubernetes App <https://console.cloud.google.com/marketplace/details/strapdata/elassandra>`_ 
 (require an existing GCP project and a running Google Kubernetes Cluster).
+
+
+Running Cassandra only
+----------------------
+
+In a cluster, you may need to run Cassandra datacenter without Elasticsearch indexing. In such case, change the CASSANDRA_DAEMON variable 
+to **org.apache.cassandra.service.CassandraDaemon** in your ``/etc/default/cassandra`` on all nodes of your Cassandra only datacenter.
