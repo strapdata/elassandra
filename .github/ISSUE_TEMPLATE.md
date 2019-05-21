@@ -40,7 +40,7 @@ us to reproduce it, the more likely that somebody will take the time to look at 
  2.
  3.
 
-**Please provide the following information:
+**Please provide the following information**:
 
 * elassandra logs (logs/system.logs or /var/lib/cassandra/system.log)
 * elasticsearch cluster state (curl http://localhost:9200/_cluster/state)
