@@ -734,6 +734,39 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(resp.getHits().getTotalHits(), equalTo(1L));
      }
 
+    // #292 test
+    @Test
+    public void testStringMappedAsMultiFields() throws Exception {
+        process(ConsistencyLevel.ONE, "CREATE KEYSPACE example WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1': 1};");
+        process(ConsistencyLevel.ONE,"CREATE TABLE example.sessions (id text, day text, PRIMARY KEY ((id)));");
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("id")
+                            .field("type", "keyword")
+                            .field("cql_collection", "singleton")
+                            .field("cql_primary_key_order", 0)
+                            .field("cql_partition_key", true)
+                        .endObject()
+                        .startObject("day")
+                            .field("type", "keyword").field("cql_collection", "singleton")
+                             .startObject("fields")
+                                .startObject("date").field("type", "date").field("format","yyyy-MM-dd").endObject()
+                                .startObject("numeric").field("type", "double").endObject()
+                                .startObject("addr").field("type", "ip").endObject()
+                                .startObject("bool").field("type", "boolean").endObject()
+                            .endObject()
+                        .endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("example")
+                .setSettings(Settings.builder().put("index.mapping.ignore_malformed", true).build())
+                .addMapping("sessions", mapping));
+        process(ConsistencyLevel.ONE,"INSERT INTO example.sessions (id, day) VALUES ('1', '2019-05-01');");
+        SearchResponse resp = client().prepareSearch().setIndices("example").setQuery(QueryBuilders.matchAllQuery()).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+     }
+
     @Test
     public void testNestedMappingUpdate() throws Exception {
         createIndex("test");

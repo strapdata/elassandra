@@ -550,6 +550,16 @@ public class DateFieldMapper extends FieldMapper {
             } else if (object instanceof UUID) {
                 // CQL timeuuid
                 value = UUIDGen.unixTimestamp((UUID)object);
+            } else if (object instanceof String) {
+                try {
+                    value = fieldType().parse((String)object);
+                } catch (IllegalArgumentException e) {
+                    if (ignoreMalformed.value()) {
+                        return;
+                    } else {
+                        throw e;
+                    }
+                }
             } else {
                 value = (Long)object;
             }

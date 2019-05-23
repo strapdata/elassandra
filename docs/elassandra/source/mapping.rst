@@ -91,6 +91,18 @@ For more information about Cassandra collection types and compound primary key, 
    force a read before index even if all fields are provided in the Cassandra upsert operation. For this reason, when you don't need multi-valued fields, use fields backed by
    native Cassandra types rather than the default list to avoid a read-before-index when inserting a row containing all its mandatory elasticsearch fields.
 
+Elasticsearch multi-fields
+--------------------------
+
+Elassandra supports `Elasticsearch multi-fields <https://www.elastic.co/guide/en/elasticsearch/reference/6.2/multi-fields.html>` indexing, allowing to index a field in differents ways for different purposes.
+
+.. TIP::
+
+  Indexing a wrong datatype into a field may throws an exception by default and reject the whole document. 
+  The `ignore_malformed parameter<https://www.elastic.co/guide/en/elasticsearch/reference/6.3/ignore-malformed.html>`_, if set to true, allows the exception to be ignored.
+  This parameter can also be set at the `index level <https://www.elastic.co/guide/en/elasticsearch/reference/6.3/ignore-malformed.html#ignore-malformed-setting>`_, 
+  to allow to ignore malformed content globally across all mapping types.
+
 Bi-directional mapping
 ----------------------
 
@@ -792,7 +804,7 @@ As a result, you can index, get or delete a Cassandra row, including any column 
 Elasticsearch pipeline processors
 ---------------------------------
 
-Elassandra 6.x supports Elasticsearchpipeline processors <https://www.elastic.co/guide/en/elasticsearch/reference/current/pipeline.html>`_ when indexing through the Elasticsearch API. The following example
+Elassandra 6.x supports Elasticsearch `pipeline processors <https://www.elastic.co/guide/en/elasticsearch/reference/current/pipeline.html>`_ when indexing through the Elasticsearch API. The following example
 illustrates how to generates a **timeuuid** clustering key when ingesting some logs into Elassandra (requires Elassandra 6.2.3.8+):
 
 First, create a named pipeline as show below. This pipeline adds a new *timeuuid* field based on the existing date field *es_time* using the date format ISO8601 in europ timezone.

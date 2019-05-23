@@ -280,16 +280,21 @@ public class BooleanFieldMapper extends FieldMapper {
 
     @Override
     public void createField(ParseContext context, Object object) throws IOException {
-        Boolean value = (Boolean) object;
         if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored() && !fieldType().hasDocValues()) {
             return;
         }
-        if (value == null) {
+        Boolean value = null;
+        if (object == null) {
             if (fieldType().nullValue() == null) {
                return;
             }
             value = fieldType().nullValue();
+        } else if (object instanceof Boolean) {
+            value = (Boolean)object;
+        } else if (object instanceof String) {
+            value = Boolean.valueOf((String)object);
         }
+
         if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
             context.doc().add(new Field(fieldType().name(), value ? "T" : "F", fieldType()));
         }

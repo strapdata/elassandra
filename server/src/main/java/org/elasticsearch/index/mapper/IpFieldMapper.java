@@ -424,8 +424,15 @@ public class IpFieldMapper extends FieldMapper {
         InetAddress address = null;
 
         if (object instanceof String) {
-            //TODO: find why we got String object here ?
-            address = com.google.common.net.InetAddresses.forString((String)object);
+            try {
+                address = InetAddresses.forString((String)object);
+            } catch (IllegalArgumentException e) {
+                if (ignoreMalformed.value()) {
+                    return;
+                } else {
+                    throw e;
+                }
+            }
         } else {
             address =  (InetAddress) object;
         }
