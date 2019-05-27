@@ -28,6 +28,7 @@ import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.ParsingException;
 import org.elasticsearch.common.Strings;
@@ -76,6 +77,7 @@ public class QueryShardContext extends QueryRewriteContext {
     private final SimilarityService similarityService;
     private final BitsetFilterCache bitsetFilterCache;
     private final BiFunction<MappedFieldType, String, IndexFieldData<?>> indexFieldDataService;
+    private final ClusterService clusterService;
     private final int shardId;
     private final IndexReader reader;
     private final String clusterAlias;
@@ -99,16 +101,28 @@ public class QueryShardContext extends QueryRewriteContext {
     private boolean isFilter;
 
     public QueryShardContext(int shardId, IndexSettings indexSettings, BitsetFilterCache bitsetFilterCache,
+            BiFunction<MappedFieldType, String, IndexFieldData<?>> indexFieldDataLookup, MapperService mapperService,
+            SimilarityService similarityService, ScriptService scriptService, NamedXContentRegistry xContentRegistry,
+            NamedWriteableRegistry namedWriteableRegistry, Client client, IndexReader reader, LongSupplier nowInMillis,
+            String clusterAlias) {
+        this( shardId,  indexSettings,  bitsetFilterCache,
+                indexFieldDataLookup,  mapperService,
+                 similarityService,  scriptService,  xContentRegistry,
+                 namedWriteableRegistry,  client,  reader,  nowInMillis,
+                 clusterAlias, null);
+    }
+    public QueryShardContext(int shardId, IndexSettings indexSettings, BitsetFilterCache bitsetFilterCache,
                              BiFunction<MappedFieldType, String, IndexFieldData<?>> indexFieldDataLookup, MapperService mapperService,
                              SimilarityService similarityService, ScriptService scriptService, NamedXContentRegistry xContentRegistry,
                              NamedWriteableRegistry namedWriteableRegistry, Client client, IndexReader reader, LongSupplier nowInMillis,
-                             String clusterAlias) {
+                             String clusterAlias, ClusterService clusterService) {
         super(xContentRegistry, namedWriteableRegistry,client, nowInMillis);
         this.shardId = shardId;
         this.similarityService = similarityService;
         this.mapperService = mapperService;
         this.bitsetFilterCache = bitsetFilterCache;
         this.indexFieldDataService = indexFieldDataLookup;
+        this.clusterService = clusterService;
         this.allowUnmappedFields = indexSettings.isDefaultAllowUnmappedFields();
         this.nestedScope = new NestedScope();
         this.scriptService = scriptService;
@@ -121,7 +135,7 @@ public class QueryShardContext extends QueryRewriteContext {
     public QueryShardContext(QueryShardContext source) {
         this(source.shardId, source.indexSettings, source.bitsetFilterCache, source.indexFieldDataService, source.mapperService,
                 source.similarityService, source.scriptService, source.getXContentRegistry(), source.getWriteableRegistry(),
-                source.client, source.reader, source.nowInMillis, source.clusterAlias);
+                source.client, source.reader, source.nowInMillis, source.clusterAlias, source.clusterService);
         this.types = source.getTypes();
     }
 
@@ -131,6 +145,10 @@ public class QueryShardContext extends QueryRewriteContext {
         this.namedQueries.clear();
         this.nestedScope = new NestedScope();
         this.isFilter = false;
+    }
+
+    public ClusterService getClusterService() {
+        return this.clusterService;
     }
 
     public IndexAnalyzers getIndexAnalyzers() {

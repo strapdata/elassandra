@@ -137,7 +137,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private Supplier<Sort> indexSortSupplier;
 
     private SearchProcessorFactory searchProcessorFactory;
-    
+
     public IndexService(
             IndexSettings indexSettings,
             NodeEnvironment nodeEnv,
@@ -196,12 +196,12 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
 
         this.tokenRangesBitsetFilterCache = new TokenRangesBitsetFilterCache(indexSettings, clusterService.tokenRangesService());
         this.tokenRangesBitsetFilterCache.setListener(new TokenRangeBitsetCacheListener(this));
-        
+
         this.warmer = new IndexWarmer(indexSettings.getSettings(), threadPool, indexFieldData,
             bitsetFilterCache.createListener(threadPool));
         this.indexCache = new IndexCache(indexSettings, queryCache, bitsetFilterCache);
         this.indexCache.tokenRangeBitsetFilterCache(this.tokenRangesBitsetFilterCache);
-        
+
         this.engineFactory = engineFactory;
         // initialize this last -- otherwise if the wrapper requires any other member to be non-null we fail with an NPE
         this.searcherWrapper = wrapperFactory.newWrapper(this);
@@ -306,15 +306,15 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     public SearchProcessorFactory searchProcessorFactory() {
         return this.searchProcessorFactory;
     }
-    
+
     public boolean isTokenRangesBitsetCacheEnabled() {
         return this.indexSettings.getSettings().getAsBoolean(IndexMetaData.SETTING_TOKEN_RANGES_BITSET_CACHE, this.clusterService.settings().getAsBoolean(ClusterService.SETTING_CLUSTER_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE)));
     }
-    
+
     public ClusterService clusterService() {
         return this.clusterService;
     }
-    
+
     public String keyspace() {
         return this.mapperService.keyspace();
     }
@@ -337,7 +337,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             return sum / count;
         }
     }
-    
+
     public IndexShard createShard(ShardRouting routing) throws IOException {
         return createShard(routing, s -> {});
     }
@@ -521,7 +521,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             shardId, indexSettings, indexCache.bitsetFilterCache(), indexFieldData::getForField, mapperService(),
                 similarityService(), scriptService, xContentRegistry,
                namedWriteableRegistry, client, indexReader,
-            nowInMillis, clusterAlias);
+            nowInMillis, clusterAlias, clusterService);
     }
 
     /**
@@ -642,7 +642,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             }
         }
     }
-    
+
     private final class FieldDataCacheListener implements IndexFieldDataCache.Listener {
         final IndexService indexService;
 

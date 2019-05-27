@@ -1099,7 +1099,7 @@ public abstract class AbstractQueryTestCase<QB extends AbstractQueryBuilder<QB>>
 
         QueryShardContext createShardContext() {
             return new QueryShardContext(0, idxSettings, bitsetFilterCache, indexFieldDataService::getForField, mapperService,
-                similarityService, scriptService, xContentRegistry, namedWriteableRegistry, this.client, null, () -> nowInMillis, null);
+                similarityService, scriptService, xContentRegistry, namedWriteableRegistry, this.client, null, () -> nowInMillis, null, null);
         }
 
         ScriptModule createScriptModule(List<ScriptPlugin> scriptPlugins) {
