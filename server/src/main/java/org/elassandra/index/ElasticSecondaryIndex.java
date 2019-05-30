@@ -2174,7 +2174,7 @@ public class ElasticSecondaryIndex implements Index {
                     if (indexInfo.includeNodeId)
                         context.docMapper.nodeFieldMapper().createField(context, ImmutableMappingInfo.this.nodeId);
 
-                    if (this instanceof WideRowcument && baseCfs.metadata.partitionKeyColumns().size() > 1)
+                    if ((this instanceof WideRowcument || context.docMapper.routingFieldMapper().fieldType().hasDocValues()) && baseCfs.metadata.partitionKeyColumns().size() > 1)
                         context.docMapper.routingFieldMapper().createField(context, partitionKey);
 
                     if (!indexInfo.versionLessEngine) {
@@ -2278,7 +2278,8 @@ public class ElasticSecondaryIndex implements Index {
 
                                 final SourceToParse sourceToParse = SourceToParse.source(indexInfo.name, typeName, id, source, XContentType.JSON);
                                 sourceToParse.token((Long)key.getToken().getTokenValue());
-                                if (this instanceof WideRowcument && baseCfs.metadata.partitionKeyColumns().size() > 1)
+
+                                if ((this instanceof WideRowcument || docMapper.routingFieldMapper().fieldType().hasDocValues()) &&  baseCfs.metadata.partitionKeyColumns().size() > 1)
                                     sourceToParse.routing(partitionKey);
 
                                 final ParsedDocument parsedDoc = docMapper.parse(sourceToParse);
@@ -2298,7 +2299,7 @@ public class ElasticSecondaryIndex implements Index {
                                     SeqNoFieldMapper.SequenceIDFields.emptySeqID(),
                                     (isStatic()) ? partitionKey : id,
                                     context.type(),
-                                    Serializer.stringify(pkCols, baseCfs.metadata.partitionKeyColumns().size()), // routing
+                                    partitionKey,
                                     ((Long) key.getToken().getTokenValue()).longValue(),
                                     context.docs(),
                                     context.source(), // source

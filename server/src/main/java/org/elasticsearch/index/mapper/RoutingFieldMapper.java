@@ -20,11 +20,13 @@
 package org.elasticsearch.index.mapper;
 
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.SortedSetDocValuesField;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -89,6 +91,9 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
                 Object fieldNode = entry.getValue();
                 if (fieldName.equals("required")) {
                     builder.required(TypeParsers.nodeBooleanValue(name, "required", fieldNode, parserContext));
+                    iterator.remove();
+                } else if (fieldName.equals(TypeParsers.DOC_VALUES)) {
+                    builder.docValues(TypeParsers.nodeBooleanValue(name, TypeParsers.DOC_VALUES, fieldNode, parserContext));
                     iterator.remove();
                 }
             }
@@ -177,6 +182,10 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
                 context.doc().add(field);
                 createFieldNamesField(context, context.doc().getFields());
             }
+            if (fieldType().hasDocValues()) {
+                final BytesRef binaryValue = new BytesRef(routing);
+                context.doc().add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
+            }
         }
     }
 
@@ -187,6 +196,10 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
             if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
                 fields.add(new Field(fieldType().name(), routing, fieldType()));
                 createFieldNamesField(context, fields);
+            }
+            if (fieldType().hasDocValues()) {
+                final BytesRef binaryValue = new BytesRef(routing);
+                fields.add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
             }
         }
     }
@@ -201,13 +214,14 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
         boolean includeDefaults = params.paramAsBoolean("include_defaults", false);
 
         // if all are defaults, no sense to write it at all
-        if (!includeDefaults && required == Defaults.REQUIRED) {
+        if (!includeDefaults && required == Defaults.REQUIRED && fieldType().hasDocValues() == Defaults.FIELD_TYPE.hasDocValues() ) {
             return builder;
         }
         builder.startObject(CONTENT_TYPE);
         if (includeDefaults || required != Defaults.REQUIRED) {
             builder.field("required", required);
         }
+        doXContentDocValues(builder, includeDefaults);
         builder.endObject();
         return builder;
     }
