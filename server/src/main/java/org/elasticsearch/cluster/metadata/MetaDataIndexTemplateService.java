@@ -207,7 +207,9 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
                 }
                 IndexTemplateMetaData template = templateBuilder.build();
 
-                MetaData.Builder builder = MetaData.builder(currentState.metaData()).put(template);
+                MetaData.Builder builder = MetaData.builder(currentState.metaData())
+                        .setClusterUuid()
+                        .put(template);
 
                 return ClusterState.builder(currentState).metaData(builder).build();
             }
