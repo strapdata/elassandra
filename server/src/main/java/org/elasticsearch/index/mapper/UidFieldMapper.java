@@ -233,7 +233,7 @@ public class UidFieldMapper extends MetadataFieldMapper {
     public void createField(ParseContext context, Object object) throws IOException {
         if (fieldType.indexOptions() != IndexOptions.NONE || fieldType.stored()) {
             Uid value = (Uid)object;
-            Field uid = new Field(NAME, Uid.createUid(context.sourceToParse().type(), context.sourceToParse().id()), fieldType);
+            Field uid = new Field(NAME, Uid.createUid(context.type(), context.id()), fieldType);
             context.doc().add(uid);
         }
     }
