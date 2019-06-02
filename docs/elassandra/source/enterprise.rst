@@ -57,10 +57,6 @@ To check that your *Strapdata Enterprise plugin* is active:
       ],
     ....
 
-.. TIP::
-
-   The Elassandra Enterprise plugin is active if at least one of its features is enabled in conf/elasticsearch.yml.
-
 If you run in a container, the `strapdata/elassandra-enterprise <https://hub.docker.com/r/strapdata/elassandra-enterprise>`_ docker image has the Enterprise plugin installed.
 
 License management
@@ -176,6 +172,252 @@ Then reload the license with a POST REST request as shown below, each node retur
 
    If you have several Elasticsearch clusters in your Cassandra cluster, reload the license for each datacenter where Elasticsearch has been enabled.
 
+Index Join on Partition Key
+---------------------------
+
+Elassandra Enterprise supports `query time join <http://wiki.apache.org/solr/Join>`_ accross Elasticsearch indices under these two conditions:
+
+* Elasticsearch indexes must have the same Cassandra keyspace and same partition key (same columns in the same order with same key validators).
+* When partition key is composite, ``doc_values`` must be enabled on the ``_routing`` metafield.
+
+Join query syntax
+.................
+
+The join query requires an inner *FROM* index and a query. The following query returns the documents from *index1* having the
+partition key of documents in *index2* returned by the inner query. Of course, this is meaningfull when *index1*
+has no clustering key.
+ 
+.. code ::
+
+   GET /index1/_search
+   {
+      "query": {
+         "join" : {
+            "index" : "index2",
+            "score_mode" : "avg",
+            "query" : {
+              ...
+            }
+         }
+      }
+   }
+
+The join query allows recusive join accross many indices sharing the same partition key by combining the *join* and *bool* queries:
+
+.. code ::
+
+   GET /index1/_search
+   {
+       "query":{
+         "join":{
+           "index":"index2",
+           "query":{
+             "bool":{
+               "must": [
+                  { ... },
+                  { "join":{
+                     "index":"index3",
+                     "query":{ ... }
+                    }
+                 }
+               ]
+             }
+           }
+         }
+       }
+   }
+
+.. Note ::
+
+   A join query is not a relational join where the fields from the inner join queries are returned in the results. It's more 
+   like an SQL query SELECT ... FROM ... WHERE ... IN (SELECT ... FROM ...).
+   
+Join query example
+..................
+
+In this example, we create three tables with the following CQL orders:
+
+* The books table, where the UUID of a book is the partition and primary key.
+* The citations and edition tables with compound primary key.
+
+Those three tables share the same single partition key, the book UUID, in the same keyspace **example**. Because
+data distribution is driven by the same partition key, joining many Elasticsearch shards on each node is consistent.
+
+.. code ::
+
+   CREATE KEYSPACE IF NOT EXISTS example WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', 'DC1' : 1 };
+   
+   CREATE TABLE IF NOT EXISTS books (books uuid PRIMARY KEY, title text, author text);
+   INSERT INTO example.books (books, title, author) VALUES (278078aa-095f-4aec-a048-a138f5071431, 'A Brief History of Time', 'Stephen Hawking');
+   INSERT INTO example.books (books, title, author) VALUES (7c592b75-475c-420d-980b-f035e1252787, 'The Universe in a Nutshell', 'Stephen Hawking');
+   INSERT INTO example.books (books, title, author) VALUES (f1662d47-afe7-4273-8544-d7663dcb7498, 'Relativity', 'Albert Einstein');
+   INSERT INTO example.books (books, title, author) VALUES (72cc85db-4ec1-455a-b893-e884607b3f9f, 'The World as I See It', 'Albert Einstein');
+   
+   CREATE TABLE IF NOT EXISTS citations (books uuid, id uuid, words text, PRIMARY KEY (books, id));
+   INSERT INTO example.citations (books, id, words) VALUES (278078aa-095f-4aec-a048-a138f5071431, 0c46578e-4dcf-46d3-9136-8a2da187b8eb, 'Quiet people have the loudest minds.');
+   INSERT INTO example.citations (books, id, words) VALUES (278078aa-095f-4aec-a048-a138f5071431, f14942d8-281f-4835-813d-09254a0d70d8, 'Intelligence is the ability to adapt to change.');
+   INSERT INTO example.citations (books, id, words) VALUES (278078aa-095f-4aec-a048-a138f5071431, f9e3b0ba-2c52-484e-911e-d2e633baf41c, 'I don''t think the human race will survive the next thousand years, unless we spread into space.');
+   INSERT INTO example.citations (books, id, words) VALUES (f1662d47-afe7-4273-8544-d7663dcb7498, 72cc85db-4ec1-455a-b893-e884607b3f9f, 'Great spirits have always encountered violent opposition from mediocre minds.');
+   INSERT INTO example.citations (books, id, words) VALUES (f1662d47-afe7-4273-8544-d7663dcb7498, 70986be4-e586-4560-9405-12c290e9e0ab, 'If you can''t explain it to a six year old, you don''t understand it yourself.');
+   
+   CREATE TABLE IF NOT EXISTS editions (books uuid, editor text, isbn text, available boolean, PRIMARY KEY ((books), editor));
+   INSERT INTO example.editions (books, editor, isbn, available) VALUES (278078aa-095f-4aec-a048-a138f5071431, 'Bantam Press', '0857501003', true);
+   INSERT INTO example.editions (books, editor, isbn, available) VALUES (7c592b75-475c-420d-980b-f035e1252787, 'Bantam Press', '9780593048153', false);
+   INSERT INTO example.editions (books, editor, isbn, available) VALUES (f1662d47-afe7-4273-8544-d7663dcb7498, 'Penguin Classics', '0143039822', false);
+   INSERT INTO example.editions (books, editor, isbn, available) VALUES (f1662d47-afe7-4273-8544-d7663dcb7498, 'GENERAL PRESS', 'B00R86QABW', false);
+   INSERT INTO example.editions (books, editor, isbn, available) VALUES (72cc85db-4ec1-455a-b893-e884607b3f9f, 'Filiquarian Publishing', '1599869659', false);
+
+We create three Elasticsearch indices backed by theses 3 tables in the **example** keyspace:
+
+.. code ::
+
+   PUT /books
+   {
+     "settings":{ "index.keyspace":"example" },
+     "mappings":{
+       "books":{
+         "properties":{
+           "title":{"type":"text", "cql_collection":"singleton"},
+           "author":{"type":"text", "cql_collection":"singleton"},
+           "books":{"type":"keyword", "cql_collection":"singleton","cql_partition_key":"true", "cql_primary_key_order":"0"}
+         }
+       }
+     }
+   }
+   PUT /citations 
+   {
+     "settings":{ "index.keyspace":"example" },
+     "mappings":{
+       "citations":{
+         "properties":{
+           "books":{"type":"keyword", "cql_collection":"singleton","cql_partition_key":"true", "cql_primary_key_order":"0"},
+           "id":{"type":"keyword", "cql_collection":"singleton","cql_partition_key":"false", "cql_primary_key_order":"1"},
+           "words":{"type":"text", "cql_collection":"singleton"}
+         }
+       }
+     }
+   }
+   PUT /editions
+   {
+     "settings":{ "index.keyspace":"example" },
+     "mappings":{
+       "editions":{
+         "properties":{
+           "books":{"type":"keyword", "cql_collection":"singleton","cql_partition_key":"true", "cql_primary_key_order":"0"},
+           "editor":{"type":"text", "cql_collection":"singleton","cql_partition_key":"false", "cql_primary_key_order":"1"},
+           "isbn":{"type":"text", "cql_collection":"singleton"},
+           "available":{"type":"boolean", "cql_collection":"singleton"}
+         }
+       }
+     }
+   }
+
+We can search for books that have a citation containing the word *minds*:
+
+.. code ::
+
+   GET /books/_search?pretty
+   {
+     "query":{
+       "join":{
+         "index":"citations",
+         "query":{
+           "match":{ "words":"minds" }
+         }
+       }
+     }
+   }
+   {
+     "took" : 8,
+     "timed_out" : false,
+     "_shards" : {
+       "total" : 3,
+       "successful" : 3,
+       "skipped" : 0,
+       "failed" : 0
+     },
+     "hits" : {
+       "total" : 2,
+       "max_score" : 1.0,
+       "hits" : [
+         {
+           "_index" : "books",
+           "_type" : "books",
+           "_id" : "f1662d47-afe7-4273-8544-d7663dcb7498",
+           "_score" : 1.0,
+           "_source" : {
+             "books" : "f1662d47-afe7-4273-8544-d7663dcb7498",
+             "author" : "Albert Einstein",
+             "title" : "Relativity"
+           }
+         },
+         {
+           "_index" : "books",
+           "_type" : "books",
+           "_id" : "278078aa-095f-4aec-a048-a138f5071431",
+           "_score" : 1.0,
+           "_source" : {
+             "books" : "278078aa-095f-4aec-a048-a138f5071431",
+             "author" : "Stephen Hawking",
+             "title" : "A Brief History of Time"
+           }
+         }
+       ]
+     }
+   }
+
+Through a recusive join query, we can search for books that have a citation containing the word *mind* and *available* from table *editions*: 
+
+.. code ::
+
+   GET /books/_search?pretty
+   {
+       "query":{
+         "join":{
+           "index":"citations",
+           "query":{
+             "bool":{
+               "must": [
+                  { "match":{ "words":"minds"}},
+                  { "join":{
+                     "index":"editions",
+                     "query":{ "term": { "available":"true" }}
+                    }
+                  }
+               ]
+             }
+           }
+         }
+       }
+   }
+   {
+     "took" : 7,
+     "timed_out" : false,
+     "_shards" : {
+       "total" : 3,
+       "successful" : 3,
+       "skipped" : 0,
+       "failed" : 0
+     },
+     "hits" : {
+       "total" : 1,
+       "max_score" : 1.0,
+       "hits" : [
+         {
+           "_index" : "books",
+           "_type" : "books",
+           "_id" : "278078aa-095f-4aec-a048-a138f5071431",
+           "_score" : 1.0,
+           "_source" : {
+             "books" : "278078aa-095f-4aec-a048-a138f5071431",
+             "author" : "Stephen Hawking",
+             "title" : "A Brief History of Time"
+           }
+         }
+       ]
+     }
+   }
+   
 
 JMX Managment & Monitoring
 --------------------------
