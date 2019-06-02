@@ -1,3 +1,9 @@
+6.2.3.16 - 2018-05-31
+  * Add doc_values support for _routing
+  * Add #139 support for Cassandra decimal as Elasticsearch text
+  * Fix #292 index.mapping.ignore_malformed not working on Multifield
+  * Fix #294 adding template from many nodes
+
 6.2.3.15 - 2018-05-09
   * Fix mapping update while index is building
   * Fix #286 index deletion when having multiple index on the same table
