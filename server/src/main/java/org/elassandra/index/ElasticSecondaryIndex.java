@@ -1004,6 +1004,7 @@ public class ElasticSecondaryIndex implements Index {
                             case ASCII:
                             case TEXT:
                             case VARCHAR:
+                            case DECIMAL:
                                 query = start != null && end != null && ((Comparable) start).compareTo(end) == 0 ?
                                     new TermQuery(new Term(mapper.name(), BytesRefs.toBytesRef(start))) :
                                     new TermRangeQuery(mapper.name(), BytesRefs.toBytesRef(start), BytesRefs.toBytesRef(end), includeLower, includeUpper);
@@ -1119,8 +1120,6 @@ public class ElasticSecondaryIndex implements Index {
                             case BOOLEAN:
                                 query = ((BooleanFieldMapper) mapper).fieldType().rangeQuery(start, end, includeLower, includeUpper, null);
                                 break;
-                            case DECIMAL:
-                                throw new UnsupportedOperationException("Unsupported type [decimal] in primary key");
                             case BLOB:
                                 throw new UnsupportedOperationException("Unsupported type [blob] in primary key");
                         }

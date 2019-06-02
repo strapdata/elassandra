@@ -19,8 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
-import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.DecimalType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.lucene.analysis.TokenStream;
@@ -45,6 +45,7 @@ import org.elasticsearch.index.fielddata.plain.DocValuesIndexFieldData;
 import org.elasticsearch.index.query.QueryShardContext;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -264,6 +265,9 @@ public final class KeywordFieldMapper extends FieldMapper {
                 // #74 workaround
                 return UUID.fromString(value.toString());
             }
+            if (atype instanceof DecimalType) {
+                return new BigDecimal(value.toString());
+            }
             return value.toString();
         }
 
@@ -389,7 +393,7 @@ public final class KeywordFieldMapper extends FieldMapper {
 
     @Override
     public void createField(ParseContext context, Object object) throws IOException {
-        String value = (object instanceof UUID) ? object.toString() : (String) object; // #74 uuid stored as string
+        String value = (object == null || object instanceof String) ? (String) object : object.toString(); // #74 uuid stored as string
         if (value == null)
             value = fieldType().nullValueAsString();
 

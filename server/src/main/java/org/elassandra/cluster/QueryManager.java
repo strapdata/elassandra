@@ -561,6 +561,9 @@ public class QueryManager extends AbstractComponent {
                 case FLOAT:
                     values[i] = value(fieldMapper, row.getFloat(columnName), valueForSearch);
                     break;
+                case DECIMAL:
+                    values[i] = value(fieldMapper, row.getDecimal(columnName), valueForSearch);
+                    break;
                 case BLOB:
                     values[i] = value(fieldMapper,
                             row.getBlob(columnName),

@@ -75,6 +75,7 @@ public class ColumnDescriptor implements Comparable<ColumnDescriptor> {
                 if (!existingCql3.equals(inferedCql) &&
                     !(existingCql3.endsWith("uuid") && inferedCql.equals("text")) && // #74 uuid is mapped as keyword
                     !(existingCql3.equals("timeuuid") && (inferedCql.equals("timestamp") || inferedCql.equals("text"))) &&
+                    !(existingCql3.equals("decimal") && inferedCql.equals("text")) &&
                     !(existingCql3.equals("date") && inferedCql.equals("timestamp")) &&
                     !(existingCql3.equals("time") && inferedCql.equals("bigint"))
                     ) // timeuuid can be mapped to date

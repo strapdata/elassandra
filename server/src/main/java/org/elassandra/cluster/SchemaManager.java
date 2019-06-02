@@ -176,6 +176,7 @@ public class SchemaManager extends AbstractComponent {
             .put("inet", "ip" )
             .put("uuid", "keyword" )
             .put("timeuuid", "keyword" )
+            .put("decimal", "keyword" )
             .build();
 
     public SchemaManager(Settings settings, ClusterService clusterService) {
