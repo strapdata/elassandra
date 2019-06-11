@@ -125,7 +125,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
         }
 
         void addRemovedIndex(IndexMetaData indexMetaData, boolean clusterDropOnDelete) {
-            assert this.keyspace == indexMetaData.keyspace();
+            assert this.keyspace.equals(indexMetaData.keyspace()) : "Keyspace does not match";
             indices.add(indexMetaData);
             for(ObjectCursor<MappingMetaData> type : indexMetaData.getMappings().values()) {
                 if (!MapperService.DEFAULT_MAPPING.equals(type.value.type())) {
