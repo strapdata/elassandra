@@ -941,5 +941,68 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertTrue(_source.contains("1524002400000"));
     }
 
+    @Test
+    public void insertFlattenDoc() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("properties")
+                        .startObject("us")
+                           .field("type", "object")
+                           .field("cql_collection", "singleton")
+                           .startObject("properties")
+                               .startObject("er")
+                                   .field("cql_collection", "singleton")
+                                   .field("type","keyword")
+                               .endObject()
+                               .startObject("form")
+                                   .field("cql_collection", "singleton")
+                                   .field("type","keyword")
+                               .endObject()
+                               .startObject("mail")
+                                   .field("cql_collection", "singleton")
+                                   .startObject("properties")
+                                       .startObject("to")
+                                           .field("cql_collection", "singleton")
+                                           .field("type","keyword")
+                                       .endObject()
+                                   .endObject()
+                               .endObject()
+                           .endObject()
+                        .endObject()
+                        .startObject("postdate")
+                            .field("type","date")
+                            .field("cql_collection", "singleton")
+                        .endObject()
+                        .startObject("message")
+                            .field("type","keyword")
+                            .field("cql_collection", "singleton")
+                        .endObject()
+                    .endObject()
+                .endObject();
+        assertAcked(client().admin().indices().prepareCreate("test1").addMapping("my_type", mapping));
+        ensureGreen("test1");
+
+        assertThat(client().prepareIndex("test1", "my_type", "1")
+                .setSource("{ \"us.er\" : \"blabla\", \"postdate\" : \"2009-11-15T14:12:12\", \"message\" : \"Test123\" }", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test1", "my_type", "2")
+                .setSource("{ \"us.er\" : \"test\", \"postdate\" : \"2009-11-15T14:12:12\", \"us.form\":\"foo\", \"message\" : \"Test123\" }", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertThat(client().prepareIndex("test1", "my_type", "3")
+                .setSource("{ \"us.er\" : \"test\", \"postdate\" : \"2009-11-15T14:12:12\", \"us.mail.to\":\"bob@foo.com\", \"message\" : \"Test123\" }", XContentType.JSON)
+                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+
+        SearchResponse resp = client().prepareSearch().setIndices("test1").setQuery(QueryBuilders.termQuery("us.er", "blabla")).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(((Map<String, Object>)resp.getHits().getAt(0).getSourceAsMap().get("us")).get("er"), equalTo("blabla"));
+
+        resp = client().prepareSearch().setIndices("test1").setQuery(QueryBuilders.termQuery("us.form", "foo")).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(((Map<String, Object>)resp.getHits().getAt(0).getSourceAsMap().get("us")).get("form"), equalTo("foo"));
+
+        resp = client().prepareSearch().setIndices("test1").setQuery(QueryBuilders.termQuery("us.mail.to", "bob@foo.com")).get();
+        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(((Map<String, Object>)((Map<String, Object>)resp.getHits().getAt(0).getSourceAsMap().get("us")).get("mail")).get("to"), equalTo("bob@foo.com"));
+    }
 }
 

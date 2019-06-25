@@ -668,6 +668,17 @@ public class QueryManager extends AbstractComponent {
         upsertDocument(request, indexMetaData, false);
     }
 
+    private Map<String, Object> updateField(Map<String, Object> node, String fieldName, Object fieldValue) {
+        int idx;
+        if ((idx = fieldName.indexOf(".")) == -1) {
+            node.put(fieldName, fieldValue);
+            return node;
+        }
+        HashMap<String, Object> subNode = (HashMap<String, Object>) node.computeIfAbsent(fieldName.substring(0, idx), k -> new HashMap<String, Object>());
+        updateField(subNode, fieldName.substring(idx+1), fieldValue);
+        return node;
+    }
+
     private void upsertDocument(final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation) throws Exception {
         final IndexService indexService = clusterService.indexService(indexMetaData.getIndex());
         final IndexShard indexShard = indexService.getShard(0);
@@ -704,7 +715,10 @@ public class QueryManager extends AbstractComponent {
         }
 
         // insert document into cassandra keyspace=index, table = type
-        final Map<String, Object> sourceMap = request.sourceAsMap();
+        final Map<String, Object> sourceMap = new HashMap<>();
+        for(Map.Entry<String, Object> entry : request.sourceAsMap().entrySet())
+            updateField(sourceMap, entry.getKey(), entry.getValue());  // build a tree from keys #295
+
         final Map<String, ObjectMapper> objectMappers = docMapper.objectMappers();
         final DocumentFieldMappers fieldMappers = docMapper.mappers();
 
@@ -743,14 +757,10 @@ public class QueryManager extends AbstractComponent {
 
             for (String field : sourceMap.keySet()) {
                 FieldMapper fieldMapper = field.startsWith(ParentFieldMapper.NAME) ? // workaround for _parent#<join_type>
-                    docMapper.parentFieldMapper() : fieldMappers.getMapper(field);
-                Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMappers.get(field);
-                ByteBuffer colName;
-                if (mapper == null) {
-                    colName = ByteBufferUtil.bytes(field);
-                } else {
-                    colName = mapper.cqlName();    // cached ByteBuffer column name.
-                }
+                        docMapper.parentFieldMapper() :
+                        fieldMappers.getMapper(field);
+                final Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMappers.get(field);
+                final ByteBuffer colName = (mapper == null) ? ByteBufferUtil.bytes(field) : mapper.cqlName();    // cached ByteBuffer column name.
                 final ColumnDefinition cd = cfm.getColumnDefinition(colName);
                 if (cd != null) {
                     // we got a CQL column.
