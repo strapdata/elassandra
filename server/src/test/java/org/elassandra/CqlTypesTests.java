@@ -456,7 +456,17 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         XContentBuilder mapping = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
-                        .startObject("id").field("type", "keyword").field("cql_collection", "singleton").field("cql_primary_key_order", 0).field("cql_partition_key", true).endObject()
+                        .startObject("id")
+                            .field("type", "keyword")
+                            .field("cql_collection", "singleton")
+                            .field("cql_primary_key_order", 0)
+                            .field("cql_partition_key", true)
+                        .endObject()
+                        .startObject("foo")
+                            .field("type", "integer")
+                            .field("cql_collection", "singleton")
+                            .field("null_value", 0)
+                        .endObject()
                         .startObject("status_code")
                             .field("type", "keyword")
                             .field("null_value", "NULL")
@@ -930,5 +940,6 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertTrue(_source.contains("\"127.0.0.1\""));
         assertTrue(_source.contains("1524002400000"));
     }
+
 }
 

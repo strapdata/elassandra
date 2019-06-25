@@ -1141,6 +1141,10 @@ public class NumberFieldMapper extends FieldMapper {
         if (value == null) {
             return;
         }
+        
+        if (numericValue == null) {
+            numericValue = fieldType().type.parse(value, coerce.value());
+        }
 
         if (includeInAll) {
             context.allEntries().addText(fieldType().name(), value.toString(), fieldType().boost());
