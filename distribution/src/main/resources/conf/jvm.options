@@ -271,7 +271,7 @@
 -Xss1m
 
 # set to headless, just in case
-#-Djava.awt.headless=true
+-Djava.awt.headless=true
 
 # ensure UTF-8 encoding by default (e.g. filenames)
 -Dfile.encoding=UTF-8
@@ -289,8 +289,9 @@
 -Dio.netty.recycler.maxCapacityPerThread=0
 
 # log4j 2
-#-Dlog4j.shutdownHookEnabled=false
-#-Dlog4j2.disable.jmx=true
+-Dlog4j.shutdownHookEnabled=false
+-Dlog4j2.disable.jmx=true
+-Dlog4j.skipJansi=true
 
 #-Djava.io.tmpdir=${ES_TMPDIR}
 

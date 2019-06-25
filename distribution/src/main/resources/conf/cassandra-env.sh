@@ -300,25 +300,9 @@ JVM_OPTS="$JVM_OPTS $MX4J_PORT"
 JVM_OPTS="$JVM_OPTS $JVM_EXTRA_OPTS"
 
 # ------ Elasticsearch settings --------
-# ensure UTF-8 encoding by default (e.g. filenames)
-JVM_OPTS="$JVM_OPTS -Dfile.encoding=UTF-8"
-
-# use our provided JNA always versus the system one
-JVM_OPTS="$JVM_OPTS -Djna.nosys=true"
 
 # use old-style file permissions on JDK9
 JVM_OPTS="$JVM_OPTS -Djdk.io.permissionsUseCanonicalPath=true"
-
-# flags to configure Netty
-JVM_OPTS="$JVM_OPTS -Dio.netty.noUnsafe=true"
-JVM_OPTS="$JVM_OPTS -Dio.netty.noKeySetOptimization=true"
-JVM_OPTS="$JVM_OPTS -Dio.netty.recycler.maxCapacityPerThread=0"
-
-# log4j 2
-JVM_OPTS="$JVM_OPTS -Dlog4j.shutdownHookEnabled=false"
-JVM_OPTS="$JVM_OPTS -Dlog4j2.disable.jmx=true"
-JVM_OPTS="$JVM_OPTS -Dlog4j.skipJansi=true"
-
 
 # Elasticsearch tmp directory.
 if [ -z "$ES_TMPDIR" ]; then
