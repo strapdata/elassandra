@@ -82,53 +82,95 @@ Ensure Java 8 is installed and `JAVA_HOME` points to the correct location.
 #### Example
 
 Try indexing a document on a non-existing index:
+
 ```bash
-curl -XPUT 'http://localhost:9200/twitter/_doc/1?pretty' -H 'Content-Type: application/json' -d '
-{
+curl -XPUT 'http://localhost:9200/twitter/_doc/1?pretty' -H 'Content-Type: application/json' -d '{
     "user": "Poulpy",
-    "post_date": "2017/10/4 13:12:00",
+    "post_date": "2017-10-04T13:12:00Z",
     "message": "Elassandra adds dynamic mapping to Cassandra"
 }'
 ```
 
 Then look-up in Cassandra:
+
 ```bash
-bin/cqlsh -c "SELECT * from twitter.\"_doc\""
+bin/cqlsh -e "SELECT * from twitter.\"_doc\""
 ```
+
 Behind the scenes, Elassandra has created a new Keyspace `twitter` and table `_doc`.
 
-Now, insert a row with CQL :
 ```CQL
-INSERT INTO twitter.doc ("_id", user, post_date, message)
+admin@cqlsh>DESC KEYSPACE twitter;
+
+CREATE KEYSPACE twitter WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1': '1'}  AND durable_writes = true;
+
+CREATE TABLE twitter."_doc" (
+    "_id" text PRIMARY KEY,
+    message list<text>,
+    post_date list<timestamp>,
+    user list<text>
+) WITH bloom_filter_fp_chance = 0.01
+    AND caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}
+    AND comment = ''
+    AND compaction = {'class': 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy', 'max_threshold': '32', 'min_threshold': '4'}
+    AND compression = {'chunk_length_in_kb': '64', 'class': 'org.apache.cassandra.io.compress.LZ4Compressor'}
+    AND crc_check_chance = 1.0
+    AND dclocal_read_repair_chance = 0.1
+    AND default_time_to_live = 0
+    AND gc_grace_seconds = 864000
+    AND max_index_interval = 2048
+    AND memtable_flush_period_in_ms = 0
+    AND min_index_interval = 128
+    AND read_repair_chance = 0.0
+    AND speculative_retry = '99PERCENTILE';
+CREATE CUSTOM INDEX elastic__doc_idx ON twitter."_doc" () USING 'org.elassandra.index.ExtendedElasticSecondaryIndex';
+```
+
+By default, multi valued Elasticsearch fields are mapped to Cassandra list.
+Now, insert a row with CQL :
+
+```CQL
+INSERT INTO twitter."_doc" ("_id", user, post_date, message)
 VALUES ( '2', ['Jimmy'], [dateof(now())], ['New data is indexed automatically']);
+SELECT * FROM twitter."_doc";
+
+ _id | message                                          | post_date                           | user
+-----+--------------------------------------------------+-------------------------------------+------------
+   2 |            ['New data is indexed automatically'] | ['2019-07-04 06:00:21.893000+0000'] |  ['Jimmy']
+   1 | ['Elassandra adds dynamic mapping to Cassandra'] | ['2017-10-04 13:12:00.000000+0000'] | ['Poulpy']
+
+(2 rows)
 ```
 
 Then search for it with the Elasticsearch API:
+
 ```bash
 curl "localhost:9200/twitter/_search?q=user:Jimmy&pretty"
 ```
 
 And here is a sample response :
+
 ```JSON
 {
-  "took" : 1,
+  "took" : 3,
   "timed_out" : false,
   "_shards" : {
     "total" : 1,
     "successful" : 1,
+    "skipped" : 0,
     "failed" : 0
   },
   "hits" : {
     "total" : 1,
-    "max_score" : 0.9808292,
+    "max_score" : 0.6931472,
     "hits" : [
       {
         "_index" : "twitter",
-        "_type" : "doc",
+        "_type" : "_doc",
         "_id" : "2",
-        "_score" : 0.9808292,
+        "_score" : 0.6931472,
         "_source" : {
-          "post_date" : "2017/10/04 13:20:00",
+          "post_date" : "2019-07-04T06:00:21.893Z",
           "message" : "New data is indexed automatically",
           "user" : "Jimmy"
         }
@@ -136,7 +178,6 @@ And here is a sample response :
     ]
   }
 }
-
 ```
 
 ## Support
