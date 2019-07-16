@@ -1,3 +1,8 @@
+6.2.3.18 - 2018-07-18
+  * Improve routing table update with batched cluster state updates
+  * Fix blocking local cluster state update
+  * Add support for Elasticsearch range fields #201
+  
 6.2.3.17 - 2018-06-26
   * Move some JVM props to jvm.options
   * Fix #298 build_hash and build_date as unknown
