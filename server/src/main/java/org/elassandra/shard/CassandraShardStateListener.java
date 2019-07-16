@@ -18,14 +18,21 @@ package org.elassandra.shard;
 import org.elassandra.cluster.SchemaManager;
 import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateTaskConfig;
+import org.elasticsearch.cluster.ClusterStateTaskExecutor;
+import org.elasticsearch.cluster.ClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.ClusterStateTaskExecutor.ClusterTasksResult;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.shard.IndexEventListener;
 import org.elasticsearch.index.shard.IndexShard;
@@ -36,6 +43,8 @@ import org.elasticsearch.indices.cluster.IndicesClusterStateService.AllocatedInd
  * Post applied cluster state service to update gossip X1 shards state.
  */
 import java.io.IOException;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Publish local ShardRouting state in the gossip state X1.
@@ -43,11 +52,13 @@ import java.io.IOException;
 public class CassandraShardStateListener extends AbstractComponent implements IndexEventListener {
 
     private final ClusterService clusterService;
+    private final RoutingTableUpdateTaskExecutor routingTableUpdateTaskExecutor;
 
     @Inject
     public CassandraShardStateListener(Settings settings, ClusterService clusterService) {
         super(settings);
         this.clusterService = clusterService;
+        this.routingTableUpdateTaskExecutor = new RoutingTableUpdateTaskExecutor();
     }
 
     /**
@@ -64,20 +75,50 @@ public class CassandraShardStateListener extends AbstractComponent implements In
                     esi.onShardStarted(indexShard);
             }
             clusterService.publishShardRoutingState(indexShard.shardId().getIndexName(), ShardRoutingState.STARTED);
-            clusterService.submitStateUpdateTask("shard-started-update-routing", new ClusterStateUpdateTask() {
-                @Override
-                public ClusterState execute(ClusterState currentState) {
-                    RoutingTable routingTable = RoutingTable.build(clusterService, currentState);
-                    return ClusterState.builder(currentState).routingTable(routingTable).build();
-                }
-
-                @Override
-                public void onFailure(String source, Exception e) {
-                    logger.error("unexpected failure during [{}]", e, source);
-                }
-            });
+            clusterService.submitStateUpdateTask("shard-started-update-routing index="+indexShard.indexService().index().getName(),
+                    new RoutingTableUpdateTask(indexShard.indexService().index()), routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor);
         } catch (IOException e) {
             logger.error("Unexpected error", e);
+        }
+    }
+
+
+    class RoutingTableUpdateTask  {
+        Index index;
+
+        RoutingTableUpdateTask(Index index) {
+            this.index = index;
+        }
+
+        public Index index() {
+            return this.index;
+        }
+    }
+
+    /**
+     * Computation of the routing table for several indices for batched cluster state updates.
+     */
+    class RoutingTableUpdateTaskExecutor implements ClusterStateTaskExecutor<RoutingTableUpdateTask>, ClusterStateTaskConfig, ClusterStateTaskListener {
+        @Override
+        public ClusterTasksResult<RoutingTableUpdateTask> execute(ClusterState currentState, List<RoutingTableUpdateTask> tasks) throws Exception {
+            RoutingTable routingTable = RoutingTable.build(clusterService, currentState, tasks.stream().map(RoutingTableUpdateTask::index).collect(Collectors.toList()));
+            ClusterState resultingState = ClusterState.builder(currentState).routingTable(routingTable).build();
+            return ClusterTasksResult.builder().successes((List)tasks).build(resultingState);
+        }
+
+        @Override
+        public TimeValue timeout() {
+            return null;
+        }
+
+        @Override
+        public Priority priority() {
+            return Priority.NORMAL;
+        }
+
+        @Override
+        public void onFailure(String source, Exception e) {
+            logger.error("unexpected failure during [{}]", e, source);
         }
     }
 

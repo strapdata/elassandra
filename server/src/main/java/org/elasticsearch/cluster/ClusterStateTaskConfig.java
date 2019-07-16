@@ -49,7 +49,7 @@ public interface ClusterStateTaskConfig {
         UPDATE,
         UPDATE_ASYNCHRONOUS;
 
-        public boolean update() {
+        public boolean updated() {
             return this.ordinal() != 0;
         }
     }

@@ -206,12 +206,14 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
         final boolean clusterDropOnDelete = currentState.metaData().settings().getAsBoolean(ClusterService.SETTING_CLUSTER_DROP_ON_DELETE_INDEX, Boolean.getBoolean("es.drop_on_delete_index"));
         final Map<String, KeyspaceRemovalInfo> removalInfoMap = new HashMap<>();
+        RoutingTable.Builder routingTableBuilder = new RoutingTable.Builder(currentState.routingTable());
         for (final Index index : indices) {
             String indexName = index.getName();
             logger.info("{} deleting index", index);
             //routingTableBuilder.remove(indexName);
             clusterBlocksBuilder.removeIndexBlocks(indexName);
             metaDataBuilder.remove(indexName);
+            routingTableBuilder.remove(index.getName());
 
             final IndexMetaData indexMetaData = currentState.metaData().index(index);
             KeyspaceRemovalInfo kri = removalInfoMap.computeIfAbsent(indexMetaData.keyspace(),  k -> { return new KeyspaceRemovalInfo(indexMetaData.keyspace()); });
@@ -238,7 +240,6 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
         // update snapshot restore entries
         ImmutableOpenMap<String, ClusterState.Custom> customs = currentState.getCustoms();
-        RoutingTable newRoutingTable = RoutingTable.build(this.clusterService, ClusterState.builder(currentState).metaData(newMetaData).blocks(blocks).customs(customs).build());
-        return ClusterState.builder(currentState).metaData(newMetaData).blocks(blocks).routingTable(newRoutingTable).customs(customs).build();
+        return ClusterState.builder(currentState).metaData(newMetaData).blocks(blocks).routingTable(routingTableBuilder.build()).customs(customs).build();
     }
 }

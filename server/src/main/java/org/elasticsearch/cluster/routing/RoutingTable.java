@@ -43,6 +43,7 @@ import org.elasticsearch.index.shard.ShardNotFoundException;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -199,11 +200,11 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
         return true;
     }
 
-    
+
     public boolean isLocalShardsStarted(String index) {
         return index(index) != null && index(index).allPrimaryShardsActive();
     }
-    
+
     /**
      * All the shards (replicas) for all indices in this routing table.
      *
@@ -428,8 +429,8 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
     public static RoutingTable.Builder builder(ClusterService clusterService, ClusterState clusterState) {
         return new RoutingTable.Builder(clusterService, clusterState);
     }
-    
-    // build routing table for all indices.
+
+    // build the entire routing table for all indices.
     public static RoutingTable build(ClusterService clusterService, ClusterState clusterState) {
         ImmutableOpenMap.Builder<String, IndexRoutingTable> indicesRoutingMap = new ImmutableOpenMap.Builder<>();
         for(ObjectObjectCursor<String, IndexMetaData> entry : clusterState.metaData().getIndices()) {
@@ -439,15 +440,29 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
         }
         return new RoutingTable(clusterState.routingTable().version(), indicesRoutingMap.build());
     }
-    
-    // update routing table for one index.
+
+    // update the routing table for a list of indices.
+    public static RoutingTable build(ClusterService clusterService, ClusterState clusterState, Collection<Index> indices) {
+        ImmutableOpenMap.Builder<String, IndexRoutingTable> indicesRoutingMap = new ImmutableOpenMap.Builder<>();
+        for(ObjectObjectCursor<String, IndexRoutingTable> entry : clusterState.routingTable().indicesRouting()) {
+            if (!indices.contains(entry.key))
+                indicesRoutingMap.put(entry.value.getIndex().getName(), entry.value);
+        }
+        for(Index index : indices) {
+            IndexRoutingTable.Builder indexRoutingTableBuilder = new IndexRoutingTable.Builder(index, clusterService, clusterState);
+            if (indexRoutingTableBuilder.shards.size() > 0)
+                indicesRoutingMap.put(indexRoutingTableBuilder.index.getName(), indexRoutingTableBuilder.build());
+        }
+        return new RoutingTable(clusterState.routingTable().version(), indicesRoutingMap.build());
+    }
+
+    // update the routing table for one index.
     public static RoutingTable build(ClusterService clusterService, ClusterState clusterState, Index index) {
         ImmutableOpenMap.Builder<String, IndexRoutingTable> indicesRoutingMap = new ImmutableOpenMap.Builder<>();
         for(ObjectObjectCursor<String, IndexRoutingTable> entry : clusterState.routingTable().indicesRouting()) {
             if (!entry.key.equals(index))
                 indicesRoutingMap.put(entry.value.getIndex().getName(), entry.value);
         }
-        
         // may update the routing table for the specified index
         IndexMetaData indexMetaData = clusterState.metaData().index(index);
         if (indexMetaData != null) {
@@ -457,8 +472,8 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
         }
         return new RoutingTable(clusterState.routingTable().version(), indicesRoutingMap.build());
     }
-    
-    
+
+
     /**
      * Builder for the routing table. Note that build can only be called one time.
      */
@@ -474,7 +489,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
         public Builder(ClusterService clusterService) {
             this(clusterService, clusterService.state());
         }
-        
+
         public Builder(RoutingTable routingTable) {
             version = routingTable.version;
             for (IndexRoutingTable indexRoutingTable : routingTable) {
@@ -495,12 +510,12 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
                     indicesRouting.put(entry.key, indexRoutingTableBuilder.build());
             }
         }
-        
+
         public Builder updateNodes(long version, RoutingNodes routingNodes) {
             // this is being called without pre initializing the routing table, so we must copy over the version as well
             /*
             this.version = version;
-            
+
 
             Map<String, IndexRoutingTable.Builder> indexRoutingTableBuilders = new HashMap<>();
             for (RoutingNode routingNode : routingNodes) {

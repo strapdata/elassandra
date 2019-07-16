@@ -741,6 +741,7 @@ public class ClusterService extends BaseClusterService {
 
     public void writeMetadataToSchemaMutations(MetaData metadata, final Collection<Mutation> mutations, final Collection<Event.SchemaChange> events) throws ConfigurationException, IOException {
         KeyspaceMetadata ksm = Schema.instance.getKSMetaData(elasticAdminKeyspaceName);
+        assert ksm != null : elasticAdminKeyspaceName+" dos not exists";
         Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
         addMetadataMutations(metadata, builder);
         mutations.add(builder.build());

@@ -470,9 +470,13 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         }
     }
 
+    /**
+     * Routing table must be updated by the caller when submitting the new cluster state.
+     * @param task
+     * @param previousClusterState
+     * @param newClusterState
+     */
     private void applyChanges(UpdateTask task, ClusterState previousClusterState, ClusterState newClusterState) {
-        // update routing table.
-        newClusterState = ClusterState.builder(newClusterState).routingTable(RoutingTable.build(clusterService, newClusterState)).build();
 
         ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.schemaUpdate, null);
         // new cluster state, notify all listeners
@@ -502,9 +506,6 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         // notify highPriorityStateAppliers, including IndicesClusterStateService to start shards and update mapperServices.
         callClusterStateAppliersHighPriority(clusterChangedEvent);
 
-        // update cluster state routing table
-        // TODO: update the routing table only for updated indices.
-        newClusterState = ClusterState.builder(newClusterState).routingTable(RoutingTable.build(this.clusterService, newClusterState)).build();
         clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.schemaUpdate, null);
         logger.debug("set locally applied cluster state to version {}", newClusterState.version());
         final ClusterState newClusterState3 = newClusterState;
@@ -515,7 +516,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         callClusterStateAppliersNormalPriority(clusterChangedEvent);
 
         // non-coordinator node
-        if (!task.schemaUpdate().update() && newClusterState.metaData().version() > previousClusterState.metaData().version()) {
+        if (!task.schemaUpdate().updated() && newClusterState.metaData().version() > previousClusterState.metaData().version()) {
             // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
             // after mapping change have been applied to secondary index in normalPriorityStateAppliers
             this.clusterService.publishX2(newClusterState);

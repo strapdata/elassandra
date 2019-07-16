@@ -606,8 +606,8 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         .metaData(newMetaData)
                         .build();
                 if (request.state() == State.OPEN) {
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterService, updatedState);
-                    updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder.build()).build();
+                    RoutingTable routingTable = RoutingTable.build(clusterService, updatedState, Collections.singleton(indexMetaData.getIndex()));
+                    updatedState = ClusterState.builder(updatedState).routingTable(routingTable).build();
                 }
                 removalExtraInfo = "cleaning up after validating index on master";
                 removalReason = IndexRemovalReason.NO_LONGER_ASSIGNED;
