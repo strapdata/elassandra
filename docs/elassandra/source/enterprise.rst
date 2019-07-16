@@ -57,6 +57,11 @@ To check that your *Strapdata Enterprise plugin* is active:
       ],
     ....
 
+.. TIP ::
+
+   If is recommended to always run the same Elassandra Enterprise plugin as your Elassandra version.
+   So after an Elassandra upgrade, reinstall the Elassandra Enterprise plugin in the same version.
+   
 If you run in a container, the `strapdata/elassandra-enterprise <https://hub.docker.com/r/strapdata/elassandra-enterprise>`_ docker image has the Enterprise plugin installed.
 
 License management
@@ -763,9 +768,9 @@ Here an illustrattion of a SSL configuration in your **conf/cassandra.yaml** fil
    #
    server_encryption_options:
        internode_encryption: all
-       keystore: conf/.keystore.jks
+       keystore: /etc/cassandra/.keystore.jks
        keystore_password: changeit
-       truststore: conf/.truststore.jks
+       truststore: /etc/cassandra/.truststore.jks
        truststore_password: changeit
        # More advanced defaults below:
        protocol: TLSv1.2
@@ -779,11 +784,11 @@ Here an illustrattion of a SSL configuration in your **conf/cassandra.yaml** fil
        enabled: true
        # If enabled and optional is set to true encrypted and unencrypted connections are handled.
        optional: true
-       keystore: conf/.keystore.jks
+       keystore: /etc/cassandra/.keystore.jks
        keystore_password: changeit
        require_client_auth: true
        # Set trustore and truststore_password if require_client_auth is true
-       truststore: conf/.truststore.jks
+       truststore: /etc/cassandra/.truststore.jks
        truststore_password: changeit
        # More advanced defaults below:
        protocol: TLSv1.2
@@ -793,9 +798,29 @@ Here an illustrattion of a SSL configuration in your **conf/cassandra.yaml** fil
 
 .. CAUTION::
 
-      If paths to keystores are relative, you could faced an issue when starting Elassandra from another directory than the installed directory. You should use the absolute keystore paths to avoid such an issue.
+   If paths to keystores are relative, you could faced an issue when starting Elassandra from another directory than the installed directory. You should use the absolute keystore paths to avoid such an issue.
 
+Elassandra nodes certificates should have the following X509 v3 extensions to work properly with HTTPS clients:
 
+.. code::
+   
+   ObjectId: 2.5.29.37 Criticality=false
+   ExtendedKeyUsages [
+     clientAuth
+     serverAuth
+   ]
+    
+   ObjectId: 2.5.29.15 Criticality=true
+   KeyUsage [
+     DigitalSignature
+     Key_Encipherment
+   ]
+
+Moreover, SSL/TLS hostname verification requires that the requested hostname matches the certificate subject common name,
+or at least one of the Subject Alternative Names`<https://en.wikipedia.org/wiki/Subject_Alternative_Name>`_ (SANs). In order
+to use the same certificate for all elassandra nodes, add a wildcard SAN to your certificate and use a matching
+DNS name to connect to the elassandra nodes. Usually, **localhost** and **127.0.0.1** are also included in the SANs to allow
+local connections.
 
 Elasticsearch SSL configuration
 ...............................
@@ -828,7 +853,29 @@ You can also check your SSL configuration with a ``GET /_sslinfo`` request.
       "https_cipher" : "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
    }
 
-If client encryption is enabled in your **conf/cassandra.yaml**, and ``require_client_auth=true``, a client certificate is required to connect.
+If client encryption is enabled in your **conf/cassandra.yaml**, and ``require_client_auth=true``, a client certificate is required to connect to elasticsearch nodes.
+
+.. code::
+
+   curl -XGET --cacert conf/cacert.pem --key client.key.pem --pass <private_key_pass> --cert client.crt.pem "https://localhost:9200/_sslinfo"
+   {
+      "https_protocol" : "TLSv1.2",
+      "https_cipher" : "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+   }
+
+When using curl, if NSS database <https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS>`_ is installed on your system, make sure your private key file is PKCS1 (or RSA). 
+If it's not the case, convert your PKCS8 private key file to a PKCS1 with the following command:
+
+.. code::
+
+   openssl rsa -in client.key.pem -out client.rsakey.pem
+
+.. TIP::
+
+   In order to enable SSL/TLS encryption without any downtime, you'll need first to deploy keystores and enable TLS/SSL for cassandra only on all nodes in a rolling restart, 
+   then enable SSL for elasticsearch in your **conf/elasticsearch.yml** in a second rolling restart. Finally, enable internode SSL/TLS client authentication in a third rolling restart
+   by configuring ``server_encryption_options.require_client_auth: true`` (If this is configured before SSL/TLS for Elasticsearch is enabled, Elasticsearch sub queries won't be
+   able to reach some nodes).
 
 JMX traffic Encryption
 ......................
@@ -1410,23 +1457,23 @@ Elasticsearch auditing tracks security events using the following fields :
 
 .. cssclass:: table-bordered
 
-+---------+---------------------------------------------------------------+
-| Field   | Description                                                   |
-+=========+===============================================================+
-| status  | GRANTED(200), UNAUTHORIZED(401), FORBIDDEN(403), BLOCKED(409) |
-+---------+---------------------------------------------------------------+
-| type    | PRIVILEGE, PERMISSION, UNAUTHORIZED, UNSUPPORTED, TAMPERED    |
-+---------+---------------------------------------------------------------+
-| login   | User login                                                    |
-+---------+---------------------------------------------------------------+
-| role    | Cassandra role                                                |
-+---------+---------------------------------------------------------------+
-| source  | Source IP of the elasticsearch request                        |
-+---------+---------------------------------------------------------------+
-| action  | Elasticsearch action                                          |
-+---------+---------------------------------------------------------------+
-| indices | Requested indices                                             |
-+---------+---------------------------------------------------------------+
++---------+---------------------------------------------------------------------------------------------------------+
+| Field   | Description                                                                                             |
++=========+=========================================================================================================+
+| status  | GRANTED(200), UNAUTHORIZED(401), FORBIDDEN(403), BLOCKED(409)                                           |
++---------+---------------------------------------------------------------------------------------------------------+
+| type    | PRIVILEGE, PERMISSION, UNAUTHORIZED, UNSUPPORTED, TAMPERED                                              |
++---------+---------------------------------------------------------------------------------------------------------+
+| login   | User login                                                                                              |
++---------+---------------------------------------------------------------------------------------------------------+
+| role    | Cassandra role                                                                                          |
++---------+---------------------------------------------------------------------------------------------------------+
+| source  | Source IP of the elasticsearch request, or the value of the **X-Forwarded-For** HTTP header if present. |
++---------+---------------------------------------------------------------------------------------------------------+
+| action  | Elasticsearch action                                                                                    |
++---------+---------------------------------------------------------------------------------------------------------+
+| indices | Requested indices                                                                                       |
++---------+---------------------------------------------------------------------------------------------------------+
 
 Audits events are recorded in a Cassandra table or in a log file configured as an appender in your **conf/logback.xml** file.
 
