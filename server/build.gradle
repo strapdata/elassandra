@@ -219,7 +219,6 @@ test {
     exclude 'org/elasticsearch/cluster/node/DiscoveryNodesTests**'
     exclude 'org/elasticsearch/index/shard/IndexShardTests*'
     exclude 'org/elasticsearch/index/shard/PrimaryReplicaSyncerTests*'
-    exclude 'org/elasticsearch/index/mapper/RangeFieldMapperTests*'
     exclude 'org/elasticsearch/index/engine/InternalEngineTests*'
     exclude 'org/elasticsearch/index/translog/**'
     exclude 'org/elasticsearch/index/seqno/**'

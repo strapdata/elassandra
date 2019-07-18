@@ -52,6 +52,9 @@ import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.index.mapper.ObjectMapper;
+import org.elasticsearch.index.mapper.RangeFieldMapper;
+import org.elasticsearch.index.mapper.RangeFieldMapper.Range;
+import org.elasticsearch.index.query.RangeQueryBuilder;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -137,7 +140,7 @@ public class Serializer {
     }
 
     /**
-     * Serialize a cassandra typed object.
+     * Serialize to a cassandra typed object.
      */
     public static ByteBuffer serialize(final String ksName, final String cfName, final AbstractType type, final String name, final Object value, final Mapper mapper)
             throws SyntaxException, ConfigurationException, JsonGenerationException, JsonMappingException, IOException {
@@ -149,7 +152,15 @@ public class Serializer {
             ByteBuffer[] components = new ByteBuffer[udt.size()];
             int i=0;
 
-            if (SchemaManager.GEO_POINT_TYPE.equals(ByteBufferUtil.string(udt.name))) {
+            if (mapper instanceof RangeFieldMapper) {
+                // parse a range field to serialized C* UDT
+                RangeFieldMapper rangeFieldMapper = (RangeFieldMapper)mapper;
+                Range range = rangeFieldMapper.parse(value);
+                components[i++]=serialize(ksName, cfName, udt.fieldType(0), RangeQueryBuilder.FROM_FIELD.getPreferredName(), rangeFieldMapper.fieldType().cqlValue(range.from), null);
+                components[i++]=serialize(ksName, cfName, udt.fieldType(1), RangeQueryBuilder.TO_FIELD.getPreferredName(), rangeFieldMapper.fieldType().cqlValue(range.to), null);
+                components[i++]=serialize(ksName, cfName, udt.fieldType(2), "include_lower", range.includeFrom, null);
+                components[i++]=serialize(ksName, cfName, udt.fieldType(3), "include_upper", range.includeTo, null);
+            } else if (SchemaManager.GEO_POINT_TYPE.equals(ByteBufferUtil.string(udt.name))) {
                 GeoPoint geoPoint = new GeoPoint();
                 if (value instanceof String) {
                     // parse from string lat,lon (ex: "41.12,-71.34") or geohash (ex:"drm3btev3e86")

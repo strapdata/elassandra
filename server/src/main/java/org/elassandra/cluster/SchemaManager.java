@@ -70,7 +70,6 @@ import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.MigrationListener;
 import org.apache.cassandra.thrift.ThriftValidation;
 import org.apache.cassandra.transport.Event;
-import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.elassandra.index.mapper.internal.TokenFieldMapper;
@@ -79,7 +78,6 @@ import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
-import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.index.mapper.CompletionFieldMapper;
@@ -93,8 +91,8 @@ import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ObjectMapper;
+import org.elasticsearch.index.mapper.RangeFieldMapper;
 import org.elasticsearch.index.mapper.SourceFieldMapper;
-import org.elasticsearch.indices.IndexCreationException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -521,6 +519,13 @@ public class SchemaManager extends AbstractComponent {
             Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm2, GEO_POINT_TYPE, GEO_POINT_FIELDS, mutations, events);
             ksm2 = x.left;
             type = x.right;
+        } else if (mapper instanceof RangeFieldMapper) {
+            Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm2,
+                    ((RangeFieldMapper) mapper).fieldType().typeName(),
+                    ((RangeFieldMapper) mapper).cqlFieldTypes(),
+                    mutations, events);
+            ksm2 = x.left;
+            type = x.right;
         } else if (mapper instanceof FieldMapper) {
             type = ((FieldMapper)mapper).rawType();
         } else {
@@ -636,8 +641,24 @@ public class SchemaManager extends AbstractComponent {
                     if (fieldMapper.cqlCollection().equals(CqlCollection.NONE))
                         continue; // ignore field.
 
-                    boolean freeze = true;
-                    if (fieldMapper instanceof GeoPointFieldMapper) {
+                    if (fieldMapper instanceof RangeFieldMapper) {
+                        RangeFieldMapper rangeFieldMapper = (RangeFieldMapper) fieldMapper;
+                        ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+                        if (cdef != null) {
+                            // index range stored as a range UDT in cassandra.
+                            if (!(cdef.type instanceof UserType))
+                                throw new MapperParsingException("Column ["+column+"] is not a Cassandra User Defined Type to store an Elasticsearch range");
+                            colDesc.type = CQL3Type.Raw.from(CQL3Type.UserDefined.create((UserType)cdef.type));
+                        } else {
+                            // create a range UDT to store range fields
+                            Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm,
+                                    rangeFieldMapper.fieldType().typeName(),
+                                    rangeFieldMapper.cqlFieldTypes(),
+                                    mutations, events);
+                            ksm = x.left;
+                            colDesc.type = x.right;
+                        }
+                    } else if (fieldMapper instanceof GeoPointFieldMapper) {
                         ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
                         if (cdef != null && cdef.type instanceof UTF8Type) {
                             // index geohash stored as text in cassandra.

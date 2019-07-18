@@ -19,7 +19,16 @@
 
 package org.elasticsearch.index.mapper;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+
 import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.cql3.FieldIdentifier;
+import org.apache.cassandra.db.marshal.UserType;
+import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.lucene.document.DoubleRange;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FloatRange;
@@ -42,6 +51,8 @@ import org.apache.lucene.store.ByteArrayDataOutput;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.Tuple;
@@ -53,15 +64,20 @@ import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.LocaleUtils;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.index.mapper.NumberFieldMapper.NumberType;
 import org.elasticsearch.index.query.QueryShardContext;
+import org.elasticsearch.index.query.RangeQueryBuilder;
 import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -69,6 +85,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseDateTimeFormatter;
 import static org.elasticsearch.index.query.RangeQueryBuilder.GTE_FIELD;
@@ -80,6 +97,13 @@ import static org.elasticsearch.index.query.RangeQueryBuilder.LT_FIELD;
 public class RangeFieldMapper extends FieldMapper {
     public static final boolean DEFAULT_INCLUDE_UPPER = true;
     public static final boolean DEFAULT_INCLUDE_LOWER = true;
+
+    public static final List<String> cqlFieldNames = new ImmutableList.Builder().add(
+            RangeQueryBuilder.FROM_FIELD.getPreferredName(),
+            RangeQueryBuilder.TO_FIELD.getPreferredName(),
+            "include_lower",
+            "include_upper")
+            .build();
 
     public static class Defaults {
         public static final Explicit<Boolean> COERCE = new Explicit<>(true, false);
@@ -319,10 +343,22 @@ public class RangeFieldMapper extends FieldMapper {
             return rangeType.rangeQuery(name(), hasDocValues(), lowerTerm, upperTerm, includeLower, includeUpper, relation,
                 timeZone, parser, context);
         }
+
+        @Override
+        public CQL3Type CQL3Type() {
+            return rangeType.cql3Type;
+        }
+
+        @Override
+        public Object cqlValue(Object value) {
+            return this.rangeType.cqlValue(value);
+        }
     }
 
     private Boolean includeInAll;
     private Explicit<Boolean> coerce;
+    private CQL3Type cql3Type;
+    private Map<String, CQL3Type.Raw> cqlTypeFields;
 
     private RangeFieldMapper(
         String simpleName,
@@ -336,6 +372,23 @@ public class RangeFieldMapper extends FieldMapper {
         super(simpleName, fieldType, defaultFieldType, indexSettings, multiFields, copyTo);
         this.coerce = coerce;
         this.includeInAll = includeInAll;
+        this.cql3Type = CQL3Type.UserDefined.create(
+                new UserType(
+                        indexSettings.get(IndexMetaData.SETTING_KEYSPACE, "dummy"),
+                        ByteBufferUtil.bytes(simpleName),
+                        cqlFieldNames.stream().map(FieldIdentifier::forUnquoted).collect(Collectors.toList()),
+                        Lists.newArrayList(
+                                fieldType().rangeType.cql3Type,
+                                fieldType().rangeType.cql3Type,
+                                CQL3Type.Native.BOOLEAN,
+                                CQL3Type.Native.BOOLEAN).stream().map(CQL3Type::getType).collect(Collectors.toList()),
+                        true));
+        this.cqlTypeFields = new ImmutableMap.Builder()
+                .put(cqlFieldNames.get(0), CQL3Type.Raw.from(fieldType().rangeType.cql3Type))
+                .put(cqlFieldNames.get(1), CQL3Type.Raw.from(fieldType().rangeType.cql3Type))
+                .put(cqlFieldNames.get(2), CQL3Type.Raw.from(CQL3Type.Native.BOOLEAN))
+                .put(cqlFieldNames.get(3), CQL3Type.Raw.from(CQL3Type.Native.BOOLEAN))
+                .build();
     }
 
     @Override
@@ -351,6 +404,78 @@ public class RangeFieldMapper extends FieldMapper {
     @Override
     protected RangeFieldMapper clone() {
         return (RangeFieldMapper) super.clone();
+    }
+
+    public Range parse(Object value) throws IOException {
+        if (value instanceof String && fieldType().rangeType == RangeType.IP) {
+            return parseIpRangeFromCidr((String) value);
+        }
+        if (value instanceof Map) {
+            Map<String, Object> mapValue = (Map<String, Object>) value;
+
+            // build a JSON doc to parse it
+            XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON).humanReadable(true);
+            builder.startObject();
+            if (mapValue.containsKey(GT_FIELD.getPreferredName()))
+                builder.field(GT_FIELD.getPreferredName(), mapValue.get(GT_FIELD.getPreferredName()));
+
+            if (mapValue.containsKey(GTE_FIELD.getPreferredName()))
+                builder.field(GTE_FIELD.getPreferredName(), mapValue.get(GTE_FIELD.getPreferredName()));
+
+            if (mapValue.containsKey(LT_FIELD.getPreferredName()))
+                builder.field(LT_FIELD.getPreferredName(), mapValue.get(LT_FIELD.getPreferredName()));
+
+            if (mapValue.containsKey(LTE_FIELD.getPreferredName()))
+                builder.field(LTE_FIELD.getPreferredName(), mapValue.get(LTE_FIELD.getPreferredName()));
+            builder.endObject();
+            XContentParser parser = JsonXContent.jsonXContent.createParser(ElassandraDaemon.instance.node().getNamedXContentRegistry(), builder.string());
+
+
+            final XContentParser.Token start = parser.nextToken();
+            if (start == XContentParser.Token.START_OBJECT) {
+                RangeFieldType fieldType = fieldType();
+                RangeType rangeType = fieldType.rangeType;
+                String fieldName = null;
+                Object from = rangeType.minValue();
+                Object to = rangeType.maxValue();
+                boolean includeFrom = DEFAULT_INCLUDE_LOWER;
+                boolean includeTo = DEFAULT_INCLUDE_UPPER;
+                XContentParser.Token token;
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                    if (token == XContentParser.Token.FIELD_NAME) {
+                        fieldName = parser.currentName();
+                    } else {
+                        if (fieldName.equals(GT_FIELD.getPreferredName())) {
+                            includeFrom = false;
+                            if (parser.currentToken() != XContentParser.Token.VALUE_NULL) {
+                                from = rangeType.parseFrom(fieldType, parser, coerce.value(), includeFrom);
+                            }
+                        } else if (fieldName.equals(GTE_FIELD.getPreferredName())) {
+                            includeFrom = true;
+                            if (parser.currentToken() != XContentParser.Token.VALUE_NULL) {
+                                from = rangeType.parseFrom(fieldType, parser, coerce.value(), includeFrom);
+                            }
+                        } else if (fieldName.equals(LT_FIELD.getPreferredName())) {
+                            includeTo = false;
+                            if (parser.currentToken() != XContentParser.Token.VALUE_NULL) {
+                                to = rangeType.parseTo(fieldType, parser, coerce.value(), includeTo);
+                            }
+                        } else if (fieldName.equals(LTE_FIELD.getPreferredName())) {
+                            includeTo = true;
+                            if (parser.currentToken() != XContentParser.Token.VALUE_NULL) {
+                                to = rangeType.parseTo(fieldType, parser, coerce.value(), includeTo);
+                            }
+                        } else {
+                            throw new MapperParsingException("error parsing field [" +
+                                name() + "], with unknown parameter [" + fieldName + "]");
+                        }
+                    }
+                }
+                return new Range(rangeType, from, to, includeFrom, includeTo);
+            }
+        }
+        throw new MapperParsingException("error parsing field ["
+                + name() + "], expected an object but got " + value.toString());
     }
 
     @Override
@@ -423,6 +548,35 @@ public class RangeFieldMapper extends FieldMapper {
         }
     }
 
+    public void createField(ParseContext context, Object value) throws IOException {
+        assert (value instanceof Map) : "Expecting a java.util.Map for range UDT";
+
+        Map<String, Object> mapValue = (Map<String, Object>)value;
+        RangeFieldType fieldType = fieldType();
+        RangeType rangeType = fieldType.rangeType;
+        Boolean includeFrom = (Boolean) mapValue.getOrDefault("include_lower", DEFAULT_INCLUDE_LOWER);
+        Boolean includeTo =  (Boolean) mapValue.getOrDefault("include_upper", DEFAULT_INCLUDE_UPPER);
+
+        // convert from CQL to ES value
+        Object from = (mapValue.containsKey("from")) ? rangeType.esValue(mapValue.get("from")) : rangeType.minValue();
+        Object to = (mapValue.containsKey("to")) ? rangeType.esValue(mapValue.get("to")) : rangeType.maxValue();
+        Range range = new Range(rangeType, from, to, includeFrom, includeTo);
+
+        final boolean includeInAll = context.includeInAll(this.includeInAll, this);
+        if (includeInAll) {
+            context.allEntries().addText(fieldType.name(), range.toString(), fieldType.boost());
+        }
+        boolean indexed = fieldType.indexOptions() != IndexOptions.NONE;
+        boolean docValued = fieldType.hasDocValues();
+        boolean stored = fieldType.stored();
+
+        for(IndexableField field : fieldType().rangeType.createFields(context, name(), range, indexed, docValued, stored))
+            context.doc().add(field);
+        if (docValued == false && (stored || indexed)) {
+            createFieldNamesField(context, context.doc().getFields());
+        }
+    }
+
     @Override
     protected void doMerge(Mapper mergeWith, boolean updateAllTypes) {
         super.doMerge(mergeWith, updateAllTypes);
@@ -459,11 +613,19 @@ public class RangeFieldMapper extends FieldMapper {
 
     @Override
     public CQL3Type CQL3Type() {
-        throw new UnsupportedOperationException();
+        return this.cql3Type;
+    }
+
+    public Map<String, CQL3Type.Raw> cqlFieldTypes() {
+        return this.cqlTypeFields;
     }
 
     private static Range parseIpRangeFromCidr(final XContentParser parser) throws IOException {
-        final Tuple<InetAddress, Integer> cidr = InetAddresses.parseCidr(parser.text());
+        return parseIpRangeFromCidr(parser.text());
+    }
+
+    private static Range parseIpRangeFromCidr(final String cidrText) throws IOException {
+        final Tuple<InetAddress, Integer> cidr = InetAddresses.parseCidr(cidrText);
         // create the lower value by zeroing out the host portion, upper value by filling it with all ones.
         byte[] lower = cidr.v1().getAddress();
         byte[] upper = lower.clone();
@@ -481,7 +643,7 @@ public class RangeFieldMapper extends FieldMapper {
 
     /** Enum defining the type of range */
     public enum RangeType {
-        IP("ip_range") {
+        IP("ip_range", CQL3Type.Native.INET) {
             @Override
             public Field getRangeField(String name, Range r) {
                 return new InetAddressRange(name, (InetAddress)r.from, (InetAddress)r.to);
@@ -581,7 +743,7 @@ public class RangeFieldMapper extends FieldMapper {
                     includeLower ? lower : nextUp(lower), includeUpper ? upper : nextDown(upper));
             }
         },
-        DATE("date_range", NumberType.LONG) {
+        DATE("date_range", CQL3Type.Native.TIMESTAMP, NumberType.LONG) {
             @Override
             public Field getRangeField(String name, Range r) {
                 return new LongRange(name, new long[] {((Number)r.from).longValue()}, new long[] {((Number)r.to).longValue()});
@@ -657,9 +819,17 @@ public class RangeFieldMapper extends FieldMapper {
             public Query intersectsQuery(String field, Object from, Object to, boolean includeLower, boolean includeUpper) {
                 return LONG.intersectsQuery(field, from, to, includeLower, includeUpper);
             }
+            @Override
+            public Date cqlValue(Object value) {
+                return new Date((long)value);
+            }
+            @Override
+            public Long esValue(Object value) {
+                return ((Date)value).getTime();
+            }
         },
         // todo support half_float
-        FLOAT("float_range", NumberType.FLOAT) {
+        FLOAT("float_range", CQL3Type.Native.FLOAT, NumberType.FLOAT) {
             @Override
             public Float minValue() {
                 return Float.NEGATIVE_INFINITY;
@@ -721,7 +891,7 @@ public class RangeFieldMapper extends FieldMapper {
                     new float[] {includeTo ? (Float)to : Math.nextDown((Float)to)});
             }
         },
-        DOUBLE("double_range", NumberType.DOUBLE) {
+        DOUBLE("double_range", CQL3Type.Native.DOUBLE, NumberType.DOUBLE) {
             @Override
             public Double minValue() {
                 return Double.NEGATIVE_INFINITY;
@@ -785,7 +955,7 @@ public class RangeFieldMapper extends FieldMapper {
         },
         // todo add BYTE support
         // todo add SHORT support
-        INTEGER("integer_range", NumberType.INTEGER) {
+        INTEGER("integer_range", CQL3Type.Native.INT, NumberType.INTEGER) {
             @Override
             public Integer minValue() {
                 return Integer.MIN_VALUE;
@@ -833,7 +1003,7 @@ public class RangeFieldMapper extends FieldMapper {
                     new int[] {(Integer)to - (includeTo ? 0 : 1)});
             }
         },
-        LONG("long_range", NumberType.LONG) {
+        LONG("long_range", CQL3Type.Native.BIGINT, NumberType.LONG) {
             @Override
             public Long minValue() {
                 return Long.MIN_VALUE;
@@ -894,14 +1064,16 @@ public class RangeFieldMapper extends FieldMapper {
             }
         };
 
-        RangeType(String name) {
+        RangeType(String name, CQL3Type cql3type) {
             this.name = name;
             this.numberType = null;
+            this.cql3Type = cql3type;
         }
 
-        RangeType(String name, NumberType type) {
+        RangeType(String name, CQL3Type cql3type, NumberType type) {
             this.name = name;
             this.numberType = type;
+            this.cql3Type = cql3type;
         }
 
         /** Get the associated type name. */
@@ -940,6 +1112,14 @@ public class RangeFieldMapper extends FieldMapper {
         public Object parseTo(RangeFieldType fieldType, XContentParser parser, boolean coerce, boolean included) throws IOException {
             Number value = numberType.parse(parser, coerce);
             return included ? value : (Number)nextDown(value);
+        }
+
+        public Object cqlValue(Object value) {
+            return value;
+        }
+
+        public Object esValue(Object value) {
+            return value;
         }
 
         public abstract Object minValue();
@@ -990,18 +1170,16 @@ public class RangeFieldMapper extends FieldMapper {
 
         public final String name;
         private final NumberType numberType;
-
-
-
+        private final CQL3Type cql3Type;
     }
 
     /** Class defining a range */
     public static class Range {
-        RangeType type;
-        Object from;
-        Object to;
-        private boolean includeFrom;
-        private boolean includeTo;
+        public final RangeType type;
+        public final Object from;
+        public final Object to;
+        public final boolean includeFrom;
+        public final boolean includeTo;
 
         public Range(RangeType type, Object from, Object to, boolean includeFrom, boolean includeTo) {
             this.type = type;
