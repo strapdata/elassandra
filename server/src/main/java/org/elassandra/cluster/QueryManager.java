@@ -679,6 +679,13 @@ public class QueryManager extends AbstractComponent {
         return node;
     }
 
+    /**
+     * Convert an IndexRequest to a CQL insert
+     * @param request
+     * @param indexMetaData
+     * @param updateOperation
+     * @throws Exception
+     */
     private void upsertDocument(final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation) throws Exception {
         final IndexService indexService = clusterService.indexService(indexMetaData.getIndex());
         final IndexShard indexShard = indexService.getShard(0);
@@ -850,8 +857,26 @@ public class QueryManager extends AbstractComponent {
         }
     }
 
-    public String buildInsertQuery(final String ksName, final String cfName, Map<String, ByteBuffer> map, String id, final boolean ifNotExists,
-            ByteBuffer[] values, int valuesOffset) throws Exception {
+    /**
+     * Build CQL insert query and populate values from the provided map.
+     * TODO: cached prepared statements ?
+     * @param ksName
+     * @param cfName
+     * @param map
+     * @param id
+     * @param ifNotExists
+     * @param values
+     * @param valuesOffset
+     * @return
+     * @throws Exception
+     */
+    public String buildInsertQuery(final String ksName,
+            final String cfName,
+            final Map<String, ByteBuffer> map,
+            final String id,
+            final boolean ifNotExists,
+            ByteBuffer[] values,
+            final int valuesOffset) throws Exception {
         final StringBuilder questionsMarks = new StringBuilder();
         final StringBuilder columnNames = new StringBuilder();
 
