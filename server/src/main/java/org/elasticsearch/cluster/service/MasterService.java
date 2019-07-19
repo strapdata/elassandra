@@ -748,16 +748,21 @@ public class MasterService extends AbstractLifecycleComponent {
         }
 
         public Map<Object, ClusterStateTaskListener> updateTasksToMap(Priority priority, final long lostTimeMillis) {
-            TimeValue timeout = TimeValue.timeValueSeconds(30*1000 - lostTimeMillis);
+            //TimeValue timeout = TimeValue.timeValueSeconds(30*1000 - lostTimeMillis);
             Map<Object, ClusterStateTaskListener> map = new HashMap<Object, ClusterStateTaskListener>();
             for (Batcher.UpdateTask updateTask : updateTasks) {
                 map.put( updateTask.task, updateTask.listener);
                 priority = priority.sameOrAfter(updateTask.priority()) ? updateTask.priority() : priority;
+
+                /*
+                // TODO: decrease timeout with lost time in a new encapsulated task.
                 if (updateTask.task instanceof ClusterStateUpdateTask) {
-                    timeout = TimeValue.timeValueMillis( ((ClusterStateUpdateTask)updateTask.task).timeout().getMillis() - lostTimeMillis);
+                    ClusterStateUpdateTask clusterStateUpdateTask = (ClusterStateUpdateTask)updateTask.task;
+                    timeout = TimeValue.timeValueMillis( clusterStateUpdateTask.timeout().getMillis() - lostTimeMillis);
                 } else if (updateTask.task instanceof ClusterStateUpdateRequest) {
                     timeout = TimeValue.timeValueMillis( ((ClusterStateUpdateRequest)updateTask.task).masterNodeTimeout().getMillis() - lostTimeMillis);
                 }
+                */
             }
             return map;
         }
