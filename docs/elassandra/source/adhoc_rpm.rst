@@ -6,9 +6,16 @@ pull it automatically as a dependency.
 
 Create a file called ``elassandra.repo`` in the ``/etc/yum.repos.d/`` directory or similar according to your distribution (RedHat, OpenSuSe...)::
 
-  [elassandra]
-  name=elassandra
+  [strapdata]
+  name=Strapdata
   baseurl=https://nexus.repo.strapdata.com/repository/rpm-releases/
+  enabled=1
+  gpgcheck=0
+  priority=1
+
+  [strapdata-snapshots]
+  name=Strapdata Snapshots
+  baseurl=https://nexus.repo.strapdata.com/repository/rpm-snapshots/
   enabled=1
   gpgcheck=0
   priority=1
