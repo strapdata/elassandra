@@ -328,15 +328,44 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         createIndex("test");
         ensureGreen("test");
 
+        XContentBuilder mappingMapOpaque = XContentFactory.jsonBuilder()
+                .startObject()
+                    .field("discover", ".*")
+                .endObject();
+        
+        XContentBuilder mappingMap = XContentFactory.jsonBuilder()
+                .startObject()
+                    .field("discover", "^((?!strings).*)")
+                    .startObject("properties")
+                        .startObject("strings")
+                            .field("type", "nested")
+                            .field("cql_collection", "singleton")
+                            .field("cql_struct", "map")
+                        .endObject()
+                    .endObject()
+                .endObject();
+        
         process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, strings map<text, text>, PRIMARY KEY (id));");
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test").setSource("{ \"event_test\" : { \"discover\" : \".*\"}}", XContentType.JSON).get());
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test")
+                .setSource(mappingMapOpaque)
+                .get());
+        
+        assertAcked(client().admin().indices().prepareCreate("test2")
+                .setSettings(Settings.builder().put("index.keyspace", "test").build())
+                .addMapping("event_test", mappingMap)
+                .get());
 
         long N = 10;
         for(int i=0; i < N; i++)
             process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,strings) VALUES ('%d',{'key%d':'b%d'})", i, i, i));
 
         assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.termQuery("strings.key1", "b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        
+        // test2 support string query because mapping is available
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("event_test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.termQuery("strings.key1", "b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
     }
 
     @Test
@@ -345,8 +374,23 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         ensureGreen("test");
 
         process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, foo text, strings map<text, text>, PRIMARY KEY (id));");
+        
+        XContentBuilder mappingMap = XContentFactory.jsonBuilder()
+                .startObject()
+                    .field("discover", "^((?!strings).*)")
+                    .startObject("properties")
+                        .startObject("strings")
+                            .field("type", "nested")
+                            .field("cql_collection", "singleton")
+                            .field("cql_struct", "map")
+                        .endObject()
+                    .endObject()
+                .endObject();
+        
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,foo) VALUES ('%d','bar')", 1));
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test").setSource("{ \"event_test\" : { \"discover\" : \".*\"}}", XContentType.JSON).get());
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test")
+                .setSource(mappingMap)
+                .get());
 
         long N = 10;
         for(int i=0; i < N; i++)
@@ -368,7 +412,21 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         for(int i=0; i < N; i++)
             process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,strings) VALUES ('%d',{'key%d':'b%d'})", i, i, i));
 
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test").setSource("{ \"event_test\" : { \"discover\" : \".*\"}}", XContentType.JSON).get());
+        XContentBuilder mappingMap = XContentFactory.jsonBuilder()
+                .startObject()
+                    .field("discover", "^((?!strings).*)")
+                    .startObject("properties")
+                        .startObject("strings")
+                            .field("type", "nested")
+                            .field("cql_collection", "singleton")
+                            .field("cql_struct", "map")
+                        .endObject()
+                    .endObject()
+                .endObject();
+        
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test")
+                .setSource(mappingMap)
+                .get());
 
         // wait asynchronous index rebuild triggered by creating the index.
         waitIndexRebuilt("test", Collections.singletonList("event_test"), 10000L);
@@ -427,17 +485,34 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         ensureGreen("test");
 
         process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, strings map<text, text>, PRIMARY KEY (id));");
+        
+        XContentBuilder mappingMap = XContentFactory.jsonBuilder()
+                .startObject()
+                    .startObject("event_test")
+                        .field("discover", "^((?!strings).*)")
+                        .startObject("properties")
+                            .startObject("strings")
+                                .field("type", "nested")
+                                .field("cql_collection", "singleton")
+                                .field("cql_struct", "map")
+                            .endObject()
+                        .endObject()
+                        .startArray("dynamic_templates")
+                            .startObject()
+                                .startObject("strings_template")
+                                    .field("match", "strings.*")
+                                    .startObject("mapping")
+                                        .field("type", "text")
+                                    .endObject()
+                                .endObject()
+                            .endObject()
+                        .endArray()
+                    .endObject()
+                .endObject();
+        
         assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test")
-                .setSource("{ \"event_test\" : { \"discover\" : \".*\", "+
-                        "\"dynamic_templates\": [ "+
-                            "{ \"strings_template\": { "+
-                                "\"match\": \"strings.*\", "+
-                                "\"mapping\": { "+
-                                    "\"type\": \"text\"" +
-                                "}"+
-                          "}}" +
-                         "]"+
-        "}}}", XContentType.JSON).get());
+                .setSource(mappingMap)
+                .get());
 
         long N = 10;
         for(int i=0; i < N; i++)

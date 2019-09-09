@@ -64,6 +64,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /** A {@link FieldMapper} for numeric types: byte, short, int, long, float and double. */
 public class NumberFieldMapper extends FieldMapper {
@@ -1117,7 +1118,7 @@ public class NumberFieldMapper extends FieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object value) throws IOException {
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
         final boolean includeInAll = context.includeInAll(this.includeInAll, this);
 
         Number numericValue = null;
@@ -1145,15 +1146,17 @@ public class NumberFieldMapper extends FieldMapper {
         if (numericValue == null) {
             numericValue = fieldType().type.parse(value, coerce.value());
         }
+        
+        String fieldName = keyName.orElse(fieldType().name());
 
         if (includeInAll) {
-            context.allEntries().addText(fieldType().name(), value.toString(), fieldType().boost());
+            context.allEntries().addText(fieldName, value.toString(), fieldType().boost());
         }
 
         boolean indexed = fieldType().indexOptions() != IndexOptions.NONE;
         boolean docValued = fieldType().hasDocValues();
         boolean stored = fieldType().stored();
-        for(Field field : fieldType().type.createFields(fieldType().name(), numericValue, indexed, docValued, stored))
+        for(Field field : fieldType().type.createFields(fieldName, numericValue, indexed, docValued, stored))
             context.doc().add(field);
         if (docValued == false && (stored || indexed)) {
             createFieldNamesField(context, context.doc().getFields());

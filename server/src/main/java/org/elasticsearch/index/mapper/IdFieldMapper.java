@@ -50,6 +50,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * A mapper for the _id field. It does nothing since _id is neither indexed nor
@@ -304,7 +305,7 @@ public class IdFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object _id) throws IOException {
+    public void createField(ParseContext context, Object _id, Optional<String> keyName) throws IOException {
         if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
             if (context.mapperService().getIndexSettings().getIndexVersionCreated().onOrAfter(Version.V_6_0_0_beta1)) {
                 BytesRef id = Uid.encodeId( (String)_id);

@@ -43,6 +43,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Mapper for the {@code _seq_no} field.
@@ -269,7 +270,7 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
         // _primary_term in parent doc only.
         if (context.doc().getParent() == null)
             context.doc().add(SequenceIDFields.PRIMARY_TERM_ZERO);

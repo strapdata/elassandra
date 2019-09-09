@@ -159,6 +159,7 @@ import org.elasticsearch.index.mapper.GeoShapeFieldMapper;
 import org.elasticsearch.index.mapper.IdFieldMapper;
 import org.elasticsearch.index.mapper.IpFieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
@@ -364,11 +365,16 @@ public class ElasticSecondaryIndex implements Index {
             }
         }
     }
-
+    
     public void addField(ParseContext ctx, ImmutableMappingInfo.ImmutableIndexInfo indexInfo, Mapper mapper, Object value) throws IOException {
+        addField( ctx, indexInfo, mapper, value, Optional.empty());
+    }
+
+    public void addField(ParseContext ctx, ImmutableMappingInfo.ImmutableIndexInfo indexInfo, Mapper mapper, Object value, Optional<String> keyName) throws IOException {
         ParseContext context = ctx;
         if (logger.isTraceEnabled())
-            logger.trace("doc[{}] class={} name={} value={}", context.docs().indexOf(context.doc()), mapper.getClass().getSimpleName(), mapper.name(), value);
+            logger.trace("doc[{}] class={} name={} value={} keyName={}", 
+                    context.docs().indexOf(context.doc()), mapper.getClass().getSimpleName(), mapper.name(), value, keyName);
 
         if (value == null && (!(mapper instanceof FieldMapper) || ((FieldMapper) mapper).fieldType().nullValue() == null))
             return;
@@ -376,7 +382,7 @@ public class ElasticSecondaryIndex implements Index {
         if (value instanceof Collection) {
             // flatten list or set of fields
             for (Object v : (Collection) value)
-                ElasticSecondaryIndex.this.addField(context, indexInfo, mapper, v);
+                ElasticSecondaryIndex.this.addField(context, indexInfo, mapper, v, keyName);
             return;
         }
 
@@ -402,7 +408,7 @@ public class ElasticSecondaryIndex implements Index {
                 geoPointFieldMapper.parse(context, geoPoint);
             }
         } else if (mapper instanceof FieldMapper) {
-            ((FieldMapper) mapper).createField(context, value);
+            ((FieldMapper) mapper).createField(context, value, keyName);
             DocumentParser.createCopyFields(context, ((FieldMapper)mapper).copyTo().copyToFields(), value);
         } else if (mapper instanceof ObjectMapper) {
             final ObjectMapper objectMapper = (ObjectMapper) mapper;
@@ -421,16 +427,20 @@ public class ElasticSecondaryIndex implements Index {
                     // see http://docs.oracle.com/javase/7/docs/api/java/util/concurrent/locks/ReentrantReadWriteLock.html for locking a cache
                     if (mapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
                         indexInfo.dynamicMappingUpdateLock.readLock().lock();
-                    Mapper subMapper = objectMapper.getMapper(entry.getKey());
-
-                    if (subMapper == null) {
-                        // try from the mapperService that could be updated
+                    
+                    String subMapperName = mapper.cqlStruct().equals(CqlStruct.OPAQUE_MAP) ?
+                            ObjectMapper.DEFAULT_KEY :
+                            entry.getKey();
+                    Mapper subMapper = objectMapper.getMapper(subMapperName);
+                    
+                    if (subMapper == null && mapper.cqlStruct().equals(Mapper.CqlStruct.MAP)) {
+                        // try from the mapperService that could have been updated
                         DocumentMapper docMapper = indexInfo.indexService.mapperService().documentMapper(indexInfo.type);
                         ObjectMapper newObjectMapper = docMapper.objectMappers().get(mapper.name());
                         subMapper = newObjectMapper.getMapper(entry.getKey());
                     }
-                    if (subMapper == null) {
-                        // dynamic field in top level map => update mapping and add the field.
+                    if (subMapper == null && mapper.cqlStruct().equals(Mapper.CqlStruct.MAP)) {
+                        // dynamic field in top level map => update the elasticsearch mapping and add the field.
                         ColumnDefinition cd = baseCfs.metadata.getColumnDefinition(mapper.cqlName());
                         if (subMapper == null && cd != null && cd.type.isCollection() && cd.type instanceof MapType ) {
                             CollectionType ctype = (CollectionType) cd.type;
@@ -503,9 +513,10 @@ public class ElasticSecondaryIndex implements Index {
 
                     try {
                         if (subMapper != null) {
-                            ElasticSecondaryIndex.this.addField(context, indexInfo, subMapper, entry.getValue());
+                        	ElasticSecondaryIndex.this.addField(context, indexInfo, subMapper, entry.getValue(), 
+                            		CqlStruct.OPAQUE_MAP.equals(mapper.cqlStruct()) ? Optional.of(mapper.name() + "." + entry.getKey()) : Optional.empty());
                         } else {
-                            logger.error("submapper not found for nested field [{}] in index [{}]", entry.getKey(), indexInfo.name);
+                            logger.error("submapper not found for nested field [{}] in index [{}], not indexed", subMapperName, indexInfo.name);
                         }
                     } finally {
                         if (mapper.cqlStruct().equals(Mapper.CqlStruct.MAP))

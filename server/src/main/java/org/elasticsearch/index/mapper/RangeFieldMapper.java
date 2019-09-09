@@ -24,7 +24,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 
 import org.apache.cassandra.cql3.CQL3Type;
-import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.FieldIdentifier;
 import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.service.ElassandraDaemon;
@@ -52,7 +51,6 @@ import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.Tuple;
@@ -84,6 +82,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -548,7 +547,8 @@ public class RangeFieldMapper extends FieldMapper {
         }
     }
 
-    public void createField(ParseContext context, Object value) throws IOException {
+    @Override
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
         assert (value instanceof Map) : "Expecting a java.util.Map for range UDT";
 
         Map<String, Object> mapValue = (Map<String, Object>)value;
@@ -562,15 +562,17 @@ public class RangeFieldMapper extends FieldMapper {
         Object to = (mapValue.containsKey("to")) ? rangeType.esValue(mapValue.get("to")) : rangeType.maxValue();
         Range range = new Range(rangeType, from, to, includeFrom, includeTo);
 
+        String fieldName = keyName.orElse(fieldType().name());
+
         final boolean includeInAll = context.includeInAll(this.includeInAll, this);
         if (includeInAll) {
-            context.allEntries().addText(fieldType.name(), range.toString(), fieldType.boost());
+            context.allEntries().addText(fieldName, range.toString(), fieldType.boost());
         }
         boolean indexed = fieldType.indexOptions() != IndexOptions.NONE;
         boolean docValued = fieldType.hasDocValues();
         boolean stored = fieldType.stored();
 
-        for(IndexableField field : fieldType().rangeType.createFields(context, name(), range, indexed, docValued, stored))
+        for(IndexableField field : fieldType().rangeType.createFields(context, fieldName, range, indexed, docValued, stored))
             context.doc().add(field);
         if (docValued == false && (stored || indexed)) {
             createFieldNamesField(context, context.doc().getFields());

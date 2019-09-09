@@ -257,6 +257,7 @@ public class TypeParsers {
         if (propName.equals(CQL_STRUCT)) {
             switch(StringUtils.lowerCase(propNode.toString())) {
             case "map" : builder.cqlStruct(CqlStruct.MAP); break;
+            case "opaque_map" : builder.cqlStruct(CqlStruct.OPAQUE_MAP); break;
             case "udt" : builder.cqlStruct(CqlStruct.UDT); break;
             case "tuple" : builder.cqlStruct(CqlStruct.TUPLE); break;
             default: throw new MapperParsingException("Unsupported CQL struct [" + propNode.toString() + "], should be in map, udt or tuple.");

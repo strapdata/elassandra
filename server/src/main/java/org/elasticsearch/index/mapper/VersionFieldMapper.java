@@ -35,6 +35,7 @@ import org.elasticsearch.index.query.QueryShardException;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /** Mapper for the _version field. */
 public class VersionFieldMapper extends MetadataFieldMapper {
@@ -135,7 +136,7 @@ public class VersionFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object value) throws IOException {
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
     }
 
     @Override

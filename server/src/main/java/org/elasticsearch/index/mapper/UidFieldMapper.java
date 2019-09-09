@@ -50,6 +50,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class UidFieldMapper extends MetadataFieldMapper {
 
@@ -230,7 +231,7 @@ public class UidFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
         if (fieldType.indexOptions() != IndexOptions.NONE || fieldType.stored()) {
             Uid value = (Uid)object;
             Field uid = new Field(NAME, Uid.createUid(context.type(), context.id()), fieldType);

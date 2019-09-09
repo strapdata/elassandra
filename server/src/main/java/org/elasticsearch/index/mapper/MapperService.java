@@ -249,9 +249,16 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                 if (mtype.getKeysType().asCQL3Type() == CQL3Type.Native.TEXT &&
                    (mtype.getValuesType().isUDT() || !mtype.getValuesType().isCollection())) {
                    mapping.put(TypeParsers.CQL_COLLECTION, "singleton");
-                   mapping.put(TypeParsers.CQL_STRUCT, "map");
+                   mapping.put(TypeParsers.CQL_STRUCT, "opaque_map");
                    mapping.put(TypeParsers.CQL_MANDATORY, Boolean.TRUE);
                    mapping.put("type", ObjectMapper.NESTED_CONTENT_TYPE);
+                   
+                   // add value type mapper with name _key
+                   Map<String, Object> properties = Maps.newHashMap();
+                   Map<String, Object> fieldProps = Maps.newHashMap();
+                   buildCollectionMapping(fieldProps, mtype.getValuesType());
+                   properties.put(ObjectMapper.DEFAULT_KEY, fieldProps);
+                   mapping.put("properties", properties);
                 } else {
                     throw new IOException("Expecting a map<text,?>");
                 }

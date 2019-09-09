@@ -66,26 +66,28 @@ Theses parameters below control the Cassandra mapping.
 
 .. cssclass:: table-bordered
 
-+-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+
-| Parameter                   | Values                           | Description                                                                                                                                                                                                                                         | |
-+=============================+==================================+=====================================================================================================================================================================================================================================================+=+
-| ``cql_collection``          | **list**, set, singleton or none | Control how the field of type X is mapped to a column list<X>, set<X> or X. Default is **list** because Elasticsearch fields are multivalued.                                                                                                       | |
-|                             |                                  | For `copyTo <https://www.elastic.co/guide/en/elasticsearch/reference/6.2/copy-to.html>`_ fields, **none** means the field is not backed into Cassandra but just indexed by Elasticsearch.                                                           | |
-+-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+
-| ``cql_struct``              | **udt** or map                   | Control how an object or nested field is mapped to a User Defined Type or to a Cassandra map<text,?>. Default is **udt**.                                                                                                                           | |
-+-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+
-| ``cql_static_column``       | true or **false**                | When *true*, the underlying CQL column is static. Default is **false**.                                                                                                                                                                             | |
-+-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+
-| ``cql_primary_key_order``   | **integer**                      | Field position in the Cassandra the primary key of the underlying Cassandra table. Default is **-1** meaning that the field is not part of the Cassandra primary key.                                                                               | |
-+-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+
-| ``cql_partition_key``       | true or **false**                | When the cql_primary_key_order >= 0, specify if the field is part of the Cassandra partition key. Default is **false** meaning that the field is not part of the Cassandra partition key.                                                           | |
-+-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+
-| ``cql_clustering_key_desc`` | true or **false**                | Indicates if the field is a clustering key in ascending or descending order, default is ascending (false). See Cassandra documentation  about `clustering key <http://cassandra.apache.org/doc/4.0/cql/ddl.html#the-clustering-columns>`_ ordering. | |
-+-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+
-| ``cql_udt_name``            | **<table_name>_<field_name>**    | Specify the Cassandra User Defined Type name to use to store an object. By default, this is automatically build (dots in *field_names* are replaced by underscores)                                                                                 | |
-+-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+
-| ``cql_type``                | **<CQL type>**                   | Specify the Cassandra type to use to store an elasticsearch field. By default, this is automatically set depending on the Elasticsearch field type, but in some situation, you can overwrite the default type by another one.                       | |
-+-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-+
++-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Parameter                   | Values                           | Description                                                                                                                                                                                                                                         |
++=============================+==================================+=====================================================================================================================================================================================================================================================+
+| ``cql_collection``          | **list**, set, singleton or none | Control how the field of type X is mapped to a column list<X>, set<X> or X. Default is **list** because Elasticsearch fields are multivalued.                                                                                                       |
+|                             |                                  | For `copyTo <https://www.elastic.co/guide/en/elasticsearch/reference/6.2/copy-to.html>`_ fields, **none** means the field is not backed into Cassandra but just indexed by Elasticsearch.                                                           |
++-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_struct``              | **udt**, map or map_opaque       | Control how an object or nested field is mapped to a User Defined Type or to a Cassandra map<text,?>. Default is **udt**. 																														   |
+|                             |                                  | When using **map**, each new key is registred as a subfield in the elasticsearch mapping through a mapping update request.                                                                                                                          |
+|                             |                                  | When using **map_opaque**, each new key is silently indexed as a new field, but the elasticsearch mapping is not updated.                                                                                                                           |
++-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_static_column``       | true or **false**                | When *true*, the underlying CQL column is static. Default is **false**.                                                                                                                                                                             |
++-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_primary_key_order``   | **integer**                      | Field position in the Cassandra the primary key of the underlying Cassandra table. Default is **-1** meaning that the field is not part of the Cassandra primary key.                                                                               |
++-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_partition_key``       | true or **false**                | When the cql_primary_key_order >= 0, specify if the field is part of the Cassandra partition key. Default is **false** meaning that the field is not part of the Cassandra partition key.                                                           |
++-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_clustering_key_desc`` | true or **false**                | Indicates if the field is a clustering key in ascending or descending order, default is ascending (false). See Cassandra documentation  about `clustering key <http://cassandra.apache.org/doc/4.0/cql/ddl.html#the-clustering-columns>`_ ordering. |
++-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_udt_name``            | **<table_name>_<field_name>**    | Specify the Cassandra User Defined Type name to use to store an object. By default, this is automatically build (dots in *field_names* are replaced by underscores)                                                                                 |
++-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``cql_type``                | **<CQL type>**                   | Specify the Cassandra type to use to store an elasticsearch field. By default, this is automatically set depending on the Elasticsearch field type, but in some situation, you can overwrite the default type by another one.                       |
++-----------------------------+----------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 For more information about Cassandra collection types and compound primary key, see `CQL Collections <http://cassandra.apache.org/doc/latest/cql/types.html?highlight=collection#collections>`_ and `Compound keys <https://docs.datastax.com/en/cql/3.1/cql/ddl/ddl_compound_keys_c.html>`_.
 
@@ -98,12 +100,12 @@ For more information about Cassandra collection types and compound primary key, 
 Elasticsearch multi-fields
 --------------------------
 
-Elassandra supports `Elasticsearch multi-fields <https://www.elastic.co/guide/en/elasticsearch/reference/6.2/multi-fields.html>` indexing, allowing to index a field in differents ways for different purposes.
+Elassandra supports `Elasticsearch multi-fields <https://www.elastic.co/guide/en/elasticsearch/reference/6.2/multi-fields.html>` indexing, allowing to index a field in many ways for different purposes.
 
 .. TIP::
 
   Indexing a wrong datatype into a field may throws an exception by default and reject the whole document. 
-  The `ignore_malformed parameter<https://www.elastic.co/guide/en/elasticsearch/reference/6.3/ignore-malformed.html>`_, if set to true, allows the exception to be ignored.
+  The `ignore_malformed parameter <https://www.elastic.co/guide/en/elasticsearch/reference/6.3/ignore-malformed.html>`_, if set to true, allows the exception to be ignored.
   This parameter can also be set at the `index level <https://www.elastic.co/guide/en/elasticsearch/reference/6.3/ignore-malformed.html#ignore-malformed-setting>`_, 
   to allow to ignore malformed content globally across all mapping types.
 
@@ -346,59 +348,64 @@ Dynamic mapping of Cassandra Map
 
 By default, nested document are be mapped to `User Defined Type <https://docs.datastax.com/en/cql/3.1/cql/cql_using/cqlUseUDT.html>`_. 
 You can also use a CQL `map <http://docs.datastax.com/en/cql/3.1/cql/cql_using/use_map_t.html#toc_pane>`_ 
-having a *text* key and value is a native or UDT type (using a collection in a map is not supported). 
-Thus, each new key in the map invlove an Elasticsearch mapping update to declare the key as a new field.
-Obivously, don't use such mapping when keys are versatile.
+having a *text* key and a value of native or UDT type (using a collection in a map is not supported by Cassandra).
+
+With ``cql_struct=map``, each new key in the map involves an Elasticsearch mapping update (and a PAXOS transaction) to declare the key as a new field.
+Obviously, don't use such mapping when keys are versatile. 
+
+.. WARNING: 
+
+	Creating an index with including a  ``cql_struct=map`` when the underlying Cassandra map contains some data cause 
+	a mapping update timeout on the coordinator node, a dead-lock because the CQL schema cannot be updated while updating a row. In such case,
+	create the index without indexing the Cassandra map column, then update the mapping to add the map column and rebuild the index.
+
+With ``cql_struct=opaque_map``, Elassandra silently index each key as an Elasticsearch field, but does not update the mapping, which is far more efficient when using versatile keys.
+Every sub-fields (or every entry in the map) have the same type defined by the pseudo field name ``_key`` in the mapping.
+These fields are searchable, except with `query string queries <https://www.elastic.co/guide/en/elasticsearch/reference/6.2/query-dsl-query-string-query.html>`_ 
+because Elasticsearch cannot lookup fields in the mapping.
+
+Finaly, when discovering the mapping from the CQL schema, Cassandra maps columns are mapped to an ``opaque_map`` by default. Adding explicit sub-fields to 
+an ``opaque_map`` is still possible if you need to make these fields visible to Kibana for example.
 
 In the following example, each new key entry in the map *attrs* is mapped as field.
 
 .. code::
 
-   cqlsh>CREATE KEYSPACE IF NOT EXISTS twitter WITH replication={ 'class':'NetworkTopologyStrategy', 'dc1':'1' };
-   cqlsh>CREATE TABLE twitter.user (
+   CREATE KEYSPACE IF NOT EXISTS twitter WITH replication={ 'class':'NetworkTopologyStrategy', 'DC1':'1' };
+   CREATE TABLE twitter.user (
       name text,
       attrs map<text,text>,
       PRIMARY KEY (name)
    );
-   cqlsh>INSERT INTO twitter.user (name,attrs) VALUES ('bob',{'email':'bob@gmail.com','firstname':'bob'});
+   INSERT INTO twitter.user (name,attrs) VALUES ('bob',{'email':'bob@gmail.com','firstname':'bob'});
 
 Create the type mapping from the Cassandra table and search for the *bob* entry.
 
 .. code::
 
-   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter/_mapping/user" -d '{ "user" : { "discover" : ".*" }}'
-   {"acknowledged":true}
-
-   curl -XGET 'http://localhost:9200/twitter/_mapping/user?pretty=true'
-   {
-     "twitter" : {
-       "mappings" : {
-         "user" : {
-           "properties" : {
-             "attrs" : {
-               "type" : "nested",
-               "cql_struct" : "map",
-               "cql_collection" : "singleton",
-               "properties" : {
-                 "email" : {
-                   "type" : "keyword"
-                 },
-                 "firstname" : {
-                   "type" : "keyword"
-                 }
-               }
-             },
-             "name" : {
-               "type" : "keyword",
-               "cql_collection" : "singleton",
-               "cql_partition_key" : true,
-               "cql_primary_key_order" : 0
-             }
-           }
-         }
-       }
-     }
-   }
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter" -d '{ 
+   	"mappings": {
+   	   "user" : { "discover" : "^((?!attrs).*)" }
+   	 }
+   }'
+   
+   curl -XPUT -H 'Content-Type: application/json' 'http://localhost:9200/twitter/_mapping/user?pretty=true' -d'{
+	   "properties" : {
+	     "attrs" : {
+	       "type" : "nested",
+	       "cql_struct" : "map",
+	       "cql_collection" : "singleton",
+	       "properties" : {
+	         "email" : {
+	           "type" : "keyword"
+	         },
+	         "firstname" : {
+	           "type" : "keyword"
+	         }
+	       }
+	     }
+	   }
+   }'
 
    curl -XGET "http://localhost:9200/twitter/user/bob?pretty=true"
    {
@@ -414,13 +421,13 @@ Now insert a new entry in the attrs map column and search for a nested field `at
 
 .. code::
 
-   cqlsh>UPDATE twitter.user SET attrs = attrs + { 'city':'paris' } WHERE name = 'bob';
+   UPDATE twitter.user SET attrs = attrs + { 'city':'paris' } WHERE name = 'bob';
 
-   curl -XGET "http://localhost:9200/twitter/_search?pretty=true" -d '{
+   curl -XGET  -H 'Content-Type: application/json' "http://localhost:9200/twitter/_search?pretty=true" -d '{
    "query":{
        "nested":{
                "path":"attrs",
-               "query":{ "match": {"attrs.city":"paris" } }
+               "query":{ "term": {"attrs.city":"paris" } }
                 }
            }
    }'
@@ -445,6 +452,60 @@ Now insert a new entry in the attrs map column and search for a nested field `at
      }
    }
 
+
+With an ``opaque_map``, search results are the same, and the Elasticsearch mapping is:
+
+.. code::
+
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/twitter" -d '{ 
+   	"mappings": {
+   	   "user" : { "discover" : ".*" }
+   	 }
+   }'
+   
+   curl -XGET "http://localhost:9200/twitter?pretty"
+   {
+	  "twitter" : {
+	    "aliases" : { },
+	    "mappings" : {
+	      "user" : {
+	        "properties" : {
+	          "attrs" : {
+	            "type" : "nested",
+	            "cql_struct" : "opaque_map",
+	            "cql_collection" : "singleton",
+	            "properties" : {
+	              "_key" : {
+	                "type" : "keyword",
+	                "cql_collection" : "singleton"
+	              }
+	            }
+	          },
+	          "name" : {
+	            "type" : "keyword",
+	            "cql_collection" : "singleton",
+	            "cql_partition_key" : true,
+	            "cql_primary_key_order" : 0
+	          }
+	        }
+	      }
+	    },
+	    "settings" : {
+	      "index" : {
+	        "creation_date" : "1568060813134",
+	        "number_of_shards" : "1",
+	        "number_of_replicas" : "0",
+	        "uuid" : "ZyolrbP9Qjm8rNezne7wUw",
+	        "version" : {
+	          "created" : "6020399"
+	        },
+	        "provided_name" : "twitter"
+	      }
+	    }
+	  }
+	}
+
+
 Dynamic Template with Dynamic Mapping
 .....................................
 
@@ -454,14 +515,14 @@ Dynamic templates can be used when creating a dynamic field from a Cassandra map
 
    "mappings" : {
          "event_test" : {
-            "dynamic_templates": [
-                   { "strings_template": {
-                         "match": "strings.*", 
-                         "mapping": {
-                             "type": "keyword"
-                         }
-                   }}
-               ],
+            "dynamic_templates": [ { 
+                   		"strings_template": {
+                         	"match": "strings.*", 
+                         	"mapping": { 
+                         		"type": "keyword"
+                         	}
+                   		}
+                   	} ],
            "properties" : {
              "id" : {
                "type" : "keyword",
@@ -520,7 +581,7 @@ Parent-Child Relationship
 
 .. WARNING:: 
 
-   Parent child is supported in Elassandra 5.x
+   Parent child is supported in Elassandra 5.x. 
    
 Elassandra supports `parent-child relationship <https://www.elastic.co/guide/en/elasticsearch/guide/current/parent-child.html>`_ when parent and child documents
 are located on the same Cassandra node. This condition is met :

@@ -32,7 +32,6 @@ import org.apache.lucene.search.suggest.document.FuzzyCompletionQuery;
 import org.apache.lucene.search.suggest.document.PrefixCompletionQuery;
 import org.apache.lucene.search.suggest.document.RegexCompletionQuery;
 import org.apache.lucene.search.suggest.document.SuggestField;
-import org.elassandra.cluster.SchemaManager;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.ParsingException;
@@ -60,6 +59,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseMultiField;
@@ -608,7 +608,7 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
 
 
     @Override
-    public void createField(ParseContext context, Object value) throws IOException {
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
         Map<String, Set<CharSequence>> contextsMap = new HashMap<>();
         Set<String> inputs = new HashSet<>();
         int weight = 1;
@@ -685,7 +685,7 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         for (IndexableField field : fields) {
             context.doc().add(field);
         }
-        super.createField(context,value);
+        super.createField(context,value, keyName);
     }
 
     @Override

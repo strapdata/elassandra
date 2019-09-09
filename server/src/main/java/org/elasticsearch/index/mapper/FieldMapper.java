@@ -48,6 +48,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.StreamSupport;
 
 public abstract class FieldMapper extends Mapper implements Cloneable {
@@ -371,7 +372,17 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
      * @param context
      * @param value
      */
-    public void createField(ParseContext context, Object value) throws IOException {
+    public final void createField(ParseContext context, Object value) throws IOException {
+        createField(context, value, Optional.empty());
+    }
+    
+    /**
+     * Add lucene field to context according to the provided value
+     * @param context
+     * @param value
+     * @param keyName override the fieldType.name() if present (Used for map_opaque) 
+     */
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
         multiFields.create(this, context, value);
     }
 
@@ -488,6 +499,8 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
         if (includeDefaults || fieldType().cqlStruct() != defaultFieldType.cqlStruct()) {
             if (fieldType().cqlStruct().equals(CqlStruct.MAP)) {
                 builder.field(TypeParsers.CQL_STRUCT, "map");
+            } else if (fieldType().cqlStruct().equals(CqlStruct.OPAQUE_MAP)) {
+                builder.field(TypeParsers.CQL_STRUCT, "opaque_map");
             } else if (fieldType().cqlStruct().equals(CqlStruct.UDT)) {
                 builder.field(TypeParsers.CQL_STRUCT, "udt");
             } else if (fieldType().cqlStruct().equals(CqlStruct.TUPLE)) {
@@ -682,7 +695,7 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
 
             context.path().add(mainField.simpleName());
             for (ObjectCursor<FieldMapper> cursor : mappers.values()) {
-                cursor.value.createField(context, val);
+                cursor.value.createField(context, val, Optional.empty());
             }
             context.path().remove();
         }

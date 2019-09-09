@@ -20,7 +20,6 @@
 package org.elasticsearch.index.mapper;
 
 import org.apache.cassandra.cql3.CQL3Type;
-import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.SimpleDateType;
 import org.apache.cassandra.serializers.SimpleDateSerializer;
@@ -40,7 +39,6 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.Version;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Numbers;
@@ -66,6 +64,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseDateTimeFormatter;
@@ -529,7 +528,7 @@ public class DateFieldMapper extends FieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
         String dateAsString = null;
         Long value = null;
         float boost = fieldType().boost();
@@ -565,9 +564,12 @@ public class DateFieldMapper extends FieldMapper {
             }
             dateAsString = fieldType().dateTimeFormatter.printer().print(value);
         }
+        
+        String fieldName = keyName.orElse(fieldType().name());
+
         if (dateAsString != null) {
             if (context.includeInAll(includeInAll, this)) {
-                context.allEntries().addText(fieldType().name(), dateAsString, boost);
+                context.allEntries().addText(fieldName, dateAsString, boost);
             }
         }
 
@@ -575,14 +577,14 @@ public class DateFieldMapper extends FieldMapper {
             context.doc().add(new LongPoint(fieldType().name(), value));
         }
         if (fieldType().hasDocValues()) {
-            context.doc().add(new SortedNumericDocValuesField(fieldType().name(), value));
+            context.doc().add(new SortedNumericDocValuesField(fieldName, value));
         } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
             createFieldNamesField(context, context.doc().getFields());
         }
         if (fieldType().stored()) {
-            context.doc().add(new StoredField(fieldType().name(), value));
+            context.doc().add(new StoredField(fieldName, value));
         }
-        super.createField(context, object);
+        super.createField(context, object, keyName);
     }
 
     @Override

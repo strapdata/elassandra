@@ -20,7 +20,6 @@
 package org.elasticsearch.index.mapper;
 
 import org.apache.cassandra.cql3.CQL3Type;
-import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.index.IndexOptions;
@@ -50,6 +49,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseField;
 
@@ -279,7 +279,7 @@ public class BooleanFieldMapper extends FieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
         if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored() && !fieldType().hasDocValues()) {
             return;
         }
@@ -295,15 +295,17 @@ public class BooleanFieldMapper extends FieldMapper {
             value = Boolean.valueOf((String)object);
         }
 
+        String fieldName = keyName.orElse(fieldType().name());
+        
         if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
-            context.doc().add(new Field(fieldType().name(), value ? "T" : "F", fieldType()));
+            context.doc().add(new Field(fieldName, value ? "T" : "F", fieldType()));
         }
         if (fieldType().hasDocValues()) {
-            context.doc().add(new SortedNumericDocValuesField(fieldType().name(), value ? 1 : 0));
+            context.doc().add(new SortedNumericDocValuesField(fieldName, value ? 1 : 0));
         } else {
             createFieldNamesField(context, context.doc().getFields());
         }
-        super.createField(context,value);
+        super.createField(context,value, keyName);
     }
 
     @Override

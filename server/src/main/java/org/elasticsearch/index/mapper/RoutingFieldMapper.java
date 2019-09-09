@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class RoutingFieldMapper extends MetadataFieldMapper {
 
@@ -174,7 +175,7 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
         String routing = (String)object;
         if (routing != null) {
             if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {

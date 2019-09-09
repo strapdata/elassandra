@@ -47,6 +47,7 @@ import java.nio.ByteBuffer;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseField;
 
@@ -205,7 +206,7 @@ public class BinaryFieldMapper extends FieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
         if (!fieldType().stored() && !fieldType().hasDocValues()) {
             return;
         }
@@ -214,15 +215,17 @@ public class BinaryFieldMapper extends FieldMapper {
             return;
         }
 
+        String fieldName = keyName.orElse(fieldType().name());
+        
         if (fieldType().stored()) {
-            context.doc().add(new Field(fieldType().name(), value, fieldType()));
+            context.doc().add(new Field(fieldName, value, fieldType()));
         }
 
         if (fieldType().hasDocValues()) {
-            CustomBinaryDocValuesField field = (CustomBinaryDocValuesField) context.doc().getByKey(fieldType().name());
+            CustomBinaryDocValuesField field = (CustomBinaryDocValuesField) context.doc().getByKey(fieldName);
             if (field == null) {
-                field = new CustomBinaryDocValuesField(fieldType().name(), value);
-                context.doc().addWithKey(fieldType().name(), field);
+                field = new CustomBinaryDocValuesField(fieldName, value);
+                context.doc().addWithKey(fieldName, field);
             } else {
                 field.add(value);
             }
@@ -232,7 +235,7 @@ public class BinaryFieldMapper extends FieldMapper {
             // no doc values
             createFieldNamesField(context, context.doc().getFields());
         }
-        super.createField(context,value);
+        super.createField(context,value, keyName);
     }
 
     @Override

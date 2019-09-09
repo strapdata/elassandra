@@ -42,7 +42,7 @@ public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
     }
 
     public static enum CqlStruct {
-        UDT, MAP, TUPLE
+        UDT, MAP, OPAQUE_MAP, TUPLE
     }
 
     public static class BuilderContext {

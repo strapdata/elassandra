@@ -543,6 +543,7 @@ public class SchemaManager extends AbstractComponent {
                 throw new ConfigurationException("Cannot build UDT for empty object ["+name+"]");
             return createOrUpdateRawType(ksm, cfName, name, objectMapper, mutations, events);
         case MAP:
+        case OPAQUE_MAP:
             if (objectMapper.iterator().hasNext()) {
                 Mapper childMapper = objectMapper.iterator().next();
                 if (childMapper instanceof FieldMapper) {
@@ -715,7 +716,7 @@ public class SchemaManager extends AbstractComponent {
                     if (!objectMapper.isEnabled()) {
                         logger.debug("Object [{}] not enabled stored as text", column);
                         colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.TEXT);
-                    } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP)) {
+                    } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP) || (objectMapper.cqlStruct().equals(CqlStruct.OPAQUE_MAP))) {
                         // TODO: check columnName exists and is map<text,?>
                         Pair<KeyspaceMetadata, CQL3Type.Raw> x = buildObject(ksm, cfName, column, objectMapper, mutations, events);
                         colDesc.type = x.right;

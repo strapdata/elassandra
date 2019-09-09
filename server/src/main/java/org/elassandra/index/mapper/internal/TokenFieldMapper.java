@@ -43,6 +43,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
 
@@ -232,7 +233,7 @@ public class TokenFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> fieldName) throws IOException {
         Long token = (Long) object;
         if (token != null) {
             context.doc().add(new LongPoint(TokenFieldMapper.NAME, token));

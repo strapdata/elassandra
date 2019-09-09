@@ -49,6 +49,8 @@ public class ObjectMapper extends Mapper implements Cloneable {
     public static final String CONTENT_TYPE = "object";
     public static final String NESTED_CONTENT_TYPE = "nested";
 
+    public static final String DEFAULT_KEY = "_key";
+    
     public static class Defaults {
         public static final boolean ENABLED = true;
         public static final Nested NESTED = Nested.NO;
@@ -289,6 +291,7 @@ public class ObjectMapper extends Mapper implements Cloneable {
                 switch (value) {
                 case "tuple": builder.cqlStruct(CqlStruct.TUPLE); break;
                 case "map": builder.cqlStruct(CqlStruct.MAP); break;
+                case "opaque_map": builder.cqlStruct(CqlStruct.OPAQUE_MAP); break;
                 case "udt": builder.cqlStruct(CqlStruct.UDT); break;
                 }
                 return true;
@@ -508,6 +511,9 @@ public class ObjectMapper extends Mapper implements Cloneable {
     }
 
     public Mapper getMapper(String field) {
+        if (CqlStruct.OPAQUE_MAP.equals(this.cqlStruct)) {
+            return mappers.get(DEFAULT_KEY);
+        }
         return mappers.get(field);
     }
 
@@ -659,6 +665,8 @@ public class ObjectMapper extends Mapper implements Cloneable {
         if (cqlStruct != Defaults.CQL_STRUCT) {
             if (cqlStruct.equals(CqlStruct.MAP)) {
                 builder.field(TypeParsers.CQL_STRUCT, "map");
+            } else if (cqlStruct.equals(CqlStruct.OPAQUE_MAP)) {
+                builder.field(TypeParsers.CQL_STRUCT, "opaque_map");
             } else if (cqlStruct.equals(CqlStruct.UDT)) {
                 builder.field(TypeParsers.CQL_STRUCT, "udt");
             } else if (cqlStruct.equals(CqlStruct.TUPLE)) {

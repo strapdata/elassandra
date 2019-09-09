@@ -19,7 +19,6 @@
 
 package org.elasticsearch.index.mapper;
 
-import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
@@ -40,6 +39,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseTextField;
 
@@ -365,25 +365,27 @@ public class TextFieldMapper extends FieldMapper {
 
 
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
         final String value = (String)object;
         if (value == null) {
             return;
         }
 
+        String fieldName = keyName.orElse(fieldType().name());
+        
         if (context.includeInAll(includeInAll, this)) {
-            context.allEntries().addText(fieldType().name(), value, fieldType().boost());
+            context.allEntries().addText(fieldName, value, fieldType().boost());
         }
 
         if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
-            Field field = new Field(fieldType().name(), value, fieldType());
+            Field field = new Field(fieldName, value, fieldType());
             context.doc().add(field);
             if (fieldType().omitNorms()) {
                 createFieldNamesField(context, context.doc().getFields());
             }
         }
 
-        super.createField(context, object); // for multi fields.
+        super.createField(context, object, keyName); // for multi fields.
     }
 
     @Override

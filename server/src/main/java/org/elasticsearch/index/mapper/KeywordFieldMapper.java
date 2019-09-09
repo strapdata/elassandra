@@ -50,6 +50,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseField;
@@ -392,7 +393,7 @@ public final class KeywordFieldMapper extends FieldMapper {
 
 
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
         String value = (object == null || object instanceof String) ? (String) object : object.toString(); // #74 uuid stored as string
         if (value == null)
             value = fieldType().nullValueAsString();
@@ -400,7 +401,8 @@ public final class KeywordFieldMapper extends FieldMapper {
         if (value == null || value.length() > ignoreAbove) {
             return;
         }
-
+        String fieldName = keyName.orElse(fieldType().name());
+        
         final NamedAnalyzer normalizer = fieldType().normalizer();
         if (normalizer != null) {
             try (TokenStream ts = normalizer.tokenStream(name(), value)) {
@@ -423,21 +425,21 @@ public final class KeywordFieldMapper extends FieldMapper {
         }
 
         if (context.includeInAll(includeInAll, this)) {
-            context.allEntries().addText(fieldType().name(), value, fieldType().boost());
+            context.allEntries().addText(fieldName, value, fieldType().boost());
         }
 
         // convert to utf8 only once before feeding postings/dv/stored fields
         final BytesRef binaryValue = new BytesRef(value);
         if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
-            Field field = new Field(fieldType().name(), binaryValue, fieldType());
+            Field field = new Field(fieldName, binaryValue, fieldType());
             context.doc().add(field);
         }
         if (fieldType().hasDocValues()) {
-            context.doc().add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
+            context.doc().add(new SortedSetDocValuesField(fieldName, binaryValue));
         } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
             createFieldNamesField(context, context.doc().getFields());
         }
-        super.createField(context, object);
+        super.createField(context, object, keyName);
     }
 
     @Override

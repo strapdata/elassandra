@@ -54,6 +54,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /** A {@link FieldMapper} for ip addresses. */
 public class IpFieldMapper extends FieldMapper {
@@ -420,7 +421,7 @@ public class IpFieldMapper extends FieldMapper {
 
     //@SuppressForbidden(reason = "toUpperCase() for consistency level")
     @Override
-    public void createField(ParseContext context, Object object) throws IOException {
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
         InetAddress address = null;
 
         if (object instanceof String) {
@@ -446,20 +447,22 @@ public class IpFieldMapper extends FieldMapper {
                 address = com.google.common.net.InetAddresses.forString(ipAsString);
             }
         }
+        
+        String fieldName = keyName.orElse(fieldType().name());
 
         if (context.includeInAll(includeInAll, this)) {
-            context.allEntries().addText(fieldType().name(), NetworkAddress.format(address), fieldType().boost());
+            context.allEntries().addText(fieldName, NetworkAddress.format(address), fieldType().boost());
         }
 
         if (fieldType().indexOptions() != IndexOptions.NONE) {
             context.doc().add(new InetAddressPoint(fieldType().name(), address));
         }
         if (fieldType().hasDocValues()) {
-            context.doc().add(new SortedSetDocValuesField(fieldType().name(), new BytesRef(InetAddressPoint.encode(address))));
+            context.doc().add(new SortedSetDocValuesField(fieldName, new BytesRef(InetAddressPoint.encode(address))));
         } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
             createFieldNamesField(context, context.doc().getFields());
         }
-        super.createField(context, object); // for multi fields.
+        super.createField(context, object, keyName); // for multi fields.
     }
 
     @Override
