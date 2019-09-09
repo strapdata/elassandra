@@ -2472,6 +2472,16 @@ public class ElasticSecondaryIndex implements Index {
                     updateMapping = true;
                     break;
                 }
+                
+                // trigger a mapping update when deleting an index #302
+                if (!event.indicesDeleted().isEmpty()) {
+                    for(org.elasticsearch.index.Index index : event.indicesDeleted()) {
+                        if (mappingInfo.indexToIdx.containsKey(index.getName())) {
+                            updateMapping = true;
+                            break;
+                        }
+                    }
+                }
             }
         }
         if (updateMapping) {
