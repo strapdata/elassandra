@@ -36,12 +36,9 @@ import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
-import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
-import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
@@ -49,7 +46,6 @@ import org.elasticsearch.common.logging.ServerLoggers;
 import org.elasticsearch.common.settings.Settings;
 
 import java.nio.ByteBuffer;
-import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -100,6 +96,9 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
                 clusterService.mergeWithTableExtensions(metaDataBuilder);
             }
 
+            // update virtualized index mapping
+            final MetaData.Builder metaDataBuilder2 = clusterService.addVirtualIndexMappings(metaDataBuilder.build());
+            
             // update blocks
             if (sourceMetaData.settings().getAsBoolean("cluster.blocks.read_only", false))
                 blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
@@ -113,7 +112,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
             clusterService.submitStateUpdateTask("cql-schema-mapping-update", new ClusterStateUpdateTask(Priority.URGENT) {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
-                    ClusterState newClusterState = newStateBuilder.incrementVersion().metaData(metaDataBuilder).blocks(blocks).build();
+                    ClusterState newClusterState = newStateBuilder.incrementVersion().metaData(metaDataBuilder2).blocks(blocks).build();
                     newClusterState = ClusterState.builder(newClusterState)
                             .routingTable(RoutingTable.build(SchemaListener.this.clusterService, newClusterState))
                             .build();

@@ -89,6 +89,8 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         IndexMetaData.INDEX_SNAPSHOT_WITH_SSTABLE_SETTING,
         IndexMetaData.INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING,
         IndexMetaData.INDEX_SETTING_KEYSPACE_SETTING,
+        IndexMetaData.INDEX_SETTING_VIRTUAL_INDEX_SETTING,
+        IndexMetaData.INDEX_SETTING_VIRTUAL_SETTING,
         IndexMetaData.INDEX_SETTING_TABLE_SETTING,
         IndexMetaData.INDEX_SETTING_TABLE_OPTIONS_SETTING,
         IndexMetaData.INDEX_SETTING_REPLICATION_SETTING,

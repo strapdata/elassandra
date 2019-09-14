@@ -257,6 +257,11 @@ public class SchemaManager extends AbstractComponent {
         }
         return metadata;
     }
+    
+    public static KeyspaceMetadata getKSMetaDataCopy(final String ksName) {
+        KeyspaceMetadata metadata = Schema.instance.getKSMetaDataSafe(ksName);
+        return metadata.copy();
+    }
 
     private Pair<KeyspaceMetadata, UserType> createUserTypeIfNotExists(KeyspaceMetadata ksm, String typeName, Map<String, CQL3Type.Raw> fields,
             final Collection<Mutation> mutations,
@@ -467,10 +472,9 @@ public class SchemaManager extends AbstractComponent {
         if (cfm.params != null && cfm.params.extensions != null)
             extensions.putAll(cfm.params.extensions);
         clusterService.putIndexMetaDataExtension(indexMetaData, extensions);
-        CFMetaData cfm2 = cfm.copy();
-        cfm2.extensions(extensions);
-        SchemaKeyspace.addTableExtensionsToSchemaMutation(cfm2, extensions, builder);
-        return cfm2;
+        cfm.extensions(extensions);
+        SchemaKeyspace.addTableExtensionsToSchemaMutation(cfm, extensions, builder);
+        return cfm;
     }
 
     public CFMetaData removeTableExtensionToMutationBuilder(CFMetaData cfm, final Set<IndexMetaData> indexMetaDataSet, Mutation.SimpleBuilder builder) {
@@ -582,18 +586,17 @@ public class SchemaManager extends AbstractComponent {
      * @param mutations
      * @param events
      */
-    public void updateTableExtensions(final IndexMetaData indexMetaData, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
+    public void updateTableExtensions(final KeyspaceMetadata ksm, final IndexMetaData indexMetaData, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
+        assert ksm.name.equals(indexMetaData.keyspace()) : "Keyspace metadata does not match indexMetadata.keyspace";
+        
         for(ObjectCursor<MappingMetaData> mappingMd : indexMetaData.getMappings().values()) {
             final String cfName = typeToCfName(indexMetaData.keyspace(), mappingMd.value.type());
-            final CFMetaData cfm = Schema.instance.getCFMetaData(indexMetaData.keyspace(), cfName);
-            if (cfm == null) {
-                logger.debug("table {}.{} does not exist in CQL schema, ignoring", indexMetaData.keyspace(), cfName);
-            } else {
-                logger.debug("table {}.{} set extensions for index {}", indexMetaData.keyspace(), cfName, indexMetaData.getIndex().getName());
-                Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(indexMetaData.keyspace(), FBUtilities.timestampMicros());
-                addTableExtensionsToMutationBuilder(cfm, indexMetaData, builder);
-                mutations.add(builder.build());
-            }
+            final CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
+            assert cfm != null : "Table "+cfName+" not found in keyspace"+ksm.name;
+            logger.debug("table {}.{} add extensions for index {}", ksm.name, cfm.cfName, indexMetaData.getIndex().getName());
+            Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
+            addTableExtensionsToMutationBuilder(cfm, indexMetaData, builder);
+            mutations.add(builder.build());
         }
     }
 

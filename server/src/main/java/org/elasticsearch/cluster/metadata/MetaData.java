@@ -19,9 +19,11 @@
 
 package org.elasticsearch.cluster.metadata;
 
+import com.carrotsearch.hppc.ObjectContainer;
 import com.carrotsearch.hppc.ObjectHashSet;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import com.google.common.collect.Lists;
 
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.logging.log4j.Logger;
@@ -77,6 +79,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static org.elasticsearch.common.settings.Settings.readSettingsFromStream;
 import static org.elasticsearch.common.settings.Settings.writeSettingsToStream;
@@ -898,7 +901,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             indices.put(indexMetaData.getIndex().getName(), indexMetaData);
             return this;
         }
-
+        
         public IndexMetaData get(String index) {
             return indices.get(index);
         }

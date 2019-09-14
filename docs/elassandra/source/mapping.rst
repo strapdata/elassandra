@@ -294,6 +294,39 @@ How To remove an old index.
 
 `Cassandra TTL <https://docs.datastax.com/en/cql/3.1/cql/cql_using/use_expire_c.html>`_ can be used in conjunction with partitioned index to automatically removed rows during the normal Cassandra compaction and repair processes when ``index_on_compaction`` is *true*, however it introduces a Lucene merge overhead because the document are re-indexed when compacting. You can also use the `DateTieredCompactionStrategy <http://www.datastax.com/dev/blog/dtcs-notes-from-the-field>`_ to the `TimeWindowTieredCompactionStrategy <http://www.datastax.com/dev/blog/twtcs-notes-from-the-field>`_ to improve performance of time series-like workloads.
 
+Virtual index
+.............
+
+In conjunction with partitioned indices, you can use a virtual index to share the same mapping for all partitioned indices.
+
+|
+
+.. image:: images/elassandra-virtual-index.jpg
+
+|
+
+A newly created index inherits the mapping created for other partitioned indices, and this drastically reduce the volume of 
+Elasticsearch mappings stored in the CQL schema, and the number of mapping update across the cluster.
+
+In order to create a partitioned index using the mapping of the virtual index, just add the name of the virtual index name as show bellow.
+
+.. code::
+
+   curl -XPUT -H 'Content-Type: application/json' "http://localhost:9200/logs_2016" -d '{
+     "settings": {
+         "keyspace":"logs",
+         "index.partition_function":"toYearIndex logs_{0,date,yyyy} date_field",
+         "index.partition_function_class":"MessageFormatPartitionFunction",
+         "index.virtual_index":"logs"
+     },
+     "mappings": {
+         "mylog" : { "discover" : ".*" }
+     }
+   }'
+
+The mappings section is only used to create the virtual index **logs** if it not exists when **logs_2016** is created.
+This virtual index **logs** have (or must have if you create it explicitly) the settings ``index.virtual=true`` and it will always be empty.
+Moreover, index templates can be used to specify common settings between partitioned index, including the virtual index name and its default mapping.
 
 Object and Nested mapping
 -------------------------

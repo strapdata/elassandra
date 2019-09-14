@@ -325,6 +325,15 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public static final Setting<String> INDEX_SETTING_TABLE_SETTING =
             Setting.simpleString(SETTING_TABLE, Property.Final, Property.IndexScope);
 
+    public static final String SETTING_VIRTUAL_INDEX = "index.virtual_index";
+    public static final Setting<String> INDEX_SETTING_VIRTUAL_INDEX_SETTING =
+            Setting.simpleString(SETTING_VIRTUAL_INDEX, Property.Final, Property.IndexScope);
+
+    public static final String SETTING_VIRTUAL = "index.virtual";
+    public static final Setting<Boolean> INDEX_SETTING_VIRTUAL_SETTING =
+            Setting.boolSetting(SETTING_VIRTUAL, false, Property.Final, Property.IndexScope);
+
+    
     public static final String SETTING_TABLE_OPTIONS = "index.table_options";
     public static final Setting<String> INDEX_SETTING_TABLE_OPTIONS_SETTING =
             Setting.simpleString(SETTING_TABLE_OPTIONS, Property.Final, Property.IndexScope);
@@ -608,6 +617,18 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
         return replicationMap;
     }
 
+    public String virtualIndex() {
+        return getSettings().get(IndexMetaData.SETTING_VIRTUAL_INDEX);
+    }
+    
+    public boolean hasVirtualIndex() {
+        return virtualIndex() != null;
+    }
+
+    public boolean isVirtual() {
+        return getSettings().getAsBoolean(IndexMetaData.SETTING_VIRTUAL, false);
+    }
+    
     /**
      * name = partition function name.
      * pattern = MessageFormat (@see MessageFormat)
@@ -1309,7 +1330,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             }
             builder.endObject();
 
-            if (!params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
+            if (!params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false) && (indexMetaData.isVirtual() || indexMetaData.virtualIndex() == null)) {
                 builder.startArray(KEY_MAPPINGS);
                 for (ObjectObjectCursor<String, MappingMetaData> cursor : indexMetaData.getMappings()) {
                     if (binary) {

@@ -1232,6 +1232,11 @@ public class ElasticSecondaryIndex implements Index {
                 if (!ElasticSecondaryIndex.this.baseCfs.metadata.ksName.equals(indexMetaData.keyspace()))
                     continue;
 
+                if (indexMetaData.isVirtual()) {
+                    logger.debug("Ignoring virtual index={}", indexMetaData.getIndex().getName());
+                    continue;
+                }
+                
                 String index = indexMetaData.getIndex().getName();
                 MappingMetaData mappingMetaData = indexMetaData.mapping(typeName);
 
@@ -2425,7 +2430,7 @@ public class ElasticSecondaryIndex implements Index {
         }
         if (mappingInfo.indices == null || mappingInfo.indices.length == 0) {
             if (logger.isWarnEnabled())
-                logger.warn("No Elasticsearch index configured for {}.{}", this.baseCfs.metadata.ksName, this.baseCfs.metadata.cfName);
+                logger.warn("No Elasticsearch index configured on table {}.{}", this.baseCfs.metadata.ksName, this.baseCfs.metadata.cfName);
             return false;
         }
 

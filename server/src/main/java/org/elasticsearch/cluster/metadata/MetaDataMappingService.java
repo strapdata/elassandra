@@ -31,9 +31,9 @@ import org.elasticsearch.action.admin.indices.mapping.put.PutMappingClusterState
 import org.elasticsearch.cluster.AckedClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateTaskConfig;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
-import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -54,6 +54,7 @@ import org.elasticsearch.indices.InvalidTypeNameException;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -269,6 +270,7 @@ public class MetaDataMappingService extends AbstractComponent {
                 SchemaUpdate schemaUpdate = SchemaUpdate.NO_UPDATE;
                 for (PutMappingClusterStateUpdateRequest request : tasks) {
                     try {
+                        List<Index> effectiveIndices = new ArrayList<>();
                         for (Index index : request.indices()) {
                             final IndexMetaData indexMetaData = currentState.metaData().getIndexSafe(index);
                             if (indexMapperServices.containsKey(indexMetaData.getIndex()) == false) {
@@ -277,8 +279,22 @@ public class MetaDataMappingService extends AbstractComponent {
                                 // add mappings for all types, we need them for cross-type validation
                                 mapperService.merge(indexMetaData, MergeReason.MAPPING_RECOVERY, request.updateAllTypes());
                             }
+                            
+                            // add virtual index in the mapperServices map, and all depending on it
+                            if (indexMetaData.virtualIndex() == null) {
+                            	effectiveIndices.add(index);
+                            } else {
+                                final IndexMetaData virtualIndexMetaData = currentState.metaData().index(indexMetaData.virtualIndex());
+                                if (virtualIndexMetaData != null && indexMapperServices.containsKey(virtualIndexMetaData.getIndex()) == false) {
+                                    MapperService mapperService = indicesService.createIndexMapperService(virtualIndexMetaData);
+                                    indexMapperServices.put(virtualIndexMetaData.getIndex(), mapperService);
+                                    // add mappings for all types, we need them for cross-type validation
+                                    mapperService.merge(virtualIndexMetaData, MergeReason.MAPPING_RECOVERY, request.updateAllTypes());
+                                }
+                                effectiveIndices.add(virtualIndexMetaData.getIndex());
+                            }
                         }
-                        currentState = applyRequest(currentState, request, indexMapperServices, mutations, events);
+                        currentState = applyRequest(currentState, request, effectiveIndices, indexMapperServices, mutations, events);
                         builder.success(request);
                         schemaUpdate = (request.schemaUpdate().ordinal() > schemaUpdate.ordinal()) ? request.schemaUpdate() : schemaUpdate;
                     } catch (Exception e) {
@@ -292,13 +308,14 @@ public class MetaDataMappingService extends AbstractComponent {
         }
 
         private ClusterState applyRequest(ClusterState currentState, PutMappingClusterStateUpdateRequest request,
+                                          List<Index> effectiveIndices,
                                           Map<Index, MapperService> indexMapperServices,
                                           Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws IOException {
             String mappingType = request.type();
             CompressedXContent mappingUpdateSource = new CompressedXContent(request.source());
             final MetaData metaData = currentState.metaData();
             final List<IndexMetaData> updateList = new ArrayList<>();
-            for (Index index : request.indices()) {
+            for (Index index : effectiveIndices) {
                 MapperService mapperService = indexMapperServices.get(index);
                 // IMPORTANT: always get the metadata from the state since it get's batched
                 // and if we pull it from the indexService we might miss an update etc.
@@ -399,15 +416,34 @@ public class MetaDataMappingService extends AbstractComponent {
                     MappingMetaData mappingMd = new MappingMetaData(mapper.mappingSource());
                     indexMetaDataBuilder.putMapping(mappingMd);
 
-                    // update CQL schema.
-                    if (mappingMd.type().equals(mappingType) && !mappingMd.type().equals(MapperService.DEFAULT_MAPPING)) {
+                    // update CQL schema, except for index pointing to a virtual index.
+                    if (mappingMd.type().equals(mappingType) && 
+                       !mappingMd.type().equals(MapperService.DEFAULT_MAPPING) &&
+                       indexMetaData.virtualIndex() == null) {
                         clusterService.getSchemaManager().updateTableSchema(mapperService, indexMetaData, mappingMd, mutations, events);
                     }
                 }
                 builder.put(indexMetaDataBuilder);
             }
             if (updated) {
-                return ClusterState.builder(currentState).metaData(builder).build();
+                MetaData newMetaData = builder.build();
+                MetaData.Builder builder2 = MetaData.builder(newMetaData);
+                for (IndexMetaData indexMetaData : updateList) {
+                    if (indexMetaData.isVirtual()) {
+                        IndexMetaData virtualIndexMetaData = newMetaData.index(indexMetaData.getIndex().getName());
+                    	// update the existing indices pointing to the virtual index
+                        for(ObjectCursor<IndexMetaData> cursor : currentState.metaData().getIndices().values()) {
+                            if (virtualIndexMetaData.getIndex().getName().equals(cursor.value.virtualIndex())) {
+                                IndexMetaData.Builder imdBuilder = IndexMetaData.builder(cursor.value).version(virtualIndexMetaData.getVersion());
+                                for(ObjectCursor<MappingMetaData> mappingCursor : virtualIndexMetaData.getMappings().values()) {
+                                    imdBuilder.putMapping(mappingCursor.value);
+                                }
+                                builder2.put(imdBuilder, false);        
+                            }
+                        }
+                    }
+                }
+                return ClusterState.builder(currentState).metaData(builder2).build();
             } else {
                 return currentState;
             }

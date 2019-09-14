@@ -20,8 +20,10 @@
 package org.elasticsearch.cluster.metadata;
 
 import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.transport.Event;
 import org.apache.cassandra.utils.FBUtilities;
+import org.elassandra.cluster.SchemaManager;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsClusterStateUpdateRequest;
@@ -255,7 +257,7 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                 maybeUpdateClusterBlock(actualIndices, blocks, IndexMetaData.INDEX_WRITE_BLOCK, IndexMetaData.INDEX_BLOCKS_WRITE_SETTING, openSettings);
                 maybeUpdateClusterBlock(actualIndices, blocks, IndexMetaData.INDEX_READ_BLOCK, IndexMetaData.INDEX_BLOCKS_READ_SETTING, openSettings);
 
-
+                Map<String, KeyspaceMetadata> ksMap = new HashMap<>();
                 if (!openIndices.isEmpty()) {
                     for (Index index : openIndices) {
                         IndexMetaData indexMetaData = metaDataBuilder.getSafe(index);
@@ -268,7 +270,8 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                             Settings finalSettings = indexSettings.build();
                             indexScopedSettings.validate(finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false), true);
                             IndexMetaData newIndexMetaData = IndexMetaData.builder(indexMetaData).settings(finalSettings).build();
-                            clusterService.getSchemaManager().updateTableExtensions(newIndexMetaData, mutations, events);
+                            KeyspaceMetadata ksm = ksMap.computeIfAbsent(newIndexMetaData.keyspace(), k -> SchemaManager.getKSMetaDataCopy(newIndexMetaData.keyspace()));
+                            clusterService.getSchemaManager().updateTableExtensions(ksm, newIndexMetaData, mutations, events);
                             metaDataBuilder.put(newIndexMetaData, true);
                         }
                     }
@@ -286,7 +289,8 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
                             Settings finalSettings = indexSettings.build();
                             indexScopedSettings.validate(finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false), true);
                             IndexMetaData newIndexMetaData = IndexMetaData.builder(indexMetaData).settings(finalSettings).build();
-                            clusterService.getSchemaManager().updateTableExtensions(newIndexMetaData, mutations, events);
+                            KeyspaceMetadata ksm = ksMap.computeIfAbsent(newIndexMetaData.keyspace(), k -> SchemaManager.getKSMetaDataCopy(newIndexMetaData.keyspace()));
+                            clusterService.getSchemaManager().updateTableExtensions(ksm, newIndexMetaData, mutations, events);
                             metaDataBuilder.put(newIndexMetaData, true);
                         }
                     }

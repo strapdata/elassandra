@@ -158,7 +158,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                 return;
             }
 
-            KeyspaceMetadata ksm = Schema.instance.getKSMetaData(keyspace);
+            KeyspaceMetadata ksm = SchemaManager.getKSMetaDataCopy(keyspace);
             if (ksm == null)
                 return;
 
@@ -181,7 +181,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
             }
             Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
             for(String table : tableExtensionToRemove.keySet()) {
-                CFMetaData cfm = Schema.instance.getCFMetaData(this.keyspace, table);
+                CFMetaData cfm = ksm.getTableOrViewNullable(table);
                 MetaDataDeleteIndexService.this.clusterService.getSchemaManager().removeTableExtensionToMutationBuilder(cfm, tableExtensionToRemove.get(table), builder);
             }
             if (!builder.isEmpty())

@@ -1026,7 +1026,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 newClusterState = ClusterState.builder(newClusterState)
                         .routingTable(RoutingTable.build(this.clusterService, newClusterState))
                         .build();
-                logger.info("CQL source={} SchemaChanges={}", clusterChangedEvent.source(), events);
+                logger.debug("CQL source={} SchemaChanges={}", clusterChangedEvent.source(), events);
             }
 
             // add new cluster state into the pending-to-apply cluster states queue, listening ack from remote nodes.
