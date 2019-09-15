@@ -157,7 +157,7 @@ import static org.elasticsearch.common.settings.Setting.listSetting;
 public class ClusterService extends BaseClusterService {
 
     private static final String ELASTIC_ADMIN_KEYSPACE = "elastic_admin";
-    public static final String ELASTIC_ADMIN_METADATA_TABLE = "metadata";
+    public static final String ELASTIC_ADMIN_METADATA_TABLE = "metadata_log";
 
     public static final String ELASTIC_EXTENSION_METADATA = "metadata";
     public static final String ELASTIC_EXTENSION_VERSION = "version";
@@ -348,14 +348,14 @@ public class ClusterService extends BaseClusterService {
     protected final Map<String, AbstractSearchStrategy> strategies = new ConcurrentHashMap<String, AbstractSearchStrategy>();
     protected final Map<String, AbstractSearchStrategy.Router> routers = new ConcurrentHashMap<String, AbstractSearchStrategy.Router>();
 
-    private final ConsistencyLevel metadataWriteCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.write.cl","QUORUM"));
-    private final ConsistencyLevel metadataReadCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.read.cl","QUORUM"));
-    private final ConsistencyLevel metadataSerialCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.serial.cl","SERIAL"));
+    private final ConsistencyLevel metadataWriteCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.write.cl", "QUORUM"));
+    private final ConsistencyLevel metadataReadCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.read.cl", "QUORUM"));
+    private final ConsistencyLevel metadataSerialCL = consistencyLevelFromString(System.getProperty("elassandra.metadata.serial.cl", "SERIAL"));
 
     private final String elasticAdminKeyspaceName;
-    private final String selectMetadataQuery;
     private final String selectVersionMetadataQuery;
-    private final String insertMetadataQuery;
+    private final String selectOwnerMetadataQuery;
+    private final String initMetadataQuery;
     private final String updateMetaDataQuery;
 
     private final SchemaManager schemaManager;
@@ -383,10 +383,21 @@ public class ClusterService extends BaseClusterService {
         } else {
             elasticAdminKeyspaceName = ELASTIC_ADMIN_KEYSPACE;
         }
-        selectMetadataQuery = String.format(Locale.ROOT, "SELECT metadata,version,owner FROM \"%s\".\"%s\" WHERE cluster_name = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
-        selectVersionMetadataQuery = String.format(Locale.ROOT, "SELECT version FROM \"%s\".\"%s\" WHERE cluster_name = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
-        insertMetadataQuery = String.format(Locale.ROOT, "INSERT INTO \"%s\".\"%s\" (cluster_name,owner,version) VALUES (?,?,?) IF NOT EXISTS", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
-        updateMetaDataQuery = String.format(Locale.ROOT, "UPDATE \"%s\".\"%s\" SET owner = ?, version = ? WHERE cluster_name = ? IF version = ?", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        selectVersionMetadataQuery = String.format(Locale.ROOT, 
+                "SELECT version FROM \"%s\".\"%s\" WHERE cluster_name = ? LIMIT 1", 
+                elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        
+        selectOwnerMetadataQuery = String.format(Locale.ROOT, 
+                "SELECT owner FROM \"%s\".\"%s\" WHERE cluster_name = ? AND v = ?", 
+                elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        
+        initMetadataQuery = String.format(Locale.ROOT, 
+                "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, source= ?, ts = dateOf(now()) WHERE cluster_name = ? AND v = ? IF version = null",
+                elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+        
+        updateMetaDataQuery = String.format(Locale.ROOT, 
+                "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, source= ?, ts = dateOf(now()) WHERE cluster_name= ? AND v = ? IF version = ?",
+                elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
     }
 
     @Override
@@ -755,21 +766,33 @@ public class ClusterService extends BaseClusterService {
     public MetaData loadGlobalState() throws NoPersistedMetaDataException {
         MetaData metadata;
         try {
-            metadata = readMetaDataFromTableExtensions();
+            metadata = readMetaDataFromTableExtensions(Optional.empty());
         } catch(NoPersistedMetaDataException e) {
-            // for backward compatibility
-            logger.info("Failed to read metadata from table extensions, falling back to table comment");
-            metadata = readAndMigrateMetadata();
+            try {
+                // fall back to table elastic_admin.metadata
+                logger.info("Failed to read metadata from {}.{} extensions, falling back to table {}.metadata extensions", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, elasticAdminKeyspaceName);
+                metadata = readMetaDataFromTableExtensions(Optional.of("metadata"));
+                upgradeMetadata(metadata, "migrate metadata from 6.2.3.8+");
+            } catch(NoPersistedMetaDataException e2) {
+                try {
+                    // for backward compatibility, fallback to elastic_admin.metadata.comment
+                    logger.info("Failed to read metadata from  {}.metadata extensions, falling back to table {}.metadata.comment", elasticAdminKeyspaceName, elasticAdminKeyspaceName);
+                    metadata = readMetaDataAsComment();
+                    upgradeMetadata(metadata, "migrate metadata from 6.2.3.7-");
+                } catch(NoPersistedMetaDataException e3) {
+                    // fall back to initial stated for new cluster
+                    metadata = state().metaData();
+                }
+            }
         }
         return metadata;
     }
 
     // read metadata from elastic_admin.metadata comment and flush it as CQL table extensions
     private AtomicBoolean migrated = new AtomicBoolean(false);
-    private MetaData readAndMigrateMetadata() throws NoPersistedMetaDataException {
-        MetaData metadata = readMetaDataAsComment();
+    private MetaData upgradeMetadata(MetaData metadata, String source) {
         if (migrated.compareAndSet(false, true)) {
-            logger.warn("Saving elasticsearch metadata from table comment into table extensions (This should happen only once when upgrading to 6.2.3.8+)");
+            logger.warn("Upgrading elasticsearch metadata, source={}");
             try {
                 Collection<Mutation> mutations = new ArrayList<>();
                 Collection<SchemaChange> events = new ArrayList<>();
@@ -779,9 +802,9 @@ public class ClusterService extends BaseClusterService {
                 }
                 //do not announce schema migration because gossip not yet ready.
                 SchemaKeyspace.mergeSchema(mutations, getSchemaManager().getInhibitedSchemaListeners());
-                logger.warn("Elasticsearch metadata migrated from comment to table extensions (This should happen only once when upgradin to 6.2.3.8+)");
+                logger.warn("Elasticsearch metadata upgraded, source={}", source);
             } catch (Exception e) {
-                logger.error("Failed to migrate elasticsearch metadata from comment to table extension.", e);
+                logger.error("Failed to upgrade elasticsearch metadata source="+source, e);
             }
         }
         return metadata;
@@ -887,12 +910,12 @@ public class ClusterService extends BaseClusterService {
      * @return
      * @throws NoPersistedMetaDataException
      */
-    public MetaData readMetaDataFromTableExtensions() throws NoPersistedMetaDataException {
+    public MetaData readMetaDataFromTableExtensions(Optional<String> metadataTableName) throws NoPersistedMetaDataException {
         KeyspaceMetadata ksm = Schema.instance.getKSMetaData(this.elasticAdminKeyspaceName);
         if (ksm == null)
             throw new NoPersistedMetaDataException("Keyspace "+this.elasticAdminKeyspaceName+" metadata not available");
 
-        CFMetaData cfm = ksm.getTableOrViewNullable(ELASTIC_ADMIN_METADATA_TABLE);
+        CFMetaData cfm = ksm.getTableOrViewNullable(metadataTableName.orElse(ELASTIC_ADMIN_METADATA_TABLE));
         if (cfm != null && cfm.params.extensions != null) {
             try {
                 final MetaData metaData =  readMetaData(cfm);
@@ -1064,40 +1087,6 @@ public class ClusterService extends BaseClusterService {
         throw new NoPersistedMetaDataException("metadata null or empty");
     }
 
-    public MetaData readInternalMetaDataAsRow() throws NoPersistedMetaDataException {
-        try {
-            UntypedResultSet rs = QueryProcessor.executeInternal(selectMetadataQuery, DatabaseDescriptor.getClusterName());
-            if (rs != null && !rs.isEmpty()) {
-                Row row = rs.one();
-                if (row.has("metadata"))
-                    return parseMetaDataString(row.getString("metadata"));
-            }
-        } catch (Exception e) {
-            logger.warn("Cannot read metadata locally",e);
-        }
-        return null;
-    }
-
-    public MetaData readMetaDataAsRow(ConsistencyLevel cl) throws NoPersistedMetaDataException {
-        try {
-            UntypedResultSet rs = process(cl, ClientState.forInternalCalls(), selectMetadataQuery, DatabaseDescriptor.getClusterName());
-            if (rs != null && !rs.isEmpty()) {
-                Row row = rs.one();
-                if (row.has("metadata"))
-                    return parseMetaDataString(row.getString("metadata"));
-            }
-        } catch (UnavailableException e) {
-            logger.warn("Cannot read elasticsearch metadata with consistency="+cl, e);
-            return null;
-        } catch (KeyspaceNotDefinedException e) {
-            logger.warn("Keyspace {} not yet defined", elasticAdminKeyspaceName);
-            return null;
-        } catch (Exception e) {
-            throw new NoPersistedMetaDataException("Unexpected error",e);
-        }
-        throw new NoPersistedMetaDataException("No elasticsearch metadata available");
-    }
-
     public Long readMetaDataVersion(ConsistencyLevel cl) throws NoPersistedMetaDataException {
         try {
             UntypedResultSet rs = process(cl, ClientState.forInternalCalls(), selectVersionMetadataQuery, DatabaseDescriptor.getClusterName());
@@ -1178,7 +1167,15 @@ public class ClusterService extends BaseClusterService {
     // Create The meta Data Table if needed
     Void createElasticAdminMetaTable() {
         try {
-            String createTable = String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".%s ( cluster_name text PRIMARY KEY, owner uuid, version bigint);",
+            String createTable = String.format(Locale.ROOT, "CREATE TABLE IF NOT EXISTS \"%s\".%s ( " +
+                    "    cluster_name text," + 
+                    "    v bigint," + 
+                    "    owner uuid," + 
+                    "    source text," + 
+                    "    ts timestamp," + 
+                    "    version bigint static," + 
+                    "    PRIMARY KEY (cluster_name, v)" + 
+                    ") WITH CLUSTERING ORDER BY (v DESC);",
                 elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
             logger.info(createTable);
             process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), createTable);
@@ -1190,11 +1187,16 @@ public class ClusterService extends BaseClusterService {
     }
 
     // initialize a first row if needed
-    Void insertFirstMetaRow(final MetaData metadata) {
+    Void insertFirstMetaRow(final MetaData metadata, String source) {
         try {
-            logger.info(insertMetadataQuery);
-            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), insertMetadataQuery,
-                DatabaseDescriptor.getClusterName(), UUID.fromString(StorageService.instance.getLocalHostId()), metadata.version());
+            logger.info(initMetadataQuery);
+            process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), 
+                    initMetadataQuery,
+                    UUID.fromString(StorageService.instance.getLocalHostId()), 
+                    metadata.version(),
+                    source,
+                    DatabaseDescriptor.getClusterName(), 
+                    metadata.version());
         } catch (Exception e) {
             logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed insert first row into table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE), e);
             throw e;
@@ -1218,32 +1220,20 @@ public class ClusterService extends BaseClusterService {
     }
 
     /**
-     * Create or update elastic_admin keyspace.
+     * Create or update elastic_admin keyspace, and create table metadata_log if not exists
      */
 
     public void createOrUpdateElasticAdminKeyspace()  {
         UntypedResultSet result = QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name='%s'", elasticAdminKeyspaceName));
         if (result.isEmpty()) {
-            MetaData metadata = state().metaData();
             try {
                 // create elastic_admin if not exists after joining the ring and before allowing metadata update.
                 retry(() -> createElasticAdminKeyspace(), "create elastic admin keyspace");
-                retry(() -> createElasticAdminMetaTable(), "create elastic admin metadata table");
-                retry(() -> insertFirstMetaRow(metadata), "write first row to metadata table");
-                logger.info("Succefully initialize {}.{} = {}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE, metadata.toString());
-                try {
-                    Collection<Mutation> mutations = new ArrayList<>();
-                    Collection<SchemaChange> events = new ArrayList<>();
-                    writeMetadataToSchemaMutations(state().metaData(), mutations, events);
-                    logger.debug("Applying initial elasticsearch mapping mutations={}", mutations);
-                    MigrationManager.announce(mutations, this.getSchemaManager().getInhibitedSchemaListeners());
-                } catch (IOException e) {
-                    logger.error("Failed to write metadata as table extension", e);
-                }
             } catch (Throwable e) {
                 logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE),e);
             }
         } else {
+            // adjust keyspace RF to the number of nodes
             Map<String,String> replication = result.one().getFrozenTextMap("replication");
             logger.debug("keyspace={} replication={}", elasticAdminKeyspaceName, replication);
 
@@ -1269,6 +1259,21 @@ public class ClusterService extends BaseClusterService {
                 logger.info("Keep unchanged keyspace={} datacenter={} RF={}", elasticAdminKeyspaceName, DatabaseDescriptor.getLocalDataCenter(), targetRF);
             }
         }
+
+        // create and init table if not exists
+        result = QueryProcessor.executeOnceInternal(String.format(Locale.ROOT, "SELECT * FROM system_schema.tables WHERE keyspace_name='%s' AND table_name = '%s'", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE));
+        if (result.isEmpty()) {
+            try {
+                retry(() -> createElasticAdminMetaTable(), String.format(Locale.ROOT, "create table %s.%s", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE));
+                
+                // insert first row if not exists
+                MetaData metaData = state().metaData();
+                String source = String.format(Locale.ROOT, "init table %s.%s", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE);
+                retry(() -> insertFirstMetaRow(metaData, source), source);
+            }  catch (Throwable e) {
+                logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to create or init table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE),e);
+            }
+        }
     }
 
 
@@ -1292,14 +1297,20 @@ public class ClusterService extends BaseClusterService {
             return;
         }
 
-        String metaDataString = MetaData.Builder.toXContent(newMetaData, MetaData.CASSANDRA_FORMAT_PARAMS);
         UUID owner = UUID.fromString(localNode().getId());
         boolean applied = processWriteConditional(
                 this.metadataWriteCL,
                 this.metadataSerialCL,
                 ClientState.forInternalCalls(),
                 updateMetaDataQuery,
-                new Object[] { owner, newMetaData.version(), DatabaseDescriptor.getClusterName(), newMetaData.version() - 1 });
+                new Object[] { 
+                        owner, 
+                        newMetaData.version(),
+                        source,
+                        DatabaseDescriptor.getClusterName(),
+                        newMetaData.version(),
+                        newMetaData.version() - 1 
+                });
         if (applied) {
             logger.debug("PAXOS Succefully update metadata source={} nextMetaData={}", source, newMetaData.x2());
             return;
@@ -1307,6 +1318,24 @@ public class ClusterService extends BaseClusterService {
             logger.warn("PAXOS Failed to update metadata source={} prevMetadata={} nextMetaData={}",source, oldMetaData.x2(), newMetaData.x2());
             throw new ConcurrentMetaDataUpdateException(owner, newMetaData.version());
         }
+    }
+    
+    /**
+     * Read owner for a given version, with CL=QUORUM and Serial CL=SERIAL to commit any remaining uncommitted Paxos state before proceeding with the read.
+     */
+    public UUID readMetaDataOwner(long version) {
+        UntypedResultSet rs = process(
+                this.metadataReadCL,
+                this.metadataSerialCL,
+                ClientState.forInternalCalls(),
+                selectOwnerMetadataQuery,
+                new Long(0),
+                new Object[] { 
+                        DatabaseDescriptor.getClusterName(),
+                        version
+                });
+        Row row = rs.one();
+        return (row == null) ? null : row.getUUID("owner");
     }
 
     /**

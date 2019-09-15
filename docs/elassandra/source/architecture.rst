@@ -285,10 +285,36 @@ Mapping and CQL schema management
 ---------------------------------
 
 Elassandra has no master node to manage the Elasticsearch mapping and all nodes can update the Elasticsearch mapping. In order to manage concurrent simultaneous mapping and CQL schema changes, 
-Elassandra plays a PAXOS transaction to update the current Elasticsearch metadata version in the Cassandra table **elastic_admin.metadata**. 
+Elassandra plays a PAXOS transaction to update the current Elasticsearch metadata version in the Cassandra table **elastic_admin.metadata_log** tracking all mapping updates:
 
-Once the PAXOS transaction succeed, Elassandra coordinator node applies n batched-atomic (1) CQL schema update boadcasted to all nodes, update and broadcast its gossip fields X2 with its *host_id*/*version_number*.
-Version number increase by one on each mapping update. Then, non-coordinator nodes catch the CQL schema change, reload their mapping and annonce the same X2 once the new Elasticsearch mapping is applied. 
+Here is the overall mapping update process including a PAXOS Light Weight Transaction and a CQL schema update:
+
+.. image:: images/elassandra-mapping-update.png
+
+Once the PAXOS transaction succeed, Elassandra coordinator node applies a batched-atomic (1) CQL schema update broadcasted to all nodes. 
+Version number increase by one on each mapping update, and the **elastic_admin.metadata_log** tracks metadata update events, as shown in the following example.
+
+.. code::
+
+	SELECT * FROM elastic_admin.metadata_log;
+
+	 cluster_name  | v    | version | owner                                | source                                          | ts
+	---------------+------+---------+--------------------------------------+-------------------------------------------------+---------------------------------
+	 trial_cluster | 4545 |    4545 | fc11f3b2-8280-4a69-af45-aaf1e9d336ae | delete-index [[index1574/q_xsELcBRFO2NITy62b6tg]] | 2019-09-16 15:06:31.054000+0000
+	 trial_cluster | 4544 |    4545 | a1fdf359-a0a0-4fd1-ad6c-1d2605248560 | delete-index [[index1575/nsuu0CFiTkC2EH2gvLkXHw]] | 2019-09-16 15:02:44.511000+0000
+	 trial_cluster | 4543 |    4545 | a1fdf359-a0a0-4fd1-ad6c-1d2605248560 | delete-index [[index2000/mEC5Bbx4T9m1ahi9LD1tIw]] | 2019-09-16 14:57:54.443000+0000
+	 trial_cluster | 4542 |    4545 | a1fdf359-a0a0-4fd1-ad6c-1d2605248560 | delete-index [[index1576/sVaT7vjWS4e2ukuLoQNo_w]] | 2019-09-16 14:56:56.561000+0000
+	 trial_cluster | 4541 |    4545 | a1fdf359-a0a0-4fd1-ad6c-1d2605248560 | delete-index [[index1570/DPmyeSB4Siyro9wbyEk9NA]] | 2019-09-16 14:55:59.507000+0000
+	 trial_cluster | 4540 |    4545 | a1fdf359-a0a0-4fd1-ad6c-1d2605248560 |                       cql-schema-mapping-update | 2019-09-16 14:54:06.280000+0000
+	 trial_cluster | 4539 |    4545 | a1fdf359-a0a0-4fd1-ad6c-1d2605248560 |           init table elastic_admin.metadata_log | 2019-09-16 14:44:57.243000+0000
+
+.. TIP::
+
+	The **elastic_admin.metadata_log** table contains one entry per metadata update event with a version number (column v), the host ID of the coordinator node (owner), 
+	the event origin (source) and timestamp (ts). If PAXOS update timeout occurs, Elassandra reads this table to transparently recover. 
+	If your cluster issues thousands of mapping updates, you should periodically delete old entries with a CQL range delete or add a default TTL to avoid an infinite growth.
+	
+Each participant node update its Elasticsearch mapping, synchronously acknowledge to the coordinator node and broadcast its gossip fields X2 with its *host_id*/*version_number*.
 As the result, all nodes sharing the same Elasticsearch mapping should have the same X2 value and you can check this with **nodetool gossipinfo**, as show here with X2 = e5df0651-8608-4590-92e1-4e523e4582b9/1.  
 
 .. code::
@@ -330,15 +356,15 @@ As the result, all nodes sharing the same Elasticsearch mapping should have the 
 (1) All CQL changes invloved by the Elasticsearch mapping update (CQL types and tables create/update) and the new Elasticsearch cluster state are applied in a *SINGLE* CQL schema update.
 The Elasticsearch metadata are stored in a binary format in the CQL schema as table extensions, stored in **system_schema.tables**, column **extensions** of type *frozen<map<text, blob>>*. 
 
-Elasticsearch metadata (indices, templates, aliases, ingest pipelines...) without document mapping is stored in **elastic_admin.metdata** table extensions:
+Elasticsearch metadata (indices, templates, aliases, ingest pipelines...) without document mapping is stored in **elastic_admin.metdata_log** table extensions:
  
 .. code::
 
    admin@cqlsh> select keyspace_name, table_name, extensions from system_schema.tables where keyspace_name='elastic_admin';
 
-    keyspace_name | table_name | extensions
-   ---------------+------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    elastic_admin |   metadata | {'metadata': 0x3a290a05fa886d6574612d64617461fa8676657273696f6ec88b636c75737465725f757569646366303561333634362d636536662d346466642d396437642d3539323539336231656565658874656d706c61746573fafb86696e6469636573fa866d79696e646578fa41c4847374617465436f70656e8773657474696e6773fa92696e6465782e6372656174696f6e5f646174654c3135343431373539313438353992696e6465782e70726f76696465645f6e616d65466d79696e64657889696e6465782e75756964556e6f4336395237345162714e7147466f6f636965755194696e6465782e76657273696f6e2e637265617465644636303230333939fb86616c6961736573fafbfb83746f746ffa41c446436f70656e47fa484c313534343133353832303437354943746f746f4a554b59336f534a675a54364f48686e51396d676f5557514b4636303230333939fb4cfafbfbfb8e696e6465782d677261766579617264fa89746f6d6273746f6e6573f8f9fbfbfb, 'owner': 0xf05a3646ce6f4dfd9d7d592593b1eeee, 'version': 0x0000000000000004}
+    keyspace_name | table_name   | extensions
+   ---------------+--------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    elastic_admin | metadata_log | {'metadata': 0x3a290a05fa886d6574612d64617461fa8676657273696f6ec88b636c75737465725f757569646366303561333634362d636536662d346466642d396437642d3539323539336231656565658874656d706c61746573fafb86696e6469636573fa866d79696e646578fa41c4847374617465436f70656e8773657474696e6773fa92696e6465782e6372656174696f6e5f646174654c3135343431373539313438353992696e6465782e70726f76696465645f6e616d65466d79696e64657889696e6465782e75756964556e6f4336395237345162714e7147466f6f636965755194696e6465782e76657273696f6e2e637265617465644636303230333939fb86616c6961736573fafbfb83746f746ffa41c446436f70656e47fa484c313534343133353832303437354943746f746f4a554b59336f534a675a54364f48686e51396d676f5557514b4636303230333939fb4cfafbfbfb8e696e6465782d677261766579617264fa89746f6d6273746f6e6573f8f9fbfbfb, 'owner': 0xf05a3646ce6f4dfd9d7d592593b1eeee, 'version': 0x0000000000000004}
    
    (1 rows)
 

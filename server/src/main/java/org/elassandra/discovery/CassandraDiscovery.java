@@ -1084,10 +1084,19 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             ackListener.onNodeAck(localNode, e);
             throw e;
         } catch(WriteTimeoutException e) {
-            logger.error("PAXOS write timeout, source={} metadata={} writeType={}. If that write succeed, this will cause mapping sycnchronization issue.",
-                    clusterChangedEvent.source(), newClusterState.metaData().x2(), e.writeType);
+            // see https://www.datastax.com/dev/blog/cassandra-error-handling-done-right
+            logger.warn("PAXOS write timeout, source={} metadata={} writeType={}, reading the owner of version={}",
+                    clusterChangedEvent.source(), newClusterState.metaData().x2(), e.writeType, newClusterState.metaData().version());
+            
+            // read the owner for the expected version to know if PAXOS transaction succeed or not.
+            UUID owner = clusterService.readMetaDataOwner(newClusterState.metaData().version());
+            if (owner == null || !owner.equals(newClusterState.metaData().clusterUUID())) {
+                logger.warn("PAXOS timeout and failed to write version={}, owner={}", newClusterState.metaData().version(), owner);
+                throw new PaxosMetaDataUpdateException(e);
+            }
+            
+            logger.warn("PAXOS timeout but succesfully write x2={}", newClusterState.metaData().x2());
             ackListener.onNodeAck(localNode, e);
-            throw new PaxosMetaDataUpdateException(e);
         } finally {
             handlerRef.set(null);
         }

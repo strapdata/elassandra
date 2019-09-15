@@ -22,6 +22,7 @@ package org.elassandra;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.service.StorageService;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
@@ -32,6 +33,7 @@ import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.elasticsearch.test.discovery.MockCassandraDiscovery;
 import org.junit.Test;
 
+import java.util.UUID;
 
 import static org.hamcrest.Matchers.equalTo;
 
@@ -57,10 +59,17 @@ public class CassandraDiscoveryTests extends ESSingleNodeTestCase {
         discovery.setPublishFunc(e -> {
             if (version == -1) {
                 // increase CQL version number to simulate PAXOS update while CQL schema not yet received.
-                UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT version FROM elastic_admin.metadata WHERE cluster_name = ?", DatabaseDescriptor.getClusterName());
+                UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT version FROM elastic_admin.metadata_log WHERE cluster_name = ? LIMIT 1", DatabaseDescriptor.getClusterName());
                 version = rs.one().getLong("version");
                 logger.warn("forcing metadata.version to {} in elastic_admin.metadata",  version + 1);
-                process(ConsistencyLevel.ONE, "UPDATE elastic_admin.metadata SET version = ? WHERE cluster_name = ?", version+1, DatabaseDescriptor.getClusterName());
+                
+                // "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, source= ?, ts = dateOf(now()) WHERE cluster_name= ? AND v = ? IF version = ?",
+                process(ConsistencyLevel.ONE, "UPDATE elastic_admin.metadata_log SET owner = ?, version = ?, source = ?, ts = dateOf(now()) WHERE cluster_name = ? AND v = ?", 
+                        UUID.fromString(StorageService.instance.getLocalHostId()), 
+                        version + 1,
+                        "paxos test",
+                        DatabaseDescriptor.getClusterName(), 
+                        version + 1);
             }
         });
 
