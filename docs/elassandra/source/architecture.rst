@@ -270,23 +270,44 @@ Secondly, in the fetch phases, the coordinator fetches the required fields by is
 
 .. image:: images/search-path.png
 
-Elassandra provides a random search strategy requesting the minimum of nodes to cover the whole Cassandra ring. 
+By default, an Elassandra search request is sub-queried to all nodes in the datacenter. 
+With the ``RandomSearchStrategy``, the coordinator node requests the minimum of nodes to cover the whole Cassandra ring depending on the Cassandra Replication Factor,
+so this reduce the overall cost of a search and lower the CPU usage of nodes. 
 For example, if you have a datacenter with four nodes and a replication factor of two, only two nodes will be requested
 with simplified token_ranges filters (adjacent token ranges are automatically merged).
 
 Additionally, as these token_ranges filters only change when the datacenter topology changes (for example when a node is down or when adding a new node), 
-Elassandra introduces a token_range bitset cache for each lucene segment.
-With this cache, out of range documents are seen as deleted documents at the lucene segment layer for subsequent 
+Elassandra introduces a token_range bitset cache for each Lucene segment.
+With this cache, out of range documents are seen as deleted documents at the Lucene segment layer for subsequent 
 queries using the same token_range filter. It drastically improves the search performances.
 
-Finally, the CQL fetch overhead can be mitigated by using keys and rows Cassandra caching, eventually using the off-heap caching features of Cassandra.
+The CQL fetch overhead can also be mitigated by using keys and rows Cassandra caching, eventually using the off-heap caching features of Cassandra.
+
+Finally, you can provide the Cassandra partition key as the routing parameter to route your search request to a Cassandra replica.
+
+.. code::
+
+	GET /books/_search?pretty&routing=xxx
+	{ 
+		“query":{ … }
+	}
+
+Elasticsearch query over CQL automatically adds routing when partition key is present:
+
+.. code::
+
+	SELECT * FROM books WHERE id=‘xxx’ AND es_query=’{"query":{ …}}'
+
+Using partition search is definitely more scalable than full search on a datacenter:
+
+.. image:: images/elassandra-scalability.png
+
 
 Mapping and CQL schema management
 ---------------------------------
 
 Elassandra has no master node to manage the Elasticsearch mapping and all nodes can update the Elasticsearch mapping. In order to manage concurrent simultaneous mapping and CQL schema changes, 
-Elassandra plays a PAXOS transaction to update the current Elasticsearch metadata version in the Cassandra table **elastic_admin.metadata_log** tracking all mapping updates:
-
+Elassandra plays a PAXOS transaction to update the current Elasticsearch metadata version in the Cassandra table **elastic_admin.metadata_log** tracking all mapping updates.
 Here is the overall mapping update process including a PAXOS Light Weight Transaction and a CQL schema update:
 
 .. image:: images/elassandra-mapping-update.png
@@ -313,9 +334,8 @@ Version number increase by one on each mapping update, and the **elastic_admin.m
 	The **elastic_admin.metadata_log** table contains one entry per metadata update event with a version number (column v), the host ID of the coordinator node (owner), 
 	the event origin (source) and timestamp (ts). If PAXOS update timeout occurs, Elassandra reads this table to transparently recover. 
 	If your cluster issues thousands of mapping updates, you should periodically delete old entries with a CQL range delete or add a default TTL to avoid an infinite growth.
-	
-Each participant node update its Elasticsearch mapping, synchronously acknowledge to the coordinator node and broadcast its gossip fields X2 with its *host_id*/*version_number*.
-As the result, all nodes sharing the same Elasticsearch mapping should have the same X2 value and you can check this with **nodetool gossipinfo**, as show here with X2 = e5df0651-8608-4590-92e1-4e523e4582b9/1.  
+
+All nodes sharing the same Elasticsearch mapping should have the same X2 value and you can check this with **nodetool gossipinfo**, as show here with X2 = e5df0651-8608-4590-92e1-4e523e4582b9/1.  
 
 .. code::
 
@@ -353,7 +373,7 @@ As the result, all nodes sharing the same Elasticsearch mapping should have the 
       LOAD:154824.0
       HOST_ID:74ae1629-0149-4e65-b790-cd25c7406675
 
-(1) All CQL changes invloved by the Elasticsearch mapping update (CQL types and tables create/update) and the new Elasticsearch cluster state are applied in a *SINGLE* CQL schema update.
+(1) All CQL changes involved by the Elasticsearch mapping update (CQL types and tables create/update) and the new Elasticsearch cluster state are applied in a *SINGLE* CQL schema update.
 The Elasticsearch metadata are stored in a binary format in the CQL schema as table extensions, stored in **system_schema.tables**, column **extensions** of type *frozen<map<text, blob>>*. 
 
 Elasticsearch metadata (indices, templates, aliases, ingest pipelines...) without document mapping is stored in **elastic_admin.metdata_log** table extensions:
@@ -379,6 +399,6 @@ For each document type backed by a Cassandra table, index metadata including the
           myindex |     mytype | {'elastic_admin/myindex': 0x44464c00aa56caad2ca92c4855b2aa562a28ca2f482d2ac94c2d06f1d2f2f341144452a924b5a2444947292d333527052c9d9d5a599e5f9482a40426a2a394999e975f941a9f98945f06d46b646a560b0600000000ffff0300}
   
 
-When snapshoting a keyspace or a table (ex: nodetool snapshot keyspace), Cassandra also backups the CQL schema (in <snapshot_dir>/schema.cql) including the elasticsearch index metadata and mapping, and thus, 
-restoring the CQL schema for an indexed table also restore the associated elasticsearch index definition in the current cluster state.
+When snapshoting a keyspace or a table (ex: nodetool snapshot <keyspace>), Cassandra also backups the CQL schema (in <snapshot_dir>/schema.cql) including the Elasticsearch index metadata and mapping, and thus, 
+restoring the CQL schema for an indexed table also restore the associated Elasticsearch index definition in the current cluster state.
 
