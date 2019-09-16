@@ -32,6 +32,7 @@ import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlocks;
@@ -202,6 +203,11 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
             @Override
             public ClusterState execute(ClusterState currentState) throws Exception {
                 throw new UnsupportedOperationException();
+            }
+            
+            @Override
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
             }
 
             @Override
