@@ -65,9 +65,9 @@ author = u'Strapdata'
 # built documents.
 #
 # The short X.Y version.
-version = u'6.2.3.18'
+version = u'6.2.3.19'
 # The full version, including alpha/beta/rc tags.
-release = u'6.2.3.18'
+release = u'6.2.3.19'
 
 tgz_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.tar.gz".format(release)
 deb_url = "https://github.com/strapdata/elassandra/releases/download/v{0}/elassandra-{0}.deb".format(release)

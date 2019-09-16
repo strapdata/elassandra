@@ -1,3 +1,17 @@
+6.2.3.19 - 2018-09-29
+  * Update the cassandra.yaml to follow the default cassandra one.
+  * Update documentation
+  * Add logback DuplicateMessageFilter in the default logback configuration
+  * Add elassandra-cli to decode Elasticsearch mapping from the CQL schema
+  * Enable mapping compression in CQL schema
+  * Improve mapping update concurrency management
+  * Improve upsert retry with mapping update
+  * Add logback DuplicateMessageFilter in the default configuration
+  * Add support for virtual index
+  * Add support for opaque_map with no mapping update
+  * Fix index setting update issue #306
+  * Fix drop column on a deleted index #302
+
 6.2.3.18 - 2018-07-18
   * Improve routing table update with batched cluster state updates
   * Fix blocking local cluster state update
