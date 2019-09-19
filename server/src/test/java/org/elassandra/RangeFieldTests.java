@@ -97,7 +97,7 @@ import static org.hamcrest.Matchers.equalTo;
 public class RangeFieldTests extends ESSingleNodeTestCase {
 
     private static String FROM_DATE = "2016-10-31";
-    private static String TO_DATE = "2016-11-01 20:00:00";
+    private static String TO_DATE = "2016-11-02 23:00:00";
     private static String FROM_IP = "::ffff:c0a8:107";
     private static String TO_IP = "2001:db8::";
     private static int FROM = 5;
@@ -192,7 +192,7 @@ public class RangeFieldTests extends ESSingleNodeTestCase {
                 .field(getToField(), getTo(type))
                 .endObject()
                 .endObject().string();
-        System.out.println("insert "+indexName+" doc="+doc+" query="+getMiddleQuery(type));
+        System.out.println("insert "+indexName+" type="+ type + " doc="+doc+" query="+getMiddleQuery(type));
 
         assertThat(client().prepareIndex(indexName, "my_type", "1")
                 .setSource(doc, XContentType.JSON)
