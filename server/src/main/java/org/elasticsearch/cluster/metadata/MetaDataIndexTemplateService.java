@@ -164,8 +164,9 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
             return;
         }
 
-        final IndexTemplateMetaData.Builder templateBuilder = IndexTemplateMetaData.builder(request.name);
-
+        // keep the template name to build listener response.
+        final String templateName = request.name;
+        
         clusterService.submitStateUpdateTask("create-index-template [" + request.name + "], cause [" + request.cause + "]",
                 new ClusterStateUpdateTask(Priority.URGENT) {
 
@@ -195,6 +196,8 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
                     throw new IllegalArgumentException("index_template [" + request.name + "] already exists");
                 }
 
+                IndexTemplateMetaData.Builder templateBuilder = IndexTemplateMetaData.builder(request.name);
+                
                 validateAndAddTemplate(request, templateBuilder, indicesService, xContentRegistry);
 
                 for (Alias alias : request.aliases) {
@@ -216,7 +219,7 @@ public class MetaDataIndexTemplateService extends AbstractComponent {
 
             @Override
             public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                listener.onResponse(new PutResponse(true, templateBuilder.build()));
+                listener.onResponse(new PutResponse(true, newState.getMetaData().getTemplates().get(templateName)));
             }
         });
     }
