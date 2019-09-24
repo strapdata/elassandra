@@ -66,12 +66,14 @@ import org.elasticsearch.index.engine.VersionConflictEngineException;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.index.mapper.Mapper.CqlCollection;
+import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.IndexShard;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.function.Consumer;
 import java.util.function.LongConsumer;
 
 public class QueryManager extends AbstractComponent {
@@ -660,12 +662,12 @@ public class QueryManager extends AbstractComponent {
         return values;
     }
 
-    public void updateDocument(final IndexRequest request, final IndexMetaData indexMetaData) throws Exception {
-        upsertDocument(request, indexMetaData, true);
+    public Engine.IndexResult updateDocument(final IndexRequest request, final IndexMetaData indexMetaData, Consumer<Mapping> onMappingUpdate) throws Exception {
+        return upsertDocument(request, indexMetaData, true, onMappingUpdate);
     }
 
-    public void insertDocument(final IndexRequest request, final IndexMetaData indexMetaData) throws Exception {
-        upsertDocument(request, indexMetaData, false);
+    public Engine.IndexResult insertDocument(final IndexRequest request, final IndexMetaData indexMetaData, Consumer<Mapping> onMappingUpdate) throws Exception {
+        return upsertDocument(request, indexMetaData, false, onMappingUpdate);
     }
 
     private Map<String, Object> updateField(Map<String, Object> node, String fieldName, Object fieldValue) {
@@ -686,7 +688,7 @@ public class QueryManager extends AbstractComponent {
      * @param updateOperation
      * @throws Exception
      */
-    private void upsertDocument(final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation) throws Exception {
+    private Engine.IndexResult upsertDocument(final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation, Consumer<Mapping> onMappingUpdate) throws Exception {
         final IndexService indexService = clusterService.indexService(indexMetaData.getIndex());
         final IndexShard indexShard = indexService.getShard(0);
 
@@ -700,7 +702,7 @@ public class QueryManager extends AbstractComponent {
         final String cfName = SchemaManager.typeToCfName(keyspaceName, request.type());
 
         // get the docMapper after a potential mapping update
-        DocumentMapperForType docMapperForType = indexShard.mapperService().documentMapperWithAutoCreate(request.type());
+        DocumentMapperForType docMapperForType = indexService.mapperService().documentMapperWithAutoCreate(request.type());
         DocumentMapper docMapper = docMapperForType.getDocumentMapper();
 
         ParsedDocument doc = docMapper.parse(sourceToParse);
@@ -716,8 +718,13 @@ public class QueryManager extends AbstractComponent {
             if (logger.isDebugEnabled())
                 logger.debug("Document source={} require a blocking mapping update of [{}] mapping={}",
                         request.sourceAsMap(), indexService.index().getName(), mappingUpdate);
+            
             // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
-            this.clusterService.blockingMappingUpdate(indexService, request.type(), mappingUpdate.toString());
+            // wrap this in the outer catch block, as the master might also throw a MapperParsingException when updating the mapping
+            onMappingUpdate.accept(mappingUpdate);
+
+            // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
+            // this.clusterService.blockingMappingUpdate(indexService, request.type(), mappingUpdate.toString());
             docMapper = indexShard.mapperService().documentMapper(request.type());
         }
 
@@ -855,6 +862,9 @@ public class QueryManager extends AbstractComponent {
                     values, 0);
             this.clusterService.process(request.waitForActiveShards().toCassandraConsistencyLevel(), query, (Object[])values);
         }
+        
+        assert request.versionType().validateVersionForWrites(request.version());
+        return new Engine.IndexResult(1L, SequenceNumbers.UNASSIGNED_SEQ_NO, true);
     }
 
     /**

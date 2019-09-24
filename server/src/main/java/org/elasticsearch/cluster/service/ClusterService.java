@@ -648,16 +648,20 @@ public class ClusterService extends BaseClusterService {
         private final CountDownLatch latch = new CountDownLatch(1);
         private volatile Throwable error = null;
 
-        public void waitForUpdate(TimeValue timeValue) throws Exception {
-            if (timeValue != null && timeValue.millis() > 0) {
-                if (!latch.await(timeValue.millis(), TimeUnit.MILLISECONDS)) {
-                    throw new ElasticsearchTimeoutException("blocking update timeout");
+        public void waitForUpdate(TimeValue timeValue) throws ElasticsearchException {
+            try {
+                if (timeValue != null && timeValue.millis() > 0) {
+                    if (!latch.await(timeValue.millis(), TimeUnit.MILLISECONDS)) {
+                        throw new ElasticsearchTimeoutException("blocking update timeout");
+                    }
+                } else {
+                    latch.await();
                 }
-            } else {
-                latch.await();
+                if (error != null)
+                    throw new RuntimeException(error);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             }
-            if (error != null)
-                throw new RuntimeException(error);
         }
 
         @Override
@@ -684,11 +688,11 @@ public class ClusterService extends BaseClusterService {
      * @param source
      * @throws Exception
      */
-    public void blockingMappingUpdate(IndexService indexService, String type, String source) throws Exception {
+    public void blockingMappingUpdate(IndexService indexService, String type, String source) throws ElasticsearchException {
         blockingMappingUpdate(indexService, type, source, SchemaUpdate.UPDATE);
     }
 
-    public void blockingMappingUpdate(IndexService indexService, String type, String source, SchemaUpdate schemaUpdate) throws Exception {
+    public void blockingMappingUpdate(IndexService indexService, String type, String source, SchemaUpdate schemaUpdate) throws ElasticsearchException {
         TimeValue timeout = settings.getAsTime(SETTING_CLUSTER_MAPPING_UPDATE_TIMEOUT, TimeValue.timeValueSeconds(Integer.getInteger(SETTING_SYSTEM_MAPPING_UPDATE_TIMEOUT, 30)));
         BlockingActionListener mappingUpdateListener = new BlockingActionListener();
         MetaDataMappingService metaDataMappingService = ElassandraDaemon.injector().getInstance(MetaDataMappingService.class);
