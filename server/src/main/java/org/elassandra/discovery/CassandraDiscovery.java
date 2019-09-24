@@ -104,13 +104,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.Optional;
 
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;
@@ -758,6 +756,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 // publish an empty map, so other nodes will see local shards UNASSIGNED.
                 Gossiper.instance.addLocalApplicationState(ELASTIC_SHARDS_STATES, StorageService.instance.valueFactory.datacenter("{}"));
             }
+        } else {
+            logger.warn("Gossiper not yet enabled to publish X1");
         }
     }
 
@@ -770,6 +770,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             Gossiper.instance.addLocalApplicationState(ELASTIC_META_DATA, StorageService.instance.valueFactory.datacenter(clusterState.metaData().x2()));
             if (logger.isTraceEnabled())
                 logger.trace("X2={} published in gossip state", clusterState.metaData().x2());
+        } else {
+            logger.warn("Gossiper not yet enabled to publish X2");
         }
     }
 

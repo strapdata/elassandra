@@ -1421,6 +1421,8 @@ public class ClusterService extends BaseClusterService {
     public void publishShardRoutingState(final String index, final ShardRoutingState shardRoutingState) throws JsonGenerationException, JsonMappingException, IOException {
         if (this.discovery != null)
             this.discovery.publishShardRoutingState(index, shardRoutingState);
+        else
+            logger.warn("Cannot publish routing state, discovery=null");
     }
 
     /**

@@ -608,17 +608,19 @@ public class SchemaManager extends AbstractComponent {
     public KeyspaceMetadata updateTableSchema(KeyspaceMetadata ksm, final MapperService mapperService, final IndexMetaData indexMetaData, final MappingMetaData mappingMd,
             final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
         String query = null;
+        String ksName = null;
+        String cfName = null;
+        Map<String, Object> mappingMap = null;
+        
         try {
-            Set<ColumnIdentifier> addedColumns = new HashSet<>();
-            String ksName = mapperService.keyspace();
-            String cfName = typeToCfName(ksName, mappingMd.type());
-            ColumnIdentifier ksNameColumnIdentifier = new ColumnIdentifier(ksName, true);
-
-            final CFMetaData cfm = Schema.instance.getCFMetaData(ksName, cfName);
+            ksName = mapperService.keyspace();
+            cfName = typeToCfName(ksName, mappingMd.type());
+            
+            final CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
             boolean newTable = (cfm == null);
 
             DocumentMapper docMapper = mapperService.documentMapper(mappingMd.type());
-            Map<String, Object> mappingMap = mappingMd.sourceAsMap();
+            mappingMap = mappingMd.sourceAsMap();
 
             Set<String> columns = new HashSet();
             if (mapperService.getIndexSettings().getIndexMetaData().isOpaqueStorage()) {
@@ -794,6 +796,7 @@ public class SchemaManager extends AbstractComponent {
                     mutations, events);
             return ksm;
         } catch (AssertionError | RequestValidationException e) {
+            logger.error("Failed to execute table="+ksName+"."+cfName+" query=" + query + " mapping="+mappingMap , e);
             throw new MapperParsingException("Failed to execute query:" + query + " : "+e.getMessage(), e);
         } catch (Throwable e) {
             throw new MapperParsingException(e.getMessage(), e);

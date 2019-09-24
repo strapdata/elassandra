@@ -516,7 +516,8 @@ public class ElasticSecondaryIndex implements Index {
                         	ElasticSecondaryIndex.this.addField(context, indexInfo, subMapper, entry.getValue(), 
                             		CqlStruct.OPAQUE_MAP.equals(mapper.cqlStruct()) ? Optional.of(mapper.name() + "." + entry.getKey()) : Optional.empty());
                         } else {
-                            logger.error("submapper not found for nested field [{}] in index [{}], not indexed", subMapperName, indexInfo.name);
+                            logger.error("submapper not found for nested field [{}] in index [{}] for metadata.version={}, not indexed", 
+                                    subMapperName, indexInfo.name, indexInfo.version);
                         }
                     } finally {
                         if (mapper.cqlStruct().equals(Mapper.CqlStruct.MAP))
