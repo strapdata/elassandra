@@ -121,7 +121,6 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             CountDownLatch startLatch = new CountDownLatch(1);
             ElassandraDaemon.instance = new ElassandraDaemon(InternalSettingsPreparer.prepareEnvironment(Settings.builder()
                     .put(Environment.PATH_HOME_SETTING.getKey(), System.getProperty("cassandra.home"))
-                    .put(Environment.PATH_HOME_SETTING.getKey(), System.getProperty("cassandra.config.dir"))
                     .build(), null)) {
                 @Override
                 public Settings nodeSettings(Settings settings) {
