@@ -86,7 +86,17 @@ public class JarHell {
                 logger.debug("classloader urls: {}", Arrays.toString(((URLClassLoader)loader).getURLs()));
              }
         }
-        checkJarHell(parseClassPath());
+
+        try {
+            checkJarHell(parseClassPath());
+        } catch (IllegalStateException e) {
+            if (Boolean.parseBoolean(System.getProperty("es.ignore_jarhell", "false"))) {
+                logger.warn("JarHell throws an exception, ignore it ! (DO NOT ENABLE THIS PROPERTY IN PRODUCTION !!!)", e);
+            } else {
+                // rethrow the exception
+                throw  e;
+            }
+        }
     }
 
     /**
@@ -273,12 +283,12 @@ public class JarHell {
                 if (clazz.startsWith("org.apache.lucene.util.LuceneTestCase")) {
                     return; // for modified version of LuceneTestCase to ignore cassandra static variables leaks.
                 }
-                
+
                 // workaround for cassandra thrift
                 if (clazz.startsWith("org.apache.cassandra.thrift")) {
                     return; // Because org.apache.commons.collections.FastHashMap in commons-collections and commons-beanutils
                 }
-                
+
                 // workaround for hadoop
                 if (clazz.startsWith("org.apache.commons")) {
                     return; // Because org.apache.commons.collections.FastHashMap in commons-collections and commons-beanutils
@@ -288,8 +298,9 @@ public class JarHell {
                 }
                 // workaround for asm required by both elasticsearch scripting modules and cassandra UDF, see #165 + CASSANDRA-11193
                 if (clazz.startsWith("org.objectweb.asm")) {
-                    return; 
+                    return;
                 }
+
                 throw new IllegalStateException("jar hell!" + System.lineSeparator() +
                         "class: " + clazz + System.lineSeparator() +
                         "jar1: " + previous + System.lineSeparator() +
