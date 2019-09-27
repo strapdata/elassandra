@@ -1285,7 +1285,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     public static final ToXContent.Params CASSANDRA_FORMAT_PARAMS;
     static {
         Map<String, String> params = new HashMap<>(2);
-        params.put("binary", "false");
+        params.put("binary", "true");
         params.put(CONTEXT_CASSANDRA_PARAM, "true");
         CASSANDRA_FORMAT_PARAMS = new MapParams(params);
     }
@@ -1293,7 +1293,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     public static final ToXContent.Params CQL_FORMAT_PARAMS;
     static {
         Map<String, String> params = new HashMap<>(2);
-        params.put("binary", "false");
+        params.put("binary", "true");
         params.put(CONTEXT_CQL_PARAM, "true");
         params.put(MetaData.CONTEXT_MODE_PARAM, MetaData.CONTEXT_CQL_PARAM);
         CQL_FORMAT_PARAMS = new MapParams(params);
