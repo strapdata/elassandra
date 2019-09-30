@@ -263,6 +263,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         MappingMetaData mmd = indexMetaDataKs.getMappings().get("t1");
         Map<String, Object> mapping = mmd.getSourceAsMap();
         Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
+        System.out.println("properties="+properties);
         assertTrue(properties.containsKey("content2"));
     }
 
