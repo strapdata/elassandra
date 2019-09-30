@@ -221,6 +221,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
+import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -2452,9 +2453,12 @@ public class ElasticSecondaryIndex implements Index {
     public void updateMappingInfo(ClusterState clusterState) {
         mappingInfoLock.writeLock().lock();
         try {
-            mappingInfoRef.set(new ImmutableMappingInfo(clusterState));
-
-            ImmutableMappingInfo newMappingInfo = mappingInfoRef.get();
+            ImmutableMappingInfo newMappingInfo = mappingInfoRef.updateAndGet(new UnaryOperator() {
+                @Override
+                public Object apply(Object t) {
+                    return new ImmutableMappingInfo(clusterState);
+                }    
+            });
             if (logger.isDebugEnabled())
                 logger.debug("secondary index=[{}] metadata.version={} mappingInfo.indices={} started shards={}/{}",
                     this.index_name, clusterState.metaData().version(),
