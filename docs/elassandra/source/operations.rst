@@ -550,3 +550,76 @@ Migrating from Elasticsearch to Elassandra
 Because of data distribution and because Elassandra stores the _source document in Cassandra SSTables, restoring an Elasticsearch snapshot won't work. In order
 to import data from an existing Elasticsearch cluster to Elassandra, you can use the `logstash elasticsearch input plugin <https://www.elastic.co/guide/en/logstash/5.5/plugins-inputs-elasticsearch.html>`_ 
 and the `cassandra output plugin <https://github.com/PerimeterX/logstash-output-cassandra>`_.
+
+
+Tooling
+_______
+
+
+Smile decoder
+-------------
+
+`SIMLE <https://github.com/FasterXML/smile-format-specification>`_ is a binary data format that defines a binary equivalent of standard JSON data format.
+This is the format used by Elassandra to store the Elasticsearch metadata into the 'extensions' of the cassandra table schema.
+
+If you want to decode a smile encoded information, Elassandra CLI provides the 'decodeSmile' command.
+
+Here after you can see how to decode an index mapping from the extensions column of Cassandra schema_table.
+
+.. code::
+      
+      $CASSANDRA_HOME/bin/cqlsh -e "select extensions from system_schema.tables where keyspace_name = 'test' and table_name = 'docs';" 
+      
+       extensions
+      ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+       {'elastic_admin/test': 0x3a290a05fa...986616c6961736573fafbfbfb}
+      
+      (1 rows)
+      
+   
+      $CASSANDRA_HOME/bin/elassandra-cli decodeSmile -s "0x3a290a05fa...986616c6961736573fafbfbfb"
+      Decoding : [0x3a290a05fa...986616c6961736573fafbfbfb]
+      {
+        "test" : {
+          "version" : 1,
+          "state" : "open",
+          "settings" : {
+            "index.creation_date" : "1569831034865",
+            "index.provided_name" : "test",
+            "index.uuid" : "4tne58smR7e5nwOrdD1VvA",
+            "index.version.created" : "6020399"
+          },
+          "mappings" : [ {
+            "docs" : {
+              "properties" : {
+                "login" : {
+                  "type" : "keyword",
+                  "cql_collection" : "singleton"
+                },
+                "uid" : {
+                  "type" : "integer",
+                  "cql_collection" : "singleton",
+                  "cql_partition_key" : true,
+                  "cql_primary_key_order" : 0
+                },
+                "username" : {
+                  "type" : "nested",
+                  "cql_collection" : "singleton",
+                  "cql_udt_name" : "user_type",
+                  "properties" : {
+                    "first" : {
+                      "type" : "keyword",
+                      "cql_collection" : "singleton"
+                    },
+                    "last" : {
+                      "type" : "keyword",
+                      "cql_collection" : "singleton"
+                    }
+                  }
+                }
+              }
+            }
+          } ],
+          "aliases" : { }
+        }
+      }

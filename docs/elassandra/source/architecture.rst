@@ -402,3 +402,7 @@ For each document type backed by a Cassandra table, index metadata including the
 When snapshoting a keyspace or a table (ex: nodetool snapshot <keyspace>), Cassandra also backups the CQL schema (in <snapshot_dir>/schema.cql) including the Elasticsearch index metadata and mapping, and thus, 
 restoring the CQL schema for an indexed table also restore the associated Elasticsearch index definition in the current cluster state.
 
+.. TIP::
+
+	You can decode the `SIMLE <https://github.com/FasterXML/smile-format-specification>`_ encoded mapping stored in table extensions by using the **elassandra-cli** utility, see :ref:`operations:tooling`.
+

@@ -32,8 +32,6 @@ import sphinx_rtd_theme
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 #extensions = [ 'sphinxjp.themes.basicstrap' ]
-extensions = [ 'sphinx.ext.autosectionlabel' ]
-autosectionlabel_prefix_document = True
 
 pdf_documents = [
 ('index', u'Elassandra Documentation', u'Elassandra Documentation', u'Strapdata'),
