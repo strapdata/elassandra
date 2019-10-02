@@ -252,20 +252,20 @@ data distribution is driven by the same partition key, joining many Elasticsearc
 
    CREATE KEYSPACE IF NOT EXISTS example WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', 'DC1' : 1 };
    
-   CREATE TABLE IF NOT EXISTS books (books uuid PRIMARY KEY, title text, author text);
+   CREATE TABLE IF NOT EXISTS example.books (books uuid PRIMARY KEY, title text, author text);
    INSERT INTO example.books (books, title, author) VALUES (278078aa-095f-4aec-a048-a138f5071431, 'A Brief History of Time', 'Stephen Hawking');
    INSERT INTO example.books (books, title, author) VALUES (7c592b75-475c-420d-980b-f035e1252787, 'The Universe in a Nutshell', 'Stephen Hawking');
    INSERT INTO example.books (books, title, author) VALUES (f1662d47-afe7-4273-8544-d7663dcb7498, 'Relativity', 'Albert Einstein');
    INSERT INTO example.books (books, title, author) VALUES (72cc85db-4ec1-455a-b893-e884607b3f9f, 'The World as I See It', 'Albert Einstein');
    
-   CREATE TABLE IF NOT EXISTS citations (books uuid, id uuid, words text, PRIMARY KEY (books, id));
+   CREATE TABLE IF NOT EXISTS example.citations (books uuid, id uuid, words text, PRIMARY KEY (books, id));
    INSERT INTO example.citations (books, id, words) VALUES (278078aa-095f-4aec-a048-a138f5071431, 0c46578e-4dcf-46d3-9136-8a2da187b8eb, 'Quiet people have the loudest minds.');
    INSERT INTO example.citations (books, id, words) VALUES (278078aa-095f-4aec-a048-a138f5071431, f14942d8-281f-4835-813d-09254a0d70d8, 'Intelligence is the ability to adapt to change.');
    INSERT INTO example.citations (books, id, words) VALUES (278078aa-095f-4aec-a048-a138f5071431, f9e3b0ba-2c52-484e-911e-d2e633baf41c, 'I don''t think the human race will survive the next thousand years, unless we spread into space.');
    INSERT INTO example.citations (books, id, words) VALUES (f1662d47-afe7-4273-8544-d7663dcb7498, 72cc85db-4ec1-455a-b893-e884607b3f9f, 'Great spirits have always encountered violent opposition from mediocre minds.');
    INSERT INTO example.citations (books, id, words) VALUES (f1662d47-afe7-4273-8544-d7663dcb7498, 70986be4-e586-4560-9405-12c290e9e0ab, 'If you can''t explain it to a six year old, you don''t understand it yourself.');
    
-   CREATE TABLE IF NOT EXISTS editions (books uuid, editor text, isbn text, available boolean, PRIMARY KEY ((books), editor));
+   CREATE TABLE IF NOT EXISTS example.editions (books uuid, editor text, isbn text, available boolean, PRIMARY KEY ((books), editor));
    INSERT INTO example.editions (books, editor, isbn, available) VALUES (278078aa-095f-4aec-a048-a138f5071431, 'Bantam Press', '0857501003', true);
    INSERT INTO example.editions (books, editor, isbn, available) VALUES (7c592b75-475c-420d-980b-f035e1252787, 'Bantam Press', '9780593048153', false);
    INSERT INTO example.editions (books, editor, isbn, available) VALUES (f1662d47-afe7-4273-8544-d7663dcb7498, 'Penguin Classics', '0143039822', false);
