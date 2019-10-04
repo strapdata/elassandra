@@ -600,19 +600,26 @@ public class SchemaManager extends AbstractComponent {
         }
     }
 
-    public void updateTableSchema(final MapperService mapperService, final IndexMetaData indexMetaData, final MappingMetaData mappingMd, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws IOException {
+    /*
+    public void updateTableSchema(final KeyspaceMetadata ksm, final MapperService mapperService, final IndexMetaData indexMetaData, final MappingMetaData mappingMd, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws IOException {
         KeyspaceMetadata ksm = createOrUpdateKeyspace(mapperService.keyspace(), settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1, mapperService.getIndexSettings().getIndexMetaData().replication(), mutations, events);
         updateTableSchema(ksm, mapperService, indexMetaData, mappingMd, mutations, events);
     }
-
-    public KeyspaceMetadata updateTableSchema(KeyspaceMetadata ksm, final MapperService mapperService, final IndexMetaData indexMetaData, final MappingMetaData mappingMd,
-            final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
+    */
+    
+    public KeyspaceMetadata updateTableSchema(final KeyspaceMetadata ksm2, 
+            final MapperService mapperService, 
+            final IndexMetaData indexMetaData, 
+            final MappingMetaData mappingMd,
+            final Collection<Mutation> mutations, 
+            final Collection<Event.SchemaChange> events) {
         String query = null;
         String ksName = null;
         String cfName = null;
         Map<String, Object> mappingMap = null;
         
         try {
+            KeyspaceMetadata ksm = ksm2;
             ksName = mapperService.keyspace();
             cfName = typeToCfName(ksName, mappingMd.type());
             

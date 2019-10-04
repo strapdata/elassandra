@@ -22,6 +22,7 @@ package org.elasticsearch.cluster.metadata;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 
 import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.transport.Event;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
@@ -62,6 +63,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
 import static org.elasticsearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.NO_LONGER_ASSIGNED;
 
 /**
@@ -184,11 +186,15 @@ public class MetaDataMappingService extends AbstractComponent {
                 indexService = indicesService.createIndex(indexMetaData, Collections.emptyList());
                 //removeIndex = true;
                 //indexService.mapperService().merge(indexMetaData, MergeReason.MAPPING_RECOVERY, true);
+                KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(
+                        indexService.mapperService().keyspace(), 
+                        settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1, 
+                        indexService.mapperService().getIndexSettings().getIndexMetaData().replication(), mutations, events);
                 for (ObjectCursor<MappingMetaData> metaData : indexMetaData.getMappings().values()) {
                     // don't apply the default mapping, it has been applied when the mapping was created
                     DocumentMapper docMapper = indexService.mapperService().merge(metaData.value.type(), metaData.value.source(), MapperService.MergeReason.MAPPING_RECOVERY, true);
                     if (!metaData.value.type().equals(MapperService.DEFAULT_MAPPING)) {
-                        clusterService.getSchemaManager().updateTableSchema(indexService.mapperService(), indexMetaData, metaData.value, mutations, events);
+                        ksm = clusterService.getSchemaManager().updateTableSchema(ksm, indexService.mapperService(), indexMetaData, metaData.value, mutations, events);
                     }
                 }
             }
@@ -230,12 +236,16 @@ public class MetaDataMappingService extends AbstractComponent {
             if (updatedTypes.isEmpty() == false) {
                 logger.warn("[{}] re-syncing mappings with cluster state because of types [{}]", index, updatedTypes);
                 dirty = true;
+                KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(
+                        indexService.mapperService().keyspace(), 
+                        settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1, 
+                        indexService.mapperService().getIndexSettings().getIndexMetaData().replication(), mutations, events);
                 for (DocumentMapper mapper : indexService.mapperService().docMappers(true)) {
                     MappingMetaData mappingMetaData2 = new MappingMetaData(mapper);
                     builder.putMapping(mappingMetaData2);
 
                     if (!mappingMetaData2.type().equals(MapperService.DEFAULT_MAPPING)) {
-                        clusterService.getSchemaManager().updateTableSchema(indexService.mapperService(), currentIndexMetaData, mappingMetaData2, mutations, events);
+                        ksm = clusterService.getSchemaManager().updateTableSchema(ksm, indexService.mapperService(), currentIndexMetaData, mappingMetaData2, mutations, events);
                     }
                 }
             }
@@ -397,7 +407,7 @@ public class MetaDataMappingService extends AbstractComponent {
                             logger.debug("{} update_mapping [{}] with source [{}]", index, mergedMapper.type(), updatedSource);
                         } else if (logger.isInfoEnabled()) {
                             logger.info("{} update_mapping [{}]", index, mergedMapper.type());
-                        }
+                        }  
 
                     }
                 } else {
@@ -412,6 +422,9 @@ public class MetaDataMappingService extends AbstractComponent {
                 IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
                 // Mapping updates on a single type may have side-effects on other types so we need to
                 // update mapping metadata on all types
+                KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(mapperService.keyspace(), 
+                        settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1, 
+                        mapperService.getIndexSettings().getIndexMetaData().replication(), mutations, events);
                 for (DocumentMapper mapper : mapperService.docMappers(true)) {
                     MappingMetaData mappingMd = new MappingMetaData(mapper.mappingSource());
                     indexMetaDataBuilder.putMapping(mappingMd);
@@ -420,7 +433,7 @@ public class MetaDataMappingService extends AbstractComponent {
                     if (mappingMd.type().equals(mappingType) && 
                        !mappingMd.type().equals(MapperService.DEFAULT_MAPPING) &&
                        indexMetaData.virtualIndex() == null) {
-                        clusterService.getSchemaManager().updateTableSchema(mapperService, indexMetaData, mappingMd, mutations, events);
+                        ksm = clusterService.getSchemaManager().updateTableSchema(ksm, mapperService, indexMetaData, mappingMd, mutations, events);
                     }
                 }
                 builder.put(indexMetaDataBuilder);
