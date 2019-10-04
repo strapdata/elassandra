@@ -41,6 +41,10 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.query.Operator;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.aggregations.Aggregation;
+import org.elasticsearch.search.aggregations.AggregationBuilders;
+import org.elasticsearch.search.aggregations.bucket.nested.InternalNested;
+import org.elasticsearch.search.aggregations.metrics.sum.InternalSum;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
@@ -335,9 +339,14 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         
         XContentBuilder mappingMap = XContentFactory.jsonBuilder()
                 .startObject()
-                    .field("discover", "^((?!strings).*)")
+                    .field("discover", "^((?!(strings|metrics)).*)")
                     .startObject("properties")
                         .startObject("strings")
+                            .field("type", "nested")
+                            .field("cql_collection", "singleton")
+                            .field("cql_struct", "map")
+                        .endObject()
+                        .startObject("metrics")
                             .field("type", "nested")
                             .field("cql_collection", "singleton")
                             .field("cql_struct", "map")
@@ -345,7 +354,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                     .endObject()
                 .endObject();
         
-        process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, strings map<text, text>, PRIMARY KEY (id));");
+        process(ConsistencyLevel.ONE,"CREATE TABLE test.event_test (id text, x int, strings map<text, text>, metrics map<text, int>, PRIMARY KEY (id));");
         assertAcked(client().admin().indices().preparePutMapping("test").setType("event_test")
                 .setSource(mappingMapOpaque)
                 .get());
@@ -356,16 +365,46 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .get());
 
         long N = 10;
-        for(int i=0; i < N; i++)
-            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id,strings) VALUES ('%d',{'key%d':'b%d'})", i, i, i));
-
+        for(int i=0; i < N; i++) {
+            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "insert into test.event_test (id, x, strings, metrics) VALUES ('%d', %d, {'key%d':'b%d'}, {'k1':%d})", i, i, i, i, i));
+        }
         assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.termQuery("strings.key1", "b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test")
+                .setQuery(QueryBuilders.nestedQuery("strings", 
+                        QueryBuilders.termQuery("strings.key1", "b1"), 
+                        RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test")
+                .setQuery(QueryBuilders.nestedQuery("strings", 
+                        QueryBuilders.termsQuery("strings.key1", "x", "b1"), 
+                        RandomPicks.randomFrom(random(), ScoreMode.values())))
+                .get().getHits().getTotalHits(), equalTo(1L));
+        
+        assertThat(client().prepareSearch().setIndices("test").setTypes("event_test")
+                .setQuery(QueryBuilders.boolQuery()
+                        .filter(QueryBuilders.termsQuery("x", new int[] {1,2}))
+                        .should(QueryBuilders.nestedQuery("strings", QueryBuilders.termsQuery("strings.key1", "x", "b1"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                        .should(QueryBuilders.nestedQuery("strings", QueryBuilders.termsQuery("strings.key2", "x", "b2"), RandomPicks.randomFrom(random(), ScoreMode.values())))
+                        .minimumShouldMatch(1))
+                .get().getHits().getTotalHits(), equalTo(2L));
         
         // test2 support string query because mapping is available
         assertThat(client().prepareSearch().setIndices("test2").setTypes("event_test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
         assertThat(client().prepareSearch().setIndices("test2").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.termQuery("strings.key1", "b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
         assertThat(client().prepareSearch().setIndices("test2").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
+        
+        // aggregation on key
+        SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("event_test")
+                .setQuery(QueryBuilders.matchAllQuery())
+                .addAggregation(AggregationBuilders
+                        .nested("metrics_agg", "metrics")
+                        .subAggregation(AggregationBuilders.sum("k1_total").field("metrics.k1")))
+                .get();
+        InternalNested metricsAgg = rsp.getAggregations().get("metrics_agg");
+        InternalSum sumAgg = metricsAgg.getAggregations().get("k1_total");
+        assertEquals(45.0, sumAgg.getValue(), 0.1);
     }
 
     @Test
