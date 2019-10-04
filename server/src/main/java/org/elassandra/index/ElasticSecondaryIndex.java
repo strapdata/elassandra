@@ -112,6 +112,7 @@ import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.block.ClusterBlockException;
@@ -2683,6 +2684,7 @@ public class ElasticSecondaryIndex implements Index {
     @Override
     public Callable<?> getInvalidateTask() {
         return () -> {
+            updateMappingInfo(ClusterState.builder(new ClusterName(DatabaseDescriptor.getClusterName())).build());
             elasticSecondayIndices.remove(index_name);
             return null;
         };
