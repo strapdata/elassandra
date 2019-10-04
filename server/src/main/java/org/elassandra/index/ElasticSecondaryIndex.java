@@ -2618,6 +2618,8 @@ public class ElasticSecondaryIndex implements Index {
                         }
                     } catch (ElasticsearchException e) {
                         logger.error("Error while flushing index=[{}]", e, indexInfo.name);
+                    } catch (org.apache.lucene.store.AlreadyClosedException e2) {
+                        logger.warn("index=[{}] was already closed", indexInfo.name);
                     }
                 }
             }
