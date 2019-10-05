@@ -15,6 +15,7 @@ import org.apache.cassandra.tracing.Tracing.TraceType;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.LeafReaderContext;
+import org.elassandra.cluster.SchemaManager;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.index.IndexNotFoundException;
@@ -57,7 +58,7 @@ public class CqlFetchPhase extends FetchPhase {
             throws IndexNotFoundException, IOException
     {
         DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
-        String cfName = ClusterService.typeToCfName(indexService.keyspace(), type);
+        String cfName = SchemaManager.typeToCfName(indexService.keyspace(), type);
         DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
         StringBuilder query = new StringBuilder();
         query.append("SELECT ");

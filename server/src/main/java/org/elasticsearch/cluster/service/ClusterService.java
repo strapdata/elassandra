@@ -582,10 +582,6 @@ public class ClusterService extends BaseClusterService {
         }
     }
 
-    public static String typeToCfName(String keyspaceName, String typeName) {
-        return SchemaManager.typeToCfName(keyspaceName, typeName);
-    }
-
     public static String buildIndexName(final String cfName) {
         return SchemaManager.buildIndexName(cfName);
     }
