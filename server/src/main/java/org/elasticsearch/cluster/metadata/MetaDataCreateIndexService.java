@@ -32,6 +32,7 @@ import org.apache.cassandra.utils.Pair;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
+import org.elassandra.cluster.SchemaManager;
 import org.elassandra.cluster.routing.AbstractSearchStrategy;
 import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.ElasticsearchException;
@@ -561,17 +562,18 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                     indexMetaDataBuilder.putCustom(customEntry.getKey(), customEntry.getValue());
                 }
 
-                indexMetaDataBuilder.state(request.state());
+                indexMetaDataBuilder.state(request.state() == null ? IndexMetaData.State.OPEN : request.state());
 
                 IndexMetaData indexMetaData = indexMetaDataBuilder.build();
-                
-                indexService.getIndexEventListener().beforeIndexAddedToCluster(indexMetaData.getIndex(),
-                    indexMetaData.getSettings());
-
-                MetaData.Builder newMetaDataBuilder = MetaData.builder(currentState.metaData())
-                    .setClusterUuid();
-                
                 IndexMetaData virtualIndexMetaData = null;
+                
+                indexService.getIndexEventListener().beforeIndexAddedToCluster(indexMetaData.getIndex(), indexMetaData.getSettings());
+
+                MetaData.Builder newMetaDataBuilder = MetaData.builder(currentState.metaData()).setClusterUuid();
+                // cannot use IndexMetaData as key because of NPE with mocked tests !
+                Map<Index, Pair<IndexMetaData, MapperService>> indiceMap = new HashMap<>();
+                indiceMap.put(indexMetaData.getIndex(), Pair.create(indexMetaData, mapperService));
+                
                 if (indexMetaData.virtualIndex() != null) {
                     virtualIndexMetaData = currentState.metaData().index(indexMetaData.virtualIndex());
                 	
@@ -589,13 +591,19 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                                 .settings(virtualSettingsBuilder)
                                 .build();
                         
-                        if (!indicesService.hasIndex(virtualIndexMetaData.getIndex())) {
-                            // create the index here (on the master) to validate it can be created, as well as adding the mapping
-                            final IndexService virtualIndexService = indicesService.createIndex(virtualIndexMetaData, Collections.emptyList());
+                        IndexService virtualIndexService = null;
+                        if (indicesService.hasIndex(virtualIndexMetaData.getIndex())) {
+                            virtualIndexService = indicesService.indexServiceSafe(virtualIndexMetaData.getIndex());
+                        } else {
+                            virtualIndexService = indicesService.createIndex(virtualIndexMetaData, Collections.emptyList());
                             createdVirtualIndex = virtualIndexService.index();
                             virtualIndexService.getIndexEventListener().beforeIndexAddedToCluster(virtualIndexMetaData.getIndex(),
                                     virtualIndexMetaData.getSettings());
                         }
+                        final MapperService virtualMapperService = virtualIndexService.mapperService();
+                        virtualMapperService.merge(mappings, MergeReason.MAPPING_UPDATE, request.updateAllTypes());
+                        logger.debug("Found virtual index=[{}] merged with mappings={}", virtualIndexMetaData.getIndex(), mappings);
+                        
                         if (logger.isDebugEnabled()) {
                             XContentBuilder jsonBuilder = XContentFactory.contentBuilder(XContentType.JSON);
                             jsonBuilder.startObject();
@@ -607,6 +615,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         }
                         
                         newMetaDataBuilder.put(virtualIndexMetaData, false);
+                        indiceMap.put(virtualIndexMetaData.getIndex(), Pair.create(virtualIndexMetaData, virtualMapperService));
                 	} else {
                 	    if (!indexMetaData.keyspace().equals(virtualIndexMetaData.keyspace()))
                             throw new InvalidIndexNameException(tmpImd.getIndex().getName(), "Virtual index keyspace does not match");
@@ -642,7 +651,6 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                                         IndexMetaData.Builder builder = IndexMetaData.builder(cursor.value).version(virtualIndexMetaData.getVersion());
                                         for(ObjectCursor<MappingMetaData> mappingCursor : virtualIndexMetaData2.getMappings().values()) {
                                             builder.putMapping(mappingCursor.value);
-                                            
                                         }
                                         IndexMetaData indexMetaData2 = builder.build();
                                         newMetaDataBuilder.put(indexMetaData2, false);
@@ -659,6 +667,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                             }
                             indexMetaData = indexMetaDataBuilder2.build();
                             mapperService.updateMapping(indexMetaData); // update mapper service to properly infer CQL schema.
+                            indiceMap.put(virtualIndexMetaData.getIndex(), Pair.create(virtualIndexMetaData, virtualMapperService));
                         } catch (Exception e) {
                             removalExtraInfo = "failed on merging mapping with the existing virtual index="+virtualIndexMetaData.getIndex().toString();
                             throw e;
@@ -673,22 +682,20 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                 try {
                     if (currentState.blocks().hasGlobalBlock(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK))
                         throw new ClusterBlockException(ImmutableSet.of(CassandraGatewayService.NO_CASSANDRA_RING_BLOCK));
-                        
-                    // don't create a keyspace while cassandra is not fully started.
-                    logger.debug("creating if not exists keyspace {} with RF={}", indexMetaData.keyspace(), indexMetaData.getNumberOfReplicas()+1);
-                    KeyspaceMetadata ksm  = clusterService.getSchemaManager().createOrUpdateKeyspace(indexMetaData.keyspace(), indexMetaData.getNumberOfReplicas()+1, indexMetaData.replication(), mutations, events);
                     
-                    // create a cassandra table per type.
-                    for (ObjectObjectCursor<String,MappingMetaData> cursor : indexMetaData.getMappings()) {
-                        MappingMetaData mappingMd = cursor.value;
-                        if (mappingMd.type() != null && !mappingMd.type().equals(MapperService.DEFAULT_MAPPING)) {
-                            ksm = clusterService.getSchemaManager().updateTableSchema(ksm, mapperService, indexMetaData, mappingMd, mutations, events);
+                    KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(indexMetaData.keyspace(), 
+                            indexMetaData.getSettings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) + 1, 
+                            indexMetaData.replication(), mutations, events);
+                    
+                    // update CQL tables for all non-default type mappings
+                    IndexMetaData imd = (virtualIndexMetaData == null) ? indexMetaData : virtualIndexMetaData;
+                    if (imd.getMappings() != null) {
+                        for(ObjectCursor<MappingMetaData> mmd : imd.getMappings().values()) {
+                            if (mmd.value.type() != null && !MapperService.DEFAULT_MAPPING.equals(mmd.value.type())) {
+                                clusterService.getSchemaManager().updateTableSchema(ksm, mmd.value.type(), indiceMap, mutations, events);
+                            }
                         }
                     }
-                    
-                    // update virtual index schema extensions on the working ksm.
-                    if (virtualIndexMetaData != null)
-                        clusterService.getSchemaManager().updateTableExtensions(ksm, virtualIndexMetaData, mutations, events);
                 } catch (Exception e) {
                     removalReason = IndexRemovalReason.FAILURE;
                     throw e;

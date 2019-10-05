@@ -21,6 +21,7 @@ import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
@@ -200,6 +201,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         for(long i=20; i < 30; i++) {
             Map<String, Object> md = client().admin().indices().prepareGetMappings("ks_"+i).addTypes("t1").get().getMappings().get("ks_"+i).get("t1").getSourceAsMap();
             Map<String, Object> properties = (Map<String, Object>) md.get("properties");
+            //System.out.println("ks_"+i+" properties="+properties);
             assertEquals(Boolean.TRUE, properties.containsKey("content"));
         }
         
@@ -214,6 +216,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         assertNotNull(row);
         Map<String, ByteBuffer> extensions = row.getMap("extensions", UTF8Type.instance, BytesType.instance);
         System.out.println("extensions.keys=" + extensions.keySet());
+        System.out.println("extensions.ks=0x"+ByteBufferUtil.bytesToHex(extensions.get("elastic_admin/ks")));
         
         IndexMetaData ksIndexMetaData = clusterService().getIndexMetaDataFromExtension(extensions.get("elastic_admin/ks"));
         assertEquals(1, ksIndexMetaData.getMappings().size());
@@ -227,6 +230,14 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
             
             IndexMetaData ksi = this.clusterService().state().metaData().index("ks_"+i);
             MappingMetaData mmd = ksi.getMappings().get("t1");
+            Map<String, Object> mapping = mmd.getSourceAsMap();
+            Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
+            assertTrue(properties.containsKey("content"));
+        }
+        
+        {
+            IndexMetaData indexMetaDataKs = clusterService().getIndexMetaDataFromExtension(extensions.get("elastic_admin/ks"));
+            MappingMetaData mmd = indexMetaDataKs.getMappings().get("t1");
             Map<String, Object> mapping = mmd.getSourceAsMap();
             Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
             assertTrue(properties.containsKey("content"));
@@ -259,12 +270,18 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
             assertEquals("ks", indexMetaDataX.getSettings().get(IndexMetaData.INDEX_SETTING_VIRTUAL_INDEX_SETTING.getKey()));
         }
         
-        IndexMetaData indexMetaDataKs = clusterService().getIndexMetaDataFromExtension(extensions.get("elastic_admin/ks"));
-        MappingMetaData mmd = indexMetaDataKs.getMappings().get("t1");
-        Map<String, Object> mapping = mmd.getSourceAsMap();
-        Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
-        System.out.println("properties="+properties);
-        assertTrue(properties.containsKey("content2"));
+        {
+            IndexMetaData indexMetaDataKs = clusterService().getIndexMetaDataFromExtension(extensions.get("elastic_admin/ks"));
+            MappingMetaData mmd = indexMetaDataKs.getMappings().get("t1");
+            Map<String, Object> mapping = mmd.getSourceAsMap();
+            Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
+            if (!properties.containsKey("content2")) {
+                System.out.println("extensions="+extensions);
+                System.out.println("extensions.ks=Ox"+ByteBufferUtil.bytesToHex(extensions.get("elastic_admin/ks")));
+                System.out.println("properties="+properties);
+            }
+            assertTrue(properties.containsKey("content2"));
+        }
     }
 
 }

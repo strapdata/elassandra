@@ -80,6 +80,7 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.mapper.CompletionFieldMapper;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.FieldMapper;
@@ -112,8 +113,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-
-import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
 
 public class SchemaManager extends AbstractComponent {
     final ClusterService clusterService;
@@ -220,7 +219,7 @@ public class SchemaManager extends AbstractComponent {
     }
 
     public String typeToCfName(CFMetaData cfm, String typeName, boolean remove) {
-        return SchemaManager.typeToCfName(cfm.ksName, typeName);
+        return SchemaManager.typeToCfName(cfm.ksName, typeName, remove);
     }
 
     public static String cfNameToType(String keyspaceName, String cfName) {
@@ -376,10 +375,10 @@ public class SchemaManager extends AbstractComponent {
         return ksm;
     }
 
-    public KeyspaceMetadata createTable(final KeyspaceMetadata ksm, String cfName, String indexName,
-            List<ColumnDescriptor> columns,
+    private KeyspaceMetadata createTable(final KeyspaceMetadata ksm, String cfName, 
+            Map<String, ColumnDescriptor> columnsMap,
             String tableOptions,
-            final IndexMetaData indexMetaData,
+            final Collection<IndexMetaData> siblings, // include the indexMetaData and all other indices having a mapping to the same table.
             final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) throws IOException, RecognitionException {
         CFName cfn = new CFName();
@@ -387,9 +386,13 @@ public class SchemaManager extends AbstractComponent {
         cfn.setKeyspace(ksm.name, true);
         CreateTableStatement.RawStatement cts = new CreateTableStatement.RawStatement(cfn, true);
 
-        logger.debug("columns="+columns);
+        logger.debug("columnsMap="+columnsMap);
+        List<ColumnDescriptor> columnsList = new ArrayList<>();
+        columnsList.addAll(columnsMap.values());
+        Collections.sort(columnsList); // sort primary key columns
+
         List<ColumnIdentifier> pk = new ArrayList<>();
-        for(ColumnDescriptor cd : columns) {
+        for(ColumnDescriptor cd : columnsList) {
             ColumnIdentifier ci = ColumnIdentifier.getInterned(cd.name, true);
             cts.addDefinition(ci, cd.type, cd.kind == Kind.STATIC);
             if (cd.kind == Kind.PARTITION_KEY)
@@ -413,20 +416,21 @@ public class SchemaManager extends AbstractComponent {
 
         ParsedStatement.Prepared stmt = cts.prepare(ksm.types);
         CFMetaData cfm = ((CreateTableStatement)stmt.statement).getCFMetaData();
-
+        updateTableExtensions(ksm, cfm, siblings);
+        
         Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
         SchemaKeyspace.addTableToSchemaMutation(cfm, true, builder);
-        addTableExtensionsToMutationBuilder(cfm, indexMetaData, builder);
         mutations.add(builder.build());
+        
         events.add(new Event.SchemaChange(Event.SchemaChange.Change.CREATED, Event.SchemaChange.Target.TABLE, cts.keyspace(), cts.columnFamily()));
         return ksm.withSwapped(ksm.tables.with(cfm));
     }
 
     // add only new columns and update table extension with mapping metadata
-    public KeyspaceMetadata updateTable(final KeyspaceMetadata ksm, String cfName, String indexName,
-            List<ColumnDescriptor> columns,
+    private KeyspaceMetadata updateTable(final KeyspaceMetadata ksm, String cfName, 
+            Map<String, ColumnDescriptor> columnsMap,
             TableAttributes tableAttrs,
-            final IndexMetaData indexMetaData,
+            final Collection<IndexMetaData> siblings,
             final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) {
         KeyspaceMetadata ksm2 = ksm;
@@ -435,46 +439,31 @@ public class SchemaManager extends AbstractComponent {
         cfn.setColumnFamily(cfName, true);
         cfn.setKeyspace(ksm.name, true);
 
-        List<AlterTableStatementColumn> colDataList = columns.stream()
+        List<AlterTableStatementColumn> colDataList = columnsMap.values().stream()
                 .filter(cd -> !cd.exists())
                 .map(cd ->  new AlterTableStatementColumn(ColumnDefinition.Raw.forColumn(cd.createColumnDefinition(ksm, cfName)), cd.type, cd.kind == Kind.STATIC))
                 .collect(Collectors.toList());
 
-        boolean changed = false;
         Pair<CFMetaData, List<ViewDefinition>> x = Pair.create(cfm, StreamSupport.stream(ksm.views(cfName).spliterator(), false).collect(Collectors.toList()));
         if (colDataList.size() > 0) {
-            logger.debug("table {}.{} add columns={}", ksm.name, cfName, columns);
+            logger.debug("table {}.{} add columnsMap={}", ksm.name, cfName, columnsMap);
             AlterTableStatement ats = new AlterTableStatement(cfn, AlterTableStatement.Type.ADD, colDataList, tableAttrs, null, null);
             x = ats.updateTable(ksm, cfm, FBUtilities.timestampMicros());
-            mutations.add(SchemaKeyspace.makeUpdateTableMutation(ksm, cfm, x.left, FBUtilities.timestampMicros()).build());
-            changed = true;
         }
-
-        logger.debug("table {}.{} set extensions for index {}", ksm.name, cfName, indexName);
-        Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
-        x = Pair.create(addTableExtensionsToMutationBuilder(x.left, indexMetaData, builder), x.right);
-        mutations.add(builder.build());
+        // update extensions
+        updateTableExtensions(ksm, x.left, siblings);
+        mutations.add(SchemaKeyspace.makeUpdateTableMutation(ksm, cfm, x.left, FBUtilities.timestampMicros()).build());
 
         ksm2 = ksm.withSwapped(ksm.tables.without(cfm.cfName).with(x.left));
         if (x.right != null && x.right.size() > 0) {
             ksm2 = ksm2.withSwapped(Views.builder().add(x.right).build());
             for(ViewDefinition view : x.right) {
-                builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
+                Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
                 mutations.add(SchemaKeyspace.makeUpdateViewMutation(builder, ksm2.views.getNullable(view.viewName), view).build());
             }
         }
         events.add(new Event.SchemaChange(Event.SchemaChange.Change.UPDATED, Event.SchemaChange.Target.TABLE, ksm.name, cfName));
         return ksm2;
-    }
-
-    private CFMetaData addTableExtensionsToMutationBuilder(CFMetaData cfm, final IndexMetaData indexMetaData, Mutation.SimpleBuilder builder) {
-        Map<String, ByteBuffer> extensions = new LinkedHashMap<String, ByteBuffer>();
-        if (cfm.params != null && cfm.params.extensions != null)
-            extensions.putAll(cfm.params.extensions);
-        clusterService.putIndexMetaDataExtension(indexMetaData, extensions);
-        cfm.extensions(extensions);
-        SchemaKeyspace.addTableExtensionsToSchemaMutation(cfm, extensions, builder);
-        return cfm;
     }
 
     public CFMetaData removeTableExtensionToMutationBuilder(CFMetaData cfm, final Set<IndexMetaData> indexMetaDataSet, Mutation.SimpleBuilder builder) {
@@ -491,7 +480,7 @@ public class SchemaManager extends AbstractComponent {
         return cfm2;
     }
 
-    public Pair<KeyspaceMetadata, CQL3Type.Raw> createOrUpdateRawType(final KeyspaceMetadata ksm, final String cfName, final String name, final Mapper mapper,
+    private Pair<KeyspaceMetadata, CQL3Type.Raw> createOrUpdateRawType(final KeyspaceMetadata ksm, final String cfName, final String name, final Mapper mapper,
             final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) {
         KeyspaceMetadata ksm2 = ksm;
@@ -538,7 +527,7 @@ public class SchemaManager extends AbstractComponent {
         return Pair.create(ksm2, mapper.collection(type));
     }
 
-    public Pair<KeyspaceMetadata, CQL3Type.Raw> buildObject(final KeyspaceMetadata ksm, final String cfName, final String name, final ObjectMapper objectMapper,
+    private Pair<KeyspaceMetadata, CQL3Type.Raw> buildObject(final KeyspaceMetadata ksm, final String cfName, final String name, final ObjectMapper objectMapper,
             final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) throws RequestExecutionException {
         switch(objectMapper.cqlStruct()) {
@@ -586,31 +575,196 @@ public class SchemaManager extends AbstractComponent {
      * @param mutations
      * @param events
      */
-    public void updateTableExtensions(final KeyspaceMetadata ksm, final IndexMetaData indexMetaData, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
-        assert ksm.name.equals(indexMetaData.keyspace()) : "Keyspace metadata does not match indexMetadata.keyspace";
+    public CFMetaData updateTableExtensions(final KeyspaceMetadata ksm, final CFMetaData cfm, final Collection<IndexMetaData> siblings) {
+        Map<String, ByteBuffer> extensions = new LinkedHashMap<String, ByteBuffer>();
+        if (cfm.params != null && cfm.params.extensions != null)
+            extensions.putAll(cfm.params.extensions);
         
-        for(ObjectCursor<MappingMetaData> mappingMd : indexMetaData.getMappings().values()) {
-            final String cfName = typeToCfName(indexMetaData.keyspace(), mappingMd.value.type());
-            final CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
-            assert cfm != null : "Table "+cfName+" not found in keyspace"+ksm.name;
-            logger.debug("table {}.{} add extensions for index {}", ksm.name, cfm.cfName, indexMetaData.getIndex().getName());
-            Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
-            addTableExtensionsToMutationBuilder(cfm, indexMetaData, builder);
-            mutations.add(builder.build());
+        for(IndexMetaData imd : siblings) {
+            assert ksm.name.equals(imd.keyspace()) : "Keyspace metadata="+ksm.name+" does not match indexMetadata.keyspace="+imd.keyspace();
+            clusterService.putIndexMetaDataExtension(imd, extensions);
         }
+        
+        cfm.extensions(extensions);
+        return cfm;
     }
-
-    /*
-    public void updateTableSchema(final KeyspaceMetadata ksm, final MapperService mapperService, final IndexMetaData indexMetaData, final MappingMetaData mappingMd, final Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws IOException {
-        KeyspaceMetadata ksm = createOrUpdateKeyspace(mapperService.keyspace(), settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1, mapperService.getIndexSettings().getIndexMetaData().replication(), mutations, events);
-        updateTableSchema(ksm, mapperService, indexMetaData, mappingMd, mutations, events);
-    }
-    */
     
-    public KeyspaceMetadata updateTableSchema(final KeyspaceMetadata ksm2, 
-            final MapperService mapperService, 
+    /**
+     * Populate the columnsMap of a table for the provided indeMetaData/mapperService
+     */
+    private KeyspaceMetadata buildColumns(final KeyspaceMetadata ksm2,
+            final CFMetaData cfm, 
+            final String type, 
             final IndexMetaData indexMetaData, 
-            final MappingMetaData mappingMd,
+            final MapperService mapperService, 
+            Map<String, ColumnDescriptor> columnsMap,
+            final Collection<Mutation> mutations, 
+            final Collection<Event.SchemaChange> events) {
+        
+        KeyspaceMetadata ksm = ksm2;
+        String cfName = typeToCfName(ksm.name, type);
+        boolean newTable = (cfm == null);
+        
+        DocumentMapper docMapper = mapperService.documentMapper(type);
+        MappingMetaData mappingMd = indexMetaData.getMappings().get(type);
+        Map<String, Object> mappingMap = mappingMd.sourceAsMap();
+
+        Set<String> columns = new HashSet();
+        if (mapperService.getIndexSettings().getIndexMetaData().isOpaqueStorage()) {
+            columns.add(SourceFieldMapper.NAME);
+        } else {
+            if (docMapper.sourceMapper().enabled())
+                columns.add(SourceFieldMapper.NAME);
+            if (mappingMap.get("properties") != null)
+                columns.addAll(((Map<String, Object>) mappingMap.get("properties")).keySet());
+        }
+
+        logger.debug("Updating CQL3 schema {}.{} columns={}", ksm.name, cfName, columns);
+        for (String column : columns) {
+            if (isReservedKeyword(column))
+                logger.warn("Allowing a CQL reserved keyword in ES: {}", column);
+
+            if (column.equals(TokenFieldMapper.NAME))
+                continue; // ignore pseudo column known by Elasticsearch
+
+            ColumnDescriptor colDesc = new ColumnDescriptor(column);
+            FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
+            ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
+            
+            if (fieldMapper != null) {
+                if (fieldMapper.cqlCollection().equals(CqlCollection.NONE))
+                    continue; // ignore field.
+
+                if (fieldMapper instanceof RangeFieldMapper) {
+                    RangeFieldMapper rangeFieldMapper = (RangeFieldMapper) fieldMapper;
+                    if (cdef != null) {
+                        // index range stored as a range UDT in cassandra.
+                        if (!(cdef.type instanceof UserType))
+                            throw new MapperParsingException("Column ["+column+"] is not a Cassandra User Defined Type to store an Elasticsearch range");
+                        colDesc.type = CQL3Type.Raw.from(CQL3Type.UserDefined.create((UserType)cdef.type));
+                    } else {
+                        // create a range UDT to store range fields
+                        Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm,
+                                rangeFieldMapper.fieldType().typeName(),
+                                rangeFieldMapper.cqlFieldTypes(),
+                                mutations, events);
+                        ksm = x.left;
+                        colDesc.type = x.right;
+                    }
+                } else if (fieldMapper instanceof GeoPointFieldMapper) {
+                    if (cdef != null && cdef.type instanceof UTF8Type) {
+                        // index geohash stored as text in cassandra.
+                        colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.TEXT);
+                    } else {
+                        // create a geo_point UDT to store lat,lon
+                        Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm, GEO_POINT_TYPE, GEO_POINT_FIELDS, mutations, events);
+                        ksm = x.left;
+                        colDesc.type = x.right;
+                    }
+                } else if (fieldMapper instanceof GeoShapeFieldMapper) {
+                    colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.TEXT);
+                } else if (fieldMapper instanceof CompletionFieldMapper) {
+                    Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm, COMPLETION_TYPE, COMPLETION_FIELDS, mutations, events);
+                    ksm = x.left;
+                    colDesc.type = x.right;
+                } else if (fieldMapper.getClass().getName().equals("org.elasticsearch.mapper.attachments.AttachmentMapper")) {
+                    // attachement is a plugin, so class may not found.
+                    Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm, ATTACHMENT_TYPE, ATTACHMENT_FIELDS, mutations, events);
+                    ksm = x.left;
+                    colDesc.type = x.right;
+                } else if (fieldMapper instanceof SourceFieldMapper) {
+                    colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.BLOB);
+                } else {
+                    colDesc.type = fieldMapper.rawType();
+                    if (colDesc.type == null) {
+                        logger.warn("Ignoring field [{}] type [{}]", column, fieldMapper.name());
+                        continue;
+                    }
+                }
+
+                if (fieldMapper.cqlPrimaryKeyOrder() >= 0) {
+                    colDesc.position = fieldMapper.cqlPrimaryKeyOrder();
+                    if (fieldMapper.cqlPartitionKey()) {
+                        colDesc.kind = Kind.PARTITION_KEY;
+                    } else {
+                        colDesc.kind = Kind.CLUSTERING;
+                        colDesc.desc = fieldMapper.cqlClusteringKeyDesc();
+                    }
+                }
+                if (fieldMapper.cqlStaticColumn())
+                    colDesc.kind = Kind.STATIC;
+                colDesc.type = fieldMapper.collection(colDesc.type);
+            } else {
+                ObjectMapper objectMapper = docMapper.objectMappers().get(column);
+                if (objectMapper == null) {
+                   logger.warn("Cannot infer CQL type from object mapping for field [{}], ignoring", column);
+                   continue;
+                }
+                if (objectMapper.cqlCollection().equals(CqlCollection.NONE))
+                    continue; // ignore field
+
+                if (!objectMapper.isEnabled()) {
+                    logger.debug("Object [{}] not enabled stored as text", column);
+                    colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.TEXT);
+                } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP) || (objectMapper.cqlStruct().equals(CqlStruct.OPAQUE_MAP))) {
+                    // TODO: check columnName exists and is map<text,?>
+                    Pair<KeyspaceMetadata, CQL3Type.Raw> x = buildObject(ksm, cfName, column, objectMapper, mutations, events);
+                    colDesc.type = x.right;
+                    ksm = x.left;
+                    //if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
+                    //    colDesc.type = objectMapper.cqlCollectionTag()+"<"+colDesc.type+">";
+                    //}
+                    //logger.debug("Expecting column [{}] to be a map<text,?>", column);
+                } else  if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
+                    if (!objectMapper.hasField()) {
+                        logger.debug("Ignoring [{}] has no sub-fields", column); // no sub-field, ignore it #146
+                        continue;
+                    }
+                    Pair<KeyspaceMetadata, CQL3Type.Raw> x = buildObject(ksm, cfName, column, objectMapper, mutations, events);
+                    ksm = x.left;
+                    colDesc.type = x.right;
+                    /*
+                    if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON) && !(cfName.equals(PERCOLATOR_TABLE) && column.equals("query"))) {
+                        colDesc.type = objectMapper.collection(colDesc.type);
+                    }
+                    */
+                }
+                if (objectMapper.cqlPrimaryKeyOrder() >= 0) {
+                    colDesc.position = fieldMapper.cqlPrimaryKeyOrder();
+                    if (objectMapper.cqlPartitionKey()) {
+                        colDesc.kind = Kind.PARTITION_KEY;
+                    } else {
+                        colDesc.kind = Kind.CLUSTERING;
+                        colDesc.desc = fieldMapper.cqlClusteringKeyDesc();
+                    }
+                }
+                if (objectMapper.cqlStaticColumn())
+                    colDesc.kind = Kind.STATIC;
+            }
+            columnsMap.putIfAbsent(colDesc.name, colDesc);
+        }
+        
+        // add _parent column if necessary. Parent and child documents should have the same partition key.
+        if (docMapper.parentFieldMapper().active() && docMapper.parentFieldMapper().pkColumns() == null)
+            columnsMap.putIfAbsent("_parent", new ColumnDescriptor("_parent", CQL3Type.Raw.from(CQL3Type.Native.TEXT)));
+        
+        logger.debug("columnsMap={}", columnsMap);
+        return ksm;
+    }
+    
+    /**
+     * Create table for all IndexMetaData having a mapping.
+     * WARNING: schema mutations are applied in a random order and table extensions is replace by the last one.
+     * @param ksm2
+     * @param type
+     * @param indiceMap
+     * @param mutations
+     * @param events
+     * @return Modified ksm
+     */
+    public KeyspaceMetadata updateTableSchema(final KeyspaceMetadata ksm2, 
+            final String type,
+            final Map<Index, Pair<IndexMetaData, MapperService>> indiceMap,
             final Collection<Mutation> mutations, 
             final Collection<Event.SchemaChange> events) {
         String query = null;
@@ -620,187 +774,47 @@ public class SchemaManager extends AbstractComponent {
         
         try {
             KeyspaceMetadata ksm = ksm2;
-            ksName = mapperService.keyspace();
-            cfName = typeToCfName(ksName, mappingMd.type());
+            ksName = ksm2.name;
+            cfName = typeToCfName(ksName, type);
             
             final CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
             boolean newTable = (cfm == null);
 
-            DocumentMapper docMapper = mapperService.documentMapper(mappingMd.type());
-            mappingMap = mappingMd.sourceAsMap();
-
-            Set<String> columns = new HashSet();
-            if (mapperService.getIndexSettings().getIndexMetaData().isOpaqueStorage()) {
-                columns.add(SourceFieldMapper.NAME);
-            } else {
-                if (docMapper.sourceMapper().enabled())
-                    columns.add(SourceFieldMapper.NAME);
-                if (mappingMap.get("properties") != null)
-                    columns.addAll(((Map<String, Object>) mappingMap.get("properties")).keySet());
+            MapperService mapperService = null; // set with one of the IndexMetaData !
+            
+            Map<String, ColumnDescriptor> columnsMap = new HashMap<>();
+            for(Pair<IndexMetaData, MapperService> pair : indiceMap.values()) {
+                IndexMetaData indexMetaData = pair.left;
+                if (indexMetaData.hasVirtualIndex())
+                    continue;
+                mapperService = pair.right;
+                ksm = buildColumns(ksm, cfm, type, indexMetaData, mapperService, columnsMap, mutations, events);
             }
-
-            logger.debug("Updating CQL3 schema {}.{} columns={}", ksName, cfName, columns);
-            List<ColumnDescriptor> columnsList = new ArrayList<>();
-            for (String column : columns) {
-                if (isReservedKeyword(column))
-                    logger.warn("Allowing a CQL reserved keyword in ES: {}", column);
-
-                if (column.equals(TokenFieldMapper.NAME))
-                    continue; // ignore pseudo column known by Elasticsearch
-
-                ColumnDescriptor colDesc = new ColumnDescriptor(column);
-                FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
-                if (fieldMapper != null) {
-                    if (fieldMapper.cqlCollection().equals(CqlCollection.NONE))
-                        continue; // ignore field.
-
-                    if (fieldMapper instanceof RangeFieldMapper) {
-                        RangeFieldMapper rangeFieldMapper = (RangeFieldMapper) fieldMapper;
-                        ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
-                        if (cdef != null) {
-                            // index range stored as a range UDT in cassandra.
-                            if (!(cdef.type instanceof UserType))
-                                throw new MapperParsingException("Column ["+column+"] is not a Cassandra User Defined Type to store an Elasticsearch range");
-                            colDesc.type = CQL3Type.Raw.from(CQL3Type.UserDefined.create((UserType)cdef.type));
-                        } else {
-                            // create a range UDT to store range fields
-                            Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm,
-                                    rangeFieldMapper.fieldType().typeName(),
-                                    rangeFieldMapper.cqlFieldTypes(),
-                                    mutations, events);
-                            ksm = x.left;
-                            colDesc.type = x.right;
-                        }
-                    } else if (fieldMapper instanceof GeoPointFieldMapper) {
-                        ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
-                        if (cdef != null && cdef.type instanceof UTF8Type) {
-                            // index geohash stored as text in cassandra.
-                            colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.TEXT);
-                        } else {
-                            // create a geo_point UDT to store lat,lon
-                            Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm, GEO_POINT_TYPE, GEO_POINT_FIELDS, mutations, events);
-                            ksm = x.left;
-                            colDesc.type = x.right;
-                        }
-                    } else if (fieldMapper instanceof GeoShapeFieldMapper) {
-                        colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.TEXT);
-                    } else if (fieldMapper instanceof CompletionFieldMapper) {
-                        Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm, COMPLETION_TYPE, COMPLETION_FIELDS, mutations, events);
-                        ksm = x.left;
-                        colDesc.type = x.right;
-                    } else if (fieldMapper.getClass().getName().equals("org.elasticsearch.mapper.attachments.AttachmentMapper")) {
-                        // attachement is a plugin, so class may not found.
-                        Pair<KeyspaceMetadata, CQL3Type.Raw> x = createRawTypeIfNotExists(ksm, ATTACHMENT_TYPE, ATTACHMENT_FIELDS, mutations, events);
-                        ksm = x.left;
-                        colDesc.type = x.right;
-                    } else if (fieldMapper instanceof SourceFieldMapper) {
-                        colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.BLOB);
-                    } else {
-                        colDesc.type = fieldMapper.rawType();
-                        if (colDesc.type == null) {
-                            logger.warn("Ignoring field [{}] type [{}]", column, fieldMapper.name());
-                            continue;
-                        }
-                    }
-
-                    if (fieldMapper.cqlPrimaryKeyOrder() >= 0) {
-                        colDesc.position = fieldMapper.cqlPrimaryKeyOrder();
-                        if (fieldMapper.cqlPartitionKey()) {
-                            colDesc.kind = Kind.PARTITION_KEY;
-                        } else {
-                            colDesc.kind = Kind.CLUSTERING;
-                            colDesc.desc = fieldMapper.cqlClusteringKeyDesc();
-                        }
-                    }
-                    if (fieldMapper.cqlStaticColumn())
-                        colDesc.kind = Kind.STATIC;
-                    colDesc.type = fieldMapper.collection(colDesc.type);
-                    columnsList.add(colDesc);
-                } else {
-                    ObjectMapper objectMapper = docMapper.objectMappers().get(column);
-                    if (objectMapper == null) {
-                       logger.warn("Cannot infer CQL type from object mapping for field [{}], ignoring", column);
-                       continue;
-                    }
-                    if (objectMapper.cqlCollection().equals(CqlCollection.NONE))
-                        continue; // ignore field
-
-                    if (!objectMapper.isEnabled()) {
-                        logger.debug("Object [{}] not enabled stored as text", column);
-                        colDesc.type = CQL3Type.Raw.from(CQL3Type.Native.TEXT);
-                    } else if (objectMapper.cqlStruct().equals(CqlStruct.MAP) || (objectMapper.cqlStruct().equals(CqlStruct.OPAQUE_MAP))) {
-                        // TODO: check columnName exists and is map<text,?>
-                        Pair<KeyspaceMetadata, CQL3Type.Raw> x = buildObject(ksm, cfName, column, objectMapper, mutations, events);
-                        colDesc.type = x.right;
-                        ksm = x.left;
-                        //if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON)) {
-                        //    colDesc.type = objectMapper.cqlCollectionTag()+"<"+colDesc.type+">";
-                        //}
-                        //logger.debug("Expecting column [{}] to be a map<text,?>", column);
-                    } else  if (objectMapper.cqlStruct().equals(CqlStruct.UDT)) {
-                        if (!objectMapper.hasField()) {
-                            logger.debug("Ignoring [{}] has no sub-fields", column); // no sub-field, ignore it #146
-                            continue;
-                        }
-                        Pair<KeyspaceMetadata, CQL3Type.Raw> x = buildObject(ksm, cfName, column, objectMapper, mutations, events);
-                        ksm = x.left;
-                        colDesc.type = x.right;
-                        /*
-                        if (!objectMapper.cqlCollection().equals(CqlCollection.SINGLETON) && !(cfName.equals(PERCOLATOR_TABLE) && column.equals("query"))) {
-                            colDesc.type = objectMapper.collection(colDesc.type);
-                        }
-                        */
-                    }
-                    if (objectMapper.cqlPrimaryKeyOrder() >= 0) {
-                        colDesc.position = fieldMapper.cqlPrimaryKeyOrder();
-                        if (objectMapper.cqlPartitionKey()) {
-                            colDesc.kind = Kind.PARTITION_KEY;
-                        } else {
-                            colDesc.kind = Kind.CLUSTERING;
-                            colDesc.desc = fieldMapper.cqlClusteringKeyDesc();
-                        }
-                    }
-                    if (objectMapper.cqlStaticColumn())
-                        colDesc.kind = Kind.STATIC;
-                    columnsList.add(colDesc);
-                }
-            }
-            logger.debug("columnsList={}", columnsList);
-
-            // add _parent column if necessary. Parent and child documents should have the same partition key.
-            if (docMapper.parentFieldMapper().active() && docMapper.parentFieldMapper().pkColumns() == null)
-                columnsList.add(new ColumnDescriptor("_parent", CQL3Type.Raw.from(CQL3Type.Native.TEXT)));
-
-            // table extension contains IndexMetaData for a simple type associated to the table, but the provided IndexMetaData may contains multiple types.
-            IndexMetaData.Builder singleTypeIndexMetaDataBuilder = new IndexMetaData.Builder(indexMetaData);
-            singleTypeIndexMetaDataBuilder.removeAllMapping();
-            singleTypeIndexMetaDataBuilder.putMapping(mappingMd);
 
             if (newTable) {
                 boolean hasPartitionKey = false;
-                for(ColumnDescriptor cd : columnsList) {
+                for(ColumnDescriptor cd : columnsMap.values()) {
                     if (cd.kind == Kind.PARTITION_KEY) {
                         hasPartitionKey = true;
                         break;
                     }
                 }
                 if (!hasPartitionKey)
-                    columnsList.add(new ColumnDescriptor(ELASTIC_ID_COLUMN_NAME, CQL3Type.Raw.from(CQL3Type.Native.TEXT), Kind.PARTITION_KEY, 0));
-                Collections.sort(columnsList); // sort primary key columns
-                ksm = createTable(ksm, cfName, mapperService.index().getName(), columnsList, mapperService.tableOptions(), singleTypeIndexMetaDataBuilder.build(), mutations, events);
+                    columnsMap.putIfAbsent(ELASTIC_ID_COLUMN_NAME, new ColumnDescriptor(ELASTIC_ID_COLUMN_NAME, CQL3Type.Raw.from(CQL3Type.Native.TEXT), Kind.PARTITION_KEY, 0));
+                ksm = createTable(ksm, cfName, columnsMap, mapperService.tableOptions(), indiceMap.values().stream().map(p->p.left).collect(Collectors.toList()), mutations, events);
             } else {
                 // check column properties matches existing ones, or add it to columnsDefinitions
-                for(ColumnDescriptor cd : columnsList)
+                for(ColumnDescriptor cd : columnsMap.values())
                     cd.validate(ksm, cfm);
                 TableAttributes tableAttrs = new TableAttributes();
-                ksm = updateTable(ksm, cfName, mapperService.index().getName(), columnsList, tableAttrs, singleTypeIndexMetaDataBuilder.build(), mutations, events);
+                ksm = updateTable(ksm, cfName, columnsMap, tableAttrs, indiceMap.values().stream().map(p->p.left).collect(Collectors.toList()), mutations, events);
             }
 
-            ksm = createSecondaryIndexIfNotExists(ksm, mappingMd,
-                    mapperService.getIndexSettings().getSettings().get(ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS,
-                            clusterService.state().metaData().settings().get(ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS,
-                                    ClusterService.defaultSecondaryIndexClass.getName())),
-                    mutations, events);
+            
+            String secondaryIndexClazz = mapperService.getIndexSettings().getSettings().get(ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS,
+                    clusterService.state().metaData().settings().get(ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS,
+                            ClusterService.defaultSecondaryIndexClass.getName()));
+            ksm = createSecondaryIndexIfNotExists(ksm, cfName, secondaryIndexClazz, mutations, events);
             return ksm;
         } catch (AssertionError | RequestValidationException e) {
             logger.error("Failed to execute table="+ksName+"."+cfName+" query=" + query + " mapping="+mappingMap , e);
@@ -817,13 +831,12 @@ public class SchemaManager extends AbstractComponent {
         return keywordsPattern.matcher(identifier.toUpperCase(Locale.ROOT)).matches();
     }
 
-    public KeyspaceMetadata createSecondaryIndexIfNotExists(final KeyspaceMetadata ksm,
-            final MappingMetaData mapping,
+    private KeyspaceMetadata createSecondaryIndexIfNotExists(final KeyspaceMetadata ksm,
+            final String tableName,
             final String className,
             final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) {
     	KeyspaceMetadata ksm2 = ksm;
-        String tableName = SchemaManager.typeToCfName(ksm.name, mapping.type());
         CFMetaData cfm0 = ksm.getTableOrViewNullable(tableName);
         assert cfm0 != null : "Table "+tableName+" not found in keyspace metadata";
 

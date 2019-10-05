@@ -25,6 +25,7 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 
 import org.apache.cassandra.config.CFMetaData;
@@ -797,9 +798,25 @@ public class ClusterService extends BaseClusterService {
                 Collection<Mutation> mutations = new ArrayList<>();
                 Collection<SchemaChange> events = new ArrayList<>();
                 writeMetadataToSchemaMutations(metadata, mutations, events);
+                
+                Multimap<CFMetaData, IndexMetaData> perTableIndices = ArrayListMultimap.create();
                 for(ObjectCursor<IndexMetaData> imd : metadata.indices().values()) {
-                    this.getSchemaManager().updateTableExtensions(SchemaManager.getKSMetaData(imd.value.keyspace()), imd.value, mutations, events);
+                    for(ObjectCursor<MappingMetaData> mmd : imd.value.getMappings().values()) {
+                        KeyspaceMetadata ksm = SchemaManager.getKSMetaDataCopy(imd.value.keyspace());
+                        String cfName = SchemaManager.typeToCfName(imd.value.keyspace(), mmd.value.type());
+                        final CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
+                        assert cfm != null : "Table "+imd.value.keyspace()+"."+cfName+" not found";
+                        perTableIndices.put(cfm,  imd.value);
+                    }
                 }
+                for(CFMetaData cfm : perTableIndices.keySet()) {
+                    KeyspaceMetadata ksm = SchemaManager.getKSMetaData(cfm.ksName);
+                    CFMetaData cfm2 = this.getSchemaManager().updateTableExtensions(ksm, cfm, perTableIndices.get(cfm));
+                    Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
+                    SchemaKeyspace.addTableToSchemaMutation(cfm2, false, builder);
+                    mutations.add(builder.build());
+                }
+                
                 //do not announce schema migration because gossip not yet ready.
                 SchemaKeyspace.mergeSchema(mutations, getSchemaManager().getInhibitedSchemaListeners());
                 logger.warn("Elasticsearch metadata upgraded, source={}", source);

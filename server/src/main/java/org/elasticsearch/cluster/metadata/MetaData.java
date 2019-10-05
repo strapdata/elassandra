@@ -906,6 +906,10 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             return indices.get(index);
         }
 
+        public ObjectContainer<IndexMetaData> indices() {
+            return indices.values();
+        }
+        
         public IndexMetaData getSafe(Index index) {
             IndexMetaData indexMetaData = get(index.getName());
             if (indexMetaData != null) {
