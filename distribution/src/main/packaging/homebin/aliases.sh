@@ -110,10 +110,10 @@ function refresh() {
 # Cassandra aliases
 alias cstart='cassandra'
 alias cdebug='cassandra -d'
-alias cstop='nodetool -p $NODETOOL_JMX_PORT -h $NODE stopdaemon'
+alias cstop='nodetool $NODETOOL_OPTS -p $NODETOOL_JMX_PORT -h $NODE stopdaemon'
 alias clog='less $CASSANDRA_LOGS/system.log'
 alias cqlsh='cqlsh $CQLSH_OPTS $NODE'
-alias nodetool='nodetool -p $NODETOOL_JMX_PORT'
+alias nodetool='nodetool $NODETOOL_OPTS -p $NODETOOL_JMX_PORT'
 
 # Start Elassandra
 alias elstart='cassandra -e'
