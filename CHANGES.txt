@@ -1,3 +1,7 @@
+6.2.3.19 - 2018-10-10
+  * Fix possible mapping loss when having multiple indices on the same table
+  * Add support for aggregation on opaque_map keys
+
 6.2.3.19 - 2018-09-29
   * Update the cassandra.yaml to follow the default cassandra one.
   * Update documentation
