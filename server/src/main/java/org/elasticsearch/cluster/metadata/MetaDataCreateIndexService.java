@@ -591,7 +591,7 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                                 .settings(virtualSettingsBuilder)
                                 .build();
                         
-                        IndexService virtualIndexService = null;
+                        final IndexService virtualIndexService;
                         if (indicesService.hasIndex(virtualIndexMetaData.getIndex())) {
                             virtualIndexService = indicesService.indexServiceSafe(virtualIndexMetaData.getIndex());
                         } else {
@@ -629,7 +629,15 @@ public class MetaDataCreateIndexService extends AbstractComponent {
                         }
                         // update virtual index mappings.
                         try {
-                            final IndexService virtualIndexService = indicesService.indexService(virtualIndexMetaData.getIndex());
+                            final IndexService virtualIndexService;
+                            if (indicesService.hasIndex(virtualIndexMetaData.getIndex())) {
+                                virtualIndexService = indicesService.indexServiceSafe(virtualIndexMetaData.getIndex());
+                            } else {
+                                virtualIndexService = indicesService.createIndex(virtualIndexMetaData, Collections.emptyList());
+                                createdVirtualIndex = virtualIndexService.index();
+                                virtualIndexService.getIndexEventListener().beforeIndexAddedToCluster(virtualIndexMetaData.getIndex(),
+                                        virtualIndexMetaData.getSettings());
+                            }
                             final MapperService virtualMapperService = virtualIndexService.mapperService();
                             virtualMapperService.merge(mappings, MergeReason.MAPPING_UPDATE, request.updateAllTypes());
                             logger.debug("Found virtual index=[{}] merged with mappings={}", virtualIndexMetaData.getIndex(), mappings);
