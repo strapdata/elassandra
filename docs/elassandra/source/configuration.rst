@@ -87,6 +87,11 @@ When a mapping change occurs, Elassandra updates the Elasticsearch metadata in `
 This transaction requires QUORUM available nodes that are more than half the nodes of one or more datacenters regarding your ``datacenter.group`` configuration.
 It also involves cross-datacenter network latency for each mapping update.
 
+.. CAUTION::
+
+	Elassandra cannot start Elasticsearch shards when the underlying keyspace is not replicated on the datacenter the node belongs to.
+	In such case, the Elasticsearch shards remain UNASSIGNED and indices are red. You can fix that by manually altering the keyspace replication map,
+	or use the Elassandra ``index.replication`` setting to properly configure it when creating the index.
 
 .. TIP::
 
