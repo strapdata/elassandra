@@ -45,6 +45,7 @@ import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestTimeoutException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.UnavailableException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
@@ -1117,6 +1118,7 @@ public class ClusterService extends BaseClusterService {
         }
         return -1L;
     }
+    
     public static String getElasticsearchClusterName(Settings settings) {
         String clusterName = DatabaseDescriptor.getClusterName();
         String datacenterGroup = settings.get(ClusterService.SETTING_CLUSTER_DATACENTER_GROUP);
@@ -1152,33 +1154,6 @@ public class ClusterService extends BaseClusterService {
             throw e;
         }
         return null;
-    }
-
-
-    // Modify keyspace replication
-    public void alterKeyspaceReplicationFactor(String keyspaceName, int rf) {
-        ReplicationParams replication = Schema.instance.getKSMetaData(keyspaceName).params.replication;
-
-        if (!NetworkTopologyStrategy.class.getName().equals(replication.klass))
-            throw new ConfigurationException("Keyspace ["+keyspaceName+"] should use "+NetworkTopologyStrategy.class.getName()+" replication strategy");
-
-        Map<String, String> repMap = replication.asMap();
-
-        if (!repMap.containsKey(DatabaseDescriptor.getLocalDataCenter()) || !Integer.toString(rf).equals(repMap.get(DatabaseDescriptor.getLocalDataCenter()))) {
-            repMap.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(rf));
-            logger.debug("Updating keyspace={} replication={}", keyspaceName, repMap);
-            try {
-                String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s",
-                        keyspaceName, FBUtilities.json(repMap).replaceAll("\"", "'"));
-                logger.info(query);
-                process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
-            } catch (Throwable e) {
-                logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to alter keyspace [{}]",keyspaceName), e);
-                throw e;
-            }
-        } else {
-            logger.info("Keep unchanged keyspace={} datacenter={} RF={}", keyspaceName, DatabaseDescriptor.getLocalDataCenter(), rf);
-        }
     }
 
     // Create The meta Data Table if needed
@@ -1338,21 +1313,31 @@ public class ClusterService extends BaseClusterService {
     }
     
     /**
-     * Read owner for a given version, with CL=QUORUM and Serial CL=SERIAL to commit any remaining uncommitted Paxos state before proceeding with the read.
+     * Read owner for a given version, with CL=SERIAL to commit any remaining uncommitted Paxos state before proceeding with the read.
+     * Retry many times if a timeout occurs, because we have no other choice to recover from a PAXOS write timeout.
      */
     public UUID readMetaDataOwner(long version) {
-        UntypedResultSet rs = process(
-                this.metadataReadCL,
-                this.metadataSerialCL,
-                ClientState.forInternalCalls(),
-                selectOwnerMetadataQuery,
-                new Long(0),
-                new Object[] { 
-                        DatabaseDescriptor.getClusterName(),
-                        version
-                });
-        Row row = rs.one();
-        return (row == null) ? null : row.getUUID("owner");
+        int attempts = Integer.getInteger("elassandra.metadata.read.attempts", 10);
+        for(int i = 0; i < 10; i++) {
+            try {
+                UntypedResultSet rs = process(
+                        this.metadataSerialCL,
+                        null,
+                        ClientState.forInternalCalls(),
+                        selectOwnerMetadataQuery,
+                        new Long(0),
+                        new Object[] { 
+                                DatabaseDescriptor.getClusterName(),
+                                version
+                        });
+                if (rs.size() > 0)
+                    return rs.one().getUUID("owner");
+            } catch(RequestTimeoutException e) {
+                logger.warn("SERIAL read failed:"+e.getMessage());
+            }
+        }
+        logger.error("Failed to read metadata owner for version={} after {} attempts", attempts);
+        return null;
     }
 
     /**
