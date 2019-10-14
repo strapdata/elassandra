@@ -556,6 +556,31 @@ Tooling
 _______
 
 
+JMXMP support
+-------------
+
+Apache Cassandra rely on JMX over RMI to expose metrics and administration endpoints (used by nodetool). 
+Unfortunately, the RMI approach makes management through a tunnel or a firewall hard or impossible.
+A simpler approach is to use the JMXMP protocol instead of RMI, java objects are just serialized over a TCP connection.
+
+Elassandra provides JMXMP support when setting the system property ``cassandra.jmxmp``:
+
+* Add -Dcassandra.jmxmp in **conf/jvm.options**
+* Run the **nodetool** utility with the option ``--jmxmp`` (it adds the system property)
+
+JMXMP TLS/SSL encryption and SASL plain text login/password authentication is also supported with the same settings as JMX over RMI. 
+
+In order to use VisualVM (or any other JMX client) :
+
+* Add the `jmxremote_optional-repackaged-5.0.jar <https://mvnrepository.com/artifact/org.glassfish.main.external/jmxremote_optional-repackaged/5.0>`_ in the classpath.
+* Use the JMX URL ``service:jmx:jmxmp://<myhost>:7199/``
+
+Here is a screenshot of visualVM using JMXMP.
+
+.. image:: images/jmxmp-visualvm.png
+
+Unfortunately, the visualVM does not currently support SASL plain text client authentication.
+
 Smile decoder
 -------------
 
