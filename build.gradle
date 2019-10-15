@@ -99,14 +99,14 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
             Node node = xml.asNode()
             node.appendNode('inceptionYear', '2015')
 
-            Node license = node.appendNode('licenses').appendNode('license')
+		    Node license = node.appendNode('licenses').appendNode('license')
             license.appendNode('name', 'The Apache Software License, Version 2.0')
             license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
             license.appendNode('distribution', 'repo')
 
-            Node developer = node.appendNode('developers').appendNode('developer')
+			Node developer = node.appendNode('developers').appendNode('developer')
             developer.appendNode('name', 'Strapdata')
-            developer.appendNode('url', 'http://www.strapdata.com')
+            developer.appendNode('url', 'https://www.strapdata.com')
           }
         }
         
@@ -115,7 +115,6 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
              from components.java
              artifacts {
                  archives sourcesJar
-                 // disabling javadoc publication because javadoc fails to build with elassandra
                  archives javadocJar
              }
           }
@@ -151,7 +150,7 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
                     Node node = xml.asNode()
                     node.appendNode('name',it.name)
                     node.appendNode('description',"Elasticsearch subproject ${project.path}")
-                    node.appendNode('url', 'http://github.com/strapdata/elassandra')
+                    node.appendNode('url', 'https://github.com/strapdata/elassandra')
                     node.appendNode('inceptionYear', '2015')
         
                     Node license = node.appendNode('licenses').appendNode('license')
@@ -160,14 +159,14 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
                     license.appendNode('distribution', 'repo')
                     
                     def scm = node.appendNode('scm')
-                    scm.appendNode('url', 'http://github.com/strapdata/elassandra')
+                    scm.appendNode('url', 'https://github.com/strapdata/elassandra')
                     scm.appendNode('connection', 'scm:git:git@github.com:strapdata/elassandra.git')
                     scm.appendNode('developerConnection', 'scm:git:git@github.com:strapdata/elassandra.git')
                     
                     Node developer = node.appendNode('developers').appendNode('developer')
                     developer.appendNode('name', 'Strapdata')
                     developer.appendNode('url', 'https://github.com/strapdata/elassandra')
-                    developer.appendNode('organizationUrl', 'http://www.strapdata.com/')
+                    developer.appendNode('organizationUrl', 'https://www.strapdata.com/')
                 }
             }
         }
@@ -212,7 +211,6 @@ allprojects {
     versionCollection = versions
 
     buildMetadata = buildMetadataMap
-
   }
 }
 
