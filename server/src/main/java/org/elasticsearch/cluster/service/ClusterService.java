@@ -1225,7 +1225,7 @@ public class ClusterService extends BaseClusterService {
                 logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to initialize table {}.{}", elasticAdminKeyspaceName, ELASTIC_ADMIN_METADATA_TABLE),e);
             }
         } else {
-            // adjust keyspace RF to the number of nodes
+            // check keyspace RF to the number of nodes
             Map<String,String> replication = result.one().getFrozenTextMap("replication");
             logger.debug("keyspace={} replication={}", elasticAdminKeyspaceName, replication);
 
@@ -1233,22 +1233,13 @@ public class ClusterService extends BaseClusterService {
                     throw new ConfigurationException("Keyspace ["+this.elasticAdminKeyspaceName+"] should use "+NetworkTopologyStrategy.class.getName()+" replication strategy");
 
             int currentRF = -1;
-            if (replication.get(DatabaseDescriptor.getLocalDataCenter()) != null) {
+            if (replication.get(DatabaseDescriptor.getLocalDataCenter()) != null && replication.containsKey(DatabaseDescriptor.getLocalDataCenter())) {
                 currentRF = Integer.valueOf(replication.get(DatabaseDescriptor.getLocalDataCenter()).toString());
             }
-            int targetRF = getLocalDataCenterSize();
-            if (targetRF != currentRF) {
-                replication.put(DatabaseDescriptor.getLocalDataCenter(), Integer.toString(targetRF));
-                try {
-                    String query = String.format(Locale.ROOT, "ALTER KEYSPACE \"%s\" WITH replication = %s",
-                            elasticAdminKeyspaceName, FBUtilities.json(replication).replaceAll("\"", "'"));
-                    logger.info(query);
-                    process(ConsistencyLevel.LOCAL_ONE, ClientState.forInternalCalls(), query);
-                } catch (Throwable e) {
-                    logger.error((Supplier<?>) () -> new ParameterizedMessage("Failed to alter keyspace [{}]", elasticAdminKeyspaceName), e);
-                }
-            } else {
-                logger.info("Keep unchanged keyspace={} datacenter={} RF={}", elasticAdminKeyspaceName, DatabaseDescriptor.getLocalDataCenter(), targetRF);
+            if (currentRF < 3) {
+                logger.warn("Keyspace [{}] replication factor {}={}, you should increase this replication factor " + 
+                            "to avoid possible issue if quorum cannot be reach to update the elasticsearch mapping.", 
+                            this.elasticAdminKeyspaceName, DatabaseDescriptor.getLocalDataCenter(), currentRF);
             }
         }
 
