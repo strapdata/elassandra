@@ -8,7 +8,10 @@ env:
     - GAE_PYTHONPATH=${HOME}/.cache/google_appengine PATH=$PATH:${HOME}/google-cloud-sdk/bin PYTHONPATH=${PYTHONPATH}:${GAE_PYTHONPATH} CLOUDSDK_CORE_DISABLE_PROMPTS=1
     # jdk used to build some cassandra artifacts
     - CASSANDRA_JAVA_HOME=/usr/lib/jvm/java-8-oracle
-
+    - secure: "DtiNCwqKF39c9Ivv2O+7U0RK0u3qKvK1YhiYUtBkEm/1qFLvNTZNNcFA6ek6nO4Q5zpfvZvFEsM9NW3p14b+GYbZzLoUFxSZy24gZGJUt1LMiSlaRNE/7phPX+WdjN8IF6OXqdfAol31VRKUvwbvv8IxRVckUoBcgp304BASDoOUrQZxnd3MfpfWqbXeOvYYYa/xkq8kZHIy9hi+2TQbm/2/P3xc/rk7yQzewzpWZOQaoIexyYyPzLzNYVpRT5QSvEZn1hFKH6Hg8BvTVBrDKLj+KTrEHSge1ICW6rET5ZTcIimHCofRL+0/DUGx0RH5tYR0LM7NXrFXGDDMC73A6KKWmlaC3hPuWD9uLLAwLC3DgZQnJo8vAxpedC6uChlgHa5I5+Ff786y3BOR/4SYwG36VAX/C0BM/IHHjz+l/IweTbY8UIxz29/99Ejj70UCSOhwnpC6tPkWfLdZ997zXu/+rx8LJBvMRX/8tiWi4L/VgE0hOEYglygRadEVwLCLIjFBmzBAfgt6PFga4th4BpEykUiuo+G5HShu3q/TyfwJqjmFGhQOWvFHwtQ0UkL3T2E4UQY16IDUx0bI6BJoua/RG09Ey5XDWq09OHiy5SB86149+w69fIIFkt7u1D6eCvMSboKLGX/fKJ7NgjS2Tb5nO4ZcRoI1SEto2Zz6QjY="
+    - secure: "DO9g8SMiE612a7iw8EjyQtcOaI/GtxNtz3dLqB7MLi2KSkM7gEBHdar1zQdlXOkDSsB4G9mbk+oc/0mTnAHxsLeJ4yzWU+oDmykgKKTVchjj1gTY6xM5V+tzc1OKT+AljtbAEzw2rvTQ1R3b2r3a3n2CaV3YMCJr7BMcFWqNDDMrS4ERgmDzm6F0ZoEYLN8wdkHbHerTym6QhhbcG9pD/Hc7yaMCn534YvZhjxezw+pn+AMd8zDNPmK2bc1xiUeaIxQEdsfczL1Ey3RDxMvo0t0WMT18s8X/DF96+KVtwfNfzHkIs/emLMzjiijeVxnTCJZJcdhUIZE09lXFmsXawkkA17DFqmEdY7rmzLPSZSxVz91uB1fMOIG1TKaZc03aS5pw7rw8d1f7JBqeeZ+JjeoDIJjcE0HAVpGAoa01a+bPeVoVUSUyLckwDY2jkuV7pgiODKsSQSP0QWfJaXwO7CHayfey6RdPMdGFDjwuUccepV1gmfeLCpupPMnJeJJb8J/NbEh/CZRedAYlXjS2+2Z6vE9HC8SoBey6WLbB9fpSXQTsqAyckg2VHBdDKFxQ/OKAElpknfyzquSvYas1F6c+4ARgoid8VDgQ9cB65A5WXZktqnb5YBZ5VEsStUp5hCGuTfAVHR7GIFM8DwE/ttRLZ8pQCbdTJcwigJAq1Vg="
+    - secure: "h+CDBcUUldtgdNR3KGhEzRKXPrgoKOEGnW1ARl+Il0qk8k0+zEOU04+U12629j0CQE8LIBL2YRmdYgchEnG1pKlQ+90gJg0hDL7V/2khBtq75BLl7csfNd/+/XK+ISqz/K7+U+kaZ2fD8AD7a59IGgWL4U8tcuDsnRyL8uniwMENdEAL7n1dQztkF1uILcKpBa4THwPkVq26SIsaBDmF0dNH1z4aqk8ru/NPF7MPL3PMby1ax07tcp8ad0MQ5Qbqw8g+8ZevTu+h5UQopMSM2SDNPrxIlilt+n5EGZlJroti68i88s6WFsysYbmeMV/mKyoG7/wOgGQLwR/WTAJTUN0FFFLXSO7IgmgPLXU3KB23oqFGlbgDSldMws5U/F+qCe8GPlHe98kikp8mwxYp481oBHfCFDhq43FVDx7Blxgkn2d3NB/ZnOrVOd9aiUJqNyAgBw9utxwquZwM8Q3tdYyj2IuLG1bR9Dx63Sbhnt1bTD0DgERaALi80VRQYBqyY2dHq/na0bG4L6b032KCRuVsrVly/B30Il+hrj/hYjblRLQPKlSYVgg15vlCTXkXFUpWrAOrnqXnw0yBQ9kfpUhl9HPU0s15K/OChm/EOHA9OXrBhdRpZOaEuloFyhGrN5ndiZEkNbDMAf6R7DV4njNq75r3/2EtZ4JajX+m3fY="
+    
 language: 
   - java
   - bash
@@ -81,7 +84,25 @@ deploy:
     on:
       tags: true
       repo: strapdata/elassandra-rc
-
+  # publish artifact in strapdata nexus
+  - provider: script
+    skip_cleanup: true
+    script: 
+       - ./gradlew publish -Dstrapdata.mavenMirror=true -Dbuild.snapshot=false -PstrapdataNexusUsername="${NEXUS_USERNAME}" -PstrapdataNexusPassword="${NEXUS_PASSWORD}" -PstrapdataNexusUrl="$NEXUS_URL/maven-releases-public/"
+    on:
+      tags: true
+      repo: strapdata/elassandra
+      
+  # publish RMP+DEB in strapdata repo
+  - provider: script
+    skip_cleanup: true
+    script: 
+       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})"
+       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
+    on:
+      tags: true
+      repo: strapdata/elassandra
+      
   # build, test and push docker images
   - provider: script
     skip_cleanup: true
