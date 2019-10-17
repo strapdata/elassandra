@@ -59,11 +59,7 @@ subprojects {
 ext.enableArtifactSigning = !version.endsWith("SNAPSHOT") && project.hasProperty("repoUsername")
 ext.repoUsername = { project.hasProperty("repoUsername") ? getProperty("repoUsername") : "" }
 ext.repoPassword = { project.hasProperty("repoPassword") ? getProperty("repoPassword") : "" }
-
-// added by strapdata to publish artifact on an internal nexus
-if (!project.hasProperty("strapdataNexusUrl")) { ext.strapdataNexusUrl = "" }
-if (!project.hasProperty("strapdataNexusUsername")) { ext.strapdataNexusUsername = "" }
-if (!project.hasProperty("strapdataNexusPassword")) { ext.strapdataNexusPassword = "" }
+// repoUrl can override the publication repo URL.
 
 Path rootPath = rootDir.toPath()
 // setup pom license info, but only for artifacts that are part of elasticsearch
@@ -74,9 +70,6 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
  
    repositories {
      mavenLocal()
-     maven {
-         url "https://oss.sonatype.org/content/repositories/snapshots/"
-     }
    }
 
   // we only use maven publish to add tasks for pom generation
@@ -84,13 +77,18 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
     publishing {
       repositories {
         maven {
-          name "deploy"
-          url strapdataNexusUrl
-          credentials {
-            username = strapdataNexusUsername
-            password = strapdataNexusPassword
-          }
-        }
+		   credentials {
+			 username = repoUsername
+			 password = repoPassword
+		   }
+		   if (project.hasProperty("repoUrl")) {
+			 url project.getProperty("repoUrl")
+		   } else if(project.version.endsWith('-SNAPSHOT')) {
+			 url "https://oss.sonatype.org/content/repositories/snapshots/"
+		   } else {
+			 url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+		  }
+   		}
       }
       publications {
         // add license information to generated poms
@@ -137,15 +135,20 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
                 // POM signature
                 beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
                 
-                // Target repository
-                repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
-                    authentication(userName: repoUsername, password: repoPassword)
-                }
-
-                // SNAPSHOT repository
-                snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
-                    authentication(userName: repoUsername, password: repoPassword)
-                }
+				if (project.hasProperty("repoUrl")) {
+					repository(url: project.getProperty("repoUrl")) {
+						authentication(userName: repoUsername, password: repoPassword)
+					}
+				} else if(project.version.endsWith('-SNAPSHOT')) {
+					snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
+						authentication(userName: repoUsername, password: repoPassword)
+					}
+				} else {
+					repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+						authentication(userName: repoUsername, password: repoPassword)
+					}
+				}
+	
                 pom.withXml { XmlProvider xml ->
                     Node node = xml.asNode()
                     node.appendNode('name',it.name)

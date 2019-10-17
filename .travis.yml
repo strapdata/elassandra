@@ -84,11 +84,21 @@ deploy:
     on:
       tags: true
       repo: strapdata/elassandra-rc
-  # publish artifact in strapdata nexus
+  
+  # publish snapshot artifact in strapdata nexus
   - provider: script
     skip_cleanup: true
     script: 
-       - ./gradlew publish -Dstrapdata.mavenMirror=true -Dbuild.snapshot=false -PstrapdataNexusUsername="${NEXUS_USERNAME}" -PstrapdataNexusPassword="${NEXUS_PASSWORD}" -PstrapdataNexusUrl="$NEXUS_URL/maven-releases-public/"
+       - ./gradlew publish -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
+    on:
+      tags: false
+      repo: strapdata/elassandra
+
+  # publish release artifact in strapdata nexus
+  - provider: script
+    skip_cleanup: true
+    script: 
+       - ./gradlew publish -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
     on:
       tags: true
       repo: strapdata/elassandra

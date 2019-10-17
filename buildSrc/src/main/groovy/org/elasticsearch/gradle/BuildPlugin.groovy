@@ -350,14 +350,12 @@ class BuildPlugin implements Plugin<Project> {
             repos.maven {
                 url System.getenv("NEXUS_URL")
                 credentials {
-                    username System.getenv("NEXUS_USER")
+                    username System.getenv("NEXUS_USERNAME")
                     password System.getenv("NEXUS_PASSWORD")
                 }
             }
         }
-        else {
-            repos.mavenCentral()
-        }
+        repos.mavenCentral()
 
         String luceneVersion = VersionProperties.lucene
         if (luceneVersion.contains('-snapshot')) {
