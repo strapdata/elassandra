@@ -84,11 +84,14 @@ under_travis() {
     #  gcloud_auth || return 1
     #  DOCKER_REGISTRY=gcr.io/ REPO_NAME=${GCLOUD_REPO_NAME:-strapdata-factory/elassandra} BASE_IMAGE=launcher.gcr.io/google/debian9:latest build_with_retry
 
+    ######
+    # This step isn't used anymore because launcher.gcr.io/google/debian9 is the default base_image now
+    ######
     # If tag = v6.2.3.x, construct the intermediate image for gke
-    if [[ ${TRAVIS_TAG} == v6.2.3.+([0-9]) ]]; then
-      # build a docker image based on google debian 9, used later as a base image in the elassandra gke marketplace
-      REPO_NAME=${REPO_NAME}-debian-gcr BASE_IMAGE=launcher.gcr.io/google/debian9:latest build_with_retry
-    fi
+    #if [[ ${TRAVIS_TAG} == v6.2.3.+([0-9]) ]]; then
+    #  # build a docker image based on google debian 9, used later as a base image in the elassandra gke marketplace
+    #  REPO_NAME=${REPO_NAME}-debian-gcr BASE_IMAGE=launcher.gcr.io/google/debian9:latest build_with_retry
+    #fi
   fi
 }
 
