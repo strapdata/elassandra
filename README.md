@@ -46,6 +46,13 @@ For Elasticsearch users, elassandra provides useful features :
   
 ## Upgrade Instructions
 
+#### Elassandra 6.2.3.21+
+
+Before version 6.2.3.21, the Cassandra replication factor for the **elasic_admin** keyspace (and elastic_admin_[datacenter.group]) was automatically adjusted to the 
+number of nodes of the datacenter. Since version 6.2.3.21 and because it has a performance impact on large clusters, it's now up to your Elassandra administrator to 
+properly adjust the replication factor for this keyspace. Keep in mind that Elasticsearch mapping updates rely on a PAXOS transaction that requires QUORUM nodes to succeed, 
+so replication factor should be at least 3 on each datacenter.
+
 #### Elassandra 6.2.3.19+
 
 Elassandra 6.2.3.19 metadata version now relies on the Cassandra table **elastic_admin.metadata_log** (that was **elastic_admin.metadata** from 6.2.3.8 to 6.2.3.18) 
