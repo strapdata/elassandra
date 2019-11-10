@@ -198,16 +198,6 @@ project.rootProject.subprojects.findAll { it.parent.path == ':modules' }.each { 
   restTestExpansions['expected.modules.count'] += 1
 }
 
-// use licenses from each of the bundled xpack plugins
-Project xpack = project(':x-pack:plugin')
-xpack.subprojects.findAll { it.parent == xpack }.each { Project xpackModule ->
-  File licenses = new File(xpackModule.projectDir, 'licenses')
-  if (licenses.exists()) {
-    buildDefaultNotice.licensesDir licenses 
-  }
-  copyModule(processDefaultOutputs, xpackModule)
-  copyLog4jProperties(buildDefaultLog4jConfig, xpackModule)
-}
 
 // make sure we have a clean task since we aren't a java project, but we have tasks that
 // put stuff in the build dir
