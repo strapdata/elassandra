@@ -150,7 +150,7 @@ public class ToAndFromJsonMetaDataTests extends ESTestCase {
         MetaData parsedMetaData = MetaData.Builder.fromXContent(createParser(JsonXContent.jsonXContent, metaDataSource));
 
         IndexMetaData indexMetaData = parsedMetaData.index("test1");
-        assertThat(indexMetaData.primaryTerm(0), equalTo(1L));
+        //assertThat(indexMetaData.primaryTerm(0), equalTo(1L));
         assertThat(indexMetaData.getNumberOfShards(), equalTo(1));
         assertThat(indexMetaData.getNumberOfReplicas(), equalTo(2));
         assertThat(indexMetaData.getCreationDate(), equalTo(-1L));
@@ -160,8 +160,8 @@ public class ToAndFromJsonMetaDataTests extends ESTestCase {
         indexMetaData = parsedMetaData.index("test2");
         assertThat(indexMetaData.getNumberOfShards(), equalTo(2));
         assertThat(indexMetaData.getNumberOfReplicas(), equalTo(3));
-        assertThat(indexMetaData.primaryTerm(0), equalTo(2L));
-        assertThat(indexMetaData.primaryTerm(1), equalTo(2L));
+        //assertThat(indexMetaData.primaryTerm(0), equalTo(2L));
+        //assertThat(indexMetaData.primaryTerm(1), equalTo(2L));
         assertThat(indexMetaData.getCreationDate(), equalTo(-1L));
         assertThat(indexMetaData.getSettings().size(), equalTo(5));
         assertThat(indexMetaData.getSettings().get("setting1"), equalTo("value1"));
