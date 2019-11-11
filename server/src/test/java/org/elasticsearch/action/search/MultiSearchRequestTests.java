@@ -251,7 +251,7 @@ public class MultiSearchRequestTests extends ESTestCase {
                 parsedRequest.add(r);
             };
             MultiSearchRequest.readMultiLineFormat(new BytesArray(originalBytes), xContentType.xContent(),
-                    consumer, null, null, null, null, null, xContentRegistry(), true);
+                    consumer, null, null, null, null, null, null, xContentRegistry(), true);
             assertEquals(originalRequest, parsedRequest);
         }
     }

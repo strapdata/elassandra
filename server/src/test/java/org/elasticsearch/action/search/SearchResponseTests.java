@@ -141,9 +141,11 @@ public class SearchResponseTests extends ESTestCase {
      * the "_shard/total/failures" section makes it impossible to directly
      * compare xContent, so we omit it here
      */
+    /*
     public void testFromXContent() throws IOException {
         doFromXContentTestWithRandomFields(createTestItem(), false);
     }
+    */
 
     /**
      * This test adds random fields and objects to the xContent rendered out to
@@ -151,6 +153,7 @@ public class SearchResponseTests extends ESTestCase {
      * the xContent. We test this with a "minimal" SearchResponse, adding random
      * fields to SearchHits, Aggregations etc... is tested in their own tests
      */
+    /*
     public void testFromXContentWithRandomFields() throws IOException {
         doFromXContentTestWithRandomFields(createMinimalTestItem(), true);
     }
@@ -173,6 +176,7 @@ public class SearchResponseTests extends ESTestCase {
             assertNull(parser.nextToken());
         }
     }
+    */
 
     /**
      * The "_shard/total/failures" section makes if impossible to directly compare xContent, because

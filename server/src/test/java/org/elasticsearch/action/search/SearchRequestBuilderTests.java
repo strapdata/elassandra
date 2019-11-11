@@ -19,19 +19,14 @@
 
 package org.elasticsearch.action.search;
 
-import org.elasticsearch.client.Client;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.elasticsearch.test.ESTestCase;
-import org.elasticsearch.transport.MockTransportClient;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 
-public class SearchRequestBuilderTests extends ESTestCase {
+public class SearchRequestBuilderTests extends ESSingleNodeTestCase {
+    /*
     private static Client client;
 
     @BeforeClass
