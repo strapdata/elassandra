@@ -1,0 +1,31 @@
+/* override table width restrictions */
+@media screen and (min-width: 767px) {
+
+   .wy-table-responsive table td {
+      /* !important prevents the common CSS stylesheets from overriding
+         this as on RTD they are loaded after this stylesheet */
+      white-space: normal !important;
+   }
+
+   .wy-table-responsive {
+      overflow: visible !important;
+   }
+   
+   .wy-nav-content {
+      max-width: 1200px !important;
+   }
+}
+
+/* workaround for parsed-literal, see https://github.com/sphinx-doc/sphinx/issues/3306 */
+.codeblock, pre.literal-block, .rst-content .literal-block, .rst-content pre.literal-block, div[class^='highlight'] {
+font-size: 12px;
+line-height: 1.5;
+display: block;
+overflow: auto;
+color: #404040;
+padding: 12px 12px;
+}
+
+.codeblock,div[class^='highlight'] {
+padding: 0;
+}
