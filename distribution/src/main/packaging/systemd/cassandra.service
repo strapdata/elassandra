@@ -1,0 +1,54 @@
+[Unit]
+Description=elassandra
+Documentation=http://www.elassandra.io/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=forking
+
+Environment=CASSANDRA_LOGDIR=/var/log/cassandra
+EnvironmentFile=-${path.env}
+
+WorkingDirectory=/usr/share/cassandra
+
+User=cassandra
+Group=cassandra
+
+PIDFile=/var/run/cassandra/cassandra.pid
+ExecStart=/usr/bin/cassandra -p /var/run/cassandra/cassandra.pid
+
+# StandardOutput is configured to redirect to journalctl since
+# some error messages may be logged in standard output before
+# cassandra logging system is initialized. cassandra
+# stores its logs in /var/log/cassandra and does not use
+# journalctl by default. If you also want to enable journalctl
+# logging, you can simply remove the "quiet" option from ExecStart.
+StandardOutput=journal
+StandardError=inherit
+
+# Elassandra production settings:
+LimitNOFILE=100000
+LimitNPROC=32768
+LimitMEMLOCK=infinity
+LimitAS=infinity
+
+# Disable timeout logic and wait until process is stopped
+TimeoutStopSec=0
+
+# SIGTERM signal is used to stop the Java process
+KillSignal=SIGTERM
+
+# Send the signal only to the JVM rather than its control group
+KillMode=process
+
+# Java process is never killed
+SendSIGKILL=no
+
+# When a JVM receives a SIGTERM signal it exits with code 143
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target
+
+# Built for ${project.name}-${project.version} (${project.name})
