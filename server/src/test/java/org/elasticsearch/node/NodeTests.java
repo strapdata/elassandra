@@ -78,6 +78,7 @@ public class NodeTests extends ESTestCase {
         }
     }
 
+    /*
     public void testLoadPluginBootstrapChecks() throws IOException {
         final String name = randomBoolean() ? randomAlphaOfLength(10) : null;
         Settings.Builder settings = baseSettings();
