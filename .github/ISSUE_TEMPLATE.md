@@ -4,9 +4,7 @@
 
 Issues that do not follow these guidelines are likely to be closed.
 
-1.  GitHub is reserved for bug reports and feature requests. The best place to
-    ask a general question is at the Elastic [forums](https://discuss.elastic.co).
-    GitHub is not the place for general questions.
+1.  GitHub is reserved for bug reports and feature requests.
 
 2.  Is this bug report or feature request for a supported OS? If not, it
     is likely to be closed.  See https://www.elastic.co/support/matrix#show_os
@@ -22,7 +20,7 @@ Issues that do not follow these guidelines are likely to be closed.
 
 <!-- Bug report -->
 
-**Elasticsearch version**:
+**Elassandra version**:
 
 **Plugins installed**: []
 
@@ -34,7 +32,7 @@ Issues that do not follow these guidelines are likely to be closed.
 
 **Steps to reproduce**:
 
-Please include a *minimal* but *complete* recreation of the problem, including
+Please include a *minimal* but **complete** **recreation** of the problem, including
 (e.g.) index creation, mappings, settings, query etc.  The easier you make for
 us to reproduce it, the more likely that somebody will take the time to look at it.
 
@@ -42,5 +40,10 @@ us to reproduce it, the more likely that somebody will take the time to look at 
  2.
  3.
 
-**Provide logs (if relevant)**:
+**Please provide the following information**:
+
+* elassandra logs (logs/system.logs or /var/lib/cassandra/system.log)
+* elasticsearch cluster state (curl http://localhost:9200/_cluster/state)
+* cassandra schema (cqlsh>DESC KEYSPACE <your_keyspace>)
+* cassandra gossip state (run: nodetool gossipinfo)
 
