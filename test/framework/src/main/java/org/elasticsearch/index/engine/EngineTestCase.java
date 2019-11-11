@@ -144,8 +144,8 @@ public abstract class EngineTestCase extends ESTestCase {
     protected Store store;
     protected Store storeReplica;
 
-    protected InternalEngine engine;
-    protected InternalEngine replicaEngine;
+    protected VersionLessInternalEngine engine;
+    //protected InternalEngine replicaEngine;
 
     protected IndexSettings defaultSettings;
     protected String codecName;
@@ -214,6 +214,7 @@ public abstract class EngineTestCase extends ESTestCase {
             engine.config().setEnableGcDeletes(false);
         }
         replicaTranslogDir = createTempDir("translog-replica");
+        /*
         replicaEngine = createEngine(storeReplica, replicaTranslogDir);
         currentIndexWriterConfig = replicaEngine.getCurrentIndexWriterConfig();
 
@@ -440,18 +441,18 @@ public abstract class EngineTestCase extends ESTestCase {
                 defaultSettings, store, translogPath, newMergePolicy(), null, localCheckpointTrackerSupplier, null, seqNoForOperation);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             IndexSettings indexSettings, Store store, Path translogPath, MergePolicy mergePolicy) throws IOException {
         return createEngine(indexSettings, store, translogPath, mergePolicy, null);
 
     }
 
-    protected InternalEngine createEngine(IndexSettings indexSettings, Store store, Path translogPath, MergePolicy mergePolicy,
+    protected VersionLessInternalEngine createEngine(IndexSettings indexSettings, Store store, Path translogPath, MergePolicy mergePolicy,
                                           @Nullable IndexWriterFactory indexWriterFactory) throws IOException {
         return createEngine(indexSettings, store, translogPath, mergePolicy, indexWriterFactory, null, null);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             IndexSettings indexSettings,
             Store store,
             Path translogPath,
@@ -464,7 +465,7 @@ public abstract class EngineTestCase extends ESTestCase {
                 globalCheckpointSupplier);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             IndexSettings indexSettings,
             Store store,
             Path translogPath,
@@ -485,7 +486,7 @@ public abstract class EngineTestCase extends ESTestCase {
                 globalCheckpointSupplier);
     }
 
-    protected InternalEngine createEngine(
+    protected VersionLessInternalEngine createEngine(
             IndexSettings indexSettings,
             Store store,
             Path translogPath,

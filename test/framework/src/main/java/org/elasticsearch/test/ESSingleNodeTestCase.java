@@ -155,12 +155,12 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
      * <code>false</code>.
      */
     protected boolean resetNodeAfterTest() {
-        return false;
+        return true;
     }
 
     /** The plugin classes that should be added to the node. */
     protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.emptyList();
+        return Collections.EMPTY_LIST;
     }
 
     /** Helper method to create list of plugins without specifying generic types. */
@@ -277,13 +277,20 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         assertAcked(createIndexRequestBuilder.get());
         // Wait for the index to be allocated so that cluster state updates don't override
         // changes that would have been done locally
-        ClusterHealthResponse health = client().admin().cluster()
-                .health(Requests.clusterHealthRequest(index).waitForYellowStatus().waitForEvents(Priority.LANGUID)
-                        .waitForNoRelocatingShards(true)).actionGet();
+        ClusterHealthRequestBuilder builder = client().admin().cluster().prepareHealth(index);
+        builder.setWaitForYellowStatus()
+            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForNoRelocatingShards(true);
+        ClusterHealthResponse health = builder.get();
+
         assertThat(health.getStatus(), lessThanOrEqualTo(ClusterHealthStatus.YELLOW));
         assertThat("Cluster must be a single node cluster", health.getNumberOfDataNodes(), equalTo(1));
         IndicesService instanceFromNode = getInstanceFromNode(IndicesService.class);
         return instanceFromNode.indexServiceSafe(resolveIndex(index));
+    }
+
+    protected static org.elasticsearch.index.engine.Engine engine(IndexService service) {
+        return service.getShard(0).getEngine();
     }
 
     public Index resolveIndex(String index) {
@@ -320,9 +327,13 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
      * @param timeout time out value to set on {@link org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest}
      */
     public ClusterHealthStatus ensureGreen(TimeValue timeout, String... indices) {
-        ClusterHealthResponse actionGet = client().admin().cluster()
-                .health(Requests.clusterHealthRequest(indices).timeout(timeout).waitForGreenStatus().waitForEvents(Priority.LANGUID)
-                        .waitForNoRelocatingShards(true)).actionGet();
+        ClusterHealthRequestBuilder builder = client().admin().cluster().prepareHealth(indices);
+        builder.setTimeout(timeout)
+            .setWaitForGreenStatus()
+            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForNoRelocatingShards(true);
+        ClusterHealthResponse actionGet = builder.get();
+
         if (actionGet.isTimedOut()) {
             logger.info("ensureGreen timed out, cluster state:\n{}\n{}", client().admin().cluster().prepareState().get().getState(),
                 client().admin().cluster().preparePendingClusterTasks().get());
