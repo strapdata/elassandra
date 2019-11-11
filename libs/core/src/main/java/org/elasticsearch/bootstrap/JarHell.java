@@ -83,7 +83,16 @@ public class JarHell {
         if (loader instanceof URLClassLoader) {
             output.accept("classloader urls: " + Arrays.toString(((URLClassLoader)loader).getURLs()));
         }
-        checkJarHell(parseClassPath(), output);
+        try {
+            checkJarHell(parseClassPath(), output);
+        } catch (IllegalStateException e) {
+            if (Boolean.parseBoolean("es.ignore_jarhell")) {
+                output.accept("Ignore JarHell exception (DO NOT ENABLE THIS PROPERTY IN PRODUCTION):" + e.getMessage());
+            } else {
+                // rethrow the exception
+                throw  e;
+            }
+        }
     }
 
     /**
@@ -277,6 +286,27 @@ public class JarHell {
                         "class: " + clazz + System.lineSeparator() +
                         "exists multiple times in jar: " + jarpath + " !!!!!!!!!");
             } else {
+                if (clazz.startsWith("org.apache.lucene.util.LuceneTestCase")) {
+                    return; // for modified version of LuceneTestCase to ignore cassandra static variables leaks.
+                }
+
+                // workaround for cassandra thrift
+                if (clazz.startsWith("org.apache.cassandra.thrift")) {
+                    return; // Because org.apache.commons.collections.FastHashMap in commons-collections and commons-beanutils
+                }
+
+                // workaround for hadoop
+                if (clazz.startsWith("org.apache.commons")) {
+                    return; // Because org.apache.commons.collections.FastHashMap in commons-collections and commons-beanutils
+                }
+                if (clazz.startsWith("org.apache.jasper")) {
+                    return; // Because of Hadoop
+                }
+                // workaround for asm required by both elasticsearch scripting modules and cassandra UDF, see #165 + CASSANDRA-11193
+                if (clazz.startsWith("org.objectweb.asm")) {
+                    return;
+                }
+
                 throw new IllegalStateException("jar hell!" + System.lineSeparator() +
                         "class: " + clazz + System.lineSeparator() +
                         "jar1: " + previous + System.lineSeparator() +

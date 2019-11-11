@@ -79,8 +79,8 @@ dependencies {
         java9Compile sourceSets.main.output
     }
 
-    testCompile("org.elasticsearch.test:framework:${version}") {
-       exclude group: 'org.elasticsearch', module: 'elasticsearch-core'
+    testCompile("com.strapdata.elasticsearch.test:framework:${version}") {
+       exclude group: 'com.strapdata.elasticsearch', module: 'elasticsearch-core'
     }
 }
 

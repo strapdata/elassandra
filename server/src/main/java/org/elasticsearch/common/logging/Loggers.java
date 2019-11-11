@@ -25,8 +25,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.Configurator;
 import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
@@ -112,6 +112,9 @@ public class Loggers {
     }
 
     public static void setLevel(Logger logger, Level level) {
+        ClusterService.setLoggingLevel(logger.getName(), level.toString());
+        
+        /*
         if (!LogManager.ROOT_LOGGER_NAME.equals(logger.getName())) {
             Configurator.setLevel(logger.getName(), level);
         } else {
@@ -129,10 +132,13 @@ public class Loggers {
                 Configurator.setLevel(loggerConfig.getName(), level);
             }
         }
+        */
     }
 
+    /*
     public static void addAppender(final Logger logger, final Appender appender) {
-        final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+        final org.apache.logging.slf4j.SLF4JLoggerContext slf4jContext = (org.apache.logging.slf4j.SLF4JLoggerContext) LogManager.getContext(false);
+        final LoggerContext ctx = (LoggerContext) slf4jContext.getExternalContext();
         final Configuration config = ctx.getConfiguration();
         config.addAppender(appender);
         LoggerConfig loggerConfig = config.getLoggerConfig(logger.getName());
@@ -167,5 +173,5 @@ public class Loggers {
         }
         return null;
     }
-
+    */
 }
