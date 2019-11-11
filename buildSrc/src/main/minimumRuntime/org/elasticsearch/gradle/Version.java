@@ -14,6 +14,9 @@ public final class Version implements Comparable<Version> {
     private final int id;
 
     private static final Pattern pattern =
+            Pattern.compile("(\\d)+\\.(\\d+)\\.(\\d+)\\.(\\d+)(-alpha\\d+|-beta\\d+|-rc\\d+)?(-SNAPSHOT)?");
+
+	private static final Pattern patternElasticsearch =
             Pattern.compile("(\\d)+\\.(\\d+)\\.(\\d+)(-alpha\\d+|-beta\\d+|-rc\\d+)?(-SNAPSHOT)?");
 
     public Version(int major, int minor, int revision) {
@@ -38,6 +41,16 @@ public final class Version implements Comparable<Version> {
     public static Version fromString(final String s) {
         Objects.requireNonNull(s);
         Matcher matcher = pattern.matcher(s);
+        if (m.matches()) {
+            // elassandra version => ignore last digit
+            return new Version(
+                Integer.parseInt(matcher.group(1)),
+                parseSuffixNumber(matcher.group(2)),
+                parseSuffixNumber(matcher.group(3))
+        	);
+        }
+        
+        matcher = patternElasticsearch.matcher(s);
         if (matcher.matches() == false) {
             throw new IllegalArgumentException(
                 "Invalid version format: '" + s + "'. Should be major.minor.revision[-(alpha|beta|rc)Number][-SNAPSHOT]"

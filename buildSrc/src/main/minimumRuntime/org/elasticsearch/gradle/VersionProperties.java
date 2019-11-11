@@ -23,11 +23,13 @@ public class VersionProperties {
     }
 
     private static final String elasticsearch;
+    static final String elasticsearch_vanilla;
     private static final String lucene;
     private static final Map<String, String> versions = new HashMap<String, String>();
     static {
         Properties props = getVersionProperties();
         elasticsearch = props.getProperty("elasticsearch");
+        elasticsearch_vanilla = props.getProperty('elasticsearch_vanilla');
         lucene = props.getProperty("lucene");
         for (String property : props.stringPropertyNames()) {
             versions.put(property, props.getProperty(property));
