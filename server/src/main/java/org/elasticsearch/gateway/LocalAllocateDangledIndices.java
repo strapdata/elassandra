@@ -130,7 +130,8 @@ public class LocalAllocateDangledIndices {
                     }
                     MetaData.Builder metaData = MetaData.builder(currentState.metaData());
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+                    //RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(LocalAllocateDangledIndices.this.clusterService, currentState);
                     final Version minIndexCompatibilityVersion = currentState.getNodes().getMaxNodeVersion()
                         .minimumIndexCompatibilityVersion();
                     boolean importNeeded = false;

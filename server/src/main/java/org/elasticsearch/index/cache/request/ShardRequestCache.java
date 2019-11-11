@@ -28,10 +28,10 @@ import org.elasticsearch.common.metrics.CounterMetric;
  */
 public final class ShardRequestCache {
 
-    final CounterMetric evictionsMetric = new CounterMetric();
-    final CounterMetric totalMetric = new CounterMetric();
-    final CounterMetric hitCount = new CounterMetric();
-    final CounterMetric missCount = new CounterMetric();
+    public final CounterMetric evictionsMetric = new CounterMetric();
+    public final CounterMetric totalMetric = new CounterMetric();
+    public final CounterMetric hitCount = new CounterMetric();
+    public final CounterMetric missCount = new CounterMetric();
 
     public RequestCacheStats stats() {
         return new RequestCacheStats(totalMetric.count(), evictionsMetric.count(), hitCount.count(), missCount.count());

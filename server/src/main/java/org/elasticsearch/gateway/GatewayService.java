@@ -127,10 +127,14 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
         clusterService.addLowPriorityApplier(metaState);
     }
 
+    public Gateway gateway() {
+        return this.gateway;
+    }
+
     @Override
     protected void doStart() {
         // use post applied so that the state will be visible to the background recovery thread we spawn in performStateRecovery
-        clusterService.addListener(this);
+        performStateRecovery(false, "startup recovery");
     }
 
     @Override
@@ -198,7 +202,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
         }
     }
 
-    private void performStateRecovery(boolean enforceRecoverAfterTime, String reason) {
+    protected void performStateRecovery(boolean enforceRecoverAfterTime, String reason) {
         final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener();
 
         if (enforceRecoverAfterTime && recoverAfterTime != null) {
@@ -272,7 +276,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
                             .build();
 
                     // initialize all index routing tables as empty
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(updatedState.routingTable());
+                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(GatewayService.this.clusterService, updatedState);
                     for (ObjectCursor<IndexMetaData> cursor : updatedState.metaData().indices().values()) {
                         routingTableBuilder.addAsRecovery(cursor.value);
                     }
@@ -281,7 +285,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
 
                     // now, reroute
                     updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder.build()).build();
-                    return allocationService.reroute(updatedState, "state recovered");
+                    return updatedState;
                 }
 
                 @Override

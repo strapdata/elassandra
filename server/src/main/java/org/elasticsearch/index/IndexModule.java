@@ -377,6 +377,7 @@ public final class IndexModule {
             BigArrays bigArrays,
             ThreadPool threadPool,
             ScriptService scriptService,
+            ClusterService clusterService,
             Client client,
             IndicesQueryCache indicesQueryCache,
             MapperRegistry mapperRegistry,

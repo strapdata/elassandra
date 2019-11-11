@@ -81,6 +81,11 @@ public class MetaStateService {
         return IndexMetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, nodeEnv.indexPaths(index));
     }
 
+    @Nullable
+    public IndexMetaData loadIndexState(byte[] indexMetaData) throws IOException {
+        return IndexMetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, indexMetaData);
+    }
+
     /**
      * Loads all indices states available on disk
      */
@@ -109,7 +114,26 @@ public class MetaStateService {
      * Loads the global state, *without* index state, see {@link #loadFullState()} for that.
      */
     MetaData loadGlobalState() throws IOException {
-        return MetaData.FORMAT.loadLatestState(logger, namedXContentRegistry, nodeEnv.nodeDataPaths());
+        try {
+            return clusterService.loadGlobalState();
+        } catch (NoPersistedMetaDataException e) {
+            return MetaData.EMPTY_META_DATA;
+        }
+    }
+
+
+    /**
+     * Decode global state from a string.
+     * @param stringMetaData
+     * @return
+     * @throws Exception
+     */
+    public MetaData loadGlobalState(String stringMetaData) throws IOException {
+        return MetaData.CASSANDRA_FORMAT.loadLatestState(logger, namedXContentRegistry, stringMetaData);
+    }
+
+    public MetaData loadGlobalState(byte[] metadata) throws IOException {
+        return MetaData.CQL_FORMAT.loadLatestState(logger, namedXContentRegistry, metadata);
     }
 
     /**

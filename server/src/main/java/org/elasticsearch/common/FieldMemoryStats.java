@@ -36,7 +36,7 @@ import java.util.Objects;
  */
 public final class FieldMemoryStats implements Writeable, Iterable<ObjectLongCursor<String>>{
 
-    private final ObjectLongHashMap<String> stats;
+    public final ObjectLongHashMap<String> stats;
 
     /**
      * Creates a new FieldMemoryStats instance

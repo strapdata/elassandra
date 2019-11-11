@@ -247,7 +247,7 @@ public class LogConfigurator {
     private static void configureStatusLogger() {
         final ConfigurationBuilder<BuiltConfiguration> builder = ConfigurationBuilderFactory.newConfigurationBuilder();
         builder.setStatusLevel(Level.ERROR);
-        Configurator.initialize(builder.build());
+        //Configurator.initialize(builder.build());
     }
 
     /**

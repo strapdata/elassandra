@@ -19,6 +19,7 @@
 
 package org.elasticsearch.common.io.stream;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
@@ -47,6 +48,7 @@ import java.io.FileNotFoundException;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryNotEmptyException;
@@ -574,6 +576,10 @@ public abstract class StreamInput extends InputStream {
                 return readGeoPoint();
             case 23:
                 return readZonedDateTime();
+            case 64: // Token
+                byte[] buf = new byte[readVInt()];
+                readFully(buf);
+                return DatabaseDescriptor.getPartitioner().getTokenFactory().fromByteArray(ByteBuffer.wrap(buf));
             default:
                 throw new IOException("Can't read unknown type [" + type + "]");
         }
@@ -730,6 +736,24 @@ public abstract class StreamInput extends InputStream {
         final byte[] bytes = new byte[length];
         readBytes(bytes, 0, bytes.length);
         return bytes;
+    }
+
+
+    public ByteBuffer readByteBuffer() throws IOException {
+        final int arraySize = readVInt();
+        if (arraySize > ArrayUtil.MAX_ARRAY_LENGTH) {
+            throw new IllegalStateException("array length must be <= to " + ArrayUtil.MAX_ARRAY_LENGTH  + " but was: " + arraySize);
+        }
+        if (arraySize < 0) {
+            return null;
+        }
+        // lets do a sanity check that if we are reading an array size that is bigger that the remaining bytes we can safely
+        // throw an exception instead of allocating the array based on the size. A simple corrutpted byte can make a node go OOM
+        // if the size is large and for perf reasons we allocate arrays ahead of time
+        ensureCanReadBytes(arraySize);
+        final byte[] bytes = new byte[arraySize];
+        readBytes(bytes, 0, bytes.length);
+        return ByteBuffer.wrap(bytes);
     }
 
     /**

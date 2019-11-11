@@ -86,7 +86,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     private final Iterable<ClusterStateApplier> clusterStateAppliers = Iterables.concat(highPriorityStateAppliers,
         normalPriorityStateAppliers, lowPriorityStateAppliers);
 
-    private final Collection<ClusterStateListener> clusterStateListeners = new CopyOnWriteArrayList<>();
+    private final Collection<ClusterStateListener> clusterStateListeners = new CopyOnWriteArraySet<>();
     private final Collection<TimeoutClusterStateListener> timeoutClusterStateListeners =
         Collections.newSetFromMap(new ConcurrentHashMap<TimeoutClusterStateListener, Boolean>());
 
@@ -161,6 +161,10 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         @Override
         public void run() {
             runTask(this);
+        }
+
+        public SchemaUpdate schemaUpdate() {
+            return this.schemaUpdate;
         }
     }
 
@@ -321,7 +325,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
                 return currentState;
             }
         };
-        submitStateUpdateTask(source, ClusterStateTaskConfig.build(Priority.HIGH), applyFunction, listener);
+        submitStateUpdateTask(source, ClusterStateTaskConfig.build(Priority.HIGH, null), applyFunction, listener);
     }
 
     private void submitStateUpdateTask(final String source, final ClusterStateTaskConfig config,
@@ -365,7 +369,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
                     // people may start an observer from an applier
                     return true;
                 } else if (className.equals(ClusterApplierService.class.getName())
-                    && methodName.equals("callClusterStateAppliers")) {
+                    && methodName.startsWith("callClusterStateAppliers")) {
                     throw new AssertionError("should not be called by a cluster state applier. reason [" + reason + "]");
                 }
             }
@@ -440,8 +444,15 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         }
     }
 
+    /**
+     * Routing table must be updated by the caller when submitting the new cluster state.
+     * @param task
+     * @param previousClusterState
+     * @param newClusterState
+     */
     private void applyChanges(UpdateTask task, ClusterState previousClusterState, ClusterState newClusterState) {
-        ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState);
+
+        ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.schemaUpdate, null);
         // new cluster state, notify all listeners
         final DiscoveryNodes.Delta nodesDelta = clusterChangedEvent.nodesDelta();
         if (nodesDelta.hasChanges() && logger.isInfoEnabled()) {
@@ -453,7 +464,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
 
         nodeConnectionsService.connectToNodes(newClusterState.nodes());
 
-        logger.debug("applying cluster state version {}", newClusterState.version());
+        logger.debug("applying cluster state version {} metadata.version={}", newClusterState.version(), newClusterState.metaData().version());
         try {
             // nothing to do until we actually recover from the gateway or any other block indicates we need to disable persistency
             if (clusterChangedEvent.state().blocks().disableStatePersistence() == false && clusterChangedEvent.metaDataChanged()) {
@@ -488,10 +499,34 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         });
     }
 
+    private void callClusterStateAppliersNormalPriority(ClusterChangedEvent clusterChangedEvent) {
+        normalPriorityStateAppliers.forEach(applier -> {
+            try {
+                logger.trace("calling [{}] with change to version [{}]", applier, clusterChangedEvent.state().version());
+                applier.applyClusterState(clusterChangedEvent);
+            } catch (Exception ex) {
+                logger.warn("failed to notify ClusterStateApplier", ex);
+            }
+        });
+    }
+
+    private void callClusterStateAppliersLowPriority(ClusterChangedEvent clusterChangedEvent) {
+        lowPriorityStateAppliers.forEach(applier -> {
+            try {
+                logger.trace("calling [{}] with change to version [{}]", applier, clusterChangedEvent.state().version());
+                applier.applyClusterState(clusterChangedEvent);
+            } catch (Exception ex) {
+                logger.warn("failed to notify ClusterStateApplier", ex);
+            }
+        });
+    }
+
+
     private void callClusterStateListeners(ClusterChangedEvent clusterChangedEvent) {
         Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
             try {
-                logger.trace("calling [{}] with change to version [{}]", listener, clusterChangedEvent.state().version());
+                logger.trace("calling [{}] with change to version [{}] metadata.version=[{}]",
+                        listener, clusterChangedEvent.state().version(), clusterChangedEvent.state().metaData().version());
                 listener.clusterChanged(clusterChangedEvent);
             } catch (Exception ex) {
                 logger.warn("failed to notify ClusterStateListener", ex);

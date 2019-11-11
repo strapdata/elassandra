@@ -107,6 +107,7 @@ public class GatewayMetaState implements ClusterStateApplier {
                 logger.error("failed to read local state, exiting...", e);
                 throw e;
             }
+            */
         }
     }
 

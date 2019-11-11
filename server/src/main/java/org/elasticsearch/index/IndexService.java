@@ -103,6 +103,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private final IndexEventListener eventListener;
     private final IndexFieldDataService indexFieldData;
     private final BitsetFilterCache bitsetFilterCache;
+    protected final TokenRangesBitsetFilterCache tokenRangesBitsetFilterCache;
     private final NodeEnvironment nodeEnv;
     private final ShardStoreDeleter shardStoreDeleter;
     private final IndexStore indexStore;
@@ -132,9 +133,12 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private final ThreadPool threadPool;
     private final BigArrays bigArrays;
     private final ScriptService scriptService;
+    private final ClusterService clusterService;
     private final Client client;
     private final CircuitBreakerService circuitBreakerService;
     private Supplier<Sort> indexSortSupplier;
+
+    private SearchProcessorFactory searchProcessorFactory;
 
     public IndexService(
             IndexSettings indexSettings,
@@ -148,6 +152,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             BigArrays bigArrays,
             ThreadPool threadPool,
             ScriptService scriptService,
+            ClusterService clusterService,
             Client client,
             QueryCache queryCache,
             IndexStore indexStore,
@@ -159,6 +164,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             List<IndexingOperationListener> indexingOperationListeners,
             NamedWriteableRegistry namedWriteableRegistry) throws IOException {
         super(indexSettings);
+        this.clusterService = clusterService;
         this.indexSettings = indexSettings;
         this.xContentRegistry = xContentRegistry;
         this.similarityService = similarityService;
@@ -253,6 +259,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         return this.mapperService.getIndexAnalyzers();
     }
 
+    @Override
     public MapperService mapperService() {
         return mapperService;
     }
@@ -613,6 +620,36 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         }
     }
 
+    private static final class TokenRangeBitsetCacheListener implements TokenRangesBitsetFilterCache.Listener {
+        final IndexService indexService;
+
+        private TokenRangeBitsetCacheListener(IndexService indexService) {
+            this.indexService = indexService;
+        }
+
+        @Override
+        public void onCache(ShardId shardId, Accountable accountable) {
+            if (shardId != null) {
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+                if (shard != null) {
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
+                    shard.tokenRangesBitsetFilterCache().onCached(ramBytesUsed);
+                }
+            }
+        }
+
+        @Override
+        public void onRemoval(ShardId shardId, Accountable accountable) {
+            if (shardId != null) {
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+                if (shard != null) {
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0l;
+                    shard.tokenRangesBitsetFilterCache().onRemoval(ramBytesUsed);
+                }
+            }
+        }
+    }
+
     private final class FieldDataCacheListener implements IndexFieldDataCache.Listener {
         final IndexService indexService;
 
@@ -679,20 +716,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             if (refreshTask.getInterval().equals(indexSettings.getRefreshInterval()) == false) {
                 rescheduleRefreshTasks();
             }
-            final Translog.Durability durability = indexSettings.getTranslogDurability();
-            if (durability != oldTranslogDurability) {
-                rescheduleFsyncTask(durability);
-            }
-        }
-    }
-
-    private void rescheduleFsyncTask(Translog.Durability durability) {
-        try {
-            if (fsyncTask != null) {
-                fsyncTask.close();
-            }
-        } finally {
-            fsyncTask = durability == Translog.Durability.REQUEST ? null : new AsyncTranslogFSync(this);
         }
     }
 
@@ -853,7 +876,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
 
         @Override
         protected void runInternal() {
-            indexService.maybeFSyncTranslogs();
         }
 
         @Override
@@ -979,11 +1001,11 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     }
 
     AsyncTranslogFSync getFsyncTask() { // for tests
-        return fsyncTask;
+        return null;
     }
 
     AsyncGlobalCheckpointTask getGlobalCheckpointTask() {
-        return globalCheckpointTask;
+        return null;
     }
 
     /**

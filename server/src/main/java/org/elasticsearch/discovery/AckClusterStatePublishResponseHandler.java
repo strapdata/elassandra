@@ -66,6 +66,7 @@ public class AckClusterStatePublishResponseHandler extends BlockingClusterStateP
 
     private void onNodeAck(final Discovery.AckListener ackListener, DiscoveryNode node, Exception e) {
         try {
+            logger.debug("ack receive from node={} exception={}", node, e);
             ackListener.onNodeAck(node, e);
         } catch (Exception inner) {
             inner.addSuppressed(e);

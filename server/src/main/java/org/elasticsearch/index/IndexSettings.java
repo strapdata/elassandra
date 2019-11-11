@@ -585,6 +585,22 @@ public final class IndexSettings {
         this.refreshInterval = timeValue;
     }
 
+    private void setTokenRangesBitsetCache(Boolean enable) {
+        this.tokenRangesBitsetCache = enable;
+    }
+
+    public String getKeyspace() {
+        return this.keyspace;
+    }
+
+    public String getTable() {
+        return this.table;
+    }
+
+    public String getTableOptions() {
+        return this.tableOptions;
+    }
+
     /**
      * Returns the settings for this index. These settings contain the node and index level settings where
      * settings that are specified on both index and node level are overwritten by the index settings.
@@ -649,7 +665,7 @@ public final class IndexSettings {
     /**
      * Returns the number of replicas this index has.
      */
-    public int getNumberOfReplicas() { return settings.getAsInt(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, null); }
+    public int getNumberOfReplicas() { return settings.getAsInt(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 0); }
 
     /**
      * Returns whether the index enforces at most one type.

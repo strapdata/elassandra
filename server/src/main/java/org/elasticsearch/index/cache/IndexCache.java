@@ -32,6 +32,7 @@ public class IndexCache extends AbstractIndexComponent implements Closeable {
 
     private final QueryCache queryCache;
     private final BitsetFilterCache bitsetFilterCache;
+    private TokenRangesBitsetFilterCache tokenRangeBitsetFilterCache;
 
     public IndexCache(IndexSettings indexSettings, QueryCache queryCache, BitsetFilterCache bitsetFilterCache) {
         super(indexSettings);
@@ -50,14 +51,25 @@ public class IndexCache extends AbstractIndexComponent implements Closeable {
         return bitsetFilterCache;
     }
 
+    public TokenRangesBitsetFilterCache tokenRangeBitsetFilterCache() {
+        return tokenRangeBitsetFilterCache;
+    }
+
+    @Inject(optional=true)
+    public void tokenRangeBitsetFilterCache(TokenRangesBitsetFilterCache tokenRangeBitsetFilterCache) {
+        this.tokenRangeBitsetFilterCache = tokenRangeBitsetFilterCache;
+    }
+
     @Override
     public void close() throws IOException {
-        IOUtils.close(queryCache, bitsetFilterCache);
+        IOUtils.close(queryCache, bitsetFilterCache, tokenRangeBitsetFilterCache);
     }
 
     public void clear(String reason) {
         queryCache.clear(reason);
         bitsetFilterCache.clear(reason);
+        if (tokenRangeBitsetFilterCache != null)
+            tokenRangeBitsetFilterCache.clear(reason);
     }
 
 }
