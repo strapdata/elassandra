@@ -81,7 +81,7 @@ dependencyLicenses {
   // Don't check licenses for dependency that are part of the elasticsearch project
   // But any other dependency should have its license/notice/sha1
   dependencies = project.configurations.runtime.fileCollection {
-    it.group.startsWith('org.elasticsearch') == false
+    it.group.startsWith('com.strapdata.elasticsearch') == false
   }
 }
 
