@@ -46,6 +46,11 @@ public final class ShardRouting implements Writeable, ToXContentObject {
      */
     public static final long UNAVAILABLE_EXPECTED_SHARD_SIZE = -1;
 
+    /**
+     * Dummy allocation ID to avoid unless random generation (this involve a lock on java.security.SecureRandom.nextBytes).
+     */
+    public static AllocationId DUMMY_ALLOCATION_ID = AllocationId.newInitializing("dummy_alloc_id");
+
     private final ShardId shardId;
     private final String currentNodeId;
     private final String relocatingNodeId;
@@ -59,13 +64,39 @@ public final class ShardRouting implements Writeable, ToXContentObject {
     @Nullable
     private final ShardRouting targetRelocatingShard;
 
+    protected transient Collection<Range<Token>> tokenRanges;
+
+    public Collection<Range<Token>> tokenRanges() {
+        return tokenRanges;
+    }
+
+    public void tokenRanges(Collection<Range<Token>> tokenRanges) {
+        this.tokenRanges = tokenRanges;
+    }
+
+    public ShardRouting(ShardId shardId, String currentNodeId, boolean primary, ShardRoutingState state, UnassignedInfo unassignedInfo, Collection<Range<Token>> tokenRanges) {
+        this(shardId, currentNodeId, null, primary, state,
+                (!primary) ? PeerRecoverySource.INSTANCE : ((state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) ? RecoverySource.LocalShardsRecoverySource.INSTANCE : null),
+                (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) ? unassignedInfo : null,
+                (state == ShardRoutingState.STARTED || state == ShardRoutingState.INITIALIZING) ? DUMMY_ALLOCATION_ID : null,
+                UNAVAILABLE_EXPECTED_SHARD_SIZE, tokenRanges);
+    }
+
+    public ShardRouting(ShardId shardId, String currentNodeId,
+            String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
+            UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize) {
+        this(shardId, currentNodeId,
+            relocatingNodeId, primary, state, recoverySource,
+            unassignedInfo, allocationId, expectedShardSize, null);
+    }
+
     /**
      * A constructor to internally create shard routing instances, note, the internal flag should only be set to true
      * by either this class or tests. Visible for testing.
      */
-    ShardRouting(ShardId shardId, String currentNodeId,
+    public ShardRouting(ShardId shardId, String currentNodeId,
                  String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
-                 UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize) {
+                 UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize, Collection<Range<Token>> tokenRanges) {
         this.shardId = shardId;
         this.currentNodeId = currentNodeId;
         this.relocatingNodeId = relocatingNodeId;
@@ -637,6 +668,9 @@ public final class ShardRouting implements Writeable, ToXContentObject {
             .field("relocating_node", relocatingNodeId())
             .field("shard", id())
             .field("index", getIndexName());
+        if (tokenRanges != null && tokenRanges.size() > 0) {
+            builder.field("token_ranges", tokenRanges);
+        }
         if (expectedShardSize != UNAVAILABLE_EXPECTED_SHARD_SIZE) {
             builder.field("expected_shard_size_in_bytes", expectedShardSize);
         }

@@ -18,9 +18,16 @@
  */
 package org.elasticsearch.cluster;
 
+import com.google.common.net.InetAddresses;
+
+import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.gms.EndpointState;
+import org.apache.cassandra.gms.Gossiper;
+import org.apache.cassandra.gms.VersionedValue;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.ack.AckedRequest;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.unit.TimeValue;
@@ -51,7 +58,8 @@ public abstract class AckedClusterStateUpdateTask<Response> extends ClusterState
      * @return true if the node is expected to send ack back, false otherwise
      */
     public boolean mustAck(DiscoveryNode discoveryNode) {
-        return true;
+        // in Elassandra, we don't expect ack from DEAD nodes....
+        return discoveryNode.status() == DiscoveryNodeStatus.ALIVE;
     }
 
     /**

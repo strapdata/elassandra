@@ -65,6 +65,12 @@ public class OperationRouting {
         clusterSettings.addSettingsUpdateConsumer(USE_ADAPTIVE_REPLICA_SELECTION_SETTING, this::setUseAdaptiveReplicaSelection);
     }
 
+    public ShardIterator shard(Index index) {
+        IndexService indexService = clusterService.indexServiceSafe(index);
+        ShardRouting shardRouting = indexService.getShardOrNull(0).routingEntry();
+        return new PlainShardIterator(new ShardId(index, 0), Collections.singletonList(shardRouting));
+    }
+
     void setUseAdaptiveReplicaSelection(boolean useAdaptiveReplicaSelection) {
         this.useAdaptiveReplicaSelection = useAdaptiveReplicaSelection;
     }

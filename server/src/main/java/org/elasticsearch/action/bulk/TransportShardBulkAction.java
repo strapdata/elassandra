@@ -378,6 +378,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
 
     public static Translog.Location performOnReplica(BulkShardRequest request, IndexShard replica) throws Exception {
         Translog.Location location = null;
+        /*
         for (int i = 0; i < request.items().length; i++) {
             BulkItemRequest item = request.items()[i];
             final Engine.Result operationResult;

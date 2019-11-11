@@ -79,9 +79,9 @@ public class TransportMultiGetAction extends HandledTransportAction<MultiGetRequ
                 continue;
             }
 
-            ShardId shardId = clusterService.operationRouting()
+            ShardId shardId = new ShardId(clusterService.operationRouting()
                     .getShards(clusterState, concreteSingleIndex, item.id(), item.routing(), null)
-                    .shardId();
+                    .shardId().getIndex(), 0);
 
             MultiGetShardRequest shardRequest = shardRequests.get(shardId);
             if (shardRequest == null) {

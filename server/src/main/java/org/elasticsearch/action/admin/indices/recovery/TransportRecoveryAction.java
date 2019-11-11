@@ -102,7 +102,7 @@ public class TransportRecoveryAction extends TransportBroadcastByNodeAction<Reco
     @Override
     protected RecoveryState shardOperation(RecoveryRequest request, ShardRouting shardRouting) {
         IndexService indexService = indicesService.indexServiceSafe(shardRouting.shardId().getIndex());
-        IndexShard indexShard = indexService.getShard(shardRouting.shardId().id());
+        IndexShard indexShard = indexService.getShard(0);
         return indexShard.recoveryState();
     }
 

@@ -90,18 +90,20 @@ public class ReplicationOperation<
     }
 
     public void execute() throws Exception {
-        final String activeShardCountFailure = checkActiveShardCount();
+        //final String activeShardCountFailure = checkActiveShardCount();
         final ShardRouting primaryRouting = primary.routingEntry();
         final ShardId primaryId = primaryRouting.shardId();
+        /*
         if (activeShardCountFailure != null) {
             finishAsFailed(new UnavailableShardsException(primaryId,
                 "{} Timeout: [{}], request: [{}]", activeShardCountFailure, request.timeout(), request));
             return;
         }
-
+        */
         totalShards.incrementAndGet();
         pendingActions.incrementAndGet(); // increase by 1 until we finish all primary coordination
         primaryResult = primary.perform(request);
+        /*
         primary.updateLocalCheckpointForShard(primaryRouting.allocationId().getId(), primary.localCheckpoint());
         final ReplicaRequest replicaRequest = primaryResult.replicaRequest();
         if (replicaRequest != null) {

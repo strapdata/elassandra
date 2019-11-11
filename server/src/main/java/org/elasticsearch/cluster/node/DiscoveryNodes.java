@@ -22,9 +22,12 @@ package org.elasticsearch.cluster.node;
 import com.carrotsearch.hppc.ObjectHashSet;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import com.google.common.base.Objects;
+
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.AbstractDiffable;
 import org.elasticsearch.cluster.Diff;
+import org.elasticsearch.cluster.node.DiscoveryNode.DiscoveryNodeStatus;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
@@ -34,7 +37,9 @@ import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.transport.TransportAddress;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -53,6 +58,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
     private final ImmutableOpenMap<String, DiscoveryNode> dataNodes;
     private final ImmutableOpenMap<String, DiscoveryNode> masterNodes;
     private final ImmutableOpenMap<String, DiscoveryNode> ingestNodes;
+    private final transient Collection<InetAddress> deadNodes;
 
     private final String masterNodeId;
     private final String localNodeId;
@@ -61,15 +67,23 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
     private final Version maxNodeVersion;
     private final Version minNodeVersion;
 
-    private DiscoveryNodes(ImmutableOpenMap<String, DiscoveryNode> nodes, ImmutableOpenMap<String, DiscoveryNode> dataNodes,
-                           ImmutableOpenMap<String, DiscoveryNode> masterNodes, ImmutableOpenMap<String, DiscoveryNode> ingestNodes,
-                           String masterNodeId, String localNodeId, Version minNonClientNodeVersion, Version maxNonClientNodeVersion,
-                           Version maxNodeVersion, Version minNodeVersion) {
+    private DiscoveryNodes(ImmutableOpenMap<String, DiscoveryNode> nodes,
+                           ImmutableOpenMap<String, DiscoveryNode> dataNodes,
+                           Collection<InetAddress> deadNodes,
+                           ImmutableOpenMap<String, DiscoveryNode> masterNodes,
+                           ImmutableOpenMap<String, DiscoveryNode> ingestNodes,
+                           String masterNodeId,
+                           String localNodeId,
+                           Version minNonClientNodeVersion,
+                           Version maxNonClientNodeVersion,
+                           Version maxNodeVersion,
+                           Version minNodeVersion) {
         this.nodes = nodes;
         this.dataNodes = dataNodes;
+        this.deadNodes = deadNodes;
         this.masterNodes = masterNodes;
         this.ingestNodes = ingestNodes;
-        this.masterNodeId = masterNodeId;
+        this.masterNodeId = localNodeId;
         this.localNodeId = localNodeId;
         this.minNonClientNodeVersion = minNonClientNodeVersion;
         this.maxNonClientNodeVersion = maxNonClientNodeVersion;
@@ -111,6 +125,19 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
         return this.nodes;
     }
 
+    public Collection<InetAddress>  getDeadNodes() {
+        return this.deadNodes;
+    }
+
+    /**
+     * Get a {@link Map} of the discovered data nodes arranged by their ids
+     *
+     * @return {@link Map} of the discovered data nodes arranged by their ids
+     */
+    public ImmutableOpenMap<String, DiscoveryNode> dataNodes() {
+        return this.dataNodes;
+    }
+
     /**
      * Get a {@link Map} of the discovered data nodes arranged by their ids
      *
@@ -126,7 +153,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      * @return {@link Map} of the discovered master nodes arranged by their ids
      */
     public ImmutableOpenMap<String, DiscoveryNode> getMasterNodes() {
-        return this.masterNodes;
+        return this.dataNodes;
     }
 
     /**
@@ -244,6 +271,23 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
     }
 
     /**
+     * Get a node by its inet address
+     *
+     * @param address {@link TransportAddress} of the wanted node
+     * @return node identified by the given address or <code>null</code> if no such node exists
+     */
+    public DiscoveryNode findByInetAddress(InetAddress address) {
+        assert address != null : "unexpected null address";
+        for (ObjectCursor<DiscoveryNode> cursor : nodes.values()) {
+            DiscoveryNode node = cursor.value;
+            if (node.getInetAddress().equals(address) || node.getName().equals(address.getHostAddress())) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Returns the version of the node with the oldest version in the cluster that is not a client node
      *
      * If there are no non-client nodes, Version.CURRENT will be returned.
@@ -349,9 +393,9 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
                             }
                         } else if (DiscoveryNode.Role.MASTER.getRoleName().equals(matchAttrName)) {
                             if (Booleans.parseBoolean(matchAttrValue, true)) {
-                                resolvedNodesIds.addAll(masterNodes.keys());
+                                resolvedNodesIds.addAll(dataNodes.keys());
                             } else {
-                                resolvedNodesIds.removeAll(masterNodes.keys());
+                                resolvedNodesIds.removeAll(dataNodes.keys());
                             }
                         } else if (DiscoveryNode.Role.INGEST.getRoleName().equals(matchAttrName)) {
                             if (Booleans.parseBoolean(matchAttrValue, true)) {
@@ -673,6 +717,8 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
             ImmutableOpenMap.Builder<String, DiscoveryNode> dataNodesBuilder = ImmutableOpenMap.builder();
             ImmutableOpenMap.Builder<String, DiscoveryNode> masterNodesBuilder = ImmutableOpenMap.builder();
             ImmutableOpenMap.Builder<String, DiscoveryNode> ingestNodesBuilder = ImmutableOpenMap.builder();
+            List<InetAddress> deadNodes = new ArrayList<InetAddress>();
+
             Version minNodeVersion = null;
             Version maxNodeVersion = null;
             Version minNonClientNodeVersion = null;
@@ -697,13 +743,22 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
                 if (nodeEntry.value.isIngestNode()) {
                     ingestNodesBuilder.put(nodeEntry.key, nodeEntry.value);
                 }
+                if (!nodeEntry.value.status().equals(DiscoveryNodeStatus.ALIVE)) {
+                    deadNodes.add(nodeEntry.value.getInetAddress());
+                }
                 minNodeVersion = minNodeVersion == null ? version : Version.min(minNodeVersion, version);
                 maxNodeVersion = maxNodeVersion == null ? version : Version.max(maxNodeVersion, version);
             }
 
             return new DiscoveryNodes(
-                nodes.build(), dataNodesBuilder.build(), masterNodesBuilder.build(), ingestNodesBuilder.build(),
-                masterNodeId, localNodeId, minNonClientNodeVersion == null ? Version.CURRENT : minNonClientNodeVersion,
+                nodes.build(),
+                dataNodesBuilder.build(),
+                deadNodes,
+                ingestNodesBuilder.build(),
+                masterNodesBuilder.build(),
+                localNodeId,
+                localNodeId,
+                minNonClientNodeVersion == null ? Version.CURRENT : minNonClientNodeVersion,
                 maxNonClientNodeVersion == null ? Version.CURRENT : maxNonClientNodeVersion,
                 maxNodeVersion == null ? Version.CURRENT : maxNodeVersion,
                 minNodeVersion == null ? Version.CURRENT : minNodeVersion

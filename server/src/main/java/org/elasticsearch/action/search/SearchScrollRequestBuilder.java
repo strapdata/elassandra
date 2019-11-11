@@ -24,6 +24,8 @@ import org.elasticsearch.client.ElasticsearchClient;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.search.Scroll;
 
+import java.util.Map;
+
 /**
  * A search scroll action request builder.
  */
@@ -66,6 +68,11 @@ public class SearchScrollRequestBuilder extends ActionRequestBuilder<SearchScrol
      */
     public SearchScrollRequestBuilder setScroll(String keepAlive) {
         request.scroll(keepAlive);
+        return this;
+    }
+
+    public SearchScrollRequestBuilder setExtraParams(Map<String, Object> extraParams) {
+        request.setExtraParams(extraParams);
         return this;
     }
 }

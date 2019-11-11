@@ -91,11 +91,38 @@ public class MetaDataMappingService {
         }
     }
 
+    static class UpdateTask extends RefreshTask {
+        final String type;
+        final CompressedXContent mappingSource;
+        final String nodeId; // null fr unknown
+        final ClusterStateTaskListener listener;
+
+        UpdateTask(String index, String indexUUID, String type, CompressedXContent mappingSource, String nodeId, ClusterStateTaskListener listener) {
+            super(index, indexUUID);
+            this.type = type;
+            this.mappingSource = mappingSource;
+            this.nodeId = nodeId;
+            this.listener = listener;
+        }
+    }
+
     class RefreshTaskExecutor implements ClusterStateTaskExecutor<RefreshTask> {
         @Override
         public ClusterTasksResult<RefreshTask> execute(ClusterState currentState, List<RefreshTask> tasks) throws Exception {
-            ClusterState newClusterState = executeRefresh(currentState, tasks);
-            return ClusterTasksResult.<RefreshTask>builder().successes(tasks).build(newClusterState);
+            Collection<Mutation> mutations = new LinkedList<>();
+            Collection<Event.SchemaChange> events = new LinkedList<>();
+            ClusterState newClusterState = executeRefresh(currentState, tasks, mutations, events);
+            return ClusterTasksResult.<RefreshTask>builder().successes(tasks).build(newClusterState, SchemaUpdate.UPDATE, mutations, events);
+        }
+    }
+
+    class UpdateTaskExecutor implements ClusterStateTaskExecutor<UpdateTask> {
+        @Override
+        public ClusterTasksResult<UpdateTask> execute(ClusterState currentState, List<UpdateTask> tasks) throws Exception {
+            Collection<Mutation> mutations = new LinkedList<>();
+            Collection<Event.SchemaChange> events = new LinkedList<>();
+            ClusterState newClusterState = executeRefresh(currentState, tasks, mutations, events);
+            return ClusterTasksResult.<UpdateTask>builder().successes(tasks).build(newClusterState, SchemaUpdate.UPDATE, mutations, events);
         }
     }
 
@@ -104,7 +131,8 @@ public class MetaDataMappingService {
      * as possible so we won't create the same index all the time for example for the updates on the same mapping
      * and generate a single cluster change event out of all of those.
      */
-    ClusterState executeRefresh(final ClusterState currentState, final List<RefreshTask> allTasks) throws Exception {
+    ClusterState executeRefresh(final ClusterState currentState, final List<? extends RefreshTask> allTasks,
+            Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws Exception {
         // break down to tasks per index, so we can optimize the on demand index service creation
         // to only happen for the duration of a single index processing of its respective events
         Map<String, List<RefreshTask>> tasksPerIndex = new HashMap<>();
@@ -116,7 +144,7 @@ public class MetaDataMappingService {
         }
 
         boolean dirty = false;
-        MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
+        MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData()).setClusterUuid();
 
         for (Map.Entry<String, List<RefreshTask>> entry : tasksPerIndex.entrySet()) {
             IndexMetaData indexMetaData = mdBuilder.get(entry.getKey());
@@ -147,13 +175,36 @@ public class MetaDataMappingService {
             if (indexService == null) {
                 // we need to create the index here, and add the current mapping to it, so we can merge
                 indexService = indicesService.createIndex(indexMetaData, Collections.emptyList());
-                removeIndex = true;
-                indexService.mapperService().merge(indexMetaData, MergeReason.MAPPING_RECOVERY, true);
+                //removeIndex = true;
+                //indexService.mapperService().merge(indexMetaData, MergeReason.MAPPING_RECOVERY, true);
+                KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(
+                        indexService.mapperService().keyspace(),
+                        settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1,
+                        indexService.mapperService().getIndexSettings().getIndexMetaData().replication(), mutations, events);
+                for (ObjectCursor<MappingMetaData> metaData : indexMetaData.getMappings().values()) {
+
+                    // build siblings indexMetaData to update table extensions in one schema mutation.
+                    Map<Index, Pair<IndexMetaData, MapperService>> indicesMap = new HashMap<>();
+
+                    for(ObjectCursor<IndexMetaData> imd : mdBuilder.indices()) {
+                        if (indexMetaData.keyspace().equals(imd.value.keyspace()) && imd.value.getMappings().containsKey(metaData.value.type())) {
+                            final IndexService indexService2 = indicesService.indexService(indexMetaData.getIndex());
+                            final MapperService mapperService2 = indexService2.mapperService();
+                            indicesMap.put(imd.value.getIndex(), Pair.create(imd.value, mapperService2));
+                        }
+                    }
+
+                    // don't apply the default mapping, it has been applied when the mapping was created
+                    DocumentMapper docMapper = indexService.mapperService().merge(metaData.value.type(), metaData.value.source(), MapperService.MergeReason.MAPPING_RECOVERY, true);
+                    if (!metaData.value.type().equals(MapperService.DEFAULT_MAPPING)) {
+                        ksm = clusterService.getSchemaManager().updateTableSchema(ksm, metaData.value.type(), indicesMap, mutations, events);
+                    }
+                }
             }
 
             IndexMetaData.Builder builder = IndexMetaData.builder(indexMetaData);
             try {
-                boolean indexDirty = refreshIndexMapping(indexService, builder);
+                boolean indexDirty = refreshIndexMapping(indexService, indexMetaData, builder, mutations, events);
                 if (indexDirty) {
                     mdBuilder.put(builder);
                     dirty = true;
@@ -171,7 +222,8 @@ public class MetaDataMappingService {
         return ClusterState.builder(currentState).metaData(mdBuilder).build();
     }
 
-    private boolean refreshIndexMapping(IndexService indexService, IndexMetaData.Builder builder) {
+    private boolean refreshIndexMapping(IndexService indexService, IndexMetaData currentIndexMetaData,  IndexMetaData.Builder builder,
+            Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
         boolean dirty = false;
         String index = indexService.index().getName();
         try {
@@ -187,8 +239,18 @@ public class MetaDataMappingService {
             if (updatedTypes.isEmpty() == false) {
                 logger.warn("[{}] re-syncing mappings with cluster state because of types [{}]", index, updatedTypes);
                 dirty = true;
+                KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(
+                        indexService.mapperService().keyspace(),
+                        settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1,
+                        indexService.mapperService().getIndexSettings().getIndexMetaData().replication(), mutations, events);
                 for (DocumentMapper mapper : indexService.mapperService().docMappers(true)) {
-                    builder.putMapping(new MappingMetaData(mapper));
+                    MappingMetaData mappingMetaData2 = new MappingMetaData(mapper);
+                    builder.putMapping(mappingMetaData2);
+
+                    if (!mappingMetaData2.type().equals(MapperService.DEFAULT_MAPPING)) {
+                        ksm = clusterService.getSchemaManager().updateTableSchema(ksm, mappingMetaData2.type(),
+                                Collections.singletonMap(currentIndexMetaData.getIndex(), Pair.create(currentIndexMetaData, indexService.mapperService())), mutations, events);
+                    }
                 }
             }
         } catch (Exception e) {
@@ -217,8 +279,13 @@ public class MetaDataMappingService {
             Map<Index, MapperService> indexMapperServices = new HashMap<>();
             ClusterTasksResult.Builder<PutMappingClusterStateUpdateRequest> builder = ClusterTasksResult.builder();
             try {
+                Collection<Mutation> mutations = new LinkedList<>();
+                Collection<Event.SchemaChange> events = new LinkedList<>();
+                SchemaUpdate schemaUpdate = SchemaUpdate.NO_UPDATE;
+                Map<String, KeyspaceMetadata> ksmMap = new HashMap<>();
                 for (PutMappingClusterStateUpdateRequest request : tasks) {
                     try {
+                        List<Index> effectiveIndices = new ArrayList<>();
                         for (Index index : request.indices()) {
                             final IndexMetaData indexMetaData = currentState.metaData().getIndexSafe(index);
                             if (indexMapperServices.containsKey(indexMetaData.getIndex()) == false) {
@@ -227,26 +294,45 @@ public class MetaDataMappingService {
                                 // add mappings for all types, we need them for cross-type validation
                                 mapperService.merge(indexMetaData, MergeReason.MAPPING_RECOVERY, request.updateAllTypes());
                             }
+
+                            // add virtual index in the mapperServices map, and all depending on it
+                            if (indexMetaData.virtualIndex() == null) {
+				effectiveIndices.add(index);
+                            } else {
+                                final IndexMetaData virtualIndexMetaData = currentState.metaData().index(indexMetaData.virtualIndex());
+                                if (virtualIndexMetaData != null && indexMapperServices.containsKey(virtualIndexMetaData.getIndex()) == false) {
+                                    MapperService mapperService = indicesService.createIndexMapperService(virtualIndexMetaData);
+                                    indexMapperServices.put(virtualIndexMetaData.getIndex(), mapperService);
+                                    // add mappings for all types, we need them for cross-type validation
+                                    mapperService.merge(virtualIndexMetaData, MergeReason.MAPPING_RECOVERY, request.updateAllTypes());
+                                }
+                                effectiveIndices.add(virtualIndexMetaData.getIndex());
+                            }
                         }
-                        currentState = applyRequest(currentState, request, indexMapperServices);
+                        currentState = applyRequest(currentState, ksmMap, request, effectiveIndices, indexMapperServices, mutations, events);
                         builder.success(request);
+                        schemaUpdate = (request.schemaUpdate().ordinal() > schemaUpdate.ordinal()) ? request.schemaUpdate() : schemaUpdate;
                     } catch (Exception e) {
                         builder.failure(request, e);
                     }
                 }
-                return builder.build(currentState);
+                return builder.build(currentState, schemaUpdate, mutations, events);
             } finally {
                 IOUtils.close(indexMapperServices.values());
             }
         }
 
-        private ClusterState applyRequest(ClusterState currentState, PutMappingClusterStateUpdateRequest request,
-                                          Map<Index, MapperService> indexMapperServices) throws IOException {
+        private ClusterState applyRequest(final ClusterState currentState,
+                final Map<String, KeyspaceMetadata> ksmMap,
+                final PutMappingClusterStateUpdateRequest request,
+                                          List<Index> effectiveIndices,
+                                          Map<Index, MapperService> indexMapperServices,
+                                          Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws IOException {
             String mappingType = request.type();
             CompressedXContent mappingUpdateSource = new CompressedXContent(request.source());
             final MetaData metaData = currentState.metaData();
             final List<IndexMetaData> updateList = new ArrayList<>();
-            for (Index index : request.indices()) {
+            for (Index index : effectiveIndices) {
                 MapperService mapperService = indexMapperServices.get(index);
                 // IMPORTANT: always get the metadata from the state since it get's batched
                 // and if we pull it from the indexService we might miss an update etc.
@@ -383,10 +469,23 @@ public class MetaDataMappingService {
         }
     }
 
-    public void putMapping(final PutMappingClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener) {
+    /**
+     * Refreshes mappings if they are not the same between original and parsed version
+     */
+    public void updateMapping(final String index, final String indexUUID, final String type, final CompressedXContent mappingSource, final String nodeId,
+            ClusterStateTaskListener listener, final TimeValue timeout) {
+        final UpdateTask updateTask = new UpdateTask(index, indexUUID, type, mappingSource, nodeId, listener);
+        clusterService.submitStateUpdateTask("update-mapping [" + index + "]",
+                updateTask,
+                ClusterStateTaskConfig.build(Priority.HIGH, timeout, ClusterStateTaskConfig.SchemaUpdate.UPDATE),
+            updateExecutor,
+            listener);
+    }
+
+    public void putMapping(final PutMappingClusterStateUpdateRequest request, final ActionListener<ClusterStateUpdateResponse> listener, ClusterStateTaskConfig.SchemaUpdate schemaUpdate) {
         clusterService.submitStateUpdateTask("put-mapping",
                 request,
-                ClusterStateTaskConfig.build(Priority.HIGH, request.masterNodeTimeout()),
+                ClusterStateTaskConfig.build(Priority.HIGH, request.masterNodeTimeout(), schemaUpdate),
                 putMappingExecutor,
                 new AckedClusterStateTaskListener() {
 

@@ -19,6 +19,8 @@
 
 package org.elasticsearch.cluster.routing;
 
+import org.codehaus.jackson.annotate.JsonCreator;
+import org.codehaus.jackson.annotate.JsonValue;
 
 /**
  * Represents the current state of a {@link ShardRouting} as defined by the
@@ -70,5 +72,32 @@ public enum ShardRoutingState {
             default:
                 throw new IllegalStateException("No routing state mapped for [" + value + "]");
         }
+    }
+
+    @Override
+    public String toString() {
+        switch (this.value) {
+        case 1:
+            return "UNASSIGNED";
+        case 2:
+            return "INITIALIZING";
+        case 3:
+            return "STARTED";
+        case 4:
+            return "RELOCATING";
+        default:
+            return "UNKNOWN";
+        }
+    }
+
+
+    @JsonCreator
+    public static ShardRoutingState fromJsonValue(Integer value) {
+        return fromValue(value.byteValue());
+    }
+
+    @JsonValue
+    public Integer jsonValue() {
+        return new Integer(this.value);
     }
 }

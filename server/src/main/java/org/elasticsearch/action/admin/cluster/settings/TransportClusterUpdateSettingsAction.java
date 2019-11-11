@@ -109,6 +109,12 @@ public class TransportClusterUpdateSettingsAction extends
             }
 
             @Override
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
+            }
+
+
+            @Override
             public void onAckTimeout() {
                 if (changed) {
                     reroute(false);

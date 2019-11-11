@@ -48,6 +48,7 @@ import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.InvalidIndexTemplateException;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -100,7 +101,17 @@ public class MetaDataIndexTemplateService {
             }
 
             @Override
-            public ClusterState execute(ClusterState currentState) {
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
+            }
+
+            @Override
+            public ClusterState execute(ClusterState currentState) throws Exception {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
                 Set<String> templateNames = new HashSet<>();
                 for (ObjectCursor<String> cursor : currentState.metaData().templates().keys()) {
                     String templateName = cursor.value;
@@ -152,7 +163,8 @@ public class MetaDataIndexTemplateService {
             return;
         }
 
-        final IndexTemplateMetaData.Builder templateBuilder = IndexTemplateMetaData.builder(request.name);
+        // keep the template name to build listener response.
+        final String templateName = request.name;
 
         clusterService.submitStateUpdateTask("create-index-template [" + request.name + "], cause [" + request.cause + "]",
                 new ClusterStateUpdateTask(Priority.URGENT) {
@@ -168,10 +180,22 @@ public class MetaDataIndexTemplateService {
             }
 
             @Override
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
+            }
+
+            @Override
             public ClusterState execute(ClusterState currentState) throws Exception {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws Exception {
                 if (request.create && currentState.metaData().templates().containsKey(request.name)) {
                     throw new IllegalArgumentException("index_template [" + request.name + "] already exists");
                 }
+
+                IndexTemplateMetaData.Builder templateBuilder = IndexTemplateMetaData.builder(request.name);
 
                 validateAndAddTemplate(request, templateBuilder, indicesService, xContentRegistry);
 

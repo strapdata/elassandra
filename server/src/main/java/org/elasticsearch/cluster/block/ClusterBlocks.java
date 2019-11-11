@@ -20,6 +20,7 @@
 package org.elasticsearch.cluster.block;
 
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+
 import org.elasticsearch.cluster.AbstractDiffable;
 import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.metadata.IndexMetaData;

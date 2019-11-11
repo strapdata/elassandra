@@ -156,6 +156,11 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
 
     public static final long UNKNOWN_VERSION = -1;
 
+    /**
+     * ClusterState version number unique generator
+     */
+    private static final AtomicLong versionGenerator = new AtomicLong(0);
+
     private final long version;
 
     private final String stateUUID;
@@ -342,8 +347,7 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
      * In essence that means that all the changes from the other cluster state are also reflected by the current one
      */
     public boolean supersedes(ClusterState other) {
-        return this.nodes().getMasterNodeId() != null && this.nodes().getMasterNodeId().equals(other.nodes().getMasterNodeId())
-            && this.version() > other.version();
+        return this.version() > other.version();
 
     }
 
@@ -452,6 +456,7 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
         // meta data
         if (metrics.contains(Metric.METADATA)) {
             builder.startObject("metadata");
+            builder.field("version", metaData().version());
             builder.field("cluster_uuid", metaData().clusterUUID());
             builder.startObject("templates");
             for (ObjectCursor<IndexTemplateMetaData> cursor : metaData().templates().values()) {
@@ -677,7 +682,7 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
         }
 
         public Builder incrementVersion() {
-            this.version = version + 1;
+            this.version = versionGenerator.incrementAndGet();
             this.uuid = UNKNOWN_UUID;
             return this;
         }
@@ -762,6 +767,10 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
         }
         builder.minimumMasterNodesOnPublishingMaster = in.getVersion().onOrAfter(Version.V_6_7_0) ? in.readVInt() : -1;
         return builder.build();
+    }
+
+    public static Diff<ClusterState> diff(ClusterState before, ClusterState after) {
+        return new ClusterStateDiff(before, after);
     }
 
     @Override

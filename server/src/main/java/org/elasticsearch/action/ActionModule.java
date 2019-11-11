@@ -436,18 +436,22 @@ public class ActionModule extends AbstractModule {
         actions.register(ClusterStateAction.INSTANCE, TransportClusterStateAction.class);
         actions.register(ClusterHealthAction.INSTANCE, TransportClusterHealthAction.class);
         actions.register(ClusterUpdateSettingsAction.INSTANCE, TransportClusterUpdateSettingsAction.class);
-        actions.register(ClusterRerouteAction.INSTANCE, TransportClusterRerouteAction.class);
+        //actions.register(ClusterRerouteAction.INSTANCE, TransportClusterRerouteAction.class);
         actions.register(ClusterSearchShardsAction.INSTANCE, TransportClusterSearchShardsAction.class);
         actions.register(PendingClusterTasksAction.INSTANCE, TransportPendingClusterTasksAction.class);
+
+        /*
         actions.register(PutRepositoryAction.INSTANCE, TransportPutRepositoryAction.class);
         actions.register(GetRepositoriesAction.INSTANCE, TransportGetRepositoriesAction.class);
         actions.register(DeleteRepositoryAction.INSTANCE, TransportDeleteRepositoryAction.class);
         actions.register(VerifyRepositoryAction.INSTANCE, TransportVerifyRepositoryAction.class);
+
         actions.register(GetSnapshotsAction.INSTANCE, TransportGetSnapshotsAction.class);
         actions.register(DeleteSnapshotAction.INSTANCE, TransportDeleteSnapshotAction.class);
         actions.register(CreateSnapshotAction.INSTANCE, TransportCreateSnapshotAction.class);
         actions.register(RestoreSnapshotAction.INSTANCE, TransportRestoreSnapshotAction.class);
         actions.register(SnapshotsStatusAction.INSTANCE, TransportSnapshotsStatusAction.class);
+        */
 
         actions.register(IndicesStatsAction.INSTANCE, TransportIndicesStatsAction.class);
         actions.register(IndicesSegmentsAction.INSTANCE, TransportIndicesSegmentsAction.class);
@@ -667,8 +671,8 @@ public class ActionModule extends AbstractModule {
         registerHandler.accept(new RestPluginsAction(settings, restController));
         registerHandler.accept(new RestFielddataAction(settings, restController));
         registerHandler.accept(new RestNodeAttrsAction(settings, restController));
-        registerHandler.accept(new RestRepositoriesAction(settings, restController));
-        registerHandler.accept(new RestSnapshotAction(settings, restController));
+        //registerHandler.accept(new RestRepositoriesAction(settings, restController));
+        //registerHandler.accept(new RestSnapshotAction(settings, restController));
         registerHandler.accept(new RestTemplatesAction(settings, restController));
         for (ActionPlugin plugin : actionPlugins) {
             for (RestHandler handler : plugin.getRestHandlers(settings, restController, clusterSettings, indexScopedSettings,

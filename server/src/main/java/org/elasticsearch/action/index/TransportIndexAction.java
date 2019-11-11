@@ -23,7 +23,6 @@ import org.elasticsearch.action.bulk.TransportBulkAction;
 import org.elasticsearch.action.bulk.TransportShardBulkAction;
 import org.elasticsearch.action.bulk.TransportSingleItemBulkWriteAction;
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
@@ -50,10 +49,10 @@ public class TransportIndexAction extends TransportSingleItemBulkWriteAction<Ind
     @Inject
     public TransportIndexAction(Settings settings, TransportService transportService, ClusterService clusterService,
                                 IndicesService indicesService,
-                                ThreadPool threadPool, ShardStateAction shardStateAction,
+                                ThreadPool threadPool,
                                 ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                 TransportBulkAction bulkAction, TransportShardBulkAction shardBulkAction) {
-        super(settings, IndexAction.NAME, transportService, clusterService, indicesService, threadPool, shardStateAction,
+        super(settings, IndexAction.NAME, transportService, clusterService, indicesService, threadPool,
             actionFilters, indexNameExpressionResolver, IndexRequest::new, IndexRequest::new, ThreadPool.Names.INDEX,
             bulkAction, shardBulkAction);
     }

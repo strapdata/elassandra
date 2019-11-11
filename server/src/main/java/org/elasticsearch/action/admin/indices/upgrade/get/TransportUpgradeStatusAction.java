@@ -98,7 +98,7 @@ public class TransportUpgradeStatusAction
     @Override
     protected ShardUpgradeStatus shardOperation(UpgradeStatusRequest request, ShardRouting shardRouting) {
         IndexService indexService = indicesService.indexServiceSafe(shardRouting.shardId().getIndex());
-        IndexShard indexShard = indexService.getShard(shardRouting.shardId().id());
+        IndexShard indexShard = indexService.getShard(0);
         List<Segment> segments = indexShard.segments(false);
         long total_bytes = 0;
         long to_upgrade_bytes = 0;

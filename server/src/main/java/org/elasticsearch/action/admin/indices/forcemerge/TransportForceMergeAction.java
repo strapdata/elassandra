@@ -78,7 +78,7 @@ public class TransportForceMergeAction
 
     @Override
     protected EmptyResult shardOperation(ForceMergeRequest request, ShardRouting shardRouting) throws IOException {
-        IndexShard indexShard = indicesService.indexServiceSafe(shardRouting.shardId().getIndex()).getShard(shardRouting.shardId().id());
+        IndexShard indexShard = indicesService.indexServiceSafe(shardRouting.shardId().getIndex()).getShard(0);
         indexShard.forceMerge(request);
         return EmptyResult.INSTANCE;
     }

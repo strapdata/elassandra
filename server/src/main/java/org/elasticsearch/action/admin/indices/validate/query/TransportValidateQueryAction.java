@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action.admin.indices.validate.query;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.action.ActionListener;
@@ -53,6 +55,7 @@ import org.elasticsearch.transport.TransportService;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -137,7 +140,15 @@ public class TransportValidateQueryAction extends TransportBroadcastAction<
             routing = Integer.toString(Randomness.get().nextInt(1000));
         }
         Map<String, Set<String>> routingMap = indexNameExpressionResolver.resolveSearchRouting(clusterState, routing, request.indices());
-        return clusterService.operationRouting().searchShards(clusterState, concreteIndices, routingMap, "_local");
+        return clusterService.operationRouting().searchShards(clusterState,
+                concreteIndices,
+                null,
+                routingMap,
+                "_local",
+                null,
+                null,
+                null,
+                null);
     }
 
     @Override

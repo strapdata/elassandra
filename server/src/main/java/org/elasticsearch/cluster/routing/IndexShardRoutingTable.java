@@ -44,6 +44,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static java.util.Collections.emptyMap;
 
@@ -65,7 +66,6 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
     final List<ShardRouting> shards;
     final List<ShardRouting> activeShards;
     final List<ShardRouting> assignedShards;
-    final Set<String> allAllocationIds;
     static final List<ShardRouting> NO_SHARDS = Collections.emptyList();
     final boolean allShardsStarted;
 
@@ -79,7 +79,7 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
      */
     final List<ShardRouting> allInitializingShards;
 
-    IndexShardRoutingTable(ShardId shardId, List<ShardRouting> shards) {
+    public IndexShardRoutingTable(ShardId shardId, List<ShardRouting> shards) {
         this.shardId = shardId;
         this.shuffler = new RotationShardShuffler(Randomness.get().nextInt());
         this.shards = Collections.unmodifiableList(shards);
@@ -127,8 +127,37 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
         this.activeShards = Collections.unmodifiableList(activeShards);
         this.assignedShards = Collections.unmodifiableList(assignedShards);
         this.allInitializingShards = Collections.unmodifiableList(allInitializingShards);
-        this.allAllocationIds = Collections.unmodifiableSet(allAllocationIds);
     }
+
+    private static RotationShardShuffler DUMMY_SHARD_SHUFFLER = new RotationShardShuffler(ThreadLocalRandom.current().nextInt());
+    private static List<ShardRouting> EMPTY_LIST = Collections.emptyList();
+
+    /**
+     * Elassandra default ctor for single primary shard IndexShardRoutingTable
+     * @param shardId
+     * @param shard
+     */
+    public IndexShardRoutingTable(ShardId shardId, ShardRouting shard) {
+         List<ShardRouting> singleton = Collections.singletonList(shard);
+
+         this.shardId = shardId;
+         this.shards = singleton;
+
+         this.allShardsStarted = shard.started();
+         this.primary = shard;
+         this.primaryAsList = singleton;
+         this.replicas = EMPTY_LIST;
+         this.activeShards = (shard.active()) ? singleton : EMPTY_LIST;
+         this.allInitializingShards = (shard.initializing()) ? singleton : EMPTY_LIST;
+         this.assignedShards = (shard.assignedToNode()) ? singleton :  EMPTY_LIST;
+
+         this.shuffler = DUMMY_SHARD_SHUFFLER;
+    }
+
+    public ShardRouting getPrimaryShardRouting() {
+        return primaryAsList.get(0);
+    }
+
 
     /**
      * Returns the shards id
@@ -619,7 +648,7 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
     }
 
     public Set<String> getAllAllocationIds() {
-        return allAllocationIds;
+        return Collections.EMPTY_SET;
     }
 
     static class AttributesKey {

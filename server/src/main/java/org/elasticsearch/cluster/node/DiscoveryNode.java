@@ -20,10 +20,10 @@
 package org.elasticsearch.cluster.node;
 
 import org.elasticsearch.Version;
-import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.network.InetAddresses;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.xcontent.ToXContentFragment;
@@ -31,11 +31,13 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.node.Node;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 
 
@@ -71,6 +73,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     }
 
     private final String nodeName;
+    private transient final InetAddress nodeNameAddress;
     private final String nodeId;
     private final String ephemeralId;
     private final String hostName;
@@ -80,6 +83,74 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     private final Version version;
     private final Set<Role> roles;
 
+    private transient UUID nodeUuid;
+    private DiscoveryNodeStatus status = DiscoveryNodeStatus.UNKNOWN;
+
+    public static enum DiscoveryNodeStatus {
+        UNKNOWN((byte) 0), ALIVE((byte) 1), DEAD((byte) 2), DISABLED((byte) 3);
+
+        private final byte status;
+
+        DiscoveryNodeStatus(byte status) {
+            this.status = status;
+        }
+
+        public byte status() {
+            return this.status;
+        }
+
+        @Override
+        public String toString() {
+            switch (this) {
+            case UNKNOWN:
+                return "UNKNOWN";
+            case ALIVE:
+                return "ALIVE";
+            case DEAD:
+                return "DEAD";
+            case DISABLED:
+                return "DISABLED";
+            default:
+                throw new IllegalArgumentException();
+            }
+        }
+    }
+
+    public DiscoveryNode status(DiscoveryNodeStatus status) {
+        this.status = status;
+        return this;
+    }
+
+    /**
+     * The name of the node.
+     */
+    public DiscoveryNodeStatus status() {
+        return this.status;
+    }
+
+    /**
+     * The name of the node.
+     */
+    public DiscoveryNodeStatus getStatus() {
+        return status();
+    }
+
+
+    public UUID uuid() {
+        return this.nodeUuid;
+    }
+
+    /**
+     * The inet listen address of the node.
+     */
+    public InetAddress getInetAddress() {
+        TransportAddress addr = getAddress();
+        return addr.address().getAddress();
+    }
+
+    public InetAddress getNameAsInetAddress() {
+        return this.nodeNameAddress;
+    }
 
     /**
      * Creates a new {@link DiscoveryNode}
@@ -136,8 +207,37 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      */
     public DiscoveryNode(String nodeName, String nodeId, TransportAddress address,
                          Map<String, String> attributes, Set<Role> roles, Version version) {
-        this(nodeName, nodeId, UUIDs.randomBase64UUID(), address.address().getHostString(), address.getAddress(), address, attributes,
-            roles, version);
+        this(nodeName, nodeId, nodeId, address.address().getHostString(), address.getAddress(), address, attributes,
+            roles, version, DiscoveryNodeStatus.UNKNOWN);
+    }
+
+    /**
+     * Creates a new {@link DiscoveryNode}
+     * <p>
+     * <b>Note:</b> if the version of the node is unknown {@link Version#minimumCompatibilityVersion()} should be used for the current
+     * version. it corresponds to the minimum version this elasticsearch version can communicate with. If a higher version is used
+     * the node might not be able to communicate with the remove node. After initial handshakes node versions will be discovered
+     * and updated.
+     * </p>
+     *
+     * @param nodeName         the nodes name
+     * @param nodeId           the nodes unique persistent id. An ephemeral id will be auto generated.
+     * @param address          the nodes transport address
+     * @param attributes       node attributes
+     * @param roles            node roles
+     * @param version          the version of the node
+     * @param status           DiscoveryNodeStus
+     */
+    public DiscoveryNode(String nodeName, String nodeId, TransportAddress address,
+            Map<String, String> attributes, Set<Role> roles, Version version, DiscoveryNodeStatus status) {
+            this(nodeName, nodeId, nodeId, address.address().getHostString(), address.getAddress(), address, attributes,
+                    roles, version, status);
+    }
+
+    public DiscoveryNode(String nodeName, String nodeId, String ephemeralId, String hostName, String hostAddress,
+            TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version) {
+        this(nodeName, nodeId, ephemeralId, hostName, hostAddress,
+            address, attributes, roles, version, DiscoveryNodeStatus.UNKNOWN);
     }
 
     /**
@@ -159,17 +259,29 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      * @param version          the version of the node
      */
     public DiscoveryNode(String nodeName, String nodeId, String ephemeralId, String hostName, String hostAddress,
-                         TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version) {
+                         TransportAddress address, Map<String, String> attributes, Set<Role> roles, Version version, DiscoveryNodeStatus status) {
+        InetAddress nodeAddr = null;
         if (nodeName != null) {
             this.nodeName = nodeName.intern();
+            try {
+                nodeAddr = InetAddresses.forString(nodeName);
+            } catch (Exception e) {
+            }
         } else {
             this.nodeName = "";
         }
+        this.nodeNameAddress = nodeAddr;
         this.nodeId = nodeId.intern();
+        try {
+            this.nodeUuid = UUID.fromString(nodeId);
+        } catch (Exception e) {
+            this.nodeUuid = UUID.randomUUID();
+        }
         this.ephemeralId = ephemeralId.intern();
         this.hostName = hostName.intern();
         this.hostAddress = hostAddress.intern();
         this.address = address;
+        this.status = status;
         if (version == null) {
             this.version = Version.CURRENT;
         } else {
@@ -193,7 +305,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     public static DiscoveryNode createLocal(Settings settings, TransportAddress publishAddress, String nodeId) {
         Map<String, String> attributes = Node.NODE_ATTRIBUTES.getAsMap(settings);
         Set<Role> roles = getRolesFromSettings(settings);
-        return new DiscoveryNode(Node.NODE_NAME_SETTING.get(settings), nodeId, publishAddress, attributes, roles, Version.CURRENT);
+        return new DiscoveryNode(Node.NODE_NAME_SETTING.get(settings), nodeId, publishAddress, attributes, roles, Version.CURRENT, DiscoveryNodeStatus.ALIVE);
     }
 
     /** extract node roles from the given settings */
@@ -218,6 +330,12 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      */
     public DiscoveryNode(StreamInput in) throws IOException {
         this.nodeName = in.readString().intern();
+        InetAddress nodeNameAddress = null;
+        try {
+            nodeNameAddress = InetAddresses.forString(this.nodeName);
+        } catch (Exception e) {
+        }
+        this.nodeNameAddress = nodeNameAddress;
         this.nodeId = in.readString().intern();
         this.ephemeralId = in.readString().intern();
         this.hostName = in.readString().intern();
@@ -375,6 +493,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         sb.append('{').append(ephemeralId).append('}');
         sb.append('{').append(hostName).append('}');
         sb.append('{').append(address).append('}');
+        sb.append('{').append(status.toString()).append('}');
         if (!attributes.isEmpty()) {
             sb.append(attributes);
         }
@@ -385,6 +504,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject(getId());
         builder.field("name", getName());
+        builder.field("status", getStatus().toString());
         builder.field("ephemeral_id", getEphemeralId());
         builder.field("transport_address", getAddress().toString());
 

@@ -19,6 +19,7 @@
 
 package org.elasticsearch.action.admin.indices.mapping.put;
 
+import org.elasticsearch.cluster.ClusterStateTaskConfig;
 import org.elasticsearch.cluster.ack.IndicesClusterStateUpdateRequest;
 
 /**
@@ -33,7 +34,7 @@ public class PutMappingClusterStateUpdateRequest extends IndicesClusterStateUpda
     private boolean updateAllTypes = false;
 
     public PutMappingClusterStateUpdateRequest() {
-
+        schemaUpdate(ClusterStateTaskConfig.SchemaUpdate.UPDATE);
     }
 
     public String type() {

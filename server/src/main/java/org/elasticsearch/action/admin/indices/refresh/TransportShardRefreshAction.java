@@ -41,9 +41,9 @@ public class TransportShardRefreshAction
 
     @Inject
     public TransportShardRefreshAction(Settings settings, TransportService transportService, ClusterService clusterService,
-                                       IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                       IndicesService indicesService, ThreadPool threadPool,
                                        ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver) {
-        super(settings, NAME, transportService, clusterService, indicesService, threadPool, shardStateAction, actionFilters,
+        super(settings, NAME, transportService, clusterService, indicesService, threadPool, actionFilters,
                 indexNameExpressionResolver, BasicReplicationRequest::new, BasicReplicationRequest::new, ThreadPool.Names.REFRESH);
     }
 
@@ -61,8 +61,10 @@ public class TransportShardRefreshAction
 
     @Override
     protected ReplicaResult shardOperationOnReplica(BasicReplicationRequest request, IndexShard replica) {
+        /*
         replica.refresh("api");
         logger.trace("{} refresh request executed on replica", replica.shardId());
+        */
         return new ReplicaResult();
     }
 }

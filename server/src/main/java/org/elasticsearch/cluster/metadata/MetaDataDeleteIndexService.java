@@ -37,10 +37,15 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.index.Index;
-import org.elasticsearch.snapshots.RestoreService;
+import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.snapshots.SnapshotsService;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static java.util.stream.Collectors.toSet;
@@ -79,33 +84,135 @@ public class MetaDataDeleteIndexService {
             }
 
             @Override
-            public ClusterState execute(final ClusterState currentState) {
-                return deleteIndices(currentState, Sets.newHashSet(request.indices()));
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
+            }
+
+            @Override
+            public ClusterState execute(ClusterState currentState) throws Exception {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public ClusterState execute(final ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
+                return deleteIndices(currentState, Sets.newHashSet(request.indices()), mutations, events);
             }
         });
+    }
+
+    // for testing purposes only
+    public ClusterState deleteIndices(ClusterState currentState, Set<Index> indices) {
+        return deleteIndices(currentState, indices, new ArrayList<Mutation>(), new ArrayList<Event.SchemaChange>());
+    }
+
+    // collected keyspaces and tables for deleted indices
+    class KeyspaceRemovalInfo {
+        String keyspace;
+        Set<IndexMetaData> indices = new HashSet<>();
+        Set<String> droppableTables = new HashSet<>();
+        Set<String> unindexableTables = new HashSet<>();
+        boolean droppableKeyspace = true;
+
+        public KeyspaceRemovalInfo(String keyspace) {
+            this.keyspace = keyspace;
+        }
+
+        void addRemovedIndex(IndexMetaData indexMetaData, boolean clusterDropOnDelete) {
+            assert this.keyspace.equals(indexMetaData.keyspace()) : "Keyspace does not match";
+            indices.add(indexMetaData);
+            for(ObjectCursor<MappingMetaData> type : indexMetaData.getMappings().values()) {
+                if (!MapperService.DEFAULT_MAPPING.equals(type.value.type())) {
+                    String tableName = SchemaManager.typeToCfName(indexMetaData.keyspace(), type.value.type());
+                    unindexableTables.add(tableName);
+                    if (indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_DROP_ON_DELETE_INDEX, clusterDropOnDelete))
+                        droppableTables.add(tableName);
+                }
+            }
+            if (!indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_DROP_ON_DELETE_INDEX, clusterDropOnDelete))
+                droppableKeyspace = false;
+        }
+
+        void removeUsedTables(IndexMetaData indexMetaData) {
+            assert this.keyspace.equals(indexMetaData.keyspace()) : "Keyspace does not match";
+            for(ObjectCursor<MappingMetaData> type: indexMetaData.getMappings().values()) {
+                String tableName = SchemaManager.typeToCfName(indexMetaData.keyspace(), type.value.type());
+                droppableTables.remove(tableName);
+                unindexableTables.remove(tableName);
+                droppableKeyspace = false;
+            }
+        }
+
+        void drop(Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
+            logger.debug("drop keyspaces={} droppableKeyspace={} droppableTables={} unindexableTables={}",
+                    keyspace, droppableKeyspace, droppableTables, unindexableTables);
+
+            if (droppableKeyspace) {
+                MetaDataDeleteIndexService.this.clusterService.getSchemaManager().dropIndexKeyspace(keyspace, mutations, events);
+                return;
+            }
+
+            KeyspaceMetadata ksm = SchemaManager.getKSMetaDataCopy(keyspace);
+            if (ksm == null)
+                return;
+
+            for(String table : droppableTables) {
+                ksm = MetaDataDeleteIndexService.this.clusterService.getSchemaManager().dropTable(ksm, table, mutations, events);
+                unindexableTables.remove(table);
+            }
+            for(String table : unindexableTables) {
+                MetaDataDeleteIndexService.this.clusterService.getSchemaManager().dropSecondaryIndex(ksm, table, mutations, events);
+            }
+
+            // remove table extensions from CQL schema
+            HashMultimap<String, IndexMetaData> tableExtensionToRemove = HashMultimap.create();
+            for(IndexMetaData indexMetaData : indices) {
+                for(ObjectCursor<MappingMetaData> type: indexMetaData.getMappings().values()) {
+                    String table = SchemaManager.typeToCfName(indexMetaData.keyspace(), type.value.type());
+                    if (!droppableTables.contains(table) && !unindexableTables.contains(table))
+                        tableExtensionToRemove.put(table, indexMetaData);
+                }
+            }
+            Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
+            for(String table : tableExtensionToRemove.keySet()) {
+                CFMetaData cfm = ksm.getTableOrViewNullable(table);
+                MetaDataDeleteIndexService.this.clusterService.getSchemaManager().removeTableExtensionToMutationBuilder(cfm, tableExtensionToRemove.get(table), builder);
+            }
+            if (!builder.isEmpty())
+                mutations.add(builder.build());
+        }
     }
 
     /**
      * Delete some indices from the cluster state.
      */
-    public ClusterState deleteIndices(ClusterState currentState, Set<Index> indices) {
+    public ClusterState deleteIndices(ClusterState currentState, Set<Index> indices, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
         final MetaData meta = currentState.metaData();
         final Set<IndexMetaData> metaDatas = indices.stream().map(i -> meta.getIndexSafe(i)).collect(toSet());
         // Check if index deletion conflicts with any running snapshots
         SnapshotsService.checkIndexDeletion(currentState, metaDatas);
-        RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
-        MetaData.Builder metaDataBuilder = MetaData.builder(meta);
+        //RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+        MetaData.Builder metaDataBuilder = MetaData.builder(meta).setClusterUuid();
         ClusterBlocks.Builder clusterBlocksBuilder = ClusterBlocks.builder().blocks(currentState.blocks());
 
         final IndexGraveyard.Builder graveyardBuilder = IndexGraveyard.builder(metaDataBuilder.indexGraveyard());
         final int previousGraveyardSize = graveyardBuilder.tombstones().size();
+
+        final boolean clusterDropOnDelete = currentState.metaData().settings().getAsBoolean(ClusterService.SETTING_CLUSTER_DROP_ON_DELETE_INDEX, Boolean.getBoolean("es.drop_on_delete_index"));
+        final Map<String, KeyspaceRemovalInfo> removalInfoMap = new HashMap<>();
+        RoutingTable.Builder routingTableBuilder = new RoutingTable.Builder(currentState.routingTable());
         for (final Index index : indices) {
             String indexName = index.getName();
             logger.info("{} deleting index", index);
-            routingTableBuilder.remove(indexName);
+            //routingTableBuilder.remove(indexName);
             clusterBlocksBuilder.removeIndexBlocks(indexName);
             metaDataBuilder.remove(indexName);
+            routingTableBuilder.remove(index.getName());
+
+            final IndexMetaData indexMetaData = currentState.metaData().index(index);
+            KeyspaceRemovalInfo kri = removalInfoMap.computeIfAbsent(indexMetaData.keyspace(),  k -> { return new KeyspaceRemovalInfo(indexMetaData.keyspace()); });
+            kri.addRemovedIndex(indexMetaData, clusterDropOnDelete);
         }
+
         // add tombstones to the cluster state for each deleted index
         final IndexGraveyard currentGraveyard = graveyardBuilder.addTombstones(indices).build(settings);
         metaDataBuilder.indexGraveyard(currentGraveyard); // the new graveyard set on the metadata
@@ -115,25 +222,17 @@ public class MetaDataDeleteIndexService {
         MetaData newMetaData = metaDataBuilder.build();
         ClusterBlocks blocks = clusterBlocksBuilder.build();
 
-        // update snapshot restore entries
-        ImmutableOpenMap<String, ClusterState.Custom> customs = currentState.getCustoms();
-        final RestoreInProgress restoreInProgress = currentState.custom(RestoreInProgress.TYPE);
-        if (restoreInProgress != null) {
-            RestoreInProgress updatedRestoreInProgress = RestoreService.updateRestoreStateWithDeletedIndices(restoreInProgress, indices);
-            if (updatedRestoreInProgress != restoreInProgress) {
-                ImmutableOpenMap.Builder<String, ClusterState.Custom> builder = ImmutableOpenMap.builder(customs);
-                builder.put(RestoreInProgress.TYPE, updatedRestoreInProgress);
-                customs = builder.build();
-            }
+        // remove keyspacse and tables still having ES indices from the unindexedTables and unindexedKeyspaces
+        for(ObjectCursor<IndexMetaData> index : newMetaData.indices().values()) {
+            final IndexMetaData imd = index.value;
+            removalInfoMap.computeIfPresent(index.value.keyspace(), (String k, KeyspaceRemovalInfo v) -> { v.removeUsedTables(imd); return v; });
         }
 
-        return allocationService.reroute(
-                ClusterState.builder(currentState)
-                    .routingTable(routingTableBuilder.build())
-                    .metaData(newMetaData)
-                    .blocks(blocks)
-                    .customs(customs)
-                    .build(),
-                "deleted indices [" + indices + "]");
+        if (this.clusterService != null)    // to avoid NPE on test
+            removalInfoMap.values().forEach( v -> v.drop(mutations, events) );
+
+        // update snapshot restore entries
+        ImmutableOpenMap<String, ClusterState.Custom> customs = currentState.getCustoms();
+        return ClusterState.builder(currentState).metaData(newMetaData).blocks(blocks).routingTable(routingTableBuilder.build()).customs(customs).build();
     }
 }

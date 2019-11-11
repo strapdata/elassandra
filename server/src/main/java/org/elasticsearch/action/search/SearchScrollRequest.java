@@ -41,6 +41,7 @@ public class SearchScrollRequest extends ActionRequest implements ToXContentObje
 
     private String scrollId;
     private Scroll scroll;
+    private Map<String,Object> extraParams;
 
     public SearchScrollRequest() {
     }
@@ -77,6 +78,11 @@ public class SearchScrollRequest extends ActionRequest implements ToXContentObje
         return scroll;
     }
 
+    public SearchScrollRequest setExtraParams(Map<String, Object> extraParams) {
+        this.extraParams = extraParams;
+        return this;
+    }
+
     /**
      * If set, will enable scrolling of the search request.
      */
@@ -104,6 +110,9 @@ public class SearchScrollRequest extends ActionRequest implements ToXContentObje
         super.readFrom(in);
         scrollId = in.readString();
         scroll = in.readOptionalWriteable(Scroll::new);
+
+        if (in.available() > 0 && in.readBoolean())
+            extraParams = in.readMap();
     }
 
     @Override
@@ -111,6 +120,10 @@ public class SearchScrollRequest extends ActionRequest implements ToXContentObje
         super.writeTo(out);
         out.writeString(scrollId);
         out.writeOptionalWriteable(scroll);
+
+        out.writeBoolean(this.extraParams != null);
+        if (this.extraParams != null)
+            out.writeMap(this.extraParams);
     }
 
     @Override

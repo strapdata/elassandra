@@ -80,7 +80,7 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
     @Override
     protected GetResponse shardOperation(GetRequest request, ShardId shardId) {
         IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
-        IndexShard indexShard = indexService.getShard(shardId.id());
+        IndexShard indexShard = indexService.getShard(0);
 
         if (request.refresh() && !request.realtime()) {
             indexShard.refresh("refresh_flag_get");

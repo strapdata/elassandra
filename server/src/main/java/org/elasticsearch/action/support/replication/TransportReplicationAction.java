@@ -105,7 +105,7 @@ public abstract class TransportReplicationAction<
 
     protected final TransportService transportService;
     protected final ClusterService clusterService;
-    protected final ShardStateAction shardStateAction;
+    //protected final ShardStateAction shardStateAction;
     protected final IndicesService indicesService;
     protected final TransportRequestOptions transportOptions;
     protected final String executor;
@@ -118,18 +118,18 @@ public abstract class TransportReplicationAction<
 
     protected TransportReplicationAction(Settings settings, String actionName, TransportService transportService,
                                          ClusterService clusterService, IndicesService indicesService,
-                                         ThreadPool threadPool, ShardStateAction shardStateAction,
+                                         ThreadPool threadPool,
                                          ActionFilters actionFilters,
                                          IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
                                          Supplier<ReplicaRequest> replicaRequest, String executor) {
-        this(settings, actionName, transportService, clusterService, indicesService, threadPool, shardStateAction, actionFilters,
+        this(settings, actionName, transportService, clusterService, indicesService, threadPool, actionFilters,
                 indexNameExpressionResolver, request, replicaRequest, executor, false);
     }
 
 
     protected TransportReplicationAction(Settings settings, String actionName, TransportService transportService,
                                          ClusterService clusterService, IndicesService indicesService,
-                                         ThreadPool threadPool, ShardStateAction shardStateAction,
+                                         ThreadPool threadPool,
                                          ActionFilters actionFilters,
                                          IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
                                          Supplier<ReplicaRequest> replicaRequest, String executor,
@@ -138,7 +138,7 @@ public abstract class TransportReplicationAction<
         this.transportService = transportService;
         this.clusterService = clusterService;
         this.indicesService = indicesService;
-        this.shardStateAction = shardStateAction;
+        //this.shardStateAction = shardStateAction;
         this.executor = executor;
 
         this.transportPrimaryAction = actionName + "[p]";
@@ -156,10 +156,12 @@ public abstract class TransportReplicationAction<
         transportService.registerRequestHandler(transportPrimaryAction, () -> new ConcreteShardRequest<>(request), executor,
             new PrimaryOperationTransportHandler());
         // we must never reject on because of thread pool capacity on replicas
+        /*
         transportService.registerRequestHandler(transportReplicaAction,
             () -> new ConcreteReplicaRequest<>(replicaRequest),
             executor, true, true,
             new ReplicaOperationTransportHandler());
+        */
     }
 
     @Override
@@ -432,6 +434,7 @@ public abstract class TransportReplicationAction<
                             primaryShardReference)
                             .execute();
                 }
+                */
             } catch (Exception e) {
                 Releasables.closeWhileHandlingException(primaryShardReference); // release shard operation lock before responding to caller
                 onFailure(e);
@@ -453,6 +456,7 @@ public abstract class TransportReplicationAction<
             return new ActionListener<Response>() {
                 @Override
                 public void onResponse(Response response) {
+                    /*
                     if (syncGlobalCheckpointAfterOperation) {
                         final IndexShard shard = primaryShardReference.indexShard;
                         try {
@@ -469,7 +473,8 @@ public abstract class TransportReplicationAction<
                             }
                         }
                     }
-                    primaryShardReference.close(); // release shard operation lock before responding to caller
+                    */
+                    //primaryShardReference.close(); // release shard operation lock before responding to caller
                     setPhase(replicationTask, "finished");
                     try {
                         channel.sendResponse(response);
@@ -480,7 +485,7 @@ public abstract class TransportReplicationAction<
 
                 @Override
                 public void onFailure(Exception e) {
-                    primaryShardReference.close(); // release shard operation lock before responding to caller
+                    //primaryShardReference.close(); // release shard operation lock before responding to caller
                     setPhase(replicationTask, "finished");
                     try {
                         channel.sendResponse(e);
@@ -847,6 +852,8 @@ public abstract class TransportReplicationAction<
                 // target is not aware that it is the active primary shard already.
                 request.routedBasedOnClusterVersion(state.version());
             }
+            */
+            request.routedBasedOnClusterVersion(state.version());
             if (logger.isTraceEnabled()) {
                 logger.trace("send action [{}] on primary [{}] for request [{}] with cluster state version [{}] to [{}]", actionName,
                     request.shardId(), request, state.version(), primary.currentNodeId());
@@ -878,6 +885,9 @@ public abstract class TransportReplicationAction<
 
         private void performAction(final DiscoveryNode node, final String action, final boolean isPrimaryAction,
                                    final TransportRequest requestToPerform) {
+            // remote shard is always 0 in elassandra
+            request.setShardId(new ShardId(request.shardId().getIndex(), 0));
+
             transportService.sendRequest(node, action, requestToPerform, transportOptions, new TransportResponseHandler<Response>() {
 
                 @Override

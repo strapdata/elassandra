@@ -168,6 +168,16 @@ public class MetaDataUpdateSettingsService {
                     routingTableBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
                     metaDataBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
                     logger.info("updating number_of_replicas to [{}] for indices {}", updatedNumberOfReplicas, actualIndices);
+                    for (String index : actualIndices) {
+                        final IndexMetaData indexMetaData = currentState.metaData().index(index);
+                        if (indexMetaData == null) {
+                            throw new IndexNotFoundException(index);
+                        }
+
+                        String keyspaceName = indexMetaData.keyspace();
+                        logger.debug("updating keyspace {} with RF={}", keyspaceName, updatedNumberOfReplicas+1);
+                        clusterService.getSchemaManager().createOrUpdateKeyspace(keyspaceName, updatedNumberOfReplicas + 1, indexMetaData.replication(), mutations, events);
+                    }
                 }
 
                 ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
@@ -248,6 +258,7 @@ public class MetaDataUpdateSettingsService {
                 } catch (IOException ex) {
                     throw ExceptionsHelper.convertToElastic(ex);
                 }
+                */
                 return updatedState;
             }
         });
@@ -291,7 +302,12 @@ public class MetaDataUpdateSettingsService {
             }
 
             @Override
-            public ClusterState execute(ClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) throws Exception {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
                 MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
                 for (Map.Entry<String, Tuple<Version, String>> entry : request.versions().entrySet()) {
                     String index = entry.getKey();

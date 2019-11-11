@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action.search;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.action.admin.cluster.shards.ClusterSearchShardsGroup;

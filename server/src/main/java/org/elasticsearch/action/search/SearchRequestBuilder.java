@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action.search;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.ActionRequestBuilder;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.client.ElasticsearchClient;
@@ -26,11 +28,11 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.script.Script;
-import org.elasticsearch.search.collapse.CollapseBuilder;
 import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.PipelineAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.collapse.CollapseBuilder;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.elasticsearch.search.rescore.RescorerBuilder;
 import org.elasticsearch.search.slice.SliceBuilder;
@@ -39,7 +41,9 @@ import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.search.suggest.SuggestBuilder;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A search action request builder.
@@ -114,6 +118,16 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
      */
     public SearchRequestBuilder setTimeout(TimeValue timeout) {
         sourceBuilder().timeout(timeout);
+        return this;
+    }
+
+    public SearchRequestBuilder setTokenRanges(Collection<Range<Token>> tokenRanges) {
+        request.tokenRanges(tokenRanges);
+        return this;
+    }
+
+    public SearchRequestBuilder setExtraParams(Map<String, Object> extraParams) {
+        request.extraParams(extraParams);
         return this;
     }
 

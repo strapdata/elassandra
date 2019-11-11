@@ -19,10 +19,15 @@
 
 package org.elasticsearch.cluster;
 
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.unit.TimeValue;
 
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -58,6 +63,10 @@ public abstract class ClusterStateUpdateTask
      * should be changed.
      */
     public abstract ClusterState execute(ClusterState currentState) throws Exception;
+
+    public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) throws Exception {
+        return execute(currentState);
+    }
 
     /**
      * A callback called when execute fails.

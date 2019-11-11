@@ -34,6 +34,7 @@ import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.node.DiscoveryNodeFilters;
 import org.elasticsearch.cluster.routing.allocation.IndexMetaDataUpdater;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.collect.ImmutableOpenIntMap;
@@ -451,6 +452,70 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
         return settings;
     }
 
+    public boolean isInsertOnly() {
+        return getSettings().getAsBoolean(IndexMetaData.SETTING_INDEX_APPEND_ONLY, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_INSERT_ONLY));
+    }
+
+    public boolean isOpaqueStorage() {
+        return getSettings().getAsBoolean(IndexMetaData.SETTING_INDEX_OPAQUE_STORAGE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_OPAQUE_STORAGE));
+    }
+
+    public String keyspace() {
+        return getSettings().get(IndexMetaData.SETTING_KEYSPACE, ClusterService.indexToKsName(index.getName()));
+    }
+
+    public String table() {
+        return getSettings().get(IndexMetaData.SETTING_TABLE, "_doc");
+    }
+
+    public String tableOptions() {
+        return getSettings().get(IndexMetaData.SETTING_TABLE_OPTIONS);
+    }
+
+    public Map<String, Integer> replication() {
+        Map<String, Integer> replicationMap = new HashMap<>();
+        for(String s : settings.getAsList(IndexMetaData.SETTING_REPLICATION)) {
+            int i = s.indexOf(":");
+            replicationMap.put(s.substring(0,i), Integer.parseInt(s.substring(i+1)));
+        }
+        return replicationMap;
+    }
+
+    public String virtualIndex() {
+        return getSettings().get(IndexMetaData.SETTING_VIRTUAL_INDEX);
+    }
+
+    public boolean hasVirtualIndex() {
+        return virtualIndex() != null;
+    }
+
+    public boolean isVirtual() {
+        return getSettings().getAsBoolean(IndexMetaData.SETTING_VIRTUAL, false);
+    }
+
+    /**
+     * name = partition function name.
+     * pattern = MessageFormat (@see MessageFormat)
+     * colX = CQL column names.
+     * @return name pattern col1 col2...colN
+     */
+    public String[] partitionFunction() {
+        String dynamicEntry = getSettings().get(IndexMetaData.SETTING_PARTITION_FUNCTION);
+        if (dynamicEntry != null) {
+            String[] args = dynamicEntry.split(" ");
+            if (args.length > 0) {
+                return args;
+            }
+        }
+        return null;
+    }
+
+    public PartitionFunction partitionFunctionClass() {
+        String partFuncClass = getSettings().get(IndexMetaData.SETTING_PARTITION_FUNCTION_CLASS, MessageFormatPartitionFunction.class.getName());
+        String partFuncClassName = partFuncClass.contains(".") ? partFuncClass : "org.elassandra.index." + partFuncClass;
+        return FBUtilities.instanceOrConstruct(partFuncClassName, "PartitionFunction class used to generate index name from document fields");
+    }
+
     public ImmutableOpenMap<String, AliasMetaData> getAliases() {
         return this.aliases;
     }
@@ -648,6 +713,11 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         Builder.toXContent(this, builder, params);
         return builder;
+    }
+
+    @Override
+    public String toString() {
+        return this.index.getName()+'/'+keyspace();
     }
 
     private static class IndexMetaDataDiff implements Diff<IndexMetaData> {
@@ -947,7 +1017,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
          * @return the provided value or -1 if it has not been set.
          */
         public int numberOfShards() {
-            return settings.getAsInt(SETTING_NUMBER_OF_SHARDS, -1);
+            return settings.getAsInt(SETTING_NUMBER_OF_SHARDS, 1);
         }
 
         public Builder numberOfReplicas(int numberOfReplicas) {
@@ -961,7 +1031,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
          * @return the provided value or -1 if it has not been set.
          */
         public int numberOfReplicas() {
-            return settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, -1);
+            return settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0);
         }
 
         public Builder routingPartitionSize(int routingPartitionSize) {
@@ -1003,6 +1073,11 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
 
         public Builder putMapping(MappingMetaData mappingMd) {
             mappings.put(mappingMd.type(), mappingMd);
+            return this;
+        }
+
+        public Builder removeAllMapping() {
+            mappings.clear();
             return this;
         }
 
@@ -1123,8 +1198,9 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
 
 
         public IndexMetaData build() {
+            Settings.Builder settingsBuilder = Settings.builder().put(settings);
             ImmutableOpenMap.Builder<String, AliasMetaData> tmpAliases = aliases;
-            Settings tmpSettings = settings;
+            Settings tmpSettings = settingsBuilder.build();
 
             // update default mapping on the MappingMetaData
             if (mappings.containsKey(MapperService.DEFAULT_MAPPING)) {
@@ -1134,7 +1210,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
                 }
             }
 
-            Integer maybeNumberOfShards = settings.getAsInt(SETTING_NUMBER_OF_SHARDS, null);
+            Integer maybeNumberOfShards = settings.getAsInt(SETTING_NUMBER_OF_SHARDS, 1);
             if (maybeNumberOfShards == null) {
                 throw new IllegalArgumentException("must specify numberOfShards for index [" + index + "]");
             }
@@ -1143,7 +1219,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
                 throw new IllegalArgumentException("must specify positive number of shards for index [" + index + "]");
             }
 
-            Integer maybeNumberOfReplicas = settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, null);
+            Integer maybeNumberOfReplicas = settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0);
             if (maybeNumberOfReplicas == null) {
                 throw new IllegalArgumentException("must specify numberOfReplicas for index [" + index + "]");
             }
@@ -1197,6 +1273,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             Version indexCreatedVersion = Version.indexCreated(settings);
             Version indexUpgradedVersion = settings.getAsVersion(IndexMetaData.SETTING_VERSION_UPGRADED, indexCreatedVersion);
 
+            primaryTerms = null;
             if (primaryTerms == null) {
                 initializePrimaryTerms();
             } else if (primaryTerms.length != numberOfShards) {
@@ -1418,6 +1495,15 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     }
 
     /**
+     * Returns <code>true</code> if the given settings indicate that the index associated
+     * with these settings uses a version less engine (i.e no more version number stored in lucene index). Otherwise <code>false</code>. The default
+     * setting for this is <code>true</code>.
+     */
+    public static boolean isIndexUsingVersionLessEngine(Settings settings) {
+        return settings.getAsBoolean(SETTING_VERSION_LESS_ENGINE, true);
+    }
+
+    /**
      * Adds human readable version and creation date settings.
      * This method is used to display the settings in a human readable format in REST API
      */
@@ -1475,7 +1561,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
      * @see #getRoutingFactor(int, int) for details
      */
     public int getRoutingFactor() {
-        return routingFactor;
+        return 1;
     }
 
     /**

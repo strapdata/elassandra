@@ -18,8 +18,13 @@
  */
 package org.elasticsearch.cluster;
 
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.common.Nullable;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +74,9 @@ public interface ClusterStateTaskExecutor<T> {
         @Nullable
         public final ClusterState resultingState;
         public final Map<T, TaskResult> executionResults;
+        public final SchemaUpdate schemaUpdate;
+        public final Collection<Mutation> mutations;
+        public final Collection<Event.SchemaChange> events;
 
         /**
          * Construct an execution result instance with a correspondence between the tasks and their execution result
@@ -76,8 +84,19 @@ public interface ClusterStateTaskExecutor<T> {
          * @param executionResults the correspondence between tasks and their outcome
          */
         ClusterTasksResult(ClusterState resultingState, Map<T, TaskResult> executionResults) {
+            this(resultingState, executionResults, SchemaUpdate.NO_UPDATE);
+        }
+
+        ClusterTasksResult(ClusterState resultingState, Map<T, TaskResult> executionResults, SchemaUpdate schemaUpdate) {
+            this(resultingState, executionResults, schemaUpdate, Collections.EMPTY_LIST, Collections.EMPTY_LIST);
+        }
+
+        ClusterTasksResult(ClusterState resultingState, Map<T, TaskResult> executionResults, SchemaUpdate schemaUpdate, Collection<Mutation> cqlMutations, Collection<Event.SchemaChange> events) {
             this.resultingState = resultingState;
             this.executionResults = executionResults;
+            this.schemaUpdate = schemaUpdate;
+            this.mutations = cqlMutations;
+            this.events = events;
         }
 
         public static <T> Builder<T> builder() {
@@ -119,9 +138,22 @@ public interface ClusterStateTaskExecutor<T> {
                 return new ClusterTasksResult<>(resultingState, executionResults);
             }
 
+            public ClusterTasksResult<T> build(ClusterState resultingState, SchemaUpdate schemaUpdate) {
+                return new ClusterTasksResult<>(resultingState, executionResults, schemaUpdate, Collections.EMPTY_LIST, Collections.EMPTY_LIST);
+            }
+
+            public ClusterTasksResult<T> build(ClusterState resultingState, SchemaUpdate schemaUpdate, Collection<Mutation> cqlMutations, Collection<Event.SchemaChange> events) {
+                return new ClusterTasksResult<>(resultingState, executionResults, schemaUpdate, cqlMutations, events);
+            }
+
             ClusterTasksResult<T> build(ClusterTasksResult<T> result, ClusterState previousState) {
                 return new ClusterTasksResult<>(result.resultingState == null ? previousState : result.resultingState,
                     executionResults);
+            }
+
+            ClusterTasksResult<T> build(ClusterTasksResult<T> result, ClusterState previousState, SchemaUpdate schemaUpdate, Collection<Mutation> cqlMutations, Collection<Event.SchemaChange> events) {
+                return new ClusterTasksResult<>(result.resultingState == null ? previousState : result.resultingState,
+                    executionResults, schemaUpdate, cqlMutations, events);
             }
         }
     }

@@ -19,11 +19,14 @@
 
 package org.elasticsearch.cluster.metadata;
 
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesClusterStateUpdateRequest;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.metadata.AliasAction.NewAliasValidator;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -39,6 +42,7 @@ import org.elasticsearch.indices.IndicesService;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -84,13 +88,28 @@ public class MetaDataIndexAliasesService {
                 }
 
                 @Override
-                public ClusterState execute(ClusterState currentState) {
-                    return innerExecute(currentState, request.actions());
+                public SchemaUpdate schemaUpdate() {
+                    return SchemaUpdate.UPDATE;
+                }
+
+                @Override
+                public ClusterState execute(ClusterState currentState) throws Exception {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
+                    return innerExecute(currentState, request.actions(), mutations, events);
                 }
             });
     }
 
+    // for test purposes only
     ClusterState innerExecute(ClusterState currentState, Iterable<AliasAction> actions) {
+        return innerExecute(currentState, actions, new ArrayList<Mutation>(), new ArrayList<Event.SchemaChange>());
+    }
+
+    ClusterState innerExecute(ClusterState currentState, Iterable<AliasAction> actions, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
         List<Index> indicesToClose = new ArrayList<>();
         Map<String, IndexService> indices = new HashMap<>();
         try {
@@ -113,7 +132,7 @@ public class MetaDataIndexAliasesService {
             if (changed) {
                 currentState = deleteIndexService.deleteIndices(currentState, indicesToDelete);
             }
-            MetaData.Builder metadata = MetaData.builder(currentState.metaData());
+            MetaData.Builder metadata = MetaData.builder(currentState.metaData()).setClusterUuid();
             // Run the remaining alias actions
             for (AliasAction action : actions) {
                 if (action.removeIndex()) {

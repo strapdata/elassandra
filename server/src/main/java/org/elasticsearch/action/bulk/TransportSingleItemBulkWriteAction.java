@@ -28,7 +28,6 @@ import org.elasticsearch.action.support.WriteResponse;
 import org.elasticsearch.action.support.replication.ReplicatedWriteRequest;
 import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.action.support.replication.TransportWriteAction;
-import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
@@ -53,11 +52,11 @@ public abstract class TransportSingleItemBulkWriteAction<
 
     protected TransportSingleItemBulkWriteAction(Settings settings, String actionName, TransportService transportService,
                                                  ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool,
-                                                 ShardStateAction shardStateAction, ActionFilters actionFilters,
+                                                 ActionFilters actionFilters,
                                                  IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
                                                  Supplier<Request> replicaRequest, String executor,
                                                  TransportBulkAction bulkAction, TransportShardBulkAction shardBulkAction) {
-        super(settings, actionName, transportService, clusterService, indicesService, threadPool, shardStateAction, actionFilters,
+        super(settings, actionName, transportService, clusterService, indicesService, threadPool, actionFilters,
             indexNameExpressionResolver, request, replicaRequest, executor);
         this.bulkAction = bulkAction;
         this.shardBulkAction = shardBulkAction;

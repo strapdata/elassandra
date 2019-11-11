@@ -35,9 +35,10 @@ import org.elasticsearch.cluster.NamedDiffable;
 import org.elasticsearch.cluster.NamedDiffableValueSerializer;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
+import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.UUIDs;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.HppcMaps;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -74,8 +75,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static org.elasticsearch.common.settings.Settings.readSettingsFromStream;
 import static org.elasticsearch.common.settings.Settings.writeSettingsToStream;
@@ -94,7 +97,10 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         GATEWAY,
 
         /* Custom metadata should be stored as part of a snapshot */
-        SNAPSHOT
+        SNAPSHOT,
+
+        /* Custom metadata should be stored as port of the cassandra schema */
+        CQL
     }
 
     /**
@@ -147,9 +153,14 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
 
     public static final String CONTEXT_MODE_PARAM = "context_mode";
 
+    public static final String CONTEXT_CASSANDRA_PARAM = "cassandra_mode";
+
+    public static final String CONTEXT_CQL_PARAM = XContentContext.CQL.toString();
+
     public static final String CONTEXT_MODE_SNAPSHOT = XContentContext.SNAPSHOT.toString();
 
     public static final String CONTEXT_MODE_GATEWAY = XContentContext.GATEWAY.toString();
+
 
     public static final String GLOBAL_STATE_FILE_PREFIX = "global-";
 
@@ -214,6 +225,15 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
 
     public String clusterUUID() {
         return this.clusterUUID;
+    }
+
+    public String x2() {
+        return this.clusterUUID+"/"+this.version;
+    }
+
+    @Override
+    public String toString() {
+        return this.clusterUUID+"/"+this.version;
     }
 
     /**
@@ -895,7 +915,12 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         private final ImmutableOpenMap.Builder<String, Custom> customs;
 
         public Builder() {
-            clusterUUID = "_na_";
+            try {
+                clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            } catch (java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException |java.lang.NoClassDefFoundError e) {
+                // for testing when Cassandra is nnot initialized.
+                clusterUUID = UUID.randomUUID().toString();
+            }
             indices = ImmutableOpenMap.builder();
             templates = ImmutableOpenMap.builder();
             customs = ImmutableOpenMap.builder();
@@ -914,7 +939,13 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
 
         public Builder put(IndexMetaData.Builder indexMetaDataBuilder) {
             // we know its a new one, increment the version and store
-            indexMetaDataBuilder.version(indexMetaDataBuilder.version() + 1);
+            return put(indexMetaDataBuilder, true);
+        }
+
+        public Builder put(IndexMetaData.Builder indexMetaDataBuilder, boolean incrementVersion) {
+            if (incrementVersion) {
+                indexMetaDataBuilder.version(indexMetaDataBuilder.version() + 1);
+            }
             IndexMetaData indexMetaData = indexMetaDataBuilder.build();
             indices.put(indexMetaData.getIndex().getName(), indexMetaData);
             return this;
@@ -934,6 +965,10 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
 
         public IndexMetaData get(String index) {
             return indices.get(index);
+        }
+
+        public ObjectContainer<IndexMetaData> indices() {
+            return indices.values();
         }
 
         public IndexMetaData getSafe(Index index) {
@@ -1073,10 +1108,18 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             return this;
         }
 
+        public Builder incrementVersion() {
+            this.version = version + 1;
+            this.clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            return this;
+        }
+
+        public Builder setClusterUuid() {
+            this.clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            return this;
+        }
+
         public Builder generateClusterUuidIfNeeded() {
-            if (clusterUUID.equals("_na_")) {
-                clusterUUID = UUIDs.randomBase64UUID();
-            }
             return this;
         }
 
@@ -1193,7 +1236,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             }
             builder.endObject();
 
-            if (context == XContentContext.API && !metaData.indices().isEmpty()) {
+            if ((context == XContentContext.API || context == XContentContext.CQL || params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false)) && !metaData.indices().isEmpty()) {
                 builder.startObject("indices");
                 for (IndexMetaData indexMetaData : metaData) {
                     IndexMetaData.Builder.toXContent(indexMetaData, builder, params);
@@ -1281,6 +1324,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     static {
         Map<String, String> params = new HashMap<>(2);
         params.put("binary", "true");
+        params.put(CONTEXT_CASSANDRA_PARAM, "true");
         params.put(MetaData.CONTEXT_MODE_PARAM, MetaData.CONTEXT_MODE_GATEWAY);
         FORMAT_PARAMS = new MapParams(params);
     }
@@ -1300,4 +1344,53 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             return Builder.fromXContent(parser);
         }
     };
+
+
+    public static final ToXContent.Params CASSANDRA_FORMAT_PARAMS;
+    static {
+        Map<String, String> params = new HashMap<>(2);
+        params.put("binary", "true");
+        params.put(CONTEXT_CASSANDRA_PARAM, "true");
+        CASSANDRA_FORMAT_PARAMS = new MapParams(params);
+    }
+
+    public static final ToXContent.Params CQL_FORMAT_PARAMS;
+    static {
+        Map<String, String> params = new HashMap<>(2);
+        params.put("binary", "true");
+        params.put(CONTEXT_CQL_PARAM, "true");
+        params.put(MetaData.CONTEXT_MODE_PARAM, MetaData.CONTEXT_CQL_PARAM);
+        CQL_FORMAT_PARAMS = new MapParams(params);
+    }
+
+    /**
+     * State format for {@link MetaData} to write to and load from cassandra
+     */
+    public static final MetaDataStateFormat<MetaData> CASSANDRA_FORMAT = new MetaDataStateFormat<MetaData>(XContentType.JSON, "cassandra-global-") {
+
+        @Override
+        public void toXContent(XContentBuilder builder, MetaData state) throws IOException {
+            Builder.toXContent(state, builder, CASSANDRA_FORMAT_PARAMS);
+        }
+
+        @Override
+        public MetaData fromXContent(XContentParser parser) throws IOException {
+            return Builder.fromXContent(parser);
+        }
+    };
+
+    public static final MetaDataStateFormat<MetaData> CQL_FORMAT = new MetaDataStateFormat<MetaData>(XContentType.SMILE, "cql-global-") {
+
+        @Override
+        public void toXContent(XContentBuilder builder, MetaData state) throws IOException {
+            Builder.toXContent(state, builder, CQL_FORMAT_PARAMS);
+        }
+
+        @Override
+        public MetaData fromXContent(XContentParser parser) throws IOException {
+            return Builder.fromXContent(parser);
+        }
+    };
+
+
 }

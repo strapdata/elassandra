@@ -96,7 +96,7 @@ public class TransportIndicesSegmentsAction
     @Override
     protected ShardSegments shardOperation(IndicesSegmentsRequest request, ShardRouting shardRouting) {
         IndexService indexService = indicesService.indexServiceSafe(shardRouting.index());
-        IndexShard indexShard = indexService.getShard(shardRouting.id());
+        IndexShard indexShard = indexService.getShard(0);
         return new ShardSegments(indexShard.routingEntry(), indexShard.segments(request.verbose()));
     }
 }

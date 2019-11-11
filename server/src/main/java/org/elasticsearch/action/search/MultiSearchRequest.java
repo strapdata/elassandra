@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action.search;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.CompositeIndicesRequest;
@@ -174,6 +176,7 @@ public class MultiSearchRequest extends ActionRequest implements CompositeIndice
                                            String[] types,
                                            String routing,
                                            String searchType,
+                                           Collection<Range<Token>> tokenRanges,
                                            NamedXContentRegistry registry,
                                            boolean allowExplicitIndex) throws IOException {
         int from = 0;

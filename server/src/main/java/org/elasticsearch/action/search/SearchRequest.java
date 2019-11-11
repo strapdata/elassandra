@@ -38,7 +38,9 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -134,6 +136,35 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
      */
     public SearchRequest(String... indices) {
         this(indices, new SearchSourceBuilder());
+    }
+
+    public Collection<Range<Token>> tokenRanges() {
+        return tokenRanges;
+    }
+
+    public SearchRequest tokenRanges(Collection<Range<Token>> tokenRanges) {
+        this.tokenRanges = tokenRanges;
+        return this;
+    }
+
+    /**
+     * Sets if this request should use the request the token bitset cache or not, assuming the index is configured to use token bitset cache.
+     */
+    public SearchRequest tokenRangesBitsetCache(Boolean tokenRangesBitsetCache) {
+        this.tokenRangesBitsetCache = tokenRangesBitsetCache;
+        return this;
+    }
+
+    public Boolean tokenRangesBitsetCache() {
+        return this.tokenRangesBitsetCache;
+    }
+
+    public Map<String, Object> extraParams() {
+        return extraParams;
+    }
+
+    public void extraParams(Map<String, Object> extraParams) {
+        this.extraParams = extraParams;
     }
 
     /**
