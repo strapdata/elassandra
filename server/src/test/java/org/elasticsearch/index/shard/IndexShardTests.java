@@ -237,6 +237,7 @@ public class IndexShardTests extends IndexShardTestCase {
         }
     }
 
+    /*
     public void testPersistenceStateMetadataPersistence() throws Exception {
         IndexShard shard = newStartedShard();
         final Path shardStatePath = shard.shardPath().getShardStatePath();
@@ -1365,6 +1366,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(newShard);
     }
 
+    /*
     public void testAsyncFsync() throws InterruptedException, IOException {
         IndexShard shard = newStartedShard();
         Semaphore semaphore = new Semaphore(Integer.MAX_VALUE);
@@ -1396,6 +1398,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(shard);
     }
+    */
 
     public void testMinimumCompatVersion() throws IOException {
         Version versionCreated = VersionUtils.randomVersion(random());
@@ -1419,6 +1422,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(test);
     }
 
+    /*
     public void testShardStats() throws IOException {
 
         IndexShard shard = newStartedShard();
@@ -1920,6 +1924,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(shard);
     }
 
+    /*
     public void testRecoverFromStoreWithOutOfOrderDelete() throws IOException {
         /*
          * The flow of this test:
@@ -2234,6 +2239,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(shard);
     }
+    */
 
     public void testRestoreShard() throws IOException {
         final IndexShard source = newStartedShard(true);
@@ -2497,6 +2503,7 @@ public class IndexShardTests extends IndexShardTestCase {
         closeShards(newShard);
     }
 
+    /*
     public void testTranslogRecoverySyncsTranslog() throws IOException {
         Settings settings = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
@@ -2723,6 +2730,7 @@ public class IndexShardTests extends IndexShardTestCase {
 
         closeShards(primary, replica);
     }
+    */
 
     public void testRecoverFromLocalShard() throws IOException {
         Settings settings = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)

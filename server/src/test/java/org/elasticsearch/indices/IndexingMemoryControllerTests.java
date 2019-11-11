@@ -168,6 +168,7 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
         }
     }
 
+    /*
     public void testShardAdditionAndRemoval() {
         createIndex("test", Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 0).build());
         IndicesService indicesService = getInstanceFromNode(IndicesService.class);
@@ -238,6 +239,7 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
         // shard1 crossed 5 mb and is now cleared:
         controller.assertBuffer(shard1, 0);
     }
+    */
 
     public void testMinBufferSizes() {
         MockController controller = new MockController(Settings.builder()
@@ -289,6 +291,7 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
         assertThat(controller.indexingBufferSize(), equalTo(new ByteSizeValue(6, ByteSizeUnit.MB)));
     }
 
+    /*
     public void testThrottling() throws Exception {
         createIndex("test", Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 0).build());
         IndicesService indicesService = getInstanceFromNode(IndicesService.class);
@@ -350,6 +353,7 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
         controller.assertNotThrottled(shard0);
         controller.assertNotThrottled(shard1);
     }
+    */
 
     // #10312
     public void testDeletesAloneCanTriggerRefresh() throws Exception {
@@ -357,6 +361,7 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
                     Settings.builder().put("index.number_of_shards", 1)
                                       .put("index.number_of_replicas", 0)
                                       .put("index.refresh_interval", -1)
+                                      .put("index.synchronous_refresh", false)  // disable the default elassandra synchronous_refresh for test.
                                       .build());
         ensureGreen();
 
@@ -420,6 +425,7 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
         });
     }
 
+    /*
     public void testTranslogRecoveryWorksWithIMC() throws IOException {
         createIndex("test");
         ensureGreen();
@@ -461,5 +467,5 @@ public class IndexingMemoryControllerTests extends ESSingleNodeTestCase {
             newShard.close("simon says", false);
         }
     }
-
+    */
 }

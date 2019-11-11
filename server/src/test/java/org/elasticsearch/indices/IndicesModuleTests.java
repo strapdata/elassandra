@@ -19,6 +19,8 @@
 
 package org.elasticsearch.indices;
 
+import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.index.mapper.AllFieldMapper;
 import org.elasticsearch.index.mapper.FieldNamesFieldMapper;
 import org.elasticsearch.index.mapper.IdFieldMapper;
