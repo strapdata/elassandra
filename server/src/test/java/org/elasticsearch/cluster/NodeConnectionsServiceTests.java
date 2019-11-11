@@ -85,6 +85,7 @@ public class NodeConnectionsServiceTests extends ESTestCase {
         return ClusterState.builder(new ClusterName("test")).nodes(builder).build();
     }
 
+    /* elassandra only support one node per JVM
     public void testConnectAndDisconnect() {
         List<DiscoveryNode> nodes = generateNodes();
         NodeConnectionsService service = new NodeConnectionsService(Settings.EMPTY, threadPool, transportService);
