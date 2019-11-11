@@ -18,6 +18,8 @@
  */
 package org.elasticsearch.index.fieldvisitor;
 
+import com.google.common.collect.ImmutableSet;
+
 import org.apache.lucene.index.FieldInfo;
 import org.elasticsearch.index.mapper.IdFieldMapper;
 import org.elasticsearch.index.mapper.MapperService;
@@ -26,6 +28,7 @@ import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.UidFieldMapper;
 
 import java.io.IOException;
+import java.util.Set;
 
 public class SingleFieldsVisitor extends FieldsVisitor {
 
@@ -66,5 +69,10 @@ public class SingleFieldsVisitor extends FieldsVisitor {
         if (type != null && id != null) {
             addValue(UidFieldMapper.NAME, Uid.createUid(type, id));
         }
+    }
+
+    @Override
+    public Set<String> requestedFields() {
+        return ImmutableSet.of(field);
     }
 }

@@ -48,4 +48,9 @@ public class CustomFieldsVisitor extends FieldsVisitor {
         }
         return Status.NO;
     }
+
+    @Override
+    public Set<String> requestedFields() {
+        return fields;
+    }
 }
