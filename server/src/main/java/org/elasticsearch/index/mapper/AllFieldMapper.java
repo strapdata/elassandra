@@ -42,6 +42,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeMapValue;
 import static org.elasticsearch.index.mapper.TypeParsers.parseTextField;
@@ -255,6 +256,17 @@ public class AllFieldMapper extends MetadataFieldMapper {
         }
         for (AllEntries.Entry entry : context.allEntries().entries()) {
             fields.add(new AllField(fieldType().name(), entry.value(), entry.boost(), fieldType()));
+        }
+    }
+
+    @Override
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
+        if (!enabledState.enabled) {
+            return;
+        }
+
+        for (AllEntries.Entry entry : context.allEntries().entries()) {
+            context.doc().add(new AllField(fieldType().name(), entry.value(), entry.boost(), fieldType()));
         }
     }
 

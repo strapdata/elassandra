@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.elasticsearch.common.settings.Settings;
 
 import java.io.IOException;

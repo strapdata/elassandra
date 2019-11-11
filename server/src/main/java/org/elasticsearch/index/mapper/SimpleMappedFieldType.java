@@ -59,5 +59,4 @@ public abstract class SimpleMappedFieldType extends MappedFieldType {
             QueryShardContext context) {
         throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] does not support range queries");
     }
-
 }

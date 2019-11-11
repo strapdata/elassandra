@@ -108,10 +108,14 @@ public class RootObjectMapper extends ObjectMapper {
         }
 
         @Override
-        protected ObjectMapper createMapper(String name, String fullPath, boolean enabled, Nested nested, Dynamic dynamic,
+        protected ObjectMapper createMapper(String name, String fullPath,
+                CqlCollection cqlCollection, CqlStruct cqlStruct, String cqlUdtName, boolean cqlPartialUpdate, boolean cqlPartitionKey, int cqlPrimaryKeyOrder, boolean cqlStaticColumn,
+                boolean enabled, Nested nested, Dynamic dynamic,
                 Boolean includeInAll, Map<String, Mapper> mappers, @Nullable Settings settings) {
             assert !nested.isNested();
-            return new RootObjectMapper(name, enabled, dynamic, includeInAll, mappers,
+            return new RootObjectMapper(name,
+                    cqlCollection, cqlStruct, cqlUdtName, cqlPartialUpdate, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn, cqlClusteringKeyDesc,
+                    enabled, dynamic, includeInAll, mappers,
                     dynamicDateTimeFormatters,
                     dynamicTemplates,
                     dateDetection, numericDetection, settings);

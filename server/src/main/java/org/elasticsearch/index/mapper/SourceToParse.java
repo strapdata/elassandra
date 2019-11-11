@@ -44,6 +44,8 @@ public class SourceToParse {
 
     private String parentId;
 
+    private long token;
+
     private XContentType xContentType;
 
     private SourceToParse(String index, String type, String id, BytesReference source, XContentType xContentType) {
@@ -83,6 +85,15 @@ public class SourceToParse {
 
     public String routing() {
         return this.routing;
+    }
+
+    public Long token() {
+        return this.token;
+    }
+
+    public SourceToParse token(Long token) {
+        this.token = token;
+        return this;
     }
 
     public XContentType getXContentType() {

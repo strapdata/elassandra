@@ -45,10 +45,13 @@ import org.elasticsearch.index.fielddata.plain.DocValuesIndexFieldData;
 import org.elasticsearch.index.query.QueryShardContext;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseField;
 
@@ -289,9 +292,35 @@ public final class KeywordFieldMapper extends FieldMapper {
             if (value == null) {
                 return null;
             }
+            if (value instanceof String) {
+                return value;
+            }
             // keywords are internally stored as utf8 bytes
             BytesRef binaryValue = (BytesRef) value;
             return binaryValue.utf8ToString();
+        }
+
+        @Override
+        public Object cqlValue(Object value, AbstractType atype) {
+            if (value == null) {
+                return null;
+            }
+            if (atype instanceof UUIDType || atype instanceof TimeUUIDType) {
+                // #74 workaround
+                return UUID.fromString(value.toString());
+            }
+            if (atype instanceof DecimalType) {
+                return new BigDecimal(value.toString());
+            }
+            return value.toString();
+        }
+
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            return value.toString();
         }
 
         @Override

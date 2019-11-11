@@ -19,6 +19,11 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.SimpleDateType;
+import org.apache.cassandra.serializers.SimpleDateSerializer;
+import org.apache.cassandra.utils.UUIDGen;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.StoredField;
@@ -52,11 +57,14 @@ import org.elasticsearch.search.DocValueFormat;
 import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseDateTimeFormatter;
 
@@ -186,6 +194,7 @@ public class DateFieldMapper extends FieldMapper {
             setHasDocValues(true);
             setOmitNorms(true);
             setDateTimeFormatter(DEFAULT_DATE_TIME_FORMATTER);
+            CQL3Type(CQL3Type.Native.TIMESTAMP);
         }
 
         DateFieldType(DateFieldType other) {
@@ -476,6 +485,66 @@ public class DateFieldMapper extends FieldMapper {
         if (fieldType().stored()) {
             fields.add(new StoredField(fieldType().name(), timestamp));
         }
+    }
+
+    @Override
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
+        String dateAsString = null;
+        Long value = null;
+        float boost = fieldType().boost();
+        if (object == null) {
+            if (fieldType().nullValue() == null) {
+                return;
+            }
+            dateAsString = fieldType().nullValueAsString();
+            if (dateAsString != null) {
+                value = fieldType().parse(dateAsString);
+            }
+        } else {
+            if (object instanceof Date) {
+                value = ((Date)object).getTime();
+            } else if (object instanceof Integer) {
+                // CQL date stored as integer, number of day since epoch - Integer.MIN_VALUE;
+                value = SimpleDateSerializer.dayToTimeInMillis((Integer)object);
+            } else if (object instanceof UUID) {
+                // CQL timeuuid
+                value = UUIDGen.unixTimestamp((UUID)object);
+            } else if (object instanceof String) {
+                try {
+                    value = fieldType().parse((String)object);
+                } catch (IllegalArgumentException e) {
+                    if (ignoreMalformed.value()) {
+                        return;
+                    } else {
+                        throw e;
+                    }
+                }
+            } else {
+                value = (Long)object;
+            }
+            dateAsString = fieldType().dateTimeFormatter.printer().print(value);
+        }
+
+        String fieldName = keyName.orElse(fieldType().name());
+
+        if (dateAsString != null) {
+            if (context.includeInAll(includeInAll, this)) {
+                context.allEntries().addText(fieldName, dateAsString, boost);
+            }
+        }
+
+        if (fieldType().indexOptions() != IndexOptions.NONE) {
+            context.doc().add(new LongPoint(fieldType().name(), value));
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedNumericDocValuesField(fieldName, value));
+        } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
+            createFieldNamesField(context, context.doc().getFields());
+        }
+        if (fieldType().stored()) {
+            context.doc().add(new StoredField(fieldName, value));
+        }
+        super.createField(context, object, keyName);
     }
 
     @Override

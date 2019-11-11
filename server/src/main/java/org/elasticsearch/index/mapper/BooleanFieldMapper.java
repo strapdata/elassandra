@@ -48,6 +48,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseField;
 
@@ -115,7 +116,10 @@ public class BooleanFieldMapper extends FieldMapper {
 
     public static final class BooleanFieldType extends TermBasedFieldType {
 
-        public BooleanFieldType() {}
+        public BooleanFieldType() {
+            super();
+            CQL3Type(CQL3Type.Native.BOOLEAN);
+        }
 
         protected BooleanFieldType(BooleanFieldType ref) {
             super(ref);
@@ -174,6 +178,9 @@ public class BooleanFieldMapper extends FieldMapper {
         public Boolean valueForDisplay(Object value) {
             if (value == null) {
                 return null;
+            }
+            if (value instanceof Boolean) {
+                return (Boolean)value;
             }
             switch(value.toString()) {
             case "F":
@@ -260,6 +267,36 @@ public class BooleanFieldMapper extends FieldMapper {
         } else {
             createFieldNamesField(context, fields);
         }
+    }
+
+    @Override
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
+        if (fieldType().indexOptions() == IndexOptions.NONE && !fieldType().stored() && !fieldType().hasDocValues()) {
+            return;
+        }
+        Boolean value = null;
+        if (object == null) {
+            if (fieldType().nullValue() == null) {
+               return;
+            }
+            value = fieldType().nullValue();
+        } else if (object instanceof Boolean) {
+            value = (Boolean)object;
+        } else if (object instanceof String) {
+            value = Boolean.valueOf((String)object);
+        }
+
+        String fieldName = keyName.orElse(fieldType().name());
+
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            context.doc().add(new Field(fieldName, value ? "T" : "F", fieldType()));
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedNumericDocValuesField(fieldName, value ? 1 : 0));
+        } else {
+            createFieldNamesField(context, context.doc().getFields());
+        }
+        super.createField(context,value, keyName);
     }
 
     @Override

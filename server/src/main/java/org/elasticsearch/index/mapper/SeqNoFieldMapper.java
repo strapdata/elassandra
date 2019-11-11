@@ -43,6 +43,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Mapper for the {@code _seq_no} field.
@@ -218,7 +219,6 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
             failIfNoDocValues();
             return new DocValuesIndexFieldData.Builder().numericType(NumericType.LONG);
         }
-
     }
 
     public SeqNoFieldMapper(Settings indexSettings) {
@@ -263,6 +263,32 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
             if (includePrimaryTerm) {
                 // primary terms are used to distinguish between parent and nested docs since 6.1.0
                 doc.add(seqID.primaryTerm);
+            }
+        }
+    }
+
+    @Override
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
+        // _primary_term in parent doc only.
+        if (context.doc().getParent() == null)
+            context.doc().add(SequenceIDFields.PRIMARY_TERM_ZERO);
+    }
+
+    @Override
+    public void postCreate(ParseContext context) throws IOException {
+        // In the case of nested docs, let's fill nested docs with the original
+        // so that Lucene doesn't write a Bitset for documents that
+        // don't have the field. This is consistent with the default value
+        // for efficiency.
+        // we share the parent docs fields to ensure good compression
+        int numDocs = context.docs().size();
+        final Version versionCreated = context.mapperService().getIndexSettings().getIndexVersionCreated();
+        final boolean includePrimaryTerm = versionCreated.before(Version.V_6_1_0);
+        for (int i = 1; i < numDocs; i++) {
+            final Document doc = context.docs().get(i);
+            if (includePrimaryTerm) {
+                // primary terms are used to distinguish between parent and nested docs since 6.1.0
+                doc.add(SequenceIDFields.PRIMARY_TERM_ZERO);
             }
         }
     }

@@ -38,6 +38,8 @@ public class ParsedDocument {
 
     private final String routing;
 
+    private final long token;
+
     private final List<Document> documents;
 
     private BytesReference source;
@@ -48,10 +50,23 @@ public class ParsedDocument {
     private String parent;
 
     public ParsedDocument(Field version,
+            SeqNoFieldMapper.SequenceIDFields seqID,
+            String id,
+            String type,
+            String routing,
+            List<Document> documents,
+            BytesReference source,
+            XContentType xContentType,
+            Mapping dynamicMappingsUpdate) {
+        this(version, seqID, id, type, routing, 0L, documents, source, xContentType, dynamicMappingsUpdate);
+    }
+
+    public ParsedDocument(Field version,
                           SeqNoFieldMapper.SequenceIDFields seqID,
                           String id,
                           String type,
                           String routing,
+                          long token,
                           List<Document> documents,
                           BytesReference source,
                           XContentType xContentType,
@@ -61,6 +76,7 @@ public class ParsedDocument {
         this.id = id;
         this.type = type;
         this.routing = routing;
+        this.token = token;
         this.documents = documents;
         this.source = source;
         this.dynamicMappingsUpdate = dynamicMappingsUpdate;
@@ -98,6 +114,10 @@ public class ParsedDocument {
 
     public String routing() {
         return this.routing;
+    }
+
+    public long token() {
+        return this.token;
     }
 
     public Document rootDoc() {

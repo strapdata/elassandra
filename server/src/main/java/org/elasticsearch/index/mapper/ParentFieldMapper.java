@@ -48,6 +48,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeMapValue;
 
@@ -55,6 +56,7 @@ public class ParentFieldMapper extends MetadataFieldMapper {
 
     public static final String NAME = "_parent";
     public static final String CONTENT_TYPE = "_parent";
+    public static final String CQL_PARENT_PK = "cql_parent_pk";
 
     public static class Defaults {
         public static final String NAME = ParentFieldMapper.NAME;
@@ -77,6 +79,8 @@ public class ParentFieldMapper extends MetadataFieldMapper {
 
         private final String documentType;
 
+        private String pkColumns;
+
         public Builder(String documentType) {
             super(Defaults.NAME, new ParentFieldType(Defaults.FIELD_TYPE, documentType), Defaults.FIELD_TYPE);
             // Defaults to true
@@ -87,6 +91,11 @@ public class ParentFieldMapper extends MetadataFieldMapper {
 
         public Builder type(String type) {
             this.parentType = type;
+            return builder;
+        }
+
+        public Builder pkColumns(String columns) {
+            this.pkColumns = columns;
             return builder;
         }
 
@@ -189,6 +198,14 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         }
 
         @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            return Uid.createUid(value.toString()).id();
+        }
+
+        @Override
         public Query existsQuery(QueryShardContext context) {
             return new DocValuesFieldExistsQuery(name());
         }
@@ -236,6 +253,13 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         return parentType;
     }
 
+    /**
+     * @return a comma separated list of pk columns names.
+     */
+    public String pkColumns() {
+        return parentPkColumns;
+    }
+
     @Override
     public void preParse(ParseContext context) throws IOException {
     }
@@ -281,6 +305,24 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         // we have parent mapping, yet no value was set, ignore it...
     }
 
+    @Override
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
+        String parentId = (String) value;
+        boolean parent = context.docMapper().isParent(context.type());
+        if (parent) {
+            //addJoinFieldIfNeeded(context, parentJoinFieldType, context.id());
+            context.doc().add(new SortedDocValuesField(parentJoinField.fieldType().name(), new BytesRef(context.id())));
+        }
+
+        if (!active()) {
+            return;
+        }
+
+        context.doc().add(new SortedDocValuesField(fieldType.name(), new BytesRef(parentId)));
+        //addJoinFieldIfNeeded(context, childJoinFieldType, parentId);
+        // we have parent mapping, yet no value was set, ignore it...
+    }
+
     public static String joinField(String parentType) {
         return ParentFieldMapper.NAME + "#" + parentType;
     }
@@ -304,6 +346,11 @@ public class ParentFieldMapper extends MetadataFieldMapper {
 
         builder.startObject(CONTENT_TYPE);
         builder.field("type", parentType);
+
+        if (this.parentPkColumns != null) {
+            builder.field(CQL_PARENT_PK, parentPkColumns);
+        }
+
         if (includeDefaults || fieldType().eagerGlobalOrdinals() == false) {
             builder.field("eager_global_ordinals", fieldType().eagerGlobalOrdinals());
         }

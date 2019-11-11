@@ -50,7 +50,7 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
         private final List<IndexableField> fields;
         private ObjectObjectMap<Object, IndexableField> keyedFields;
 
-        private Document(String path, Document parent) {
+        public Document(String path, Document parent) {
             fields = new ArrayList<>();
             this.path = path;
             this.prefix = path.isEmpty() ? "" : path + ".";
@@ -59,6 +59,10 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
 
         public Document() {
             this("", null);
+        }
+
+        public String toString() {
+            return "path="+path+" prefix="+prefix+" fields="+fields+" parent="+parent;
         }
 
         /**
@@ -169,6 +173,35 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
         }
 
     }
+
+    static abstract class FilterableDocument extends ParseContext.Document implements Predicate<IndexableField> {
+        boolean applyFilter = false;
+
+        public FilterableDocument(String path, Document parent) {
+            super(path, parent);
+        }
+
+        public FilterableDocument() {
+            super();
+        }
+
+        public void applyFilter(boolean apply) {
+            applyFilter = apply;
+        }
+
+        @Override
+        abstract public boolean apply(IndexableField input);
+
+        @Override
+        public Iterator<IndexableField> iterator() {
+            if (applyFilter) {
+                return Iterators.filter(super.iterator(), this);
+            } else {
+                return super.iterator();
+            }
+        }
+    }
+
 
     private static class FilterParseContext extends ParseContext {
 
@@ -575,7 +608,7 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
     /**
      * Return a new context that will be used within a nested document.
      */
-    public final ParseContext createNestedContext(String fullPath) {
+    public ParseContext createNestedContext(String fullPath) {
         final Document doc = new Document(fullPath, doc());
         addDoc(doc);
         return switchDoc(doc);
@@ -613,6 +646,10 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
 
     public abstract SourceToParse sourceToParse();
 
+    public void source(BytesReference source) {
+
+    }
+
     public abstract ContentPath path();
 
     public abstract XContentParser parser();
@@ -630,6 +667,14 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
     public abstract MapperService mapperService();
 
     public abstract Field version();
+
+    public String type() {
+        return this.sourceToParse().type();
+    }
+
+    public String id() {
+        return this.sourceToParse().id();
+    }
 
     public abstract void version(Field version);
 

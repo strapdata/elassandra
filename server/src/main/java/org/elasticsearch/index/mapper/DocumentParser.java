@@ -43,7 +43,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** A parser for documents, given mappings from a DocumentMapper */
-final class DocumentParser {
+public final class DocumentParser {
 
     private final IndexSettings indexSettings;
     private final DocumentMapperParser docMapperParser;
@@ -152,6 +152,7 @@ final class DocumentParser {
             context.sourceToParse().id(),
             context.sourceToParse().type(),
             source.routing(),
+            source.token(),
             context.docs(),
             context.sourceToParse().source(),
             context.sourceToParse().getXContentType(),
@@ -413,7 +414,7 @@ final class DocumentParser {
         }
     }
 
-    private static void nested(ParseContext context, ObjectMapper.Nested nested) {
+    public static void nested(ParseContext context, ObjectMapper.Nested nested) {
         ParseContext.Document nestedDoc = context.doc();
         ParseContext.Document parentDoc = nestedDoc.getParent();
         if (nested.isIncludeInParent()) {
@@ -436,7 +437,7 @@ final class DocumentParser {
         }
     }
 
-    private static ParseContext nestedContext(ParseContext context, ObjectMapper mapper) {
+    public static ParseContext nestedContext(ParseContext context, ObjectMapper mapper) {
         context = context.createNestedContext(mapper.fullPath());
         ParseContext.Document nestedDoc = context.doc();
         ParseContext.Document parentDoc = nestedDoc.getParent();
@@ -887,6 +888,50 @@ final class DocumentParser {
         }
     }
 
+
+
+
+
+    /** Creates instances of the fields that the current field should be copied to */
+    public static void createCopyFields(ParseContext context, List<String> copyToFields, Object value) throws IOException {
+        if (!context.isWithinCopyTo() && copyToFields.isEmpty() == false) {
+            context = context.createCopyToContext();
+            for (String field : copyToFields) {
+                // In case of a hierarchy of nested documents, we need to figure out
+                // which document the field should go to
+                ParseContext.Document targetDoc = null;
+                for (ParseContext.Document doc = context.doc(); doc != null; doc = doc.getParent()) {
+                    if (field.startsWith(doc.getPrefix())) {
+                        targetDoc = doc;
+                        break;
+                    }
+                }
+                assert targetDoc != null;
+                final ParseContext copyToContext;
+                if (targetDoc == context.doc()) {
+                    copyToContext = context;
+                } else {
+                    copyToContext = context.switchDoc(targetDoc);
+                }
+                createCopy(field, copyToContext, value);
+            }
+        }
+    }
+
+    /** Creates an copy of the current field with given field name and boost */
+    private static void createCopy(String field, ParseContext context, Object value) throws IOException {
+        FieldMapper fieldMapper = context.docMapper().mappers().getMapper(field);
+        if (fieldMapper != null) {
+            fieldMapper.createField(context, value);
+        } else {
+            throw new IOException("CopyTo field " + field + " mapper not found");
+        }
+    }
+
+
+
+
+
     private static Tuple<Integer, ObjectMapper> getDynamicParentMapper(ParseContext context, final String[] paths,
             ObjectMapper currentParent) {
         ObjectMapper mapper = currentParent == null ? context.root() : currentParent;
@@ -936,7 +981,7 @@ final class DocumentParser {
     }
 
     // find what the dynamic setting is given the current parse context and parent
-    private static ObjectMapper.Dynamic dynamicOrDefault(ObjectMapper parentMapper, ParseContext context) {
+    public static ObjectMapper.Dynamic dynamicOrDefault(ObjectMapper parentMapper, ParseContext context) {
         ObjectMapper.Dynamic dynamic = parentMapper.dynamic();
         while (dynamic == null) {
             int lastDotNdx = parentMapper.name().lastIndexOf('.');

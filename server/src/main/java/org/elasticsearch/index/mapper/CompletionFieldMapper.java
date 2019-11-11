@@ -18,6 +18,8 @@
  */
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
@@ -41,6 +43,7 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentParser.NumberType;
 import org.elasticsearch.common.xcontent.XContentParser.Token;
+import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.index.analysis.AnalyzerScope;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.query.QueryShardContext;
@@ -57,6 +60,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseMultiField;
@@ -90,6 +94,7 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         static {
             FIELD_TYPE.setOmitNorms(true);
             FIELD_TYPE.freeze();
+            FIELD_TYPE.cqlCollection(CqlCollection.LIST);
         }
         public static final boolean DEFAULT_PRESERVE_SEPARATORS = true;
         public static final boolean DEFAULT_POSITION_INCREMENTS = true;
@@ -645,6 +650,88 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         // no-op
     }
 
+
+    @Override
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
+        Map<String, Set<CharSequence>> contextsMap = new HashMap<>();
+        Set<String> inputs = new HashSet<>();
+        int weight = 1;
+
+        if (value instanceof String) {
+            inputs.add((String)value);
+        } else {
+            // value = type completion (input list<text>, contexts text, weight int)
+            Map<String, Object> map = (Map<String, Object>)value;
+            if (map.get("input") != null) {
+                for (String input : (List<String>)map.get("input"))
+                    inputs.add(input);
+            }
+
+            if (map.get("weight") != null)
+                weight = (Integer)map.get("weight");
+
+            if (map.get("contexts") != null) {
+                if (fieldType().hasContextMappings() == false) {
+                    throw new IllegalArgumentException("contexts field is not supported for field: [" + fieldType().name() + "]");
+                }
+                ContextMappings contextMappings = fieldType().getContextMappings();
+                String contexts = (String) map.get("contexts");
+
+                XContentParser parser = JsonXContent.jsonXContent.createParser(ElassandraDaemon.instance.node().getNamedXContentRegistry(), contexts);
+                parser.nextToken();
+                XContentParser.Token currentToken = parser.currentToken();
+                if (currentToken == XContentParser.Token.START_OBJECT) {
+                    ContextMapping contextMapping = null;
+                    String fieldName = null;
+                    while ((currentToken = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                        if (currentToken == XContentParser.Token.FIELD_NAME) {
+                            fieldName = parser.currentName();
+                            contextMapping = contextMappings.get(fieldName);
+                        } else {
+                            assert fieldName != null;
+                            assert !contextsMap.containsKey(fieldName);
+                            contextsMap.put(fieldName, contextMapping.parseContext(context, parser));
+                        }
+                    }
+                }
+            }
+        }
+
+        Map<String, CompletionInputMetaData> inputMap = new HashMap<>();
+        for (String input : inputs) {
+            if (inputMap.containsKey(input) == false || inputMap.get(input).weight < weight) {
+                inputMap.put(input, new CompletionInputMetaData(contextsMap, weight));
+            }
+        }
+
+        // index
+        for (Map.Entry<String, CompletionInputMetaData> completionInput : inputMap.entrySet()) {
+            String input = completionInput.getKey();
+            // truncate input
+            if (input.length() > maxInputLength) {
+                int len = Math.min(maxInputLength, input.length());
+                if (Character.isHighSurrogate(input.charAt(len - 1))) {
+                    assert input.length() >= len + 1 && Character.isLowSurrogate(input.charAt(len));
+                    len += 1;
+                }
+                input = input.substring(0, len);
+            }
+            CompletionInputMetaData metaData = completionInput.getValue();
+            if (fieldType().hasContextMappings()) {
+                fieldType().getContextMappings().addField(context.doc(), fieldType().name(),
+                        input, metaData.weight, metaData.contexts);
+            } else {
+                context.doc().add(new SuggestField(fieldType().name(), input, metaData.weight));
+            }
+        }
+        List<IndexableField> fields = new ArrayList<>(1);
+        createFieldNamesField(context, fields);
+        for (IndexableField field : fields) {
+            context.doc().add(field);
+        }
+        super.createField(context,value, keyName);
+    }
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
@@ -655,5 +742,10 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         super.doMerge(mergeWith, updateAllTypes);
         CompletionFieldMapper fieldMergeWith = (CompletionFieldMapper) mergeWith;
         this.maxInputLength = fieldMergeWith.maxInputLength;
+    }
+
+    @Override
+    public CQL3Type CQL3Type() {
+        throw new UnsupportedOperationException();
     }
 }

@@ -19,8 +19,15 @@
 
 package org.elasticsearch.index.get;
 
-import org.apache.lucene.index.Term;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.exceptions.RequestExecutionException;
+import org.apache.cassandra.exceptions.RequestValidationException;
+import org.elassandra.cluster.SchemaManager;
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.cluster.service.ClusterService.DocPrimaryKey;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
@@ -33,6 +40,7 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
+import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.engine.Engine;

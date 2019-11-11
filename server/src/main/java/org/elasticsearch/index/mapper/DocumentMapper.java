@@ -253,6 +253,18 @@ public class DocumentMapper implements ToXContentFragment {
         return metadataMapper(RoutingFieldMapper.class);
     }
 
+    public TokenFieldMapper tokenFieldMapper() {
+        return metadataMapper(TokenFieldMapper.class);
+    }
+
+    public NodeFieldMapper nodeFieldMapper() {
+        return metadataMapper(NodeFieldMapper.class);
+    }
+
+    public SeqNoFieldMapper seqNoFieldMapper() {
+        return metadataMapper(SeqNoFieldMapper.class);
+    }
+
     public ParentFieldMapper parentFieldMapper() {
         return metadataMapper(ParentFieldMapper.class);
     }

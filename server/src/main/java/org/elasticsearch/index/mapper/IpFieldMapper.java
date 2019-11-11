@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.lucene.document.InetAddressPoint;
 import org.apache.lucene.document.SortedSetDocValuesField;
 import org.apache.lucene.document.StoredField;
@@ -36,6 +38,7 @@ import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.network.InetAddresses;
+import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.fielddata.IndexFieldData;
@@ -51,6 +54,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /** A {@link FieldMapper} for ip addresses. */
 public class IpFieldMapper extends FieldMapper {
@@ -129,6 +133,7 @@ public class IpFieldMapper extends FieldMapper {
             super();
             setTokenized(false);
             setHasDocValues(true);
+            CQL3Type(CQL3Type.Native.INET);
         }
 
         IpFieldType(IpFieldType other) {
@@ -298,7 +303,24 @@ public class IpFieldMapper extends FieldMapper {
             if (value == null) {
                 return null;
             }
+            if (value instanceof String) {
+                return value;
+            }
+            if (value instanceof InetAddress) {
+                return NetworkAddress.format((InetAddress)value);
+            }
             return DocValueFormat.IP.format((BytesRef) value);
+        }
+
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof String) {
+                return com.google.common.net.InetAddresses.forString((String)value);
+            }
+            return value;
         }
 
         @Override
@@ -396,6 +418,52 @@ public class IpFieldMapper extends FieldMapper {
         if (fieldType().stored()) {
             fields.add(new StoredField(fieldType().name(), new BytesRef(InetAddressPoint.encode(address))));
         }
+    }
+
+    //@SuppressForbidden(reason = "toUpperCase() for consistency level")
+    @Override
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
+        InetAddress address = null;
+
+        if (object instanceof String) {
+            try {
+                address = InetAddresses.forString((String)object);
+            } catch (IllegalArgumentException e) {
+                if (ignoreMalformed.value()) {
+                    return;
+                } else {
+                    throw e;
+                }
+            }
+        } else {
+            address =  (InetAddress) object;
+        }
+
+        if (address == null) {
+            String ipAsString = fieldType().nullValueAsString();
+            if (ipAsString == null) {
+                return;
+            }
+            if (com.google.common.net.InetAddresses.isInetAddress(ipAsString)) {
+                address = com.google.common.net.InetAddresses.forString(ipAsString);
+            }
+        }
+
+        String fieldName = keyName.orElse(fieldType().name());
+
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldName, NetworkAddress.format(address), fieldType().boost());
+        }
+
+        if (fieldType().indexOptions() != IndexOptions.NONE) {
+            context.doc().add(new InetAddressPoint(fieldType().name(), address));
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedSetDocValuesField(fieldName, new BytesRef(InetAddressPoint.encode(address))));
+        } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
+            createFieldNamesField(context, context.doc().getFields());
+        }
+        super.createField(context, object, keyName); // for multi fields.
     }
 
     @Override

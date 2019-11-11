@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper;
 
 import com.carrotsearch.hppc.ObjectArrayList;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
@@ -89,7 +90,10 @@ public class BinaryFieldMapper extends FieldMapper {
 
     static final class BinaryFieldType extends MappedFieldType {
 
-        BinaryFieldType() {}
+        BinaryFieldType() {
+            super();
+            CQL3Type(CQL3Type.Native.BLOB);
+        }
 
         protected BinaryFieldType(BinaryFieldType ref) {
             super(ref);
@@ -124,6 +128,9 @@ public class BinaryFieldMapper extends FieldMapper {
                 bytes = (BytesReference) value;
             } else if (value instanceof byte[]) {
                 bytes = new BytesArray((byte[]) value);
+            } else if (value instanceof ByteBuffer) {
+                ByteBuffer bb = (ByteBuffer)value;
+                bytes = new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
             } else {
                 bytes = new BytesArray(Base64.getDecoder().decode(value.toString()));
             }
@@ -148,6 +155,15 @@ public class BinaryFieldMapper extends FieldMapper {
         @Override
         public Query termQuery(Object value, QueryShardContext context) {
             throw new QueryShardException(context, "Binary fields do not support searching");
+        }
+
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            BytesReference br = valueForDisplay(value);
+            return ByteBuffer.wrap(BytesReference.toBytes(br));
         }
     }
 
@@ -191,6 +207,39 @@ public class BinaryFieldMapper extends FieldMapper {
             createFieldNamesField(context, fields);
         }
 
+    }
+
+    @Override
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
+        if (!fieldType().stored() && !fieldType().hasDocValues()) {
+            return;
+        }
+        byte[] value = (byte[])object;
+        if (value == null) {
+            return;
+        }
+
+        String fieldName = keyName.orElse(fieldType().name());
+
+        if (fieldType().stored()) {
+            context.doc().add(new Field(fieldName, value, fieldType()));
+        }
+
+        if (fieldType().hasDocValues()) {
+            CustomBinaryDocValuesField field = (CustomBinaryDocValuesField) context.doc().getByKey(fieldName);
+            if (field == null) {
+                field = new CustomBinaryDocValuesField(fieldName, value);
+                context.doc().addWithKey(fieldName, field);
+            } else {
+                field.add(value);
+            }
+        } else {
+            // Only add an entry to the field names field if the field is stored
+            // but has no doc values so exists query will work on a field with
+            // no doc values
+            createFieldNamesField(context, context.doc().getFields());
+        }
+        super.createField(context,value, keyName);
     }
 
     @Override

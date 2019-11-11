@@ -45,6 +45,8 @@ import org.elasticsearch.common.time.DateMathParser;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.fielddata.IndexFieldData;
+import org.elasticsearch.index.mapper.Mapper.CqlCollection;
+import org.elasticsearch.index.mapper.Mapper.CqlStruct;
 import org.elasticsearch.index.query.QueryRewriteContext;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.QueryShardException;
@@ -73,6 +75,15 @@ public abstract class MappedFieldType extends FieldType {
     private String nullValueAsString; // for sending null value to _all field
     private boolean eagerGlobalOrdinals;
 
+    private CqlCollection cqlCollection = CqlCollection.LIST;
+    private CqlStruct cqlStruct = CqlStruct.UDT;
+    private CQL3Type cql3Type = CQL3Type.Native.TEXT;
+    private boolean cqlPartialUpdate = true;
+    private boolean cqlPartitionKey = false;
+    private boolean cqlStaticColumn = false;
+    private boolean cqlClusteringKeyDesc = false;
+    private int cqlPrimaryKeyOrder = -1;
+
     protected MappedFieldType(MappedFieldType ref) {
         super(ref);
         this.name = ref.name();
@@ -85,6 +96,15 @@ public abstract class MappedFieldType extends FieldType {
         this.nullValue = ref.nullValue();
         this.nullValueAsString = ref.nullValueAsString();
         this.eagerGlobalOrdinals = ref.eagerGlobalOrdinals;
+
+        this.cqlCollection = ref.cqlCollection;
+        this.cqlStruct = ref.cqlStruct;
+        this.cql3Type = ref.cql3Type;
+        this.cqlPartialUpdate = ref.cqlPartialUpdate;
+        this.cqlPartitionKey = ref.cqlPartitionKey;
+        this.cqlStaticColumn = ref.cqlStaticColumn;
+        this.cqlPrimaryKeyOrder = ref.cqlPrimaryKeyOrder;
+        this.cqlClusteringKeyDesc = ref.cqlClusteringKeyDesc;
     }
 
     public MappedFieldType() {
@@ -312,6 +332,15 @@ public abstract class MappedFieldType extends FieldType {
      *  expected type. For instance a date field would store dates as longs and
      *  format it back to a string in this method. */
     public Object valueForDisplay(Object value) {
+        return value;
+    }
+
+
+    public Object cqlValue(Object value, AbstractType atype) {
+        return cqlValue(value);
+    }
+
+    public Object cqlValue(Object value) {
         return value;
     }
 

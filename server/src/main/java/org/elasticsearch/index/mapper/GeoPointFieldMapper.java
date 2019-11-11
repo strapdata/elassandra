@@ -18,6 +18,7 @@
  */
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.lucene.document.LatLonDocValuesField;
 import org.apache.lucene.document.LatLonPoint;
 import org.apache.lucene.document.StoredField;
@@ -249,7 +250,7 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
         }
     }
 
-    protected void parse(ParseContext originalContext, GeoPoint point) throws IOException {
+    public void parse(ParseContext originalContext, GeoPoint point) throws IOException {
         // Geopoint fields, by default, will not be included in _all
         final ParseContext context = originalContext.setIncludeInAllDefault(false);
 

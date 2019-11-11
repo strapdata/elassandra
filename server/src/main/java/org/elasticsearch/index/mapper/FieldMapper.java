@@ -22,6 +22,7 @@ package org.elasticsearch.index.mapper;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
+import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexOptions;
@@ -47,6 +48,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.StreamSupport;
 
 public abstract class FieldMapper extends Mapper implements Cloneable {
@@ -101,6 +103,61 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
                 fieldType.setIndexOptions(IndexOptions.NONE);
             }
             return builder;
+        }
+
+        public T cqlCollection(CqlCollection cqlCollection) {
+            this.fieldType.cqlCollection(cqlCollection);
+            return builder;
+        }
+
+        public T cqlStruct(CqlStruct cqlStruct) {
+            this.fieldType.cqlStruct(cqlStruct);
+            return builder;
+        }
+
+        public T cqlType(CQL3Type cql3Type) {
+            this.fieldType.CQL3Type(cql3Type);
+            return builder;
+        }
+
+        public T cqlPartialUpdate(boolean cqlPartialUpdate) {
+            this.fieldType.cqlPartialUpdate(cqlPartialUpdate);
+            return builder;
+        }
+
+        public T cqlPartitionKey(boolean cqlPartitionKey) {
+            this.fieldType.cqlPartitionKey(cqlPartitionKey);
+            return builder;
+        }
+
+        public T cqlStaticColumn(boolean cqlStaticColumn) {
+            this.fieldType.cqlStaticColumn(cqlStaticColumn);
+            return builder;
+        }
+
+        public T cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
+            this.fieldType.cqlPrimaryKeyOrder(cqlPrimaryKeyOrder);
+            return builder;
+        }
+
+        public T cqlClusteringKeyDesc(boolean cqlClusteringKeyDesc) {
+            this.fieldType.cqlClusteringKeyDesc(cqlClusteringKeyDesc);
+            return builder;
+        }
+
+        public void cqlCheck() {
+            if (this.fieldType.cqlPartitionKey() && this.fieldType.cqlPrimaryKeyOrder() < 0) {
+                throw new MapperParsingException("Partition key ["
+                        + name + "] has no primary key order, please set " + TypeParsers.CQL_PRIMARY_KEY_ORDER + ".");
+            }
+            if (this.fieldType.cqlStaticColumn() && (this.fieldType.cqlPrimaryKeyOrder() > 0 || this.fieldType.cqlPartitionKey())) {
+                throw new MapperParsingException("Static column ["
+                        + name + "] cannot be part of the primary key.");
+            }
+            if (this.fieldType.cqlClusteringKeyDesc() && (this.fieldType.cqlPartitionKey() || this.fieldType.cqlPrimaryKeyOrder() < 0)) {
+                throw new MapperParsingException("Clustering column ["
+                        + name + "] cannot be part of the partition key and shoud have a primary key order.");
+            }
         }
 
         protected IndexOptions getDefaultIndexOption() {
@@ -310,6 +367,25 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
      */
     protected abstract void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException;
 
+    /**
+     * Add lucene field to context according to the provided value
+     * @param context
+     * @param value
+     */
+    public final void createField(ParseContext context, Object value) throws IOException {
+        createField(context, value, Optional.empty());
+    }
+
+    /**
+     * Add lucene field to context according to the provided value
+     * @param context
+     * @param value
+     * @param keyName override the fieldType.name() if present (Used for map_opaque)
+     */
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
+        multiFields.create(this, context, value);
+    }
+
     protected void createFieldNamesField(ParseContext context, List<IndexableField> fields) {
         FieldNamesFieldType fieldNamesFieldType = (FieldNamesFieldMapper.FieldNamesFieldType) context.docMapper()
                 .metadataMapper(FieldNamesFieldMapper.class).fieldType();
@@ -408,6 +484,48 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
             builder.field("store", fieldType().stored());
         }
         doXContentDocValues(builder, includeDefaults);
+
+        if (includeDefaults || fieldType().cqlCollection() != defaultFieldType.cqlCollection()) {
+            if (fieldType().cqlCollection().equals(CqlCollection.LIST)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "list");
+            } else if (fieldType().cqlCollection().equals(CqlCollection.SET)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "set");
+            } else if (fieldType().cqlCollection().equals(CqlCollection.SINGLETON)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "singleton");
+            } else if (fieldType().cqlCollection().equals(CqlCollection.NONE)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "none");
+            }
+        }
+        if (includeDefaults || fieldType().cqlStruct() != defaultFieldType.cqlStruct()) {
+            if (fieldType().cqlStruct().equals(CqlStruct.MAP)) {
+                builder.field(TypeParsers.CQL_STRUCT, "map");
+            } else if (fieldType().cqlStruct().equals(CqlStruct.OPAQUE_MAP)) {
+                builder.field(TypeParsers.CQL_STRUCT, "opaque_map");
+            } else if (fieldType().cqlStruct().equals(CqlStruct.UDT)) {
+                builder.field(TypeParsers.CQL_STRUCT, "udt");
+            } else if (fieldType().cqlStruct().equals(CqlStruct.TUPLE)) {
+                builder.field(TypeParsers.CQL_STRUCT, "tuple");
+            }
+        }
+        if (includeDefaults || fieldType().CQL3Type() != defaultFieldType.CQL3Type()) {
+            builder.field(TypeParsers.CQL_TYPE, fieldType().CQL3Type().toString());
+        }
+        if (includeDefaults || fieldType().cqlPartialUpdate() != defaultFieldType.cqlPartialUpdate()) {
+            builder.field(TypeParsers.CQL_MANDATORY, fieldType().cqlPartialUpdate());
+        }
+        if (includeDefaults || fieldType().cqlPartitionKey() != defaultFieldType.cqlPartitionKey()) {
+            builder.field(TypeParsers.CQL_PARTITION_KEY, fieldType().cqlPartitionKey());
+        }
+        if (includeDefaults || fieldType().cqlStaticColumn() != defaultFieldType.cqlStaticColumn()) {
+            builder.field(TypeParsers.CQL_STATIC_COLUMN, fieldType().cqlStaticColumn());
+        }
+        if (includeDefaults || fieldType().cqlPrimaryKeyOrder() != defaultFieldType.cqlPrimaryKeyOrder()) {
+            builder.field(TypeParsers.CQL_PRIMARY_KEY_ORDER, fieldType().cqlPrimaryKeyOrder());
+        }
+        if (includeDefaults || fieldType().cqlClusteringKeyDesc() != defaultFieldType.cqlClusteringKeyDesc()) {
+            builder.field(TypeParsers.CQL_CLUSTERING_KEY_DESC, fieldType().cqlClusteringKeyDesc());
+        }
+
         if (includeDefaults || fieldType().storeTermVectors() != defaultFieldType.storeTermVectors()) {
             builder.field("term_vector", termVectorOptionsToString(fieldType()));
         }
@@ -564,6 +682,21 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
             context.path().remove();
         }
 
+        public void create(FieldMapper mainField, ParseContext context, Object val) throws IOException {
+            // TODO: multi fields are really just copy fields, we just need to expose "sub fields" or something that can be part of the mappings
+            if (mappers.isEmpty()) {
+                return;
+            }
+
+            context = context.createMultiFieldContext();
+
+            context.path().add(mainField.simpleName());
+            for (ObjectCursor<FieldMapper> cursor : mappers.values()) {
+                cursor.value.createField(context, val, Optional.empty());
+            }
+            context.path().remove();
+        }
+
         public MultiFields merge(MultiFields mergeWith) {
             ImmutableOpenMap.Builder<String, FieldMapper> newMappersBuilder = ImmutableOpenMap.builder(mappers);
 
@@ -676,4 +809,49 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
         }
     }
 
+    public CqlCollection cqlCollection() {
+        return this.fieldType().cqlCollection();
+    }
+
+    public String cqlCollectionTag() {
+        return this.fieldType().cqlCollectionTag();
+    }
+
+
+    public CqlStruct cqlStruct() {
+        return this.fieldType().cqlStruct();
+    }
+
+
+    public boolean cqlPartialUpdate() {
+        return this.fieldType().cqlPartialUpdate();
+    }
+
+    public boolean cqlStaticColumn() {
+        return this.fieldType().cqlStaticColumn();
+    }
+
+    public boolean cqlPartitionKey() {
+        return this.fieldType().cqlPartitionKey();
+    }
+
+    public int cqlPrimaryKeyOrder() {
+        return this.fieldType().cqlPrimaryKeyOrder();
+    }
+
+    public boolean cqlClusteringKeyDesc() {
+        return this.fieldType().cqlClusteringKeyDesc();
+    }
+
+    public boolean hasField() {
+        return true;
+    }
+
+    public CQL3Type.Raw rawType() {
+        return CQL3Type.Raw.from(CQL3Type());
+    }
+
+    public CQL3Type CQL3Type() {
+        return this.fieldType().CQL3Type();
+    }
 }

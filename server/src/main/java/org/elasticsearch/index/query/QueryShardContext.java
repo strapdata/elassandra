@@ -30,6 +30,7 @@ import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.ParsingException;
 import org.elasticsearch.common.Strings;
@@ -139,6 +140,10 @@ public class QueryShardContext extends QueryRewriteContext {
         this.namedQueries.clear();
         this.nestedScope = new NestedScope();
         this.isFilter = false;
+    }
+
+    public ClusterService getClusterService() {
+        return this.clusterService;
     }
 
     public IndexAnalyzers getIndexAnalyzers() {
