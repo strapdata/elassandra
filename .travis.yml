@@ -1,0 +1,129 @@
+dist: trusty
+sudo: required
+env:
+  global:
+    # this variable determine when docker images are tagged 'latest'
+    - LATEST_VERSION=6.2.3
+    # Make sure gcloud command is on our PATH and the App Engine SDK is in the Python path
+    - GAE_PYTHONPATH=${HOME}/.cache/google_appengine PATH=$PATH:${HOME}/google-cloud-sdk/bin PYTHONPATH=${PYTHONPATH}:${GAE_PYTHONPATH} CLOUDSDK_CORE_DISABLE_PROMPTS=1
+    # jdk used to build some cassandra artifacts
+    - CASSANDRA_JAVA_HOME=/usr/lib/jvm/java-8-oracle
+    - secure: "DtiNCwqKF39c9Ivv2O+7U0RK0u3qKvK1YhiYUtBkEm/1qFLvNTZNNcFA6ek6nO4Q5zpfvZvFEsM9NW3p14b+GYbZzLoUFxSZy24gZGJUt1LMiSlaRNE/7phPX+WdjN8IF6OXqdfAol31VRKUvwbvv8IxRVckUoBcgp304BASDoOUrQZxnd3MfpfWqbXeOvYYYa/xkq8kZHIy9hi+2TQbm/2/P3xc/rk7yQzewzpWZOQaoIexyYyPzLzNYVpRT5QSvEZn1hFKH6Hg8BvTVBrDKLj+KTrEHSge1ICW6rET5ZTcIimHCofRL+0/DUGx0RH5tYR0LM7NXrFXGDDMC73A6KKWmlaC3hPuWD9uLLAwLC3DgZQnJo8vAxpedC6uChlgHa5I5+Ff786y3BOR/4SYwG36VAX/C0BM/IHHjz+l/IweTbY8UIxz29/99Ejj70UCSOhwnpC6tPkWfLdZ997zXu/+rx8LJBvMRX/8tiWi4L/VgE0hOEYglygRadEVwLCLIjFBmzBAfgt6PFga4th4BpEykUiuo+G5HShu3q/TyfwJqjmFGhQOWvFHwtQ0UkL3T2E4UQY16IDUx0bI6BJoua/RG09Ey5XDWq09OHiy5SB86149+w69fIIFkt7u1D6eCvMSboKLGX/fKJ7NgjS2Tb5nO4ZcRoI1SEto2Zz6QjY="
+    - secure: "DO9g8SMiE612a7iw8EjyQtcOaI/GtxNtz3dLqB7MLi2KSkM7gEBHdar1zQdlXOkDSsB4G9mbk+oc/0mTnAHxsLeJ4yzWU+oDmykgKKTVchjj1gTY6xM5V+tzc1OKT+AljtbAEzw2rvTQ1R3b2r3a3n2CaV3YMCJr7BMcFWqNDDMrS4ERgmDzm6F0ZoEYLN8wdkHbHerTym6QhhbcG9pD/Hc7yaMCn534YvZhjxezw+pn+AMd8zDNPmK2bc1xiUeaIxQEdsfczL1Ey3RDxMvo0t0WMT18s8X/DF96+KVtwfNfzHkIs/emLMzjiijeVxnTCJZJcdhUIZE09lXFmsXawkkA17DFqmEdY7rmzLPSZSxVz91uB1fMOIG1TKaZc03aS5pw7rw8d1f7JBqeeZ+JjeoDIJjcE0HAVpGAoa01a+bPeVoVUSUyLckwDY2jkuV7pgiODKsSQSP0QWfJaXwO7CHayfey6RdPMdGFDjwuUccepV1gmfeLCpupPMnJeJJb8J/NbEh/CZRedAYlXjS2+2Z6vE9HC8SoBey6WLbB9fpSXQTsqAyckg2VHBdDKFxQ/OKAElpknfyzquSvYas1F6c+4ARgoid8VDgQ9cB65A5WXZktqnb5YBZ5VEsStUp5hCGuTfAVHR7GIFM8DwE/ttRLZ8pQCbdTJcwigJAq1Vg="
+    - secure: "h+CDBcUUldtgdNR3KGhEzRKXPrgoKOEGnW1ARl+Il0qk8k0+zEOU04+U12629j0CQE8LIBL2YRmdYgchEnG1pKlQ+90gJg0hDL7V/2khBtq75BLl7csfNd/+/XK+ISqz/K7+U+kaZ2fD8AD7a59IGgWL4U8tcuDsnRyL8uniwMENdEAL7n1dQztkF1uILcKpBa4THwPkVq26SIsaBDmF0dNH1z4aqk8ru/NPF7MPL3PMby1ax07tcp8ad0MQ5Qbqw8g+8ZevTu+h5UQopMSM2SDNPrxIlilt+n5EGZlJroti68i88s6WFsysYbmeMV/mKyoG7/wOgGQLwR/WTAJTUN0FFFLXSO7IgmgPLXU3KB23oqFGlbgDSldMws5U/F+qCe8GPlHe98kikp8mwxYp481oBHfCFDhq43FVDx7Blxgkn2d3NB/ZnOrVOd9aiUJqNyAgBw9utxwquZwM8Q3tdYyj2IuLG1bR9Dx63Sbhnt1bTD0DgERaALi80VRQYBqyY2dHq/na0bG4L6b032KCRuVsrVly/B30Il+hrj/hYjblRLQPKlSYVgg15vlCTXkXFUpWrAOrnqXnw0yBQ9kfpUhl9HPU0s15K/OChm/EOHA9OXrBhdRpZOaEuloFyhGrN5ndiZEkNbDMAf6R7DV4njNq75r3/2EtZ4JajX+m3fY="
+    
+language: 
+  - java
+  - bash
+
+services:
+  - docker
+
+before_cache:
+  - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
+  - rm -fr $HOME/.gradle/caches/*/plugin-resolution/
+
+cache:
+  directories:
+    - $HOME/.gradle/caches/
+    - $HOME/.gradle/wrapper/
+    # Cache our Gcloud SDK between commands
+    - $HOME/google-cloud-sdk/
+
+before_install:
+  - wget https://github.com/strapdata/bach/raw/master/install-jdk.sh
+  # solves gpg server problems
+  - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
+
+matrix:
+  include:
+# Java 10 "Oracle JDK"
+    - env: JDK='Oracle JDK 10'
+      install: . ./install-jdk.sh -v -f 9; keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -alias SFSRootCAG2x -file SFSRootCAG2.pem -noprompt
+
+install: ./gradlew --version
+
+script:
+  - ./gradlew server:test -Dbuild.snapshot=false
+  - ./gradlew assemble -Dbuild.snapshot=false
+
+before_deploy:
+  - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)
+  - export ZIPBALL=$(ls distribution/zip/build/distributions/elassandra-*.zip)
+  - export DEBPKG=$(ls distribution/deb/build/distributions/elassandra-*.deb)
+  - export RPMPKG=$(ls distribution/rpm/build/distributions/elassandra-*.rpm)
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+deploy:
+  - provider: releases
+    overwrite: true
+    draft: false
+    api_key:
+      secure: "MFhecFMYXJRTZYYTY0zrvQyDoTUXtaODNuF/Im7pFZDbC7aWgo5s8HFmyzNpJADKwydO1RLFPpEhJGTJ/FbuTDvshc/PirzVbrVr4jK0hnNCFaYEBqOypJzoR1j5bdivmMWxaHVvKEfAr+iNs9fwEVeb3uS+JrsZspImBkDbbeuOq0SKyxl1CrE1KF3aZJWOv50zKJaGyre9dKUq9JL8Js2dNKpebYhP8tjhD7iShD344I00br9qu3ThZ3rG6LTv4c3llI0ZRhWb644iNFtz9CoKQXK30ATjh1avT1wZr6Ci+62kYAePBToagbHd5xs8S78hFkUcm7Z0/8XX8m5KJNyJl+MSh0F/vkEpBJaLSqwUPcgbEB5wqYvWDTWADY9rQ80Mv6I97kmxpYPGpRLONBxjDby2fUVGnyr+7tWhAmAXOomtMXMl6LOLHCp0gNFMO2Twp77vTRz8e38B2dJ5vg155bGNHM7kBwP3EuiKiKFwA+RUpukVLQon7foGvikEsB1HLrNoOg44QEzrcEL6UP9tHyEFWWfwSnD3q7ybQ7bjzFC4N9F1t/NpYI2icR8X/3dRrj4GjWMCMWK75HZWjycrfd0nNLdhKyGAw2rlTmgq6Sypm3g80aq3LvGJ+Pnb7s6B2IAzNgOyhT8TKlIILZ3wQlYMrVBaVaMTmRItHWY="
+    file:
+      - "$TARBALL"
+      - "$ZIPBALL"
+      - "$RPMPKG"
+      - "$DEBPKG"
+    skip_cleanup: true
+    on:
+      tags: true
+      repo: strapdata/elassandra
+
+  - provider: releases
+    overwrite: true
+    draft: false
+    api_key:
+      secure: "NN1SqRo+yryyjsnuan7rtqFd7IgVPTTaWO1m8ZptBdPENvapT2SXiCXa9Clrtgyamt3B/j5G8CdRp480xSXI/yUBwHHDE1Q0OV7eV1CfzmZvlXoxS1rWaDByDuFnvXdoQTBij1ytZHgVsfgmHdU47CcmQVpvQi/IQmu+9WEMpIt55l5fLNvIuy5UiynYDchBN1MYkJLxzlSoqmZdmM58DtL/vBg1nDNqsxvaesyh+8RzoQ33uM4+BWItpzjdvwbfCYN5Bsq8lvdPuxCYeQ5b7RWYPxpTNaV7zS8XDvcbgss7DwZ7w59YloDNvL0WbliE7pma3VHnvctX+oQY/LWhdJ3vJwNvmuwW9zgNUz70s5ec9Eos105xWWiKakIMEgtUdW35VBWEdnQdTYo9zbL/2deScXugcWkMv1Cb/EDeo6gFbc6cBL9TivCyWsv7GqMMC13X9Sj3vDi4S+wzMXQAuDgkdFTY2CfjAiFPRlxe9wPn00RAmnpq46Cma+NoAvnqMuCglKi/WAak8byxEMLRskrb5zHXFKTG8xCqiPJpz7hxnMoRULwn9jJj/6xRQlemKY4eF0DLebWmJ8hpebdX+tx6iMhI0qvpOb3j0uvySIi0bmR/6B9PlhULUNzwf+LFoSA37DCxcqDdOQX/qp8FJdBk7fM55lkVvhe+bCzufRg="
+    file:
+      - "$TARBALL"
+      - "$ZIPBALL"
+      - "$RPMPKG"
+      - "$DEBPKG"
+    skip_cleanup: true
+    on:
+      tags: true
+      repo: strapdata/elassandra-rc
+  
+  # publish snapshot artifact in strapdata nexus
+  - provider: script
+    skip_cleanup: true
+    script: 
+       - ./gradlew publish -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-snapshots/"
+    on:
+      tags: false
+      repo: strapdata/elassandra
+
+  # publish release artifact in strapdata nexus
+  - provider: script
+    skip_cleanup: true
+    script: 
+       - ./gradlew publish -Dbuild.snapshot=false -PrepoUsername="${NEXUS_USERNAME}" -PrepoPassword="${NEXUS_PASSWORD}" -PrepoUrl="$NEXUS_URL/maven-releases-public/"
+    on:
+      tags: true
+      repo: strapdata/elassandra
+      
+  # publish RMP+DEB in strapdata repo
+  - provider: script
+    skip_cleanup: true
+    script: 
+       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${RPMPKG} "${NEXUS_URL}/$(basename ${RPMPKG})"
+       - curl -v --user ${NEXUS_USERNAME}:${NEXUS_PASSWORD} -X POST -H 'Content-Type: multipart/form-data' --data-binary "@${DEBPKG}" "${NEXUS_URL}/apt-releases/"
+    on:
+      tags: true
+      repo: strapdata/elassandra
+      
+  # build, test and push docker images
+  - provider: script
+    skip_cleanup: true
+    script: bash ./ci/docker.sh
+    on:
+      tags: true
+
+  # bump and push to gke marketplace repo, build gke images, push to gcr.io
+  - provider: script
+    skip_cleanup: true
+    script: bash ./ci/gke-marketplace.sh
+    on:
+      tags: true
+      repo: strapdata/elassandra
