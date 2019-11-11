@@ -83,6 +83,11 @@ public class ContextMappings implements ToXContent, Iterable<ContextMapping> {
         return contextMappings.size();
     }
 
+
+    public List<ContextMapping> contextMappings() {
+        return this.contextMappings;
+    }
+
     /**
      * Returns a context mapping by its name
      */

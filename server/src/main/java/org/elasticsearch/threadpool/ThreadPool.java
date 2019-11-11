@@ -269,6 +269,25 @@ public class ThreadPool implements Scheduler, Closeable {
         return holder.info;
     }
 
+    public Collection<String> getThreadPoolExecutorNames() {
+        List<String> threadPoolNames = new ArrayList<String>();
+        for (ExecutorHolder holder : executors.values()) {
+            String name = holder.info.getName();
+            // no need to have info on "same" thread pool
+            if ("same".equals(name)) {
+                continue;
+            }
+            if (holder.executor() instanceof ThreadPoolExecutor) {
+                threadPoolNames.add(name);
+            }
+        }
+        return threadPoolNames;
+    }
+
+    public ThreadPoolExecutor getThreadPoolExecutor(String name) {
+        return (ThreadPoolExecutor) executors.get(name).executor();
+    }
+
     public ThreadPoolStats stats() {
         List<ThreadPoolStats.Stats> stats = new ArrayList<>();
         for (ExecutorHolder holder : executors.values()) {

@@ -316,4 +316,18 @@ public class ShardSearchLocalRequest implements ShardSearchRequest {
         }
     }
 
+    @Override
+    public Boolean tokenRangesBitsetCache() {
+        return this.tokenRangesBitsetCache;
+    }
+
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+        return this.tokenRanges;
+    }
+
+    @Override
+    public Map<String,Object> extraParams() {
+        return this.extraParams;
+    }
 }

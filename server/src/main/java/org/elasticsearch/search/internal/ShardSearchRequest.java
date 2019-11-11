@@ -38,6 +38,8 @@ import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Map;
 import java.util.function.Function;
 
 /**

@@ -38,6 +38,7 @@ import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.transport.TransportRequest;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -60,6 +61,29 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
         this.shardSearchLocalRequest = new ShardSearchLocalRequest(searchRequest, shardId, numberOfShards, aliasFilter, indexBoost,
             nowInMillis, clusterAlias, indexRoutings);
         this.originalIndices = originalIndices;
+    }
+
+    // for test only
+    public ShardSearchTransportRequest(OriginalIndices originalIndices, SearchRequest searchRequest, SearchShardIterator shardIt, int numberOfShards,
+            AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias) {
+        this.shardSearchLocalRequest = new ShardSearchLocalRequest(searchRequest, shardIt, numberOfShards, aliasFilter, indexBoost, nowInMillis, clusterAlias);
+        this.originalIndices = originalIndices;
+    }
+
+
+    @Override
+    public Collection<Range<Token>> tokenRanges() {
+         return shardSearchLocalRequest.tokenRanges();
+    }
+
+    @Override
+    public Boolean tokenRangesBitsetCache() {
+        return shardSearchLocalRequest.tokenRangesBitsetCache();
+    }
+
+    @Override
+    public Map<String,Object> extraParams() {
+        return shardSearchLocalRequest.extraParams();
     }
 
     public void searchType(SearchType searchType) {

@@ -306,6 +306,10 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
         return transport.getStats();
     }
 
+    public long getOpenConnections() {
+        return transport.getStats().getServerOpen();
+    }
+
     public BoundTransportAddress boundAddress() {
         return transport.boundAddress();
     }

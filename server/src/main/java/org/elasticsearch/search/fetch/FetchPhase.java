@@ -429,12 +429,96 @@ public class FetchPhase implements SearchPhase {
         return nestedIdentity;
     }
 
+    protected NavigableSet<String> requiredColumns(SearchContext searchContext, FieldsVisitor fieldVisitor) throws IOException {
+        return fieldVisitor.requiredColumns(searchContext);
+    }
+
+    protected ParsedStatement.Prepared getCqlPreparedStatement(SearchContext searchContext, IndexService indexService, FieldsVisitor fieldVisitor, String typeKey, boolean staticDocument) throws IOException {
+        ParsedStatement.Prepared cqlStatement = searchContext.getCqlPreparedStatement( typeKey );
+        if (cqlStatement == null) {
+            // fetch from requested stored_fields.
+            NavigableSet<String> requiredColumns = requiredColumns(searchContext, fieldVisitor);
+            if (requiredColumns.size() > 0) {
+                IndexMetaData indexMetaData = clusterService.state().metaData().index(searchContext.request().shardId().getIndexName());
+                if (requiredColumns.contains(NodeFieldMapper.NAME)) {
+                    searchContext.includeNode(indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_INCLUDE_NODE_ID, clusterService.settings().getAsBoolean(ClusterService.SETTING_CLUSTER_INCLUDE_NODE_ID, false)));
+                    requiredColumns.remove(NodeFieldMapper.NAME);
+                }
+                DocumentMapper docMapper = searchContext.mapperService().documentMapper(fieldVisitor.uid().type());
+                if (fieldVisitor.loadSource() && docMapper.sourceMapper().enabled()) {
+                    requiredColumns.add(SourceFieldMapper.NAME);
+                }
+                if (requiredColumns.size() > 0) {
+                    String query = clusterService.getQueryManager().buildFetchQuery(
+                            indexService, fieldVisitor.uid().type(),
+                            requiredColumns.toArray(new String[requiredColumns.size()]), staticDocument, docMapper.getColumnDefinitions());
+                    Logger logger = Loggers.getLogger(FetchPhase.class);
+                    if (logger.isTraceEnabled())
+                        logger.trace("new statement={}",query);
+                    cqlStatement = QueryProcessor.prepareInternal(query);
+                    searchContext.putCqlPreparedStatement(typeKey, cqlStatement);
+                }
+            }
+        }
+        return cqlStatement;
+    }
+
+    protected void processCqlResultSet(SearchContext searchContext, IndexService indexService, FieldsVisitor fieldVisitor, ResultSet resultSet) throws IOException {
+        UntypedResultSet rs = UntypedResultSet.create(resultSet);
+        if (!rs.isEmpty()) {
+            Row row = rs.one();
+            Map<String, Object> mapObject = clusterService.getQueryManager().rowAsMap(indexService, fieldVisitor.uid().type(), row);
+            if (searchContext.includeNode()) {
+                mapObject.put(NodeFieldMapper.NAME, clusterService.state().nodes().getLocalNodeId());
+            }
+            if (fieldVisitor.requestedFields() != null && fieldVisitor.requestedFields().size() > 0) {
+                Map<String, List<Object>> flatMap = new HashMap<String, List<Object>>();
+                clusterService.getQueryManager().flattenTree(fieldVisitor.requestedFields(), "", mapObject, flatMap);
+                for (String field :  fieldVisitor.requestedFields()) {
+                    if (flatMap.get(field) != null && field != IdFieldMapper.NAME)
+                        fieldVisitor.setValues(field, flatMap.get(field));
+                }
+            }
+            if (fieldVisitor.loadSource()) {
+                fieldVisitor.source( clusterService.getQueryManager().source(indexService, searchContext.mapperService().documentMapper(fieldVisitor.uid().type()), mapObject, fieldVisitor.uid()) );
+            }
+        }
+    }
+
     private void loadStoredFields(SearchContext searchContext, LeafReaderContext readerContext, FieldsVisitor fieldVisitor, int docId) {
         fieldVisitor.reset();
         try {
             readerContext.reader().document(docId, fieldVisitor);
         } catch (IOException e) {
             throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + docId + "]", e);
+        }
+
+        // load field from cassandra
+        IndexService indexService = searchContext.indexShard().indexService();
+        try {
+            fieldVisitor.postProcess(indexService.mapperService());
+            DocPrimaryKey docPk = clusterService.getQueryManager().parseElasticId(indexService, fieldVisitor.uid().type(), fieldVisitor.uid().id());
+            String typeKey = fieldVisitor.uid().type();
+            if (docPk.isStaticDocument)
+                typeKey += "_static";
+
+            ParsedStatement.Prepared cqlStatement = getCqlPreparedStatement(searchContext, indexService, fieldVisitor, typeKey, docPk.isStaticDocument);
+            if (cqlStatement != null) {
+                ResultMessage result = cqlStatement.statement.executeInternal(new QueryState(ClientState.forInternalCalls()), QueryOptions.forInternalCalls(ConsistencyLevel.ONE, docPk.serialize(cqlStatement)));
+                if (result instanceof ResultMessage.Rows) {
+                    processCqlResultSet(searchContext, indexService, fieldVisitor, ((ResultMessage.Rows)result).result);
+                }
+            } else {
+                // when only requesting for field _node
+                if (searchContext.includeNode()) {
+                    List<Object> values = new ArrayList<Object>(1);
+                    values.add(clusterService.state().nodes().getLocalNodeId());
+                    fieldVisitor.setValues(NodeFieldMapper.NAME, values);
+                }
+            }
+        } catch (Exception e) {
+            Loggers.getLogger(FetchPhase.class).error("Fetch failed id=" + fieldVisitor.uid().id(), e);
+            throw new FetchPhaseExecutionException(searchContext, "Failed to fetch doc id [" + fieldVisitor.uid().id() + "] from cassandra", e);
         }
     }
 }

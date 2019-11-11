@@ -19,12 +19,16 @@
 package org.elasticsearch.search.internal;
 
 
+import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.Counter;
+import org.elassandra.search.SearchProcessor;
 import org.elasticsearch.action.search.SearchTask;
 import org.elasticsearch.action.search.SearchType;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.lease.Releasables;
@@ -66,6 +70,8 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -96,6 +102,11 @@ public abstract class SearchContext extends AbstractRefCounted implements Releas
 
     public abstract boolean isCancelled();
 
+    protected ClusterState clusterState = null;
+    protected SearchProcessor processor = null;
+    protected boolean includeNode;
+    protected ConcurrentMap<String, ParsedStatement.Prepared> cqlStatementCache = new ConcurrentHashMap<String, ParsedStatement.Prepared>();
+
     @Override
     public final void close() {
         if (closed.compareAndSet(false, true)) { // prevent double closing
@@ -124,6 +135,43 @@ public abstract class SearchContext extends AbstractRefCounted implements Releas
      * @param rewrite if the set query should be rewritten against the searcher returned from {@link #searcher()}
      */
     public abstract void preProcess(boolean rewrite);
+
+    public boolean includeNode() {
+        return this.includeNode;
+    }
+
+    public void includeNode(boolean includeNode) {
+        this.includeNode = includeNode;
+    }
+
+    public IndexService indexService() {
+        return null;
+    }
+
+    public ClusterService clusterService() {
+        return null;
+    }
+
+    public ClusterState getClusterState() {
+        return this.clusterState;
+    }
+
+    public void searchProcessor(SearchProcessor processor) {
+        this.processor = processor;
+    }
+
+    public SearchProcessor searchProcessor() {
+        return processor;
+    }
+
+
+    public ParsedStatement.Prepared getCqlPreparedStatement(String key) {
+        return cqlStatementCache.get(key);
+    }
+
+    public void putCqlPreparedStatement(String key, ParsedStatement.Prepared query) {
+        cqlStatementCache.put(key, query);
+    }
 
     /** Automatically apply all required filters to the given query such as
      *  alias filters, types filters, etc. */
