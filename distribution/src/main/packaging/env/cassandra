@@ -1,0 +1,22 @@
+# This file is sourced by the cassandra service, postinst scripts, elasticsearch-plugin...
+
+# Control how cassandra is started:
+#    - org.apache.cassandra.service.CassandraDaemon - normally
+#    - org.apache.cassandra.service.ElassandraDaemon - with elasticsearch enabled
+CASSANDRA_DAEMON=org.apache.cassandra.service.ElassandraDaemon
+
+# Elassandra configuration directory
+#CASSANDRA_CONF=
+
+# Elasssandra Java path
+#JAVA_HOME=
+
+# Extra java options
+#JVM_OPTS=
+
+# Elassandra logs directory
+#CASSANDRA_LOGDIR=/var/log/cassandra
+
+# Configure restart on package upgrade (true, every other setting will lead to not restarting)
+#RESTART_ON_UPGRADE=true
+
