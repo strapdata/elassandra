@@ -46,7 +46,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testModificationPreventsFlushing() throws InterruptedException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 
@@ -92,7 +92,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testSingleShardSuccess() throws InterruptedException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 
@@ -112,7 +112,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testSyncFailsIfOperationIsInFlight() throws InterruptedException, ExecutionException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 
@@ -171,7 +171,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testFailAfterIntermediateCommit() throws InterruptedException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 
@@ -205,7 +205,7 @@ public class SyncedFlushSingleNodeTests extends ESSingleNodeTestCase {
 
     public void testFailWhenCommitIsMissing() throws InterruptedException {
         createIndex("test");
-        client().prepareIndex("test", "test", "1").setSource("{}", XContentType.JSON).get();
+        client().prepareIndex("test", "test", "1").setSource("{ \"foo\" : \"bar\" }", XContentType.JSON).get();
         IndexService test = getInstanceFromNode(IndicesService.class).indexService(resolveIndex("test"));
         IndexShard shard = test.getShardOrNull(0);
 
