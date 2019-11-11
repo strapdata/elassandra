@@ -41,7 +41,7 @@ public final class Version implements Comparable<Version> {
     public static Version fromString(final String s) {
         Objects.requireNonNull(s);
         Matcher matcher = pattern.matcher(s);
-        if (m.matches()) {
+        if (matcher.matches()) {
             // elassandra version => ignore last digit
             return new Version(
                 Integer.parseInt(matcher.group(1)),

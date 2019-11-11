@@ -23,6 +23,9 @@ import org.gradle.api.InvalidUserDataException
 import org.gradle.api.Task
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.OutputFile
+import java.util.regex.Matcher
+import java.util.regex.Pattern
+
 /**
  * Creates a plugin descriptor.
  */

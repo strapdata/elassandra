@@ -29,7 +29,7 @@ public class VersionProperties {
     static {
         Properties props = getVersionProperties();
         elasticsearch = props.getProperty("elasticsearch");
-        elasticsearch_vanilla = props.getProperty('elasticsearch_vanilla');
+        elasticsearch_vanilla = props.getProperty("elasticsearch_vanilla");
         lucene = props.getProperty("lucene");
         for (String property : props.stringPropertyNames()) {
             versions.put(property, props.getProperty(property));
