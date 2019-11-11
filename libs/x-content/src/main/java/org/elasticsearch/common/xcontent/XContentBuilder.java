@@ -42,6 +42,8 @@ import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.Function;
+import java.nio.ByteBuffer;
+import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
  * A utility to build XContent (ie json).
@@ -693,7 +695,20 @@ public final class XContentBuilder implements Closeable, Flushable {
         generator.writeBinary(value, offset, length);
         return this;
     }
-
+    
+    public XContentBuilder binaryValue(ByteBuffer value) throws IOException {
+        if (value == null) {
+            return nullValue();
+        }
+        
+        ByteBuffer bb = ByteBufferUtil.clone(value);
+        byte[] bytes = new byte[bb.remaining()];
+        bb.get(bytes);
+        
+        value(bytes);
+        return this;
+    }
+    
     /**
      * Writes the binary content of the given byte array as UTF-8 bytes.
      *
@@ -826,6 +841,8 @@ public final class XContentBuilder implements Closeable, Flushable {
             values((Object[]) value, ensureNoSelfReferences);
         } else if (value instanceof ToXContent) {
             value((ToXContent) value);
+        } else if (value instanceof ByteBuffer) {
+            binaryValue((ByteBuffer)value);
         } else if (value instanceof Enum<?>) {
             // Write out the Enum toString
             value(Objects.toString(value));

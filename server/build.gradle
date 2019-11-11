@@ -133,7 +133,50 @@ dependencies {
   }
 
   testCompile 'com.google.jimfs:jimfs:1.1'
-  testCompile 'com.google.guava:guava:18.0'
+  compile 'com.google.guava:guava:19.0'
+  
+  // Elassandra add-ons
+  compile("com.strapdata.cassandra:cassandra-all:${versions.cassandra}") {
+    exclude group:'net.java.dev.jna', module:'jna'
+    exclude group:'org.ow2.asm', module:'asm'
+    exclude group:'org.apache.commons', module:'commons-lang3'
+    exclude group:'org.slf4j', module:'slf4j-api' 
+    exclude group:'org.yaml', module:'snakeyaml' 
+    exclude group:'io.netty', module:'netty-all' 
+    exclude group:'joda-time', module:'joda-time' 
+    exclude group:'commons-codec', module:'commons-codec' 
+  }
+
+  // See CASSANDRA-11193 Missing binary dependencies for running Cassandra in embedded mode
+  //compile("org.ow2.asm:asm-debug-all:5.1")
+
+  // Usually when gradle detect a version conflict, it takes the newest version.
+  // Unfortunately this mechanism doesn't work with deps in elasticsearch modules.
+  // When gradle is collecting the jars to be packaged within a module, it excludes any jar that
+  // is already included in the core library folder, with the exactly same version number.
+  // This way, if a version conflict occurs between core and a module, the jar will be shipped in the module,
+  // resulting in a jar hell at runtime. The solution here is to explicitly declare these conflicting deps
+  // at the top-level, with same version numbers as in the modules.
+  compile "org.apache.httpcomponents:httpclient:${versions.httpclient}"
+  compile "org.apache.httpcomponents:httpcore:${versions.httpcore}"
+  compile "commons-codec:commons-codec:${versions.commonscodec}"
+  compile "commons-logging:commons-logging:${versions.commonslogging}"
+  compile "org.apache.commons:commons-lang3:3.4"
+
+
+  // Elasticsearch require netty 4.1
+  // https://github.com/netty/netty/issues/6855
+  compile "io.netty:netty-all:4.1.16.Final"
+
+  // https://www.elastic.co/guide/en/elasticsearch/client/java-api/current/_using_another_logger.html
+  // log4j2 to slf4j to logback
+  compile "org.apache.logging.log4j:log4j-to-slf4j:${versions.log4j}"
+  compile "org.slf4j:slf4j-api:1.7.25", optional
+  compile "ch.qos.logback:logback-classic:1.1.8"
+  compile "ch.qos.logback:logback-core:1.1.8"
+  compile "org.javassist:javassist:3.20.0-GA"
+
+  compile 'net.sf.jopt-simple:jopt-simple:5.0.2'
 }
 
 compileJava.options.compilerArgs << "-Xlint:-cast,-deprecation,-rawtypes,-try,-unchecked"
