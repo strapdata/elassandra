@@ -444,6 +444,12 @@ class BuildPlugin implements Plugin<Project> {
         return System.getenv('RUNTIME_JAVA_HOME') ?: compilerJavaHome
     }
 
+    private static String findCassandraJavaHome(final String runtimeJavaHome) {
+        assert runtimeJavaHome != null
+        return System.getenv('CASSANDRA_JAVA_HOME') ?: java.lang.System.getProperty("cassandra.java.home", runtimeJavaHome)
+    }
+
+
     /** Finds printable java version of the given JAVA_HOME */
     private static String findJavaVersionDetails(Project project, String javaHome) {
         String versionInfoScript = 'print(' +
@@ -842,6 +848,10 @@ class BuildPlugin implements Plugin<Project> {
         sourcesJarTask.description = 'Assembles a jar containing source files.'
         sourcesJarTask.from(project.sourceSets.main.allSource)
         project.assemble.dependsOn(sourcesJarTask)
+    }
+
+    static void configureCassandraStress(Project project) {
+      project.assemble.dependsOn(':cassandra-stress-jar')
     }
 
     /** Adds additional manifest info to jars */
