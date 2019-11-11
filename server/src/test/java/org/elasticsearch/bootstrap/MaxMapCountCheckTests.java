@@ -132,6 +132,7 @@ public class MaxMapCountCheckTests extends AbstractBootstrapCheckTestCase {
 
         assertThat(check.getMaxMapCount(), equalTo(procSysVmMaxMapCount));
         verify(reader).close();
+        /*
 
         {
             reset(reader);

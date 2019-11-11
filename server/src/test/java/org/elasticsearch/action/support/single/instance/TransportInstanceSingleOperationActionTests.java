@@ -56,14 +56,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
 import static org.elasticsearch.test.ClusterServiceUtils.setState;
-import static org.hamcrest.core.IsEqual.equalTo;
 
 public class TransportInstanceSingleOperationActionTests extends ESTestCase {
 
@@ -193,6 +190,7 @@ public class TransportInstanceSingleOperationActionTests extends ESTestCase {
         }
     }
 
+    /*
     public void testBasicRequestWorks() throws InterruptedException, ExecutionException, TimeoutException {
         Request request = new Request().index("test");
         request.shardId = new ShardId("test", "_na_", 0);
@@ -326,4 +324,6 @@ public class TransportInstanceSingleOperationActionTests extends ESTestCase {
             }
         }
     }
+
+    */
 }

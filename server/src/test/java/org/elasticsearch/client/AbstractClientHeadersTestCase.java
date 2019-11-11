@@ -62,7 +62,7 @@ public abstract class AbstractClientHeadersTestCase extends ESTestCase {
                 IndexAction.INSTANCE,
 
                 // cluster admin actions
-                ClusterStatsAction.INSTANCE, CreateSnapshotAction.INSTANCE, ClusterRerouteAction.INSTANCE,
+                ClusterStatsAction.INSTANCE,
 
                 // indices admin actions
                 CreateIndexAction.INSTANCE, IndicesStatsAction.INSTANCE, ClearIndicesCacheAction.INSTANCE, FlushAction.INSTANCE
