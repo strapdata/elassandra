@@ -82,6 +82,7 @@ public class SuggestionEntryTests extends ESTestCase {
         return entry;
     }
 
+    /*
     public void testFromXContent() throws IOException {
         doTestFromXContent(false);
     }
@@ -127,6 +128,7 @@ public class SuggestionEntryTests extends ESTestCase {
             assertToXContentEquivalent(originalBytes, toXContent(parsed, xContentType, humanReadable), xContentType);
         }
     }
+    */
 
     public void testToXContent() throws IOException {
         Option option = new Option(new Text("someText"), new Text("somethingHighlighted"), 1.3f, true);

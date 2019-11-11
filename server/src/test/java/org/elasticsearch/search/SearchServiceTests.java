@@ -362,6 +362,7 @@ public class SearchServiceTests extends ESSingleNodeTestCase {
         }
 
     }
+    */
 
     /**
      * test that getting more than the allowed number of docvalue_fields throws an exception

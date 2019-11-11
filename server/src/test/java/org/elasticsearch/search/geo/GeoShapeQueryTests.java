@@ -229,6 +229,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
             .setQuery(geoIntersectionQuery("location", "Big_Rectangle", "shape_type")).get());
         assertThat(e.getMessage(), containsString("source disabled"));
     }
+    */
 
     public void testReusableBuilder() throws IOException {
         PolygonBuilder polygon = new PolygonBuilder(new CoordinatesBuilder()
@@ -249,7 +250,8 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
     }
 
     public void testShapeFetchingPath() throws Exception {
-        createIndex("shapes");
+        client().admin().indices().prepareCreate("shapes").addMapping("type", "_source", "enabled=true").execute().actionGet();
+
         client().admin().indices().prepareCreate("test").addMapping("type", "location", "type=geo_shape").execute().actionGet();
 
         String location = "\"location\" : {\"type\":\"polygon\", \"coordinates\":[[[-10,-10],[10,-10],[10,10],[-10,10],[-10,-10]]]}";
@@ -491,7 +493,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
     }
 
     public void testShapeFilterWithDefinedGeoCollection() throws Exception {
-        createIndex("shapes");
+        client().admin().indices().prepareCreate("shapes").addMapping("type", "_source", "enabled=true").execute().actionGet();
         client().admin().indices().prepareCreate("test").addMapping("type", "location", "type=geo_shape,tree=quadtree")
                 .execute().actionGet();
 
