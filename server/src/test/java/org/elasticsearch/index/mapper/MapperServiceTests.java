@@ -246,6 +246,7 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                 .put("index.routing_partition_size", 2))
             .execute().actionGet().isAcknowledged());
     }
+    */
 
     public void testIndexSortWithNestedFields() throws IOException {
         Settings settings = Settings.builder()

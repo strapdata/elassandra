@@ -165,10 +165,10 @@ public class FieldFilterMapperPluginTests extends ESSingleNodeTestCase {
         MappingMetaData mappingMetaData = mappings.get("_doc");
         assertNotNull(mappingMetaData);
         Map<String, Object> sourceAsMap = mappingMetaData.getSourceAsMap();
-        assertEquals(4, sourceAsMap.size());
+        assertEquals(3, sourceAsMap.size());    // elassandra does not show _source when disabled because it's the default.
         assertTrue(sourceAsMap.containsKey("_meta"));
         assertTrue(sourceAsMap.containsKey("_routing"));
-        assertTrue(sourceAsMap.containsKey("_source"));
+        //assertTrue(sourceAsMap.containsKey("_source"));
         Map<String, Object> typeProperties = (Map<String, Object>)sourceAsMap.get("properties");
         assertEquals(4, typeProperties.size());
 
@@ -212,10 +212,10 @@ public class FieldFilterMapperPluginTests extends ESSingleNodeTestCase {
         MappingMetaData mappingMetaData = mappings.get("_doc");
         assertNotNull(mappingMetaData);
         Map<String, Object> sourceAsMap = mappingMetaData.getSourceAsMap();
-        assertEquals(4, sourceAsMap.size());
+        assertEquals(3, sourceAsMap.size());        // elassandra does not show _source when disabled because it's the default.
         assertTrue(sourceAsMap.containsKey("_meta"));
         assertTrue(sourceAsMap.containsKey("_routing"));
-        assertTrue(sourceAsMap.containsKey("_source"));
+        //assertTrue(sourceAsMap.containsKey("_source"));
         Map<String, Object> typeProperties = (Map<String, Object>)sourceAsMap.get("properties");
         assertEquals(5, typeProperties.size());
 

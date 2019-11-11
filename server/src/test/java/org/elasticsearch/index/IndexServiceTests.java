@@ -219,6 +219,7 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
         });
     }
 
+    /* Elassandra does not sync translog
     public void testAsyncFsyncActuallyWorks() throws Exception {
         Settings settings = Settings.builder()
             .put(IndexSettings.INDEX_TRANSLOG_SYNC_INTERVAL_SETTING.getKey(), "100ms") // very often :)
@@ -273,6 +274,7 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
                 .get();
         assertNotNull(indexService.getFsyncTask());
     }
+    */
 
     public void testAsyncTranslogTrimActuallyWorks() throws Exception {
         Settings settings = Settings.builder()
