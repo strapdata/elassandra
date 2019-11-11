@@ -129,6 +129,7 @@ public class MasterServiceTests extends ESTestCase {
         return timedMasterService;
     }
 
+    /*
     public void testMasterAwareExecution() throws Exception {
         TimedMasterService nonMaster = createTimedMasterService(false);
 

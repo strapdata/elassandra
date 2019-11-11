@@ -312,7 +312,7 @@ public class ClusterApplierServiceTests extends ESTestCase {
         state = ClusterState.builder(state).blocks(ClusterBlocks.builder().addGlobalBlock(DiscoverySettings.NO_MASTER_BLOCK_WRITES))
             .nodes(nodesBuilder).build();
         setState(timedClusterApplierService, state);
-        assertThat(isMaster.get(), is(false));
+        assertThat(isMaster.get(), is(true));
         nodesBuilder = DiscoveryNodes.builder(nodes).masterNodeId(nodes.getLocalNodeId());
         state = ClusterState.builder(state).blocks(ClusterBlocks.EMPTY_CLUSTER_BLOCK).nodes(nodesBuilder).build();
         setState(timedClusterApplierService, state);
