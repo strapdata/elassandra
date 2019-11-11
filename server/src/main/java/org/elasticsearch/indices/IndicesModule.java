@@ -19,6 +19,8 @@
 
 package org.elasticsearch.indices;
 
+import org.elassandra.index.mapper.internal.NodeFieldMapper;
+import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.action.admin.indices.rollover.Condition;
 import org.elasticsearch.action.admin.indices.rollover.MaxAgeCondition;
 import org.elasticsearch.action.admin.indices.rollover.MaxDocsCondition;
@@ -58,8 +60,6 @@ import org.elasticsearch.index.mapper.TextFieldMapper;
 import org.elasticsearch.index.mapper.TypeFieldMapper;
 import org.elasticsearch.index.mapper.UidFieldMapper;
 import org.elasticsearch.index.mapper.VersionFieldMapper;
-import org.elasticsearch.index.seqno.GlobalCheckpointSyncAction;
-import org.elasticsearch.index.shard.PrimaryReplicaSyncer;
 import org.elasticsearch.indices.cluster.IndicesClusterStateService;
 import org.elasticsearch.indices.flush.SyncedFlushService;
 import org.elasticsearch.indices.mapper.MapperRegistry;
@@ -166,6 +166,8 @@ public class IndicesModule extends AbstractModule {
         builtInMetadataMappers.put(VersionFieldMapper.NAME, new VersionFieldMapper.TypeParser());
         builtInMetadataMappers.put(ParentFieldMapper.NAME, new ParentFieldMapper.TypeParser());
         builtInMetadataMappers.put(SeqNoFieldMapper.NAME, new SeqNoFieldMapper.TypeParser());
+        builtInMetadataMappers.put(TokenFieldMapper.NAME, new TokenFieldMapper.TypeParser());
+        builtInMetadataMappers.put(NodeFieldMapper.NAME, new NodeFieldMapper.TypeParser());
         //_field_names must be added last so that it has a chance to see all the other mappers
         builtInMetadataMappers.put(FieldNamesFieldMapper.NAME, new FieldNamesFieldMapper.TypeParser());
         return Collections.unmodifiableMap(builtInMetadataMappers);
@@ -246,9 +248,9 @@ public class IndicesModule extends AbstractModule {
         bind(IndicesClusterStateService.class).asEagerSingleton();
         bind(SyncedFlushService.class).asEagerSingleton();
         bind(TransportNodesListShardStoreMetaData.class).asEagerSingleton();
-        bind(GlobalCheckpointSyncAction.class).asEagerSingleton();
+        //bind(GlobalCheckpointSyncAction.class).asEagerSingleton();
         bind(TransportResyncReplicationAction.class).asEagerSingleton();
-        bind(PrimaryReplicaSyncer.class).asEagerSingleton();
+        //bind(PrimaryReplicaSyncer.class).asEagerSingleton();
     }
 
     /**

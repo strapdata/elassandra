@@ -20,6 +20,8 @@
 package org.elasticsearch.index.shard;
 
 import com.carrotsearch.hppc.ObjectLongMap;
+
+import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.index.CheckIndex;
@@ -187,6 +189,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     private final ShardRequestCache requestCacheStats;
     private final ShardFieldData shardFieldData;
     private final ShardBitsetFilterCache shardBitsetFilterCache;
+    private final ShardBitsetFilterCache tokenRangesBitsetFilterCache;
     private final Object mutex = new Object();
     private final String checkIndexOnStartup;
     private final CodecService codecService;
@@ -195,6 +198,10 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     private final TranslogConfig translogConfig;
     private final IndexEventListener indexEventListener;
     private final QueryCachingPolicy cachingPolicy;
+
+    private final IndexService indexService;
+    private final ClusterService clusterService;
+
     private final Supplier<Sort> indexSortSupplier;
     // Package visible for testing
     final CircuitBreakerService circuitBreakerService;
@@ -379,6 +386,14 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return shardBitsetFilterCache;
     }
 
+    public IndexService indexService() {
+        return this.indexService;
+    }
+
+    public ShardBitsetFilterCache tokenRangesBitsetFilterCache() {
+        return tokenRangesBitsetFilterCache;
+    }
+
     public MapperService mapperService() {
         return mapperService;
     }
@@ -421,6 +436,39 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     @Override
     public ShardRouting routingEntry() {
         return this.shardRouting;
+    }
+
+    public void shardRouting(ShardRouting shardRouting) {
+        this.shardRouting = shardRouting;
+    }
+
+    public synchronized void moveToStart() {
+        synchronized(mutex) {
+            if (state == IndexShardState.CREATED || state == IndexShardState.POST_RECOVERY) {
+                // we want to refresh *before* we move to internal STARTED state
+                try {
+                    getEngine().refresh("cluster_state_started");
+                } catch (Throwable t) {
+                    logger.warn("failed to refresh due to move to cluster wide started", t);
+                }
+                /*
+                ShardRouting(ShardId shardId, String currentNodeId,
+                        String relocatingNodeId, boolean primary, ShardRoutingState state, RecoverySource recoverySource,
+                        UnassignedInfo unassignedInfo, AllocationId allocationId, long expectedShardSize, Collection<Range<Token>> tokenRanges)
+                */
+                this.shardRouting = new ShardRouting(this.shardId,
+                        this.clusterService.localNode().getId(), null,
+                        true,
+                        ShardRoutingState.STARTED,
+                        null,
+                        IndexRoutingTable.UNASSIGNED_INFO_INDEX_CREATED,
+                        ShardRouting.DUMMY_ALLOCATION_ID,
+                        ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE,
+                        AbstractSearchStrategy.EMPTY_RANGE_TOKEN_LIST);
+                changeState(IndexShardState.STARTED, "start shard [" + state + "]");
+                indexEventListener.afterIndexShardStarted(this);
+            }
+        }
     }
 
     public QueryCachingPolicy getQueryCachingPolicy() {
@@ -932,7 +980,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         }
     }
 
-    private Engine.DeleteResult delete(Engine engine, Engine.Delete delete) throws IOException {
+    public Engine.DeleteResult delete(Engine engine, Engine.Delete delete) throws IOException {
         active.set(true);
         final Engine.DeleteResult result;
         delete = indexingOperationListeners.preDelete(shardId, delete);
@@ -956,6 +1004,11 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
             return Engine.GetResult.NOT_EXISTS;
         }
         return getEngine().get(get, this::acquireSearcher);
+    }
+
+    public Engine.GetResult get(String type, String id) throws IOException {
+        readAllowed();
+        return clusterService.getQueryManager().fetchSourceInternal(this.indexService, type, id, this.mapperService.documentMapper(type).getColumnDefinitions(), (timeElapsed) -> refreshMetric.inc(timeElapsed));
     }
 
     /**
@@ -1028,6 +1081,10 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return searchStats.stats(groups);
     }
 
+    public ShardSearchStats shardShearchStats() {
+        return this.searchStats;
+    }
+
     public GetStats getStats() {
         return getService.stats();
     }
@@ -1052,6 +1109,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     public SegmentsStats segmentStats(boolean includeSegmentFileSizes) {
         SegmentsStats segmentsStats = getEngine().segmentsStats(includeSegmentFileSizes);
         segmentsStats.addBitsetMemoryInBytes(shardBitsetFilterCache.getMemorySizeInBytes());
+        segmentsStats.addTokenRangesBitsetMemoryInBytes(tokenRangesBitsetFilterCache.getMemorySizeInBytes());
         return segmentsStats;
     }
 
@@ -1428,6 +1486,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                 }
             }
         }
+        */
         return opsRecovered;
     }
 
@@ -2204,6 +2263,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                 globalCheckpointSyncer.run();
             }
         }
+        */
     }
 
     /**
@@ -2346,7 +2406,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         recoveryState.getVerifyIndex().checkIndexTime(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - timeNS)));
     }
 
-    Engine getEngine() {
+    public Engine getEngine() {
         Engine engine = getEngineOrNull();
         if (engine == null) {
             throw new AlreadyClosedException("engine is closed");
@@ -2362,8 +2422,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return this.currentEngineReference.get();
     }
 
-    public void startRecovery(RecoveryState recoveryState, PeerRecoveryTargetService recoveryTargetService,
-                              PeerRecoveryTargetService.RecoveryListener recoveryListener, RepositoriesService repositoriesService,
+    public void startRecovery(RecoveryState recoveryState,
+                              PeerRecoveryTargetService.RecoveryListener recoveryListener,
                               BiConsumer<String, MappingMetaData> mappingUpdateConsumer,
                               IndicesService indicesService) {
         // TODO: Create a proper object to encapsulate the recovery context
@@ -2398,6 +2458,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                     }
                 });
                 break;
+            /*
             case PEER:
                 try {
                     markAsRecovering("from " + recoveryState.getSourceNode(), recoveryState);
@@ -2423,6 +2484,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                     }
                 });
                 break;
+            */
             case LOCAL_SHARDS:
                 final IndexMetaData indexMetaData = indexSettings().getIndexMetaData();
                 final Index resizeSourceIndex = indexMetaData.getResizeSourceIndex();
@@ -2507,6 +2569,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
             final ShardRouting newRouting,
             final @Nullable ShardRouting currentRouting,
             final Logger logger) throws IOException {
+        /*
         assert newRouting != null : "newRouting must not be null";
 
         // only persist metadata if routing information that is persisted in shard state metadata actually changed
@@ -2528,6 +2591,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         } else {
             logger.trace("{} skip writing shard state, has been written before", shardId);
         }
+        */
     }
 
     private DocumentMapperForType docMapper(String type) {
@@ -2895,7 +2959,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
      * Returns the current translog durability mode
      */
     public Translog.Durability getTranslogDurability() {
-        return indexSettings.getTranslogDurability();
+        return Translog.Durability.ASYNC; // dummy settings
     }
 
     // we can not protect with a lock since we "release" on a different thread

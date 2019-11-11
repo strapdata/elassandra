@@ -362,7 +362,7 @@ final class StoreRecovery {
      */
     private void internalRecoverFromStore(IndexShard indexShard) throws IndexShardRecoveryException {
         final RecoveryState recoveryState = indexShard.recoveryState();
-        final boolean indexShouldExists = recoveryState.getRecoverySource().getType() != RecoverySource.Type.EMPTY_STORE;
+        boolean indexShouldExists = recoveryState.getRecoverySource().getType() != RecoverySource.Type.EMPTY_STORE;
         indexShard.prepareForIndexRecovery();
         long version = -1;
         SegmentInfos si = null;
@@ -373,6 +373,7 @@ final class StoreRecovery {
                 store.failIfCorrupted();
                 try {
                     si = store.readLastCommittedSegmentsInfo();
+                    indexShouldExists = true;
                 } catch (Exception e) {
                     String files = "_unknown_";
                     try {
@@ -396,6 +397,7 @@ final class StoreRecovery {
                         Lucene.cleanLuceneIndex(store.directory());
                         si = null;
                     }
+                    */
                 }
             } catch (Exception e) {
                 throw new IndexShardRecoveryException(shardId, "failed to fetch index version after copying it over", e);

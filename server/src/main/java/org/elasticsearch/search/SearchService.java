@@ -760,6 +760,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         try {
             context.clearReleasables(Lifetime.PHASE);
             context.setTask(null);
+            TokenRangesSearcherWrapper.removeCurrent();
         } finally {
             context.decRef();
         }

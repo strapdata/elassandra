@@ -554,6 +554,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
         } finally {
             Releasables.close(out);
         }
+        return DUMMY_LOCATION;
     }
 
     /**
@@ -564,9 +565,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
      * @return {@code true} if the current generation should be rolled to a new generation
      */
     public boolean shouldRollGeneration() {
-        final long size = this.current.sizeInBytes();
-        final long threshold = this.indexSettings.getGenerationThresholdSize().getBytes();
-        return size > threshold;
+        return false;
     }
 
     /**
@@ -574,14 +573,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
      * can be returned by the next write.
      */
     public Location getLastWriteLocation() {
-        try (ReleasableLock lock = readLock.acquire()) {
-            /*
-             * We use position = current - 1 and size = Integer.MAX_VALUE here instead of position current and size = 0 for two reasons:
-             * 1. Translog.Location's compareTo doesn't actually pay attention to size even though it's equals method does.
-             * 2. It feels more right to return a *position* that is before the next write's position rather than rely on the size.
-             */
-            return new Location(current.generation, current.sizeInBytes() - 1, Integer.MAX_VALUE);
-        }
+        return new Location(0, Integer.MAX_VALUE,0);
     }
 
     /**
@@ -590,9 +582,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
      * @return the last synced checkpoint
      */
     public long getLastSyncedGlobalCheckpoint() {
-        try (ReleasableLock ignored = readLock.acquire()) {
-            return current.getLastSyncedCheckpoint().globalCheckpoint;
-        }
+        return 0L;
     }
 
     /**
@@ -873,6 +863,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
     }
 
 
+    public final static Location DUMMY_LOCATION = new Location(0,0,0);
     public static class Location implements Comparable<Location> {
 
         public final long generation;
@@ -1771,14 +1762,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
     }
 
     void closeFilesIfNoPendingRetentionLocks() throws IOException {
-        try (ReleasableLock ignored = writeLock.acquire()) {
-            if (closed.get() && deletionPolicy.pendingTranslogRefCount() == 0) {
-                logger.trace("closing files. translog is closed and there are no pending retention locks");
-                ArrayList<Closeable> toClose = new ArrayList<>(readers);
-                toClose.add(current);
-                IOUtils.close(toClose);
-            }
-        }
+
     }
 
     /**

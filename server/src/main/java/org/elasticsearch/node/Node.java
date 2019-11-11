@@ -252,6 +252,11 @@ public abstract class Node implements Closeable {
     private final Collection<LifecycleComponent> pluginLifecycleComponents;
     private final LocalNodeFactory localNodeFactory;
     private final NodeService nodeService;
+    private final NamedXContentRegistry xContentRegistry;
+
+    private final ClusterService clusterService;
+    private TransportService transportService;
+    private CassandraDiscovery discovery;
 
     /**
      * Constructs a node with the given settings.
@@ -379,7 +384,7 @@ public abstract class Node implements Closeable {
                 getCustomNameResolvers(pluginsService.filterPlugins(DiscoveryPlugin.class)));
 
             List<ClusterPlugin> clusterPlugins = pluginsService.filterPlugins(ClusterPlugin.class);
-            final ClusterService clusterService = new ClusterService(settings, settingsModule.getClusterSettings(), threadPool,
+            clusterService = new ClusterService(settings, settingsModule.getClusterSettings(), threadPool,
                ClusterModule.getClusterStateCustomSuppliers(clusterPlugins));
             clusterService.addStateApplier(scriptModule.getScriptService());
             resourcesToClose.add(clusterService);
@@ -402,7 +407,7 @@ public abstract class Node implements Closeable {
             IndicesModule indicesModule = new IndicesModule(pluginsService.filterPlugins(MapperPlugin.class));
             modules.add(indicesModule);
 
-            SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class));
+            SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class), clusterService);
             CircuitBreakerService circuitBreakerService = createCircuitBreakerService(settingsModule.getSettings(),
                 settingsModule.getClusterSettings());
             resourcesToClose.add(circuitBreakerService);
@@ -803,7 +808,15 @@ public abstract class Node implements Closeable {
                 }
             }
         }
+        */
 
+        // create elastic_admin if not exists after joining the ring and before allowing metadata update.
+        clusterService().createOrUpdateElasticAdminKeyspace();
+
+        // Cassandra started => release metadata update blocks.
+        gatewayService().enableMetaDataPersictency();
+
+        transportService.acceptIncomingRequests();
 
         if (NetworkModule.HTTP_ENABLED.get(settings)) {
             injector.getInstance(HttpServerTransport.class).start();
@@ -818,6 +831,11 @@ public abstract class Node implements Closeable {
             writePortsFile("transport", transport.boundAddress());
         }
 
+        logger.info("Elasticsearch started state={}", clusterService.state().toString());
+
+        // Added for esrally when started in foreground.
+        System.out.println("Elassandra started");
+
         logger.info("started");
 
         pluginsService.filterPlugins(ClusterPlugin.class).forEach(ClusterPlugin::onNodeStarted);
@@ -825,7 +843,7 @@ public abstract class Node implements Closeable {
         return this;
     }
 
-    private Node stop() {
+    public Node stop() {
         if (!lifecycle.moveToStopped()) {
             return this;
         }
@@ -836,19 +854,19 @@ public abstract class Node implements Closeable {
             injector.getInstance(HttpServerTransport.class).stop();
         }
 
-        injector.getInstance(SnapshotsService.class).stop();
-        injector.getInstance(SnapshotShardsService.class).stop();
+        //injector.getInstance(SnapshotsService.class).stop();
+        //injector.getInstance(SnapshotShardsService.class).stop();
         // stop any changes happening as a result of cluster state changes
         injector.getInstance(IndicesClusterStateService.class).stop();
         // close discovery early to not react to pings anymore.
         // This can confuse other nodes and delay things - mostly if we're the master and we're running tests.
         injector.getInstance(Discovery.class).stop();
         // we close indices first, so operations won't be allowed on it
-        injector.getInstance(RoutingService.class).stop();
+        //injector.getInstance(RoutingService.class).stop();
         injector.getInstance(ClusterService.class).stop();
         injector.getInstance(NodeConnectionsService.class).stop();
         nodeService.getMonitorService().stop();
-        injector.getInstance(GatewayService.class).stop();
+        injector.getInstance(CassandraGatewayService.class).stop();
         injector.getInstance(SearchService.class).stop();
         injector.getInstance(TransportService.class).stop();
 
@@ -884,9 +902,9 @@ public abstract class Node implements Closeable {
         if (NetworkModule.HTTP_ENABLED.get(settings)) {
             toClose.add(injector.getInstance(HttpServerTransport.class));
         }
-        toClose.add(() -> stopWatch.stop().start("snapshot_service"));
-        toClose.add(injector.getInstance(SnapshotsService.class));
-        toClose.add(injector.getInstance(SnapshotShardsService.class));
+        //toClose.add(() -> stopWatch.stop().start("snapshot_service"));
+        //toClose.add(injector.getInstance(SnapshotsService.class));
+        //toClose.add(injector.getInstance(SnapshotShardsService.class));
         toClose.add(() -> stopWatch.stop().start("client"));
         Releasables.close(injector.getInstance(Client.class));
         toClose.add(() -> stopWatch.stop().start("indices_cluster"));
@@ -906,7 +924,7 @@ public abstract class Node implements Closeable {
         toClose.add(() -> stopWatch.stop().start("monitor"));
         toClose.add(nodeService.getMonitorService());
         toClose.add(() -> stopWatch.stop().start("gateway"));
-        toClose.add(injector.getInstance(GatewayService.class));
+        toClose.add(injector.getInstance(CassandraGatewayService.class));
         toClose.add(() -> stopWatch.stop().start("search"));
         toClose.add(injector.getInstance(SearchService.class));
         toClose.add(() -> stopWatch.stop().start("transport"));
@@ -997,8 +1015,16 @@ public abstract class Node implements Closeable {
     /**
      * The {@link PluginsService} used to build this node's components.
      */
-    protected PluginsService getPluginsService() {
+    public PluginsService getPluginsService() {
         return pluginsService;
+    }
+
+    public synchronized ClusterService clusterService() {
+        return this.clusterService;
+    }
+
+    public synchronized CassandraGatewayService gatewayService() {
+        return this.injector.getInstance(CassandraGatewayService.class);
     }
 
     /**
@@ -1095,5 +1121,9 @@ public abstract class Node implements Closeable {
             assert localNode.get() != null;
             return localNode.get();
         }
+    }
+
+    public NamedXContentRegistry getNamedXContentRegistry() {
+        return xContentRegistry;
     }
 }

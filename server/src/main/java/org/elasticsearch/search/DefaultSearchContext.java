@@ -270,6 +270,19 @@ final class DefaultSearchContext extends SearchContext {
     @Override
     public Query buildFilteredQuery(Query query) {
         List<Query> filters = new ArrayList<>();
+
+        Query tokenRangeQuery = null;
+        if (Boolean.FALSE.equals(this.request.tokenRangesBitsetCache()) ||
+            !this.indexService.isTokenRangesBitsetCacheEnabled()) {
+            if ( (this.request.tokenRanges() != null && this.request.tokenRanges().size() > 0) &&
+                 (this.aggregations == null ||  this.aggregations.factories() == null || !this.aggregations.factories().hasTokenRangeAggregation()) ) {
+                tokenRangeQuery = this.clusterService().tokenRangesService().getTokenRangesQuery(request.tokenRanges());
+            }
+        }
+        if (tokenRangeQuery != null) {
+            filters.add(tokenRangeQuery);
+        }
+
         Query typeFilter = createTypeFilter(queryShardContext.getTypes());
         if (typeFilter != null) {
             filters.add(typeFilter);
@@ -841,5 +854,15 @@ final class DefaultSearchContext extends SearchContext {
     @Override
     public boolean isCancelled() {
         return task.isCancelled();
+    }
+
+    @Override
+    public ClusterService clusterService() {
+        return indexService.clusterService();
+    }
+
+    @Override
+    public IndexService indexService() {
+        return indexService;
     }
 }

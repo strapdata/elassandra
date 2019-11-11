@@ -35,8 +35,8 @@ import static java.util.Collections.emptyMap;
 
 public final class ShardSearchStats implements SearchOperationListener {
 
-    private final StatsHolder totalStats = new StatsHolder();
-    private final CounterMetric openContexts = new CounterMetric();
+    public final StatsHolder totalStats = new StatsHolder();
+    public final CounterMetric openContexts = new CounterMetric();
     private volatile Map<String, StatsHolder> groupsStats = emptyMap();
 
     /**

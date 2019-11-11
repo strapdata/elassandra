@@ -840,6 +840,13 @@ public final class SearchHit implements Streamable, ToXContentObject, Iterable<D
                 innerHits.put(key, value);
             }
         }
+
+        if (this.version == Long.MIN_VALUE && in.readBoolean()) {
+            int rowSize = in.readVInt();
+            this.values = new ArrayList<ByteBuffer>(rowSize);
+            for(int i=0; i < rowSize; i++)
+                values.add(in.readByteBuffer());
+        }
     }
 
     @Override
@@ -895,6 +902,13 @@ public final class SearchHit implements Streamable, ToXContentObject, Iterable<D
                 out.writeString(entry.getKey());
                 entry.getValue().writeTo(out);
             }
+        }
+
+        if (this.values != null) {
+            out.writeBoolean(true);
+            out.writeVInt(values.size());
+            for(ByteBuffer bb : values)
+               out.writeByteBuffer(bb);
         }
     }
 

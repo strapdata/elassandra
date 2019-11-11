@@ -32,14 +32,18 @@ import org.elasticsearch.cluster.ClusterStateApplier;
 import org.elasticsearch.cluster.action.index.NodeMappingRefreshAction;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.IndexMetaData.State;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.routing.AllocationId;
+import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
+import org.elasticsearch.cluster.routing.RecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.Type;
 import org.elasticsearch.cluster.routing.RoutingNode;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
@@ -244,6 +248,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
         // we need to clean the shards and indices we have on this node, since we
         // are going to recover them again once state persistence is disabled (no master / not recovered)
         // TODO: feels hacky, a block disables state persistence, and then we clean the allocated shards, maybe another flag in blocks?
+        /*
         if (state.blocks().disableStatePersistence()) {
             for (AllocatedIndex<? extends Shard> indexService : indicesService) {
                 indicesService.removeIndex(indexService.index(), NO_LONGER_ASSIGNED,
@@ -251,54 +256,23 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
             }
             return;
         }
-
-        updateFailedShardsCache(state);
+        */
+        //updateFailedShardsCache(state);
 
         deleteIndices(event); // also deletes shards of deleted indices
 
-        removeUnallocatedIndices(event); // also removes shards of removed indices
+        removeClosedIndices(event); // also removes shards of removed indices
 
-        failMissingShards(state);
+        //failMissingShards(state);
 
-        removeShards(state);   // removes any local shards that doesn't match what the master expects
+        //removeShards(state);   // removes any local shards that doesn't match what the master expects
 
         updateIndices(event); // can also fail shards, but these are then guaranteed to be in failedShardsCache
 
-        createIndices(state);
+        //createIndices(state);
+        applyNewIndices(event);
 
         createOrUpdateShards(state);
-    }
-
-    /**
-     * Removes shard entries from the failed shards cache that are no longer allocated to this node by the master.
-     * Sends shard failures for shards that are marked as actively allocated to this node but don't actually exist on the node.
-     * Resends shard failures for shards that are still marked as allocated to this node but previously failed.
-     *
-     * @param state new cluster state
-     */
-    private void updateFailedShardsCache(final ClusterState state) {
-        RoutingNode localRoutingNode = state.getRoutingNodes().node(state.nodes().getLocalNodeId());
-        if (localRoutingNode == null) {
-            failedShardsCache.clear();
-            return;
-        }
-
-        DiscoveryNode masterNode = state.nodes().getMasterNode();
-
-        // remove items from cache which are not in our routing table anymore and resend failures that have not executed on master yet
-        for (Iterator<Map.Entry<ShardId, ShardRouting>> iterator = failedShardsCache.entrySet().iterator(); iterator.hasNext(); ) {
-            ShardRouting failedShardRouting = iterator.next().getValue();
-            ShardRouting matchedRouting = localRoutingNode.getByShardId(failedShardRouting.shardId());
-            if (matchedRouting == null || matchedRouting.isSameAllocation(failedShardRouting) == false) {
-                iterator.remove();
-            } else {
-                if (masterNode != null) { // TODO: can we remove this? Is resending shard failures the responsibility of shardStateAction?
-                    String message = "master " + masterNode + " has not removed previously failed shard. resending shard failure";
-                    logger.trace("[{}] re-sending failed shard [{}], reason [{}]", matchedRouting.shardId(), matchedRouting, message);
-                    shardStateAction.localShardFailed(matchedRouting, message, null, SHARD_STATE_ACTION_LISTENER, state);
-                }
-            }
-        }
     }
 
     /**
@@ -373,56 +347,17 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
      *
      * @param event the cluster changed event
      */
-    private void removeUnallocatedIndices(final ClusterChangedEvent event) {
+    private void removeClosedIndices(final ClusterChangedEvent event) {
         final ClusterState state = event.state();
         final String localNodeId = state.nodes().getLocalNodeId();
         assert localNodeId != null;
 
-        Set<Index> indicesWithShards = new HashSet<>();
-        RoutingNode localRoutingNode = state.getRoutingNodes().node(localNodeId);
-        if (localRoutingNode != null) { // null e.g. if we are not a data node
-            for (ShardRouting shardRouting : localRoutingNode) {
-                indicesWithShards.add(shardRouting.index());
-            }
-        }
-
         for (AllocatedIndex<? extends Shard> indexService : indicesService) {
             Index index = indexService.index();
-            if (indicesWithShards.contains(index) == false) {
-                // if the cluster change indicates a brand new cluster, we only want
-                // to remove the in-memory structures for the index and not delete the
-                // contents on disk because the index will later be re-imported as a
-                // dangling index
-                final IndexMetaData indexMetaData = state.metaData().index(index);
-                assert indexMetaData != null || event.isNewCluster() :
-                    "index " + index + " does not exist in the cluster state, it should either " +
-                        "have been deleted or the cluster must be new";
-                final AllocatedIndices.IndexRemovalReason reason =
-                    indexMetaData != null && indexMetaData.getState() == IndexMetaData.State.CLOSE ? CLOSED : NO_LONGER_ASSIGNED;
+            if (state.metaData().index(index) == null || state.metaData().index(index).getState() == State.CLOSE) {
+                final AllocatedIndices.IndexRemovalReason reason = CLOSED;
                 logger.debug("{} removing index, [{}]", index, reason);
                 indicesService.removeIndex(index, reason, "removing index (no shards allocated)");
-            }
-        }
-    }
-
-    /**
-     * Notifies master about shards that don't exist but are supposed to be active on this node.
-     *
-     * @param state new cluster state
-     */
-    private void failMissingShards(final ClusterState state) {
-        RoutingNode localRoutingNode = state.getRoutingNodes().node(state.nodes().getLocalNodeId());
-        if (localRoutingNode == null) {
-            return;
-        }
-        for (final ShardRouting shardRouting : localRoutingNode) {
-            ShardId shardId = shardRouting.shardId();
-            if (shardRouting.initializing() == false &&
-                failedShardsCache.containsKey(shardId) == false &&
-                indicesService.getShardOrNull(shardId) == null) {
-                // the master thinks we are active, but we don't have this shard at all, mark it as failed
-                sendFailShard(shardRouting, "master marked shard as active, but shard has not been created, mark shard as failed", null,
-                    state);
             }
         }
     }
@@ -563,7 +498,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
 
         for (final ShardRouting shardRouting : localRoutingNode) {
             ShardId shardId = shardRouting.shardId();
-            if (failedShardsCache.containsKey(shardId) == false) {
+            if (shardId.getId() == 0) {
                 AllocatedIndex<? extends Shard> indexService = indicesService.indexService(shardId.getIndex());
                 assert indexService != null : "index " + shardId.getIndex() + " should have been created by createIndices";
                 Shard shard = indexService.getShardOrNull(shardId.id());
@@ -577,7 +512,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
         }
     }
 
-    private void createShard(DiscoveryNodes nodes, RoutingTable routingTable, ShardRouting shardRouting, ClusterState state) {
+    private Shard createShard(DiscoveryNodes nodes, RoutingTable routingTable, ShardRouting shardRouting, ClusterState state) {
         assert shardRouting.initializing() : "only allow shard creation for initializing shard but was " + shardRouting;
 
         DiscoveryNode sourceNode = null;
@@ -785,6 +720,8 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
          */
         ShardRouting routingEntry();
 
+        void moveToStart();
+
         /**
          * Returns the latest internal shard state.
          */
@@ -933,7 +870,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
         void processPendingDeletes(Index index, IndexSettings indexSettings, TimeValue timeValue)
             throws IOException, InterruptedException, ShardLockObtainFailedException;
 
-        enum IndexRemovalReason {
+        public enum IndexRemovalReason {
             /**
              * Shard of this index were previously assigned to this node but all shards have been relocated.
              * The index should be removed and all associated resources released. Persistent parts of the index

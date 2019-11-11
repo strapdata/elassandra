@@ -263,6 +263,7 @@ import org.elasticsearch.search.suggest.term.TermSuggestionBuilder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -315,8 +316,25 @@ public class SearchModule {
         registerAggregations(plugins);
         registerPipelineAggregations(plugins);
         registerFetchSubPhases(plugins);
+        registerFetchPhase(plugins);
         registerSearchExts(plugins);
         registerShapes();
+    }
+
+
+    public void registerFetchPhase(List<SearchPlugin> plugins) {
+        for(SearchPlugin p : plugins) {
+            if (p.getFetchPhaseSupplier() != null) {
+                fetchPhaseSupplier.set((subPhases, clusterService) -> p.getFetchPhaseSupplier().create(subPhases, clusterService));
+            }
+        }
+        if (fetchPhaseSupplier.get() == null) {
+            if (ElasticQueryHandler.class.getName().equals(System.getProperty("cassandra.custom_query_handler_class"))) {
+                fetchPhaseSupplier.set((subPhases, clusterService) -> new CqlFetchPhase(subPhases, clusterService));
+            } else {
+                fetchPhaseSupplier.set((subPhases, clusterService) -> new FetchPhase(subPhases, clusterService));
+            }
+        }
     }
 
     public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
@@ -414,6 +432,8 @@ public class SearchModule {
                 DateRangeAggregationBuilder::parse).addResultReader(InternalDateRange::new));
         registerAggregation(new AggregationSpec(IpRangeAggregationBuilder.NAME, IpRangeAggregationBuilder::new,
                 IpRangeAggregationBuilder::parse).addResultReader(InternalBinaryRange::new));
+        registerAggregation(new AggregationSpec(TokenRangeAggregationBuilder.NAME, TokenRangeAggregationBuilder::new,
+                TokenRangeAggregationBuilder::parse).addResultReader(InternalTokenRange::new));
         registerAggregation(new AggregationSpec(HistogramAggregationBuilder.NAME, HistogramAggregationBuilder::new,
                 HistogramAggregationBuilder::parse).addResultReader(InternalHistogram::new));
         registerAggregation(new AggregationSpec(DateHistogramAggregationBuilder.NAME, DateHistogramAggregationBuilder::new,
@@ -811,6 +831,6 @@ public class SearchModule {
     }
 
     public FetchPhase getFetchPhase() {
-        return new FetchPhase(fetchSubPhases);
+        return fetchPhaseSupplier.get().apply(fetchSubPhases, clusterService);
     }
 }

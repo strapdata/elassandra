@@ -44,10 +44,11 @@ import org.elasticsearch.search.aggregations.bucket.significant.heuristics.Signi
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
 import org.elasticsearch.search.aggregations.pipeline.movavg.MovAvgPipelineAggregator;
 import org.elasticsearch.search.aggregations.pipeline.movavg.models.MovAvgModel;
+import org.elasticsearch.search.fetch.FetchPhase;
 import org.elasticsearch.search.fetch.FetchSubPhase;
 import org.elasticsearch.search.fetch.subphase.highlight.Highlighter;
-import org.elasticsearch.search.rescore.RescorerBuilder;
 import org.elasticsearch.search.rescore.Rescorer;
+import org.elasticsearch.search.rescore.RescorerBuilder;
 import org.elasticsearch.search.suggest.Suggester;
 import org.elasticsearch.search.suggest.SuggestionBuilder;
 
@@ -89,6 +90,19 @@ public interface SearchPlugin {
     default List<FetchSubPhase> getFetchSubPhases(FetchPhaseConstructionContext context) {
         return emptyList();
     }
+
+    @FunctionalInterface
+    public interface FetchPhaseSupplier {
+        FetchPhase create(List<FetchSubPhase> subPhases, ClusterService clusterService);
+    }
+
+    /**
+     * The new {@link FetchSubPhase}s defined by this plugin.
+     */
+    default FetchPhaseSupplier getFetchPhaseSupplier() {
+        return null;
+    }
+
     /**
      * The new {@link SearchExtBuilder}s defined by this plugin.
      */

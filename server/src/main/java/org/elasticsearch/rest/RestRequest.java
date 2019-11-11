@@ -19,6 +19,9 @@
 
 package org.elasticsearch.rest;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.common.Booleans;
