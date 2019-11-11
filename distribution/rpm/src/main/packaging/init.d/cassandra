@@ -1,0 +1,215 @@
+#!/bin/bash
+#
+# cassandra <summary>
+#
+# chkconfig:   2345 80 20
+# description: Starts and stops a single elassandra instance on this system
+#
+
+### BEGIN INIT INFO
+# Provides: Elassandra
+# Required-Start: $network $named
+# Required-Stop: $network $named
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: This service manages the elassandra daemon
+# Description: Elassandra is a very scalable, schema-free and high-performance search solution supporting multi-tenancy and near realtime search.
+### END INIT INFO
+
+#
+# init.d / servicectl compatibility (openSUSE)
+#
+if [ -f /etc/rc.status ]; then
+    . /etc/rc.status
+    rc_reset
+fi
+
+#
+# Source function library.
+#
+if [ -f /etc/rc.d/init.d/functions ]; then
+    . /etc/rc.d/init.d/functions
+fi
+
+# Sets the default values for elassandra variables used in this script
+CASSANDRA_HOME=/usr/share/cassandra
+CASSANDRA_USER="cassandra"
+CASSANDRA_GROUP="cassandra"
+CASSANDRA_LOGDIR="/var/log/cassandra"
+
+MAX_OPEN_FILES=100000
+MAX_MAP_COUNT=1048575
+MAX_LOCKED_MEMORY=unlimited
+MAX_AS=unlimited
+MAX_NPROC=32768
+
+PID_DIR="/var/run/cassandra"
+
+# Source the default env file
+ES_ENV_FILE="${path.env}"
+if [ -f "$ES_ENV_FILE" ]; then
+    . "$ES_ENV_FILE"
+fi
+
+# Export some variables if defined in ${path.env}
+export CASSANDRA_LOGDIR
+[ -n "$EXTRA_CLASSPATH" ] && export EXTRA_CLASSPATH
+[ -n "$CASSANDRA_DAEMON" ] && export CASSANDRA_DAEMON
+[ -n "$JVM_OPTS" ] && export JVM_OPTS
+[ -n "$JAVA_HOME" ] && export JAVA_HOME
+[ -n "$CASSANDRA_CONF" ] && export CASSANDRA_CONF
+
+
+# CONF_FILE setting was removed
+if [ ! -z "$CONF_FILE" ]; then
+    echo "CONF_FILE setting is no longer supported. elasticsearch.yml must be placed in the config directory and cannot be renamed."
+    exit 1
+fi
+
+exec="/usr/bin/cassandra"
+prog="cassandra"
+pidfile="$PID_DIR/${prog}.pid"
+
+#export ES_JAVA_OPTS
+#export JAVA_HOME
+#export ES_INCLUDE
+#export ES_JVM_OPTIONS
+#export ES_STARTUP_SLEEP_TIME
+
+# export unsupported variables so bin/elasticsearch can reject them and inform the user these are unsupported
+#if test -n "$ES_MIN_MEM"; then export ES_MIN_MEM; fi
+#if test -n "$ES_MAX_MEM"; then export ES_MAX_MEM; fi
+#if test -n "$ES_HEAP_SIZE"; then export ES_HEAP_SIZE; fi
+#if test -n "$ES_HEAP_NEWSIZE"; then export ES_HEAP_NEWSIZE; fi
+#if test -n "$ES_DIRECT_SIZE"; then export ES_DIRECT_SIZE; fi
+#if test -n "$ES_USE_IPV4"; then export ES_USE_IPV4; fi
+#if test -n "$ES_GC_OPTS"; then export ES_GC_OPTS; fi
+#if test -n "$ES_GC_LOG_FILE"; then export ES_GC_LOG_FILE; fi
+
+lockfile=/var/lock/subsys/$prog
+
+# backwards compatibility for old config sysconfig files, pre 0.90.1
+if [ -n $USER ] && [ -z $CASSANDRA_USER ] ; then
+   CASSANDRA_USER=$USER
+fi
+
+if [ ! -x "$exec" ]; then
+    echo "The cassandra startup script does not exists or it is not executable, tried: $exec"
+    exit 1
+fi
+
+checkJava() {
+    if [ -x "$JAVA_HOME/bin/java" ]; then
+        JAVA="$JAVA_HOME/bin/java"
+    else
+        JAVA=`which java`
+    fi
+
+    if [ ! -x "$JAVA" ]; then
+        echo "Could not find any executable java binary. Please install java in your PATH or set JAVA_HOME"
+        exit 1
+    fi
+}
+
+start() {
+    checkJava
+    [ -x $exec ] || exit 5
+
+    if [ -n "$MAX_OPEN_FILES" ]; then
+        ulimit -n $MAX_OPEN_FILES
+    fi
+    if [ -n "$MAX_LOCKED_MEMORY" ]; then
+        ulimit -l $MAX_LOCKED_MEMORY
+    fi
+    if [ -n "$MAX_NPROC" ]; then
+        ulimit -u $MAX_NPROC
+    fi
+    if [ -n "$MAX_AS" ]; then
+        ulimit -v $MAX_AS
+    fi
+    if [ -n "$MAX_MAP_COUNT" -a -f /proc/sys/vm/max_map_count ]; then
+        sysctl -q -w vm.max_map_count=$MAX_MAP_COUNT
+    fi
+
+    # Ensure that the PID_DIR exists (it is cleaned at OS startup time)
+    if [ -n "$PID_DIR" ] && [ ! -e "$PID_DIR" ]; then
+        mkdir -p "$PID_DIR" && chown "$CASSANDRA_USER":"$CASSANDRA_GROUP" "$PID_DIR"
+    fi
+    if [ -n "$pidfile" ] && [ ! -e "$pidfile" ]; then
+        touch "$pidfile" && chown "$CASSANDRA_USER":"$CASSANDRA_GROUP" "$pidfile"
+    fi
+
+    cd $CASSANDRA_HOME
+    echo -n $"Starting $prog: "
+    # if not running, start it up here, usually something like "daemon $exec"
+    daemon --user $CASSANDRA_USER --pidfile $pidfile $exec -p $pidfile
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && touch $lockfile
+    return $retval
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    # stop it here, often "killproc $prog"
+    killproc -p $pidfile -d ${stopping.timeout} $prog
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && rm -f $lockfile
+    return $retval
+}
+
+restart() {
+    stop
+    start
+}
+
+reload() {
+    restart
+}
+
+force_reload() {
+    restart
+}
+
+rh_status() {
+    # run checks to determine if the service is running or use generic status
+    status -p $pidfile $prog
+}
+
+rh_status_q() {
+    rh_status >/dev/null 2>&1
+}
+
+
+case "$1" in
+    start)
+        rh_status_q && exit 0
+        $1
+        ;;
+    stop)
+        rh_status_q || exit 0
+        $1
+        ;;
+    restart)
+        $1
+        ;;
+    reload)
+        rh_status_q || exit 7
+        $1
+        ;;
+    force-reload)
+        force_reload
+        ;;
+    status)
+        rh_status
+        ;;
+    condrestart|try-restart)
+        rh_status_q || exit 0
+        restart
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
+        exit 2
+esac
+exit $?
