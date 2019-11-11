@@ -26,7 +26,7 @@ plugins {
   id 'groovy'
 }
 
-group = 'org.elasticsearch.gradle'
+group = 'com.strapdata.elasticsearch.gradle'
 
 String minimumGradleVersion = file('src/main/resources/minimumGradleVersion').text.trim()
 if (GradleVersion.current() < GradleVersion.version(minimumGradleVersion)) {
@@ -263,7 +263,7 @@ class VersionPropertiesLoader {
     if (elasticsearch == null) {
       throw new IllegalStateException("Elasticsearch version is missing from properties.")
     }
-    if (elasticsearch.matches("[0-9]+\\.[0-9]+\\.[0-9]+") == false) {
+    if (elasticsearch.matches("[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]") == false) {
       throw new IllegalStateException(
               "Expected elasticsearch version to be numbers only of the form  X.Y.Z but it was: " +
                       elasticsearch
@@ -280,5 +280,6 @@ class VersionPropertiesLoader {
       elasticsearch += "-SNAPSHOT"
     }
     loadedProps.put("elasticsearch", elasticsearch)
+    loadedProps.put("elasticsearch_vanilla", systemProperties.getProperty('elasticsearch_vanilla') + (("true".equals(systemProperties.getProperty("build.snapshot", "true"))) ? "-SNAPSHOT" : ""));
   }
 }

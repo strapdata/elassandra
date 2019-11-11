@@ -32,7 +32,7 @@ publishing {
 }
 
 dependencies {
-    compile "org.elasticsearch:elasticsearch-core:${version}"
+    compile "com.strapdata.elasticsearch:elasticsearch-core:${version}"
 
     compile "org.yaml:snakeyaml:${versions.snakeyaml}"
     compile "com.fasterxml.jackson.core:jackson-core:${versions.jackson}"
@@ -45,7 +45,7 @@ dependencies {
     testCompile "org.hamcrest:hamcrest-all:${versions.hamcrest}"
 
     testCompile(project(":test:framework")) {
-        exclude group: 'org.elasticsearch', module: 'elasticsearch-x-content'
+        exclude group: 'com.strapdata.elasticsearch', module: 'elasticsearch-x-content'
     }
 
 }

@@ -25,7 +25,7 @@ dependencies {
     compile 'org.jruby.jcodings:jcodings:1.0.12'
 
     testCompile(project(":test:framework")) {
-        exclude group: 'org.elasticsearch', module: 'elasticsearch-grok'
+        exclude group: 'com.strapdata.elasticsearch', module: 'elasticsearch-grok'
     }
 }
 

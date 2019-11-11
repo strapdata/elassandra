@@ -74,9 +74,9 @@ if (!isEclipse && !isIdea) {
 
 dependencies {
 
-  compile "org.elasticsearch:elasticsearch-core:${version}"
-  compile "org.elasticsearch:elasticsearch-secure-sm:${version}"
-  compile "org.elasticsearch:elasticsearch-x-content:${version}"
+  compile "com.strapdata.elasticsearch:elasticsearch-core:${version}"
+  compile "com.strapdata.elasticsearch:elasticsearch-secure-sm:${version}"
+  compile "com.strapdata.elasticsearch:elasticsearch-x-content:${version}"
 
   compileOnly project(':libs:plugin-classloader')
   testRuntime project(':libs:plugin-classloader')
@@ -99,7 +99,7 @@ dependencies {
   compile "org.apache.lucene:lucene-suggest:${versions.lucene}"
 
   // utilities
-  compile "org.elasticsearch:elasticsearch-cli:${version}"
+  compile "com.strapdata.elasticsearch:elasticsearch-cli:${version}"
   compile 'com.carrotsearch:hppc:0.7.1'
 
   // time handling, remove with java 8 time
@@ -129,7 +129,7 @@ dependencies {
 
   testCompile(project(":test:framework")) {
     // tests use the locally compiled version of server
-    exclude group: 'org.elasticsearch', module: 'elasticsearch'
+    exclude group: 'com.strapdata.elasticsearch', module: 'elasticsearch'
   }
 
   testCompile 'com.google.jimfs:jimfs:1.1'
@@ -321,7 +321,7 @@ if (project.runtimeJavaVersion > JavaVersion.VERSION_1_8) {
 dependencyLicenses {
   mapping from: /lucene-.*/, to: 'lucene'
   dependencies = project.configurations.runtime.fileCollection {
-    it.group.startsWith('org.elasticsearch') == false ||
+    it.group.startsWith('com.strapdata.elasticsearch') == false ||
             // keep the following org.elasticsearch jars in
             (it.name == 'jna' ||
              it.name == 'securesm')

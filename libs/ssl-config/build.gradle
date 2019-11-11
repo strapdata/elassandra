@@ -21,10 +21,10 @@ apply plugin: 'nebula.maven-base-publish'
 apply plugin: 'nebula.maven-scm'
 
 dependencies {
-    compile "org.elasticsearch:elasticsearch-core:${version}"
+    compile "com.strapdata.elasticsearch:elasticsearch-core:${version}"
 
     testCompile(project(":test:framework")) {
-        exclude group: 'org.elasticsearch', module: 'elasticsearch-ssl-config'
+        exclude group: 'com.strapdata.elasticsearch', module: 'elasticsearch-ssl-config'
     }
 
     testCompile "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"

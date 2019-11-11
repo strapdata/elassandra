@@ -20,7 +20,7 @@
 apply plugin: 'elasticsearch.build'
 apply plugin: 'application'
 
-group = 'org.elasticsearch.client'
+group = 'com.strapdata.elasticsearch.client'
 
 // Not published so no need to assemble
 assemble.enabled = true

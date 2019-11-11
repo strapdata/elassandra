@@ -37,7 +37,7 @@ dependencies {
     testCompile "org.hamcrest:hamcrest-all:${versions.hamcrest}"
     
     testCompile(project(":test:framework")) {
-        exclude group: 'org.elasticsearch', module: 'elasticsearch-secure-sm'
+        exclude group: 'com.strapdata.elasticsearch', module: 'elasticsearch-secure-sm'
     }
 }
 

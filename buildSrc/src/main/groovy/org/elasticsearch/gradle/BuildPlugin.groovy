@@ -127,6 +127,8 @@ class BuildPlugin implements Plugin<Project> {
             )
             String compilerJavaHome = findCompilerJavaHome()
             String runtimeJavaHome = findRuntimeJavaHome(compilerJavaHome)
+            String cassandraJavaHome = findCassandraJavaHome(runtimeJavaHome)
+            
             File gradleJavaHome = Jvm.current().javaHome
 
             final Map<Integer, String> javaVersions = [:]
@@ -158,6 +160,13 @@ class BuildPlugin implements Plugin<Project> {
             String inFipsJvmScript = 'print(java.security.Security.getProviders()[0].name.toLowerCase().contains("fips"));'
             boolean inFipsJvm = Boolean.parseBoolean(runJavaAsScript(project, runtimeJavaHome, inFipsJvmScript))
 
+            String cassandraJavaVersionDetails = gradleJavaVersionDetails
+            JavaVersion cassandraJavaVersionEnum = JavaVersion.current()
+            if (new File(cassandraJavaHome).canonicalPath != gradleJavaHome.canonicalPath) {
+                cassandraJavaVersionDetails = findJavaVersionDetails(project, cassandraJavaHome)
+                cassandraJavaVersionEnum = JavaVersion.toVersion(findJavaSpecificationVersion(project, cassandraJavaHome))
+            }
+            
             // Build debugging info
             println '======================================='
             println 'Elasticsearch Build Hamster says Hello!'
@@ -170,6 +179,8 @@ class BuildPlugin implements Plugin<Project> {
                 println "  Runtime java.home     : ${runtimeJavaHome}"
                 println "  Gradle JDK Version    : ${JavaVersion.toVersion(gradleJavaVersion)} (${gradleJavaVersionDetails})"
                 println "  Gradle java.home      : ${gradleJavaHome}"
+                println "  JDK Version (cassandra) : ${cassandraJavaVersionDetails}"
+                println "  JAVA_HOME (cassandra)   : ${cassandraJavaHome}"
             } else {
                 println "  JDK Version           : ${JavaVersion.toVersion(gradleJavaVersion)} (${gradleJavaVersionDetails})"
                 println "  JAVA_HOME             : ${gradleJavaHome}"
@@ -217,6 +228,7 @@ class BuildPlugin implements Plugin<Project> {
             project.rootProject.ext.runtimeJavaHome = runtimeJavaHome
             project.rootProject.ext.compilerJavaVersion = compilerJavaVersionEnum
             project.rootProject.ext.runtimeJavaVersion = runtimeJavaVersionEnum
+            project.rootProject.ext.cassandraJavaHome = cassandraJavaHome
             project.rootProject.ext.javaVersions = javaVersions
             project.rootProject.ext.buildChecksDone = true
             project.rootProject.ext.minimumCompilerVersion = minimumCompilerVersion
@@ -362,6 +374,7 @@ class BuildPlugin implements Plugin<Project> {
 
     private static String findCompilerJavaHome() {
         String compilerJavaHome = System.getenv('JAVA_HOME')
+        compilerJavaHome = '/Library/Java/JavaVirtualMachines/jdk-12.0.2.jdk/Contents/Home'
         final String compilerJavaProperty = System.getProperty('compiler.java')
         if (compilerJavaProperty != null) {
             compilerJavaHome = findJavaHome(compilerJavaProperty)
@@ -879,21 +892,25 @@ class BuildPlugin implements Plugin<Project> {
                 }
             }
             // add license/notice files
+            /*  TODO: fix license
             project.afterEvaluate {
-                if (project.licenseFile == null || project.noticeFile == null) {
-                    throw new GradleException("Must specify license and notice file for project ${project.path}")
-                }
-                jarTask.metaInf {
-                    from(project.licenseFile.parent) {
-                        include project.licenseFile.name
-                        rename { 'LICENSE.txt' }
+                if (project.dependencyLicenses.enabled) {
+                    if (project.licenseFile == null || project.noticeFile == null) {
+                        throw new GradleException("Must specify license and notice file for project ${project.path}")
                     }
-                    from(project.noticeFile.parent) {
-                        include project.noticeFile.name
-                        rename { 'NOTICE.txt' }
+                    jarTask.metaInf {
+                        from(project.licenseFile.parent) {
+                            include project.licenseFile.name
+                            rename { 'LICENSE.txt' }
+                        }
+                        from(project.noticeFile.parent) {
+                            include project.noticeFile.name
+                            rename { 'NOTICE.txt' }
+                        }
                     }
                 }
             }
+            */
         }
         project.plugins.withType(ShadowPlugin).whenPluginAdded {
             /*

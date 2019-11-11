@@ -28,7 +28,7 @@ mainClassName = 'org.openjdk.jmh.Main'
 unitTest.enabled = false
 
 dependencies {
-    compile("org.elasticsearch:elasticsearch:${version}") {
+    compile("com.strapdata.elasticsearch:elasticsearch:${version}") {
         // JMH ships with the conflicting version 4.6. This prevents us from using jopt-simple in benchmarks (which should be ok) but allows
         // us to invoke the JMH uberjar as usual.
         exclude group: 'net.sf.jopt-simple', module: 'jopt-simple'

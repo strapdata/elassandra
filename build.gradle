@@ -27,21 +27,36 @@ import org.elasticsearch.gradle.plugin.PluginBuildPlugin
 import org.gradle.util.GradleVersion
 import org.gradle.util.DistributionLocator
 import org.gradle.plugins.ide.eclipse.model.SourceFolder
+import com.github.jk1.license.render.*;
+import com.github.jk1.license.filter.*;
 
 plugins {
     id 'com.gradle.build-scan' version '2.3'
+    id 'com.github.jk1.dependency-license-report' version '1.3'
     id 'base'
 }
 
 apply plugin: 'nebula.info-scm'
 apply from: 'gradle/build-scan.gradle'
+apply plugin: 'com.github.jk1.dependency-license-report'
+apply plugin: 'maven'
+apply plugin: 'signing'
+
+repositories {
+    mavenLocal()
+}
 
 // common maven publishing configuration
 allprojects {
-  group = 'org.elasticsearch'
+  group = 'com.strapdata.elasticsearch'
   version = VersionProperties.elasticsearch
   description = "Elasticsearch subproject ${project.path}"
 }
+
+ext.enableArtifactSigning = !version.endsWith("SNAPSHOT") && project.hasProperty("repoUsername")
+ext.repoUsername = { project.hasProperty("repoUsername") ? getProperty("repoUsername") : "" }
+ext.repoPassword = { project.hasProperty("repoPassword") ? getProperty("repoPassword") : "" }
+// repoUrl can override the publication repo URL.
 
 BuildPlugin.configureRepositories(project)
 
@@ -69,7 +84,7 @@ subprojects {
         all {
           pom.withXml { XmlProvider xml ->
             Node node = xml.asNode()
-            node.appendNode('inceptionYear', '2009')
+            node.appendNode('inceptionYear', '2015')
 
             Node license = node.appendNode('licenses').appendNode('license')
             license.appendNode('name', project.licenseName)
@@ -77,23 +92,124 @@ subprojects {
             license.appendNode('distribution', 'repo')
 
             Node developer = node.appendNode('developers').appendNode('developer')
-            developer.appendNode('name', 'Elastic')
-            developer.appendNode('url', 'http://www.elastic.co')
+            developer.appendNode('name', 'Strapdata')
+            developer.appendNode('url', 'https://www.strapdata.com')
           }
         }
       }
       repositories {
+      /*
+        maven {
+           credentials {
+             username = repoUsername
+             password = repoPassword
+           }
+           if (project.hasProperty("repoUrl")) {
+             url project.getProperty("repoUrl")
+           } else if(project.version.endsWith('-SNAPSHOT')) {
+             url "https://oss.sonatype.org/content/repositories/snapshots/"
+           } else {
+             url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+           }
+        }
+      */
         maven {
           name = 'test'
           url = "${rootProject.buildDir}/local-test-repo"
         }
-      }
-    }
-  }
+        
+      publications {
+        // add license information to generated poms
+        all {
+          pom.withXml { XmlProvider xml ->
+            Node node = xml.asNode()
+            node.appendNode('inceptionYear', '2015')
 
-  plugins.withType(BuildPlugin).whenPluginAdded {
-    project.licenseFile = project.rootProject.file('licenses/APACHE-LICENSE-2.0.txt')
-    project.noticeFile = project.rootProject.file('NOTICE.txt')
+            Node license = node.appendNode('licenses').appendNode('license')
+            license.appendNode('name', 'The Apache Software License, Version 2.0')
+            license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
+            license.appendNode('distribution', 'repo')
+
+            Node developer = node.appendNode('developers').appendNode('developer')
+            developer.appendNode('name', 'Strapdata')
+            developer.appendNode('url', 'https://www.strapdata.com')
+          }
+        }
+        
+        maven(MavenPublication) {
+         if (components.hasProperty('java')) {
+             from components.java
+             artifacts {
+                 archives sourcesJar
+                 archives javadocJar
+             }
+         }
+        }
+      }
+     }
+    }
+
+    if (enableArtifactSigning) {
+       signing {
+         sign configurations.archives
+       }
+    }
+   
+    // OSSRH publication
+    /*
+    uploadArchives {
+        repositories {
+            mavenDeployer {
+                uploadDescriptor = true
+                
+                // POM signature
+                beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+                
+                if (project.hasProperty("repoUrl")) {
+                    repository(url: project.getProperty("repoUrl")) {
+                        authentication(userName: repoUsername, password: repoPassword)
+                    }
+                } else if(project.version.endsWith('-SNAPSHOT')) {
+                    snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
+                        authentication(userName: repoUsername, password: repoPassword)
+                    }
+                } else {
+                    repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                        authentication(userName: repoUsername, password: repoPassword)
+                    }
+                }
+    
+                pom.withXml { XmlProvider xml ->
+                    Node node = xml.asNode()
+                    node.appendNode('name',it.name)
+                    node.appendNode('description',"Elasticsearch subproject ${project.path}")
+                    node.appendNode('url', 'https://github.com/strapdata/elassandra')
+                    node.appendNode('inceptionYear', '2015')
+        
+                    Node license = node.appendNode('licenses').appendNode('license')
+                    license.appendNode('name', 'The Apache Software License, Version 2.0')
+                    license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
+                    license.appendNode('distribution', 'repo')
+                    
+                    def scm = node.appendNode('scm')
+                    scm.appendNode('url', 'https://github.com/strapdata/elassandra')
+                    scm.appendNode('connection', 'scm:git:git@github.com:strapdata/elassandra.git')
+                    scm.appendNode('developerConnection', 'scm:git:git@github.com:strapdata/elassandra.git')
+                    
+                    Node developer = node.appendNode('developers').appendNode('developer')
+                    developer.appendNode('name', 'Strapdata')
+                    developer.appendNode('url', 'https://github.com/strapdata/elassandra')
+                    developer.appendNode('organizationUrl', 'https://www.strapdata.com/')
+                }
+            }
+        }
+    }
+    */
+    
+    plugins.withType(BuildPlugin).whenPluginAdded {
+      project.licenseFile = project.rootProject.file('licenses/APACHE-LICENSE-2.0.txt')
+      project.noticeFile = project.rootProject.file('NOTICE.txt')
+    }
   }
 }
 
@@ -151,7 +267,7 @@ task verifyVersions {
     // Read the list from maven central. 
     // Fetch the metadata an parse the xml into Version instances because it's more straight forward here 
     // rather than bwcVersion ( VersionCollection ).
-    new URL('https://repo1.maven.org/maven2/org/elasticsearch/elasticsearch/maven-metadata.xml').openStream().withStream { s ->
+    new URL('https://oss.sonatype.org/content/repositories/snapshots/com/strapdata/elasticsearch/elasticsearch/maven-metadata.xml').openStream().withStream { s ->
       bwcVersions.compareToAuthoritative(
               new XmlParser().parse(s)
                       .versioning.versions.version
@@ -230,41 +346,42 @@ allprojects {
     them as external dependencies so the build plugin that we use can be used
     to build elasticsearch plugins outside of the elasticsearch source tree. */
   ext.projectSubstitutions = [
-    "org.elasticsearch.gradle:build-tools:${version}": ':build-tools',
+    "com.strapdata.elasticsearch.gradle:build-tools:${version}": ':build-tools',
     "org.elasticsearch:rest-api-spec:${version}": ':rest-api-spec',
-    "org.elasticsearch:elasticsearch:${version}": ':server',
-    "org.elasticsearch:elasticsearch-cli:${version}": ':libs:cli',
-    "org.elasticsearch:elasticsearch-core:${version}": ':libs:core',
-    "org.elasticsearch:elasticsearch-x-content:${version}": ':libs:x-content',
-    "org.elasticsearch:elasticsearch-secure-sm:${version}": ':libs:secure-sm',
-    "org.elasticsearch:elasticsearch-ssl-config:${version}": ':libs:elasticsearch-ssl-config',
-    "org.elasticsearch.client:elasticsearch-rest-client:${version}": ':client:rest',
-    "org.elasticsearch.client:elasticsearch-rest-client-sniffer:${version}": ':client:sniffer',
-    "org.elasticsearch.client:elasticsearch-rest-high-level-client:${version}": ':client:rest-high-level',
-    "org.elasticsearch.client:test:${version}": ':client:test',
-    "org.elasticsearch.client:transport:${version}": ':client:transport',
-    "org.elasticsearch.plugin:elasticsearch-scripting-painless-spi:${version}": ':modules:lang-painless:spi',
-    "org.elasticsearch.test:framework:${version}": ':test:framework',
-    "org.elasticsearch.distribution.integ-test-zip:elasticsearch:${version}": ':distribution:archives:integ-test-zip',
-    "org.elasticsearch.distribution.zip:elasticsearch:${version}": ':distribution:archives:zip',
-    "org.elasticsearch.distribution.zip:elasticsearch-oss:${version}": ':distribution:archives:oss-zip',
-    "org.elasticsearch.distribution.tar:elasticsearch:${version}": ':distribution:archives:tar',
-    "org.elasticsearch.distribution.tar:elasticsearch-oss:${version}": ':distribution:archives:oss-tar',
-    "org.elasticsearch.distribution.rpm:elasticsearch:${version}": ':distribution:packages:rpm',
-    "org.elasticsearch.distribution.rpm:elasticsearch-oss:${version}": ':distribution:packages:oss-rpm',
-    "org.elasticsearch.distribution.deb:elasticsearch:${version}": ':distribution:packages:deb',
-    "org.elasticsearch.distribution.deb:elasticsearch-oss:${version}": ':distribution:packages:oss-deb',
-    "org.elasticsearch.test:logger-usage:${version}": ':test:logger-usage',
+    "com.strapdata.elasticsearch:elasticsearch:${version}": ':server',
+    "com.strapdata.elasticsearch:elasticsearch-cli:${version}": ':libs:cli',
+    "com.strapdata.elasticsearch:elasticsearch-core:${version}": ':libs:core',
+    "com.strapdata.elasticsearch:elasticsearch-x-content:${version}": ':libs:x-content',
+    "com.strapdata.elasticsearch:elasticsearch-secure-sm:${version}": ':libs:secure-sm',
+    "com.strapdata.elasticsearch:elasticsearch-ssl-config:${version}": ':libs:elasticsearch-ssl-config',
+    "com.strapdata.elasticsearch.client:elasticsearch-rest-client:${version}": ':client:rest',
+    "com.strapdata.elasticsearch.client:elasticsearch-rest-client-sniffer:${version}": ':client:sniffer',
+    "com.strapdata.elasticsearch.client:elasticsearch-rest-high-level-client:${version}": ':client:rest-high-level',
+    "com.strapdata.elasticsearch.client:test:${version}": ':client:test',
+    "com.strapdata.elasticsearch.client:transport:${version}": ':client:transport',
+    "com.strapdata.elasticsearch.plugin:elasticsearch-scripting-painless-spi:${version}": ':modules:lang-painless:spi',
+    "com.strapdata.elasticsearch.test:framework:${version}": ':test:framework',
+    "com.strapdata.elasticsearch.distribution.integ-test-zip:elasticsearch:${version}": ':distribution:archives:integ-test-zip',
+    "com.strapdata.elasticsearch.distribution.zip:elasticsearch:${version}": ':distribution:archives:zip',
+    "com.strapdata.elasticsearch.distribution.zip:elasticsearch-oss:${version}": ':distribution:archives:oss-zip',
+    "com.strapdata.elasticsearch.distribution.tar:elasticsearch:${version}": ':distribution:archives:tar',
+    "com.strapdata.elasticsearch.distribution.tar:elasticsearch-oss:${version}": ':distribution:archives:oss-tar',
+    "com.strapdata.elasticsearch.distribution.rpm:elasticsearch:${version}": ':distribution:packages:rpm',
+    "com.strapdata.elasticsearch.distribution.rpm:elasticsearch-oss:${version}": ':distribution:packages:oss-rpm',
+    "com.strapdata.elasticsearch.distribution.deb:elasticsearch:${version}": ':distribution:packages:deb',
+    "com.strapdata.elasticsearch.distribution.deb:elasticsearch-oss:${version}": ':distribution:packages:oss-deb',
+    "com.strapdata.elasticsearch.test:logger-usage:${version}": ':test:logger-usage',
     // for transport client
-    "org.elasticsearch.plugin:transport-netty4-client:${version}": ':modules:transport-netty4',
-    "org.elasticsearch.plugin:reindex-client:${version}": ':modules:reindex',
-    "org.elasticsearch.plugin:lang-mustache-client:${version}": ':modules:lang-mustache',
-    "org.elasticsearch.plugin:parent-join-client:${version}": ':modules:parent-join',
-    "org.elasticsearch.plugin:aggs-matrix-stats-client:${version}": ':modules:aggs-matrix-stats',
-    "org.elasticsearch.plugin:percolator-client:${version}": ':modules:percolator',
-    "org.elasticsearch.plugin:rank-eval-client:${version}": ':modules:rank-eval',
+    "com.strapdata.elasticsearch.plugin:transport-netty4-client:${version}": ':modules:transport-netty4',
+    "com.strapdata.elasticsearch.plugin:reindex-client:${version}": ':modules:reindex',
+    "com.strapdata.elasticsearch.plugin:lang-mustache-client:${version}": ':modules:lang-mustache',
+    "com.strapdata.elasticsearch.plugin:parent-join-client:${version}": ':modules:parent-join',
+    "com.strapdata.elasticsearch.plugin:aggs-matrix-stats-client:${version}": ':modules:aggs-matrix-stats',
+    "com.strapdata.elasticsearch.plugin:percolator-client:${version}": ':modules:percolator',
+    "com.strapdata.elasticsearch.plugin:rank-eval-client:${version}": ':modules:rank-eval',
   ]
   // substitute unreleased versions with projects that check out and build locally
+  /*
   bwcVersions.forPreviousUnreleased { VersionCollection.UnreleasedVersionInfo unreleasedVersion ->
     Version unreleased = unreleasedVersion.version
     String snapshotProject = ":distribution:bwc:${unreleasedVersion.gradleProjectName}"
@@ -277,6 +394,7 @@ allprojects {
       ext.projectSubstitutions["org.elasticsearch.distribution.zip:elasticsearch-oss:${unreleased}"] = snapshotProject
     }
   }
+  */
 
   /*
    * Gradle only resolve project substitutions during dependency resolution but
@@ -312,7 +430,7 @@ allprojects {
       String artifactsHost = VersionProperties.elasticsearch.endsWith("-SNAPSHOT") ? "https://snapshots.elastic.co" : "https://artifacts.elastic.co"
       Closure sortClosure = { a, b -> b.group <=> a.group }
       Closure depJavadocClosure = { shadowed, dep ->
-        if (dep.group == null || false == dep.group.startsWith('org.elasticsearch')) {
+        if (dep.group == null || false == dep.group.startsWith('com.strapdata.elasticsearch')) {
           return
         }
         Project upstreamProject = project.ext.dependencyToProject(dep)
@@ -606,6 +724,16 @@ allprojects {
   } 
 }
 
+gradle.projectsEvaluated {
+// import ant tasks from cassandra
+  ant.importBuild('server/cassandra/build.xml') { antTargetName ->
+    'cassandra-' + antTargetName
+  }
+
+  ant.setProperty("javac.executable", project.cassandraJavaHome + "/bin/javac")
+}
+
+tasks.getByName('clean').dependsOn('cassandra-realclean')
 
 
 
