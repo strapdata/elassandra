@@ -33,6 +33,7 @@ import org.elassandra.cluster.Serializer;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.common.document.DocumentField;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.geo.GeoUtils;
 import org.elasticsearch.common.settings.Settings;
@@ -41,10 +42,16 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.query.Operator;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.aggregations.Aggregation;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.bucket.nested.InternalNested;
 import org.elasticsearch.search.aggregations.metrics.sum.InternalSum;
+import org.elasticsearch.search.sort.NestedSortBuilder;
+import org.elasticsearch.search.sort.NestedSortBuilderTests;
+import org.elasticsearch.search.sort.SortBuilder;
+import org.elasticsearch.search.sort.SortBuilders;
+import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
@@ -64,6 +71,7 @@ import java.util.stream.Stream;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 
 /**
  * Elassandra CQL types mapping tests.
@@ -396,15 +404,59 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareSearch().setIndices("test2").setTypes("event_test").setQuery(QueryBuilders.nestedQuery("strings", QueryBuilders.queryStringQuery("strings.key1:b1"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(1L));
         
         // aggregation on key
-        SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("event_test")
-                .setQuery(QueryBuilders.matchAllQuery())
-                .addAggregation(AggregationBuilders
-                        .nested("metrics_agg", "metrics")
-                        .subAggregation(AggregationBuilders.sum("k1_total").field("metrics.k1")))
-                .get();
-        InternalNested metricsAgg = rsp.getAggregations().get("metrics_agg");
-        InternalSum sumAgg = metricsAgg.getAggregations().get("k1_total");
-        assertEquals(45.0, sumAgg.getValue(), 0.1);
+        {
+            SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("event_test")
+                    .setQuery(QueryBuilders.matchAllQuery())
+                    .addAggregation(AggregationBuilders
+                            .nested("metrics_agg", "metrics")
+                            .subAggregation(AggregationBuilders.sum("k1_total").field("metrics.k1")))
+                    .get();
+            InternalNested metricsAgg = rsp.getAggregations().get("metrics_agg");
+            InternalSum sumAgg = metricsAgg.getAggregations().get("k1_total");
+            assertEquals(45.0, sumAgg.getValue(), 0.1);
+        }
+        
+        // sort DESC on map value
+        {
+            SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("event_test")
+                    .setQuery(QueryBuilders.nestedQuery("metrics", QueryBuilders.rangeQuery("metrics.k1").gt(3).lte(8), ScoreMode.Avg))
+                    .addSort(SortBuilders.fieldSort("metrics.k1")
+                            .setNestedSort(new NestedSortBuilder("metrics"))
+                            .order(SortOrder.DESC))
+                    .storedFields("metrics.k1")
+                    .get();
+            int v = 100;
+            int i = 0;
+            for(SearchHit hit : rsp.getHits().getHits()) {
+                DocumentField f = hit.getFields().get("metrics.k1");
+                int vf = f.getValue();
+                System.out.println("hit["+i+"] metrics.k1="+vf);  
+                assertThat(v, greaterThan(vf));
+                v = vf;
+                i++;
+            }
+        }
+        
+        // sort ASC on map value
+        {
+            SearchResponse rsp = client().prepareSearch().setIndices("test").setTypes("event_test")
+                    .setQuery(QueryBuilders.nestedQuery("metrics", QueryBuilders.rangeQuery("metrics.k1").gt(3).lte(8), ScoreMode.Avg))
+                    .addSort(SortBuilders.fieldSort("metrics.k1")
+                            .setNestedSort(new NestedSortBuilder("metrics"))
+                            .order(SortOrder.ASC))
+                    .storedFields("metrics.k1")
+                    .get();
+            int v = -1;
+            int i = 0;
+            for(SearchHit hit : rsp.getHits().getHits()) {
+                DocumentField f = hit.getFields().get("metrics.k1");
+                int vf = f.getValue();
+                System.out.println("hit["+i+"] metrics.k1="+vf);  
+                assertThat(vf, greaterThan(v));
+                v = vf;
+                i++;
+            }
+        }
     }
 
     @Test
