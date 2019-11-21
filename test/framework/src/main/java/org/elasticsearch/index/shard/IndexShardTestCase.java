@@ -51,11 +51,7 @@ import org.elasticsearch.index.MapperTestUtils;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.cache.IndexCache;
 import org.elasticsearch.index.cache.query.DisabledQueryCache;
-import org.elasticsearch.index.engine.DocIdSeqNoAndTerm;
-import org.elasticsearch.index.engine.Engine;
-import org.elasticsearch.index.engine.EngineFactory;
-import org.elasticsearch.index.engine.EngineTestCase;
-import org.elasticsearch.index.engine.InternalEngineFactory;
+import org.elasticsearch.index.engine.*;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.seqno.ReplicationTracker;
@@ -387,9 +383,7 @@ public abstract class IndexShardTestCase extends ESTestCase {
                     warmer,
                     Collections.emptyList(),
                     Arrays.asList(listeners),
-                    globalCheckpointSyncer,
-                    retentionLeaseSyncer,
-                    breakerService);
+                    breakerService, null, null);
             indexShard.addShardFailureCallback(DEFAULT_SHARD_FAILURE_HANDLER);
             success = true;
         } finally {
@@ -439,8 +433,8 @@ public abstract class IndexShardTestCase extends ESTestCase {
                 null,
                 null,
                 engineFactory,
-                current.getGlobalCheckpointSyncer(),
-                current.getRetentionLeaseSyncer(),
+                null,
+                null,
             EMPTY_EVENT_LISTENER, listeners);
     }
 
@@ -532,13 +526,21 @@ public abstract class IndexShardTestCase extends ESTestCase {
 
     protected static AtomicLong currentClusterStateVersion = new AtomicLong();
 
+    public void updateShardState(final ShardRouting newRouting,
+                                 final long newPrimaryTerm,
+                                 final long applyingClusterStateVersion,
+                                 final Set<String> inSyncAllocationIds,
+                                 final IndexShardRoutingTable routingTable,
+                                 final Set<String> pre60AllocationIds) throws IOException {
+
+    }
     public static void updateRoutingEntry(IndexShard shard, ShardRouting shardRouting) throws IOException {
         Set<String> inSyncIds =
             shardRouting.active() ? Collections.singleton(shardRouting.allocationId().getId()) : Collections.emptySet();
         IndexShardRoutingTable newRoutingTable = new IndexShardRoutingTable.Builder(shardRouting.shardId())
             .addShard(shardRouting)
             .build();
-        shard.updateShardState(shardRouting, shard.getPendingPrimaryTerm(), null, currentClusterStateVersion.incrementAndGet(),
+        shard.updateShardState(shardRouting, shard.getPendingPrimaryTerm(), currentClusterStateVersion.incrementAndGet(),
             inSyncIds, newRoutingTable, Collections.emptySet());
     }
 
@@ -623,7 +625,7 @@ public abstract class IndexShardTestCase extends ESTestCase {
             pNode, rNode, snapshot, replica.routingEntry().primary(), 0, startingSeqNo);
         final RecoverySourceHandler recovery = new RecoverySourceHandler(
             primary, recoveryTarget, request, Math.toIntExact(ByteSizeUnit.MB.toBytes(1)), between(1, 8));
-        primary.updateShardState(primary.routingEntry(), primary.getPendingPrimaryTerm(), null,
+        primary.updateShardState(primary.routingEntry(), primary.getPendingPrimaryTerm(),
             currentClusterStateVersion.incrementAndGet(), inSyncIds, routingTable, Collections.emptySet());
 
         PlainActionFuture<RecoveryResponse> future = new PlainActionFuture<>();
@@ -648,9 +650,9 @@ public abstract class IndexShardTestCase extends ESTestCase {
         Set<String> inSyncIdsWithReplica = new HashSet<>(inSyncIds);
         inSyncIdsWithReplica.add(replica.routingEntry().allocationId().getId());
         // update both primary and replica shard state
-        primary.updateShardState(primary.routingEntry(), primary.getPendingPrimaryTerm(), null,
+        primary.updateShardState(primary.routingEntry(), primary.getPendingPrimaryTerm(),
             currentClusterStateVersion.incrementAndGet(), inSyncIdsWithReplica, newRoutingTable, Collections.emptySet());
-        replica.updateShardState(replica.routingEntry().moveToStarted(), replica.getPendingPrimaryTerm(), null,
+        replica.updateShardState(replica.routingEntry().moveToStarted(), replica.getPendingPrimaryTerm(),
             currentClusterStateVersion.get(), inSyncIdsWithReplica, newRoutingTable, Collections.emptySet());
     }
 
@@ -673,8 +675,8 @@ public abstract class IndexShardTestCase extends ESTestCase {
             .addShard(routingEntry)
             .build();
         replica.updateShardState(routingEntry, replica.getPendingPrimaryTerm() + 1,
-            (is, listener) ->
-                listener.onResponse(new PrimaryReplicaSyncer.ResyncTask(1, "type", "action", "desc", null, Collections.emptyMap())),
+            //(is, listener) ->
+            //    listener.onResponse(new PrimaryReplicaSyncer.ResyncTask(1, "type", "action", "desc", null, Collections.emptyMap())),
             currentClusterStateVersion.incrementAndGet(),
             inSyncIds, newRoutingTable, Collections.emptySet());
     }
