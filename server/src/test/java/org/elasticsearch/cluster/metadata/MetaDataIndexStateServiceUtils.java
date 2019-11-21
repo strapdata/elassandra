@@ -21,6 +21,7 @@ package org.elasticsearch.cluster.metadata;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlock;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.index.Index;
 
 import java.util.Map;
@@ -31,11 +32,11 @@ public class MetaDataIndexStateServiceUtils {
     }
 
     /**
-     * Allows to call {@link MetaDataIndexStateService#addIndexClosedBlocks(Index[], Map, ClusterState)} which is a protected method.
+     * Allows to call {@link MetaDataIndexStateService#addIndexClosedBlocks(Index[], Map, ClusterState, ClusterService)} which is a protected method.
      */
     public static ClusterState addIndexClosedBlocks(final Index[] indices, final Map<Index, ClusterBlock> blockedIndices,
                                                     final ClusterState state) {
-        return MetaDataIndexStateService.addIndexClosedBlocks(indices, blockedIndices, state);
+        return MetaDataIndexStateService.addIndexClosedBlocks(indices, blockedIndices, state, null);
     }
 
     /**

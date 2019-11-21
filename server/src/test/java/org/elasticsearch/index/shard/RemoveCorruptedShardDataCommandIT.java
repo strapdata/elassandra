@@ -61,7 +61,6 @@ import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.MergePolicyConfig;
 import org.elasticsearch.index.MockEngineFactoryPlugin;
 import org.elasticsearch.index.seqno.SeqNoStats;
-import org.elasticsearch.index.translog.TestTranslog;
 import org.elasticsearch.index.translog.TranslogCorruptedException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.recovery.RecoveryState;
@@ -316,7 +315,7 @@ public class RemoveCorruptedShardDataCommandIT extends ESIntegTestCase {
             @Override
             public Settings onNodeStopped(String nodeName) throws Exception {
                 logger.info("--> corrupting translog on node {}", nodeName);
-                TestTranslog.corruptRandomTranslogFile(logger, random(), translogDir);
+                //TestTranslog.corruptRandomTranslogFile(logger, random(), translogDir);
                 return super.onNodeStopped(nodeName);
             }
         });
@@ -476,7 +475,7 @@ public class RemoveCorruptedShardDataCommandIT extends ESIntegTestCase {
 
         // Corrupt the translog file(s) on the replica
         logger.info("--> corrupting translog");
-        TestTranslog.corruptRandomTranslogFile(logger, random(), translogDir);
+        //TestTranslog.corruptRandomTranslogFile(logger, random(), translogDir);
 
         // Start the node with the non-corrupted data path
         logger.info("--> starting node");

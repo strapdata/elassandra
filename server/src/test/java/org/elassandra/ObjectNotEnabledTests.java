@@ -24,6 +24,7 @@ import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
@@ -101,7 +102,8 @@ public class ObjectNotEnabledTests extends ESSingleNodeTestCase {
                 .get().getHits();
 
         assertThat(hits.getTotalHits(), equalTo(1L));
-        assertThat(XContentFactory.jsonBuilder().map((Map<String,Object>)hits.getHits()[0].getSourceAsMap().get("session_data")).string(), equalTo("{\"arbitrary_object\":{\"some_array\":[\"foo\",\"bar\",{\"baz\":2}]}}"));
+        assertThat(BytesReference.bytes(XContentFactory.jsonBuilder().map((Map<String,Object>)hits.getHits()[0].getSourceAsMap().get("session_data"))).utf8ToString(),
+            equalTo("{\"arbitrary_object\":{\"some_array\":[\"foo\",\"bar\",{\"baz\":2}]}}"));
 
         UntypedResultSet results = process(ConsistencyLevel.ONE,"SELECT session_data FROM my_index.\"_doc\" WHERE \"_id\"='session_1';");
         assertThat(results.size(),equalTo(1));

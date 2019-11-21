@@ -44,27 +44,28 @@ public class SearchRequestBuilderTests extends ESSingleNodeTestCase {
         client.close();
         client = null;
     }
+     */
 
     public void testEmptySourceToString() {
-        SearchRequestBuilder searchRequestBuilder = client.prepareSearch();
+        SearchRequestBuilder searchRequestBuilder = client().prepareSearch();
         assertThat(searchRequestBuilder.toString(), equalTo(new SearchSourceBuilder().toString()));
     }
 
     public void testQueryBuilderQueryToString() {
-        SearchRequestBuilder searchRequestBuilder = client.prepareSearch();
+        SearchRequestBuilder searchRequestBuilder = client().prepareSearch();
         searchRequestBuilder.setQuery(QueryBuilders.matchAllQuery());
         assertThat(searchRequestBuilder.toString(), equalTo(new SearchSourceBuilder().query(QueryBuilders.matchAllQuery()).toString()));
     }
 
     public void testSearchSourceBuilderToString() {
-        SearchRequestBuilder searchRequestBuilder = client.prepareSearch();
+        SearchRequestBuilder searchRequestBuilder = client().prepareSearch();
         searchRequestBuilder.setSource(new SearchSourceBuilder().query(QueryBuilders.termQuery("field", "value")));
         assertThat(searchRequestBuilder.toString(),
             equalTo(new SearchSourceBuilder().query(QueryBuilders.termQuery("field", "value")).toString()));
     }
 
     public void testThatToStringDoesntWipeRequestSource() {
-        SearchRequestBuilder searchRequestBuilder = client.prepareSearch()
+        SearchRequestBuilder searchRequestBuilder = client().prepareSearch()
             .setSource(new SearchSourceBuilder().query(QueryBuilders.termQuery("field", "value")));
         String preToString = searchRequestBuilder.request().toString();
         assertThat(searchRequestBuilder.toString(),

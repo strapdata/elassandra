@@ -358,7 +358,7 @@ public class TransportReplicationAllPermitsAcquisitionTests extends IndexShardTe
 
         TestAction(Settings settings, String actionName, TransportService transportService, ClusterService clusterService,
                    ShardStateAction shardStateAction, ThreadPool threadPool, ShardId shardId, IndexShard primary, IndexShard replica) {
-            super(settings, actionName, transportService, clusterService, null, threadPool, shardStateAction,
+            super(settings, actionName, transportService, clusterService, null, threadPool,
                 new ActionFilters(new HashSet<>()), new IndexNameExpressionResolver(Settings.EMPTY), Request::new, Request::new,
                 ThreadPool.Names.SAME);
             this.shardId = Objects.requireNonNull(shardId);

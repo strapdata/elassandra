@@ -113,13 +113,25 @@ public class MapperMergeValidatorTests extends ESTestCase {
     }
 
     private static ObjectMapper createObjectMapper(String name) {
-        return new ObjectMapper(name, name, true,
+        return new ObjectMapper(name, name,
+            CqlMapper.CqlCollection.LIST,
+            CqlMapper.CqlStruct.UDT,
+            name,
+            false,
+            false, -1, false,  false,
+            true,
             ObjectMapper.Nested.NO,
             ObjectMapper.Dynamic.FALSE, false, emptyMap(), createSettings());
     }
 
     private static ObjectMapper createNestedObjectMapper(String name) {
-        return new ObjectMapper(name, name, true,
+        return new ObjectMapper(name, name,
+            CqlMapper.CqlCollection.LIST,
+            CqlMapper.CqlStruct.UDT,
+            name,
+            false,
+            false, -1, false,  false,
+            true,
             ObjectMapper.Nested.newNested(false, false),
             ObjectMapper.Dynamic.FALSE, false, emptyMap(), createSettings());
     }

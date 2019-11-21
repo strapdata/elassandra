@@ -37,6 +37,7 @@ import org.elassandra.cluster.Serializer;
 import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.geo.GeoUtils;
@@ -185,13 +186,13 @@ public class RangeFieldTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareCreate(indexName).addMapping("my_type", mapping));
         ensureGreen(indexName);
 
-        String doc = XContentFactory.jsonBuilder()
+        String doc = BytesReference.bytes(XContentFactory.jsonBuilder()
                 .startObject()
                 .startObject("field")
                 .field(getFromField(), getFrom(type))
                 .field(getToField(), getTo(type))
                 .endObject()
-                .endObject().string();
+                .endObject()).utf8ToString();
         System.out.println("insert "+indexName+" type="+ type + " doc="+doc+" query="+getMiddleQuery(type));
 
         assertThat(client().prepareIndex(indexName, "my_type", "1")

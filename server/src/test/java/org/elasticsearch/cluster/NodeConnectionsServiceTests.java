@@ -133,6 +133,7 @@ public class NodeConnectionsServiceTests extends ESTestCase {
         service.new ConnectionChecker().run();
         assertConnectedExactlyToNodes(event.state());
     }
+    */
 
     private void assertConnectedExactlyToNodes(ClusterState state) {
         assertConnected(state.nodes());

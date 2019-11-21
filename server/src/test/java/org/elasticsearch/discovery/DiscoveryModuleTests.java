@@ -23,6 +23,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterApplier;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.network.NetworkService;
@@ -60,6 +61,7 @@ public class DiscoveryModuleTests extends ESTestCase {
     private NamedWriteableRegistry namedWriteableRegistry;
     private MasterService masterService;
     private ClusterApplier clusterApplier;
+    private ClusterService clusterService;
     private ThreadPool threadPool;
     private ClusterSettings clusterSettings;
 
@@ -92,6 +94,7 @@ public class DiscoveryModuleTests extends ESTestCase {
         masterService = mock(MasterService.class);
         namedWriteableRegistry = new NamedWriteableRegistry(Collections.emptyList());
         clusterApplier = mock(ClusterApplier.class);
+        clusterService = mock(ClusterService.class);
         clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
     }
 
@@ -102,7 +105,7 @@ public class DiscoveryModuleTests extends ESTestCase {
 
     private DiscoveryModule newModule(Settings settings, List<DiscoveryPlugin> plugins) {
         return new DiscoveryModule(settings, threadPool, transportService, namedWriteableRegistry, null, masterService,
-            clusterApplier, clusterSettings, plugins, null, createTempDir().toAbsolutePath());
+            clusterService, clusterApplier, clusterSettings, plugins, null, createTempDir().toAbsolutePath());
     }
 
     public void testDefaults() {

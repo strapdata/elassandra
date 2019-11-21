@@ -214,6 +214,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
         assertThat(searchResponse.getHits().getAt(0).getId(), equalTo("1"));
     }
 
+    /*
     public void testIndexedShapeReferenceSourceDisabled() throws Exception {
         XContentBuilder mapping = createMapping();
         client().admin().indices().prepareCreate("test").addMapping("type1", mapping).get();

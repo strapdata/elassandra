@@ -111,7 +111,7 @@ public class TransportBroadcastByNodeActionTests extends ESSingleNodeTestCase {
         TestTransportBroadcastByNodeAction(Settings settings, TransportService transportService, ActionFilters actionFilters,
                                            IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
                                            String executor) {
-            super(settings, "indices:admin/test", THREAD_POOL, TransportBroadcastByNodeActionTests.this.clusterService, transportService,
+            super(settings, "indices:admin/test", THREAD_POOL, clusterService(), transportService,
                 actionFilters, indexNameExpressionResolver, request, executor);
         }
 
@@ -169,7 +169,7 @@ public class TransportBroadcastByNodeActionTests extends ESSingleNodeTestCase {
     class MyResolver extends IndexNameExpressionResolver {
         MyResolver() {
            super(Settings.EMPTY);
-       }            
+       }
 
         @Override
         public String[] concreteIndexNames(ClusterState state, IndicesRequest request) {
@@ -186,12 +186,12 @@ public class TransportBroadcastByNodeActionTests extends ESSingleNodeTestCase {
     public void setUp() throws Exception {
         super.setUp();
         transport = new CapturingTransport();
-        clusterService = createClusterService(THREAD_POOL);
-        TransportService transportService = transport.createCapturingTransportService(clusterService.getSettings(), THREAD_POOL,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR, x -> clusterService.localNode(), null, Collections.emptySet());
+
+        TransportService transportService = transport.createCapturingTransportService(clusterService().getSettings(), THREAD_POOL,
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR, x -> clusterService().localNode(), null, Collections.emptySet());
         transportService.start();
         transportService.acceptIncomingRequests();
-        setClusterState(clusterService, TEST_INDEX);
+        setClusterState(clusterService(), TEST_INDEX);
         action = new TestTransportBroadcastByNodeAction(
                 Settings.EMPTY,
                 transportService,

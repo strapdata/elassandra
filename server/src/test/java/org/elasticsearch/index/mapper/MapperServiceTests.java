@@ -213,6 +213,7 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                         "you can use [copy_to] on mapping fields to create your own catch all field.");
     }
 
+
     public void testPartitionedConstraints() {
         // partitioned index must have routing
          IllegalArgumentException noRoutingException = expectThrows(IllegalArgumentException.class, () -> {
@@ -246,7 +247,6 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                 .put("index.routing_partition_size", 2))
             .execute().actionGet().isAcknowledged());
     }
-    */
 
     public void testIndexSortWithNestedFields() throws IOException {
         Settings settings = Settings.builder()
@@ -378,7 +378,7 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
         assertEquals("_doc", mapperService.resolveDocumentType("_doc"));
         assertEquals("my_type", mapperService.resolveDocumentType("my_type"));
         assertEquals("_default_", mapperService.resolveDocumentType("_default_"));
-        
+
         String mapping = Strings.toString(
                 XContentFactory.jsonBuilder().startObject().startObject("properties").endObject().endObject());
         mapperService.merge("type1", new CompressedXContent(mapping), MergeReason.MAPPING_UPDATE, randomBoolean());
@@ -406,7 +406,7 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                 .put(IndexMetaData.SETTING_VERSION_CREATED, Version.V_5_6_16).build()).mapperService();
         assertEquals("_doc", mapperService.resolveDocumentType("_doc"));
         assertEquals("my_type", mapperService.resolveDocumentType("my_type"));
-        
+
         String mapping = Strings.toString(
                 XContentFactory.jsonBuilder().startObject().startObject("properties").endObject().endObject());
         mapperService.merge("type1", new CompressedXContent(mapping), MergeReason.MAPPING_UPDATE, randomBoolean());

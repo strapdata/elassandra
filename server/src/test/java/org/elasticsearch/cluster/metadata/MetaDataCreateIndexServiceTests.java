@@ -394,6 +394,7 @@ public class MetaDataCreateIndexServiceTests extends ESTestCase {
                 new IndexScopedSettings(Settings.EMPTY, settingsSet));
         consumer.accept(indexSettingsBuilder.build());
     }
+    */
 
     private DiscoveryNode newNode(String nodeId) {
         return new DiscoveryNode(nodeId, buildNewFakeTransportAddress(), emptyMap(),

@@ -66,7 +66,6 @@ import org.elasticsearch.index.flush.FlushStats;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.seqno.RetentionLeaseSyncer;
 import org.elasticsearch.index.seqno.SequenceNumbers;
-import org.elasticsearch.index.translog.TestTranslog;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.index.translog.TranslogStats;
 import org.elasticsearch.indices.IndicesService;
@@ -673,9 +672,7 @@ public class IndexShardIT extends ESSingleNodeTestCase {
                 null,
                 Collections.emptyList(),
                 Arrays.asList(listeners),
-                () -> {},
-                RetentionLeaseSyncer.EMPTY,
-                cbs);
+                cbs, indexService, indexService.clusterService());
     }
 
     private static ShardRouting getInitializingShardRouting(ShardRouting existingShardRouting) {
@@ -818,12 +815,14 @@ public class IndexShardIT extends ESSingleNodeTestCase {
             }
         }
         IndexShard shard = indexService.getShard(0);
+        /*
         try (Translog.Snapshot luceneSnapshot = shard.newChangesSnapshot("test", 0, numOps - 1, true);
              Translog.Snapshot translogSnapshot = getTranslog(shard).newSnapshot()) {
             List<Translog.Operation> opsFromLucene = TestTranslog.drainSnapshot(luceneSnapshot, true);
             List<Translog.Operation> opsFromTranslog = TestTranslog.drainSnapshot(translogSnapshot, true);
             assertThat(opsFromLucene, equalTo(opsFromTranslog));
         }
+        */
     }
 
     public void testRoutingRequiresTypeless() throws IOException {

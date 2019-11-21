@@ -178,7 +178,7 @@ public class MaxMapCountCheckTests extends AbstractBootstrapCheckTestCase {
             Loggers.removeAppender(logger, appender);
             appender.stop();
         }
-
+        */
     }
 
     private static class ParameterizedMessageLoggingExpectation implements MockLogAppender.LoggingExpectation {
