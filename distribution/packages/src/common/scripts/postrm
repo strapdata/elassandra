@@ -9,6 +9,9 @@
 #       $1=0         : indicates a removal
 #       $1=1         : indicates an upgrade
 
+
+
+SOURCE_ENV_FILE=true
 REMOVE_DIRS=false
 REMOVE_USER_AND_GROUP=false
 
@@ -21,6 +24,7 @@ case "$1" in
 
     purge)
         REMOVE_USER_AND_GROUP=true
+        SOURCE_ENV_FILE=false
     ;;
     failed-upgrade|abort-install|abort-upgrade|disappear|upgrade|disappear)
     ;;
@@ -41,45 +45,68 @@ case "$1" in
     ;;
 esac
 
+# Sets the default values for cassandra variables used in this script
+ES_USER="cassandra"
+ES_GROUP="cassandra"
+LOG_DIR="/var/log/cassandra"
+PLUGINS_DIR="/usr/share/cassandra/plugins"
+PID_DIR="/var/run/cassandra"
+DATA_DIR="/var/lib/cassandra"
+CONF_DIR="/etc/cassandra"
+
+# Source the default env file
+if [ "$SOURCE_ENV_FILE" = "true" ]; then
+    ES_ENV_FILE="${path.env}"
+    if [ -f "$ES_ENV_FILE" ]; then
+        . "$ES_ENV_FILE"
+    fi
+fi
+
 if [ "$REMOVE_DIRS" = "true" ]; then
 
-    if [ -d /var/log/elasticsearch ]; then
+    if [ -d "$LOG_DIR" ]; then
         echo -n "Deleting log directory..."
-        rm -rf /var/log/elasticsearch
+        rm -rf "$LOG_DIR"
         echo " OK"
     fi
 
-    if [ -d /usr/share/elasticsearch/plugins ]; then
+    if [ -d "$PLUGINS_DIR" ]; then
         echo -n "Deleting plugins directory..."
-        rm -rf /usr/share/elasticsearch/plugins
+        rm -rf "$PLUGINS_DIR"
         echo " OK"
     fi
 
-    if [ -d /var/run/elasticsearch ]; then
+    if [ -d "$PID_DIR" ]; then
         echo -n "Deleting PID directory..."
-        rm -rf /var/run/elasticsearch
+        rm -rf "$PID_DIR"
         echo " OK"
     fi
 
     # Delete the data directory if and only if empty
-    if [ -d /var/lib/elasticsearch ]; then
-        rmdir --ignore-fail-on-non-empty /var/lib/elasticsearch
+    if [ -d "$DATA_DIR" ]; then
+        rmdir --ignore-fail-on-non-empty "$DATA_DIR"
+    fi
+
+    TRIGGERS_DIR="/etc/cassandra/triggers"
+    # delete the triggers directory if and only if empty
+    if [ -d "$TRIGGERS_DIR" ]; then
+        rmdir --ignore-fail-on-non-empty "$TRIGGERS_DIR"
     fi
 
     # delete the conf directory if and only if empty
-    if [ -d /etc/elasticsearch ]; then
-        rmdir --ignore-fail-on-non-empty /etc/elasticsearch
+    if [ -d "$CONF_DIR" ]; then
+        rmdir --ignore-fail-on-non-empty "$CONF_DIR"
     fi
 
 fi
 
 if [ "$REMOVE_USER_AND_GROUP" = "true" ]; then
-    if id elasticsearch > /dev/null 2>&1 ; then
-        userdel elasticsearch
+    if id "$ES_USER" > /dev/null 2>&1 ; then
+        userdel "$ES_USER"
     fi
 
-    if getent group elasticsearch > /dev/null 2>&1 ; then
-        groupdel elasticsearch
+    if getent group "$ES_GROUP" > /dev/null 2>&1 ; then
+        groupdel "$ES_GROUP"
     fi
 fi
 
