@@ -85,7 +85,7 @@ public class TimeuuidProcessor extends AbstractProcessor {
     }
 
     @Override
-    public void execute(IngestDocument ingestDocument) {
+    public IngestDocument execute(IngestDocument ingestDocument) {
         Object obj = ingestDocument.getFieldValue(field, Object.class);
         String value = null;
         if (obj != null) {
@@ -120,6 +120,7 @@ public class TimeuuidProcessor extends AbstractProcessor {
             long timestamp = UUIDGen.unixTimestamp(timeuuid);
             ingestDocument.setFieldValue( bucketField, Long.toString(timestamp / bucketTime));
         }
+        return ingestDocument;
     }
 
     @Override

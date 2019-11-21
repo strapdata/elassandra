@@ -45,28 +45,28 @@ import static java.time.temporal.ChronoField.MONTH_OF_YEAR;
 import static java.time.temporal.ChronoField.NANO_OF_SECOND;
 import static java.time.temporal.ChronoField.SECOND_OF_DAY;
 
-enum DateFormat {
+public enum DateFormat {
     Iso8601 {
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             return ISODateTimeFormat.dateTimeParser().withZone(timezone)::parseDateTime;
         }
     },
     Unix {
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             return (date) -> new DateTime((long)(Double.parseDouble(date) * 1000), timezone);
         }
     },
     UnixMs {
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             return (date) -> new DateTime(Long.parseLong(date), timezone);
         }
     },
     Tai64n {
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             return (date) -> new DateTime(parseMillis(date), timezone);
         }
 
@@ -85,7 +85,7 @@ enum DateFormat {
             Arrays.asList(NANO_OF_SECOND, SECOND_OF_DAY, MINUTE_OF_DAY, HOUR_OF_DAY, DAY_OF_MONTH, MONTH_OF_YEAR);
 
         @Override
-        Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
+        public Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale) {
             // in case you are wondering why we do not call 'DateFormatter.forPattern(format)' for all cases here, but only for the
             // non java time case:
             // When the joda date formatter parses a date then a year is always set, so that no fallback can be used, like
@@ -125,9 +125,9 @@ enum DateFormat {
         }
     };
 
-    abstract Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale);
+    public abstract Function<String, DateTime> getFunction(String format, DateTimeZone timezone, Locale locale);
 
-    static DateFormat fromString(String format) {
+    public static DateFormat fromString(String format) {
         switch (format) {
             case "ISO8601":
                 return Iso8601;

@@ -48,13 +48,14 @@ public class Base64Processor extends AbstractProcessor {
     }
 
     @Override
-    public void execute(IngestDocument ingestDocument) {
+    public IngestDocument execute(IngestDocument ingestDocument) {
         String value = ingestDocument.getFieldValue(field, String.class);
         if (value != null) {
             byte[] bytes = Hex.hexToBytes(value);
             String targetValue = Base64.encodeBase64String(bytes);
             ingestDocument.setFieldValue( targetField, targetValue);
         }
+        return ingestDocument;
     }
 
     @Override
