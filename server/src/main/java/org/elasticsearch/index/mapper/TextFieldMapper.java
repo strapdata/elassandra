@@ -61,13 +61,7 @@ import org.elasticsearch.index.fielddata.plain.PagedBytesIndexFieldData;
 import org.elasticsearch.index.query.QueryShardContext;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseTextField;
 
@@ -865,6 +859,36 @@ public class TextFieldMapper extends FieldMapper {
             return super.iterator();
         }
         return Iterators.concat(super.iterator(), subIterators.iterator());
+    }
+
+    @Override
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
+        final String value = (String)object;
+        if (value == null) {
+            return;
+        }
+
+        String fieldName = keyName.orElse(fieldType().name());
+
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldName, value, fieldType().boost());
+        }
+
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            Field field = new Field(fieldName, value, fieldType());
+            context.doc().add(field);
+            if (fieldType().omitNorms()) {
+                createFieldNamesField(context, context.doc().getFields());
+            }
+            if (prefixFieldMapper != null) {
+                prefixFieldMapper.addField(value, Collections.singletonList(field));
+            }
+            if (phraseFieldMapper != null) {
+                context.doc().add(new Field(phraseFieldMapper.fieldType.name(), value, phraseFieldMapper.fieldType));
+            }
+        }
+
+        super.createField(context, object, keyName); // for multi fields.
     }
 
     @Override

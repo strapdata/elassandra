@@ -25,6 +25,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.action.support.master.TransportMasterNodeAction;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateTaskConfig;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
@@ -112,7 +113,7 @@ public class TransportPutMappingAction extends TransportMasterNodeAction<PutMapp
                         concreteIndices, request.type()), t);
                     listener.onFailure(t);
                 }
-            });
+            }, ClusterStateTaskConfig.SchemaUpdate.UPDATE);
         } catch (IndexNotFoundException ex) {
             logger.debug(() -> new ParameterizedMessage("failed to put mappings on indices [{}], type [{}]",
                 request.indices(), request.type()), ex);

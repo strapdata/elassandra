@@ -65,7 +65,7 @@ import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.VersionConflictEngineException;
 import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.mapper.*;
-import org.elasticsearch.index.mapper.Mapper.CqlCollection;
+import org.elasticsearch.index.mapper.CqlMapper.CqlCollection;
 import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.IndexShard;
 
@@ -80,7 +80,7 @@ public class QueryManager extends AbstractComponent {
     private final ClusterService clusterService;
 
     public QueryManager(Settings settings, ClusterService clusterService) {
-        super(settings);
+        super();
         this.clusterService = clusterService;
     }
 
@@ -114,7 +114,7 @@ public class QueryManager extends AbstractComponent {
         return builder;
     }
 
-    public static boolean isStaticOrPartitionKey(Mapper mapper) {
+    public static boolean isStaticOrPartitionKey(CqlMapper mapper) {
         return mapper.cqlStaticColumn() || mapper.cqlPartitionKey();
     }
 
@@ -222,7 +222,7 @@ public class QueryManager extends AbstractComponent {
         // rebuild _source from all cassandra columns.
         XContentBuilder builder = buildDocument(docMapper, sourceAsMap, true, isStaticDocument(indexService, uid));
         builder.humanReadable(true);
-        return builder.bytes();
+        return BytesReference.bytes(builder);
     }
 
 
@@ -350,7 +350,7 @@ public class QueryManager extends AbstractComponent {
         UntypedResultSet result = fetchRowInternal(indexService, type, docPk, columnDefs.keySet().toArray(new String[columnDefs.size()]), columnDefs);
         onRefresh.accept(System.nanoTime() - time);
         if (!result.isEmpty()) {
-            return new Engine.GetResult(true, 1L, new DocIdAndVersion(0, 1L, null), null);
+            return new Engine.GetResult(true, 1L, new DocIdAndVersion(0, 1L, SequenceNumbers.UNASSIGNED_SEQ_NO, SequenceNumbers.UNASSIGNED_PRIMARY_TERM, null, 0), null);
         }
         return Engine.GetResult.NOT_EXISTS;
     }
@@ -367,11 +367,14 @@ public class QueryManager extends AbstractComponent {
         if (indexService != null) {
             DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
             if (docMapper != null) {
-                for(FieldMapper fieldMapper : docMapper.mappers()) {
+                for(Mapper fieldMapper : docMapper.mappers()) {
                     if (fieldMapper instanceof MetadataFieldMapper)
                         continue;
-                    if (fieldMapper.cqlPrimaryKeyOrder() == -1 && !fieldMapper.cqlStaticColumn() && fieldMapper.cqlCollection() == Mapper.CqlCollection.SINGLETON) {
-                        return fieldMapper.name();
+                    if (fieldMapper instanceof CqlMapper) {
+                        CqlMapper mapper = (CqlMapper) fieldMapper;
+                        if (mapper.cqlPrimaryKeyOrder() == -1 && !mapper.cqlStaticColumn() && mapper.cqlCollection() == CqlMapper.CqlCollection.SINGLETON) {
+                            return fieldMapper.name();
+                        }
                     }
                 }
             }
@@ -452,11 +455,15 @@ public class QueryManager extends AbstractComponent {
     }
 
 
-    public void deleteRow(final IndexService indexService, final String type, final String id, final ConsistencyLevel cl) throws InvalidRequestException, RequestExecutionException, RequestValidationException,
-            IOException {
-        String cfName = SchemaManager.typeToCfName(indexService.keyspace(), type);
-        DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
-        this.clusterService.process(cl, buildDeleteQuery(docMapper, indexService.keyspace(), cfName), parseElasticId(indexService, type, id).values);
+    public Engine.DeleteResult deleteRow(final IndexService indexService, final String type, final String id, final ConsistencyLevel cl) throws IOException {
+        try {
+            String cfName = SchemaManager.typeToCfName(indexService.keyspace(), type);
+            DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
+            this.clusterService.process(cl, buildDeleteQuery(docMapper, indexService.keyspace(), cfName), parseElasticId(indexService, type, id).values);
+            return new Engine.DeleteResult( 1L, SequenceNumbers.UNASSIGNED_PRIMARY_TERM, SequenceNumbers.UNASSIGNED_SEQ_NO, true);
+        } catch(RequestExecutionException | RequestValidationException e) {
+            return new Engine.DeleteResult(e, 1L, SequenceNumbers.UNASSIGNED_PRIMARY_TERM, SequenceNumbers.UNASSIGNED_SEQ_NO, false);
+        }
     }
 
 
@@ -662,12 +669,12 @@ public class QueryManager extends AbstractComponent {
         return values;
     }
 
-    public Engine.IndexResult updateDocument(final IndexRequest request, final IndexMetaData indexMetaData, Consumer<Mapping> onMappingUpdate) throws Exception {
-        return upsertDocument(request, indexMetaData, true, onMappingUpdate);
+    public Engine.IndexResult updateDocument(final IndexRequest request, final IndexMetaData indexMetaData) throws IOException {
+        return upsertDocument(request, indexMetaData, true);
     }
 
-    public Engine.IndexResult insertDocument(final IndexRequest request, final IndexMetaData indexMetaData, Consumer<Mapping> onMappingUpdate) throws Exception {
-        return upsertDocument(request, indexMetaData, false, onMappingUpdate);
+    public Engine.IndexResult insertDocument(final IndexRequest request, final IndexMetaData indexMetaData) throws IOException {
+        return upsertDocument(request, indexMetaData, false);
     }
 
     private Map<String, Object> updateField(Map<String, Object> node, String fieldName, Object fieldValue) {
@@ -683,12 +690,8 @@ public class QueryManager extends AbstractComponent {
 
     /**
      * Convert an IndexRequest to a CQL insert
-     * @param request
-     * @param indexMetaData
-     * @param updateOperation
-     * @throws Exception
      */
-    private Engine.IndexResult upsertDocument(final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation, Consumer<Mapping> onMappingUpdate) throws Exception {
+    private Engine.IndexResult upsertDocument(final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation) throws IOException {
         final IndexService indexService = clusterService.indexService(indexMetaData.getIndex());
         final IndexShard indexShard = indexService.getShard(0);
 
@@ -714,18 +717,11 @@ public class QueryManager extends AbstractComponent {
 
         final boolean dynamicMappingEnable = indexService.mapperService().dynamic();
         if (mappingUpdate != null && dynamicMappingEnable) {
-            doc.addDynamicMappingsUpdate(mappingUpdate);
             if (logger.isDebugEnabled())
                 logger.debug("Document source={} require a blocking mapping update of [{}] mapping={}",
                         request.sourceAsMap(), indexService.index().getName(), mappingUpdate);
-            
-            // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
-            // wrap this in the outer catch block, as the master might also throw a MapperParsingException when updating the mapping
-            onMappingUpdate.accept(mappingUpdate);
-
-            // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
-            // this.clusterService.blockingMappingUpdate(indexService, request.type(), mappingUpdate.toString());
-            docMapper = indexShard.mapperService().documentMapper(request.type());
+            // retry done by the caller once the mapping is updated
+            return new Engine.IndexResult(mappingUpdate);
         }
 
         // insert document into cassandra keyspace=index, table = type
@@ -770,7 +766,7 @@ public class QueryManager extends AbstractComponent {
             }
 
             for (String field : sourceMap.keySet()) {
-                FieldMapper fieldMapper = field.startsWith(ParentFieldMapper.NAME) ? // workaround for _parent#<join_type>
+                Mapper fieldMapper = field.startsWith(ParentFieldMapper.NAME) ? // workaround for _parent#<join_type>
                         docMapper.parentFieldMapper() :
                         fieldMappers.getMapper(field);
                 final Mapper mapper = (fieldMapper != null) ? fieldMapper : objectMappers.get(field);
@@ -796,8 +792,11 @@ public class QueryManager extends AbstractComponent {
                             continue;
                         }
 
-                        if (mapper != null && mapper.cqlCollection().equals(CqlCollection.SINGLETON) && (fieldValue instanceof Collection)) {
-                            throw new MapperParsingException("field " + fieldMapper.name() + " should be a single value");
+                        if (fieldMapper instanceof CqlMapper) {
+                            CqlMapper cqlMapper = (CqlMapper) fieldMapper;
+                            if (cqlMapper != null && cqlMapper.cqlCollection().equals(CqlCollection.SINGLETON) && (fieldValue instanceof Collection)) {
+                                throw new MapperParsingException("field " + fieldMapper.name() + " should be a single value");
+                            }
                         }
 
                         // hack to store percolate query as a string while mapper is an object mapper.
@@ -847,7 +846,7 @@ public class QueryManager extends AbstractComponent {
         } else {
             ElasticSecondaryIndex esi = ElasticSecondaryIndex.elasticSecondayIndices.get(keyspaceName+"."+cfName);
             ByteBuffer NULL_VALUE = (esi == null || !esi.isInsertOnly()) ? null : ByteBufferUtil.UNSET_BYTE_BUFFER;
-            for(FieldMapper m : fieldMappers) {
+            for(Mapper m : fieldMappers) {
                 String fullname = m.name();
                 if (map.get(fullname) == null && !fullname.startsWith("_") && fullname.indexOf('.') == -1 && cfm.getColumnDefinition(m.cqlName()) != null)
                     map.put(fullname, NULL_VALUE);
@@ -857,28 +856,17 @@ public class QueryManager extends AbstractComponent {
                     map.put(m, NULL_VALUE);
             }
             values = new ByteBuffer[map.size()];
-            query = buildInsertQuery(keyspaceName, cfName, map, id,
-                    false,
-                    values, 0);
+            query = buildInsertQuery(keyspaceName, cfName, map, id, false, values, 0);
             this.clusterService.process(request.waitForActiveShards().toCassandraConsistencyLevel(), query, (Object[])values);
         }
-        
+
         assert request.versionType().validateVersionForWrites(request.version());
-        return new Engine.IndexResult(1L, SequenceNumbers.UNASSIGNED_SEQ_NO, true);
+        return new Engine.IndexResult(1L, SequenceNumbers.UNASSIGNED_PRIMARY_TERM, SequenceNumbers.UNASSIGNED_SEQ_NO, true);
     }
 
     /**
      * Build CQL insert query and populate values from the provided map.
      * TODO: cached prepared statements ?
-     * @param ksName
-     * @param cfName
-     * @param map
-     * @param id
-     * @param ifNotExists
-     * @param values
-     * @param valuesOffset
-     * @return
-     * @throws Exception
      */
     public String buildInsertQuery(final String ksName,
             final String cfName,
@@ -886,7 +874,7 @@ public class QueryManager extends AbstractComponent {
             final String id,
             final boolean ifNotExists,
             ByteBuffer[] values,
-            final int valuesOffset) throws Exception {
+            final int valuesOffset) {
         final StringBuilder questionsMarks = new StringBuilder();
         final StringBuilder columnNames = new StringBuilder();
 

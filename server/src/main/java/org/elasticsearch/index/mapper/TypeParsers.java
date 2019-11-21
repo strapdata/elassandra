@@ -19,15 +19,42 @@
 
 package org.elasticsearch.index.mapper;
 
-import org.apache.logging.log4j.LogManager;
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.CQLFragmentParser;
+import org.apache.cassandra.cql3.CqlParser;
+import org.apache.cassandra.db.marshal.AsciiType;
+import org.apache.cassandra.db.marshal.BooleanType;
+import org.apache.cassandra.db.marshal.ByteType;
+import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.CounterColumnType;
+import org.apache.cassandra.db.marshal.DecimalType;
+import org.apache.cassandra.db.marshal.DoubleType;
+import org.apache.cassandra.db.marshal.DurationType;
+import org.apache.cassandra.db.marshal.EmptyType;
+import org.apache.cassandra.db.marshal.FloatType;
+import org.apache.cassandra.db.marshal.InetAddressType;
+import org.apache.cassandra.db.marshal.Int32Type;
+import org.apache.cassandra.db.marshal.IntegerType;
+import org.apache.cassandra.db.marshal.LongType;
+import org.apache.cassandra.db.marshal.ShortType;
+import org.apache.cassandra.db.marshal.SimpleDateType;
+import org.apache.cassandra.db.marshal.TimeType;
+import org.apache.cassandra.db.marshal.TimeUUIDType;
+import org.apache.cassandra.db.marshal.TimestampType;
+import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.db.marshal.UUIDType;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.index.IndexOptions;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.logging.DeprecationLogger;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.time.DateFormatter;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
+import org.elasticsearch.index.mapper.CqlMapper.CqlCollection;
+import org.elasticsearch.index.mapper.CqlMapper.CqlStruct;
 import org.elasticsearch.index.similarity.SimilarityProvider;
 
 import java.util.Collections;
@@ -50,7 +77,17 @@ public class TypeParsers {
     public static final String INDEX_OPTIONS_POSITIONS = "positions";
     public static final String INDEX_OPTIONS_OFFSETS = "offsets";
 
-    private static final DeprecationLogger DEPRECATION_LOGGER = new DeprecationLogger(LogManager.getLogger(TypeParsers.class));
+    public static final String CQL_COLLECTION = "cql_collection";
+    public static final String CQL_STRUCT = "cql_struct";
+    public static final String CQL_TYPE = "cql_type";
+    public static final String CQL_UDT_NAME = "cql_udt_name";
+    public static final String CQL_MANDATORY = "cql_mandatory";
+    public static final String CQL_STATIC_COLUMN = "cql_static_column";
+    public static final String CQL_CLUSTERING_KEY_DESC = "cql_clustering_key_desc";
+    public static final String CQL_PARTITION_KEY = "cql_partition_key";
+    public static final String CQL_PRIMARY_KEY_ORDER = "cql_primary_key_order";
+
+    private static final DeprecationLogger DEPRECATION_LOGGER = new DeprecationLogger(Loggers.getLogger(TypeParsers.class));
 
     //TODO 22298: Remove this method and have all call-sites use <code>XContentMapValues.nodeBooleanValue(node)</code> directly.
     public static boolean nodeBooleanValue(String fieldName, String propertyName, Object node,
@@ -218,7 +255,7 @@ public class TypeParsers {
             final Object propNode) {
         if (propName.equals(CQL_STRUCT)) {
             switch(StringUtils.lowerCase(propNode.toString())) {
-            case "map" : builder.cqlStruct(CqlStruct.MAP); break;
+            case "map" : builder.cqlStruct(CqlMapper.CqlStruct.MAP); break;
             case "opaque_map" : builder.cqlStruct(CqlStruct.OPAQUE_MAP); break;
             case "udt" : builder.cqlStruct(CqlStruct.UDT); break;
             case "tuple" : builder.cqlStruct(CqlStruct.TUPLE); break;

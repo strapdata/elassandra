@@ -22,8 +22,10 @@ package org.elasticsearch.gateway;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.elassandra.NoPersistedMetaDataException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.env.NodeEnvironment;
@@ -43,10 +45,16 @@ public class MetaStateService {
 
     private final NodeEnvironment nodeEnv;
     private final NamedXContentRegistry namedXContentRegistry;
+    private final ClusterService clusterService;
 
     public MetaStateService(NodeEnvironment nodeEnv, NamedXContentRegistry namedXContentRegistry) {
+        this(nodeEnv, namedXContentRegistry, null);
+    }
+
+    public MetaStateService(NodeEnvironment nodeEnv, NamedXContentRegistry namedXContentRegistry, ClusterService clusterService) {
         this.nodeEnv = nodeEnv;
         this.namedXContentRegistry = namedXContentRegistry;
+        this.clusterService = clusterService;
     }
 
     /**
@@ -124,9 +132,6 @@ public class MetaStateService {
 
     /**
      * Decode global state from a string.
-     * @param stringMetaData
-     * @return
-     * @throws Exception
      */
     public MetaData loadGlobalState(String stringMetaData) throws IOException {
         return MetaData.CASSANDRA_FORMAT.loadLatestState(logger, namedXContentRegistry, stringMetaData);

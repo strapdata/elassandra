@@ -81,6 +81,7 @@ public class QueryShardContext extends QueryRewriteContext {
     private final BitsetFilterCache bitsetFilterCache;
     private final Function<IndexReaderContext, IndexSearcher> searcherFactory;
     private final BiFunction<MappedFieldType, String, IndexFieldData<?>> indexFieldDataService;
+    private final ClusterService clusterService;
     private final int shardId;
     private final IndexReader reader;
     private final String clusterAlias;
@@ -109,6 +110,19 @@ public class QueryShardContext extends QueryRewriteContext {
                              SimilarityService similarityService, ScriptService scriptService, NamedXContentRegistry xContentRegistry,
                              NamedWriteableRegistry namedWriteableRegistry, Client client, IndexReader reader, LongSupplier nowInMillis,
                              String clusterAlias) {
+        this( shardId,  indexSettings,  bitsetFilterCache,
+            searcherFactory, indexFieldDataLookup,  mapperService,
+            similarityService,  scriptService,  xContentRegistry,
+            namedWriteableRegistry,  client,  reader,  nowInMillis,
+            clusterAlias, null);
+    }
+
+    public QueryShardContext(int shardId, IndexSettings indexSettings, BitsetFilterCache bitsetFilterCache,
+                             Function<IndexReaderContext, IndexSearcher> searcherFactory,
+                             BiFunction<MappedFieldType, String, IndexFieldData<?>> indexFieldDataLookup, MapperService mapperService,
+                             SimilarityService similarityService, ScriptService scriptService, NamedXContentRegistry xContentRegistry,
+                             NamedWriteableRegistry namedWriteableRegistry, Client client, IndexReader reader, LongSupplier nowInMillis,
+                             String clusterAlias, ClusterService clusterService) {
         super(xContentRegistry, namedWriteableRegistry,client, nowInMillis);
         this.shardId = shardId;
         this.similarityService = similarityService;
@@ -116,6 +130,7 @@ public class QueryShardContext extends QueryRewriteContext {
         this.bitsetFilterCache = bitsetFilterCache;
         this.searcherFactory = searcherFactory;
         this.indexFieldDataService = indexFieldDataLookup;
+        this.clusterService = clusterService;
         this.allowUnmappedFields = indexSettings.isDefaultAllowUnmappedFields();
         this.nestedScope = new NestedScope();
         this.scriptService = scriptService;

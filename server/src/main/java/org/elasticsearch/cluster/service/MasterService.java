@@ -19,18 +19,24 @@
 
 package org.elasticsearch.cluster.service;
 
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.elassandra.shard.CassandraShardStartedBarrier;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.cluster.AckedClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterState.Builder;
 import org.elasticsearch.cluster.ClusterStateTaskConfig;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor.ClusterTasksResult;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
+import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.ack.ClusterStateUpdateRequest;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -39,30 +45,37 @@ import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.CountDown;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
+import org.elasticsearch.common.util.concurrent.FutureUtils;
 import org.elasticsearch.common.util.concurrent.PrioritizedEsThreadPoolExecutor;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.discovery.Discovery;
+import org.elasticsearch.discovery.Discovery.AckListener;
 import org.elasticsearch.threadpool.Scheduler;
 import org.elasticsearch.threadpool.ThreadPool;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.elasticsearch.cluster.service.ClusterService.CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING;
+import static org.elasticsearch.cluster.service.BaseClusterService.CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING;
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
 public class MasterService extends AbstractLifecycleComponent {
@@ -82,6 +95,8 @@ public class MasterService extends AbstractLifecycleComponent {
 
     private volatile PrioritizedEsThreadPoolExecutor threadPoolExecutor;
     private volatile Batcher taskBatcher;
+
+    private volatile ClusterService clusterService;
 
     public MasterService(String nodeName, Settings settings, ThreadPool threadPool) {
         this.nodeName = nodeName;
@@ -391,11 +406,28 @@ public class MasterService extends AbstractLifecycleComponent {
         }
 
         public Discovery.AckListener createAckListener(ThreadPool threadPool, ClusterState newClusterState) {
-            return new DelegatingAckListener(nonFailedTasks.stream()
-                .filter(task -> task.listener instanceof AckedClusterStateTaskListener)
-                .map(task -> new AckCountDownListener((AckedClusterStateTaskListener) task.listener, newClusterState.version(),
-                    newClusterState.nodes(), threadPool))
-                .collect(Collectors.toList()));
+            ArrayList<Discovery.AckListener> ackListeners = new ArrayList<>();
+
+            //timeout straightaway, otherwise we could wait forever as the timeout thread has not started
+            nonFailedTasks.stream().filter(task -> task.listener instanceof AckedClusterStateTaskListener).forEach(task -> {
+                final AckedClusterStateTaskListener ackedListener = (AckedClusterStateTaskListener) task.listener;
+                if (ackedListener.ackTimeout() == null || ackedListener.ackTimeout().millis() == 0) {
+                    ackedListener.onAckTimeout();
+                } else {
+                    try {
+                        ackListeners.add(new AckCountDownListener(ackedListener, newClusterState.version(), newClusterState.nodes(),
+                            threadPool));
+                    } catch (EsRejectedExecutionException ex) {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("Couldn't schedule timeout thread - node might be shutting down", ex);
+                        }
+                        //timeout straightaway, otherwise we could wait forever as the timeout thread has not started
+                        ackedListener.onAckTimeout();
+                    }
+                }
+            });
+
+            return new DelegatingAckListener(ackListeners);
         }
 
         public boolean clusterStateUnchanged() {
@@ -574,6 +606,10 @@ public class MasterService extends AbstractLifecycleComponent {
                 listener.onNodeAck(node, e);
             }
         }
+
+        public void onTimeout() {
+            throw new UnsupportedOperationException("no timeout delegation");
+        }
     }
 
     private static class AckCountDownListener implements Discovery.AckListener {
@@ -582,7 +618,7 @@ public class MasterService extends AbstractLifecycleComponent {
 
         private final AckedClusterStateTaskListener ackedTaskListener;
         private final CountDown countDown;
-        private final DiscoveryNode masterNode;
+        private final DiscoveryNodes nodes;
         private final ThreadPool threadPool;
         private final long clusterStateVersion;
         private volatile Scheduler.Cancellable ackTimeoutCallback;
@@ -593,16 +629,18 @@ public class MasterService extends AbstractLifecycleComponent {
             this.ackedTaskListener = ackedTaskListener;
             this.clusterStateVersion = clusterStateVersion;
             this.threadPool = threadPool;
-            this.masterNode = nodes.getMasterNode();
+            this.nodes = nodes;
             int countDown = 0;
             for (DiscoveryNode node : nodes) {
                 //we always wait for at least the master node
-                if (node.equals(masterNode) || ackedTaskListener.mustAck(node)) {
+                if (ackedTaskListener.mustAck(node)) {
                     countDown++;
                 }
             }
+            //we always wait for at least 1 node (the master)
+            countDown = Math.max(1, countDown);
             logger.trace("expecting {} acknowledgements for cluster_state update (version: {})", countDown, clusterStateVersion);
-            this.countDown = new CountDown(countDown + 1); // we also wait for onCommit to be called
+            this.countDown = new CountDown(countDown); // we also wait for onCommit to be called
         }
 
         @Override
@@ -627,7 +665,7 @@ public class MasterService extends AbstractLifecycleComponent {
 
         @Override
         public void onNodeAck(DiscoveryNode node, @Nullable Exception e) {
-            if (node.equals(masterNode) == false && ackedTaskListener.mustAck(node) == false) {
+            if (!ackedTaskListener.mustAck(node)) {
                 return;
             }
             if (e == null) {
@@ -671,6 +709,7 @@ public class MasterService extends AbstractLifecycleComponent {
             }
         } catch (Exception e) {
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(currentTimeInNanos() - startTimeNS)));
+            logger.warn((Supplier<?>) () -> new ParameterizedMessage("failed to execute cluster state update source [{}]", taskInputs.summary), e);
             if (logger.isTraceEnabled()) {
                 logger.trace(
                     () -> new ParameterizedMessage(

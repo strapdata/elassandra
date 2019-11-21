@@ -115,8 +115,7 @@ public class ParentFieldMapper extends MetadataFieldMapper {
             }
             name = joinField(parentType);
             setupFieldType(context);
-            return new ParentFieldMapper(createParentJoinFieldMapper(documentType, context), fieldType,
-                parentType, context.indexSettings());
+            return new ParentFieldMapper(createParentJoinFieldMapper(documentType, context), fieldType, parentType, pkColumns, context.indexSettings());
         }
     }
 
@@ -132,6 +131,9 @@ public class ParentFieldMapper extends MetadataFieldMapper {
                 Object fieldNode = entry.getValue();
                 if (fieldName.equals("type")) {
                     builder.type(fieldNode.toString());
+                    iterator.remove();
+                } else if (fieldName.equals(CQL_PARENT_PK)) {
+                    builder.pkColumns(fieldNode.toString());
                     iterator.remove();
                 } else if (FIELDDATA.match(fieldName, LoggingDeprecationHandler.INSTANCE)) {
                     // for bw compat only
@@ -152,11 +154,10 @@ public class ParentFieldMapper extends MetadataFieldMapper {
         public MetadataFieldMapper getDefault(MappedFieldType fieldType, ParserContext context) {
             final Settings indexSettings = context.mapperService().getIndexSettings().getSettings();
             final String typeName = context.type();
-            KeywordFieldMapper parentJoinField = createParentJoinFieldMapper(typeName,
-                new BuilderContext(indexSettings, new ContentPath(0)));
+            KeywordFieldMapper parentJoinField = createParentJoinFieldMapper(typeName, new BuilderContext(indexSettings, new ContentPath(0)));
             MappedFieldType childJoinFieldType = new ParentFieldType(Defaults.FIELD_TYPE, typeName);
             childJoinFieldType.setName(ParentFieldMapper.NAME);
-            return new ParentFieldMapper(parentJoinField, childJoinFieldType, null, indexSettings);
+            return new ParentFieldMapper(parentJoinField, childJoinFieldType, null, null, indexSettings);
         }
     }
 
@@ -234,15 +235,16 @@ public class ParentFieldMapper extends MetadataFieldMapper {
     }
 
     private final String parentType;
+    private final String parentPkColumns;
     // has no impact of field data settings, is just here for creating a join field,
     // the parent field mapper in the child type pointing to this type determines the field data settings for this join field
     private final KeywordFieldMapper parentJoinField;
 
-    private ParentFieldMapper(KeywordFieldMapper parentJoinField, MappedFieldType childJoinFieldType,
-                              String parentType, Settings indexSettings) {
+    private ParentFieldMapper(KeywordFieldMapper parentJoinField, MappedFieldType childJoinFieldType, String parentType, String parentPkColumns, Settings indexSettings) {
         super(NAME, childJoinFieldType, Defaults.FIELD_TYPE, indexSettings);
         this.parentType = parentType;
         this.parentJoinField = parentJoinField;
+        this.parentPkColumns = parentPkColumns;
     }
 
     public MappedFieldType getParentJoinFieldType() {

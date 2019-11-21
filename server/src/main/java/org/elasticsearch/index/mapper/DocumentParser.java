@@ -888,10 +888,6 @@ public final class DocumentParser {
         }
     }
 
-
-
-
-
     /** Creates instances of the fields that the current field should be copied to */
     public static void createCopyFields(ParseContext context, List<String> copyToFields, Object value) throws IOException {
         if (!context.isWithinCopyTo() && copyToFields.isEmpty() == false) {
@@ -920,17 +916,13 @@ public final class DocumentParser {
 
     /** Creates an copy of the current field with given field name and boost */
     private static void createCopy(String field, ParseContext context, Object value) throws IOException {
-        FieldMapper fieldMapper = context.docMapper().mappers().getMapper(field);
-        if (fieldMapper != null) {
-            fieldMapper.createField(context, value);
+        Mapper mapper = context.docMapper().mappers().getMapper(field);
+        if (mapper != null && mapper instanceof FieldMapper) {
+            ((FieldMapper)mapper).createField(context, value);
         } else {
             throw new IOException("CopyTo field " + field + " mapper not found");
         }
     }
-
-
-
-
 
     private static Tuple<Integer, ObjectMapper> getDynamicParentMapper(ParseContext context, final String[] paths,
             ObjectMapper currentParent) {

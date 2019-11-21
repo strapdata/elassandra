@@ -42,9 +42,11 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.query.Rewriteable;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.node.ResponseCollectorService;
 import org.elasticsearch.search.SearchService;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.internal.AliasFilter;
@@ -55,13 +57,7 @@ import org.elasticsearch.transport.RemoteClusterService;
 import org.elasticsearch.transport.Transport;
 import org.elasticsearch.transport.TransportService;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -312,8 +308,16 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             concreteIndices[i] = indices[i].getName();
         }
         Map<String, Long> nodeSearchCounts = searchTransportService.getPendingSearchRequests();
-        GroupShardsIterator<ShardIterator> localShardsIterator = clusterService.operationRouting().searchShards(clusterState,
-                concreteIndices, routingMap, searchRequest.preference(), searchService.getResponseCollectorService(), nodeSearchCounts);
+        GroupShardsIterator<ShardIterator> localShardsIterator = clusterService.operationRouting().searchShards(
+                clusterState,
+                concreteIndices,
+                searchRequest.types(),
+                routingMap,
+                searchRequest.preference(),
+                searchService.getResponseCollectorService(),
+                searchRequest.tokenRanges(),
+                searchRequest.remoteAddress(),
+                nodeSearchCounts);
         GroupShardsIterator<SearchShardIterator> shardIterators = mergeShardsIterators(localShardsIterator, localIndices,
             searchRequest.getLocalClusterAlias(), remoteShardIterators);
 

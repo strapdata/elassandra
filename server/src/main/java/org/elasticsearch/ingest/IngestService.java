@@ -136,6 +136,11 @@ public class IngestService implements ClusterStateApplier {
             public ClusterState execute(ClusterState currentState) {
                 return innerDelete(request, currentState);
             }
+
+            @Override
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
+            }
         });
     }
 
@@ -162,6 +167,7 @@ public class IngestService implements ClusterStateApplier {
         }
         ClusterState.Builder newState = ClusterState.builder(currentState);
         newState.metaData(MetaData.builder(currentState.getMetaData())
+                .setClusterUuid()
                 .putCustom(IngestMetadata.TYPE, new IngestMetadata(pipelinesCopy))
                 .build());
         return newState.build();
@@ -224,6 +230,11 @@ public class IngestService implements ClusterStateApplier {
                     @Override
                     public ClusterState execute(ClusterState currentState) {
                         return innerPut(request, currentState);
+                    }
+
+                    @Override
+                    public SchemaUpdate schemaUpdate() {
+                        return SchemaUpdate.UPDATE;
                     }
                 });
     }
@@ -347,6 +358,7 @@ public class IngestService implements ClusterStateApplier {
         pipelines.put(request.getId(), new PipelineConfiguration(request.getId(), request.getSource(), request.getXContentType()));
         ClusterState.Builder newState = ClusterState.builder(currentState);
         newState.metaData(MetaData.builder(currentState.getMetaData())
+            .setClusterUuid()
             .putCustom(IngestMetadata.TYPE, new IngestMetadata(pipelines))
             .build());
         return newState.build();

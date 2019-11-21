@@ -19,6 +19,15 @@
 
 package org.elasticsearch.search.fetch;
 
+import org.apache.cassandra.cql3.QueryOptions;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.ResultSet;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.cql3.statements.ParsedStatement;
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.service.QueryState;
+import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.LeafReaderContext;
@@ -28,25 +37,25 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.BitSet;
+import org.elassandra.index.mapper.internal.NodeFieldMapper;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.document.DocumentField;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
+import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.fieldvisitor.CustomFieldsVisitor;
 import org.elasticsearch.index.fieldvisitor.FieldsVisitor;
-import org.elasticsearch.index.mapper.DocumentMapper;
-import org.elasticsearch.index.mapper.MappedFieldType;
-import org.elasticsearch.index.mapper.MapperService;
-import org.elasticsearch.index.mapper.ObjectMapper;
-import org.elasticsearch.index.mapper.SourceFieldMapper;
-import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.SearchPhase;
@@ -58,13 +67,7 @@ import org.elasticsearch.search.lookup.SourceLookup;
 import org.elasticsearch.tasks.TaskCancelledException;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 
 /**
@@ -74,11 +77,17 @@ import java.util.Set;
 public class FetchPhase implements SearchPhase {
     private static final Logger LOGGER = LogManager.getLogger(FetchPhase.class);
 
-    private final FetchSubPhase[] fetchSubPhases;
+    protected final FetchSubPhase[] fetchSubPhases;
+    protected final ClusterService clusterService;
 
     public FetchPhase(List<FetchSubPhase> fetchSubPhases) {
+        this(fetchSubPhases, null);
+    }
+
+    public FetchPhase(List<FetchSubPhase> fetchSubPhases, ClusterService clusterService) {
         this.fetchSubPhases = fetchSubPhases.toArray(new FetchSubPhase[fetchSubPhases.size() + 1]);
         this.fetchSubPhases[fetchSubPhases.size()] = new InnerHitsFetchSubPhase(this);
+        this.clusterService = clusterService;
     }
 
     @Override
@@ -196,7 +205,7 @@ public class FetchPhase implements SearchPhase {
         return -1;
     }
 
-    private SearchHit createSearchHit(SearchContext context,
+    protected SearchHit createSearchHit(SearchContext context,
                                       FieldsVisitor fieldsVisitor,
                                       int docId,
                                       int subDocId,
@@ -205,6 +214,8 @@ public class FetchPhase implements SearchPhase {
         if (fieldsVisitor == null) {
             return new SearchHit(docId);
         }
+        loadStoredFields(context, subReaderContext, fieldsVisitor, subDocId);
+        fieldsVisitor.postProcess(context.mapperService());
 
         Map<String, DocumentField> searchFields = getSearchFields(context, fieldsVisitor, subDocId,
             storedToRequestedFields, subReaderContext);
@@ -354,6 +365,26 @@ public class FetchPhase implements SearchPhase {
         return new SearchHit(nestedTopDocId, uid.id(), documentMapper.typeText(), nestedIdentity, searchFields);
     }
 
+    private Map<String, DocumentField> getSearchFields(SearchContext context, int nestedSubDocId,
+                                                       Map<String, Set<String>> storedToRequestedFields,
+                                                       LeafReaderContext subReaderContext) {
+        Map<String, DocumentField> searchFields = null;
+        if (context.hasStoredFields() && !context.storedFieldsContext().fieldNames().isEmpty()) {
+            FieldsVisitor nestedFieldsVisitor = new CustomFieldsVisitor(storedToRequestedFields.keySet(), false);
+            if (nestedFieldsVisitor != null) {
+                loadStoredFields(context, subReaderContext, nestedFieldsVisitor, nestedSubDocId);
+                nestedFieldsVisitor.postProcess(context.mapperService());
+                if (!nestedFieldsVisitor.fields().isEmpty()) {
+                    searchFields = new HashMap<>(nestedFieldsVisitor.fields().size());
+                    for (Map.Entry<String, List<Object>> entry : nestedFieldsVisitor.fields().entrySet()) {
+                        searchFields.put(entry.getKey(), new DocumentField(entry.getKey(), entry.getValue()));
+                    }
+                }
+            }
+        }
+        return searchFields;
+    }
+
     private SearchHit.NestedIdentity getInternalNestedIdentity(SearchContext context, int nestedSubDocId,
                                                                LeafReaderContext subReaderContext,
                                                                MapperService mapperService,
@@ -466,7 +497,7 @@ public class FetchPhase implements SearchPhase {
     protected void processCqlResultSet(SearchContext searchContext, IndexService indexService, FieldsVisitor fieldVisitor, ResultSet resultSet) throws IOException {
         UntypedResultSet rs = UntypedResultSet.create(resultSet);
         if (!rs.isEmpty()) {
-            Row row = rs.one();
+            UntypedResultSet.Row row = rs.one();
             Map<String, Object> mapObject = clusterService.getQueryManager().rowAsMap(indexService, fieldVisitor.uid().type(), row);
             if (searchContext.includeNode()) {
                 mapObject.put(NodeFieldMapper.NAME, clusterService.state().nodes().getLocalNodeId());
@@ -497,7 +528,7 @@ public class FetchPhase implements SearchPhase {
         IndexService indexService = searchContext.indexShard().indexService();
         try {
             fieldVisitor.postProcess(indexService.mapperService());
-            DocPrimaryKey docPk = clusterService.getQueryManager().parseElasticId(indexService, fieldVisitor.uid().type(), fieldVisitor.uid().id());
+            ClusterService.DocPrimaryKey docPk = clusterService.getQueryManager().parseElasticId(indexService, fieldVisitor.uid().type(), fieldVisitor.uid().id());
             String typeKey = fieldVisitor.uid().type();
             if (docPk.isStaticDocument)
                 typeKey += "_static";

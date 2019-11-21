@@ -51,7 +51,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
 
-public abstract class FieldMapper extends Mapper implements Cloneable {
+public abstract class FieldMapper extends Mapper implements CqlMapper, Cloneable {
     public static final Setting<Boolean> IGNORE_MALFORMED_SETTING =
         Setting.boolSetting("index.mapping.ignore_malformed", false, Property.IndexScope);
     public static final Setting<Boolean> COERCE_SETTING =
@@ -369,8 +369,6 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
 
     /**
      * Add lucene field to context according to the provided value
-     * @param context
-     * @param value
      */
     public final void createField(ParseContext context, Object value) throws IOException {
         createField(context, value, Optional.empty());
@@ -378,9 +376,6 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
 
     /**
      * Add lucene field to context according to the provided value
-     * @param context
-     * @param value
-     * @param keyName override the fieldType.name() if present (Used for map_opaque)
      */
     public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
         multiFields.create(this, context, value);

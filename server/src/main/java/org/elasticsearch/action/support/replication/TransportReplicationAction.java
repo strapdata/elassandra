@@ -393,7 +393,7 @@ public abstract class TransportReplicationAction<
                     logger.trace("cluster is blocked, action failed on primary", blockException);
                     throw blockException;
                 }
-
+                /*
                 if (primaryShardReference.isRelocated()) {
                     primaryShardReference.close(); // release shard operation lock as soon as possible
                     setPhase(replicationTask, "primary_delegation");
@@ -427,12 +427,14 @@ public abstract class TransportReplicationAction<
                             }
                         });
                 } else {
+                */
                     setPhase(replicationTask, "primary");
                     final ActionListener<Response> listener = createResponseListener(primaryShardReference);
                     createReplicatedOperation(request,
                             ActionListener.wrap(result -> result.respond(listener), listener::onFailure),
                             primaryShardReference)
                             .execute();
+                    /*
                 }
                 */
             } catch (Exception e) {
@@ -811,20 +813,24 @@ public abstract class TransportReplicationAction<
 
                 // resolve all derived request fields, so we can route and apply it
                 resolveRequest(indexMetaData, request);
-                assert request.shardId() != null : "request shardId must be set in resolveRequest";
-                assert request.waitForActiveShards() != ActiveShardCount.DEFAULT :
-                    "request waitForActiveShards must be set in resolveRequest";
+                //assert request.shardId() != null : "request shardId must be set in resolveRequest";
+                //assert request.waitForActiveShards() != ActiveShardCount.DEFAULT :
+                //     "request waitForActiveShards must be set in resolveRequest";
 
+                /* No need for retry in ELassandra.
                 final ShardRouting primary = primary(state);
                 if (retryIfUnavailable(state, primary)) {
                     return;
                 }
-                final DiscoveryNode node = state.nodes().get(primary.currentNodeId());
+                */
+                final DiscoveryNode node = state.nodes().getLocalNode();
+                /*
                 if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                     performLocalAction(state, primary, node, indexMetaData);
                 } else {
                     performRemoteAction(state, primary, node);
                 }
+                */
             }
         }
 
@@ -839,6 +845,7 @@ public abstract class TransportReplicationAction<
         }
 
         private void performRemoteAction(ClusterState state, ShardRouting primary, DiscoveryNode node) {
+            /*
             if (state.version() < request.routedBasedOnClusterVersion()) {
                 logger.trace("failed to find primary [{}] for request [{}] despite sender thinking it would be here. Local cluster state "
                         + "version [{}]] is older than on sending node (version [{}]), scheduling a retry...", request.shardId(), request,
@@ -1052,7 +1059,7 @@ public abstract class TransportReplicationAction<
         }
 
         public boolean isRelocated() {
-            return indexShard.isRelocatedPrimary();
+            return false;
         }
 
         @Override
@@ -1074,12 +1081,12 @@ public abstract class TransportReplicationAction<
 
         @Override
         public void updateLocalCheckpointForShard(String allocationId, long checkpoint) {
-            indexShard.updateLocalCheckpointForShard(allocationId, checkpoint);
+            //indexShard.updateLocalCheckpointForShard(allocationId, checkpoint);
         }
 
         @Override
         public void updateGlobalCheckpointForShard(final String allocationId, final long globalCheckpoint) {
-            indexShard.updateGlobalCheckpointForShard(allocationId, globalCheckpoint);
+            //indexShard.updateGlobalCheckpointForShard(allocationId, globalCheckpoint);
         }
 
         @Override
@@ -1099,7 +1106,7 @@ public abstract class TransportReplicationAction<
 
         @Override
         public ReplicationGroup getReplicationGroup() {
-            return indexShard.getReplicationGroup();
+            return null;
         }
     }
 

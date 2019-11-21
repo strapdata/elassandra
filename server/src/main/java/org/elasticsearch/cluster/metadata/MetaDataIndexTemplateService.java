@@ -19,6 +19,8 @@
 package org.elasticsearch.cluster.metadata;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.CollectionUtil;
@@ -27,6 +29,7 @@ import org.elasticsearch.action.admin.indices.alias.Alias;
 import org.elasticsearch.action.support.master.MasterNodeRequest;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
@@ -47,16 +50,7 @@ import org.elasticsearch.indices.IndexTemplateMissingException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.InvalidIndexTemplateException;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static org.elasticsearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.NO_LONGER_ASSIGNED;
 
@@ -127,7 +121,7 @@ public class MetaDataIndexTemplateService {
                     }
                     throw new IndexTemplateMissingException(request.name);
                 }
-                MetaData.Builder metaData = MetaData.builder(currentState.metaData());
+                MetaData.Builder metaData = MetaData.builder(currentState.metaData()).setClusterUuid();
                 for (String templateName : templateNames) {
                     logger.info("removing template [{}]", templateName);
                     metaData.removeTemplate(templateName);
@@ -206,7 +200,9 @@ public class MetaDataIndexTemplateService {
                 }
                 IndexTemplateMetaData template = templateBuilder.build();
 
-                MetaData.Builder builder = MetaData.builder(currentState.metaData()).put(template);
+                MetaData.Builder builder = MetaData.builder(currentState.metaData())
+                        .setClusterUuid()
+                        .put(template);
 
                 logger.info("adding template [{}] for index patterns {}", request.name, request.indexPatterns);
                 return ClusterState.builder(currentState).metaData(builder).build();
@@ -214,14 +210,14 @@ public class MetaDataIndexTemplateService {
 
             @Override
             public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                listener.onResponse(new PutResponse(true, templateBuilder.build()));
+                listener.onResponse(new PutResponse(true, newState.getMetaData().getTemplates().get(templateName)));
             }
         });
     }
 
     /**
      * Finds index templates whose index pattern matched with the given index name.
-     * The result is sorted by {@link IndexTemplateMetaData#order} descending.
+     * The result is sorted by {@link IndexTemplateMetaData} descending.
      */
     public static List<IndexTemplateMetaData> findTemplates(MetaData metaData, String indexName) {
         final List<IndexTemplateMetaData> matchedTemplates = new ArrayList<>();

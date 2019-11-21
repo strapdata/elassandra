@@ -308,10 +308,10 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
     public void finalizeRecovery(final long globalCheckpoint, ActionListener<Void> listener) {
         ActionListener.completeWith(listener, () -> {
             final IndexShard indexShard = indexShard();
-            indexShard.updateGlobalCheckpointOnReplica(globalCheckpoint, "finalizing recovery");
+            //indexShard.updateGlobalCheckpointOnReplica(globalCheckpoint, "finalizing recovery");
             // Persist the global checkpoint.
             indexShard.sync();
-            indexShard.persistRetentionLeases();
+            //indexShard.persistRetentionLeases();
             indexShard.finalizeRecovery();
             return null;
         });
@@ -324,7 +324,7 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
 
     @Override
     public void handoffPrimaryContext(final ReplicationTracker.PrimaryContext primaryContext) {
-        indexShard.activateWithPrimaryContext(primaryContext);
+        //indexShard.activateWithPrimaryContext(primaryContext);
     }
 
     @Override
@@ -358,7 +358,7 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
              * We have to update the retention leases before we start applying translog operations to ensure we are retaining according to
              * the policy.
              */
-            indexShard().updateRetentionLeasesOnReplica(retentionLeases);
+            //indexShard().updateRetentionLeasesOnReplica(retentionLeases);
             for (Translog.Operation operation : operations) {
                 Engine.Result result = indexShard().applyTranslogOperation(operation, Engine.Operation.Origin.PEER_RECOVERY);
                 if (result.getResultType() == Engine.Result.Type.MAPPING_UPDATE_REQUIRED) {
@@ -412,9 +412,10 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
             // TODO: Assign the global checkpoint to the max_seqno of the safe commit if the index version >= 6.2
             final String translogUUID = Translog.createEmptyTranslog(
                 indexShard.shardPath().resolveTranslog(), SequenceNumbers.UNASSIGNED_SEQ_NO, shardId,
-                indexShard.getPendingPrimaryTerm());
+                SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
             store.associateIndexWithNewTranslog(translogUUID);
 
+            /*
             if (indexShard.getRetentionLeases().leases().isEmpty()) {
                 // if empty, may be a fresh IndexShard, so write an empty leases file to disk
                 indexShard.persistRetentionLeases();
@@ -422,6 +423,7 @@ public class RecoveryTarget extends AbstractRefCounted implements RecoveryTarget
             } else {
                 assert indexShard.assertRetentionLeasesPersisted();
             }
+            */
 
         } catch (CorruptIndexException | IndexFormatTooNewException | IndexFormatTooOldException ex) {
             // this is a fatal exception at this stage.

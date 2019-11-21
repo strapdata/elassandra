@@ -237,7 +237,6 @@ public abstract class AbstractSearchStrategy {
 
             /**
              * Should returns selected shards token range bitset covering 100% of the cassandra ring.
-             * @return
              */
             public abstract Map<DiscoveryNode, BitSet> selectedShards();
 

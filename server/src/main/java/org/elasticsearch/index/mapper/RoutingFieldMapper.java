@@ -164,10 +164,30 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void postParse(ParseContext context) throws IOException {
+    }
+
+    @Override
     public void parse(ParseContext context) throws IOException {
         // no need ot parse here, we either get the routing in the sourceToParse
         // or we don't have routing, if we get it in sourceToParse, we process it in preParse
         // which will always be called
+    }
+
+    @Override
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
+        String routing = (String)object;
+        if (routing != null) {
+            if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+                Field field = new Field(fieldType().name(), routing, fieldType());
+                context.doc().add(field);
+                createFieldNamesField(context, context.doc().getFields());
+            }
+            if (fieldType().hasDocValues()) {
+                final BytesRef binaryValue = new BytesRef(routing);
+                context.doc().add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
+            }
+        }
     }
 
     @Override

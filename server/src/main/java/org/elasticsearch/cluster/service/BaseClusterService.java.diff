@@ -1,0 +1,55 @@
+diff --git a/server/src/main/java/org/elasticsearch/cluster/service/ClusterService.java b/server/src/main/java/org/elasticsearch/cluster/service/BaseClusterService.java
+index 7610d75f677..c6a94ac559f 100644
+--- a/server/src/main/java/org/elasticsearch/cluster/service/ClusterService.java
++++ b/server/src/main/java/org/elasticsearch/cluster/service/BaseClusterService.java
+@@ -19,6 +19,7 @@
+ 
+ package org.elasticsearch.cluster.service;
+ 
++import org.elassandra.discovery.CassandraDiscovery;
+ import org.elasticsearch.cluster.ClusterName;
+ import org.elasticsearch.cluster.ClusterState;
+ import org.elasticsearch.cluster.ClusterStateApplier;
+@@ -44,7 +45,7 @@ import java.util.Collections;
+ import java.util.Map;
+ import java.util.function.Supplier;
+ 
+-public class ClusterService extends AbstractLifecycleComponent {
++public abstract class BaseClusterService extends AbstractLifecycleComponent {
+ 
+     private final MasterService masterService;
+ 
+@@ -56,16 +57,15 @@ public class ClusterService extends AbstractLifecycleComponent {
+ 
+     private final ClusterName clusterName;
+ 
+-    private final OperationRouting operationRouting;
++    protected OperationRouting operationRouting;
+ 
+     private final ClusterSettings clusterSettings;
+     private final Map<String, Supplier<ClusterState.Custom>> initialClusterStateCustoms;
+ 
+-    public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool,
++    public BaseClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool,
+                           Map<String, Supplier<ClusterState.Custom>> initialClusterStateCustoms) {
+         super(settings);
+         this.masterService = new MasterService(settings, threadPool);
+-        this.operationRouting = new OperationRouting(settings, clusterSettings);
+         this.clusterSettings = clusterSettings;
+         this.clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);
+         this.clusterSettings.addSettingsUpdateConsumer(CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING,
+@@ -115,13 +115,7 @@ public class ClusterService extends AbstractLifecycleComponent {
+     /**
+      * The local node.
+      */
+-    public DiscoveryNode localNode() {
+-        DiscoveryNode localNode = state().getNodes().getLocalNode();
+-        if (localNode == null) {
+-            throw new IllegalStateException("No local node found. Is the node started?");
+-        }
+-        return localNode;
+-    }
++    public abstract DiscoveryNode localNode();
+ 
+     public OperationRouting operationRouting() {
+         return operationRouting;

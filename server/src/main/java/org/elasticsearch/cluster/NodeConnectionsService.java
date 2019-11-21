@@ -147,7 +147,7 @@ public class NodeConnectionsService extends AbstractLifecycleComponent {
         assert nodeLocks.isHeldByCurrentThread(node) : "validateAndConnectIfNeeded must be called under lock";
         if (lifecycle.stoppedOrClosed() ||
                 nodes.containsKey(node) == false  ||
-                node.status() != DiscoveryNodeStatus.ALIVE) { // we double check existence of node since connectToNode might take time...
+                node.status() != DiscoveryNode.DiscoveryNodeStatus.ALIVE) { // we double check existence of node since connectToNode might take time...
             // nothing to do
         } else {
             try {

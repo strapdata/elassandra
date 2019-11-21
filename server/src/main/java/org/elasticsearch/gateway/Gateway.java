@@ -59,87 +59,22 @@ public class Gateway {
     }
 
     public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
-        String[] nodesIds = clusterService.state().nodes().getMasterNodes().keys().toArray(String.class);
-        logger.trace("performing state recovery from {}", Arrays.toString(nodesIds));
-        TransportNodesListGatewayMetaState.NodesGatewayMetaState nodesState = listGatewayMetaState.list(nodesIds, null).actionGet();
+        ClusterState.Builder builder = ClusterState.builder(clusterService.state());
 
-
-        int requiredAllocation = Math.max(1, minimumMasterNodes);
-
-
-        if (nodesState.hasFailures()) {
-            for (FailedNodeException failedNodeException : nodesState.failures()) {
-                logger.warn("failed to fetch state from node", failedNodeException);
-            }
-        }
-
-        ObjectFloatHashMap<Index> indices = new ObjectFloatHashMap<>();
-        MetaData electedGlobalState = null;
-        int found = 0;
-        for (TransportNodesListGatewayMetaState.NodeGatewayMetaState nodeState : nodesState.getNodes()) {
-            if (nodeState.metaData() == null) {
-                continue;
-            }
-            found++;
-            if (electedGlobalState == null) {
-                electedGlobalState = nodeState.metaData();
-            } else if (nodeState.metaData().version() > electedGlobalState.version()) {
-                electedGlobalState = nodeState.metaData();
-            }
-            for (ObjectCursor<IndexMetaData> cursor : nodeState.metaData().indices().values()) {
-                indices.addTo(cursor.value.getIndex(), 1);
-            }
-        }
-        if (found < requiredAllocation) {
-            listener.onFailure("found [" + found + "] metadata states, required [" + requiredAllocation + "]");
+        MetaData metadata = null;
+        try {
+            metadata = clusterService.loadGlobalState();
+            logger.info("Successfull cluster state recovery from CQL schema version={}/{}", metadata.clusterUUID(), metadata.version());
+            listener.onSuccess( builder.metaData(metadata).build() );
             return;
-        }
-        // update the global state, and clean the indices, we elect them in the next phase
-        MetaData.Builder metaDataBuilder = MetaData.builder(electedGlobalState).removeAllIndices();
-
-        assert !indices.containsKey(null);
-        final Object[] keys = indices.keys;
-        for (int i = 0; i < keys.length; i++) {
-            if (keys[i] != null) {
-                Index index = (Index) keys[i];
-                IndexMetaData electedIndexMetaData = null;
-                int indexMetaDataCount = 0;
-                for (TransportNodesListGatewayMetaState.NodeGatewayMetaState nodeState : nodesState.getNodes()) {
-                    if (nodeState.metaData() == null) {
-                        continue;
-                    }
-                    IndexMetaData indexMetaData = nodeState.metaData().index(index);
-                    if (indexMetaData == null) {
-                        continue;
-                    }
-                    if (electedIndexMetaData == null) {
-                        electedIndexMetaData = indexMetaData;
-                    } else if (indexMetaData.getVersion() > electedIndexMetaData.getVersion()) {
-                        electedIndexMetaData = indexMetaData;
-                    }
-                    indexMetaDataCount++;
-                }
-                if (electedIndexMetaData != null) {
-                    if (indexMetaDataCount < requiredAllocation) {
-                        logger.debug("[{}] found [{}], required [{}], not adding", index, indexMetaDataCount, requiredAllocation);
-                    } // TODO if this logging statement is correct then we are missing an else here
-                    try {
-                        if (electedIndexMetaData.getState() == IndexMetaData.State.OPEN) {
-                            // verify that we can actually create this index - if not we recover it as closed with lots of warn logs
-                            indicesService.verifyIndexMetadata(electedIndexMetaData, electedIndexMetaData);
-                        }
-                    } catch (Exception e) {
-                        final Index electedIndex = electedIndexMetaData.getIndex();
-                        logger.warn(() -> new ParameterizedMessage("recovering index {} failed - recovering as closed", electedIndex), e);
-                        electedIndexMetaData = IndexMetaData.builder(electedIndexMetaData).state(IndexMetaData.State.CLOSE).build();
-                    }
-
-                    metaDataBuilder.put(electedIndexMetaData, false);
-                }
+        } catch (Exception e) {
+            metadata = clusterService.state().metaData();
+            if (metadata.clusterUUID().equals("_na_")) {
+                metadata = MetaData.builder(metadata).clusterUUID(clusterService.localNode().getId()).build();
             }
+            logger.info("New cluster state metadata version={}/{}", metadata.clusterUUID(), metadata.version());
+            listener.onSuccess( builder.metaData(metadata).build() );
         }
-        final ClusterState.Builder builder = upgradeAndArchiveUnknownOrInvalidSettings(metaDataBuilder);
-        listener.onSuccess(builder.build());
     }
 
     ClusterState.Builder upgradeAndArchiveUnknownOrInvalidSettings(MetaData.Builder metaDataBuilder) {

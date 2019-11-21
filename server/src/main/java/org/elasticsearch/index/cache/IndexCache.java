@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.cache;
 
+import org.elassandra.index.search.TokenRangesBitsetFilterCache;
+import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.index.AbstractIndexComponent;
 import org.elasticsearch.index.IndexSettings;

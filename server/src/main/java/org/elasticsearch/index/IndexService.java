@@ -26,13 +26,18 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.IOUtils;
+import org.elassandra.index.search.TokenRangesBitsetFilterCache;
+import org.elassandra.search.SearchProcessorFactory;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.Version;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
@@ -40,7 +45,6 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.concurrent.AbstractAsyncTask;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
-import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.env.ShardLock;
 import org.elasticsearch.env.ShardLockObtainFailedException;
@@ -122,9 +126,9 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     private final List<SearchOperationListener> searchOperationListeners;
     private final List<IndexingOperationListener> indexingOperationListeners;
     private volatile AsyncRefreshTask refreshTask;
-    private volatile AsyncTranslogFSync fsyncTask;
-    private volatile AsyncGlobalCheckpointTask globalCheckpointTask;
-    private volatile AsyncRetentionLeaseSyncTask retentionLeaseSyncTask;
+    //private volatile AsyncTranslogFSync fsyncTask;
+    //private volatile AsyncGlobalCheckpointTask globalCheckpointTask;
+    //private volatile AsyncRetentionLeaseSyncTask retentionLeaseSyncTask;
 
     // don't convert to Setting<> and register... we only set this in tests and register via a plugin
     private final String INDEX_TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING = "index.translog.retention.check_interval";
@@ -195,6 +199,10 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         this.indexStore = indexStore;
         indexFieldData.setListener(new FieldDataCacheListener(this));
         this.bitsetFilterCache = new BitsetFilterCache(indexSettings, new BitsetCacheListener(this));
+
+        this.tokenRangesBitsetFilterCache = new TokenRangesBitsetFilterCache(indexSettings, clusterService.tokenRangesService());
+        this.tokenRangesBitsetFilterCache.setListener(new TokenRangeBitsetCacheListener(this));
+
         this.warmer = new IndexWarmer(threadPool, indexFieldData, bitsetFilterCache.createListener(threadPool));
         this.indexCache = new IndexCache(indexSettings, queryCache, bitsetFilterCache);
         this.engineFactory = Objects.requireNonNull(engineFactory);
@@ -205,9 +213,6 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         // kick off async ops for the first shard in this index
         this.refreshTask = new AsyncRefreshTask(this);
         this.trimTranslogTask = new AsyncTrimTranslogTask(this);
-        this.globalCheckpointTask = new AsyncGlobalCheckpointTask(this);
-        this.retentionLeaseSyncTask = new AsyncRetentionLeaseSyncTask(this);
-        rescheduleFsyncTask(indexSettings.getTranslogDurability());
     }
 
     public int numberOfShards() {
@@ -291,18 +296,31 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             } finally {
                 IOUtils.close(
                         bitsetFilterCache,
+                        tokenRangesBitsetFilterCache,
                         indexCache,
                         indexFieldData,
                         mapperService,
                         refreshTask,
-                        fsyncTask,
-                        trimTranslogTask,
-                        globalCheckpointTask,
-                        retentionLeaseSyncTask);
+                        trimTranslogTask);
             }
         }
     }
 
+    public SearchProcessorFactory searchProcessorFactory() {
+        return this.searchProcessorFactory;
+    }
+
+    public boolean isTokenRangesBitsetCacheEnabled() {
+        return this.indexSettings.getSettings().getAsBoolean(IndexMetaData.SETTING_TOKEN_RANGES_BITSET_CACHE, this.clusterService.settings().getAsBoolean(ClusterService.SETTING_CLUSTER_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE)));
+    }
+
+    public ClusterService clusterService() {
+        return this.clusterService;
+    }
+
+    public String keyspace() {
+        return this.mapperService.keyspace();
+    }
 
     public String indexUUID() {
         return indexSettings.getUUID();
@@ -323,11 +341,13 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         }
     }
 
+    public IndexShard createShard(ShardRouting routing) throws IOException {
+        return createShard(routing, s -> {});
+    }
+
     public synchronized IndexShard createShard(
             final ShardRouting routing,
-            final Consumer<ShardId> globalCheckpointSyncer,
-            final RetentionLeaseSyncer retentionLeaseSyncer) throws IOException {
-        Objects.requireNonNull(retentionLeaseSyncer);
+            final Consumer<ShardId> globalCheckpointSyncer) throws IOException {
         /*
          * TODO: we execute this in parallel but it's a synced method. Yet, we might
          * be able to serialize the execution via the cluster state in the future. for now we just
@@ -413,10 +433,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
                     bigArrays,
                     engineWarmer,
                     searchOperationListeners,
-                    indexingOperationListeners,
-                    () -> globalCheckpointSyncer.accept(shardId),
-                    retentionLeaseSyncer,
-                    circuitBreakerService);
+                    indexingOperationListeners, circuitBreakerService, this, clusterService);
             eventListener.indexShardStateChanged(indexShard, null, indexShard.state(), "shard created");
             eventListener.afterIndexShardCreated(indexShard);
             shards = newMapBuilder(shards).put(shardId.id(), indexShard).immutableMap();
@@ -803,9 +820,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     }
 
     private void syncRetentionLeases() {
-        if (indexSettings.isSoftDeleteEnabled()) {
-            sync(IndexShard::syncRetentionLeases, "retention lease");
-        }
+
     }
 
     private void sync(final Consumer<IndexShard> sync, final String source) {

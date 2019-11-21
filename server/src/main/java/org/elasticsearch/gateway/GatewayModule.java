@@ -20,16 +20,17 @@
 package org.elasticsearch.gateway;
 
 import org.elasticsearch.common.inject.AbstractModule;
+import org.elassandra.gateway.CassandraGatewayService;
 
 public class GatewayModule extends AbstractModule {
 
 
     @Override
     protected void configure() {
-        bind(DanglingIndicesState.class).asEagerSingleton();
-        bind(GatewayService.class).asEagerSingleton();
+        //bind(DanglingIndicesState.class).asEagerSingleton();
+        bind(CassandraGatewayService.class).asEagerSingleton();
         bind(TransportNodesListGatewayMetaState.class).asEagerSingleton();
         bind(TransportNodesListGatewayStartedShards.class).asEagerSingleton();
-        bind(LocalAllocateDangledIndices.class).asEagerSingleton();
+        //bind(LocalAllocateDangledIndices.class).asEagerSingleton();
     }
 }

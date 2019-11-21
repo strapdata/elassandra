@@ -87,6 +87,8 @@ public class SeqNoFieldMapper extends MetadataFieldMapper {
                     new NumericDocValuesField(NAME, SequenceNumbers.UNASSIGNED_SEQ_NO),
                     new NumericDocValuesField(PRIMARY_TERM_NAME, 0), new NumericDocValuesField(TOMBSTONE_NAME, 0));
         }
+
+        public static NumericDocValuesField PRIMARY_TERM_ZERO = new NumericDocValuesField(PRIMARY_TERM_NAME, 0);
     }
 
     public static final String NAME = "_seq_no";

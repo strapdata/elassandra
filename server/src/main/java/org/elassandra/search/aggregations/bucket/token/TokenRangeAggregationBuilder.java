@@ -32,6 +32,7 @@ import org.elasticsearch.search.aggregations.support.ValuesSourceParserHelper;
 import org.elasticsearch.search.internal.SearchContext;
 
 import java.io.IOException;
+import java.util.Map;
 
 public class TokenRangeAggregationBuilder extends AbstractRangeBuilder<TokenRangeAggregationBuilder, Range> {
     public static final String NAME = "token_range";
@@ -59,6 +60,15 @@ public class TokenRangeAggregationBuilder extends AbstractRangeBuilder<TokenRang
 
     public TokenRangeAggregationBuilder(String name) {
         super(name, InternalRange.FACTORY);
+    }
+
+    /**
+     * Create a shallow copy of this builder and replacing {@link #factoriesBuilder} and <code>metaData</code>.
+     * Used by {@link #rewrite(QueryRewriteContext)}.
+     */
+    @Override
+    protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metaData) {
+        return null;
     }
 
     /**

@@ -23,6 +23,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.SetOnce;
+import org.elassandra.discovery.CassandraDiscovery;
+import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.Build;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchTimeoutException;
@@ -38,14 +40,7 @@ import org.elasticsearch.bootstrap.BootstrapCheck;
 import org.elasticsearch.bootstrap.BootstrapContext;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.node.NodeClient;
-import org.elasticsearch.cluster.ClusterInfo;
-import org.elasticsearch.cluster.ClusterInfoService;
-import org.elasticsearch.cluster.ClusterModule;
-import org.elasticsearch.cluster.ClusterName;
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateObserver;
-import org.elasticsearch.cluster.InternalClusterInfoService;
-import org.elasticsearch.cluster.NodeConnectionsService;
+import org.elasticsearch.cluster.*;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.metadata.AliasValidator;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -71,6 +66,7 @@ import org.elasticsearch.common.inject.util.Providers;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.logging.DeprecationLogger;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.network.NetworkService;
@@ -267,6 +263,10 @@ public abstract class Node implements Closeable {
         this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null));
     }
 
+    public Node(Settings preparedSettings, Collection<Class<? extends Plugin>> classpathPlugins) {
+        this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), classpathPlugins, true);
+    }
+
     public Node(Environment environment) {
         this(environment, Collections.emptyList(), true);
     }
@@ -407,7 +407,7 @@ public abstract class Node implements Closeable {
             IndicesModule indicesModule = new IndicesModule(pluginsService.filterPlugins(MapperPlugin.class));
             modules.add(indicesModule);
 
-            SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class), clusterService);
+            SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class));
             CircuitBreakerService circuitBreakerService = createCircuitBreakerService(settingsModule.getSettings(),
                 settingsModule.getClusterSettings());
             resourcesToClose.add(circuitBreakerService);
@@ -427,7 +427,7 @@ public abstract class Node implements Closeable {
                 ClusterModule.getNamedWriteables().stream())
                 .flatMap(Function.identity()).collect(Collectors.toList());
             final NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(namedWriteables);
-            NamedXContentRegistry xContentRegistry = new NamedXContentRegistry(Stream.of(
+            this.xContentRegistry = new NamedXContentRegistry(Stream.of(
                 NetworkModule.getNamedXContents().stream(),
                 indicesModule.getNamedXContents().stream(),
                 searchModule.getNamedXContents().stream(),
@@ -435,7 +435,7 @@ public abstract class Node implements Closeable {
                     .flatMap(p -> p.getNamedXContent().stream()),
                 ClusterModule.getNamedXWriteables().stream())
                 .flatMap(Function.identity()).collect(toList()));
-            final MetaStateService metaStateService = new MetaStateService(nodeEnvironment, xContentRegistry);
+            final MetaStateService metaStateService = new MetaStateService(nodeEnvironment, xContentRegistry, clusterService);
 
             // collect engine factory providers from server and from plugins
             final Collection<EnginePlugin> enginePlugins = pluginsService.filterPlugins(EnginePlugin.class);
@@ -457,7 +457,7 @@ public abstract class Node implements Closeable {
                     new IndicesService(settings, pluginsService, nodeEnvironment, xContentRegistry, analysisModule.getAnalysisRegistry(),
                             clusterModule.getIndexNameExpressionResolver(), indicesModule.getMapperRegistry(), namedWriteableRegistry,
                             threadPool, settingsModule.getIndexScopedSettings(), circuitBreakerService, bigArrays,
-                            scriptModule.getScriptService(), client, metaStateService, engineFactoryProviders, indexStoreFactories);
+                            scriptModule.getScriptService(), clusterService, client, metaStateService, engineFactoryProviders, indexStoreFactories);
 
             final AliasValidator aliasValidator = new AliasValidator();
 
@@ -533,7 +533,7 @@ public abstract class Node implements Closeable {
                 clusterService, threadPool, xContentRegistry));
 
             final DiscoveryModule discoveryModule = new DiscoveryModule(this.settings, threadPool, transportService, namedWriteableRegistry,
-                networkService, clusterService.getMasterService(), clusterService.getClusterApplierService(),
+                networkService, clusterService.getMasterService(), clusterService, clusterService.getClusterApplierService(),
                 clusterService.getClusterSettings(), pluginsService.filterPlugins(DiscoveryPlugin.class),
                 clusterModule.getAllocationService(), environment.configFile());
             this.nodeService = new NodeService(settings, threadPool, monitorService, discoveryModule.getDiscovery(),
@@ -708,42 +708,65 @@ public abstract class Node implements Closeable {
         return nodeEnvironment;
     }
 
-
     /**
-     * Start the node. If the node is already started, this method is no-op.
+     * Start Elasticsearch for write-only operations.
      */
-    public Node start() throws NodeValidationException {
+    public Node activate() {
         if (!lifecycle.moveToStarted()) {
             return this;
         }
 
-        logger.info("starting ...");
-        pluginLifecycleComponents.forEach(LifecycleComponent::start);
+        logger.info("activating ...");
 
-        injector.getInstance(MappingUpdatedAction.class).setClient(client);
-        injector.getInstance(IndicesService.class).start();
-        injector.getInstance(IndicesClusterStateService.class).start();
-        injector.getInstance(SnapshotsService.class).start();
-        injector.getInstance(SnapshotShardsService.class).start();
-        injector.getInstance(RoutingService.class).start();
-        injector.getInstance(SearchService.class).start();
-        nodeService.getMonitorService().start();
+        transportService = injector.getInstance(TransportService.class);
+        transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
+        transportService.start();
 
-        final ClusterService clusterService = injector.getInstance(ClusterService.class);
+        discovery = (CassandraDiscovery) injector.getInstance(Discovery.class);
+        final ClusterState initialClusterState = discovery.initClusterState(transportService.getLocalNode());
 
         final NodeConnectionsService nodeConnectionsService = injector.getInstance(NodeConnectionsService.class);
         nodeConnectionsService.start();
         clusterService.setNodeConnectionsService(nodeConnectionsService);
 
+        clusterService.start();
+
+        injector.getInstance(IndicesService.class).start();
+        injector.getInstance(IndicesClusterStateService.class).start();
+
+        // gateway should start after disco, so it can try and recovery from gateway on "start"
+        gatewayService().start(); // block until recovery done from cassandra schema.
+
+        logger.info("activated ...");
+        return this;
+    }
+
+    /**
+     * Start the node. If the node is already started, this method is no-op.
+     */
+    public Node start() throws NodeValidationException {
+        logger.info("starting ...");
+
+        // hack around dependency injection problem (for now...)
+        pluginLifecycleComponents.forEach(LifecycleComponent::start);
+
+        injector.getInstance(MappingUpdatedAction.class).setClient(client);
+        //injector.getInstance(IndicesService.class).start();
+        //injector.getInstance(IndicesClusterStateService.class).start();
+        //injector.getInstance(SnapshotsService.class).start();
+        //injector.getInstance(SnapshotShardsService.class).start();
+        //injector.getInstance(RoutingService.class).start();
+        injector.getInstance(SearchService.class).start();
+        nodeService.getMonitorService().start();
+
         injector.getInstance(ResourceWatcherService.class).start();
-        injector.getInstance(GatewayService.class).start();
-        Discovery discovery = injector.getInstance(Discovery.class);
-        clusterService.getMasterService().setClusterStatePublisher(discovery::publish);
 
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
+        /*
         TransportService transportService = injector.getInstance(TransportService.class);
         transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
         transportService.start();
+        */
         assert localNodeFactory.getNode() != null;
         assert transportService.getLocalNode().equals(localNodeFactory.getNode())
             : "transportService has a different local node than the factory provided";
@@ -770,11 +793,12 @@ public abstract class Node implements Closeable {
         clusterService.addStateApplier(transportService.getTaskManager());
         // start after transport service so the local disco is known
         discovery.start(); // start before cluster service so that it can set initial state on ClusterApplierService
-        clusterService.start();
+
         assert clusterService.localNode().equals(localNodeFactory.getNode())
             : "clusterService has a different local node than the factory provided";
-        transportService.acceptIncomingRequests();
+
         discovery.startInitialJoin();
+        /*
         // tribe nodes don't have a master so we shouldn't register an observer         s
         final TimeValue initialStateTimeout = DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.get(settings);
         if (initialStateTimeout.millis() > 0) {
@@ -847,6 +871,7 @@ public abstract class Node implements Closeable {
         if (!lifecycle.moveToStopped()) {
             return this;
         }
+        Logger logger = Loggers.getLogger(Node.class, NODE_NAME_SETTING.get(settings));
         logger.info("stopping ...");
 
         injector.getInstance(ResourceWatcherService.class).stop();
@@ -892,6 +917,7 @@ public abstract class Node implements Closeable {
             return;
         }
 
+        Logger logger = Loggers.getLogger(Node.class, NODE_NAME_SETTING.get(settings));
         logger.info("closing ...");
         List<Closeable> toClose = new ArrayList<>();
         StopWatch stopWatch = new StopWatch("node_close");
@@ -1086,7 +1112,8 @@ public abstract class Node implements Closeable {
     /** Constructs a ClusterInfoService which may be mocked for tests. */
     protected ClusterInfoService newClusterInfoService(Settings settings, ClusterService clusterService,
                                                        ThreadPool threadPool, NodeClient client, Consumer<ClusterInfo> listeners) {
-        return new InternalClusterInfoService(settings, clusterService, threadPool, client, listeners);
+        return new EmptyClusterInfoService();
+        //return new InternalClusterInfoService(settings, clusterService, threadPool, client, listeners);
     }
 
     /**
@@ -1101,12 +1128,12 @@ public abstract class Node implements Closeable {
         return nodeId.substring(0, 7);
     }
 
-    private static class LocalNodeFactory implements Function<BoundTransportAddress, DiscoveryNode> {
+    public static class LocalNodeFactory implements Function<BoundTransportAddress, DiscoveryNode> {
         private final SetOnce<DiscoveryNode> localNode = new SetOnce<>();
         private final String persistentNodeId;
         private final Settings settings;
 
-        private LocalNodeFactory(Settings settings, String persistentNodeId) {
+        public LocalNodeFactory(Settings settings, String persistentNodeId) {
             this.persistentNodeId = persistentNodeId;
             this.settings = settings;
         }

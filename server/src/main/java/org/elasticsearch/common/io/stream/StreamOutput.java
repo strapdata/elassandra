@@ -727,6 +727,13 @@ public abstract class StreamOutput extends OutputStream {
             o.writeString(zoneId.equals("Z") ? DateTimeZone.UTC.getID() : zoneId);
             o.writeLong(zonedDateTime.toInstant().toEpochMilli());
         });
+        writers.put(Token.class, (o, v) -> {
+            o.writeByte((byte) 64);
+            IPartitioner p = DatabaseDescriptor.getPartitioner();
+            ByteBuffer b = p.getTokenFactory().toByteArray((Token) v);
+            o.writeVInt(b.array().length);
+            o.writeBytes(b.array());
+        });
         WRITERS = Collections.unmodifiableMap(writers);
     }
 

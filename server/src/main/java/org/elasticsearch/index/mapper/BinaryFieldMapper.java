@@ -44,10 +44,15 @@ import org.elasticsearch.index.query.QueryShardException;
 import org.elasticsearch.search.DocValueFormat;
 import org.joda.time.DateTimeZone;
 
+import java.util.Optional;
+
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.nio.ByteBuffer;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseField;
 

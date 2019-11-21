@@ -40,6 +40,7 @@ import org.elasticsearch.index.query.QueryShardContext;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 
@@ -220,6 +221,9 @@ public class IndexFieldMapper extends MetadataFieldMapper {
 
     @Override
     public void preParse(ParseContext context) throws IOException {}
+
+    @Override
+    public void postParse(ParseContext context) throws IOException {}
 
     @Override
     protected void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException {}

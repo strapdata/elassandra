@@ -56,7 +56,6 @@ public class CassandraShardStateListener extends AbstractComponent implements In
 
     @Inject
     public CassandraShardStateListener(Settings settings, ClusterService clusterService) {
-        super(settings);
         this.clusterService = clusterService;
         this.routingTableUpdateTaskExecutor = new RoutingTableUpdateTaskExecutor();
     }
@@ -124,7 +123,6 @@ public class CassandraShardStateListener extends AbstractComponent implements In
 
     /**
      * Called before the index shard gets closed.
-     * @param indexShard The index shard
      */
     @Override
     public void beforeIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
@@ -140,8 +138,6 @@ public class CassandraShardStateListener extends AbstractComponent implements In
      *
      * Note: this method is only called if the deletion of the shard did finish without an exception
      *
-     * @param shardId The shard id
-     * @param indexSettings the shards index settings
      */
     @Override
     public void afterIndexShardDeleted(ShardId shardId, Settings indexSettings) {

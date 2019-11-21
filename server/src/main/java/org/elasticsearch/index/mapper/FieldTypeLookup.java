@@ -196,7 +196,19 @@ class FieldTypeLookup implements Iterable<MappedFieldType> {
     /** Returns the field for the given field */
     public MappedFieldType get(String field) {
         String concreteField = aliasToConcreteName.getOrDefault(field, field);
-        return fullNameToFieldType.get(concreteField);
+        MappedFieldType mappedFieldType = fullNameToFieldType.get(concreteField);
+        if (mappedFieldType == null) {
+            int i = field.lastIndexOf(".");
+            if (i > 0) {
+                // search for an opaque_map _key mapper field type
+                mappedFieldType = fullNameToFieldType.get(field.substring(0, i + 1) + ObjectMapper.DEFAULT_KEY);
+                if (mappedFieldType != null) {
+                    mappedFieldType = mappedFieldType.clone();
+                    mappedFieldType.setName(field);
+                }
+            }
+        }
+        return mappedFieldType;
     }
 
     /**

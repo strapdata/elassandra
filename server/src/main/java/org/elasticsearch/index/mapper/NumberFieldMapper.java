@@ -1053,6 +1053,16 @@ public class NumberFieldMapper extends FieldMapper {
         }
 
         @Override
+        public Object cqlValue(Object value) {
+            return type.cqlValue(value);
+        }
+
+        @Override
+        public CQL3Type CQL3Type() {
+            return this.type.CQL3Type();
+        }
+
+        @Override
         public boolean equals(Object o) {
             if (super.equals(o) == false) {
                 return false;

@@ -35,6 +35,9 @@ import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
 import org.elasticsearch.bootstrap.Bootstrap;
+import org.elasticsearch.bootstrap.BootstrapCheck;
+import org.elasticsearch.bootstrap.BootstrapChecks;
+import org.elasticsearch.bootstrap.BootstrapContext;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.ClusterState;
@@ -45,8 +48,10 @@ import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Injector;
 import org.elasticsearch.common.inject.spi.Message;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.logging.LogConfigurator;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.BoundTransportAddress;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.monitor.jvm.JvmInfo;
 import org.elasticsearch.monitor.process.ProcessProbe;
@@ -178,7 +183,19 @@ public class ElassandraDaemon extends CassandraDaemon {
             // add ElassandraDaemon as a ClusterPlugin
             List<Class<? extends Plugin>> pluginList2 = Lists.newArrayList(pluginList);
             pluginList2.add(ElassandraPlugin.class);
-            this.node = new Node(getSettings(), pluginList2);
+            this.node = new Node(getSettings(), pluginList2) {
+                @Override
+                protected void validateNodeBeforeAcceptingRequests(
+                    final BootstrapContext context,
+                    final BoundTransportAddress boundTransportAddress, List<BootstrapCheck> checks) throws NodeValidationException {
+                    BootstrapChecks.check(context, boundTransportAddress, checks);
+                }
+
+                @Override
+                protected void registerDerivedNodeNameWithLogger(String nodeName) {
+                    LogConfigurator.setNodeName(nodeName);
+                }
+            };
         }
 
         //enable indexing in cassandra.
@@ -401,7 +418,19 @@ public class ElassandraDaemon extends CassandraDaemon {
         // add ElassandraDaemon as a ClusterPlugin
         List<Class<? extends Plugin>> classpathPlugins2 = Lists.newArrayList(classpathPlugins);
         classpathPlugins2.add(ElassandraPlugin.class);
-        this.node = new Node(nodeSettings, classpathPlugins2);
+        this.node = new Node(nodeSettings, classpathPlugins2)  {
+            @Override
+            protected void validateNodeBeforeAcceptingRequests(
+                final BootstrapContext context,
+                final BoundTransportAddress boundTransportAddress, List<BootstrapCheck> checks) throws NodeValidationException {
+                BootstrapChecks.check(context, boundTransportAddress, checks);
+            }
+
+            @Override
+            protected void registerDerivedNodeNameWithLogger(String nodeName) {
+                LogConfigurator.setNodeName(nodeName);
+            }
+        };
 
         return this.node;
     }

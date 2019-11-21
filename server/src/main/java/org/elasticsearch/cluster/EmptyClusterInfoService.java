@@ -19,11 +19,17 @@
 
 package org.elasticsearch.cluster;
 
+import org.elasticsearch.common.inject.Inject;
+
 /**
  * ClusterInfoService that provides empty maps for disk usage and shard sizes
  */
 public class EmptyClusterInfoService implements ClusterInfoService {
     public static final EmptyClusterInfoService INSTANCE = new EmptyClusterInfoService();
+
+    @Inject
+    public EmptyClusterInfoService() {
+    }
 
     @Override
     public ClusterInfo getClusterInfo() {

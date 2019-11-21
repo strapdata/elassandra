@@ -85,6 +85,11 @@ public final class FieldAliasMapper extends Mapper {
     }
 
     @Override
+    public boolean hasField() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Iterator<Mapper> iterator() {
         return Collections.emptyIterator();
     }

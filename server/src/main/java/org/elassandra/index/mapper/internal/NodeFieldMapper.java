@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -99,7 +99,7 @@ public class NodeFieldMapper extends MetadataFieldMapper {
         public String typeName() {
             return CONTENT_TYPE;
         }
-        
+
         @Override
         public String name() {
             return NAME;
@@ -116,15 +116,14 @@ public class NodeFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
-    public Mapper parse(ParseContext context) throws IOException {
-        return null;
+    public void parse(ParseContext context) throws IOException {
     }
 
     @Override
     public void postParse(ParseContext context) throws IOException {
         super.parse(context);
     }
-    
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

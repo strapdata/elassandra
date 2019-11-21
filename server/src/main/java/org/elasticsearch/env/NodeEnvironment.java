@@ -23,6 +23,8 @@ import java.io.UncheckedIOException;
 import java.util.Iterator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -424,8 +426,7 @@ public final class NodeEnvironment  implements Closeable {
     }
 
     public static String generateNodeId(Settings settings) {
-        Random random = Randomness.get(settings, NODE_ID_SEED_SETTING);
-        return UUIDs.randomBase64UUID(random);
+        return SystemKeyspace.getLocalHostId().toString();
     }
 
     @SuppressForbidden(reason = "System.out.*")

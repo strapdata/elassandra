@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexOptions;
@@ -45,8 +47,8 @@ import org.elasticsearch.common.time.DateMathParser;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.fielddata.IndexFieldData;
-import org.elasticsearch.index.mapper.Mapper.CqlCollection;
-import org.elasticsearch.index.mapper.Mapper.CqlStruct;
+import org.elasticsearch.index.mapper.CqlMapper.CqlCollection;
+import org.elasticsearch.index.mapper.CqlMapper.CqlStruct;
 import org.elasticsearch.index.query.QueryRewriteContext;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.QueryShardException;
@@ -58,6 +60,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.db.marshal.AbstractType;
 /**
  * This defines the core properties and functions to operate on a field.
  */
@@ -144,13 +148,91 @@ public abstract class MappedFieldType extends FieldType {
             Objects.equals(eagerGlobalOrdinals, fieldType.eagerGlobalOrdinals) &&
             Objects.equals(nullValue, fieldType.nullValue) &&
             Objects.equals(nullValueAsString, fieldType.nullValueAsString) &&
-            Objects.equals(similarity, fieldType.similarity);
+            Objects.equals(cqlCollection, fieldType.cqlCollection) &&
+            Objects.equals(cqlStruct, fieldType.cqlStruct) &&
+            Objects.equals(cql3Type, fieldType.cql3Type) &&
+            Objects.equals(cqlPartialUpdate, fieldType.cqlPartialUpdate) &&
+            Objects.equals(cqlPartitionKey, fieldType.cqlPartitionKey) &&
+            Objects.equals(cqlStaticColumn, fieldType.cqlStaticColumn) &&
+            Objects.equals(cqlClusteringKeyDesc, fieldType.cqlClusteringKeyDesc) &&
+            Objects.equals(cqlPrimaryKeyOrder, fieldType.cqlPrimaryKeyOrder);
+    }
+
+    public CqlCollection cqlCollection() {
+        return this.cqlCollection;
+    }
+
+    public void cqlCollection(CqlCollection cqlCollection) {
+        this.cqlCollection = cqlCollection;
+    }
+
+    public String cqlCollectionTag() {
+        if (this.cqlCollection.equals(CqlCollection.LIST)) return "list";
+        if (this.cqlCollection.equals(CqlCollection.SET)) return "set";
+        return "";
+    }
+
+    public CqlStruct cqlStruct() {
+        return this.cqlStruct;
+    }
+
+    public void cqlStruct(CqlStruct cqlStruct) {
+        this.cqlStruct = cqlStruct;
+    }
+
+    public CQL3Type CQL3Type() {
+        return this.cql3Type;
+    }
+
+    public void CQL3Type(CQL3Type type) {
+        this.cql3Type = type;
+    }
+
+    public boolean cqlPartialUpdate() {
+        return this.cqlPartialUpdate;
+    }
+
+    public void cqlPartialUpdate(boolean cqlPartialUpdate) {
+        this.cqlPartialUpdate = cqlPartialUpdate;
+    }
+
+    public boolean cqlPartitionKey() {
+        return this.cqlPartitionKey;
+    }
+
+    public void cqlPartitionKey(boolean cqlPartitionKey) {
+        this.cqlPartitionKey = cqlPartitionKey;
+    }
+
+    public boolean cqlStaticColumn() {
+        return this.cqlStaticColumn;
+    }
+
+    public void cqlStaticColumn(boolean cqlStaticColumn) {
+        this.cqlStaticColumn = cqlStaticColumn;
+    }
+
+    public int cqlPrimaryKeyOrder() {
+        return this.cqlPrimaryKeyOrder;
+    }
+
+    public void cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
+        this.cqlPrimaryKeyOrder = cqlPrimaryKeyOrder;
+    }
+
+    public boolean cqlClusteringKeyDesc() {
+        return cqlClusteringKeyDesc;
+    }
+
+    public void cqlClusteringKeyDesc(boolean cqlClusteringKeyDesc) {
+        this.cqlClusteringKeyDesc = cqlClusteringKeyDesc;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), name, boost, docValues, indexAnalyzer, searchAnalyzer, searchQuoteAnalyzer,
-            eagerGlobalOrdinals, similarity == null ? null : similarity.name(), nullValue, nullValueAsString);
+            eagerGlobalOrdinals, similarity == null ? null : similarity.name(), nullValue, nullValueAsString,
+                    cqlCollection, cqlStruct, cql3Type, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder);
     }
 
     // TODO: we need to override freeze() and add safety checks that all settings are actually set

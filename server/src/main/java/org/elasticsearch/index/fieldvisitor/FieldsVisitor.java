@@ -69,6 +69,7 @@ public class FieldsVisitor extends StoredFieldVisitor {
     protected BytesReference source;
     protected String type, id;
     protected Map<String, List<Object>> fieldsValues;
+    protected List<ByteBuffer> values;
 
     public FieldsVisitor(boolean loadSource) {
         this(loadSource, SourceFieldMapper.NAME);
@@ -107,7 +108,7 @@ public class FieldsVisitor extends StoredFieldVisitor {
         List<String> requiredColumns =  new ArrayList<String>();
         if (requestedFields() != null) {
             for(String fieldExp : requestedFields()) {
-                for(String field : searchContext.mapperService().simpleMatchToIndexNames(fieldExp)) {
+                for(String field : searchContext.mapperService().simpleMatchToFullName(fieldExp)) {
                     int i = field.indexOf('.');
                     String columnName = (i > 0) ? field.substring(0, i) : field;
                     requiredColumns.add(columnName);

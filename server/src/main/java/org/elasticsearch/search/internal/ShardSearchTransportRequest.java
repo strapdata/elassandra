@@ -19,9 +19,12 @@
 
 package org.elasticsearch.search.internal;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.IndicesRequest;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchShardIterator;
 import org.elasticsearch.action.search.SearchTask;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.action.support.IndicesOptions;
@@ -65,7 +68,7 @@ public class ShardSearchTransportRequest extends TransportRequest implements Sha
 
     // for test only
     public ShardSearchTransportRequest(OriginalIndices originalIndices, SearchRequest searchRequest, SearchShardIterator shardIt, int numberOfShards,
-            AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias) {
+                                       AliasFilter aliasFilter, float indexBoost, long nowInMillis, String clusterAlias) {
         this.shardSearchLocalRequest = new ShardSearchLocalRequest(searchRequest, shardIt, numberOfShards, aliasFilter, indexBoost, nowInMillis, clusterAlias);
         this.originalIndices = originalIndices;
     }

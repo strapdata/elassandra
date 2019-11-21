@@ -19,6 +19,8 @@
 
 package org.elasticsearch.cluster.routing;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.cluster.routing.RecoverySource.ExistingStoreRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.PeerRecoverySource;
 import org.elasticsearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
@@ -32,6 +34,7 @@ import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -117,8 +120,9 @@ public final class ShardRouting implements Writeable, ToXContentObject {
             "recovery source only available on unassigned or initializing shard but was " + state;
         assert recoverySource == null || recoverySource == PeerRecoverySource.INSTANCE || primary :
             "replica shards always recover from primary";
-        assert (currentNodeId == null) == (state == ShardRoutingState.UNASSIGNED)  :
-            "unassigned shard must not be assigned to a node " + this;
+        //assert (currentNodeId == null) == (state == ShardRoutingState.UNASSIGNED)  :
+        //    "unassigned shard must not be assigned to a node " + this;
+        this.tokenRanges = tokenRanges;
     }
 
     @Nullable
@@ -483,10 +487,7 @@ public final class ShardRouting implements Writeable, ToXContentObject {
      * no allocation at all..
      **/
     public boolean isSameAllocation(ShardRouting other) {
-        boolean b = this.allocationId != null && other.allocationId != null && this.allocationId.getId().equals(other.allocationId.getId());
-        assert b == false || this.currentNodeId.equals(other.currentNodeId) :
-            "ShardRoutings have the same allocation id but not the same node. This [" + this + "], other [" + other + "]";
-        return b;
+        return true;
     }
 
     /**

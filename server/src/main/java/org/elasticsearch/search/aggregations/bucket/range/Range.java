@@ -41,7 +41,7 @@ public interface Range extends MultiBucketsAggregation {
         /**
          * @return The string value for the lower bound of the range
          */
-        String getFromAsString();
+        Object getFromAsString();
 
         /**
          * @return The upper bound of the range (excluding)

@@ -314,11 +314,13 @@ public final class Bootstrap {
         final boolean closeStandardStreams = (foreground == false) || quiet;
         try {
             if (closeStandardStreams) {
-                final Logger rootLogger = LogManager.getRootLogger();
-                final Appender maybeConsoleAppender = Loggers.findAppender(rootLogger, ConsoleAppender.class);
+                /*
+                final Logger rootLogger = ESLoggerFactory.getRootLogger();
+                final Appender maybeConsoleAppender = ServerLoggers.findAppender(rootLogger, ConsoleAppender.class);
                 if (maybeConsoleAppender != null) {
                     Loggers.removeAppender(rootLogger, maybeConsoleAppender);
                 }
+                */
                 closeSystOut();
             }
 
@@ -346,12 +348,17 @@ public final class Bootstrap {
             }
         } catch (NodeValidationException | RuntimeException e) {
             // disable console logging, so user does not see the exception twice (jvm will show it already)
-            final Logger rootLogger = LogManager.getRootLogger();
-            final Appender maybeConsoleAppender = Loggers.findAppender(rootLogger, ConsoleAppender.class);
+            /*
+            final Logger rootLogger = ESLoggerFactory.getRootLogger();
+            final Appender maybeConsoleAppender = ServerLoggers.findAppender(rootLogger, ConsoleAppender.class);
             if (foreground && maybeConsoleAppender != null) {
                 Loggers.removeAppender(rootLogger, maybeConsoleAppender);
             }
-            Logger logger = LogManager.getLogger(Bootstrap.class);
+            */
+            Logger logger = Loggers.getLogger(Bootstrap.class);
+            if (INSTANCE.node != null) {
+                logger = Loggers.getLogger(Bootstrap.class, Node.NODE_NAME_SETTING.get(INSTANCE.node.settings()));
+            }
             // HACK, it sucks to do this, but we will run users out of disk space otherwise
             if (e instanceof CreationException) {
                 // guice: log the shortened exc to the log file
@@ -378,9 +385,11 @@ public final class Bootstrap {
                 logger.error("Exception", e);
             }
             // re-enable it if appropriate, so they can see any logging during the shutdown process
+            /*
             if (foreground && maybeConsoleAppender != null) {
                 Loggers.addAppender(rootLogger, maybeConsoleAppender);
             }
+            */
 
             throw e;
         }

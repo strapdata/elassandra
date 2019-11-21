@@ -41,6 +41,7 @@ import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.geo.ShapeRelation;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.time.DateFormatter;
@@ -252,7 +253,9 @@ public class DateFieldMapper extends FieldMapper {
         }
 
         long parse(String value) {
-            return dateTimeFormatter().parseMillis(value);
+            return (CQL3Type().equals(CQL3Type.Native.TIMEUUID))  ?
+                    UUIDGen.unixTimestamp(UUID.fromString(value)) :
+                    dateTimeFormatter().parseMillis(value);
         }
 
         @Override
@@ -383,11 +386,47 @@ public class DateFieldMapper extends FieldMapper {
 
         @Override
         public Object valueForDisplay(Object value) {
-            Long val = (Long) value;
-            if (val == null) {
+            if (value == null) {
                 return null;
             }
-            return dateTimeFormatter().formatMillis(val);
+            if (value instanceof Date) {
+                return dateTimeFormatter().formatMillis( ((Date) value).getTime() );
+            }
+            if (value instanceof Long) {
+                Long val = (Long) value;
+                return dateTimeFormatter().formatMillis(val);
+            }
+            return value;
+        }
+
+
+        @Override
+        public Object cqlValue(Object value, AbstractType atype) {
+            Object val = cqlValue(value);
+            if (val instanceof Date && atype instanceof SimpleDateType) {
+                return (int)SimpleDateSerializer.timeInMillisToDay(((Date)val).getTime());
+            }
+            return val;
+        }
+
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            if (this.CQL3Type() == CQL3Type.Native.TIMEUUID) {
+                return UUID.fromString(value.toString());
+            }
+            if (value instanceof Date) {
+                return (Date)value;
+            }
+            if (value instanceof Number) {
+                return new Date(((Number) value).longValue());
+            }
+            if (value instanceof BytesRef) {
+                return new Date(Numbers.bytesToLong((BytesRef) value));
+            }
+            return dateTimeFormatter.parseJoda(value.toString()).toDate();
         }
 
         @Override
@@ -522,7 +561,7 @@ public class DateFieldMapper extends FieldMapper {
             } else {
                 value = (Long)object;
             }
-            dateAsString = fieldType().dateTimeFormatter.printer().print(value);
+            dateAsString = fieldType().dateTimeFormatter.formatMillis(value);
         }
 
         String fieldName = keyName.orElse(fieldType().name());

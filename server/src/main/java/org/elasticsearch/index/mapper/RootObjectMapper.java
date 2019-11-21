@@ -202,10 +202,12 @@ public class RootObjectMapper extends ObjectMapper {
     private Explicit<Boolean> numericDetection;
     private Explicit<DynamicTemplate[]> dynamicTemplates;
 
-    RootObjectMapper(String name, boolean enabled, Dynamic dynamic, Boolean includeInAll, Map<String, Mapper> mappers,
+    RootObjectMapper(String name,
+                     CqlCollection cqlCollection, CqlStruct cqlStruct, String cqlUdtName, boolean cqlPartialUpdate, boolean cqlPartitionKey, int cqlPrimaryKeyOrder, boolean cqlStaticColumn, boolean cqlClusteringKeyDesc,
+                     boolean enabled, Dynamic dynamic, Boolean includeInAll, Map<String, Mapper> mappers,
                      Explicit<DateFormatter[]> dynamicDateTimeFormatters, Explicit<DynamicTemplate[]> dynamicTemplates,
                      Explicit<Boolean> dateDetection, Explicit<Boolean> numericDetection, Settings settings) {
-        super(name, name, enabled, Nested.NO, dynamic, includeInAll, mappers, settings);
+        super(name, name, cqlCollection, cqlStruct, cqlUdtName, cqlPartialUpdate, cqlPartitionKey, cqlPrimaryKeyOrder, cqlStaticColumn, cqlClusteringKeyDesc, enabled, Nested.NO, dynamic, includeInAll, mappers, settings);
         this.dynamicTemplates = dynamicTemplates;
         this.dynamicDateTimeFormatters = dynamicDateTimeFormatters;
         this.dateDetection = dateDetection;

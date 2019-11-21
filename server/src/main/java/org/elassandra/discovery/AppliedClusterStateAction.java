@@ -61,7 +61,7 @@ public class AppliedClusterStateAction extends AbstractComponent {
             TransportService transportService,
             AppliedClusterStateListener incomingClusterStateListener,
             DiscoverySettings discoverySettings) {
-        super(settings);
+        super();
         this.transportService = transportService;
         this.appliedClusterStateListener = incomingClusterStateListener;
         this.discoverySettings = discoverySettings;

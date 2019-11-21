@@ -38,6 +38,7 @@ import org.elasticsearch.common.ParsingException;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.common.util.set.Sets;
+import org.elasticsearch.common.xcontent.DeprecationHandler;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -653,7 +654,7 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
 
     @Override
     public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
-        Map<String, Set<CharSequence>> contextsMap = new HashMap<>();
+        Map<String, Set<String>> contextsMap = new HashMap<>();
         Set<String> inputs = new HashSet<>();
         int weight = 1;
 
@@ -677,7 +678,10 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
                 ContextMappings contextMappings = fieldType().getContextMappings();
                 String contexts = (String) map.get("contexts");
 
-                XContentParser parser = JsonXContent.jsonXContent.createParser(ElassandraDaemon.instance.node().getNamedXContentRegistry(), contexts);
+                XContentParser parser = JsonXContent.jsonXContent.createParser(
+                    ElassandraDaemon.instance.node().getNamedXContentRegistry(),
+                    DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                    contexts);
                 parser.nextToken();
                 XContentParser.Token currentToken = parser.currentToken();
                 if (currentToken == XContentParser.Token.START_OBJECT) {
@@ -700,7 +704,7 @@ public class CompletionFieldMapper extends FieldMapper implements ArrayValueMapp
         Map<String, CompletionInputMetaData> inputMap = new HashMap<>();
         for (String input : inputs) {
             if (inputMap.containsKey(input) == false || inputMap.get(input).weight < weight) {
-                inputMap.put(input, new CompletionInputMetaData(contextsMap, weight));
+                inputMap.put(input, new CompletionInputMetaData(input, contextsMap, weight));
             }
         }
 

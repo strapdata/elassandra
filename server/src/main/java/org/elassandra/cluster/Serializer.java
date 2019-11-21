@@ -43,6 +43,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.JsonMappingException;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -231,7 +232,7 @@ public class Serializer {
                     if (value instanceof Map) {
                         XContentBuilder builder = XContentFactory.jsonBuilder();
                         builder.map( (Map) value);
-                        return type.decompose( builder.string() );
+                        return type.decompose(BytesReference.bytes(builder).utf8ToString());
                     }
                     return type.decompose( value );
                 }

@@ -56,9 +56,9 @@ public class TransportVerifyShardBeforeCloseAction extends TransportReplicationA
     @Inject
     public TransportVerifyShardBeforeCloseAction(final Settings settings, final TransportService transportService,
                                                  final ClusterService clusterService, final IndicesService indicesService,
-                                                 final ThreadPool threadPool, final ShardStateAction stateAction,
+                                                 final ThreadPool threadPool,
                                                  final ActionFilters actionFilters, final IndexNameExpressionResolver resolver) {
-        super(settings, NAME, transportService, clusterService, indicesService, threadPool, stateAction, actionFilters, resolver,
+        super(settings, NAME, transportService, clusterService, indicesService, threadPool, actionFilters, resolver,
             ShardRequest::new, ShardRequest::new, ThreadPool.Names.MANAGEMENT);
     }
 
@@ -130,7 +130,7 @@ public class TransportVerifyShardBeforeCloseAction extends TransportReplicationA
 
         @Override
         public void markShardCopyAsStaleIfNeeded(final ShardId shardId, final String allocationId, final ActionListener<Void> listener) {
-            shardStateAction.remoteShardFailed(shardId, allocationId, primaryTerm, true, "mark copy as stale", null, listener);
+            //shardStateAction.remoteShardFailed(shardId, allocationId, primaryTerm, true, "mark copy as stale", null, listener);
         }
     }
 

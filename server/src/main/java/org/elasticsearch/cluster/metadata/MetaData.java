@@ -19,10 +19,12 @@
 
 package org.elasticsearch.cluster.metadata;
 
+import com.carrotsearch.hppc.ObjectContainer;
 import com.carrotsearch.hppc.ObjectHashSet;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 import org.apache.lucene.util.CollectionUtil;
@@ -202,6 +204,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         int totalNumberOfShards = 0;
         int totalOpenIndexShards = 0;
         int numberOfShards = 0;
+        /*
         for (ObjectCursor<IndexMetaData> cursor : indices.values()) {
             totalNumberOfShards += cursor.value.getTotalNumberOfShards();
             numberOfShards += cursor.value.getNumberOfShards();
@@ -209,6 +212,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
                 totalOpenIndexShards += cursor.value.getTotalNumberOfShards();
             }
         }
+         */
         this.totalNumberOfShards = totalNumberOfShards;
         this.totalOpenIndexShards = totalOpenIndexShards;
         this.numberOfShards = numberOfShards;
@@ -1203,11 +1207,23 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         }
 
         public static String toXContent(MetaData metaData) throws IOException {
+            return toXContent(metaData, ToXContent.EMPTY_PARAMS);
+        }
+
+        public static String toXContent(MetaData metaData, ToXContent.Params params) throws IOException {
             XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
             builder.startObject();
-            toXContent(metaData, builder, ToXContent.EMPTY_PARAMS);
+            toXContent(metaData, builder, params);
             builder.endObject();
             return Strings.toString(builder);
+        }
+
+        public static byte[] toBytes(MetaData metaData, ToXContent.Params params) throws IOException {
+            XContentBuilder builder = XContentFactory.contentBuilder(XContentType.SMILE);
+            builder.startObject();
+            toXContent(metaData, builder, params);
+            builder.endObject();
+            return BytesReference.toBytes(BytesReference.bytes(builder));
         }
 
         public static void toXContent(MetaData metaData, XContentBuilder builder, ToXContent.Params params) throws IOException {
@@ -1366,7 +1382,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
     /**
      * State format for {@link MetaData} to write to and load from cassandra
      */
-    public static final MetaDataStateFormat<MetaData> CASSANDRA_FORMAT = new MetaDataStateFormat<MetaData>(XContentType.JSON, "cassandra-global-") {
+    public static final MetaDataStateFormat<MetaData> CASSANDRA_FORMAT = new MetaDataStateFormat<MetaData>("cassandra-global-") {
 
         @Override
         public void toXContent(XContentBuilder builder, MetaData state) throws IOException {
@@ -1379,7 +1395,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         }
     };
 
-    public static final MetaDataStateFormat<MetaData> CQL_FORMAT = new MetaDataStateFormat<MetaData>(XContentType.SMILE, "cql-global-") {
+    public static final MetaDataStateFormat<MetaData> CQL_FORMAT = new MetaDataStateFormat<MetaData>("cql-global-") {
 
         @Override
         public void toXContent(XContentBuilder builder, MetaData state) throws IOException {

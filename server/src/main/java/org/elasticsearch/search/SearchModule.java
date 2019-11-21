@@ -20,6 +20,11 @@
 package org.elasticsearch.search;
 
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.util.SetOnce;
+import org.elassandra.index.ElasticQueryHandler;
+import org.elassandra.search.aggregations.bucket.token.InternalTokenRange;
+import org.elassandra.search.aggregations.bucket.token.TokenRangeAggregationBuilder;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.NamedRegistry;
 import org.elasticsearch.common.geo.GeoShapeType;
 import org.elasticsearch.common.geo.ShapesAvailability;
@@ -229,6 +234,7 @@ import org.elasticsearch.search.aggregations.pipeline.movfn.MovFnPipelineAggrega
 import org.elasticsearch.search.aggregations.pipeline.movfn.MovFnPipelineAggregator;
 import org.elasticsearch.search.aggregations.pipeline.serialdiff.SerialDiffPipelineAggregationBuilder;
 import org.elasticsearch.search.aggregations.pipeline.serialdiff.SerialDiffPipelineAggregator;
+import org.elasticsearch.search.fetch.CqlFetchPhase;
 import org.elasticsearch.search.fetch.FetchPhase;
 import org.elasticsearch.search.fetch.FetchSubPhase;
 import org.elasticsearch.search.fetch.subphase.DocValueFieldsFetchSubPhase;
@@ -286,10 +292,16 @@ public class SearchModule {
             "moving_avg_model");
 
     private final List<FetchSubPhase> fetchSubPhases = new ArrayList<>();
+    private final SetOnce<BiFunction<List<FetchSubPhase>, ClusterService, FetchPhase>> fetchPhaseSupplier = new SetOnce<>();
 
     private final Settings settings;
+    private final ClusterService clusterService;
     private final List<NamedWriteableRegistry.Entry> namedWriteables = new ArrayList<>();
     private final List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>();
+
+    public SearchModule(Settings settings, boolean transportClient, List<SearchPlugin> plugins) {
+        this(settings, transportClient, plugins, null);
+    }
 
     /**
      * Constructs a new SearchModule object
@@ -301,8 +313,9 @@ public class SearchModule {
      * @param transportClient Is this being constructed in the TransportClient or not
      * @param plugins List of included {@link SearchPlugin} objects.
      */
-    public SearchModule(Settings settings, boolean transportClient, List<SearchPlugin> plugins) {
+    public SearchModule(Settings settings, boolean transportClient, List<SearchPlugin> plugins, ClusterService clusterService) {
         this.settings = settings;
+        this.clusterService = clusterService;
         this.transportClient = transportClient;
         registerSuggesters(plugins);
         highlighters = setupHighlighters(settings, plugins);

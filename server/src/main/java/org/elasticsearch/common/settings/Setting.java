@@ -20,6 +20,8 @@
 package org.elasticsearch.common.settings;
 
 import org.apache.logging.log4j.Logger;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.Version;
@@ -1419,6 +1421,10 @@ public class Setting<T> implements ToXContentObject {
 
     public static Setting<TimeValue> positiveTimeSetting(String key, TimeValue defaultValue, Property... properties) {
         return timeSetting(key, defaultValue, TimeValue.timeValueMillis(0), properties);
+    }
+
+    public static Setting<Class<? extends AbstractSearchStrategy>> searchStrategy(String key, String defaultValue, Property... properties) {
+        return new Setting<>(key, (s) -> PrimaryFirstSearchStrategy.class.getName(), (s) -> AbstractSearchStrategy.getSearchStrategyClass(s), properties);
     }
 
     public static Setting<TimeValue> positiveTimeSetting(

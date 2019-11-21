@@ -46,6 +46,7 @@ import org.elasticsearch.common.util.concurrent.PrioritizedEsThreadPoolExecutor;
 import org.elasticsearch.common.util.iterable.Iterables;
 import org.elasticsearch.threadpool.Scheduler;
 import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -55,6 +56,7 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -62,7 +64,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-import static org.elasticsearch.cluster.service.ClusterService.CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING;
+import static org.elasticsearch.cluster.service.BaseClusterService.CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING;
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
 public class ClusterApplierService extends AbstractLifecycleComponent implements ClusterApplier {
@@ -101,6 +103,8 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     private NodeConnectionsService nodeConnectionsService;
     private Supplier<ClusterState.Builder> stateBuilderSupplier;
 
+    private ClusterService clusterService;
+
     public ClusterApplierService(String nodeName, Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool,
             Supplier<ClusterState.Builder> stateBuilderSupplier) {
         this.clusterSettings = clusterSettings;
@@ -110,6 +114,10 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         this.localNodeMasterListeners = new LocalNodeMasterListeners(threadPool);
         this.stateBuilderSupplier = stateBuilderSupplier;
         this.nodeName = nodeName;
+    }
+
+    public void setClusterService(ClusterService clusterService) {
+        this.clusterService = clusterService;
     }
 
     public void setSlowTaskLoggingThreshold(TimeValue slowTaskLoggingThreshold) {
@@ -145,12 +153,15 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     class UpdateTask extends SourcePrioritizedRunnable implements Function<ClusterState, ClusterState> {
         final ClusterApplyListener listener;
         final Function<ClusterState, ClusterState> updateFunction;
+        final SchemaUpdate schemaUpdate;
 
         UpdateTask(Priority priority, String source, ClusterApplyListener listener,
-                   Function<ClusterState, ClusterState> updateFunction) {
+                   Function<ClusterState, ClusterState> updateFunction,
+                   SchemaUpdate schemaUpdate) {
             super(priority, source);
             this.listener = listener;
             this.updateFunction = updateFunction;
+            this.schemaUpdate = schemaUpdate;
         }
 
         @Override
@@ -335,7 +346,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             return;
         }
         try {
-            UpdateTask updateTask = new UpdateTask(config.priority(), source, new SafeClusterApplyListener(listener, logger), executor);
+            UpdateTask updateTask = new UpdateTask(config.priority(), source, new SafeClusterApplyListener(listener, logger), executor, config.schemaUpdate());
             if (config.timeout() != null) {
                 threadPoolExecutor.execute(updateTask, config.timeout(),
                     () -> threadPool.generic().execute(
@@ -446,9 +457,6 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
 
     /**
      * Routing table must be updated by the caller when submitting the new cluster state.
-     * @param task
-     * @param previousClusterState
-     * @param newClusterState
      */
     private void applyChanges(UpdateTask task, ClusterState previousClusterState, ClusterState newClusterState) {
 
@@ -476,20 +484,35 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         }
 
         logger.debug("apply cluster state with version {}", newClusterState.version());
-        callClusterStateAppliers(clusterChangedEvent);
 
         nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
 
+        // notify highPriorityStateAppliers, including IndicesClusterStateService to start shards and update mapperServices.
+        callClusterStateAppliersHighPriority(clusterChangedEvent);
+
+        clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.schemaUpdate, null);
         logger.debug("set locally applied cluster state to version {}", newClusterState.version());
-        state.set(newClusterState);
+        final ClusterState newClusterState3 = newClusterState;
+        state.set(newClusterState3);
+
+        // notify normalPriorityStateAppliers with the new cluster state,
+        // including CassandraSecondaryIndicesApplier to create new C* 2i instances when newClusterState is applied by all nodes.
+        callClusterStateAppliersNormalPriority(clusterChangedEvent);
+
+        // non-coordinator node
+        if (!task.schemaUpdate().updated() && newClusterState.metaData().version() > previousClusterState.metaData().version()) {
+             // For non-coordinator nodes, publish in gossip state the applied metadata.uuid and version.
+             // after mapping change have been applied to secondary index in normalPriorityStateAppliers
+             this.clusterService.publishX2(newClusterState);
+        }
 
         callClusterStateListeners(clusterChangedEvent);
-
+        callClusterStateAppliersLowPriority(clusterChangedEvent);
         task.listener.onSuccess(task.source);
     }
 
-    private void callClusterStateAppliers(ClusterChangedEvent clusterChangedEvent) {
-        clusterStateAppliers.forEach(applier -> {
+    private void callClusterStateAppliersHighPriority(ClusterChangedEvent clusterChangedEvent) {
+        highPriorityStateAppliers.forEach(applier -> {
             try {
                 logger.trace("calling [{}] with change to version [{}]", applier, clusterChangedEvent.state().version());
                 applier.applyClusterState(clusterChangedEvent);

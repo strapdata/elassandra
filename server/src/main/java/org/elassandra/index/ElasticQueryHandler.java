@@ -59,9 +59,11 @@ import org.elasticsearch.action.search.SearchScrollRequestBuilder;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.ParsingException;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.common.xcontent.DeprecationHandler;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -202,7 +204,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
             if (scrollId == null) {
             	SearchSourceBuilder ssb = null;
             	try {
-            		XContentParser parser = JsonXContent.jsonXContent.createParser(ElassandraDaemon.instance.node().getNamedXContentRegistry(), query);
+            		XContentParser parser = JsonXContent.jsonXContent.createParser(ElassandraDaemon.instance.node().getNamedXContentRegistry(), DeprecationHandler.THROW_UNSUPPORTED_OPERATION, query);
             		ssb = SearchSourceBuilder.fromXContent(parser);
             	} catch(ParsingException e) {
             		throw new SyntaxException(e.getMessage());
@@ -406,7 +408,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         xContentBuilder.startObject();
                         termBucket.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
                         xContentBuilder.endObject();
-                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(xContentBuilder.string()));
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
                     }
                     break;
                 case DateHistogramAggregationBuilder.NAME:
@@ -417,7 +419,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         histoBucket.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
                         if (histoBucket.getKeyed())
                             xContentBuilder.endObject();
-                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(xContentBuilder.string()));
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
                     }
                     break;
                 case InternalTDigestPercentiles.NAME:
@@ -430,7 +432,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                             xContentBuilder.field(Double.toString(percentile.getPercent()), percentile.getValue());
                         xContentBuilder.endObject();
                         xContentBuilder.endObject();
-                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(xContentBuilder.string()));
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
                     }
                     break;
                 case SumAggregationBuilder.NAME:
@@ -455,7 +457,7 @@ public class ElasticQueryHandler extends QueryProcessor  {
                         xContentBuilder.field("avg", stats.getAvg());
                         xContentBuilder.field("sum", stats.getSum());
                         xContentBuilder.endObject();
-                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(xContentBuilder.string()));
+                        setElement(getRow(amdb, level, rows), amdb.getColumn(agg.getName()), ByteBufferUtil.bytes(BytesReference.bytes(xContentBuilder).utf8ToString()));
                     }
                     break;
                 default:

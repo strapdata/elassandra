@@ -82,9 +82,11 @@ final class PerThreadIDVersionAndSeqNoLookup {
         } else {
             termsEnum = terms.iterator();
         }
+        /*
         if (reader.getNumericDocValues(VersionFieldMapper.NAME) == null) {
             throw new IllegalArgumentException("reader misses the [" + VersionFieldMapper.NAME + "] field; _uid terms [" + terms + "]");
         }
+        */
         Object readerKey = null;
         assert (readerKey = reader.getCoreCacheHelper().getKey()) != null;
         this.readerKey = readerKey;
@@ -132,7 +134,8 @@ final class PerThreadIDVersionAndSeqNoLookup {
                 seqNo = UNASSIGNED_SEQ_NO;
                 term = UNASSIGNED_PRIMARY_TERM;
             }
-            return new DocIdAndVersion(docID, versions.longValue(), seqNo, term, context.reader(), context.docBase);
+            */
+            return new DocIdAndVersion(docID, 1L, UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM, context.reader(), context.docBase);
         } else {
             return null;
         }

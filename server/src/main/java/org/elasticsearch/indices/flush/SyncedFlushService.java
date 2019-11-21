@@ -508,7 +508,7 @@ public class SyncedFlushService implements IndexEventListener {
         final CommitStats commitStats = indexShard.commitStats();
         final Engine.CommitId commitId = commitStats.getRawCommitId();
         logger.trace("{} pre sync flush done. commit id {}, num docs {}", request.shardId(), commitId, commitStats.getNumDocs());
-        return new PreSyncedFlushResponse(commitId, commitStats.getNumDocs(), commitStats.syncId());
+        return new PreSyncedFlushResponse(commitId, commitStats.getNumDocs(), null);
     }
 
     private ShardSyncedFlushResponse performSyncedFlush(ShardSyncedFlushRequest request) {

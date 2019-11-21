@@ -23,6 +23,13 @@ import com.carrotsearch.hppc.LongArrayList;
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import org.apache.cassandra.utils.FBUtilities;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
+import org.elassandra.index.ExtendedElasticSecondaryIndex;
+import org.elassandra.index.MessageFormatPartitionFunction;
+import org.elassandra.index.PartitionFunction;
+import org.elassandra.index.StringPartitionFunction;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.admin.indices.rollover.RolloverInfo;
@@ -64,15 +71,9 @@ import java.io.IOException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import static org.elasticsearch.cluster.node.DiscoveryNodeFilters.IP_VALIDATOR;
 import static org.elasticsearch.cluster.node.DiscoveryNodeFilters.OpType.AND;
@@ -278,6 +279,105 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     private final int numberOfShards;
     private final int numberOfReplicas;
 
+    // elassandra index-level specific settings
+    public static final String SETTING_KEYSPACE = "index.keyspace";
+    public static final Setting<String> INDEX_SETTING_KEYSPACE_SETTING =
+            Setting.simpleString(SETTING_KEYSPACE, Property.Final, Property.IndexScope);
+
+    public static final String SETTING_TABLE = "index.table";
+    public static final Setting<String> INDEX_SETTING_TABLE_SETTING =
+            Setting.simpleString(SETTING_TABLE, Property.Final, Property.IndexScope);
+
+    public static final String SETTING_VIRTUAL_INDEX = "index.virtual_index";
+    public static final Setting<String> INDEX_SETTING_VIRTUAL_INDEX_SETTING =
+            Setting.simpleString(SETTING_VIRTUAL_INDEX, Property.Final, Property.IndexScope);
+
+    public static final String SETTING_VIRTUAL = "index.virtual";
+    public static final Setting<Boolean> INDEX_SETTING_VIRTUAL_SETTING =
+            Setting.boolSetting(SETTING_VIRTUAL, false, Property.Final, Property.IndexScope);
+
+
+    public static final String SETTING_TABLE_OPTIONS = "index.table_options";
+    public static final Setting<String> INDEX_SETTING_TABLE_OPTIONS_SETTING =
+            Setting.simpleString(SETTING_TABLE_OPTIONS, Property.Final, Property.IndexScope);
+
+    public static final String SETTING_REPLICATION = "index.replication";
+    public static final Pattern dcReplicationPattern = Pattern.compile("^[_A-Za-z][_A-Za-z0-9]+:\\d++$");
+    public static final Setting<List<String>> INDEX_SETTING_REPLICATION_SETTING =
+            Setting.listSetting(SETTING_REPLICATION, Collections.EMPTY_LIST, (s) -> {
+                if (!dcReplicationPattern.matcher(s).matches())
+                    throw new IllegalArgumentException("Expecting a valid keyspace replication expression");
+                return s;
+            }, Property.Final, Property.IndexScope);
+
+    public static final String SETTING_SECONDARY_INDEX_CLASS = INDEX_SETTING_PREFIX+ClusterService.SECONDARY_INDEX_CLASS;
+    public static final Setting<String> INDEX_SECONDARY_INDEX_CLASS_SETTING =
+            Setting.simpleString(SETTING_SECONDARY_INDEX_CLASS, ExtendedElasticSecondaryIndex.class.getName(), Property.Final, Property.IndexScope);
+
+    public static final String SETTING_SEARCH_STRATEGY_CLASS = INDEX_SETTING_PREFIX+ClusterService.SEARCH_STRATEGY_CLASS;
+    public static final Setting<Class<? extends AbstractSearchStrategy>> INDEX_SEARCH_STRATEGY_CLASS_SETTING =
+            Setting.searchStrategy(SETTING_SEARCH_STRATEGY_CLASS, PrimaryFirstSearchStrategy.class.getName(), Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_PARTITION_FUNCTION = INDEX_SETTING_PREFIX+"partition_function";
+    public static final Setting<String> INDEX_PARTITION_FUNCTION_SETTING =
+            Setting.simpleString(SETTING_PARTITION_FUNCTION, StringPartitionFunction.class.getName(), Property.Final, Property.IndexScope);
+
+    public static final String SETTING_PARTITION_FUNCTION_CLASS = INDEX_SETTING_PREFIX+"partition_function_class";
+    public static final Setting<String> INDEX_PARTITION_FUNCTION_CLASS_SETTING =
+            Setting.simpleString(SETTING_PARTITION_FUNCTION_CLASS, MessageFormatPartitionFunction.class.getName(), Property.Final, Property.IndexScope);
+
+    public static final String SETTING_INCLUDE_NODE_ID = INDEX_SETTING_PREFIX+ClusterService.INCLUDE_NODE_ID;
+    public static final Setting<Boolean> INDEX_INCLUDE_NODE_ID_SETTING =
+            Setting.boolSetting(SETTING_INCLUDE_NODE_ID, false, Property.Final, Property.IndexScope);
+
+    public static final String SETTING_INDEX_ON_COMPACTION = INDEX_SETTING_PREFIX+ClusterService.INDEX_ON_COMPACTION;
+    public static final Setting<Boolean> INDEX_INDEX_ON_COMPACTION_SETTING =
+            Setting.boolSetting(SETTING_INDEX_ON_COMPACTION, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_ON_COMPACTION), Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_SYNCHRONOUS_REFRESH = INDEX_SETTING_PREFIX+ClusterService.SYNCHRONOUS_REFRESH;
+    public static final Setting<Boolean> INDEX_SYNCHRONOUS_REFRESH_SETTING =
+            Setting.boolSetting(SETTING_SYNCHRONOUS_REFRESH, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_SYNCHRONOUS_REFRESH), Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_DROP_ON_DELETE_INDEX = INDEX_SETTING_PREFIX+ClusterService.DROP_ON_DELETE_INDEX;
+    public static final Setting<Boolean> INDEX_DROP_ON_DELETE_INDEX_SETTING =
+            Setting.boolSetting(SETTING_DROP_ON_DELETE_INDEX, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_DROP_ON_DELETE_INDEX), Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_SNAPSHOT_WITH_SSTABLE = INDEX_SETTING_PREFIX+ClusterService.SNAPSHOT_WITH_SSTABLE;
+    public static final Setting<Boolean> INDEX_SNAPSHOT_WITH_SSTABLE_SETTING =
+            Setting.boolSetting(SETTING_SNAPSHOT_WITH_SSTABLE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_SNAPSHOT_WITH_SSTABLE), Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_TOKEN_RANGES_BITSET_CACHE = INDEX_SETTING_PREFIX+ClusterService.TOKEN_RANGES_BITSET_CACHE;
+    public static final Setting<Boolean> INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING =
+            Setting.boolSetting(SETTING_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE), Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_VERSION_LESS_ENGINE = INDEX_SETTING_PREFIX+ClusterService.VERSION_LESS_ENGINE;
+    public static final Setting<Boolean> INDEX_VERSION_LESS_ENGINE_SETTING =
+            Setting.boolSetting(SETTING_VERSION_LESS_ENGINE, true, Property.Final, Property.IndexScope);
+
+    public static final String SETTING_INDEX_STATIC_COLUMNS = INDEX_SETTING_PREFIX+ClusterService.INDEX_STATIC_COLUMNS;
+    public static final Setting<Boolean> INDEX_INDEX_STATIC_COLUMNS_SETTING =
+            Setting.boolSetting(SETTING_INDEX_STATIC_COLUMNS, false, Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_INDEX_STATIC_ONLY = INDEX_SETTING_PREFIX+ClusterService.INDEX_STATIC_ONLY;
+    public static final Setting<Boolean> INDEX_INDEX_STATIC_ONLY_SETTING =
+            Setting.boolSetting(SETTING_INDEX_STATIC_ONLY, false, Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_INDEX_STATIC_DOCUMENT = INDEX_SETTING_PREFIX+ClusterService.INDEX_STATIC_DOCUMENT;
+    public static final Setting<Boolean> INDEX_INDEX_STATIC_DOCUMENT_SETTING =
+            Setting.boolSetting(SETTING_INDEX_STATIC_DOCUMENT, false, Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_INDEX_APPEND_ONLY = INDEX_SETTING_PREFIX+ClusterService.INDEX_INSERT_ONLY;
+    public static final Setting<Boolean> INDEX_INDEX_INSERT_ONLY_SETTING =
+            Setting.boolSetting(SETTING_INDEX_APPEND_ONLY, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_INSERT_ONLY), Property.Dynamic, Property.IndexScope);
+
+    public static final String SETTING_INDEX_OPAQUE_STORAGE = INDEX_SETTING_PREFIX+ClusterService.INDEX_OPAQUE_STORAGE;
+    public static final Setting<Boolean> INDEX_INDEX_OPAQUE_STORAGE_SETTING =
+            Setting.boolSetting(SETTING_INDEX_OPAQUE_STORAGE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_INDEX_OPAQUE_STORAGE), Property.Final, Property.IndexScope);
+
+    // hard-coded hash function as of 2.0
+    // older indices will read which hash function to use in their index settings
+    //private static final HashFunction MURMUR3_HASH_FUNCTION = new Murmur3HashFunction();
+
     private final Index index;
     private final long version;
 
@@ -322,6 +422,22 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
                           int routingNumShards, int routingPartitionSize, ActiveShardCount waitForActiveShards,
                           ImmutableOpenMap<String, RolloverInfo> rolloverInfos) {
 
+        Integer maybeNumberOfShards = settings.getAsInt(SETTING_NUMBER_OF_SHARDS, 1);
+        if (maybeNumberOfShards == null) {
+            throw new IllegalArgumentException("must specify numberOfShards for index [" + index + "]");
+        }
+        if (numberOfShards <= 0) {
+            throw new IllegalArgumentException("must specify positive number of shards for index [" + index + "]");
+        }
+
+        Integer maybeNumberOfReplicas = settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0);
+        if (maybeNumberOfReplicas == null) {
+            throw new IllegalArgumentException("must specify numberOfReplicas for index [" + index + "]");
+        }
+        if (numberOfReplicas < 0) {
+            throw new IllegalArgumentException("must specify non-negative number of shards for index [" + index + "]");
+        }
+
         this.index = index;
         this.version = version;
         assert mappingVersion >= 0 : mappingVersion;
@@ -355,6 +471,10 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
 
     public Index getIndex() {
         return index;
+    }
+
+    public String uuid() {
+        return getIndexUUID();
     }
 
     public String getIndexUUID() {
@@ -1303,24 +1423,44 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             builder.field(KEY_VERSION, indexMetaData.getVersion());
             builder.field(KEY_MAPPING_VERSION, indexMetaData.getMappingVersion());
             builder.field(KEY_SETTINGS_VERSION, indexMetaData.getSettingsVersion());
-            builder.field(KEY_ROUTING_NUM_SHARDS, indexMetaData.getRoutingNumShards());
+            if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false) && !params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
+                builder.field(KEY_ROUTING_NUM_SHARDS, indexMetaData.getRoutingNumShards());
+            }
             builder.field(KEY_STATE, indexMetaData.getState().toString().toLowerCase(Locale.ENGLISH));
 
             boolean binary = params.paramAsBoolean("binary", false);
 
             builder.startObject(KEY_SETTINGS);
-            indexMetaData.getSettings().toXContent(builder, new MapParams(Collections.singletonMap("flat_settings", "true")));
-            builder.endObject();
-
-            builder.startArray(KEY_MAPPINGS);
-            for (ObjectObjectCursor<String, MappingMetaData> cursor : indexMetaData.getMappings()) {
-                if (binary) {
-                    builder.value(cursor.value.source().compressed());
-                } else {
-                    builder.map(XContentHelper.convertToMap(new BytesArray(cursor.value.source().uncompressed()), true).v2());
+            //indexMetaData.getSettings().toXContent(builder, new MapParams(Collections.singletonMap("flat_settings", "true")));
+            for (String key : indexMetaData.getSettings().keySet()) {
+                switch (key) {
+                    case SETTING_NUMBER_OF_SHARDS:
+                        if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false) && !params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
+                            builder.field(SETTING_NUMBER_OF_SHARDS, indexMetaData.getNumberOfShards());
+                        }
+                        break;
+                    case SETTING_NUMBER_OF_REPLICAS:
+                        if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false) && !params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
+                            builder.field(SETTING_NUMBER_OF_REPLICAS, indexMetaData.getNumberOfReplicas());
+                        }
+                        break;
+                    default:
+                        builder.field(key, indexMetaData.getSettings().getAsObject(key));
                 }
             }
-            builder.endArray();
+            builder.endObject();
+
+            if (!params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false) && (indexMetaData.isVirtual() || indexMetaData.virtualIndex() == null)) {
+                builder.startArray(KEY_MAPPINGS);
+                for (ObjectObjectCursor<String, MappingMetaData> cursor : indexMetaData.getMappings()) {
+                    if (binary) {
+                        builder.value(cursor.value.source().compressed());
+                    } else {
+                        builder.map(XContentHelper.convertToMap(new BytesArray(cursor.value.source().uncompressed()), true).v2());
+                    }
+                }
+                builder.endArray();
+            }
 
             for (ObjectObjectCursor<String, DiffableStringMap> cursor : indexMetaData.customData) {
                 builder.field(cursor.key);
@@ -1333,27 +1473,29 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             }
             builder.endObject();
 
-            builder.startArray(KEY_PRIMARY_TERMS);
-            for (int i = 0; i < indexMetaData.getNumberOfShards(); i++) {
-                builder.value(indexMetaData.primaryTerm(i));
-            }
-            builder.endArray();
-
-            builder.startObject(KEY_IN_SYNC_ALLOCATIONS);
-            for (IntObjectCursor<Set<String>> cursor : indexMetaData.inSyncAllocationIds) {
-                builder.startArray(String.valueOf(cursor.key));
-                for (String allocationId : cursor.value) {
-                    builder.value(allocationId);
+            if (!params.paramAsBoolean(MetaData.CONTEXT_CASSANDRA_PARAM, false) && !params.paramAsBoolean(MetaData.CONTEXT_CQL_PARAM, false)) {
+                builder.startArray(KEY_PRIMARY_TERMS);
+                for (int i = 0; i < indexMetaData.getNumberOfShards(); i++) {
+                    builder.value(indexMetaData.primaryTerm(i));
                 }
                 builder.endArray();
-            }
-            builder.endObject();
 
-            builder.startObject(KEY_ROLLOVER_INFOS);
-            for (ObjectCursor<RolloverInfo> cursor : indexMetaData.getRolloverInfos().values()) {
-                cursor.value.toXContent(builder, params);
+                builder.startObject(KEY_IN_SYNC_ALLOCATIONS);
+                for (IntObjectCursor<Set<String>> cursor : indexMetaData.inSyncAllocationIds) {
+                    builder.startArray(String.valueOf(cursor.key));
+                    for (String allocationId : cursor.value) {
+                        builder.value(allocationId);
+                    }
+                    builder.endArray();
+                }
+                builder.endObject();
+
+                builder.startObject(KEY_ROLLOVER_INFOS);
+                for (ObjectCursor<RolloverInfo> cursor : indexMetaData.getRolloverInfos().values()) {
+                    cursor.value.toXContent(builder, params);
+                }
+                builder.endObject();
             }
-            builder.endObject();
 
             builder.endObject();
         }

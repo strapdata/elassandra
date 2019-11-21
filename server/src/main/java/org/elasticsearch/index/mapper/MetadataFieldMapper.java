@@ -66,8 +66,24 @@ public abstract class MetadataFieldMapper extends FieldMapper {
     /**
      * Called after {@link FieldMapper#parse(ParseContext)} on the {@link RootObjectMapper}.
      */
-    public void postParse(ParseContext context) throws IOException {
-        // do nothing
+    public abstract void postParse(ParseContext context) throws IOException;
+
+
+    /**
+     * Called before {@link FieldMapper#createField(ParseContext, Object)} on the {@link RootObjectMapper}.
+     */
+    public void preCreate(ParseContext context) throws IOException {
+    }
+
+    /**
+     * Called after {@link FieldMapper#parse(ParseContext)} on the {@link RootObjectMapper}.
+     */
+    public void postCreate(ParseContext context) throws IOException {
+    }
+
+    @Override
+    public CQL3Type CQL3Type() {
+        throw new UnsupportedOperationException();
     }
 
     @Override

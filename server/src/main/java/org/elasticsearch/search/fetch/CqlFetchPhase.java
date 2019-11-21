@@ -2,6 +2,8 @@ package org.elasticsearch.search.fetch;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.cassandra.cql3.QueryProcessor;
@@ -31,17 +33,15 @@ public class CqlFetchPhase extends FetchPhase {
 
     public static final String PROJECTION = "_projection";
 
-    public CqlFetchPhase(List<FetchSubPhase> fetchSubPhases) {
-        super(fetchSubPhases);
-    }
 
     public CqlFetchPhase(List<FetchSubPhase> fetchSubPhases, ClusterService clusterService) {
         super(fetchSubPhases, clusterService);
     }
 
+
     @Override
-    protected SearchHit createSearchHit(SearchContext context, FieldsVisitor fieldsVisitor, int docId, int subDocId, LeafReaderContext subReaderContext) {
-        SearchHit searchHit = super.createSearchHit(context, fieldsVisitor, docId, subDocId, subReaderContext);
+    protected SearchHit createSearchHit(SearchContext context, FieldsVisitor fieldsVisitor, int docId, int subDocId, Map<String, Set<String>> storedToRequestedFields, LeafReaderContext subReaderContext) {
+        SearchHit searchHit = super.createSearchHit(context, fieldsVisitor, docId, subDocId, storedToRequestedFields, subReaderContext);
         if (fieldsVisitor.getValues() != null) {
             searchHit.setValues(fieldsVisitor.getValues());
             searchHit.version(Long.MIN_VALUE);   // flag indicating that searchHit has ByteBuffer value when reading from InputStream

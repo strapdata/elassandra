@@ -79,20 +79,10 @@ public final class EngineConfig {
     private final Sort indexSort;
     @Nullable
     private final CircuitBreakerService circuitBreakerService;
-    private final LongSupplier globalCheckpointSupplier;
-    private final Supplier<RetentionLeases> retentionLeasesSupplier;
+    //private final LongSupplier globalCheckpointSupplier;
+    //private final Supplier<RetentionLeases> retentionLeasesSupplier;
 
-    /**
-     * A supplier of the outstanding retention leases. This is used during merged operations to determine which operations that have been
-     * soft deleted should be retained.
-     *
-     * @return a supplier of outstanding retention leases
-     */
-    public Supplier<RetentionLeases> retentionLeasesSupplier() {
-        return retentionLeasesSupplier;
-    }
-
-    private final LongSupplier primaryTermSupplier;
+    //private final LongSupplier primaryTermSupplier;
     private final TombstoneDocSupplier tombstoneDocSupplier;
 
     /**
@@ -139,9 +129,7 @@ public final class EngineConfig {
                         TranslogConfig translogConfig, TimeValue flushMergesAfter,
                         List<ReferenceManager.RefreshListener> externalRefreshListener,
                         List<ReferenceManager.RefreshListener> internalRefreshListener, Sort indexSort,
-                        CircuitBreakerService circuitBreakerService, LongSupplier globalCheckpointSupplier,
-                        Supplier<RetentionLeases> retentionLeasesSupplier,
-                        LongSupplier primaryTermSupplier,
+                        CircuitBreakerService circuitBreakerService,
                         TombstoneDocSupplier tombstoneDocSupplier) {
         this.shardId = shardId;
         this.allocationId = allocationId;
@@ -177,9 +165,7 @@ public final class EngineConfig {
         this.internalRefreshListener = internalRefreshListener;
         this.indexSort = indexSort;
         this.circuitBreakerService = circuitBreakerService;
-        this.globalCheckpointSupplier = globalCheckpointSupplier;
-        this.retentionLeasesSupplier = Objects.requireNonNull(retentionLeasesSupplier);
-        this.primaryTermSupplier = primaryTermSupplier;
+
         this.tombstoneDocSupplier = tombstoneDocSupplier;
     }
 
@@ -251,13 +237,6 @@ public final class EngineConfig {
      */
     public Store getStore() {
         return store;
-    }
-
-    /**
-     * Returns the global checkpoint tracker
-     */
-    public LongSupplier getGlobalCheckpointSupplier() {
-        return globalCheckpointSupplier;
     }
 
     /**
@@ -370,13 +349,6 @@ public final class EngineConfig {
     @Nullable
     public CircuitBreakerService getCircuitBreakerService() {
         return this.circuitBreakerService;
-    }
-
-    /**
-     * Returns a supplier that supplies the latest primary term value of the associated shard.
-     */
-    public LongSupplier getPrimaryTermSupplier() {
-        return primaryTermSupplier;
     }
 
     /**

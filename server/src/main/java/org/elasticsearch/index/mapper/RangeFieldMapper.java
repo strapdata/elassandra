@@ -53,6 +53,7 @@ import org.elasticsearch.Version;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.geo.ShapeRelation;
 import org.elasticsearch.common.network.InetAddresses;
@@ -62,24 +63,19 @@ import org.elasticsearch.common.time.DateFormatter;
 import org.elasticsearch.common.time.DateMathParser;
 import org.elasticsearch.common.time.DateUtils;
 import org.elasticsearch.common.util.LocaleUtils;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.common.xcontent.*;
+import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.index.mapper.NumberFieldMapper.NumberType;
 import org.elasticsearch.index.query.QueryShardContext;
+import org.elasticsearch.index.query.RangeQueryBuilder;
 import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.elasticsearch.index.mapper.TypeParsers.parseDateTimeFormatter;
 import static org.elasticsearch.index.query.RangeQueryBuilder.GTE_FIELD;
@@ -424,7 +420,10 @@ public class RangeFieldMapper extends FieldMapper {
             if (mapValue.containsKey(LTE_FIELD.getPreferredName()))
                 builder.field(LTE_FIELD.getPreferredName(), mapValue.get(LTE_FIELD.getPreferredName()));
             builder.endObject();
-            XContentParser parser = JsonXContent.jsonXContent.createParser(ElassandraDaemon.instance.node().getNamedXContentRegistry(), builder.string());
+            XContentParser parser = JsonXContent.jsonXContent.createParser(
+                ElassandraDaemon.instance.node().getNamedXContentRegistry(),
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                BytesReference.bytes(builder).utf8ToString());
 
 
             final XContentParser.Token start = parser.nextToken();
@@ -823,6 +822,7 @@ public class RangeFieldMapper extends FieldMapper {
             public Date cqlValue(Object value) {
                 return new Date((long)value);
             }
+
             @Override
             public Long esValue(Object value) {
                 return ((Date)value).getTime();

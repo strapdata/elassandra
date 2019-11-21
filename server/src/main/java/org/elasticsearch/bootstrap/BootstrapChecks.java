@@ -52,7 +52,7 @@ import java.util.regex.Pattern;
  * es.enforce.bootstrap.checks} is set to {@true}. In this case we assume the node is running in production and all bootstrap checks must
  * pass.
  */
-final class BootstrapChecks {
+public final class BootstrapChecks {
 
     private BootstrapChecks() {
     }
@@ -67,8 +67,8 @@ final class BootstrapChecks {
      * @param context              the current node bootstrap context
      * @param boundTransportAddress the node network bindings
      */
-    static void check(final BootstrapContext context, final BoundTransportAddress boundTransportAddress,
-                      List<BootstrapCheck> additionalChecks) throws NodeValidationException {
+    public static void check(final BootstrapContext context, final BoundTransportAddress boundTransportAddress,
+                             List<BootstrapCheck> additionalChecks) throws NodeValidationException {
         final List<BootstrapCheck> builtInChecks = checks();
         final List<BootstrapCheck> combinedChecks = new ArrayList<>(builtInChecks);
         combinedChecks.addAll(additionalChecks);

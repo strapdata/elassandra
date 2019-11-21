@@ -20,6 +20,7 @@
 package org.elasticsearch.plugins;
 
 import org.apache.lucene.search.Query;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.io.stream.NamedWriteable;

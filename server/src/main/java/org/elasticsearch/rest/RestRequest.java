@@ -42,12 +42,7 @@ import org.elasticsearch.common.xcontent.XContentType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -476,6 +471,22 @@ public abstract class RestRequest implements ToXContent.Params {
             }
         }
         throw new IllegalArgumentException("empty Content-Type header");
+    }
+
+    public Collection<Range<Token>> paramsAsTokenRanges(String key) {
+        String value = param(key);
+        if (value != null) {
+            Collection<Range<Token>> tokenRanges = new ArrayList<Range<Token>>();
+            Token.TokenFactory tokenFactory = DatabaseDescriptor.getPartitioner().getTokenFactory();
+            StringTokenizer stk = new StringTokenizer(value, "{[(,)]}");
+            while (stk.hasMoreTokens()) {
+                Token leftToken = tokenFactory.fromString(stk.nextToken());
+                Token rightToken = tokenFactory.fromString(stk.nextToken());
+                tokenRanges.add(new Range(leftToken, rightToken));
+            }
+            return tokenRanges;
+        }
+        return null;
     }
 
     public static class ContentTypeHeaderException extends RuntimeException {

@@ -49,8 +49,11 @@ public abstract class ClusterStateUpdateTask
     @Override
     public final ClusterTasksResult<ClusterStateUpdateTask> execute(ClusterState currentState, List<ClusterStateUpdateTask> tasks)
             throws Exception {
-        ClusterState result = execute(currentState);
-        return ClusterTasksResult.<ClusterStateUpdateTask>builder().successes(tasks).build(result);
+        Collection<Mutation> mutations = new LinkedList<>();
+        Collection<Event.SchemaChange> events = new LinkedList<>();
+        ClusterState result = execute(currentState, mutations, events);
+        return ClusterTasksResult.<ClusterStateUpdateTask>builder().successes(tasks)
+            .build(result, tasks.stream().map(t->t.schemaUpdate()).max(Comparator.comparing(Enum::ordinal)).get(), mutations, events);
     }
 
     @Override

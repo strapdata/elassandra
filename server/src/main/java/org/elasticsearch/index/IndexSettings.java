@@ -357,6 +357,11 @@ public final class IndexSettings {
 
     private volatile long retentionLeaseMillis;
 
+    private final String keyspace;
+    private final String table;
+    private final String tableOptions;
+    private volatile boolean tokenRangesBitsetCache;
+
     /**
      * The maximum age of a retention lease before it is considered expired.
      *
@@ -477,6 +482,11 @@ public final class IndexSettings {
         this.queryStringAllowLeadingWildcard = QUERY_STRING_ALLOW_LEADING_WILDCARD.get(nodeSettings);
         this.defaultAllowUnmappedFields = scopedSettings.get(ALLOW_UNMAPPED);
         this.durability = scopedSettings.get(INDEX_TRANSLOG_DURABILITY_SETTING);
+
+        this.keyspace = indexMetaData.keyspace();
+        this.table = indexMetaData.table();
+        this.tableOptions = indexMetaData.tableOptions();
+
         defaultFields = scopedSettings.get(DEFAULT_FIELD_SETTING);
         syncInterval = INDEX_TRANSLOG_SYNC_INTERVAL_SETTING.get(settings);
         refreshInterval = scopedSettings.get(INDEX_REFRESH_INTERVAL_SETTING);
@@ -559,6 +569,8 @@ public final class IndexSettings {
         scopedSettings.addSettingsUpdateConsumer(INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING, this::setSoftDeleteRetentionOperations);
         scopedSettings.addSettingsUpdateConsumer(INDEX_SEARCH_THROTTLED, this::setSearchThrottled);
         scopedSettings.addSettingsUpdateConsumer(INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING, this::setRetentionLeaseMillis);
+
+        scopedSettings.addSettingsUpdateConsumer(IndexMetaData.INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING, this::setTokenRangesBitsetCache);
     }
 
     private void setTranslogFlushThresholdSize(ByteSizeValue byteSizeValue) {

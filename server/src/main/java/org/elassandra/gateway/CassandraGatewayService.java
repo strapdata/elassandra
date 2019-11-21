@@ -15,6 +15,8 @@
  */
 package org.elassandra.gateway;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.block.ClusterBlock;
@@ -39,6 +41,7 @@ import java.util.EnumSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CassandraGatewayService extends GatewayService {
+    final Logger logger = LogManager.getLogger(getClass());
 
     public static final ClusterBlock NO_CASSANDRA_RING_BLOCK = new ClusterBlock(12, "no cassandra ring", true, true, true, RestStatus.SERVICE_UNAVAILABLE, EnumSet.of(ClusterBlockLevel.READ));
 

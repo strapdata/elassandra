@@ -401,4 +401,9 @@ public class GeoPointFieldMapper extends FieldMapper implements ArrayValueMapper
     private boolean isNormalizable(double coord) {
         return Double.isNaN(coord) == false && Double.isInfinite(coord) == false;
     }
+
+    @Override
+    public CQL3Type CQL3Type() {
+        throw new UnsupportedOperationException();
+    }
 }

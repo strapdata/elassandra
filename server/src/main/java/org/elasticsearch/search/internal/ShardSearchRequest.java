@@ -19,6 +19,8 @@
 
 package org.elasticsearch.search.internal;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.cluster.metadata.AliasMetaData;
@@ -151,6 +153,21 @@ public interface ShardSearchRequest {
             }
             return combined;
         }
+    }
+
+    default Boolean tokenRangesBitsetCache() {
+        return false;
+    }
+
+    /**
+     * Returns the token range for this request
+     */
+    default Collection<Range<Token>> tokenRanges() {
+        return null;
+    }
+
+    default Map<String,Object> extraParams() {
+        return null;
     }
 
     /**

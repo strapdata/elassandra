@@ -68,7 +68,7 @@ import java.util.stream.Stream;
  * have received all old operations via the recovery mechanism and are kept up to date by the various replications actions. The set of
  * shards that are taken into account for the global checkpoint calculation are called the "in-sync shards".
  * <p>
- * The global checkpoint is maintained by the primary shard and is replicated to all the replicas (via {@link GlobalCheckpointSyncAction}).
+ * The global checkpoint is maintained by the primary shard and is replicated to all the replicas.
  */
 public class ReplicationTracker extends AbstractIndexShardComponent implements LongSupplier {
 

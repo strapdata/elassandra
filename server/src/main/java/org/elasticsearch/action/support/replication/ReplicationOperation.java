@@ -127,7 +127,7 @@ public class ReplicationOperation<
             markUnavailableShardsAsStale(replicaRequest, replicationGroup);
             performOnReplicas(replicaRequest, globalCheckpoint, maxSeqNoOfUpdatesOrDeletes, replicationGroup);
         }
-
+        */
         successfulShards.incrementAndGet();  // mark primary as successful
         decPendingAndFinishIfNeeded();
     }

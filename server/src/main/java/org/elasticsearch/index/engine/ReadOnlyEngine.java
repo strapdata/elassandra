@@ -109,7 +109,7 @@ public class ReadOnlyEngine extends Engine {
                     // In addition to that we only execute the check if the index the engine belongs to has been
                     // created after the refactoring of the Close Index API and its TransportVerifyShardBeforeCloseAction
                     // that guarantee that all operations have been flushed to Lucene.
-                    final long globalCheckpoint = engineConfig.getGlobalCheckpointSupplier().getAsLong();
+                    final long globalCheckpoint = SequenceNumbers.UNASSIGNED_SEQ_NO;
                     if (globalCheckpoint != SequenceNumbers.UNASSIGNED_SEQ_NO
                         && engineConfig.getIndexSettings().getIndexVersionCreated().onOrAfter(Version.V_6_7_0)) {
                         if (seqNoStats.getMaxSeqNo() != globalCheckpoint) {

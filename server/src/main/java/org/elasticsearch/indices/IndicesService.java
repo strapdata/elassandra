@@ -41,6 +41,7 @@ import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.routing.RecoverySource;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.breaker.CircuitBreaker;
@@ -95,7 +96,6 @@ import org.elasticsearch.index.recovery.RecoveryStats;
 import org.elasticsearch.index.refresh.RefreshStats;
 import org.elasticsearch.index.search.stats.SearchStats;
 import org.elasticsearch.index.seqno.RetentionLeaseStats;
-import org.elasticsearch.index.seqno.RetentionLeaseSyncer;
 import org.elasticsearch.index.seqno.SeqNoStats;
 import org.elasticsearch.index.shard.IllegalIndexShardStateException;
 import org.elasticsearch.index.shard.IndexEventListener;
@@ -112,7 +112,6 @@ import org.elasticsearch.indices.mapper.MapperRegistry;
 import org.elasticsearch.indices.recovery.PeerRecoveryTargetService;
 import org.elasticsearch.indices.recovery.RecoveryState;
 import org.elasticsearch.plugins.PluginsService;
-import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.internal.AliasFilter;
 import org.elasticsearch.search.internal.SearchContext;
@@ -219,7 +218,7 @@ public class IndicesService extends AbstractLifecycleComponent
                           AnalysisRegistry analysisRegistry, IndexNameExpressionResolver indexNameExpressionResolver,
                           MapperRegistry mapperRegistry, NamedWriteableRegistry namedWriteableRegistry, ThreadPool threadPool,
                           IndexScopedSettings indexScopedSettings, CircuitBreakerService circuitBreakerService, BigArrays bigArrays,
-                          ScriptService scriptService, Client client, MetaStateService metaStateService,
+                          ScriptService scriptService, ClusterService clusterService, Client client, MetaStateService metaStateService,
                           Collection<Function<IndexSettings, Optional<EngineFactory>>> engineFactoryProviders,
                           Map<String, Function<IndexSettings, IndexStore>> indexStoreFactories) {
         this.settings = settings;
@@ -384,11 +383,11 @@ public class IndicesService extends AbstractLifecycleComponent
 
         CommitStats commitStats;
         SeqNoStats seqNoStats;
-        RetentionLeaseStats retentionLeaseStats;
+        RetentionLeaseStats retentionLeaseStats = null;
         try {
             commitStats = indexShard.commitStats();
             seqNoStats = indexShard.seqNoStats();
-            retentionLeaseStats = indexShard.getRetentionLeaseStats();
+            //retentionLeaseStats = indexShard.getRetentionLeaseStats();
         } catch (AlreadyClosedException e) {
             // shard is closed - no stats is fine
             commitStats = null;
@@ -614,18 +613,13 @@ public class IndicesService extends AbstractLifecycleComponent
     public IndexShard createShard(
             final ShardRouting shardRouting,
             final RecoveryState recoveryState,
-            final PeerRecoveryTargetService recoveryTargetService,
             final PeerRecoveryTargetService.RecoveryListener recoveryListener,
-            final RepositoriesService repositoriesService,
-            final Consumer<IndexShard.ShardFailure> onShardFailure,
-            final Consumer<ShardId> globalCheckpointSyncer,
-            final RetentionLeaseSyncer retentionLeaseSyncer) throws IOException {
-        Objects.requireNonNull(retentionLeaseSyncer);
+            final Consumer<IndexShard.ShardFailure> onShardFailure) throws IOException {
         ensureChangesAllowed();
         IndexService indexService = indexService(shardRouting.index());
-        IndexShard indexShard = indexService.createShard(shardRouting, globalCheckpointSyncer, retentionLeaseSyncer);
+        IndexShard indexShard = indexService.createShard(shardRouting);
         indexShard.addShardFailureCallback(onShardFailure);
-        indexShard.startRecovery(recoveryState, recoveryTargetService, recoveryListener, repositoriesService,
+        indexShard.startRecovery(recoveryState, recoveryListener,
             (type, mapping) -> {
                 assert recoveryState.getRecoverySource().getType() == RecoverySource.Type.LOCAL_SHARDS:
                     "mapping update consumer only required by local shards recovery";

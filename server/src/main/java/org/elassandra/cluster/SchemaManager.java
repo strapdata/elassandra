@@ -20,7 +20,6 @@
 package org.elassandra.cluster;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.google.common.collect.ImmutableMap;
 
 import org.antlr.runtime.RecognitionException;
 import org.apache.cassandra.config.CFMetaData;
@@ -72,6 +71,7 @@ import org.apache.cassandra.thrift.ThriftValidation;
 import org.apache.cassandra.transport.Event;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
+import org.apache.logging.log4j.LogManager;
 import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -81,19 +81,10 @@ import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.index.Index;
-import org.elasticsearch.index.mapper.CompletionFieldMapper;
-import org.elasticsearch.index.mapper.DocumentMapper;
-import org.elasticsearch.index.mapper.FieldMapper;
-import org.elasticsearch.index.mapper.GeoPointFieldMapper;
-import org.elasticsearch.index.mapper.GeoShapeFieldMapper;
-import org.elasticsearch.index.mapper.Mapper;
-import org.elasticsearch.index.mapper.Mapper.CqlCollection;
-import org.elasticsearch.index.mapper.Mapper.CqlStruct;
-import org.elasticsearch.index.mapper.MapperParsingException;
-import org.elasticsearch.index.mapper.MapperService;
-import org.elasticsearch.index.mapper.ObjectMapper;
-import org.elasticsearch.index.mapper.RangeFieldMapper;
-import org.elasticsearch.index.mapper.SourceFieldMapper;
+import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.CqlMapper.CqlCollection;
+import org.elasticsearch.index.mapper.CqlMapper.CqlStruct;
+import com.google.common.collect.ImmutableMap;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -113,8 +104,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+import org.apache.logging.log4j.Logger;
 
-public class SchemaManager extends AbstractComponent {
+public class SchemaManager {
+    final Logger logger = LogManager.getLogger(getClass());
     final ClusterService clusterService;
     final SchemaListener schemaListener;
 
@@ -130,10 +123,9 @@ public class SchemaManager extends AbstractComponent {
     public static final String COMPLETION_TYPE = "completion";
     public static final ColumnIdentifier COMPLETION_NAME = new ColumnIdentifier(COMPLETION_TYPE, true);
 
-    static final Map<String, CQL3Type.Raw> GEO_POINT_FIELDS = new ImmutableMap.Builder<String, CQL3Type.Raw>()
-            .put(org.elasticsearch.common.geo.GeoUtils.LATITUDE, CQL3Type.Raw.from(CQL3Type.Native.DOUBLE))
-            .put(org.elasticsearch.common.geo.GeoUtils.LONGITUDE, CQL3Type.Raw.from(CQL3Type.Native.DOUBLE))
-            .build();
+    static final Map<String, CQL3Type.Raw> GEO_POINT_FIELDS = ImmutableMap.of(
+            org.elasticsearch.common.geo.GeoUtils.LATITUDE, CQL3Type.Raw.from(CQL3Type.Native.DOUBLE),
+            org.elasticsearch.common.geo.GeoUtils.LONGITUDE, CQL3Type.Raw.from(CQL3Type.Native.DOUBLE));
 
     static final Map<String, CQL3Type.Raw> COMPLETION_FIELDS = new ImmutableMap.Builder<String, CQL3Type.Raw>()
             .put("input",  CQL3Type.Raw.list(CQL3Type.Raw.from(CQL3Type.Native.TEXT)))
@@ -177,7 +169,6 @@ public class SchemaManager extends AbstractComponent {
             .build();
 
     public SchemaManager(Settings settings, ClusterService clusterService) {
-        super(settings);
         this.clusterService = clusterService;
         this.schemaListener = new SchemaListener(settings, clusterService);
         this.inhibitedSchemaListeners = Collections.singletonList(this.schemaListener);
@@ -256,7 +247,7 @@ public class SchemaManager extends AbstractComponent {
         }
         return metadata;
     }
-    
+
     public static KeyspaceMetadata getKSMetaDataCopy(final String ksName) {
         KeyspaceMetadata metadata = Schema.instance.getKSMetaDataSafe(ksName);
         return metadata.copy();
@@ -375,7 +366,7 @@ public class SchemaManager extends AbstractComponent {
         return ksm;
     }
 
-    private KeyspaceMetadata createTable(final KeyspaceMetadata ksm, String cfName, 
+    private KeyspaceMetadata createTable(final KeyspaceMetadata ksm, String cfName,
             Map<String, ColumnDescriptor> columnsMap,
             String tableOptions,
             final Collection<IndexMetaData> siblings, // include the indexMetaData and all other indices having a mapping to the same table.
@@ -417,17 +408,17 @@ public class SchemaManager extends AbstractComponent {
         ParsedStatement.Prepared stmt = cts.prepare(ksm.types);
         CFMetaData cfm = ((CreateTableStatement)stmt.statement).getCFMetaData();
         updateTableExtensions(ksm, cfm, siblings);
-        
+
         Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
         SchemaKeyspace.addTableToSchemaMutation(cfm, true, builder);
         mutations.add(builder.build());
-        
+
         events.add(new Event.SchemaChange(Event.SchemaChange.Change.CREATED, Event.SchemaChange.Target.TABLE, cts.keyspace(), cts.columnFamily()));
         return ksm.withSwapped(ksm.tables.with(cfm));
     }
 
     // add only new columns and update table extension with mapping metadata
-    private KeyspaceMetadata updateTable(final KeyspaceMetadata ksm, String cfName, 
+    private KeyspaceMetadata updateTable(final KeyspaceMetadata ksm, String cfName,
             Map<String, ColumnDescriptor> columnsMap,
             TableAttributes tableAttrs,
             final Collection<IndexMetaData> siblings,
@@ -480,7 +471,7 @@ public class SchemaManager extends AbstractComponent {
         return cfm2;
     }
 
-    private Pair<KeyspaceMetadata, CQL3Type.Raw> createOrUpdateRawType(final KeyspaceMetadata ksm, final String cfName, final String name, final Mapper mapper,
+    private Pair<KeyspaceMetadata, CQL3Type.Raw> createOrUpdateRawType(final KeyspaceMetadata ksm, final String cfName, final String name, final CqlMapper mapper,
             final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) {
         KeyspaceMetadata ksm2 = ksm;
@@ -498,7 +489,7 @@ public class SchemaManager extends AbstractComponent {
                 // Use only the last part of the fullname to build UDT.
                 int lastDotIndex = m.name().lastIndexOf('.');
                 String fieldName = (lastDotIndex > 0) ? m.name().substring(lastDotIndex+1) :  m.name();
-                Pair<KeyspaceMetadata, CQL3Type.Raw> x = createOrUpdateRawType(ksm2, cfName, fieldName, m, mutations, events);
+                Pair<KeyspaceMetadata, CQL3Type.Raw> x = createOrUpdateRawType(ksm2, cfName, fieldName, (CqlMapper) m, mutations, events);
                 ksm2 = x.left;
                 fields.put(fieldName, x.right);
             }
@@ -571,40 +562,37 @@ public class SchemaManager extends AbstractComponent {
 
     /**
      * Update table extensions when index settings change. This allow to get index settings+mappings in the CQL backup of the table.
-     * @param indexMetaData
-     * @param mutations
-     * @param events
      */
     public CFMetaData updateTableExtensions(final KeyspaceMetadata ksm, final CFMetaData cfm, final Collection<IndexMetaData> siblings) {
         Map<String, ByteBuffer> extensions = new LinkedHashMap<String, ByteBuffer>();
         if (cfm.params != null && cfm.params.extensions != null)
             extensions.putAll(cfm.params.extensions);
-        
+
         for(IndexMetaData imd : siblings) {
             assert ksm.name.equals(imd.keyspace()) : "Keyspace metadata="+ksm.name+" does not match indexMetadata.keyspace="+imd.keyspace();
             clusterService.putIndexMetaDataExtension(imd, extensions);
         }
-        
+
         cfm.extensions(extensions);
         return cfm;
     }
-    
+
     /**
      * Populate the columnsMap of a table for the provided indeMetaData/mapperService
      */
     private KeyspaceMetadata buildColumns(final KeyspaceMetadata ksm2,
-            final CFMetaData cfm, 
-            final String type, 
-            final IndexMetaData indexMetaData, 
-            final MapperService mapperService, 
+            final CFMetaData cfm,
+            final String type,
+            final IndexMetaData indexMetaData,
+            final MapperService mapperService,
             Map<String, ColumnDescriptor> columnsMap,
-            final Collection<Mutation> mutations, 
+            final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) {
-        
+
         KeyspaceMetadata ksm = ksm2;
         String cfName = typeToCfName(ksm.name, type);
         boolean newTable = (cfm == null);
-        
+
         DocumentMapper docMapper = mapperService.documentMapper(type);
         MappingMetaData mappingMd = indexMetaData.getMappings().get(type);
         Map<String, Object> mappingMap = mappingMd.sourceAsMap();
@@ -630,7 +618,7 @@ public class SchemaManager extends AbstractComponent {
             ColumnDescriptor colDesc = new ColumnDescriptor(column);
             FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
             ColumnDefinition cdef = (newTable) ? null : cfm.getColumnDefinition(new ColumnIdentifier(column, true));
-            
+
             if (fieldMapper != null) {
                 if (fieldMapper.cqlCollection().equals(CqlCollection.NONE))
                     continue; // ignore field.
@@ -743,45 +731,39 @@ public class SchemaManager extends AbstractComponent {
             }
             columnsMap.putIfAbsent(colDesc.name, colDesc);
         }
-        
+
         // add _parent column if necessary. Parent and child documents should have the same partition key.
         if (docMapper.parentFieldMapper().active() && docMapper.parentFieldMapper().pkColumns() == null)
             columnsMap.putIfAbsent("_parent", new ColumnDescriptor("_parent", CQL3Type.Raw.from(CQL3Type.Native.TEXT)));
-        
+
         logger.debug("columnsMap={}", columnsMap);
         return ksm;
     }
-    
+
     /**
      * Create table for all IndexMetaData having a mapping.
      * WARNING: schema mutations are applied in a random order and table extensions is replace by the last one.
-     * @param ksm2
-     * @param type
-     * @param indiceMap
-     * @param mutations
-     * @param events
-     * @return Modified ksm
      */
-    public KeyspaceMetadata updateTableSchema(final KeyspaceMetadata ksm2, 
+    public KeyspaceMetadata updateTableSchema(final KeyspaceMetadata ksm2,
             final String type,
             final Map<Index, Pair<IndexMetaData, MapperService>> indiceMap,
-            final Collection<Mutation> mutations, 
+            final Collection<Mutation> mutations,
             final Collection<Event.SchemaChange> events) {
         String query = null;
         String ksName = null;
         String cfName = null;
         Map<String, Object> mappingMap = null;
-        
+
         try {
             KeyspaceMetadata ksm = ksm2;
             ksName = ksm2.name;
             cfName = typeToCfName(ksName, type);
-            
+
             final CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
             boolean newTable = (cfm == null);
 
             MapperService mapperService = null; // set with one of the IndexMetaData !
-            
+
             Map<String, ColumnDescriptor> columnsMap = new HashMap<>();
             for(Pair<IndexMetaData, MapperService> pair : indiceMap.values()) {
                 IndexMetaData indexMetaData = pair.left;
@@ -810,7 +792,7 @@ public class SchemaManager extends AbstractComponent {
                 ksm = updateTable(ksm, cfName, columnsMap, tableAttrs, indiceMap.values().stream().map(p->p.left).collect(Collectors.toList()), mutations, events);
             }
 
-            
+
             String secondaryIndexClazz = mapperService.getIndexSettings().getSettings().get(ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS,
                     clusterService.state().metaData().settings().get(ClusterService.SETTING_CLUSTER_SECONDARY_INDEX_CLASS,
                             ClusterService.defaultSecondaryIndexClass.getName()));

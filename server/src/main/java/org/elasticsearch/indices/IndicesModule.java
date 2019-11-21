@@ -25,7 +25,6 @@ import org.elasticsearch.action.admin.indices.rollover.Condition;
 import org.elasticsearch.action.admin.indices.rollover.MaxAgeCondition;
 import org.elasticsearch.action.admin.indices.rollover.MaxDocsCondition;
 import org.elasticsearch.action.admin.indices.rollover.MaxSizeCondition;
-import org.elasticsearch.action.resync.TransportResyncReplicationAction;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -249,7 +248,7 @@ public class IndicesModule extends AbstractModule {
         bind(SyncedFlushService.class).asEagerSingleton();
         bind(TransportNodesListShardStoreMetaData.class).asEagerSingleton();
         //bind(GlobalCheckpointSyncAction.class).asEagerSingleton();
-        bind(TransportResyncReplicationAction.class).asEagerSingleton();
+        //bind(TransportResyncReplicationAction.class).asEagerSingleton();
         //bind(PrimaryReplicaSyncer.class).asEagerSingleton();
     }
 

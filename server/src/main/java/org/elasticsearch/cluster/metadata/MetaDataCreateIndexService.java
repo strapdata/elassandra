@@ -19,10 +19,20 @@
 
 package org.elasticsearch.cluster.metadata;
 
+import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.transport.Event;
+import org.apache.cassandra.utils.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.gateway.CassandraGatewayService;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ResourceAlreadyExistsException;
 import org.elasticsearch.Version;
@@ -37,6 +47,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.ack.CreateIndexClusterStateUpdateResponse;
 import org.elasticsearch.cluster.block.ClusterBlock;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData.State;
@@ -57,8 +68,7 @@ import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.NamedXContentRegistry;
-import org.elasticsearch.common.xcontent.XContentHelper;
+import org.elasticsearch.common.xcontent.*;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexNotFoundException;
@@ -70,20 +80,14 @@ import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.indices.IndexCreationException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.InvalidIndexNameException;
+import org.elasticsearch.indices.InvalidTypeNameException;
 import org.elasticsearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
@@ -235,6 +239,7 @@ public class MetaDataCreateIndexService {
                         request,
                         listener,
                         indicesService,
+                        clusterService,
                         aliasValidator,
                         xContentRegistry,
                         settings,
@@ -260,7 +265,7 @@ public class MetaDataCreateIndexService {
         private final IndexScopedSettings indexScopedSettings;
 
         IndexCreationTask(Logger logger, AllocationService allocationService, CreateIndexClusterStateUpdateRequest request,
-                          ActionListener<ClusterStateUpdateResponse> listener, IndicesService indicesService,
+                          ActionListener<ClusterStateUpdateResponse> listener, IndicesService indicesService,  ClusterService clusterService,
                           AliasValidator aliasValidator, NamedXContentRegistry xContentRegistry,
                           Settings settings, IndexValidator validator, IndexScopedSettings indexScopedSettings) {
             super(Priority.URGENT, request, listener);
@@ -395,6 +400,37 @@ public class MetaDataCreateIndexService {
                 }
                 // now, put the request settings, so they override templates
                 indexSettingsBuilder.put(request.settings());
+                indexSettingsBuilder.put(SETTING_NUMBER_OF_SHARDS, clusterService.state().nodes().getSize());
+
+                String keyspace = indexSettingsBuilder.get(IndexMetaData.SETTING_KEYSPACE);
+                if (keyspace == null) {
+                    keyspace = ClusterService.indexToKsName(request.index());
+                    if (!keyspace.equals(request.index())) {
+                        logger.info("index [{}] automatically mapped to keyspace [{}]", request.index(), keyspace);
+                        indexSettingsBuilder.put(IndexMetaData.SETTING_KEYSPACE, keyspace);
+                    }
+                } else {
+                    if (!keyspace.equals(ClusterService.indexToKsName(keyspace))) {
+                        throw new InvalidIndexNameException(null, keyspace, "Invalid cassandra keyspace name");
+                    }
+                }
+
+                if (Schema.instance != null && Schema.instance.getKeyspaceInstance(keyspace) != null) {
+                    // read RF from keyspace definition
+                    indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, ClusterService.replicationFactor(keyspace) - 1 );
+                } else {
+                    // set number_of_replica from settings but lower to the number of nodes in the datacenter.
+                    int number_of_replicas = Math.min( request.settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, 0)) , clusterService.state().nodes().getSize()-1);
+                    indexSettingsBuilder.put(SETTING_NUMBER_OF_REPLICAS, number_of_replicas);
+                }
+
+                // check that we can instanciate the search strategy
+                if (indexSettingsBuilder.get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS) != null) {
+                    AbstractSearchStrategy.getSearchStrategyClass(indexSettingsBuilder.get(IndexMetaData.SETTING_SEARCH_STRATEGY_CLASS)).newInstance();
+                } else {
+                    AbstractSearchStrategy.getSearchStrategyClass(clusterService.getClusterSettings().get(ClusterService.CLUSTER_SEARCH_STRATEGY_CLASS_SETTING)).newInstance();
+                }
+                /*
                 if (indexSettingsBuilder.get(SETTING_NUMBER_OF_SHARDS) == null) {
                     deprecationLogger.deprecated("the default number of shards will change from [5] to [1] in 7.0.0; "
                             + "if you wish to continue using the default of [5] shards, "
@@ -407,6 +443,7 @@ public class MetaDataCreateIndexService {
                 if (settings.get(SETTING_AUTO_EXPAND_REPLICAS) != null && indexSettingsBuilder.get(SETTING_AUTO_EXPAND_REPLICAS) == null) {
                     indexSettingsBuilder.put(SETTING_AUTO_EXPAND_REPLICAS, settings.get(SETTING_AUTO_EXPAND_REPLICAS));
                 }
+                */
 
                 if (indexSettingsBuilder.get(IndexMetaData.SETTING_INDEX_VERSION_CREATED.getKey()) == null) {
                     final DiscoveryNodes nodes = currentState.nodes();
@@ -453,7 +490,7 @@ public class MetaDataCreateIndexService {
                  * We can not check the shard limit until we have applied templates, otherwise we do not know the actual number of shards
                  * that will be used to create this index.
                  */
-                checkShardLimit(actualIndexSettings, currentState);
+                //checkShardLimit(actualIndexSettings, currentState);
 
                 tmpImdBuilder.settings(actualIndexSettings);
 
@@ -603,7 +640,7 @@ public class MetaDataCreateIndexService {
                             jsonBuilder.endObject();
                             logger.debug("Creating new virtual index={} with metadata={}",
                                     virtualIndexMetaData.getIndex().toString(),
-                                    jsonBuilder.string());
+                                    jsonBuilder.toString());
                         }
 
                         newMetaDataBuilder.put(virtualIndexMetaData, false);
@@ -665,8 +702,9 @@ public class MetaDataCreateIndexService {
                             for(ObjectCursor<MappingMetaData> mappingCursor : virtualIndexMetaData.getMappings().values()) {
                                 indexMetaDataBuilder2.putMapping(mappingCursor.value);
                             }
-                            indexMetaData = indexMetaDataBuilder2.build();
-                            mapperService.updateMapping(indexMetaData); // update mapper service to properly infer CQL schema.
+                            IndexMetaData indexMetaData2 = indexMetaDataBuilder2.build();
+                            mapperService.updateMapping(indexMetaData, indexMetaData2); // update mapper service to properly infer CQL schema.
+                            indexMetaData = indexMetaData2;
                             indiceMap.put(virtualIndexMetaData.getIndex(), Pair.create(virtualIndexMetaData, virtualMapperService));
                         } catch (Exception e) {
                             removalExtraInfo = "failed on merging mapping with the existing virtual index="+virtualIndexMetaData.getIndex().toString();

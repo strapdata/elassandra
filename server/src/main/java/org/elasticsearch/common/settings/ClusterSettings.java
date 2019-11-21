@@ -278,6 +278,14 @@ public final class ClusterSettings extends AbstractScopedSettings {
                     IndexModule.NODE_STORE_ALLOW_MMAPFS,
                     IndexModule.NODE_STORE_ALLOW_MMAP,
                     ClusterService.CLUSTER_SERVICE_SLOW_TASK_LOGGING_THRESHOLD_SETTING,
+
+                    ClusterService.CLUSTER_MAPPING_UPDATE_TIMEOUT_SETTING,
+                    ClusterService.CLUSTER_SECONDARY_INDEX_CLASS_SETTING,
+                    ClusterService.CLUSTER_SEARCH_STRATEGY_CLASS_SETTING,
+                    ClusterService.CLUSTER_DROP_ON_DELETE_INDEX_SETTING,
+                    ClusterService.CLUSTER_VERSION_LESS_ENGINE_SETTING,
+                    ClusterService.CLUSTER_TOKEN_RANGES_BITSET_CACHE_SETTING,
+
                     ClusterService.USER_DEFINED_META_DATA,
                     SearchService.DEFAULT_SEARCH_TIMEOUT_SETTING,
                     SearchService.DEFAULT_ALLOW_PARTIAL_SEARCH_RESULTS,
@@ -458,6 +466,7 @@ public final class ClusterSettings extends AbstractScopedSettings {
                     Node.BREAKER_TYPE_KEY,
                     OperationRouting.USE_ADAPTIVE_REPLICA_SELECTION_SETTING,
                     IndexGraveyard.SETTING_MAX_TOMBSTONES,
+                    ClusterService.SETTING_DATCENTER_GROUP,
                     EnableAssignmentDecider.CLUSTER_TASKS_ALLOCATION_ENABLE_SETTING,
                     PersistentTasksClusterService.CLUSTER_TASKS_ALLOCATION_RECHECK_INTERVAL_SETTING
             )));

@@ -19,12 +19,12 @@
 
 package org.elasticsearch.discovery;
 
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.LogManager;
+import org.elassandra.discovery.CassandraDiscovery;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterApplier;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.network.NetworkService;
@@ -56,6 +56,8 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * A module for loading classes for node discovery.
@@ -64,15 +66,15 @@ public class DiscoveryModule {
     private static final Logger logger = LogManager.getLogger(DiscoveryModule.class);
 
     public static final Setting<String> DISCOVERY_TYPE_SETTING =
-        new Setting<>("discovery.type", "zen", Function.identity(), Property.NodeScope);
+        new Setting<>("discovery.type", "cassandra", Function.identity(), Property.NodeScope);
     public static final Setting<List<String>> DISCOVERY_HOSTS_PROVIDER_SETTING =
-        Setting.listSetting("discovery.zen.hosts_provider", Collections.emptyList(), Function.identity(), Property.NodeScope);
+        Setting.listSetting("discovery.cassandra.hosts_provider", Collections.emptyList(), Function.identity(), Property.NodeScope);
 
     private final Discovery discovery;
 
     public DiscoveryModule(Settings settings, ThreadPool threadPool, TransportService transportService,
                            NamedWriteableRegistry namedWriteableRegistry, NetworkService networkService, MasterService masterService,
-                           ClusterApplier clusterApplier, ClusterSettings clusterSettings, List<DiscoveryPlugin> plugins,
+                           ClusterService clusterService, ClusterApplier clusterApplier, ClusterSettings clusterSettings, List<DiscoveryPlugin> plugins,
                            AllocationService allocationService, Path configFile) {
         final Collection<BiConsumer<DiscoveryNode,ClusterState>> joinValidators = new ArrayList<>();
         final Map<String, Supplier<UnicastHostsProvider>> hostProviders = new HashMap<>();
@@ -98,12 +100,13 @@ public class DiscoveryModule {
             hostsProviderNames = extendedHostsProviderNames;
         }
 
+        /*
         final Set<String> missingProviderNames = new HashSet<>(hostsProviderNames);
         missingProviderNames.removeAll(hostProviders.keySet());
         if (missingProviderNames.isEmpty() == false) {
             throw new IllegalArgumentException("Unknown zen hosts providers " + missingProviderNames);
         }
-
+        */
         List<UnicastHostsProvider> filteredHostsProviders = hostsProviderNames.stream()
             .map(hostProviders::get).map(Supplier::get).collect(Collectors.toList());
 
@@ -116,10 +119,15 @@ public class DiscoveryModule {
         };
 
         Map<String, Supplier<Discovery>> discoveryTypes = new HashMap<>();
+        /*
         discoveryTypes.put("zen",
             () -> new ZenDiscovery(settings, threadPool, transportService, namedWriteableRegistry, masterService, clusterApplier,
                 clusterSettings, hostsProvider, allocationService, Collections.unmodifiableCollection(joinValidators)));
         discoveryTypes.put("single-node", () -> new SingleNodeDiscovery(settings, transportService, masterService, clusterApplier));
+        */
+        discoveryTypes.put("cassandra",
+                () -> new CassandraDiscovery(settings, transportService, clusterService, clusterApplier, namedWriteableRegistry));
+
         for (DiscoveryPlugin plugin : plugins) {
             plugin.getDiscoveryTypes(threadPool, transportService, namedWriteableRegistry,
                 masterService, clusterApplier, clusterSettings, hostsProvider, allocationService).entrySet().forEach(entry -> {

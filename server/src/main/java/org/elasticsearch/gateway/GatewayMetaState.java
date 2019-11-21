@@ -83,6 +83,7 @@ public class GatewayMetaState implements ClusterStateApplier {
             nodeEnv.ensureAtomicMoveSupported();
         }
         if (DiscoveryNode.isMasterNode(settings) || DiscoveryNode.isDataNode(settings)) {
+            /* Disable metadata upgrade because cassandra not ready for schema update.
             try {
                 ensureNoPre019State();
                 final MetaData metaData = metaStateService.loadFullState();

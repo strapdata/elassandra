@@ -23,6 +23,7 @@ import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.xcontent.DeprecationHandler;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -136,17 +137,17 @@ public class RangeAggregator extends BucketsAggregator {
                 if (token == XContentParser.Token.FIELD_NAME) {
                     currentFieldName = parser.currentName();
                 } else if (token == XContentParser.Token.VALUE_NUMBER) {
-                    if (FROM_FIELD.match(currentFieldName)) {
+                    if (FROM_FIELD.match(currentFieldName, DeprecationHandler.THROW_UNSUPPORTED_OPERATION)) {
                         from = parser.longValue();
-                    } else if (TO_FIELD.match(currentFieldName)) {
+                    } else if (TO_FIELD.match(currentFieldName, DeprecationHandler.THROW_UNSUPPORTED_OPERATION)) {
                         to = parser.longValue();
                     }
                 } else if (token == XContentParser.Token.VALUE_STRING) {
-                    if (FROM_FIELD.match(currentFieldName)) {
+                    if (FROM_FIELD.match(currentFieldName, DeprecationHandler.THROW_UNSUPPORTED_OPERATION)) {
                         fromAsStr = parser.text();
-                    } else if (TO_FIELD.match(currentFieldName)) {
+                    } else if (TO_FIELD.match(currentFieldName, DeprecationHandler.THROW_UNSUPPORTED_OPERATION)) {
                         toAsStr = parser.text();
-                    } else if (KEY_FIELD.match(currentFieldName)) {
+                    } else if (KEY_FIELD.match(currentFieldName, DeprecationHandler.THROW_UNSUPPORTED_OPERATION)) {
                         key = parser.text();
                     }
                 }

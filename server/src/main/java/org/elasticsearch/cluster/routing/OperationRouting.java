@@ -19,36 +19,40 @@
 
 package org.elasticsearch.cluster.routing;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+import org.elassandra.index.search.TokenRangesService;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.TransportAddress;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardNotFoundException;
 import org.elasticsearch.node.ResponseCollectorService;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.io.IOException;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class OperationRouting {
     private static final Logger logger = LogManager.getLogger(OperationRouting.class);
     private static final DeprecationLogger deprecationLogger = new DeprecationLogger(logger);
+
+    private final ClusterService clusterService;
 
     public static final Setting<Boolean> USE_ADAPTIVE_REPLICA_SELECTION_SETTING =
             Setting.boolSetting("cluster.routing.use_adaptive_replica_selection", false,
@@ -57,7 +61,8 @@ public class OperationRouting {
     private List<String> awarenessAttributes;
     private boolean useAdaptiveReplicaSelection;
 
-    public OperationRouting(Settings settings, ClusterSettings clusterSettings) {
+    public OperationRouting(Settings settings, ClusterSettings clusterSettings, ClusterService clusterService) {
+        this.clusterService = clusterService;
         this.awarenessAttributes = AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.get(settings);
         this.useAdaptiveReplicaSelection = USE_ADAPTIVE_REPLICA_SELECTION_SETTING.get(settings);
         clusterSettings.addSettingsUpdateConsumer(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING,
@@ -99,17 +104,20 @@ public class OperationRouting {
                                                            String[] concreteIndices,
                                                            @Nullable Map<String, Set<String>> routing,
                                                            @Nullable String preference) {
-        return searchShards(clusterState, concreteIndices, routing, preference, null, null);
+        return searchShards(clusterState, concreteIndices, null, routing, preference, null, null, null, null);
     }
 
 
     public GroupShardsIterator<ShardIterator> searchShards(ClusterState clusterState,
                                                            String[] concreteIndices,
+                                                           @Nullable String[] types,
                                                            @Nullable Map<String, Set<String>> routing,
                                                            @Nullable String preference,
                                                            @Nullable ResponseCollectorService collectorService,
+                                                           @Nullable Collection<Range<Token>> tokenRanges,
+                                                           @Nullable TransportAddress src,
                                                            @Nullable Map<String, Long> nodeCounts) {
-        final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices, routing);
+        final Set<IndexShardRoutingTable> shards = computeTargetedShards(clusterState, concreteIndices, types, routing, preference, tokenRanges, src);
         final Set<ShardIterator> set = new HashSet<>(shards.size());
         for (IndexShardRoutingTable shard : shards) {
             ShardIterator iterator = preferenceActiveShardIterator(shard,
@@ -118,30 +126,54 @@ public class OperationRouting {
                 set.add(iterator);
             }
         }
+        if (logger.isDebugEnabled())
+            logger.debug("routing to nodes={}", set.stream()
+                    .filter(it -> it.remaining() > 0)
+                    .map(it -> {
+                        ShardRouting shard = it.nextOrNull();
+                        return shard.currentNodeId()+":"+shard.tokenRanges().toString();
+                    })
+                    .collect(Collectors.joining(", ")));
         return new GroupShardsIterator<>(new ArrayList<>(set));
     }
 
     private static final Map<String, Set<String>> EMPTY_ROUTING = Collections.emptyMap();
 
     private Set<IndexShardRoutingTable> computeTargetedShards(ClusterState clusterState, String[] concreteIndices,
-                                                              @Nullable Map<String, Set<String>> routing) {
+                                                              @Nullable String[] types,
+                                                              @Nullable Map<String, Set<String>> routing,
+                                                              @Nullable String preference,
+                                                              @Nullable Collection<Range<Token>> tokenRanges,
+                                                              @Nullable TransportAddress src) {
         routing = routing == null ? EMPTY_ROUTING : routing; // just use an empty map
         final Set<IndexShardRoutingTable> set = new HashSet<>();
         // we use set here and not list since we might get duplicates
         for (String index : concreteIndices) {
-            final IndexRoutingTable indexRouting = indexRoutingTable(clusterState, index);
             final IndexMetaData indexMetaData = indexMetaData(clusterState, index);
+            final IndexRoutingTable indexRouting = new IndexRoutingTable.Builder(indexMetaData.getIndex(), this.clusterService, clusterState, preference, src).build();
+
+            // ignore routing if types is empty.
             final Set<String> effectiveRouting = routing.get(index);
-            if (effectiveRouting != null) {
+            if (types != null && types.length > 0 && effectiveRouting != null) {
                 for (String r : effectiveRouting) {
-                    final int routingPartitionSize = indexMetaData.getRoutingPartitionSize();
-                    for (int partitionOffset = 0; partitionOffset < routingPartitionSize; partitionOffset++) {
-                        set.add(shardRoutingTable(indexRouting, calculateScaledShardId(indexMetaData, r, partitionOffset)));
+                    for (IndexShardRoutingTable indexShard : indexRouting) {
+                        for(String type :types) {
+                            try {
+                                Token token = this.clusterService.getQueryManager().getToken(this.clusterService.indexServiceSafe(indexMetaData.getIndex()), type, r);
+                                if (TokenRangesService.tokenRangesContains(indexShard.activeShards().iterator().next().tokenRanges(), token)) {
+                                    set.add(indexShard);
+                                    break;
+                                }
+                            } catch (IOException e) {
+                            }
+                        }
                     }
                 }
             } else {
                 for (IndexShardRoutingTable indexShard : indexRouting) {
-                    set.add(indexShard);
+                    if (tokenRanges == null || (TokenRangesService.tokenRangesIntersec(indexShard.primaryShard().tokenRanges(), tokenRanges))) {
+                        set.add(indexShard);
+                    }
                 }
             }
         }

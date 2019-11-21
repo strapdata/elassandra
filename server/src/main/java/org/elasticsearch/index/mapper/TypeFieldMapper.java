@@ -324,6 +324,14 @@ public class TypeFieldMapper extends MetadataFieldMapper {
         super.parse(context);
     }
 
+    /**
+     * Called after {@link FieldMapper#parse(ParseContext)} on the {@link RootObjectMapper}.
+     */
+    @Override
+    public void postParse(ParseContext context) throws IOException {
+
+    }
+
     @Override
     public void parse(ParseContext context) throws IOException {
         // we parse in pre parse

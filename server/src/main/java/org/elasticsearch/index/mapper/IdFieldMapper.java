@@ -292,6 +292,14 @@ public class IdFieldMapper extends MetadataFieldMapper {
         super.parse(context);
     }
 
+    /**
+     * Called after {@link FieldMapper#parse(ParseContext)} on the {@link RootObjectMapper}.
+     */
+    @Override
+    public void postParse(ParseContext context) throws IOException {
+
+    }
+
     @Override
     protected void parseCreateField(ParseContext context, List<IndexableField> fields) throws IOException {
         if (fieldType.indexOptions() != IndexOptions.NONE || fieldType.stored()) {

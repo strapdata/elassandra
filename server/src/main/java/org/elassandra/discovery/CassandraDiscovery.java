@@ -35,6 +35,7 @@ import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.Event;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
@@ -122,9 +123,12 @@ import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK
  *
  */
 public class CassandraDiscovery extends AbstractLifecycleComponent implements Discovery, IEndpointStateChangeSubscriber, AppliedClusterStateAction.AppliedClusterStateListener {
+    final Logger logger = LogManager.getLogger(CassandraDiscovery.class);
+
     private static final EnumSet CASSANDRA_ROLES = EnumSet.of(Role.MASTER,Role.DATA);
     private final TransportService transportService;
 
+    private final Settings settings;
     private final ClusterService clusterService;
     private final ClusterApplier clusterApplier;
     private final AtomicReference<ClusterState> committedState; // last committed cluster state
@@ -166,6 +170,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             final ClusterApplier clusterApplier,
             NamedWriteableRegistry namedWriteableRegistry) {
         super(settings);
+        this.settings = settings;
         this.clusterApplier = clusterApplier;
         this.clusterService = clusterService;
         this.discoverySettings = new DiscoverySettings(settings, clusterService.getClusterSettings());
@@ -254,9 +259,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     /**
      * Update the shardState map and trigger a cluster state routing table update if changed.
-     * @param remoteNode
-     * @param shardsStateMap
-     * @param source
      */
     private void updateShardRouting(final UUID remoteNode, final Map<String, ShardRoutingState> shardsStateMap, String source, final ClusterState currentState) {
         this.remoteShardRoutingStateMap.compute(remoteNode, (k, v) -> {
@@ -833,12 +835,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
         /**
          * Put or update discovery node if needed
-         * @param hostId
-         * @param endpoint
-         * @param internalIp = endpoint address or prefered_ip
-         * @param rpcAddress
-         * @param status
-         * @return true if updated
          */
         public synchronized boolean update(final EndpointState epState, final String hostId, final InetAddress endpoint, final InetAddress internalIp, final InetAddress rpcAddress) {
             if (localNode().getId().equals(hostId)) {
@@ -972,10 +968,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     /**
      * Publish the new metadata through a CQL schema update (a blocking schema update unless we update a CQL map as a dynamic nested object),
      * and wait acks (AckClusterStatePublishResponseHandler) from participant nodes with state alive+NORMAL.
-     * @param clusterChangedEvent
-     * @param ackListener
-     * @throws InterruptedException
-     * @throws IOException
      */
     void publishAsCoordinator(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener) throws InterruptedException, IOException {
         logger.debug("Coordinator update source={} metadata={}", clusterChangedEvent.source(), clusterChangedEvent.state().metaData().x2());
@@ -1089,14 +1081,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             // see https://www.datastax.com/dev/blog/cassandra-error-handling-done-right
             logger.warn("PAXOS write timeout, source={} metadata={} writeType={}, reading the owner of version={}",
                     clusterChangedEvent.source(), newClusterState.metaData().x2(), e.writeType, newClusterState.metaData().version());
-            
+
             // read the owner for the expected version to know if PAXOS transaction succeed or not.
             UUID owner = clusterService.readMetaDataOwner(newClusterState.metaData().version());
             if (owner == null || !owner.equals(newClusterState.metaData().clusterUUID())) {
                 logger.warn("PAXOS timeout and failed to write version={}, owner={}", newClusterState.metaData().version(), owner);
                 throw new PaxosMetaDataUpdateException(e);
             }
-            
+
             logger.warn("PAXOS timeout but succesfully write x2={}", newClusterState.metaData().x2());
             ackListener.onNodeAck(localNode, e);
         } finally {
@@ -1106,8 +1098,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     /**
      * Publish the new metadata and notify the coordinator through an appliedClusterStateAction.
-     * @param clusterChangedEvent
-     * @param ackListener
      */
     void publishAsParticipator(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener) {
         ClusterState newClusterState = clusterChangedEvent.state();
@@ -1156,8 +1146,6 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     /**
      * Publish a local cluster state update (no coordination) coming from a CQL schema update.
-     * @param clusterChangedEvent
-     * @param ackListener
      */
     void publishLocalUpdate(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener) {
         ClusterState newClusterState = clusterChangedEvent.state();
@@ -1288,9 +1276,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
         clusterApplier.onNewClusterState("apply cluster state (from " + newClusterState.metaData().clusterUUID() + "[" + reason + "])",
             this::clusterState,
-            new ClusterStateTaskListener() {
+            new ClusterApplier.ClusterApplyListener() {
                 @Override
-                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+                public void onSuccess(String source) {
                     try {
                         pendingStatesQueue.markAsProcessed(newClusterState);
                     } catch (Exception e) {

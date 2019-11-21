@@ -39,11 +39,7 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
@@ -209,6 +205,9 @@ public class MultiSearchRequest extends ActionRequest implements CompositeIndice
             if (searchType != null) {
                 searchRequest.searchType(searchType);
             }
+            if (tokenRanges != null) {
+                searchRequest.tokenRanges(tokenRanges);
+            }
             IndicesOptions defaultOptions = searchRequest.indicesOptions();
             // now parse the action
             if (nextMarker - from > 0) {
@@ -236,6 +235,8 @@ public class MultiSearchRequest extends ActionRequest implements CompositeIndice
                             searchRequest.preference(nodeStringValue(value, null));
                         } else if ("routing".equals(entry.getKey())) {
                             searchRequest.routing(nodeStringValue(value, null));
+                        } else if ("token_ranges_bitset_cache".equals(entry.getKey()) || "tokenRangesBitsetCache".equals(entry.getKey())) {
+                            searchRequest.tokenRangesBitsetCache(nodeBooleanValue(value, entry.getKey()));
                         } else if ("allow_partial_search_results".equals(entry.getKey())) {
                             searchRequest.allowPartialSearchResults(nodeBooleanValue(value, null));
                         } else if ("expand_wildcards".equals(entry.getKey()) || "expandWildcards".equals(entry.getKey())) {
@@ -342,6 +343,13 @@ public class MultiSearchRequest extends ActionRequest implements CompositeIndice
         if (request.routing() != null) {
             xContentBuilder.field("routing", request.routing());
         }
+        if (request.tokenRanges() != null) {
+            xContentBuilder.field("tokens", request.tokenRanges());
+        }
+        if (request.tokenRangesBitsetCache() != null) {
+            xContentBuilder.field("token_ranges_bitset_cache", request.tokenRanges());
+        }
+
         if (request.allowPartialSearchResults() != null) {
             xContentBuilder.field("allow_partial_search_results", request.allowPartialSearchResults());
         }

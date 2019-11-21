@@ -54,6 +54,7 @@ import org.elasticsearch.search.lookup.SourceLookup;
 import org.elasticsearch.transport.RemoteClusterAware;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -120,6 +121,8 @@ public final class SearchHit implements Streamable, ToXContentObject, Iterable<D
     private Map<String, Object> sourceAsMap;
 
     private Map<String, SearchHits> innerHits;
+
+    private List<ByteBuffer> values;
 
     SearchHit() {
 
@@ -1057,8 +1060,11 @@ public final class SearchHit implements Streamable, ToXContentObject, Iterable<D
         }
     }
 
-    @Override
-    public String toString() {
-        return Strings.toString(this, true, true);
+    public List<ByteBuffer> getValues() {
+        return values;
+    }
+
+    public void setValues(List<ByteBuffer> row) {
+        this.values = row;
     }
 }

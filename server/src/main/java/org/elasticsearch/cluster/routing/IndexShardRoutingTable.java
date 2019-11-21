@@ -134,8 +134,6 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
 
     /**
      * Elassandra default ctor for single primary shard IndexShardRoutingTable
-     * @param shardId
-     * @param shard
      */
     public IndexShardRoutingTable(ShardId shardId, ShardRouting shard) {
          List<ShardRouting> singleton = Collections.singletonList(shard);

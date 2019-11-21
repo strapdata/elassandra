@@ -46,18 +46,17 @@ import java.util.function.LongSupplier;
 public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
     private final Logger logger;
     private final TranslogDeletionPolicy translogDeletionPolicy;
-    private final SoftDeletesPolicy softDeletesPolicy;
-    private final LongSupplier globalCheckpointSupplier;
+    //private final SoftDeletesPolicy softDeletesPolicy;
+    //private final LongSupplier globalCheckpointSupplier;
     private final ObjectIntHashMap<IndexCommit> snapshottedCommits; // Number of snapshots held against each commit point.
     private volatile IndexCommit safeCommit; // the most recent safe commit point - its max_seqno at most the persisted global checkpoint.
     private volatile IndexCommit lastCommit; // the most recent commit point
 
-    CombinedDeletionPolicy(Logger logger, TranslogDeletionPolicy translogDeletionPolicy,
-                           SoftDeletesPolicy softDeletesPolicy, LongSupplier globalCheckpointSupplier) {
+    CombinedDeletionPolicy(Logger logger, TranslogDeletionPolicy translogDeletionPolicy) {
         this.logger = logger;
         this.translogDeletionPolicy = translogDeletionPolicy;
-        this.softDeletesPolicy = softDeletesPolicy;
-        this.globalCheckpointSupplier = globalCheckpointSupplier;
+        //this.softDeletesPolicy = softDeletesPolicy;
+        //this.globalCheckpointSupplier = globalCheckpointSupplier;
         this.snapshottedCommits = new ObjectIntHashMap<>();
     }
 
@@ -67,7 +66,7 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
         onCommit(commits);
         if (safeCommit != commits.get(commits.size() - 1)) {
             throw new IllegalStateException("Engine is opened, but the last commit isn't safe. Global checkpoint ["
-                + globalCheckpointSupplier.getAsLong() + "], seqNo is last commit ["
+                + SequenceNumbers.UNASSIGNED_SEQ_NO + "], seqNo is last commit ["
                 + SequenceNumbers.loadSeqNoInfoFromLuceneCommit(lastCommit.getUserData().entrySet()) + "], "
                 + "seqNos in safe commit [" + SequenceNumbers.loadSeqNoInfoFromLuceneCommit(safeCommit.getUserData().entrySet()) + "]");
         }
@@ -75,7 +74,7 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
 
     @Override
     public synchronized void onCommit(List<? extends IndexCommit> commits) throws IOException {
-        final int keptPosition = indexOfKeptCommits(commits, globalCheckpointSupplier.getAsLong());
+        final int keptPosition = indexOfKeptCommits(commits, SequenceNumbers.UNASSIGNED_SEQ_NO);
         lastCommit = commits.get(commits.size() - 1);
         safeCommit = commits.get(keptPosition);
         for (int i = 0; i < keptPosition; i++) {
@@ -105,8 +104,10 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
         translogDeletionPolicy.setTranslogGenerationOfLastCommit(lastGen);
         translogDeletionPolicy.setMinTranslogGenerationForRecovery(minRequiredGen);
 
+        /*
         softDeletesPolicy.setLocalCheckpointOfSafeCommit(
             Long.parseLong(safeCommit.getUserData().get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)));
+         */
     }
 
     /**
@@ -163,6 +164,7 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
      * Index commits with different translog UUID will be filtered out as they don't belong to this engine.
      */
     private static int indexOfKeptCommits(List<? extends IndexCommit> commits, long globalCheckpoint) throws IOException {
+        /*
         final String expectedTranslogUUID = commits.get(commits.size() - 1).getUserData().get(Translog.TRANSLOG_UUID_KEY);
 
         // Commits are sorted by age (the 0th one is the oldest commit).
@@ -212,6 +214,7 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
      * Checks if the deletion policy can release some index commits with the latest global checkpoint.
      */
     boolean hasUnreferencedCommits() throws IOException {
+        /*
         final IndexCommit lastCommit = this.lastCommit;
         if (safeCommit != lastCommit) { // Race condition can happen but harmless
             if (lastCommit.getUserData().containsKey(SequenceNumbers.MAX_SEQ_NO)) {
@@ -220,6 +223,7 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
                 return globalCheckpointSupplier.getAsLong() >= maxSeqNoFromLastCommit;
             }
         }
+        */
         return false;
     }
 

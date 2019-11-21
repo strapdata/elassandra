@@ -44,7 +44,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class ObjectMapper extends Mapper implements Cloneable {
+public class ObjectMapper extends Mapper implements CqlMapper, Cloneable {
 
     public static final String CONTENT_TYPE = "object";
     public static final String NESTED_CONTENT_TYPE = "nested";
@@ -684,6 +684,53 @@ public class ObjectMapper extends Mapper implements Cloneable {
             // only write the object content type if there are no properties, otherwise, it is automatically detected
             builder.field("type", CONTENT_TYPE);
         }
+
+        if (cqlStruct != Defaults.CQL_STRUCT) {
+            if (cqlStruct.equals(CqlStruct.MAP)) {
+                builder.field(TypeParsers.CQL_STRUCT, "map");
+            } else if (cqlStruct.equals(CqlStruct.OPAQUE_MAP)) {
+                builder.field(TypeParsers.CQL_STRUCT, "opaque_map");
+            } else if (cqlStruct.equals(CqlStruct.UDT)) {
+                builder.field(TypeParsers.CQL_STRUCT, "udt");
+            } else if (cqlStruct.equals(CqlStruct.TUPLE)) {
+                builder.field(TypeParsers.CQL_STRUCT, "tuple");
+            }
+        }
+
+        if (cqlCollection != Defaults.CQL_COLLECTION) {
+            if (cqlCollection.equals(CqlCollection.SET)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "set");
+            } else if (cqlCollection.equals(CqlCollection.LIST)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "list");
+            } else if (cqlCollection.equals(CqlCollection.SINGLETON)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "singleton");
+            } else if (cqlCollection.equals(CqlCollection.NONE)) {
+                builder.field(TypeParsers.CQL_COLLECTION, "none");
+            }
+        }
+        if (cqlUdtName != null) {
+            builder.field(TypeParsers.CQL_UDT_NAME, cqlUdtName);
+        }
+        if (cqlPartialUpdate != Defaults.CQL_MANDATORY) {
+            builder.field(TypeParsers.CQL_MANDATORY, cqlPartialUpdate);
+        }
+
+        if (cqlPartitionKey != Defaults.CQL_PARTITION_KEY) {
+            builder.field(TypeParsers.CQL_PARTITION_KEY, cqlPartitionKey);
+        }
+
+        if (cqlPrimaryKeyOrder != Defaults.CQL_PRIMARY_KEY_ORDER) {
+            builder.field(TypeParsers.CQL_PRIMARY_KEY_ORDER, cqlPrimaryKeyOrder);
+        }
+
+        if (cqlClusteringKeyDesc != Defaults.CQL_CLUSTERING_KEY_DESC) {
+            builder.field(TypeParsers.CQL_CLUSTERING_KEY_DESC, cqlClusteringKeyDesc);
+        }
+
+        if (cqlStaticColumn != Defaults.CQL_STATIC_COLUMN) {
+            builder.field(TypeParsers.CQL_STATIC_COLUMN, cqlStaticColumn);
+        }
+
         if (dynamic != null) {
             builder.field("dynamic", dynamic.name().toLowerCase(Locale.ROOT));
         }

@@ -17,12 +17,13 @@ package org.elassandra.shard;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateApplier;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.index.IndexService;
@@ -38,13 +39,13 @@ import java.util.concurrent.TimeUnit;
  * @author vroyer
  *
  */
-public class CassandraShardStartedBarrier extends AbstractComponent implements ClusterStateApplier  {
+public class CassandraShardStartedBarrier implements ClusterStateApplier  {
 
+    final Logger logger = LogManager.getLogger(getClass());
     final CountDownLatch latch = new CountDownLatch(1);
     final ClusterService clusterService;
 
     public CassandraShardStartedBarrier(Settings settings, ClusterService clusterService) {
-        super(settings);
         this.clusterService = clusterService;
         clusterService.addLowPriorityApplier(this);
     }
@@ -74,8 +75,6 @@ public class CassandraShardStartedBarrier extends AbstractComponent implements C
 
     /**
      * Release the barrier if all local shards (for OPEN indices) are started.
-     * @param clusterState
-     * @return
      */
     private boolean isReadyToIndex(ClusterState clusterState) {
         boolean readyToIndex;

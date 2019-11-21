@@ -19,6 +19,10 @@
 
 package org.elasticsearch.index.mapper;
 
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.DecimalType;
+import org.apache.cassandra.db.marshal.TimeUUIDType;
+import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
@@ -189,7 +193,7 @@ public final class KeywordFieldMapper extends FieldMapper {
         }
     }
 
-    public static final class KeywordFieldType extends StringFieldType {
+    public static class KeywordFieldType extends StringFieldType {
 
         private NamedAnalyzer normalizer = null;
         private boolean splitQueriesOnWhitespace;
@@ -434,8 +438,62 @@ public final class KeywordFieldMapper extends FieldMapper {
 
         if (fieldType().hasDocValues()) {
             fields.add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
+        } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
+            createFieldNamesField(context, fields);
         }
     }
+
+
+    @Override
+    public void createField(ParseContext context, Object object, Optional<String> keyName) throws IOException {
+        String value = (object == null || object instanceof String) ? (String) object : object.toString(); // #74 uuid stored as string
+        if (value == null)
+            value = fieldType().nullValueAsString();
+
+        if (value == null || value.length() > ignoreAbove) {
+            return;
+        }
+        String fieldName = keyName.orElse(fieldType().name());
+
+        final NamedAnalyzer normalizer = fieldType().normalizer();
+        if (normalizer != null) {
+            try (TokenStream ts = normalizer.tokenStream(name(), value)) {
+                final CharTermAttribute termAtt = ts.addAttribute(CharTermAttribute.class);
+                ts.reset();
+                if (ts.incrementToken() == false) {
+                  throw new IllegalStateException("The normalization token stream is "
+                      + "expected to produce exactly 1 token, but got 0 for analyzer "
+                      + normalizer + " and input \"" + value + "\"");
+                }
+                final String newValue = termAtt.toString();
+                if (ts.incrementToken()) {
+                  throw new IllegalStateException("The normalization token stream is "
+                      + "expected to produce exactly 1 token, but got 2+ for analyzer "
+                      + normalizer + " and input \"" + value + "\"");
+                }
+                ts.end();
+                value = newValue;
+            }
+        }
+
+        if (context.includeInAll(includeInAll, this)) {
+            context.allEntries().addText(fieldName, value, fieldType().boost());
+        }
+
+        // convert to utf8 only once before feeding postings/dv/stored fields
+        final BytesRef binaryValue = new BytesRef(value);
+        if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+            Field field = new Field(fieldName, binaryValue, fieldType());
+            context.doc().add(field);
+        }
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedSetDocValuesField(fieldName, binaryValue));
+        } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
+            createFieldNamesField(context, context.doc().getFields());
+        }
+        super.createField(context, object, keyName);
+    }
+
     @Override
     protected String contentType() {
         return CONTENT_TYPE;

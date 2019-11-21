@@ -23,19 +23,28 @@ import com.carrotsearch.hppc.IntSet;
 import com.carrotsearch.hppc.cursors.IntCursor;
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
 import org.apache.lucene.util.CollectionUtil;
+import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.elassandra.cluster.routing.PrimaryFirstSearchStrategy;
 import org.elasticsearch.cluster.AbstractDiffable;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.IndexMetaData.State;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.routing.RecoverySource.EmptyStoreRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.ExistingStoreRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.LocalShardsRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.PeerRecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
+import org.elasticsearch.cluster.routing.UnassignedInfo.AllocationStatus;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.collect.ImmutableOpenIntMap;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
 
@@ -370,7 +379,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
             } catch (NullPointerException | java.lang.AssertionError e) {
                 // thrown by cassandra when the keyspace is not yet create locally.
                 // We must wait for a gossip schema change to update the routing Table.
-                Loggers.getLogger(getClass().getName()).warn("Keyspace not available for index ["+this.index+"]", e);
+                Loggers.getLogger(getClass()).warn("Keyspace not available for index ["+this.index+"]", e);
             }
         }
 
@@ -378,7 +387,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         public Builder(Index index, ClusterService clusterService, ClusterState targetState, @Nullable String preference, TransportAddress src) {
             this.index = index;
             IndexMetaData targetIndexMetaData = targetState.metaData().index(index);
-            if (targetIndexMetaData == null || targetIndexMetaData.getState() == State.CLOSE)
+            if (targetIndexMetaData == null || targetIndexMetaData.getState() == IndexMetaData.State.CLOSE)
                 return;
             try {
                 AbstractSearchStrategy.Router router = clusterService.getRouter(targetIndexMetaData, targetState);
@@ -602,8 +611,10 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         });
 
         for (IndexShardRoutingTable indexShard : ordered) {
-            sb.append("----shard_id [").append(indexShard.shardId().getIndex().getName())
-                .append("][").append(indexShard.shardId().id()).append("]\n");
+            sb.append("----shard_id [").append(indexShard.shardId().getIndex().getName()).append("][").append(indexShard.shardId().id())
+            .append("][")
+            .append(indexShard.getPrimaryShardRouting().tokenRanges())
+            .append("]\n");
             for (ShardRouting shard : indexShard) {
                 sb.append("--------").append(shard.shortSummary()).append("\n");
             }

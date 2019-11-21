@@ -25,6 +25,7 @@ import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.action.support.replication.TransportWriteAction;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.translog.Translog;
@@ -121,6 +122,10 @@ class BulkPrimaryExecutionContext {
     public BulkItemResponse getExecutionResult() {
         assert assertInvariants(ItemProcessingState.EXECUTED);
         return executionResult;
+    }
+
+    public IndexMetaData getIndexMetaData() {
+        return this.getPrimary().indexSettings().getIndexMetaData();
     }
 
     /** returns the number of times the current operation has been retried */

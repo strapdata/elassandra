@@ -254,8 +254,17 @@ public class SourceFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void postParse(ParseContext context) throws IOException {
+    }
+
+    @Override
     public void parse(ParseContext context) throws IOException {
         // nothing to do here, we will call it in pre parse
+    }
+
+    @Override
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
+        // Nothing to, _source should be disabled in elassandra.
     }
 
     @Override

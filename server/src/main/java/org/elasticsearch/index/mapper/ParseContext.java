@@ -21,23 +21,18 @@ package org.elasticsearch.index.mapper;
 
 import com.carrotsearch.hppc.ObjectObjectHashMap;
 import com.carrotsearch.hppc.ObjectObjectMap;
+import com.google.common.collect.Iterators;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.util.BytesRef;
-import org.elasticsearch.common.lucene.all.AllEntries;
 import org.elasticsearch.Version;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.lucene.all.AllEntries;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.IndexSettings;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public abstract class ParseContext implements Iterable<ParseContext.Document>{
 
@@ -174,35 +169,6 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
 
     }
 
-    static abstract class FilterableDocument extends ParseContext.Document implements Predicate<IndexableField> {
-        boolean applyFilter = false;
-
-        public FilterableDocument(String path, Document parent) {
-            super(path, parent);
-        }
-
-        public FilterableDocument() {
-            super();
-        }
-
-        public void applyFilter(boolean apply) {
-            applyFilter = apply;
-        }
-
-        @Override
-        abstract public boolean apply(IndexableField input);
-
-        @Override
-        public Iterator<IndexableField> iterator() {
-            if (applyFilter) {
-                return Iterators.filter(super.iterator(), this);
-            } else {
-                return super.iterator();
-            }
-        }
-    }
-
-
     private static class FilterParseContext extends ParseContext {
 
         private final ParseContext in;
@@ -259,6 +225,11 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
         @Override
         public Document doc() {
             return in.doc();
+        }
+
+        @Override
+        public List<Document> docs() {
+            return in.docs();
         }
 
         @Override
@@ -418,7 +389,8 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
             return documents.get(0);
         }
 
-        List<Document> docs() {
+        @Override
+        public List<Document> docs() {
             return this.documents;
         }
 
@@ -657,6 +629,8 @@ public abstract class ParseContext implements Iterable<ParseContext.Document>{
     public abstract Document rootDoc();
 
     public abstract Document doc();
+
+    public abstract List<Document> docs();
 
     protected abstract void addDoc(Document doc);
 

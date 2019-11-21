@@ -19,6 +19,8 @@
 
 package org.elasticsearch.action.search;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.apache.logging.log4j.LogManager;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionRequest;
@@ -102,6 +104,11 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
 
     private IndicesOptions indicesOptions = DEFAULT_INDICES_OPTIONS;
 
+    private Boolean tokenRangesBitsetCache;
+    private Collection<Range<Token>> tokenRanges;
+    private Map<String,Object> extraParams;
+
+
     public SearchRequest() {
         this.localClusterAlias = null;
         this.absoluteStartMillis = DEFAULT_ABSOLUTE_START_MILLIS;
@@ -128,6 +135,9 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
         this.localClusterAlias = searchRequest.localClusterAlias;
         this.absoluteStartMillis = searchRequest.absoluteStartMillis;
         this.finalReduce = searchRequest.finalReduce;
+        this.tokenRangesBitsetCache = searchRequest.tokenRangesBitsetCache;
+        this.tokenRanges = searchRequest.tokenRanges;
+        this.extraParams = searchRequest.extraParams;
     }
 
     /**
@@ -419,7 +429,7 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
     public Boolean requestCache() {
         return this.requestCache;
     }
-    
+
     /**
      * Sets if this request should allow partial results. (If method is not called,
      * will default to the cluster level setting).
@@ -554,6 +564,23 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
             maxConcurrentShardRequests = in.readVInt();
             preFilterShardSize = in.readVInt();
         }
+
+
+        if (in.available() > 0)
+            tokenRangesBitsetCache = in.readOptionalBoolean();
+
+        if (in.available() > 0 && in.readBoolean()) {
+            Object[] tokens = (Object[]) in.readGenericValue();
+            this.tokenRanges = new ArrayList<Range<Token>>(tokens.length / 2);
+            for (int i = 0; i < tokens.length;) {
+                Range<Token> range = new Range<Token>((Token) tokens[i++], (Token) tokens[i++]);
+                this.tokenRanges.add(range);
+            }
+        }
+
+        if (in.available() > 0 && in.readBoolean())
+            extraParams = in.readMap();
+
         if (in.getVersion().onOrAfter(Version.V_6_3_0)) {
             allowPartialSearchResults = in.readOptionalBoolean();
         }
@@ -593,6 +620,24 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
             out.writeVInt(maxConcurrentShardRequests);
             out.writeVInt(preFilterShardSize);
         }
+
+        out.writeOptionalBoolean(tokenRangesBitsetCache);
+
+        out.writeBoolean(tokenRanges != null);
+        if (tokenRanges != null) {
+            Token[] tokens = new Token[tokenRanges.size() * 2];
+            int i = 0;
+            for (Range<Token> range : tokenRanges) {
+                tokens[i++] = range.left;
+                tokens[i++] = range.right;
+            }
+            out.writeGenericValue(tokens);
+        }
+
+        out.writeBoolean(this.extraParams != null);
+        if (this.extraParams != null)
+            out.writeMap(this.extraParams);
+
         if (out.getVersion().onOrAfter(Version.V_6_3_0)) {
             out.writeOptionalBoolean(allowPartialSearchResults);
         }
@@ -626,6 +671,9 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
                 Objects.equals(maxConcurrentShardRequests, that.maxConcurrentShardRequests) &&
                 Objects.equals(preFilterShardSize, that.preFilterShardSize) &&
                 Objects.equals(indicesOptions, that.indicesOptions) &&
+                Objects.equals(tokenRangesBitsetCache, that.tokenRangesBitsetCache) &&
+                Objects.equals(tokenRanges, that.tokenRanges) &&
+                Objects.equals(extraParams, that.extraParams) &&
                 Objects.equals(allowPartialSearchResults, that.allowPartialSearchResults) &&
                 Objects.equals(localClusterAlias, that.localClusterAlias) &&
                 absoluteStartMillis == that.absoluteStartMillis;
@@ -635,7 +683,7 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
     public int hashCode() {
         return Objects.hash(searchType, Arrays.hashCode(indices), routing, preference, source, requestCache,
                 scroll, Arrays.hashCode(types), indicesOptions, batchedReduceSize, maxConcurrentShardRequests, preFilterShardSize,
-                allowPartialSearchResults, localClusterAlias, absoluteStartMillis);
+                allowPartialSearchResults, localClusterAlias, absoluteStartMillis, tokenRanges, tokenRangesBitsetCache, extraParams);
     }
 
     @Override
@@ -652,6 +700,9 @@ public final class SearchRequest extends ActionRequest implements IndicesRequest
                 ", maxConcurrentShardRequests=" + maxConcurrentShardRequests +
                 ", batchedReduceSize=" + batchedReduceSize +
                 ", preFilterShardSize=" + preFilterShardSize +
+                ", tokenRanges=" + tokenRanges +
+                ", tokenRangesBitsetCache=" + tokenRangesBitsetCache +
+                ", extraParams=" + extraParams +
                 ", allowPartialSearchResults=" + allowPartialSearchResults +
                 ", localClusterAlias=" + localClusterAlias +
                 ", getOrCreateAbsoluteStartMillis=" + absoluteStartMillis +

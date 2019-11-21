@@ -223,8 +223,7 @@ public class TokenFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
-    public Mapper parse(ParseContext context) throws IOException {
-        return null;
+    public void parse(ParseContext context) throws IOException {
     }
 
     @Override

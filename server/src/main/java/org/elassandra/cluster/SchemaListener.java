@@ -30,6 +30,7 @@ import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.service.MigrationListener;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elassandra.index.ElasticSecondaryIndex;
 import org.elasticsearch.cluster.ClusterChangedEvent;
@@ -42,7 +43,6 @@ import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
-import org.elasticsearch.common.logging.ServerLoggers;
 import org.elasticsearch.common.settings.Settings;
 
 import java.nio.ByteBuffer;
@@ -64,7 +64,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
     public SchemaListener(Settings settings, ClusterService clusterService) {
         this.clusterService = clusterService;
         this.clusterService.addListener(this);
-        this.logger = ServerLoggers.getLogger(getClass(), settings);
+        this.logger = LogManager.getLogger(getClass());
     }
 
     /**
@@ -98,7 +98,7 @@ public class SchemaListener extends MigrationListener implements ClusterStateLis
 
             // update virtualized index mapping
             final MetaData.Builder metaDataBuilder2 = clusterService.addVirtualIndexMappings(metaDataBuilder.build());
-            
+
             // update blocks
             if (sourceMetaData.settings().getAsBoolean("cluster.blocks.read_only", false))
                 blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);

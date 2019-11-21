@@ -49,7 +49,6 @@ import org.elasticsearch.common.util.concurrent.FutureUtils;
 import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.RecoveryEngineException;
-import org.elasticsearch.index.seqno.LocalCheckpointTracker;
 import org.elasticsearch.index.seqno.RetentionLeases;
 import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.IndexShard;
@@ -144,6 +143,7 @@ public class RecoverySourceHandler {
             final Consumer<Exception> onFailure = e ->
                 IOUtils.closeWhileHandlingException(releaseResources, () -> wrappedListener.onFailure(e));
 
+            /*
             runUnderPrimaryPermit(() -> {
                 final IndexShardRoutingTable routingTable = shard.getReplicationGroup().getRoutingTable();
                 ShardRouting targetShardRouting = routingTable.getByAllocationId(request.targetAllocationId());
@@ -155,6 +155,7 @@ public class RecoverySourceHandler {
                 assert targetShardRouting.initializing() : "expected recovery target to be initializing but was " + targetShardRouting;
             }, shardId + " validating recovery target ["+ request.targetAllocationId() + "] registered ",
                 shard, cancellableThreads, logger);
+             */
             final Closeable retentionLock = shard.acquireRetentionLock();
             resources.add(retentionLock);
             final long startingSeqNo;
@@ -208,8 +209,10 @@ public class RecoverySourceHandler {
                  * make sure to do this before sampling the max sequence number in the next step, to ensure that we send
                  * all documents up to maxSeqNo in phase2.
                  */
+                /*
                 runUnderPrimaryPermit(() -> shard.initiateTracking(request.targetAllocationId()),
                     shardId + " initiating tracking of " + request.targetAllocationId(), shard, cancellableThreads, logger);
+                */
 
                 final long endingSeqNo = shard.seqNoStats().getMaxSeqNo();
                 if (logger.isTraceEnabled()) {
@@ -224,9 +227,11 @@ public class RecoverySourceHandler {
                 // are at least as high as the corresponding values on the primary when any of these operations were executed on it.
                 final long maxSeenAutoIdTimestamp = shard.getMaxSeenAutoIdTimestamp();
                 final long maxSeqNoOfUpdatesOrDeletes = shard.getMaxSeqNoOfUpdatesOrDeletes();
-                final RetentionLeases retentionLeases = shard.getRetentionLeases();
+                //final RetentionLeases retentionLeases = shard.getRetentionLeases();
+                /*
                 phase2(startingSeqNo, endingSeqNo, phase2Snapshot, maxSeenAutoIdTimestamp, maxSeqNoOfUpdatesOrDeletes,
                     retentionLeases, sendSnapshotStep);
+                 */
                 sendSnapshotStep.whenComplete(
                     r -> IOUtils.close(phase2Snapshot),
                     e -> {
@@ -285,9 +290,9 @@ public class RecoverySourceHandler {
             try (Releasable ignored = FutureUtils.get(permit)) {
                 // check that the IndexShard still has the primary authority. This needs to be checked under operation permit to prevent
                 // races, as IndexShard will switch its authority only when it holds all operation permits, see IndexShard.relocated()
-                if (primary.isRelocatedPrimary()) {
-                    throw new IndexShardRelocatedException(primary.shardId());
-                }
+                //if (primary.isRelocatedPrimary()) {
+                //    throw new IndexShardRelocatedException(primary.shardId());
+                // }
                 runnable.run();
             } finally {
                 // just in case we got an exception (likely interrupted) while waiting for the get
@@ -652,6 +657,7 @@ public class RecoverySourceHandler {
          * marking the shard as in-sync. If the relocation handoff holds all the permits then after the handoff completes and we acquire
          * the permit then the state of the shard will be relocated and this recovery will fail.
          */
+        /*
         runUnderPrimaryPermit(() -> shard.markAllocationIdAsInSync(request.targetAllocationId(), targetLocalCheckpoint),
             shardId + " marking " + request.targetAllocationId() + " as in sync", shard, cancellableThreads, logger);
         final long globalCheckpoint = shard.getGlobalCheckpoint();
@@ -666,16 +672,18 @@ public class RecoverySourceHandler {
                 // TODO: make relocated async
                 // this acquires all IndexShard operation permits and will thus delay new recoveries until it is done
                 cancellableThreads.execute(() -> shard.relocated(recoveryTarget::handoffPrimaryContext));
-                /*
-                 * if the recovery process fails after disabling primary mode on the source shard, both relocation source and
-                 * target are failed (see {@link IndexShard#updateRoutingEntry}).
-                 */
+                //
+                // if the recovery process fails after disabling primary mode on the source shard, both relocation source and
+                // target are failed (see {@link IndexShard#updateRoutingEntry}).
+                //
             }
             stopWatch.stop();
             logger.trace("finalizing recovery took [{}]", stopWatch.totalTime());
             listener.onResponse(null);
         }, listener::onFailure);
+         */
     }
+
 
     static final class SendSnapshotResult {
         final long targetLocalCheckpoint;
@@ -707,7 +715,7 @@ public class RecoverySourceHandler {
 
     void sendFiles(Store store, StoreFileMetaData[] files, Supplier<Integer> translogOps) throws Exception {
         ArrayUtil.timSort(files, Comparator.comparingLong(StoreFileMetaData::length)); // send smallest first
-        final LocalCheckpointTracker requestSeqIdTracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
+        //final LocalCheckpointTracker requestSeqIdTracker = new LocalCheckpointTracker(NO_OPS_PERFORMED, NO_OPS_PERFORMED);
         final AtomicReference<Tuple<StoreFileMetaData, Exception>> error = new AtomicReference<>();
         final byte[] buffer = new byte[chunkSizeInBytes];
         for (final StoreFileMetaData md : files) {
@@ -721,8 +729,8 @@ public class RecoverySourceHandler {
                 while ((bytesRead = in.read(buffer, 0, buffer.length)) != -1) {
                     final BytesArray content = new BytesArray(buffer, 0, bytesRead);
                     final boolean lastChunk = position + content.length() == md.length();
-                    final long requestSeqId = requestSeqIdTracker.generateSeqNo();
-                    cancellableThreads.execute(() -> requestSeqIdTracker.waitForOpsToComplete(requestSeqId - maxConcurrentFileChunks));
+                    //final long requestSeqId = requestSeqIdTracker.generateSeqNo();
+                    //cancellableThreads.execute(() -> requestSeqIdTracker.waitForOpsToComplete(requestSeqId - maxConcurrentFileChunks));
                     cancellableThreads.checkForCancel();
                     if (error.get() != null) {
                         break;
@@ -731,10 +739,10 @@ public class RecoverySourceHandler {
                     cancellableThreads.executeIO(() ->
                         recoveryTarget.writeFileChunk(md, requestFilePosition, content, lastChunk, translogOps.get(),
                             ActionListener.wrap(
-                                r -> requestSeqIdTracker.markSeqNoAsCompleted(requestSeqId),
+                                r -> {},
                                 e -> {
                                     error.compareAndSet(null, Tuple.tuple(md, e));
-                                    requestSeqIdTracker.markSeqNoAsCompleted(requestSeqId);
+                                    //requestSeqIdTracker.markSeqNoAsCompleted(requestSeqId);
                                 }
                             )));
                     position += content.length();
@@ -747,7 +755,7 @@ public class RecoverySourceHandler {
         // When we terminate exceptionally, we don't wait for the outstanding requests as we don't use their results anyway.
         // This allows us to end quickly and eliminate the complexity of handling requestSeqIds in case of error.
         if (error.get() == null) {
-            cancellableThreads.execute(() -> requestSeqIdTracker.waitForOpsToComplete(requestSeqIdTracker.getMaxSeqNo()));
+            cancellableThreads.execute(() -> {});
         }
         if (error.get() != null) {
             handleErrorOnSendFiles(store, error.get().v1(), error.get().v2());

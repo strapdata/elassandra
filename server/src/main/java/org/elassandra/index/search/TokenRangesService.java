@@ -27,26 +27,14 @@ import java.util.concurrent.TimeUnit;
 public class TokenRangesService extends AbstractComponent {
 
     Queue<TokenRangesQueryListener> tokenRangesQueryListeners = new ConcurrentLinkedQueue<TokenRangesQueryListener>();
+    final Settings settings;
+    final Cache<Collection<Range<Token>>, Query> tokenRangesQueryCache;
 
     @Inject
     public TokenRangesService(Settings settings) {
-        super(settings);
-    }
-    
-    public interface TokenRangesQueryListener {
-        public void onRemoveQuery(Query query);
-    }
-    
-    public void register(TokenRangesQueryListener listener) {
-        tokenRangesQueryListeners.add(listener);
-    }
-    
-    public void unregister(TokenRangesQueryListener listener) {
-        tokenRangesQueryListeners.remove(listener);
-    }
-    
-    Cache<Collection<Range<Token>>, Query> tokenRangesQueryCache = CacheBuilder.newBuilder()
-            .concurrencyLevel(EsExecutors.numberOfProcessors(settings))
+        this.settings = settings;
+        this.tokenRangesQueryCache = CacheBuilder.newBuilder()
+            .concurrencyLevel(EsExecutors.numberOfProcessors(TokenRangesService.this.settings))
             .expireAfterAccess(Integer.getInteger(ClusterService.SETTING_SYSTEM_TOKEN_RANGES_QUERY_EXPIRE, 5), TimeUnit.MINUTES)
             .removalListener(new RemovalListener<Collection<Range<Token>>, Query>() {
                 @Override
@@ -57,7 +45,20 @@ public class TokenRangesService extends AbstractComponent {
                         listener.onRemoveQuery(notification.getValue());
                 }
             }).build();
-    
+    }
+
+    public interface TokenRangesQueryListener {
+        public void onRemoveQuery(Query query);
+    }
+
+    public void register(TokenRangesQueryListener listener) {
+        tokenRangesQueryListeners.add(listener);
+    }
+
+    public void unregister(TokenRangesQueryListener listener) {
+        tokenRangesQueryListeners.remove(listener);
+    }
+
     public Query getTokenRangesQuery(Collection<Range<Token>> tokenRanges) {
         Query tokenRangesQuery = null;
         if (tokenRanges != null) {
@@ -69,7 +70,7 @@ public class TokenRangesService extends AbstractComponent {
                     if (unique_range.left.equals(AbstractSearchStrategy.TOKEN_MIN) && unique_range.right.equals(AbstractSearchStrategy.TOKEN_MAX))
                         // full search range, so don't add any filter.
                         return null;
-                    
+
                     if (unique_range.left.equals(unique_range.right)) {
                         // partition key search, not cached.
                         return NumberFieldMapper.NumberType.LONG.termQuery(TokenFieldMapper.NAME,unique_range.left);
@@ -104,41 +105,41 @@ public class TokenRangesService extends AbstractComponent {
         }
         return null;
     }
-    
+
     Query newNumericRangesQuery(Range<Token> range) {
         Long left =  (Long) range.left.getTokenValue();
         Long right = (Long) range.right.getTokenValue();
         return (left.equals(right)) ?
             NumberFieldMapper.NumberType.LONG.termQuery(TokenFieldMapper.NAME,left) :
-            NumberFieldMapper.NumberType.LONG.rangeQuery(TokenFieldMapper.NAME, 
+            NumberFieldMapper.NumberType.LONG.rangeQuery(TokenFieldMapper.NAME,
                 left == Long.MIN_VALUE ? null : left,
                 right == Long.MAX_VALUE ? null : right,
                 false, true, true);
     }
-    
+
     public static boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Range<Token> requestTokenRange) {
         if (requestTokenRange.left.equals(requestTokenRange.right))
             return tokenRangesContains(shardTokenRanges, requestTokenRange.left);
-        
+
         for(Range<Token> shardRange : shardTokenRanges) {
-            if (shardRange.intersects(requestTokenRange)) 
+            if (shardRange.intersects(requestTokenRange))
                 return true;
         }
         return false;
     }
-    
+
     // requestTokenRanges may contains singleton
     public static boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Collection<Range<Token>> requestTokenRanges) {
         for(Range<Token> requestTokenRange : requestTokenRanges) {
-            if (tokenRangesIntersec(shardTokenRanges, requestTokenRange)) 
+            if (tokenRangesIntersec(shardTokenRanges, requestTokenRange))
                 return true;
         }
         return false;
     }
-    
+
     public static boolean tokenRangesContains(Collection<Range<Token>> shardTokenRanges, Token token) {
         for(Range<Token> shardRange : shardTokenRanges) {
-            if (shardRange.contains(token)) 
+            if (shardRange.contains(token))
                 return true;
         }
         return false;

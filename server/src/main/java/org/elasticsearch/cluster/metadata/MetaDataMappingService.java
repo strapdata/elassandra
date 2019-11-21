@@ -20,6 +20,13 @@
 package org.elasticsearch.cluster.metadata;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
+
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.transport.Event;
+import org.apache.cassandra.utils.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -28,7 +35,9 @@ import org.elasticsearch.action.admin.indices.mapping.put.PutMappingClusterState
 import org.elasticsearch.cluster.AckedClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateTaskConfig;
+import org.elasticsearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
+import org.elasticsearch.cluster.ClusterStateTaskListener;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -36,6 +45,7 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.index.Index;
@@ -47,13 +57,11 @@ import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.InvalidTypeNameException;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.elasticsearch.index.mapper.MapperService.isMappingSourceTyped;
+import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
 import static org.elasticsearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.NO_LONGER_ASSIGNED;
 
 /**
@@ -65,15 +73,21 @@ public class MetaDataMappingService {
 
     private final ClusterService clusterService;
     private final IndicesService indicesService;
+    private final Settings settings;
 
     final RefreshTaskExecutor refreshExecutor = new RefreshTaskExecutor();
     final PutMappingExecutor putMappingExecutor = new PutMappingExecutor();
-
+    final ClusterStateTaskExecutor<UpdateTask> updateExecutor = new UpdateTaskExecutor();
 
     @Inject
-    public MetaDataMappingService(ClusterService clusterService, IndicesService indicesService) {
+    public MetaDataMappingService(Settings settings, ClusterService clusterService, IndicesService indicesService) {
         this.clusterService = clusterService;
         this.indicesService = indicesService;
+        this.settings = settings;
+    }
+
+    public Settings settings() {
+        return this.settings;
     }
 
     static class RefreshTask {
@@ -112,7 +126,7 @@ public class MetaDataMappingService {
             Collection<Mutation> mutations = new LinkedList<>();
             Collection<Event.SchemaChange> events = new LinkedList<>();
             ClusterState newClusterState = executeRefresh(currentState, tasks, mutations, events);
-            return ClusterTasksResult.<RefreshTask>builder().successes(tasks).build(newClusterState, SchemaUpdate.UPDATE, mutations, events);
+            return ClusterTasksResult.<RefreshTask>builder().successes(tasks).build(newClusterState, ClusterStateTaskConfig.SchemaUpdate.UPDATE, mutations, events);
         }
     }
 
@@ -122,7 +136,7 @@ public class MetaDataMappingService {
             Collection<Mutation> mutations = new LinkedList<>();
             Collection<Event.SchemaChange> events = new LinkedList<>();
             ClusterState newClusterState = executeRefresh(currentState, tasks, mutations, events);
-            return ClusterTasksResult.<UpdateTask>builder().successes(tasks).build(newClusterState, SchemaUpdate.UPDATE, mutations, events);
+            return ClusterTasksResult.<UpdateTask>builder().successes(tasks).build(newClusterState, ClusterStateTaskConfig.SchemaUpdate.UPDATE, mutations, events);
         }
     }
 
@@ -391,13 +405,20 @@ public class MetaDataMappingService {
                     && mappingType.charAt(0) == '_') {
                 throw new InvalidTypeNameException("Document mapping type name can't start with '_', found: [" + mappingType + "]");
             }
-            MetaData.Builder builder = MetaData.builder(metaData);
+            MetaData.Builder builder = MetaData.builder(metaData).setClusterUuid();
             boolean updated = false;
+
+            Map<Index, Pair<IndexMetaData, MapperService>> mapperServicesMap = new HashMap<>();
+
             for (IndexMetaData indexMetaData : updateList) {
                 boolean updatedMapping = false;
                 // do the actual merge here on the master, and update the mapping source
                 // we use the exact same indexService and metadata we used to validate above here to actually apply the update
                 final Index index = indexMetaData.getIndex();
+                IndexService indexService = indicesService.indexService(index);
+                if (indexService == null) {
+                    continue;
+                }
                 final MapperService mapperService = indexMapperServices.get(index);
 
                 // If the _type name is _doc and there is no _doc top-level key then this means that we
@@ -442,8 +463,12 @@ public class MetaDataMappingService {
                 IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(indexMetaData);
                 // Mapping updates on a single type may have side-effects on other types so we need to
                 // update mapping metadata on all types
+                KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(mapperService.keyspace(),
+                        settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1,
+                        mapperService.getIndexSettings().getIndexMetaData().replication(), mutations, events);
                 for (DocumentMapper mapper : mapperService.docMappers(true)) {
-                    indexMetaDataBuilder.putMapping(new MappingMetaData(mapper.mappingSource()));
+                    MappingMetaData mappingMd = new MappingMetaData(mapper.mappingSource());
+                    indexMetaDataBuilder.putMapping(mappingMd);
                 }
                 if (updatedMapping) {
                     indexMetaDataBuilder.mappingVersion(1 + indexMetaDataBuilder.mappingVersion());
@@ -457,7 +482,56 @@ public class MetaDataMappingService {
                 updated |= updatedMapping;
             }
             if (updated) {
-                return ClusterState.builder(currentState).metaData(builder).build();
+                MetaData newMetaData = builder.build();
+                MetaData.Builder builder2 = MetaData.builder(newMetaData);
+                for (IndexMetaData indexMetaData : mapperServicesMap.values().stream().map(p -> p.left).collect(Collectors.toList()) ) {
+                    if (indexMetaData.isVirtual()) {
+                        IndexMetaData virtualIndexMetaData = newMetaData.index(indexMetaData.getIndex().getName());
+                    	// update the existing indices pointing to the virtual index
+                        for(ObjectCursor<IndexMetaData> cursor : currentState.metaData().getIndices().values()) {
+                            if (virtualIndexMetaData.getIndex().getName().equals(cursor.value.virtualIndex())) {
+                                IndexMetaData.Builder imdBuilder = IndexMetaData.builder(cursor.value).version(virtualIndexMetaData.getVersion());
+                                for(ObjectCursor<MappingMetaData> mappingCursor : virtualIndexMetaData.getMappings().values()) {
+                                    imdBuilder.putMapping(mappingCursor.value);
+                                }
+                                IndexMetaData indexMetaData2 = imdBuilder.build();
+                                builder2.put(indexMetaData2, false);
+                                mapperServicesMap.put(indexMetaData2.getIndex(), Pair.create(indexMetaData2, indexMapperServices.get(virtualIndexMetaData.getIndex())));
+                            }
+                        }
+                    }
+                }
+
+                // collect tables+IndexMetaData to update extensions
+                Multimap<String, IndexMetaData> perTableIndexMetaData = ArrayListMultimap.create();
+                for (IndexMetaData indexMetaData : mapperServicesMap.values().stream().map(p -> p.left).collect(Collectors.toList())) {
+                    for(ObjectCursor<MappingMetaData> mmd : indexMetaData.getMappings().values()) {
+                        if (!mmd.value.type().equals(MapperService.DEFAULT_MAPPING) && indexMetaData.virtualIndex() == null)
+                            perTableIndexMetaData.put( indexMetaData.keyspace() + "." + mmd.value.type(), indexMetaData);
+                    }
+                }
+
+                // update each table schema with related index metadata to store mapping in table extensions
+                for(String ksTypeName : perTableIndexMetaData.keySet()) {
+                    int i = ksTypeName.indexOf(".");
+                    String ksName = ksTypeName.substring(0, i);
+                    String type = ksTypeName.substring(i + 1);
+
+                    IndexMetaData indexMetaData = perTableIndexMetaData.get(ksTypeName).iterator().next();
+                    ksmMap.compute(ksName, (k, v) -> {
+                        if (v == null)
+                            v = clusterService.getSchemaManager().createOrUpdateKeyspace(ksName,
+                                    settings().getAsInt(SETTING_NUMBER_OF_REPLICAS, 0) +1,
+                                    indexMetaData.replication(), mutations, events);
+                        return clusterService.getSchemaManager().updateTableSchema(v, type,
+                                mapperServicesMap.entrySet().stream()
+                                    .filter(e -> e.getValue().left.keyspace().equals(ksName) && e.getValue().left.getMappings().containsKey(type))
+                                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)),
+                                mutations, events);
+                    });
+                }
+
+                return ClusterState.builder(currentState).metaData(builder2).build();
             } else {
                 return currentState;
             }

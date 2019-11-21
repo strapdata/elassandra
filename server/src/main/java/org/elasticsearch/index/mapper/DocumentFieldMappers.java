@@ -20,13 +20,10 @@
 package org.elasticsearch.index.mapper;
 
 import org.apache.lucene.analysis.Analyzer;
+import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.index.analysis.FieldNameAnalyzer;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 
 public final class DocumentFieldMappers implements Iterable<Mapper> {
 
@@ -79,6 +76,35 @@ public final class DocumentFieldMappers implements Iterable<Mapper> {
      */
     public Mapper getMapper(String field) {
         return fieldMappers.get(field);
+    }
+
+    public Collection<String> simpleMatchToFullName(String pattern) {
+        Set<String> fields = new HashSet<>();
+        for (Mapper mapper : this) {
+            if (mapper instanceof FieldMapper) {
+                FieldMapper fieldMapper = (FieldMapper)mapper;
+                if (Regex.simpleMatch(pattern, fieldMapper.fieldType().name())) {
+                    fields.add(fieldMapper.fieldType().name());
+                }
+            }
+        }
+        return fields;
+    }
+
+    public FieldMapper smartNameFieldMapper(String name) {
+        Mapper mapper = getMapper(name);
+        if ((mapper != null) && (mapper instanceof FieldMapper)) {
+            return (FieldMapper)mapper;
+        }
+        for (Mapper otherMapper : this) {
+            if (otherMapper instanceof FieldMapper) {
+                FieldMapper otherFieldMapper = (FieldMapper) otherMapper;
+                if (otherFieldMapper.fieldType().name().equals(name)) {
+                    return otherFieldMapper;
+                }
+            }
+        }
+        return null;
     }
 
     /**

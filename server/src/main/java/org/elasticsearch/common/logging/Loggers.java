@@ -66,7 +66,7 @@ public class Loggers {
     }
 
     public static Logger getLogger(Class<?> clazz, String... prefixes) {
-        return new PrefixLogger(LogManager.getLogger(clazz), formatPrefix(prefixes));
+        return (prefixes.length == 0) ? LogManager.getLogger(clazz) : new PrefixLogger(LogManager.getLogger(clazz), formatPrefix(prefixes));
     }
 
     public static Logger getLogger(Logger parentLogger, String s) {
@@ -113,7 +113,7 @@ public class Loggers {
 
     public static void setLevel(Logger logger, Level level) {
         ClusterService.setLoggingLevel(logger.getName(), level.toString());
-        
+
         /*
         if (!LogManager.ROOT_LOGGER_NAME.equals(logger.getName())) {
             Configurator.setLevel(logger.getName(), level);
@@ -135,19 +135,20 @@ public class Loggers {
         */
     }
 
-    /*
     public static void addAppender(final Logger logger, final Appender appender) {
-        final org.apache.logging.slf4j.SLF4JLoggerContext slf4jContext = (org.apache.logging.slf4j.SLF4JLoggerContext) LogManager.getContext(false);
-        final LoggerContext ctx = (LoggerContext) slf4jContext.getExternalContext();
-        final Configuration config = ctx.getConfiguration();
-        config.addAppender(appender);
-        LoggerConfig loggerConfig = config.getLoggerConfig(logger.getName());
-        if (!logger.getName().equals(loggerConfig.getName())) {
-            loggerConfig = new LoggerConfig(logger.getName(), logger.getLevel(), true);
-            config.addLogger(logger.getName(), loggerConfig);
+        final LoggerContext context = (LoggerContext) LogManager.getContext(false);
+        final LoggerContext ctx = (LoggerContext) context.getExternalContext();
+        if (ctx != null) {
+            final Configuration config = ctx.getConfiguration();
+            config.addAppender(appender);
+            LoggerConfig loggerConfig = config.getLoggerConfig(logger.getName());
+            if (!logger.getName().equals(loggerConfig.getName())) {
+                loggerConfig = new LoggerConfig(logger.getName(), logger.getLevel(), true);
+                config.addLogger(logger.getName(), loggerConfig);
+            }
+            loggerConfig.addAppender(appender, null, null);
+            ctx.updateLoggers();
         }
-        loggerConfig.addAppender(appender, null, null);
-        ctx.updateLoggers();
     }
 
     public static void removeAppender(final Logger logger, final Appender appender) {
@@ -173,5 +174,5 @@ public class Loggers {
         }
         return null;
     }
-    */
+
 }

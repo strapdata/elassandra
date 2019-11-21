@@ -60,6 +60,14 @@ public abstract class TransportWriteAction<
         > extends TransportReplicationAction<Request, ReplicaRequest, Response> {
 
     protected TransportWriteAction(Settings settings, String actionName, TransportService transportService,
+                                   ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool, ShardStateAction shardStateAction,
+                                   ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
+                                   Supplier<ReplicaRequest> replicaRequest, String executor) {
+        super(settings, actionName, transportService, clusterService, indicesService, threadPool, actionFilters,
+            indexNameExpressionResolver, request, replicaRequest, executor, true);
+    }
+
+    protected TransportWriteAction(Settings settings, String actionName, TransportService transportService,
             ClusterService clusterService, IndicesService indicesService, ThreadPool threadPool,
             ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request,
                                    Supplier<ReplicaRequest> replicaRequest, String executor) {
@@ -379,13 +387,17 @@ public abstract class TransportWriteAction<
             if (TransportActions.isShardNotAvailableException(exception) == false) {
                 logger.warn(new ParameterizedMessage("[{}] {}", replica.shardId(), message), exception);
             }
+            /*
             shardStateAction.remoteShardFailed(
                 replica.shardId(), replica.allocationId().getId(), primaryTerm, true, message, exception, listener);
+             */
         }
 
         @Override
         public void markShardCopyAsStaleIfNeeded(ShardId shardId, String allocationId, ActionListener<Void> listener) {
+            /*
             shardStateAction.remoteShardFailed(shardId, allocationId, primaryTerm, true, "mark copy as stale", null, listener);
+            */
         }
     }
 }

@@ -245,6 +245,11 @@ public class AllFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void postCreate(ParseContext context) throws IOException {
+        createField(context, null);
+    }
+
+    @Override
     public void parse(ParseContext context) throws IOException {
         // we parse in post parse
     }

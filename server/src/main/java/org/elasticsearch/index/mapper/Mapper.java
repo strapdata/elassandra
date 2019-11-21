@@ -37,14 +37,6 @@ import java.util.function.Supplier;
 
 public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
 
-    public static enum CqlCollection {
-        LIST, SET, SINGLETON, NONE
-    }
-
-    public static enum CqlStruct {
-        UDT, MAP, OPAQUE_MAP, TUPLE
-    }
-
     public static class BuilderContext {
         private final Settings indexSettings;
         private final ContentPath contentPath;
@@ -202,7 +194,7 @@ public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
      */
     public abstract Mapper updateFieldType(Map<String, MappedFieldType> fullNameToFieldType);
 
-
+    public abstract boolean hasField();
 
     /**
      * @return cql column name as a ByteBuffer
@@ -212,36 +204,5 @@ public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
             cqlName = ByteBufferUtil.bytes(this.simpleName);
         }
         return cqlName;
-    }
-
-    public abstract CqlCollection cqlCollection();
-
-    public abstract String cqlCollectionTag();
-
-    public abstract CqlStruct cqlStruct();
-
-    public abstract boolean cqlPartialUpdate();
-
-    public abstract boolean cqlPartitionKey();
-
-    public abstract boolean cqlStaticColumn();
-
-    public abstract int cqlPrimaryKeyOrder();
-
-    public abstract boolean cqlClusteringKeyDesc();
-
-    public abstract boolean hasField();
-
-    public abstract CQL3Type CQL3Type();
-
-    public CQL3Type.Raw collection(CQL3Type.Raw rawType) {
-        switch(cqlCollection()) {
-        case LIST:
-            return CQL3Type.Raw.list( rawType );
-        case SET:
-            return CQL3Type.Raw.set( rawType );
-        default:
-            return rawType;
-        }
     }
 }

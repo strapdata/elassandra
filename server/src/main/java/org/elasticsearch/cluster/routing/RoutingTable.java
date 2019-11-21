@@ -554,6 +554,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
             for (IndexRoutingTable.Builder indexBuilder : indexRoutingTableBuilders.values()) {
                 add(indexBuilder);
             }
+            */
             return this;
         }
 
@@ -565,6 +566,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
          * @return the builder
          */
         public Builder updateNumberOfReplicas(final int numberOfReplicas, final String[] indices) {
+            /*
             if (indicesRouting == null) {
                 throw new IllegalStateException("once build is called the builder cannot be reused");
             }

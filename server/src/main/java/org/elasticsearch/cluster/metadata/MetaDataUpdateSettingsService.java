@@ -19,9 +19,18 @@
 
 package org.elasticsearch.cluster.metadata;
 
-import org.apache.logging.log4j.Logger;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.SchemaKeyspace;
+import org.apache.cassandra.transport.Event;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.logging.log4j.LogManager;
-import org.elasticsearch.ExceptionsHelper;
+import org.apache.logging.log4j.Logger;
+import org.elassandra.cluster.SchemaManager;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsClusterStateUpdateRequest;
@@ -44,16 +53,11 @@ import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.Index;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 import static org.elasticsearch.action.support.ContextPreservingActionListener.wrapPreservingContext;
 import static org.elasticsearch.index.IndexSettings.same;
@@ -122,10 +126,19 @@ public class MetaDataUpdateSettingsService {
             }
 
             @Override
-            public ClusterState execute(ClusterState currentState) {
+            public ClusterState execute(ClusterState currentState) throws Exception {
+                throw new UnsupportedOperationException();
+            }
 
+            @Override
+            public SchemaUpdate schemaUpdate() {
+                return SchemaUpdate.UPDATE;
+            }
+
+            @Override
+            public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events) {
                 RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
-                MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData());
+                MetaData.Builder metaDataBuilder = MetaData.builder(currentState.metaData()).setClusterUuid();
 
                 // allow to change any settings to a close index, and only allow dynamic settings to be changed
                 // on an open index
@@ -192,6 +205,7 @@ public class MetaDataUpdateSettingsService {
                 maybeUpdateClusterBlock(actualIndices, blocks, IndexMetaData.INDEX_READ_BLOCK,
                     IndexMetaData.INDEX_BLOCKS_READ_SETTING, openSettings);
 
+                Multimap<CFMetaData, IndexMetaData> perTableIndices = ArrayListMultimap.create();
                 if (!openIndices.isEmpty()) {
                     for (Index index : openIndices) {
                         IndexMetaData indexMetaData = metaDataBuilder.getSafe(index);
@@ -204,7 +218,17 @@ public class MetaDataUpdateSettingsService {
                             Settings finalSettings = indexSettings.build();
                             indexScopedSettings.validate(
                                 finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false), true);
-                            metaDataBuilder.put(IndexMetaData.builder(indexMetaData).settings(finalSettings));
+                            IndexMetaData newIndexMetaData = IndexMetaData.builder(indexMetaData).settings(finalSettings).build();
+
+                            // collect tables+IndexMetaData to update extensions
+                            for(ObjectCursor<MappingMetaData> mmd : newIndexMetaData.getMappings().values()) {
+                                KeyspaceMetadata ksm = SchemaManager.getKSMetaDataCopy(newIndexMetaData.keyspace());
+                                String cfName = SchemaManager.typeToCfName(newIndexMetaData.keyspace(), mmd.value.type());
+                                final CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
+                                assert cfm != null : "Table "+newIndexMetaData.keyspace()+"."+cfName+" not found";
+                                perTableIndices.put(cfm,  newIndexMetaData);
+                            }
+                            metaDataBuilder.put(newIndexMetaData, true);
                         }
                     }
                 }
@@ -221,9 +245,28 @@ public class MetaDataUpdateSettingsService {
                             Settings finalSettings = indexSettings.build();
                             indexScopedSettings.validate(
                                 finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false), true);
-                            metaDataBuilder.put(IndexMetaData.builder(indexMetaData).settings(finalSettings));
+                            IndexMetaData newIndexMetaData = IndexMetaData.builder(indexMetaData).settings(finalSettings).build();
+
+                            // collect tables+IndexMetaData to update extensions
+                            for(ObjectCursor<MappingMetaData> mmd : newIndexMetaData.getMappings().values()) {
+                                KeyspaceMetadata ksm = SchemaManager.getKSMetaDataCopy(newIndexMetaData.keyspace());
+                                String cfName = SchemaManager.typeToCfName(newIndexMetaData.keyspace(), mmd.value.type());
+                                final CFMetaData cfm = ksm.getTableOrViewNullable(cfName);
+                                assert cfm != null : "Table "+newIndexMetaData.keyspace()+"."+cfName+" not found";
+                                perTableIndices.put(cfm,  newIndexMetaData);
+                            }
+                            metaDataBuilder.put(newIndexMetaData, true);
                         }
                     }
+                }
+
+                // update table extensions with related index metadata
+                for(CFMetaData cfm : perTableIndices.keySet()) {
+                    KeyspaceMetadata ksm = SchemaManager.getKSMetaData(cfm.ksName);
+                    CFMetaData cfm2 = clusterService.getSchemaManager().updateTableExtensions(ksm, cfm, perTableIndices.get(cfm));
+                    Mutation.SimpleBuilder builder = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, FBUtilities.timestampMicros());
+                    SchemaKeyspace.addTableToSchemaMutation(cfm2, false, builder);
+                    mutations.add(builder.build());
                 }
 
                 // increment settings versions
@@ -235,10 +278,10 @@ public class MetaDataUpdateSettingsService {
                     }
                 }
 
-                ClusterState updatedState = ClusterState.builder(currentState).metaData(metaDataBuilder)
-                    .routingTable(routingTableBuilder.build()).blocks(blocks).build();
+                ClusterState updatedState = ClusterState.builder(currentState).metaData(metaDataBuilder).blocks(blocks).build();
 
                 // now, reroute in case things change that require it (like number of replicas)
+                /*
                 updatedState = allocationService.reroute(updatedState, "settings update");
                 try {
                     for (Index index : openIndices) {
