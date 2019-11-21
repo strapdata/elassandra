@@ -40,6 +40,17 @@ dependencies {
     compile "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${versions.jackson}"
     compile "com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:${versions.jackson}"
 
+    compile("com.strapdata.cassandra:cassandra-all:${versions.cassandra}") {
+        exclude group:'net.java.dev.jna', module:'jna'
+        exclude group:'org.ow2.asm', module:'asm'
+        exclude group:'org.apache.commons', module:'commons-lang3'
+        exclude group:'org.slf4j', module:'slf4j-api'
+        exclude group:'org.yaml', module:'snakeyaml'
+        exclude group:'io.netty', module:'netty-all'
+        exclude group:'joda-time', module:'joda-time'
+        exclude group:'commons-codec', module:'commons-codec'
+    }
+
     testCompile "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
     testCompile "junit:junit:${versions.junit}"
     testCompile "org.hamcrest:hamcrest-all:${versions.hamcrest}"

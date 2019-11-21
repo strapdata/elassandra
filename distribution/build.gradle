@@ -17,6 +17,7 @@
  * under the License.
  */
 
+import org.gradle.api.file.RelativePath
 import org.elasticsearch.gradle.ConcatFilesTask
 import org.elasticsearch.gradle.MavenFilteringHack
 import org.elasticsearch.gradle.NoticeTask
@@ -88,7 +89,7 @@ task buildOssBin {
 }
 task buildOssConfig {
   dependsOn processOssOutputs
-  outputs.dir "${ossOutputs}/config"
+  outputs.dir "${ossOutputs}/conf"
 }
 task buildDefaultModules {
   dependsOn processDefaultOutputs
@@ -100,8 +101,9 @@ task buildDefaultBin {
 }
 task buildDefaultConfig {
   dependsOn processDefaultOutputs
-  outputs.dir "${defaultOutputs}/config"
+  outputs.dir "${defaultOutputs}/conf"
 }
+
 task buildTransportModules {
   dependsOn processTransportOutputs
   outputs.dir "${transportOutputs}/modules"
@@ -112,10 +114,6 @@ void copyModule(Sync copyTask, Project module) {
     dependsOn { module.bundlePlugin }
     from({ zipTree(module.bundlePlugin.outputs.files.singleFile) }) {
       includeEmptyDirs false
-
-      // these are handled separately in the log4j config tasks below
-      exclude '*/config/log4j2.properties'
-      exclude 'config/log4j2.properties'
 
       eachFile { details ->
         String name = module.plugins.hasPlugin('elasticsearch.esplugin') ? module.esplugin.name : module.es_meta_plugin.name 
@@ -129,44 +127,6 @@ void copyModule(Sync copyTask, Project module) {
           details.relativePath = new RelativePath(true, segments.takeRight(segments.length - 1))
         }
       }
-    }
-  }
-}
-
-// log4j config could be contained in modules, so we must join it together using these tasks
-task buildOssLog4jConfig {
-  dependsOn processOssOutputs
-  ext.contents = []
-  ext.log4jFile = file("${ossOutputs}/log4j2.properties")
-  outputs.file log4jFile
-}
-task buildDefaultLog4jConfig {
-  dependsOn processDefaultOutputs
-  ext.contents = []
-  ext.log4jFile = file("${defaultOutputs}/log4j2.properties")
-  outputs.file log4jFile
-}
-
-Closure writeLog4jProperties = {
-  String mainLog4jProperties = file('src/config/log4j2.properties').getText('UTF-8')
-  it.log4jFile.setText(mainLog4jProperties, 'UTF-8')
-  for (String moduleLog4jProperties : it.contents.reverse()) {
-    it.log4jFile.append(moduleLog4jProperties, 'UTF-8')
-  }
-}
-buildOssLog4jConfig.doLast(writeLog4jProperties)
-buildDefaultLog4jConfig.doLast(writeLog4jProperties)
-
-// copy log4j2.properties from modules that have it
-void copyLog4jProperties(Task buildTask, Project module) {
-  buildTask.doFirst {
-    FileTree tree = zipTree(module.bundlePlugin.outputs.files.singleFile)
-    FileTree filtered = tree.matching {
-      include 'config/log4j2.properties'
-      include '*/config/log4j2.properties' // could be in a bundled plugin
-    }
-    if (filtered.isEmpty() == false) {
-      buildTask.contents.add('\n\n' + filtered.singleFile.getText('UTF-8'))
     }
   }
 }
@@ -187,9 +147,6 @@ project.rootProject.subprojects.findAll { it.parent.path == ':modules' }.each { 
   if (module.name.startsWith('transport-')) {
     copyModule(processTransportOutputs, module)
   }
-
-  copyLog4jProperties(buildOssLog4jConfig, module)
-  copyLog4jProperties(buildDefaultLog4jConfig, module)
 
   // make sure the module's integration tests run after the integ-test-zip (ie rest tests)
   module.afterEvaluate({
@@ -227,11 +184,18 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
           from { project(':distribution:tools:plugin-cli').jar }
           from { project(':distribution:tools:plugin-cli').configurations.runtime }
         }
-        if (oss == false) {
-          into('tools/security-cli') {
-            from { project(':x-pack:plugin:security:cli').jar }
-            from { project(':x-pack:plugin:security:cli').configurations.compile }
-          }
+
+        // Important files used to ship some cqlsh.py python dependencies if not already installed on host.
+        // This prevents the need to run 'pip install cassandra driver'
+        with copySpec {
+          from '../../server/cassandra/lib'
+          include '*.zip'
+        }
+
+        // Add dependency on cassandra-driver for UDF
+        with copySpec {
+          from '../../server/cassandra/lib'
+          include 'cassandra-driver-core-3.0.1-shaded.jar'
         }
       }
     }
@@ -239,18 +203,15 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
     modulesFiles = { oss ->
       copySpec {
         eachFile {
-          if (it.relativePath.segments[-2] == 'bin') {
+          if (it.relativePath.segments[-2] == 'bin' || it.relativePath.segments[-2] == 'MacOS') {
             // bin files, wherever they are within modules (eg platform specific) should be executable
+            // and MacOS is an alternative to bin on macOS
             it.mode = 0755
           } else {
             it.mode = 0644
           }
         }
-        if (oss) {
-          from project(':distribution').buildOssModules
-        } else {
-          from project(':distribution').buildDefaultModules
-        }
+        from project(':distribution').buildOssModules
       }
     }
 
@@ -262,16 +223,8 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
       copySpec {
         with copySpec {
           // main config files, processed with distribution specific substitutions
-          from '../src/config'
-          exclude 'log4j2.properties' // this is handled separately below
+          from '../src/conf'
           MavenFilteringHack.filter(it, expansionsForDistribution(distributionType, oss))
-        }
-        if (oss) {
-          from project(':distribution').buildOssLog4jConfig
-          from project(':distribution').buildOssConfig
-        } else {
-          from project(':distribution').buildDefaultLog4jConfig
-          from project(':distribution').buildDefaultConfig
         }
       }
     }
@@ -281,7 +234,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
         with copySpec {
           // main bin files, processed with distribution specific substitutions
           // everything except windows files
-          from '../src/bin'
+          from '../src/bin2'
           exclude '*.exe'
           exclude '*.bat'
           eachFile { it.setMode(0755) }
@@ -289,12 +242,76 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
         }
         with copySpec {
           eachFile { it.setMode(0755) }
-          if (oss) {
-            from project(':distribution').buildOssBin
-          } else {
-            from project(':distribution').buildDefaultBin
-          }
+          from project(':distribution').buildOssBin
         }
+      }
+    }
+
+    cassandraBinFiles = { distributionType, oss ->
+      copySpec {
+        from '../../server/cassandra/bin'
+        exclude 'cassandra.in.sh'
+        exclude 'cassandra'
+        eachFile { it.setMode(0755) }
+        MavenFilteringHack.filter(it, expansionsForDistribution(distributionType, oss))
+      }
+    }
+
+    homebinFiles = { distributionType, oss ->
+      copySpec {
+        from 'packages/src/main/packaging/homebin'
+        eachFile { it.setMode(0755) }
+        MavenFilteringHack.filter(it, expansionsForDistribution(distributionType, oss))
+      }
+    }
+
+    pylibFiles = { distributionType, oss ->
+      copySpec {
+        from '../../server/cassandra/pylib'
+      }
+    }
+
+    cassandraLicenseFiles = { distributionType, oss ->
+      copySpec {
+        from '../../server/cassandra/lib/licenses'
+      }
+    }
+
+    sigarFiles = { distributionType, oss ->
+      copySpec {
+        from '../../server/cassandra/lib/sigar-bin'
+        eachFile { it.setMode(0755) }
+      }
+    }
+
+    toolsFiles = { distributionType, oss ->
+      copySpec {
+        from '../../server/cassandra/tools'
+        exclude 'stress/**'
+        eachFile { it.setMode(0755) }
+      }
+    }
+
+    stressFiles = { distributionType, oss ->
+      copySpec {
+        from '../../server/cassandra/build/tools'
+        include 'stress/**'
+      }
+    }
+
+    commonFiles = { distributionType, oss ->
+      copySpec {
+        from rootProject.projectDir
+        include 'LICENSE.txt'
+        include 'CHANGES.txt'
+        include 'README.md'
+      }
+    }
+
+    licenseFiles = { distributionType, oss ->
+      copySpec {
+        from rootProject.buildDir.path + '/licenses'
+        include '**'
       }
     }
 
@@ -309,6 +326,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
 
 }
 
+/*
 task run(type: RunTask) {
   distribution = System.getProperty('run.distribution', 'zip')
   if (distribution == 'zip') {
@@ -330,6 +348,7 @@ task run(type: RunTask) {
     keystoreSetting 'bootstrap.password', 'password'
   }
 }
+*/
 
 /**
  * Build some variables that are replaced in the packages. This includes both
@@ -363,18 +382,15 @@ task run(type: RunTask) {
  */
 subprojects {
   ext.expansionsForDistribution = { distributionType, oss ->
-    final String defaultHeapSize = "1g"
-    final String packagingPathData = "path.data: /var/lib/elasticsearch"
-    final String pathLogs = "/var/log/elasticsearch"
+    final String defaultHeapSize = "2g"
+    final String packagingPathData = "path.data: /var/lib/cassandra/elasticsearch.data"
+    final String pathLogs = "/var/log/cassandra"
     final String packagingPathLogs = "path.logs: ${pathLogs}"
     final String packagingLoggc = "${pathLogs}/gc.log"
 
     String licenseText
-    if (oss) {
-      licenseText = rootProject.file('licenses/APACHE-LICENSE-2.0.txt').getText('UTF-8')
-    } else {
-      licenseText = rootProject.file('licenses/ELASTIC-LICENSE.txt').getText('UTF-8')
-    }
+    licenseText = rootProject.file('licenses/APACHE-LICENSE-2.0.txt').getText('UTF-8')
+
     // license text needs to be indented with a single space
     licenseText = ' ' + licenseText.replace('\n', '\n ') 
 
@@ -385,50 +401,50 @@ subprojects {
       'project.version': version,
 
       'path.conf': [
-        'deb': '/etc/elasticsearch',
-        'rpm': '/etc/elasticsearch',
-        'def': '"$ES_HOME"/config'
+        'deb': '/etc/cassandra',
+        'rpm': '/etc/cassandra',
+        'def': '"$ES_HOME"/conf'
       ],
       'path.data': [
         'deb': packagingPathData,
         'rpm': packagingPathData,
-        'def': '#path.data: /path/to/data'
+        'def': '#path.data: /var/lib/cassandra/data'
       ],
       'path.env': [
-        'deb': '/etc/default/elasticsearch',
-        'rpm': '/etc/sysconfig/elasticsearch',
+        'deb': '/etc/default/cassandra',
+        'rpm': '/etc/sysconfig/cassandra',
         /* There isn't one of these files for tar or zip but its important to
           make an empty string here so the script can properly skip it. */
-        'def': 'if [ -z "$ES_PATH_CONF" ]; then ES_PATH_CONF="$ES_HOME"/config; done',
+        'def': 'if [ -z "$ES_PATH_CONF" ]; then ES_PATH_CONF="$ES_HOME"/conf; done',
       ],
       'source.path.env': [
-         'deb': 'source /etc/default/elasticsearch',
-         'rpm': 'source /etc/sysconfig/elasticsearch',
-         'def': 'if [ -z "$ES_PATH_CONF" ]; then ES_PATH_CONF="$ES_HOME"/config; fi',
+         'deb': 'source /etc/default/cassandra',
+         'rpm': 'source /etc/sysconfig/cassandra',
+         'def': 'if [ -z "$ES_PATH_CONF" ]; then ES_PATH_CONF="$ES_HOME"/conf; fi',
       ],
       'path.logs': [
         'deb': packagingPathLogs,
         'rpm': packagingPathLogs,
-        'def': '#path.logs: /path/to/logs'
+        'def': '#path.logs: /var/log/cassandra'
       ],
       'loggc': [
         'deb': packagingLoggc,
         'rpm': packagingLoggc,
-        'def': 'logs/gc.log'
+        'def': '/var/log/cassandra/gc.log'
       ],
 
       'heap.min': defaultHeapSize,
       'heap.max': defaultHeapSize,
 
       'heap.dump.path': [
-        'deb': "-XX:HeapDumpPath=/var/lib/elasticsearch",
-        'rpm': "-XX:HeapDumpPath=/var/lib/elasticsearch",
-        'def': "-XX:HeapDumpPath=data"
+        'deb': "-XX:HeapDumpPath=/var/log/cassandra",
+        'rpm': "-XX:HeapDumpPath=/var/log/cassandra",
+        'def': "-XX:HeapDumpPath=logs"
       ],
 
       'error.file': [
-        'deb': "-XX:ErrorFile=/var/log/elasticsearch/hs_err_pid%p.log",
-        'rpm': "-XX:ErrorFile=/var/log/elasticsearch/hs_err_pid%p.log",
+        'deb': "-XX:ErrorFile=/var/log/cassandra/hs_err_pid%p.log",
+        'rpm': "-XX:ErrorFile=/var/log/cassandra/hs_err_pid%p.log",
         'def': "-XX:ErrorFile=logs/hs_err_pid%p.log"
       ],
 
@@ -444,7 +460,7 @@ subprojects {
       ],
 
       'es.distribution.flavor': [
-        'def': oss ? 'oss' : 'default'
+        'def': 'oss'
       ],
 
 
@@ -456,7 +472,7 @@ subprojects {
       ],
 
       'license.name': [
-        'deb': oss ? 'ASL-2.0' : 'Elastic-License'
+        'deb': 'ASL-2.0'
       ],
 
       'license.text': [

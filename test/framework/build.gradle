@@ -19,10 +19,10 @@
 import com.carrotsearch.gradle.junit4.RandomizedTestingTask;
 
 dependencies {
-  compile "org.elasticsearch.client:elasticsearch-rest-client:${version}"
-  compile "org.elasticsearch.client:elasticsearch-rest-client-sniffer:${version}"
-  compile "org.elasticsearch:elasticsearch:${version}"
-  compile "org.elasticsearch:elasticsearch-cli:${version}"
+  compile "com.strapdata.elasticsearch.client:elasticsearch-rest-client:${version}"
+  compile "com.strapdata.elasticsearch.client:elasticsearch-rest-client-sniffer:${version}"
+  compile "com.strapdata.elasticsearch:elasticsearch:${version}"
+  compile "com.strapdata.elasticsearch:elasticsearch-cli:${version}"
   compile "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
   compile "junit:junit:${versions.junit}"
   compile "org.hamcrest:hamcrest-all:${versions.hamcrest}"

@@ -40,57 +40,73 @@ task createLogsDir(type: EmptyDirTask) {
   dir "${logsDir}"
   dirMode 0755
 }
+ext.dataDir = new File(buildDir, 'data-hack/data')
+task createDataDir(type: EmptyDirTask) {
+  dir "${dataDir}"
+  dirMode 0755
+}
 ext.pluginsDir= new File(buildDir, 'plugins-hack/plugins')
 task createPluginsDir(type: EmptyDirTask) {
   dir "${pluginsDir}"
   dirMode 0755
 }
 
+
 CopySpec archiveFiles(CopySpec modulesFiles, String distributionType, boolean oss) {
   return copySpec {
-    into("elasticsearch-${version}") {
+    into("elassandra-${version}") {
       into('lib') {
         with libFiles(oss)
+        into('sigar-bin') {
+          dirMode 0755
+          with sigarFiles(distributionType, oss)
+        }
+        into('licenses') {
+          dirMode 0755
+          with cassandraLicenseFiles(distributionType, oss)
+          with licenseFiles(distributionType, oss)
+        }
       }
-      into('config') {
+      into('conf') {
         dirMode 0750
         fileMode 0660
         with configFiles(distributionType, oss)
       }
       into('bin') {
         with binFiles(distributionType, oss)
-        with copySpec {
-          from('../src/bin') {
-            include '*.bat'
-            filter(FixCrLfFilter, eol: FixCrLfFilter.CrLf.newInstance('crlf'))
-          }
-          MavenFilteringHack.filter(it, expansionsForDistribution(distributionType, oss))
-        }
+        with cassandraBinFiles(distributionType, oss)
       }
       into('') {
         from {
           dirMode 0755
           logsDir.getParent()
         }
-      }
-      into('') {
+        from {
+          dirMode 0755
+          dataDir.getParent()
+        }
         from {
           dirMode 0755
           pluginsDir.getParent()
         }
       }
+      into('pylib') {
+        dirMode 0755
+        with pylibFiles(distributionType, oss)
+      }
+      into('tools') {
+        with toolsFiles(distributionType, oss)
+        with stressFiles(distributionType, oss)
+      }
       from(rootProject.projectDir) {
-        include 'README.textile'
+        include 'README.md'
       }
       from(rootProject.file('licenses')) {
-        include oss ? 'APACHE-LICENSE-2.0.txt' : 'ELASTIC-LICENSE.txt'
+        include 'APACHE-LICENSE-2.0.txt'
         rename { 'LICENSE.txt' }
       }
 
       with noticeFile
-      from('../src') {
-        include 'bin/*.exe'
-      }
       into('modules') {
         with modulesFiles
       }
@@ -100,10 +116,10 @@ CopySpec archiveFiles(CopySpec modulesFiles, String distributionType, boolean os
 
 // common config across all zip/tar
 tasks.withType(AbstractArchiveTask) {
-  dependsOn createLogsDir, createPluginsDir
+  dependsOn createLogsDir, createDataDir, createPluginsDir
   String subdir = it.name.substring('build'.size()).replaceAll(/[A-Z]/) { '-' + it.toLowerCase() }.substring(1)
   destinationDir = file("${subdir}/build/distributions")
-  baseName = "elasticsearch${ subdir.contains('oss') ? '-oss' : ''}"
+  baseName = "elassandra"
 }
 
 Closure commonZipConfig = {
@@ -204,13 +220,9 @@ subprojects {
     onlyIf toolExists
     doLast {
       String licenseFilename = null
-      if (project.name.contains('oss-') || project.name == 'integ-test-zip') {
-        licenseFilename = "APACHE-LICENSE-2.0.txt"
-      } else {
-        licenseFilename = "ELASTIC-LICENSE.txt"
-      }
+      licenseFilename = "APACHE-LICENSE-2.0.txt"
       final List<String> licenseLines = Files.readAllLines(rootDir.toPath().resolve("licenses/" + licenseFilename))
-      final Path licensePath = archiveExtractionDir.toPath().resolve("elasticsearch-${VersionProperties.elasticsearch}/LICENSE.txt")
+      final Path licensePath = archiveExtractionDir.toPath().resolve("elassandra-${VersionProperties.elasticsearch}/LICENSE.txt")
       assertLinesInFile(licensePath, licenseLines)
     }
   }
@@ -220,8 +232,8 @@ subprojects {
     dependsOn buildDist, checkExtraction
     onlyIf toolExists
     doLast {
-      final List<String> noticeLines = Arrays.asList("Elasticsearch", "Copyright 2009-2018 Elasticsearch")
-      final Path noticePath = archiveExtractionDir.toPath().resolve("elasticsearch-${VersionProperties.elasticsearch}/NOTICE.txt")
+      final List<String> noticeLines = Arrays.asList("Strapdata", "Copyright 2017-2019 Strapdata")
+      final Path noticePath = archiveExtractionDir.toPath().resolve("elassandra-${VersionProperties.elasticsearch}/NOTICE.txt")
       assertLinesInFile(noticePath, noticeLines)
     }
   }
@@ -290,7 +302,7 @@ configure(subprojects.findAll { it.name.contains('zip') }) {
   // note: the group must be correct before applying the nexus plugin, or
   // it will capture the wrong value...
   String subgroup = project.name == 'integ-test-zip' ? 'integ-test-zip' : 'zip'
-  project.group = "org.elasticsearch.distribution.${subgroup}"
+  project.group = "com.strapdata.elasticsearch.distribution.${subgroup}"
 
   // make the pom file name use elasticsearch instead of the project name
   archivesBaseName = "elasticsearch${it.name.contains('oss') ? '-oss' : ''}"

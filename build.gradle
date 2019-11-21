@@ -149,12 +149,14 @@ subprojects {
      }
     }
 
+    /*
     if (enableArtifactSigning) {
        signing {
          sign configurations.archives
        }
     }
-   
+   */
+
     // OSSRH publication
     /*
     uploadArchives {
@@ -725,7 +727,7 @@ allprojects {
 }
 
 gradle.projectsEvaluated {
-// import ant tasks from cassandra
+  // import ant tasks from cassandra
   ant.importBuild('server/cassandra/build.xml') { antTargetName ->
     'cassandra-' + antTargetName
   }

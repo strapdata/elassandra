@@ -73,20 +73,20 @@ void addProcessFilesTask(String type, boolean oss) {
       MavenFilteringHack.filter(it, expansionsForDistribution(type, oss))
     }
 
-    into('etc/elasticsearch') {
+    into('etc/cassandra') {
       with configFiles(type, oss)
     }
     MavenFilteringHack.filter(it, expansionsForDistribution(type, oss))
 
     doLast {
       // create empty dirs, we set the permissions when configuring the packages
-      mkdir "${packagingFiles}/var/run/elasticsearch"
-      mkdir "${packagingFiles}/var/log/elasticsearch"
-      mkdir "${packagingFiles}/var/lib/elasticsearch"
-      mkdir "${packagingFiles}/usr/share/elasticsearch/plugins"
+      mkdir "${packagingFiles}/var/run/cassandra"
+      mkdir "${packagingFiles}/var/log/cassandra"
+      mkdir "${packagingFiles}/var/lib/cassandra"
+      mkdir "${packagingFiles}/usr/share/cassandra/plugins"
 
       // bare empty dir for /etc/elasticsearch
-      mkdir "${packagingFiles}/elasticsearch"
+      mkdir "${packagingFiles}/cassandra"
     }
   }
 }
@@ -105,7 +105,7 @@ Closure commonPackageConfig(String type, boolean oss) {
     // Follow elasticsearch's file naming convention
     archiveName "${packageName}-${project.version}.${type}"
 
-    String prefix = "${oss ? 'oss-' : ''}${type}"
+    String prefix = "${type}"
     destinationDir = file("${prefix}/build/distributions")
     String packagingFiles = "build/packaging/${prefix}"
 
@@ -120,19 +120,39 @@ Closure commonPackageConfig(String type, boolean oss) {
 
     // top level "into" directive is not inherited from ospackage for some reason, so we must
     // specify it again explicitly for copying common files
-    into('/usr/share/elasticsearch') {
+    into('/usr/share/cassandra') {
       into('bin') {
         with binFiles(type, oss)
       }
       from(rootProject.projectDir) {
-        include 'README.textile'
+        include 'README.md'
         fileMode 0644
       }
       into('lib') {
           with libFiles(oss)
       }
+      into('lib/licenses') {
+        dirMode 0755
+        with cassandraLicenseFiles(type, oss)
+        with licenseFiles(type, oss)
+      }
       into('modules') {
         with modulesFiles(oss)
+      }
+      into('lib/sigar-bin') {
+        with copySpec {
+          with sigarFiles(type, oss)
+          exclude '*.dll'
+        }
+      }
+      into('tools') {
+        with copySpec {
+          with toolsFiles(type, oss)
+          with stressFiles(type, oss)
+          exclude 'bin/*.bat'
+          exclude 'bin/*.exe'
+          exclude 'bin/*.ps1'
+        }
       }
       // we need to specify every intermediate directory in these paths so the package managers know they are explicitly
       // intended to manage them; otherwise they may be left behind on uninstallation. duplicate calls of the same
@@ -158,9 +178,9 @@ Closure commonPackageConfig(String type, boolean oss) {
       }
     } else {
       assert type == 'rpm'
-      into('/usr/share/elasticsearch') {
+      into('/usr/share/cassandra') {
         from(rootProject.file('licenses')) {
-          include oss ? 'APACHE-LICENSE-2.0.txt' : 'ELASTIC-LICENSE.txt'
+          include 'APACHE-LICENSE-2.0.txt'
           rename { 'LICENSE.txt' }
         }
         fileMode 0644
@@ -168,28 +188,33 @@ Closure commonPackageConfig(String type, boolean oss) {
     }
 
     // ========= config files =========
-    configurationFile '/etc/elasticsearch/elasticsearch.yml'
-    configurationFile '/etc/elasticsearch/jvm.options'
-    configurationFile '/etc/elasticsearch/log4j2.properties'
-    if (oss == false) {
-      configurationFile '/etc/elasticsearch/role_mapping.yml'
-      configurationFile '/etc/elasticsearch/roles.yml'
-      configurationFile '/etc/elasticsearch/users'
-      configurationFile '/etc/elasticsearch/users_roles'
-    }
+    configurationFile '/etc/cassandra/cassandra-env.sh'
+    configurationFile '/etc/cassandra/cassandra-jaas.config'
+    configurationFile '/etc/cassandra/cassandra-rackdc.properties'
+    configurationFile '/etc/cassandra/cassandra-topology.properties'
+    configurationFile '/etc/cassandra/cassandra.yaml'
+    configurationFile '/etc/cassandra/commitlog_archiving.properties'
+    configurationFile '/etc/cassandra/cqlshrc.sample'
+    configurationFile '/etc/cassandra/elasticsearch.yml'
+    configurationFile '/etc/cassandra/jvm.options'
+    configurationFile '/etc/cassandra/logback-tools.xml'
+    configurationFile '/etc/cassandra/logback.xml'
+    configurationFile '/etc/cassandra/metrics-reporter-config-sample.yaml'
+    configurationFile '/etc/cassandra/README.txt'
+
    from("${packagingFiles}") {
      dirMode 02750
      into('/etc')
-     permissionGroup 'elasticsearch'
+     permissionGroup 'cassandra'
      includeEmptyDirs true
      createDirectoryEntry true
-     include("elasticsearch") // empty dir, just to add directory entry
+     include("cassandra") // empty dir, just to add directory entry
    }
-   from("${packagingFiles}/etc/elasticsearch") {
-     into('/etc/elasticsearch')
+   from("${packagingFiles}/etc/cassandra") {
+     into('/etc/cassandra')
       dirMode 02750
       fileMode 0660
-      permissionGroup 'elasticsearch'
+      permissionGroup 'cassandra'
       includeEmptyDirs true
       createDirectoryEntry true
       fileType CONFIG | NOREPLACE
@@ -198,7 +223,7 @@ Closure commonPackageConfig(String type, boolean oss) {
     configurationFile envFile
     into(new File(envFile).getParent()) {
       fileType CONFIG | NOREPLACE
-      permissionGroup 'elasticsearch'
+      permissionGroup 'cassandra'
       fileMode 0660
       from "${packagingFiles}/env/elasticsearch"
     }
@@ -206,26 +231,26 @@ Closure commonPackageConfig(String type, boolean oss) {
     // ========= systemd =========
     configurationFile '/usr/lib/systemd/system/elasticsearch.service'
     into('/usr/lib/tmpfiles.d') {
-      from "${packagingFiles}/systemd/elasticsearch.conf"
+      from "${packagingFiles}/systemd/cassazndra.conf"
       fileMode 0644
     }
     into('/usr/lib/systemd/system') {
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/systemd/elasticsearch.service"
+      from "${packagingFiles}/systemd/cassandra.service"
       fileMode 0644
     }
     into('/usr/lib/sysctl.d') {
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/systemd/sysctl/elasticsearch.conf"
+      from "${packagingFiles}/systemd/sysctl/cassandra.conf"
       fileMode 0644
     }
 
     // ========= sysV init =========
-    configurationFile '/etc/init.d/elasticsearch'
+    configurationFile '/etc/init.d/cassandra'
     into('/etc/init.d') {
       fileMode 0750
       fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/init.d/elasticsearch"
+      from "${packagingFiles}/init.d/cassandra"
     }
 
     // ========= empty dirs =========
@@ -242,13 +267,13 @@ Closure commonPackageConfig(String type, boolean oss) {
         dirMode mode
       }
     }
-    copyEmptyDir('/var/run/elasticsearch', 'elasticsearch', 'elasticsearch', 0755)
-    copyEmptyDir('/var/log/elasticsearch', 'elasticsearch', 'elasticsearch', 02750)
-    copyEmptyDir('/var/lib/elasticsearch', 'elasticsearch', 'elasticsearch', 02750)
-    copyEmptyDir('/usr/share/elasticsearch/plugins', 'root', 'root', 0755)
+    copyEmptyDir('/var/run/cassandra', 'cassandra', 'cassandra', 0755)
+    copyEmptyDir('/var/log/cassandra', 'cassandra', 'cassandra', 02750)
+    copyEmptyDir('/var/lib/cassandra', 'cassandra', 'cassandra', 02750)
+    copyEmptyDir('/usr/share/cassandra/plugins', 'root', 'root', 0755)
 
     // the oss package conflicts with the default distribution and vice versa
-    conflicts('elasticsearch' + (oss ? '' : '-oss'))
+    conflicts('cassandra')
   }
 }
 

@@ -47,7 +47,7 @@ dependencies {
   compile 'com.google.api-client:google-api-client:1.24.1'
   compile 'com.google.http-client:google-http-client-appengine:1.24.1'
   compile 'com.google.http-client:google-http-client-jackson:1.24.1'
-  compile 'org.codehaus.jackson:jackson-core-asl:1.9.11'
+  compile 'org.codehaus.jackson:jackson-core-asl:1.9.13'
   compile 'com.google.http-client:google-http-client-jackson2:1.24.1'
   compile "com.fasterxml.jackson.core:jackson-core:${versions.jackson}"
   compile 'com.google.api:gax-httpjson:0.47.0'

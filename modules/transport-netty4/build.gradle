@@ -34,6 +34,7 @@ compileTestJava.options.compilerArgs << "-Xlint:-cast,-deprecation,-rawtypes,-tr
 
 dependencies {
     // network stack
+    /* available from server:
     compile "io.netty:netty-buffer:${versions.netty}"
     compile "io.netty:netty-codec:${versions.netty}"
     compile "io.netty:netty-codec-http:${versions.netty}"
@@ -41,6 +42,7 @@ dependencies {
     compile "io.netty:netty-handler:${versions.netty}"
     compile "io.netty:netty-resolver:${versions.netty}"
     compile "io.netty:netty-transport:${versions.netty}"
+     */
 }
 
 dependencyLicenses {

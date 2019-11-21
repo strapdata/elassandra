@@ -105,6 +105,15 @@ dependencies {
   // time handling, remove with java 8 time
   compile "joda-time:joda-time:${versions.joda}"
 
+  // json and yaml
+  compile "org.yaml:snakeyaml:${versions.snakeyaml}"
+  compile "com.fasterxml.jackson.core:jackson-core:${versions.jackson}"
+  compile "com.fasterxml.jackson.dataformat:jackson-dataformat-smile:${versions.jackson}"
+  compile "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${versions.jackson}"
+  compile "com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:${versions.jackson}"
+  compile "org.codehaus.jackson:jackson-core-asl:1.9.13"
+  compile "org.codehaus.jackson:jackson-mapper-asl:1.9.13"
+
   // percentiles aggregation
   compile 'com.tdunning:t-digest:3.2'
   // precentil ranks aggregation
@@ -133,10 +142,10 @@ dependencies {
   }
 
   testCompile 'com.google.jimfs:jimfs:1.1'
-  compile 'com.google.guava:guava:19.0'
+  compile "com.google.guava:guava:19"
   
   // Elassandra add-ons
-  compile("com.strapdata.cassandra:cassandra-all:${versions.cassandra}") {
+  runtime("com.strapdata.cassandra:cassandra-all:${versions.cassandra}") {
     exclude group:'net.java.dev.jna', module:'jna'
     exclude group:'org.ow2.asm', module:'asm'
     exclude group:'org.apache.commons', module:'commons-lang3'
@@ -146,6 +155,11 @@ dependencies {
     exclude group:'joda-time', module:'joda-time' 
     exclude group:'commons-codec', module:'commons-codec' 
   }
+
+  compile group: 'org.antlr', name: 'antlr', version: '3.5.2'
+  compile group: 'org.antlr', name: 'antlr-runtime', version: '3.5.2'
+  compile group: 'com.boundary', name: 'high-scale-lib', version: '1.0.6'
+  compile group: 'com.github.jbellis', name: 'jamm', version: '0.3.0'
 
   // See CASSANDRA-11193 Missing binary dependencies for running Cassandra in embedded mode
   //compile("org.ow2.asm:asm-debug-all:5.1")
@@ -163,10 +177,14 @@ dependencies {
   compile "commons-logging:commons-logging:${versions.commonslogging}"
   compile "org.apache.commons:commons-lang3:3.4"
 
+  testCompile "com.codahale.metrics:metrics-core:3.0.2"
+  testCompile "net.jpountz.lz4:lz4:1.3.0"
+  testCompile "org.fusesource:sigar:1.6.4"
+  testCompile "com.googlecode.concurrentlinkedhashmap:concurrentlinkedhashmap-lru:1.4"
 
   // Elasticsearch require netty 4.1
   // https://github.com/netty/netty/issues/6855
-  compile "io.netty:netty-all:4.1.16.Final"
+  compile "io.netty:netty-all:4.1.32.Final"
 
   // https://www.elastic.co/guide/en/elasticsearch/client/java-api/current/_using_another_logger.html
   // log4j2 to slf4j to logback
@@ -181,6 +199,7 @@ dependencies {
 
 compileJava.options.compilerArgs << "-Xlint:-cast,-deprecation,-rawtypes,-try,-unchecked"
 compileTestJava.options.compilerArgs << "-Xlint:-cast,-deprecation,-rawtypes,-try,-unchecked"
+javadoc.options.addStringOption('-Xdoclint:none', '-quiet')
 
 task testScriptDocValuesMissingV7Behaviour(type: RandomizedTestingTask) {
   include '**/ScriptDocValuesMissingV7BehaviourTests.class'
@@ -193,6 +212,8 @@ check.dependsOn(testScriptDocValuesMissingV7Behaviour)
 unitTest {
   // these are tested explicitly in separate test tasks
   exclude '**/*ScriptDocValuesMissingV7BehaviourTests.class'
+  jvmArg '-Djava.locale.providers=COMPAT'
+
 }
 
 forbiddenPatterns {
@@ -367,7 +388,8 @@ dependencyLicenses {
     it.group.startsWith('com.strapdata.elasticsearch') == false ||
             // keep the following org.elasticsearch jars in
             (it.name == 'jna' ||
-             it.name == 'securesm')
+             it.name == 'securesm' ||
+             it.name == 'cassandra')
   }
 }
 
