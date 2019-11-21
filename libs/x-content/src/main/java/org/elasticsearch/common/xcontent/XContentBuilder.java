@@ -43,6 +43,8 @@ import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.Function;
 import java.nio.ByteBuffer;
+
+import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
@@ -695,20 +697,20 @@ public final class XContentBuilder implements Closeable, Flushable {
         generator.writeBinary(value, offset, length);
         return this;
     }
-    
+
     public XContentBuilder binaryValue(ByteBuffer value) throws IOException {
         if (value == null) {
             return nullValue();
         }
-        
+
         ByteBuffer bb = ByteBufferUtil.clone(value);
         byte[] bytes = new byte[bb.remaining()];
         bb.get(bytes);
-        
+
         value(bytes);
         return this;
     }
-    
+
     /**
      * Writes the binary content of the given byte array as UTF-8 bytes.
      *
@@ -843,7 +845,7 @@ public final class XContentBuilder implements Closeable, Flushable {
             value((ToXContent) value);
         } else if (value instanceof ByteBuffer) {
             binaryValue((ByteBuffer)value);
-        } else if (value instanceof Enum<?>) {
+        } else if (value instanceof Enum<?> || value instanceof Range<?>) {
             // Write out the Enum toString
             value(Objects.toString(value));
         } else {
