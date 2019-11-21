@@ -88,7 +88,7 @@ public class DependenciesInfoTask extends DefaultTask {
                 continue
             }
             // only external dependencies are checked
-            if (dependency.group != null && dependency.group.contains("org.elasticsearch")) {
+            if (dependency.group != null && dependency.group.contains("com.strapdata.elasticsearch")) {
                 continue
             }
 

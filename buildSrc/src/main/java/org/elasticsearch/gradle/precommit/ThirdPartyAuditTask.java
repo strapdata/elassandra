@@ -173,7 +173,7 @@ public class ThirdPartyAuditTask extends DefaultTask {
         // or dependencies added as `files(...)`, we can't be sure if those are third party or not.
         // err on the side of scanning these to make sure we don't miss anything
         Spec<Dependency> reallyThirdParty = dep -> dep.getGroup() != null &&
-            dep.getGroup().startsWith("org.elasticsearch") == false;
+            dep.getGroup().startsWith("com.strapdata.elasticsearch") == false;
         Set<File> jars = getRuntimeConfiguration()
             .getResolvedConfiguration()
             .getFiles(reallyThirdParty);

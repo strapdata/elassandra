@@ -302,7 +302,7 @@ public class TestClustersPlugin implements Plugin<Project> {
         project.afterEvaluate(ip -> container.forEach(esNode -> {
             // declare dependencies against artifacts needed by cluster formation.
             String dependency = String.format(
-                "org.elasticsearch.distribution.zip:%s:%s@zip",
+                "com.strapdata.elasticsearch.distribution.zip:%s:%s@zip",
                 esNode.getDistribution().getFileName(),
                 esNode.getVersion()
             );

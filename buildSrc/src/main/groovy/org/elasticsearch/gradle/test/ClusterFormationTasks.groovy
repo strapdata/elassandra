@@ -176,7 +176,7 @@ class ClusterFormationTasks {
             artifactName += '-oss'
             subgroup = distro.substring('oss-'.length())
         }
-        project.dependencies.add(configuration.name, "org.elasticsearch.distribution.${subgroup}:${artifactName}:${elasticsearchVersion}@${packaging}")
+        project.dependencies.add(configuration.name, "com.strapdata.elasticsearch.distribution.${subgroup}:${artifactName}:${elasticsearchVersion}@${packaging}")
     }
 
     /** Adds a dependency on a different version of the given plugin, which will be retrieved using gradle's dependency resolution */
@@ -185,7 +185,7 @@ class ClusterFormationTasks {
             Project pluginProject = (Project)plugin
             verifyProjectHasBuildPlugin(configuration.name, elasticsearchVersion, project, pluginProject)
             final String pluginName = findPluginName(pluginProject)
-            project.dependencies.add(configuration.name, "org.elasticsearch.plugin:${pluginName}:${elasticsearchVersion}@zip")
+            project.dependencies.add(configuration.name, "com.strapdata.elasticsearch.plugin:${pluginName}:${elasticsearchVersion}@zip")
         } else {
             project.dependencies.add(configuration.name, "${plugin}@zip")
         }

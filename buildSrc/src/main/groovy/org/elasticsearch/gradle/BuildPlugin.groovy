@@ -107,6 +107,7 @@ class BuildPlugin implements Plugin<Project> {
         configureJavadoc(project)
         configureSourcesJar(project)
         configurePomGeneration(project)
+        configureCassandraStress(project)
 
         applyCommonTestConfig(project)
         configureTest(project)
@@ -557,6 +558,15 @@ class BuildPlugin implements Plugin<Project> {
                 return
             }
             configuration.resolutionStrategy {
+                force 'com.google.guava:guava:19.0'
+                force 'org.apache.thrift:libthrift:0.9.2'
+                force 'org.apache.httpcomponents:httpclient:4.5.2'
+                force 'org.apache.httpcomponents:httpcore:4.4.5'
+                force 'commons-logging:commons-logging:1.2'
+                force 'commons-cli:commons-cli:1.3.1'
+                force 'io.dropwizard.metrics:metrics-core:3.1.0'
+            }
+            configuration.resolutionStrategy {
                 failOnVersionConflict()
             }
         })
@@ -564,7 +574,7 @@ class BuildPlugin implements Plugin<Project> {
         // force all dependencies added directly to compile/testCompile to be non-transitive, except for ES itself
         Closure disableTransitiveDeps = { Dependency dep ->
             if (dep instanceof ModuleDependency && !(dep instanceof ProjectDependency)
-                    && dep.group.startsWith('org.elasticsearch') == false) {
+                    && dep.group.startsWith('com.strapdata.elasticsearch') == false) {
                 dep.transitive = false
 
                 // also create a configuration just for this dependency version, so that later
@@ -606,10 +616,20 @@ class BuildPlugin implements Plugin<Project> {
             // such that we don't have to pass hardcoded files to gradle
             repos.mavenLocal()
         }
+        if (System.getProperty("strapdata.mavenMirror") != null) {
+            repos.maven {
+                url System.getenv("NEXUS_URL")
+                credentials {
+                    username System.getenv("NEXUS_USERNAME")
+                    password System.getenv("NEXUS_PASSWORD")
+                }
+            }
+        }
         repos.maven {
             name "elastic"
             url "https://artifacts.elastic.co/maven"
         }
+        repos.mavenCentral()
         repos.jcenter()
         String luceneVersion = VersionProperties.lucene
         if (luceneVersion.contains('-snapshot')) {
@@ -831,7 +851,8 @@ class BuildPlugin implements Plugin<Project> {
             classes.add(javaCompile.destinationDir)
         }
         project.tasks.withType(Javadoc) { javadoc ->
-            javadoc.executable = new File(project.compilerJavaHome, 'bin/javadoc')
+            // build javadoc with jdk8
+            javadoc.executable = new File(project.cassandraJavaHome, 'bin/javadoc')
             javadoc.classpath = javadoc.getClasspath().filter { f ->
                 return classes.contains(f) == false
             }
@@ -946,7 +967,7 @@ class BuildPlugin implements Plugin<Project> {
     static void applyCommonTestConfig(Project project) {
         project.tasks.withType(RandomizedTestingTask) {task ->
             jvm "${project.runtimeJavaHome}/bin/java"
-            parallelism System.getProperty('tests.jvms', project.rootProject.ext.defaultParallel)
+            parallelism System.getProperty('tests.jvms', '1')
             ifNoTests 'fail'
             onNonEmptyWorkDirectory 'wipe'
             leaveTemporary true
@@ -968,9 +989,12 @@ class BuildPlugin implements Plugin<Project> {
             }
 
             // TODO: why are we not passing maxmemory to junit4?
-            jvmArg '-Xmx' + System.getProperty('tests.heap.size', '512m')
-            jvmArg '-Xms' + System.getProperty('tests.heap.size', '512m')
+            jvmArg '-Xmx' + System.getProperty('tests.heap.size', '1512m')
+            jvmArg '-Xms' + System.getProperty('tests.heap.size', '1512m')
             jvmArg '-XX:+HeapDumpOnOutOfMemoryError'
+            jvmArg '-Xdebug'
+            jvmArg '-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4242'
+
             File heapdumpDir = new File(project.buildDir, 'heapdump')
             heapdumpDir.mkdirs()
             jvmArg '-XX:HeapDumpPath=' + heapdumpDir
@@ -980,12 +1004,17 @@ class BuildPlugin implements Plugin<Project> {
             argLine System.getProperty('tests.jvm.argline')
 
             // we use './temp' since this is per JVM and tests are forbidden from writing to CWD
+            systemProperty 'cassandra.jmx.local.port', "7199"
+            systemProperty 'cassandra.jmx.remote.port', "7199"
+            systemProperty 'com.sun.management.jmxremote.ssl', "false"
+            systemProperty 'com.sun.management.jmxremote.authenticate', "false"
+
             systemProperty 'java.io.tmpdir', './temp'
             systemProperty 'java.awt.headless', 'true'
             systemProperty 'tests.gradle', 'true'
             systemProperty 'tests.artifact', project.name
             systemProperty 'tests.task', path
-            systemProperty 'tests.security.manager', 'true'
+            systemProperty 'tests.security.manager', 'false'
             systemProperty 'jna.nosys', 'true'
             // TODO: remove this deprecation compatibility setting for 7.0
             systemProperty 'es.aggregations.enable_scripted_metric_agg_param', 'false'
@@ -996,7 +1025,7 @@ class BuildPlugin implements Plugin<Project> {
                 systemProperty 'runtime.java', project.ext.runtimeJavaVersion.getMajorVersion()
             }
             // TODO: remove setting logging level via system property
-            systemProperty 'tests.logger.level', 'WARN'
+            systemProperty 'tests.logger.level', 'TRACE'
             for (Map.Entry<String, String> property : System.properties.entrySet()) {
                 if (property.getKey().startsWith('tests.') ||
                         property.getKey().startsWith('es.')) {
@@ -1020,6 +1049,22 @@ class BuildPlugin implements Plugin<Project> {
                 systemProperty 'javax.net.ssl.trustStorePassword', 'password'
                 systemProperty 'javax.net.ssl.keyStorePassword', 'password'
             }
+
+            // cassandra settings
+            systemProperty 'cassandra.home', "${project.buildDir}/testrun/test/J0"
+            systemProperty 'cassandra.logdir', "${project.buildDir}/testrun/test/J0"
+            systemProperty 'logback.configurationFile', "${project.projectDir}/src/test/resources/conf/logback.xml"
+            systemProperty 'java.library.path', "${project.projectDir}/server/cassandra/lib/sigar-bin"
+            systemProperty 'cassandra.config', "file://${project.projectDir}/src/test/resources/conf/cassandra.yaml"
+            systemProperty 'cassandra.config.dir', "${project.projectDir}/src/test/resources/conf"
+            systemProperty 'cassandra-rackdc.properties', "file://${project.projectDir}/src/test/resources/conf/cassandra-rackdc.properties"
+            systemProperty 'cassandra.config.loader', "org.elassandra.config.YamlTestConfigurationLoader"
+            systemProperty 'cassandra.storagedir', "${project.buildDir}/testrun/test/J0"
+            systemProperty 'es.synchronous_refresh', 'true'
+            systemProperty 'es.drop_on_delete_index', 'true'
+            systemProperty 'tests.maven', 'true'
+            systemProperty 'cassandra.custom_query_handler_class', 'org.elassandra.index.ElasticQueryHandler'
+            //systemProperty 'io.netty.tryReflectionSetAccessible', 'false'
 
             boolean assertionsEnabled = Boolean.parseBoolean(System.getProperty('tests.asserts', 'true'))
             enableSystemAssertions assertionsEnabled
@@ -1201,6 +1246,12 @@ class BuildPlugin implements Plugin<Project> {
     static Task configureTest(Project project) {
         project.tasks.getByName('test') {
             include '**/*Tests.class'
+            exclude '**/MockNodeTests.class'
+            exclude '**/MockTcpTransportTests.class'
+            exclude '**/InternalTestCluster.class'
+            exclude '**/InternalTestClusterTests.class'
+            exclude '**/discovery/*.class'
+            exclude '**/*IT.class'
         }
     }
 
@@ -1210,11 +1261,11 @@ class BuildPlugin implements Plugin<Project> {
         project.test.mustRunAfter(precommit)
         // only require dependency licenses for non-elasticsearch deps
         project.dependencyLicenses.dependencies = project.configurations.runtime.fileCollection {
-            it.group.startsWith('org.elasticsearch') == false
+            it.group.startsWith('com.strapdata.elasticsearch') == false
         } - project.configurations.compileOnly
         project.plugins.withType(ShadowPlugin).whenPluginAdded {
             project.dependencyLicenses.dependencies += project.configurations.bundle.fileCollection {
-                it.group.startsWith('org.elasticsearch') == false
+                it.group.startsWith('com.strapdata.elasticsearch') == false
             }
         }
     }
