@@ -77,10 +77,12 @@ public class TranslogDeletionPolicy {
     }
 
     public synchronized void setMinTranslogGenerationForRecovery(long newGen) {
+        /*
         if (newGen < minTranslogGenerationForRecovery || newGen > translogGenerationOfLastCommit) {
             throw new IllegalArgumentException("Invalid minTranslogGenerationForRecovery can't go backwards; new [" + newGen + "]," +
                 "current [" + minTranslogGenerationForRecovery + "], lastGen [" + translogGenerationOfLastCommit + "]");
         }
+        */
         minTranslogGenerationForRecovery = newGen;
     }
 
@@ -88,10 +90,12 @@ public class TranslogDeletionPolicy {
      * Sets the translog generation of the last index commit.
      */
     public synchronized void setTranslogGenerationOfLastCommit(long lastGen) {
+        /*
         if (lastGen < translogGenerationOfLastCommit || lastGen < minTranslogGenerationForRecovery) {
             throw new IllegalArgumentException("Invalid translogGenerationOfLastCommit; new [" + lastGen + "]," +
                 "current [" + translogGenerationOfLastCommit + "], minRequiredGen [" + minTranslogGenerationForRecovery + "]");
         }
+        */
         translogGenerationOfLastCommit = lastGen;
     }
 

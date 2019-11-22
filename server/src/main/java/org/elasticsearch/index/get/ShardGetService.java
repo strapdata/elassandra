@@ -267,7 +267,7 @@ public final class ShardGetService extends AbstractIndexShardComponent {
             }
         }
 
-        return new GetResult(shardId.getIndexName(), type, id, UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM, 1L, true, sourceToBeReturned, fields);
+        return new GetResult(shardId.getIndexName(), type, id, 1L, 1L, 1L, true, sourceToBeReturned, fields);
     }
 
     private GetResult innerGetLoadFromStoredFields(String type, String id, String[] gFields, FetchSourceContext fetchSourceContext, Engine.GetResult get, MapperService mapperService) {

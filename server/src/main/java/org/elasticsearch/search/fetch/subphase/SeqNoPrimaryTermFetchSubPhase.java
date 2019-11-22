@@ -45,6 +45,7 @@ public final class SeqNoPrimaryTermFetchSubPhase implements FetchSubPhase {
         NumericDocValues seqNoField = null;
         NumericDocValues primaryTermField = null;
         for (SearchHit hit : hits) {
+            /*
             int readerId = ReaderUtil.subIndex(hit.docId(), context.searcher().getIndexReader().leaves());
             LeafReaderContext subReaderContext = context.searcher().getIndexReader().leaves().get(readerId);
             if (lastReaderId != readerId) {
@@ -62,8 +63,9 @@ public final class SeqNoPrimaryTermFetchSubPhase implements FetchSubPhase {
                 seqNo = seqNoField.longValue();
                 primaryTerm = primaryTermField.longValue();
             }
-            hit.setSeqNo(seqNo);
-            hit.setPrimaryTerm(primaryTerm);
+             */
+            hit.setSeqNo(1L);
+            hit.setPrimaryTerm(1L);
         }
     }
 }

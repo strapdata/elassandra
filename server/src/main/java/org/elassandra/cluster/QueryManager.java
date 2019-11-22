@@ -350,7 +350,7 @@ public class QueryManager extends AbstractComponent {
         UntypedResultSet result = fetchRowInternal(indexService, type, docPk, columnDefs.keySet().toArray(new String[columnDefs.size()]), columnDefs);
         onRefresh.accept(System.nanoTime() - time);
         if (!result.isEmpty()) {
-            return new Engine.GetResult(true, 1L, new DocIdAndVersion(0, 1L, SequenceNumbers.UNASSIGNED_SEQ_NO, SequenceNumbers.UNASSIGNED_PRIMARY_TERM, null, 0), null);
+            return new Engine.GetResult(true, 1L, new DocIdAndVersion(0, 1L, 1L, 1L, null, 0), null);
         }
         return Engine.GetResult.NOT_EXISTS;
     }
@@ -397,41 +397,54 @@ public class QueryManager extends AbstractComponent {
         int prefixLength = query.length();
 
         for (String c : requiredColumns) {
-            switch(c){
-            case TokenFieldMapper.NAME:
-                query.append(query.length() > 7 ? ',':' ')
-                    .append("token(")
-                    .append(cqlFragment.ptCols)
-                    .append(") as \"_token\"");
-                break;
-            case RoutingFieldMapper.NAME:
-                query.append(query.length() > 7 ? ',':' ')
-                    .append( (metadata.partitionKeyColumns().size() > 1) ? "toJsonArray(" : "toString(" )
-                    .append(cqlFragment.ptCols)
-                    .append(") as \"_routing\"");
-                break;
-            case ParentFieldMapper.NAME:
-                ParentFieldMapper parentMapper = docMapper.parentFieldMapper();
-                if (parentMapper.active()) {
-                    query.append(query.length() > 7 ? ',':' ');
-                    if  (parentMapper.pkColumns() == null) {
-                        // default column name for _parent should be string.
-                        query.append("\"_parent\"");
-                    } else {
-                        query.append( (parentMapper.pkColumns().indexOf(',') > 0) ? "toJsonArray(" : "toString(")
-                             .append(parentMapper.pkColumns())
-                             .append(") as \"_parent\"");
+            switch (c) {
+                case TokenFieldMapper.NAME:
+                    query.append(query.length() > 7 ? ',' : ' ')
+                        .append("token(")
+                        .append(cqlFragment.ptCols)
+                        .append(") as \"_token\"");
+                    break;
+                case RoutingFieldMapper.NAME:
+                    query.append(query.length() > 7 ? ',' : ' ')
+                        .append((metadata.partitionKeyColumns().size() > 1) ? "toJsonArray(" : "toString(")
+                        .append(cqlFragment.ptCols)
+                        .append(") as \"_routing\"");
+                    break;
+                case "_ttl":
+                    if (regularColumn == null)
+                        regularColumn = regularColumn(indexService, cfName);
+                    if (regularColumn != null)
+                        query.append(query.length() > 7 ? ',' : ' ').append("TTL(").append(regularColumn).append(") as \"_ttl\"");
+                    break;
+                case SeqNoFieldMapper.NAME:
+                case "_timestamp":
+                    if (regularColumn == null)
+                        regularColumn = regularColumn(indexService, cfName);
+                    if (regularColumn != null)
+                        query.append(query.length() > 7 ? ',' : ' ').append("WRITETIME(").append(regularColumn).append(") as \"_timestamp\"");
+                    break;
+                case ParentFieldMapper.NAME:
+                    ParentFieldMapper parentMapper = docMapper.parentFieldMapper();
+                    if (parentMapper.active()) {
+                        query.append(query.length() > 7 ? ',' : ' ');
+                        if (parentMapper.pkColumns() == null) {
+                            // default column name for _parent should be string.
+                            query.append("\"_parent\"");
+                        } else {
+                            query.append((parentMapper.pkColumns().indexOf(',') > 0) ? "toJsonArray(" : "toString(")
+                                .append(parentMapper.pkColumns())
+                                .append(") as \"_parent\"");
+                        }
                     }
-                }
-                break;
-            case NodeFieldMapper.NAME:
-                // nothing to add.
-                break;
-            default:
-                ColumnDefinition cd = columnDefs.get(c);
-                if (cd != null && (cd.isPartitionKey() || cd.isStatic() || !forStaticDocument)) {
-                   query.append(query.length() > prefixLength ? ',':' ').append("\"").append(c).append("\"");
-                }
+                    break;
+                case NodeFieldMapper.NAME:
+                    // nothing to add.
+                    break;
+                default:
+                    ColumnDefinition cd = columnDefs.get(c);
+                    if (cd != null && (cd.isPartitionKey() || cd.isStatic() || !forStaticDocument)) {
+                        query.append(query.length() > prefixLength ? ',' : ' ').append("\"").append(c).append("\"");
+                    }
             }
         }
         if (query.length() == prefixLength) {
