@@ -384,7 +384,12 @@ public abstract class TransportReplicationAction<
                             }));
 
              */
-            runWithPrimaryShardReference(new PrimaryShardReference(indexShard, null));
+            runWithPrimaryShardReference(new PrimaryShardReference(indexShard, new Releasable() {
+                @Override
+                public void close() {
+
+                }
+            }));
         }
 
         void runWithPrimaryShardReference(final PrimaryShardReference primaryShardReference) {
