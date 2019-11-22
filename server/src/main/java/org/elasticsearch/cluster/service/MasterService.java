@@ -252,7 +252,7 @@ public class MasterService extends AbstractLifecycleComponent {
                     }
                 }
 
-                logger.debug("publishing cluster state version [{}]", newClusterState.version());
+                logger.debug("publishing cluster state version [{}] metadata=[{}]", newClusterState.version(), newClusterState.metaData().x2());
                 try {
                     clusterStatePublisher.accept(clusterChangedEvent, taskOutputs.createAckListener(threadPool, newClusterState));
                 } catch (Discovery.FailedToCommitClusterStateException t) {
