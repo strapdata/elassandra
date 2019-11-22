@@ -2527,7 +2527,7 @@ public class InternalEngine extends Engine {
 
     @Override
     public SeqNoStats getSeqNoStats(long globalCheckpoint) {
-        throw new UnsupportedOperationException("No SeqNo tracking in elassandra");
+        return SeqNoStats.DUMMY_SEGNO_STATS;
     }
 
     /**

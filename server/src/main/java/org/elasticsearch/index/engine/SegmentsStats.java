@@ -281,6 +281,10 @@ public class SegmentsStats implements Streamable, ToXContentFragment {
         return new ByteSizeValue(bitsetMemoryInBytes);
     }
 
+    public ByteSizeValue getTokenRangeBitsetMemory() {
+        return new ByteSizeValue(tokenRangesBitsetMemoryInBytes);
+    }
+
     public ImmutableOpenMap<String, Long> getFileSizes() {
         return fileSizes;
     }
@@ -307,7 +311,7 @@ public class SegmentsStats implements Streamable, ToXContentFragment {
         builder.humanReadableField(Fields.INDEX_WRITER_MEMORY_IN_BYTES, Fields.INDEX_WRITER_MEMORY, getIndexWriterMemory());
         builder.humanReadableField(Fields.VERSION_MAP_MEMORY_IN_BYTES, Fields.VERSION_MAP_MEMORY, getVersionMapMemory());
         builder.humanReadableField(Fields.FIXED_BIT_SET_MEMORY_IN_BYTES, Fields.FIXED_BIT_SET, getBitsetMemory());
-        builder.humanReadableField(Fields.TOKEN_RANGES_BIT_SET_MEMORY_IN_BYTES, Fields.TOKEN_RANGES_BIT_SET, tokenRangesBitsetMemoryInBytes);
+        builder.humanReadableField(Fields.TOKEN_RANGES_BIT_SET_MEMORY_IN_BYTES, Fields.TOKEN_RANGES_BIT_SET, getTokenRangeBitsetMemory());
 
         builder.field(Fields.MAX_UNSAFE_AUTO_ID_TIMESTAMP, maxUnsafeAutoIdTimestamp);
         builder.startObject(Fields.FILE_SIZES);

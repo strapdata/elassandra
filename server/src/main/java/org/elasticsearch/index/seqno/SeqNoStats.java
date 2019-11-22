@@ -39,6 +39,8 @@ public class SeqNoStats implements ToXContentFragment, Writeable {
     private final long localCheckpoint;
     private final long globalCheckpoint;
 
+    public static final SeqNoStats DUMMY_SEGNO_STATS = new SeqNoStats(0, 0, 0);
+
     public SeqNoStats(long maxSeqNo, long localCheckpoint, long globalCheckpoint) {
         assert localCheckpoint <= maxSeqNo:
             "local checkpoint [" + localCheckpoint + "] is above maximum seq no [" + maxSeqNo + "]";
