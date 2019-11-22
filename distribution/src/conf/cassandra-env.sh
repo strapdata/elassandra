@@ -315,6 +315,12 @@ JVM_OPTS="$JVM_OPTS $JVM_EXTRA_OPTS"
 # use old-style file permissions on JDK9
 JVM_OPTS="$JVM_OPTS -Djdk.io.permissionsUseCanonicalPath=true"
 
+ES_DISTRIBUTION_FLAVOR=${es.distribution.flavor}
+ES_DISTRIBUTION_TYPE=${es.distribution.type}
+
+JVM_OPTS="$JVM_OPTS -Des.distribution.flavor=$ES_DISTRIBUTION_FLAVOR"
+JVM_OPTS="$JVM_OPTS -Des.distribution.type=$ES_DISTRIBUTION_TYPE"
+
 # Elasticsearch tmp directory.
 if [ -z "$ES_TMPDIR" ]; then
   set +e

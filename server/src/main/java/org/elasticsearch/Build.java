@@ -132,10 +132,10 @@ public class Build {
         flavor = Flavor.fromDisplayName(System.getProperty("es.distribution.flavor", "unknown"), true);
         type = Type.fromDisplayName(System.getProperty("es.distribution.type", "unknown"), true);
 
-        final String esPrefix = ".*/elasticsearch-" + Version.CURRENT;
+        final String esPrefixRegex = ".*/elasticsearch-" + Version.CURRENT + "\\.(\\d+)(-SNAPSHOT)?\\.jar";
         final URL url = getElasticsearchCodeSourceLocation();
         final String urlStr = url == null ? "" : url.toString();
-        if (urlStr.startsWith("file:/") && (urlStr.endsWith(esPrefix + ".jar") || urlStr.endsWith(esPrefix + "-SNAPSHOT.jar"))) {
+        if (urlStr.startsWith("file:/") && (urlStr.matches(esPrefixRegex))) {
             try (JarInputStream jar = new JarInputStream(FileSystemUtils.openFileURLStream(url))) {
                 Manifest manifest = jar.getManifest();
                 shortHash = manifest.getMainAttributes().getValue("Change");
