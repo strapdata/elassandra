@@ -169,7 +169,8 @@ public class Serializer {
                 } else {
                     // parse from lat, lon fields as map
                     Map<String, Object> mapValue = (Map<String, Object>) value;
-                    geoPoint.reset((Double)mapValue.get(org.elasticsearch.common.geo.GeoUtils.LATITUDE), (Double)mapValue.get(org.elasticsearch.common.geo.GeoUtils.LONGITUDE));
+                    geoPoint.reset(convertToDouble(mapValue.get(org.elasticsearch.common.geo.GeoUtils.LATITUDE)),
+                                   convertToDouble(mapValue.get(org.elasticsearch.common.geo.GeoUtils.LONGITUDE)));
                 }
                 components[i++]=serialize(ksName, cfName, udt.fieldType(0), org.elasticsearch.common.geo.GeoUtils.LATITUDE, geoPoint.lat(), null);
                 components[i++]=serialize(ksName, cfName, udt.fieldType(1), org.elasticsearch.common.geo.GeoUtils.LONGITUDE, geoPoint.lon(), null);
@@ -239,6 +240,18 @@ public class Serializer {
             }
             return type.decompose( value );
         }
+    }
+
+    public static Double convertToDouble(Object value) {
+        if (value == null)
+            return null;
+        if (value instanceof Double)
+            return (Double)value;
+        if (value instanceof Integer)
+            return ((Integer)value).doubleValue();
+        if (value instanceof Long)
+            return ((Long)value).doubleValue();
+        return Double.parseDouble(value.toString());
     }
 
     public static Object deserialize(AbstractType<?> type, ByteBuffer bb) throws CharacterCodingException {
