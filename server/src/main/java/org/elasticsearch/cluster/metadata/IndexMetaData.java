@@ -349,11 +349,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
     public static final String SETTING_TOKEN_RANGES_BITSET_CACHE = INDEX_SETTING_PREFIX+ClusterService.TOKEN_RANGES_BITSET_CACHE;
     public static final Setting<Boolean> INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING =
             Setting.boolSetting(SETTING_TOKEN_RANGES_BITSET_CACHE, Boolean.getBoolean(ClusterService.SETTING_SYSTEM_TOKEN_RANGES_BITSET_CACHE), Property.Dynamic, Property.IndexScope);
-
-    public static final String SETTING_VERSION_LESS_ENGINE = INDEX_SETTING_PREFIX+ClusterService.VERSION_LESS_ENGINE;
-    public static final Setting<Boolean> INDEX_VERSION_LESS_ENGINE_SETTING =
-            Setting.boolSetting(SETTING_VERSION_LESS_ENGINE, true, Property.Final, Property.IndexScope);
-
+    
     public static final String SETTING_INDEX_STATIC_COLUMNS = INDEX_SETTING_PREFIX+ClusterService.INDEX_STATIC_COLUMNS;
     public static final Setting<Boolean> INDEX_INDEX_STATIC_COLUMNS_SETTING =
             Setting.boolSetting(SETTING_INDEX_STATIC_COLUMNS, false, Property.Dynamic, Property.IndexScope);
@@ -1634,15 +1630,6 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             }
             return builder.build();
         }
-    }
-
-    /**
-     * Returns <code>true</code> if the given settings indicate that the index associated
-     * with these settings uses a version less engine (i.e no more version number stored in lucene index). Otherwise <code>false</code>. The default
-     * setting for this is <code>true</code>.
-     */
-    public static boolean isIndexUsingVersionLessEngine(Settings settings) {
-        return settings.getAsBoolean(SETTING_VERSION_LESS_ENGINE, true);
     }
 
     /**

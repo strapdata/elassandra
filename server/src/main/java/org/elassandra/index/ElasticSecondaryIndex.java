@@ -1271,7 +1271,7 @@ public class ElasticSecondaryIndex implements Index {
                         logger.error("indexService not available for [{}], ignoring", index);
                         continue;
                     }
-                    ImmutableIndexInfo indexInfo = new ImmutableIndexInfo(index, indexService, mappingMetaData, state.metaData(), IndexMetaData.isIndexUsingVersionLessEngine(indexMetaData.getSettings()));
+                    ImmutableIndexInfo indexInfo = new ImmutableIndexInfo(index, indexService, mappingMetaData, state.metaData(), true);
                     indexList.add(indexInfo);
 
                     Map<String, Object> props = (Map<String, Object>) mappingMap.computeIfAbsent("properties", s -> new HashMap<>());
@@ -2335,8 +2335,7 @@ public class ElasticSecondaryIndex implements Index {
                         if (!indexInfo.updated)
                             indexInfo.updated = true;
 
-
-                       final Engine.Index operation = new Engine.Index(
+                        final Engine.Index operation = new Engine.Index(
                             termUid(indexInfo.indexService, id),
                             parsedDoc,
                             SequenceNumbers.UNASSIGNED_SEQ_NO,
