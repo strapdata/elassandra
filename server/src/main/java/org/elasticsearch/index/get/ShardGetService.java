@@ -253,11 +253,6 @@ public final class ShardGetService extends AbstractIndexShardComponent {
             if (sourceFieldFiltering || sourceFetchFiltering) {
                 // TODO: The source might parsed and available in the sourceLookup but that one uses unordered maps so different. Do we care?
                 XContentType sourceContentType = XContentType.JSON;
-                /*
-                if (fetchSourceContext.transformSource()) {
-                    sourceAsMap = docMapper.transformSourceAsMap(sourceAsMap);
-                }
-                */
                 if (sourceFieldFiltering) {
                     sourceAsMap = XContentMapValues.filter(sourceAsMap, sourceFieldMapper.includes(), sourceFieldMapper.excludes());
                 }
