@@ -100,7 +100,7 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
         assert lastCommit.isDeleted() == false : "The last commit must not be deleted";
         final long lastGen = Long.parseLong(lastCommit.getUserData().get(Translog.TRANSLOG_GENERATION_KEY));
 
-        assert minRequiredGen <= lastGen : "minRequiredGen must not be greater than lastGen";
+        //assert minRequiredGen <= lastGen : "minRequiredGen must not be greater than lastGen";
         translogDeletionPolicy.setTranslogGenerationOfLastCommit(lastGen);
         translogDeletionPolicy.setMinTranslogGenerationForRecovery(minRequiredGen);
 
