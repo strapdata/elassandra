@@ -358,6 +358,7 @@ public abstract class TransportReplicationAction<
             if (shardRouting.primary() == false) {
                 throw new ReplicationOperation.RetryOnPrimaryException(shardId, "actual shard is not a primary " + shardRouting);
             }
+            /*
             final String actualAllocationId = shardRouting.allocationId().getId();
             if (actualAllocationId.equals(targetAllocationID) == false) {
                 throw new ShardNotFoundException(shardId, "expected allocation id [{}] but found [{}]", targetAllocationID,
@@ -381,6 +382,9 @@ public abstract class TransportReplicationAction<
                                     onFailure(e);
                                 }
                             }));
+
+             */
+            runWithPrimaryShardReference(new PrimaryShardReference(indexShard, null));
         }
 
         void runWithPrimaryShardReference(final PrimaryShardReference primaryShardReference) {
@@ -824,6 +828,7 @@ public abstract class TransportReplicationAction<
                 }
                 */
                 final DiscoveryNode node = state.nodes().getLocalNode();
+                performLocalAction(state, null, node, indexMetaData);
                 /*
                 if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                     performLocalAction(state, primary, node, indexMetaData);
@@ -836,12 +841,14 @@ public abstract class TransportReplicationAction<
 
         private void performLocalAction(ClusterState state, ShardRouting primary, DiscoveryNode node, IndexMetaData indexMetaData) {
             setPhase(task, "waiting_on_primary");
+            ShardId shardId = new ShardId(request.shardId().getIndex(), 0);
+            request.setShardId(shardId);
             if (logger.isTraceEnabled()) {
                 logger.trace("send action [{}] to local primary [{}] for request [{}] with cluster state version [{}] to [{}] ",
-                    transportPrimaryAction, request.shardId(), request, state.version(), primary.currentNodeId());
+                    transportPrimaryAction, request.shardId(), request, state.version(), node.getId());
             }
             performAction(node, transportPrimaryAction, true,
-                new ConcreteShardRequest<>(request, primary.allocationId().getId(), indexMetaData.primaryTerm(primary.id())));
+                new ConcreteShardRequest<>(request, ShardRouting.DUMMY_ALLOCATION_ID.getId(), 1L));
         }
 
         private void performRemoteAction(ClusterState state, ShardRouting primary, DiscoveryNode node) {

@@ -515,10 +515,8 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
             assert shardId != null;
             // can throw timeout exception when updating mappings or ISE for attempting to
             // update default mappings which are bubbled up
-            if (update != null) {
-                // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
-               clusterService.blockingMappingUpdate(shardId.getIndex(), type, update.toString());
-            }
+            // blocking Elasticsearch mapping update (required to update cassandra schema before inserting a row, this is the cost of dynamic mapping)
+            clusterService.blockingMappingUpdate(shardId.getIndex(), type, update.toString());
         }
     }
 
