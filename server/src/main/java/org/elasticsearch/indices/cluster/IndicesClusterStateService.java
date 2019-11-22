@@ -354,7 +354,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
                 }
                 try {
                     indexService = indicesService.createIndex(indexMetaData, buildInIndexListener);
-                    //indexService.updateMapping(indexMetaData);
+                    indexService.updateMapping(null, indexMetaData);
                 } catch (Throwable e) {
                     if (logger.isWarnEnabled()) {
                         logger.warn("[{}][{}] failed to create index", indexMetaData.getIndex(),  indexMetaData.getIndexUUID(), e);
@@ -590,12 +590,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
         @Override
         public void accept(final IndexShard.ShardFailure shardFailure) {
             final ShardRouting shardRouting = shardFailure.routing;
-            threadPool.generic().execute(() -> {
-                synchronized (IndicesClusterStateService.this) {
-                    failAndRemoveShard(shardRouting, true, "shard failure, reason [" + shardFailure.reason + "]", shardFailure.cause,
-                        clusterService.state());
-                }
-            });
+            logger.error("Shard recovery failure reson=[{}]", shardFailure.reason);
         }
     }
 
