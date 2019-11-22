@@ -49,7 +49,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 
-import static org.elasticsearch.index.seqno.RetentionLeaseActions.RETAIN_ALL;
+//import static org.elasticsearch.index.seqno.RetentionLeaseActions.RETAIN_ALL;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
 import static org.hamcrest.Matchers.equalTo;
@@ -274,6 +274,7 @@ public abstract class ESBlobStoreRepositoryIntegTestCase extends ESIntegTestCase
         }
     }
 
+    /*
     public void testRetentionLeasesClearedOnRestore() throws Exception {
         final String repoName = randomAsciiName();
         logger.info("-->  creating repository {}", repoName);
@@ -326,6 +327,7 @@ public abstract class ESBlobStoreRepositoryIntegTestCase extends ESIntegTestCase
             .getRetentionLeaseStats().retentionLeases();
         assertFalse(restoredRetentionLeases.toString() + " has no " + leaseId, restoredRetentionLeases.contains(leaseId));
     }
+    */
 
     protected void addRandomDocuments(String name, int numDocs) throws ExecutionException, InterruptedException {
         IndexRequestBuilder[] indexRequestBuilders = new IndexRequestBuilder[numDocs];

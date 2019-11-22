@@ -1318,6 +1318,7 @@ public final class InternalTestCluster extends TestCluster {
     }
 
     public void assertSeqNos() throws Exception {
+        /*
         assertBusy(() -> {
             final ClusterState state = clusterService().state();
             for (ObjectObjectCursor<String, IndexRoutingTable> indexRoutingTable : state.routingTable().indicesRouting()) {
@@ -1356,6 +1357,7 @@ public final class InternalTestCluster extends TestCluster {
                 }
             }
         });
+        */
     }
 
     /**
