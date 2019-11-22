@@ -47,12 +47,7 @@ import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.fieldvisitor.CustomFieldsVisitor;
 import org.elasticsearch.index.fieldvisitor.FieldsVisitor;
-import org.elasticsearch.index.mapper.DocumentMapper;
-import org.elasticsearch.index.mapper.Mapper;
-import org.elasticsearch.index.mapper.MapperService;
-import org.elasticsearch.index.mapper.ParentFieldMapper;
-import org.elasticsearch.index.mapper.RoutingFieldMapper;
-import org.elasticsearch.index.mapper.SourceFieldMapper;
+import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.index.shard.AbstractIndexShardComponent;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.search.fetch.subphase.FetchSourceContext;
@@ -302,11 +297,9 @@ public final class ShardGetService extends AbstractIndexShardComponent {
                 source = clusterService.getQueryManager().source(this.indexService, docMapper, sourceMap, fieldVisitor.uid().id());
 
                 fieldVisitor.source( BytesReference.toBytes(source) );
-                //docIdAndVersion.context.reader().document(docIdAndVersion.docId, fieldVisitor);
             } catch (IOException | RequestExecutionException | RequestValidationException e) {
                 throw new ElasticsearchException("Failed to get type [" + type + "] and id [" + id + "]", e);
             }
-            //source = fieldVisitor.source();
 
             if (!fieldVisitor.fields().isEmpty()) {
                 fieldVisitor.postProcess(mapperService);
