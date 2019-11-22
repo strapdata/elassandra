@@ -158,7 +158,7 @@ public class MetaDataMappingService {
         }
 
         boolean dirty = false;
-        MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData()).setClusterUuid();
+        MetaData.Builder mdBuilder = MetaData.builder(currentState.metaData());
 
         for (Map.Entry<String, List<RefreshTask>> entry : tasksPerIndex.entrySet()) {
             IndexMetaData indexMetaData = mdBuilder.get(entry.getKey());
@@ -311,7 +311,7 @@ public class MetaDataMappingService {
 
                             // add virtual index in the mapperServices map, and all depending on it
                             if (indexMetaData.virtualIndex() == null) {
-				effectiveIndices.add(index);
+				                effectiveIndices.add(index);
                             } else {
                                 final IndexMetaData virtualIndexMetaData = currentState.metaData().index(indexMetaData.virtualIndex());
                                 if (virtualIndexMetaData != null && indexMapperServices.containsKey(virtualIndexMetaData.getIndex()) == false) {
@@ -406,7 +406,7 @@ public class MetaDataMappingService {
                 throw new InvalidTypeNameException("Document mapping type name can't start with '_', found: [" + mappingType + "]");
             }
             MetaData.Builder builder = MetaData.builder(metaData).setClusterUuid();
-            boolean updated = false;
+            int updateCount = 0;
 
             Map<Index, Pair<IndexMetaData, MapperService>> mapperServicesMap = new HashMap<>();
 
@@ -472,16 +472,13 @@ public class MetaDataMappingService {
                 }
                 if (updatedMapping) {
                     indexMetaDataBuilder.mappingVersion(1 + indexMetaDataBuilder.mappingVersion());
+                    updateCount++;
                 }
-                /*
-                 * This implicitly increments the index metadata version and builds the index metadata. This means that we need to have
-                 * already incremented the mapping version if necessary. Therefore, the mapping version increment must remain before this
-                 * statement.
-                 */
-                builder.put(indexMetaDataBuilder);
-                updated |= updatedMapping;
+                IndexMetaData updatedIndexMetaData = indexMetaDataBuilder.build();
+                builder.put(updatedIndexMetaData, true);
+                mapperServicesMap.put(updatedIndexMetaData.getIndex(), Pair.create(updatedIndexMetaData, mapperService));
             }
-            if (updated) {
+            if (updateCount > 0) {
                 MetaData newMetaData = builder.build();
                 MetaData.Builder builder2 = MetaData.builder(newMetaData);
                 for (IndexMetaData indexMetaData : mapperServicesMap.values().stream().map(p -> p.left).collect(Collectors.toList()) ) {
