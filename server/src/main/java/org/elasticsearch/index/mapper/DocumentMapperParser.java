@@ -122,7 +122,7 @@ public class DocumentMapperParser {
             if (MapperService.DISCOVER.equals(fieldName)) {
                 iterator.remove();
             } else {
-		    MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
+                MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
                 if (typeParser != null) {
                     iterator.remove();
                     if (false == fieldNode instanceof Map) {
