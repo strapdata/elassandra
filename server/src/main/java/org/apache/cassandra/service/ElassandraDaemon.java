@@ -453,7 +453,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                 .put("discovery.type", "cassandra")
                 .put("node.data", true)
                 .put("node.master", true)
-                .put("node.name", CassandraDiscovery.buildNodeName(FBUtilities.getBroadcastAddress()))
+                .put("node.name", FBUtilities.getBroadcastAddress().getHostAddress())
                 .put("node.attr.dc", DatabaseDescriptor.getLocalDataCenter())
                 .put("node.attr.rack", DatabaseDescriptor.getEndpointSnitch().getRack(FBUtilities.getBroadcastAddress()))
                 .put("cluster.name", ClusterService.getElasticsearchClusterName(env.settings()))

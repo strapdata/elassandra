@@ -34,6 +34,7 @@ import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.discovery.zen.UnicastHostsProvider;
 import org.elasticsearch.discovery.zen.ZenDiscovery;
 import org.elasticsearch.plugins.DiscoveryPlugin;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.NoopDiscovery;
 import org.elasticsearch.test.transport.MockTransportService;
@@ -55,7 +56,7 @@ import java.util.function.Supplier;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class DiscoveryModuleTests extends ESTestCase {
+public class DiscoveryModuleTests extends ESSingleNodeTestCase {
 
     private TransportService transportService;
     private NamedWriteableRegistry namedWriteableRegistry;

@@ -44,13 +44,13 @@ public class CassandraDiscoveryPlugin implements DiscoveryPlugin {
     private static final DeprecationLogger deprecationLogger = new DeprecationLogger(logger);
 
     public static final String CASSANDRA = "cassandra";
-    
+
     private Settings settings;
-    
+
     public CassandraDiscoveryPlugin(Settings settings) {
         this.settings = settings;
     }
-    
+
     @Override
     public Map<String, Supplier<Discovery>> getDiscoveryTypes(ThreadPool threadPool, TransportService transportService,
             NamedWriteableRegistry namedWriteableRegistry,
@@ -60,7 +60,7 @@ public class CassandraDiscoveryPlugin implements DiscoveryPlugin {
             UnicastHostsProvider hostsProvider,
             AllocationService allocationService) {
         return Collections.singletonMap(CASSANDRA, () ->
-            new CassandraDiscovery(settings, transportService, masterService.getClusterService(), clusterApplier, namedWriteableRegistry));
-        
+            new CassandraDiscovery(settings, transportService, masterService, masterService.getClusterService(), clusterApplier, clusterSettings, namedWriteableRegistry));
+
     }
 }

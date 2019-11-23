@@ -126,7 +126,8 @@ public class DiscoveryModule {
         discoveryTypes.put("single-node", () -> new SingleNodeDiscovery(settings, transportService, masterService, clusterApplier));
         */
         discoveryTypes.put("cassandra",
-                () -> new CassandraDiscovery(settings, transportService, clusterService, clusterApplier, namedWriteableRegistry));
+                () -> new CassandraDiscovery(settings, transportService, masterService,
+                    clusterService, clusterApplier, clusterSettings, namedWriteableRegistry));
 
         for (DiscoveryPlugin plugin : plugins) {
             plugin.getDiscoveryTypes(threadPool, transportService, namedWriteableRegistry,

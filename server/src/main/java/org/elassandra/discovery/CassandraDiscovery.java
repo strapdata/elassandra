@@ -69,10 +69,12 @@ import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.ClusterApplier;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.cluster.service.MasterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.network.NetworkAddress;
+import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
@@ -129,7 +131,9 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     private final TransportService transportService;
 
     private final Settings settings;
+    private final MasterService masterService;
     private final ClusterService clusterService;
+    private final ClusterSettings clusterSettings;
     private final ClusterApplier clusterApplier;
     private final AtomicReference<ClusterState> committedState; // last committed cluster state
 
@@ -164,24 +168,29 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     public static final Setting<Integer> MAX_PENDING_CLUSTER_STATES_SETTING =
             Setting.intSetting("discovery.cassandra.publish.max_pending_cluster_states", 1024, 1, Property.NodeScope);
 
-    public CassandraDiscovery(Settings settings,
-            TransportService transportService,
-            final ClusterService clusterService,
-            final ClusterApplier clusterApplier,
-            NamedWriteableRegistry namedWriteableRegistry) {
+    public CassandraDiscovery(final Settings settings,
+                              final TransportService transportService,
+                              final MasterService masterService,
+                              final ClusterService clusterService,
+                              final ClusterApplier clusterApplier,
+                              final ClusterSettings clusterSettings,
+                              final NamedWriteableRegistry namedWriteableRegistry) {
         super(settings);
         this.settings = settings;
+        this.masterService = masterService;
         this.clusterApplier = clusterApplier;
         this.clusterService = clusterService;
-        this.discoverySettings = new DiscoverySettings(settings, clusterService.getClusterSettings());
+        this.clusterSettings = clusterSettings;
+        this.discoverySettings = new DiscoverySettings(settings, clusterSettings);
         this.namedWriteableRegistry = namedWriteableRegistry;
         this.transportService = transportService;
         this.clusterName = clusterService.getClusterName();
 
         this.committedState = new AtomicReference<>();
         this.clusterService.setDiscovery(this);
-        this.clusterService.getMasterService().setClusterStateSupplier(() -> committedState.get());
-        this.clusterService.getMasterService().setClusterStatePublisher(this::publish);
+
+        this.masterService.setClusterStateSupplier(() -> committedState.get());
+        this.masterService.setClusterStatePublisher(this::publish);
 
         this.localAddress = FBUtilities.getBroadcastAddress();
         this.localDc = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());

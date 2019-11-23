@@ -51,9 +51,9 @@ public class MockCassandraDiscovery extends CassandraDiscovery {
     Consumer<ClusterChangedEvent> publishFunc;
     Consumer<ClusterChangedEvent> resumitFunc;
 
-    private MockCassandraDiscovery(Settings settings, TransportService transportService, ClusterService clusterService,
-            ClusterApplier clusterApplier, NamedWriteableRegistry namedWriteableRegistry) {
-        super(settings, transportService, clusterService, clusterApplier, namedWriteableRegistry);
+    private MockCassandraDiscovery(Settings settings, TransportService transportService, MasterService masterService, ClusterService clusterService,
+            ClusterApplier clusterApplier, ClusterSettings clusterSettings, NamedWriteableRegistry namedWriteableRegistry) {
+        super(settings, transportService, masterService, clusterService, clusterApplier, clusterSettings, namedWriteableRegistry);
     }
 
     public void setPublishFunc(Consumer<ClusterChangedEvent> publishFunc) {
@@ -96,7 +96,8 @@ public class MockCassandraDiscovery extends CassandraDiscovery {
                 AllocationService allocationService) {
             Map<String, Supplier<Discovery>> discoveryTypes = new HashMap<>();
             discoveryTypes.put(MOCK_CASSANDRA,
-                    () -> new MockCassandraDiscovery(Settings.builder().build(), transportService, masterService.getClusterService(), clusterApplier, namedWriteableRegistry));
+                    () -> new MockCassandraDiscovery(Settings.builder().build(), transportService, masterService,
+                        masterService.getClusterService(), clusterApplier, clusterSettings, namedWriteableRegistry));
             return discoveryTypes;
         }
     }
