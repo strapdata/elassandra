@@ -27,6 +27,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.net.InetAddress;
 import java.nio.file.Path;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
@@ -845,6 +846,8 @@ public final class XContentBuilder implements Closeable, Flushable {
             value((ToXContent) value);
         } else if (value instanceof ByteBuffer) {
             binaryValue((ByteBuffer)value);
+        } else if (value instanceof InetAddress) {
+            value(((InetAddress)value).getHostAddress());
         } else if (value instanceof Enum<?> || value instanceof Range<?>) {
             // Write out the Enum toString
             value(Objects.toString(value));
