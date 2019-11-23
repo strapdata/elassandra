@@ -145,6 +145,7 @@ public abstract class MappedFieldType extends FieldType {
             Objects.equals(indexAnalyzer, fieldType.indexAnalyzer) &&
             Objects.equals(searchAnalyzer, fieldType.searchAnalyzer) &&
             Objects.equals(searchQuoteAnalyzer(), fieldType.searchQuoteAnalyzer()) &&
+            Objects.equals(similarity(), fieldType.similarity()) &&
             Objects.equals(eagerGlobalOrdinals, fieldType.eagerGlobalOrdinals) &&
             Objects.equals(nullValue, fieldType.nullValue) &&
             Objects.equals(nullValueAsString, fieldType.nullValueAsString) &&
