@@ -19,6 +19,7 @@
 package org.elasticsearch.test;
 
 import com.carrotsearch.randomizedtesting.RandomizedContext;
+import com.google.common.collect.Lists;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.UntypedResultSet;
@@ -321,11 +322,12 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             assertThat("test leaves transient cluster metadata behind: " + metaData.transientSettings().getAsGroups(),
                 metaData.transientSettings().size(), equalTo(0));
 
-            List<String> userKeyspaces = Schema.instance.getUserKeyspaces();
+            List<String> userKeyspaces = Lists.newArrayList(Schema.instance.getUserKeyspaces());
             userKeyspaces.remove(this.clusterService().getElasticAdminKeyspaceName());
             assertThat("test leaves a user keyspace behind:" + userKeyspaces, userKeyspaces.size(), equalTo(0));
         } catch(Exception e) {
             logger.warn("[{}#{}]: failed to clean indices and metadata: error="+e, getTestClass().getSimpleName(), getTestName());
+            logger.warn("Exception:", e);
         } finally {
             testMutex.release();
             logger.info("[{}#{}]: released semaphore={}", getTestClass().getSimpleName(), getTestName(), testMutex.toString());
