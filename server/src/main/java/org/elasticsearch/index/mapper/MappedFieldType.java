@@ -232,7 +232,7 @@ public abstract class MappedFieldType extends FieldType {
     public int hashCode() {
         return Objects.hash(super.hashCode(), name, boost, docValues, indexAnalyzer, searchAnalyzer, searchQuoteAnalyzer,
             eagerGlobalOrdinals, similarity == null ? null : similarity.name(), nullValue, nullValueAsString,
-                    cqlCollection, cqlStruct, cql3Type, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder);
+                    cqlCollection, cqlStruct, cql3Type, cqlPartialUpdate, cqlPartitionKey, cqlStaticColumn, cqlPrimaryKeyOrder, cqlClusteringKeyDesc);
     }
 
     // TODO: we need to override freeze() and add safety checks that all settings are actually set
