@@ -82,7 +82,16 @@ public final class EngineConfig {
     //private final LongSupplier globalCheckpointSupplier;
     //private final Supplier<RetentionLeases> retentionLeasesSupplier;
 
-    //private final LongSupplier primaryTermSupplier;
+    /**
+     * A supplier of the outstanding retention leases. This is used during merged operations to determine which operations that have been
+     * soft deleted should be retained.
+     *
+     * @return a supplier of outstanding retention leases
+     */
+    public Supplier<RetentionLeases> retentionLeasesSupplier() {
+        return () -> RetentionLeases.EMPTY;
+    }
+
     private final TombstoneDocSupplier tombstoneDocSupplier;
 
     /**
@@ -349,6 +358,13 @@ public final class EngineConfig {
     @Nullable
     public CircuitBreakerService getCircuitBreakerService() {
         return this.circuitBreakerService;
+    }
+
+    /**
+     * Returns a supplier that supplies the latest primary term value of the associated shard.
+     */
+    public LongSupplier getPrimaryTermSupplier() {
+        return () -> 0;
     }
 
     /**

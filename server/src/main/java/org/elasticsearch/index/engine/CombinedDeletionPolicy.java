@@ -53,6 +53,11 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
     private volatile IndexCommit lastCommit; // the most recent commit point
 
     CombinedDeletionPolicy(Logger logger, TranslogDeletionPolicy translogDeletionPolicy) {
+        this(logger, translogDeletionPolicy, null, null);
+    }
+
+    CombinedDeletionPolicy(Logger logger, TranslogDeletionPolicy translogDeletionPolicy,
+                           SoftDeletesPolicy softDeletesPolicy, LongSupplier globalCheckpointSupplier) {
         this.logger = logger;
         this.translogDeletionPolicy = translogDeletionPolicy;
         //this.softDeletesPolicy = softDeletesPolicy;

@@ -84,6 +84,7 @@ public final class RetentionLease implements ToXContent, Writeable {
         return source;
     }
 
+    public static final RetentionLease DUMMY_RETENTION_LEASE = new RetentionLease("dummy", 1L, 0L, "dummy source");
     /**
      * Constructs a new retention lease.
      *

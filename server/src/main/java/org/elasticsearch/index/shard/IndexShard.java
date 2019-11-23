@@ -22,6 +22,7 @@ package org.elasticsearch.index.shard;
 import com.carrotsearch.hppc.ObjectLongMap;
 
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.index.CheckIndex;
 import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.IndexOptions;
@@ -398,7 +399,12 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
      * See {@link org.elasticsearch.cluster.metadata.IndexMetaData#primaryTerm(int)}
      */
     public long getPendingPrimaryTerm() {
-        return SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
+        return this.pendingPrimaryTerm;
+    }
+
+    /** Returns the primary term that is currently being used to assign to operations */
+    public long getOperationPrimaryTerm() {
+        return 1L;
     }
 
     /**
@@ -606,6 +612,58 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     }
 
     private final AtomicBoolean primaryReplicaResyncInProgress = new AtomicBoolean();
+
+    /**
+     * Completes the relocation. Operations are blocked and current operations are drained before changing state to relocated. The provided
+     * {@link Runnable} is executed after all operations are successfully blocked.
+     *
+     * @param consumer a {@link Runnable} that is executed after operations are blocked
+     * @throws IllegalIndexShardStateException if the shard is not relocating due to concurrent cancellation
+     * @throws InterruptedException            if blocking operations is interrupted
+     */
+    public void relocated(final Consumer<ReplicationTracker.PrimaryContext> consumer)
+                                            throws IllegalIndexShardStateException, InterruptedException {
+        assert shardRouting.primary() : "only primaries can be marked as relocated: " + shardRouting;
+        final Releasable forceRefreshes = refreshListeners.forceRefreshes();
+        try {
+            indexShardOperationPermits.blockOperations(30, TimeUnit.MINUTES, () -> {
+                forceRefreshes.close();
+                // no shard operation permits are being held here, move state from started to relocated
+                assert indexShardOperationPermits.getActiveOperationsCount() == 0 :
+                        "in-flight operations in progress while moving shard state to relocated";
+                /*
+                 * We should not invoke the runnable under the mutex as the expected implementation is to handoff the primary context via a
+                 * network operation. Doing this under the mutex can implicitly block the cluster state update thread on network operations.
+                 */
+                verifyRelocatingState();
+                /*
+                final ReplicationTracker.PrimaryContext primaryContext = replicationTracker.startRelocationHandoff();
+                try {
+                    consumer.accept(primaryContext);
+                    synchronized (mutex) {
+                        verifyRelocatingState();
+                        replicationTracker.completeRelocationHandoff(); // make changes to primaryMode and relocated flag only under mutex
+                    }
+                } catch (final Exception e) {
+                    try {
+                        replicationTracker.abortRelocationHandoff();
+                    } catch (final Exception inner) {
+                        e.addSuppressed(inner);
+                    }
+                    throw e;
+                }
+                */
+            });
+        } catch (TimeoutException e) {
+            logger.warn("timed out waiting for relocation hand-off to complete");
+            // This is really bad as ongoing replication operations are preventing this shard from completing relocation hand-off.
+            // Fail primary relocation source and target shards.
+            failShard("timed out waiting for relocation hand-off to complete", null);
+            throw new IndexShardClosedException(shardId(), "timed out waiting for relocation hand-off to complete");
+        } finally {
+            forceRefreshes.close();
+        }
+    }
 
     private void verifyRelocatingState() {
         if (state != IndexShardState.STARTED) {
@@ -1818,7 +1876,177 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         }
     }
 
+    /**
+     * Notifies the service to update the local checkpoint for the shard with the provided allocation ID. See
+     * {@link ReplicationTracker#updateLocalCheckpoint(String, long)} for
+     * details.
+     *
+     * @param allocationId the allocation ID of the shard to update the local checkpoint for
+     * @param checkpoint   the local checkpoint for the shard
+     */
+    public void updateLocalCheckpointForShard(final String allocationId, final long checkpoint) {
+        verifyNotClosed();
+    }
 
+    /**
+     * Update the local knowledge of the global checkpoint for the specified allocation ID.
+     *
+     * @param allocationId     the allocation ID to update the global checkpoint for
+     * @param globalCheckpoint the global checkpoint
+     */
+    public void updateGlobalCheckpointForShard(final String allocationId, final long globalCheckpoint) {
+        verifyNotClosed();
+    }
+
+    /**
+     * Add a global checkpoint listener. If the global checkpoint is equal to or above the global checkpoint the listener is waiting for,
+     * then the listener will be notified immediately via an executor (so possibly not on the current thread). If the specified timeout
+     * elapses before the listener is notified, the listener will be notified with an {@link TimeoutException}. A caller may pass null to
+     * specify no timeout.
+     *
+     * @param waitingForGlobalCheckpoint the global checkpoint the listener is waiting for
+     * @param listener                   the listener
+     * @param timeout                    the timeout
+     */
+    public void addGlobalCheckpointListener(
+            final long waitingForGlobalCheckpoint,
+            final GlobalCheckpointListeners.GlobalCheckpointListener listener,
+            final TimeValue timeout) {
+        //this.globalCheckpointListeners.add(waitingForGlobalCheckpoint, listener, timeout);
+    }
+
+    private void ensureSoftDeletesEnabled(String feature) {
+        if (indexSettings.isSoftDeleteEnabled() == false) {
+            String message = feature + " requires soft deletes but " + indexSettings.getIndex() + " does not have soft deletes enabled";
+            assert false : message;
+            throw new IllegalStateException(message);
+        }
+    }
+
+    /**
+     * Get all retention leases tracked on this shard.
+     *
+     * @return the retention leases
+     */
+    public RetentionLeases getRetentionLeases() {
+        return RetentionLeases.EMPTY;
+    }
+
+    /**
+     * If the expire leases parameter is false, gets all retention leases tracked on this shard and otherwise first calculates
+     * expiration of existing retention leases, and then gets all non-expired retention leases tracked on this shard. Note that only the
+     * primary shard calculates which leases are expired, and if any have expired, syncs the retention leases to any replicas. If the
+     * expire leases parameter is true, this replication tracker must be in primary mode.
+     *
+     * @return a tuple indicating whether or not any retention leases were expired, and the non-expired retention leases
+     */
+    public Tuple<Boolean, RetentionLeases> getRetentionLeases(final boolean expireLeases) {
+        return new Tuple<>(expireLeases, RetentionLeases.EMPTY);
+    }
+
+    static final RetentionLeaseStats EMPTY_RETENTION_LEASES_STATS = new RetentionLeaseStats(RetentionLeases.EMPTY);
+    public RetentionLeaseStats getRetentionLeaseStats() {
+        verifyNotClosed();
+        return EMPTY_RETENTION_LEASES_STATS;
+    }
+
+
+    /**
+     * Adds a new retention lease.
+     *
+     * @param id                      the identifier of the retention lease
+     * @param retainingSequenceNumber the retaining sequence number
+     * @param source                  the source of the retention lease
+     * @param listener                the callback when the retention lease is successfully added and synced to replicas
+     * @return the new retention lease
+     * @throws IllegalArgumentException if the specified retention lease already exists
+     */
+    public RetentionLease addRetentionLease(
+            final String id,
+            final long retainingSequenceNumber,
+            final String source,
+            final ActionListener<ReplicationResponse> listener) {
+        return RetentionLease.DUMMY_RETENTION_LEASE;
+    }
+
+    /**
+     * Renews an existing retention lease.
+     *
+     * @param id                      the identifier of the retention lease
+     * @param retainingSequenceNumber the retaining sequence number
+     * @param source                  the source of the retention lease
+     * @return the renewed retention lease
+     * @throws IllegalArgumentException if the specified retention lease does not exist
+     */
+    public RetentionLease renewRetentionLease(final String id, final long retainingSequenceNumber, final String source) {
+        return RetentionLease.DUMMY_RETENTION_LEASE;
+    }
+
+    /**
+     * Removes an existing retention lease.
+     *
+     * @param id       the identifier of the retention lease
+     * @param listener the callback when the retention lease is successfully removed and synced to replicas
+     */
+    public void removeRetentionLease(final String id, final ActionListener<ReplicationResponse> listener) {
+
+    }
+
+    /**
+     * Updates retention leases on a replica.
+     *
+     * @param retentionLeases the retention leases
+     */
+    public void updateRetentionLeasesOnReplica(final RetentionLeases retentionLeases) {
+
+    }
+
+    /**
+     * Loads the latest retention leases from their dedicated state file.
+     *
+     * @return the retention leases
+     * @throws IOException if an I/O exception occurs reading the retention leases
+     */
+    public RetentionLeases loadRetentionLeases() throws IOException {
+        verifyNotClosed();
+        return RetentionLeases.EMPTY;
+    }
+
+    /**
+     * Persists the current retention leases to their dedicated state file.
+     *
+     * @throws IOException if an exception occurs writing the state file
+     */
+    public void persistRetentionLeases() throws IOException {
+        verifyNotClosed();
+    }
+
+    /**
+     * Syncs the current retention leases to all replicas.
+     */
+    public void syncRetentionLeases() {
+
+    }
+
+    /**
+     * Called when the recovery process for a shard has opened the engine on the target shard. Ensures that the right data structures
+     * have been set up locally to track local checkpoint information for the shard and that the shard is added to the replication group.
+     *
+     * @param allocationId  the allocation ID of the shard for which recovery was initiated
+     */
+    public void initiateTracking(final String allocationId) {
+    }
+
+    /**
+     * Marks the shard with the provided allocation ID as in-sync with the primary shard. See
+     * {@link ReplicationTracker#markAllocationIdAsInSync(String, long)}
+     * for additional details.
+     *
+     * @param allocationId    the allocation ID of the shard to mark as in-sync
+     * @param localCheckpoint the current local checkpoint on the shard
+     */
+    public void markAllocationIdAsInSync(final String allocationId, final long localCheckpoint) throws InterruptedException {
+    }
 
     /**
      * Returns the local checkpoint for the shard.
@@ -1826,7 +2054,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
      * @return the local checkpoint
      */
     public long getLocalCheckpoint() {
-        return getEngine().getLocalCheckpoint();
+        return 0L;
     }
 
     /**
@@ -1887,7 +2115,37 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                 globalCheckpointSyncer.run();
             }
         }
-        */
+
+         */
+    }
+
+    /**
+     * Returns the current replication group for the shard.
+     *
+     * @return the replication group
+     */
+    public ReplicationGroup getReplicationGroup() {
+        verifyNotClosed();
+        return ReplicationGroup.DUMMY_REPLICATION_GROUP;
+    }
+
+    /**
+     * Updates the global checkpoint on a replica shard after it has been updated by the primary.
+     *
+     * @param globalCheckpoint the global checkpoint
+     * @param reason           the reason the global checkpoint was updated
+     */
+    public void updateGlobalCheckpointOnReplica(final long globalCheckpoint, final String reason) {
+
+    }
+
+    /**
+     * Updates the known allocation IDs and the local checkpoints for the corresponding allocations from a primary relocation source.
+     *
+     * @param primaryContext the sequence number context
+     */
+    public void activateWithPrimaryContext(final ReplicationTracker.PrimaryContext primaryContext) {
+
     }
 
     /**
@@ -1897,12 +2155,6 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
      */
     public boolean pendingInSync() {
         return false;
-    }
-
-    static final RetentionLeaseStats EMPTY_RETENTION_LEASES_STATS = new RetentionLeaseStats(RetentionLeases.EMPTY);
-    public RetentionLeaseStats getRetentionLeaseStats() {
-        verifyNotClosed();
-        return EMPTY_RETENTION_LEASES_STATS;
     }
 
     /**
@@ -2104,6 +2356,13 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
             default:
                 throw new IllegalArgumentException("Unknown recovery source " + recoveryState.getRecoverySource());
         }
+    }
+
+    /**
+     * Returns whether the shard is a relocated primary, i.e. not in charge anymore of replicating changes (see {@link ReplicationTracker}).
+     */
+    public boolean isRelocatedPrimary() {
+        return false;
     }
 
     class ShardEventListener implements Engine.EventListener {
@@ -2628,6 +2887,56 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         };
     }
 
+    /**
+     * Rollback the current engine to the safe commit, then replay local translog up to the global checkpoint.
+     */
+    void resetEngineToGlobalCheckpoint() throws IOException {
+        /*
+        assert getActiveOperationsCount() == 0 : "Ongoing writes [" + getActiveOperations() + "]";
+        sync(); // persist the global checkpoint to disk
+        final SeqNoStats seqNoStats = seqNoStats();
+        final TranslogStats translogStats = translogStats();
+        // flush to make sure the latest commit, which will be opened by the read-only engine, includes all operations.
+        flush(new FlushRequest().waitIfOngoing(true));
+        synchronized (mutex) {
+            verifyNotClosed();
+            // we must create a new engine under mutex (see IndexShard#snapshotStoreMetadata).
+            final Engine readOnlyEngine = new ReadOnlyEngine(newEngineConfig(), seqNoStats, translogStats, false, Function.identity());
+            IOUtils.close(currentEngineReference.getAndSet(readOnlyEngine));
+        }
+
+        Engine newEngine = null;
+        try {
+            final long globalCheckpoint = getGlobalCheckpoint();
+            trimUnsafeCommits();
+            synchronized (mutex) {
+                verifyNotClosed();
+                // we must create a new engine under mutex (see IndexShard#snapshotStoreMetadata).
+                newEngine = engineFactory.newReadWriteEngine(newEngineConfig());
+                onNewEngine(newEngine);
+            }
+            newEngine.advanceMaxSeqNoOfUpdatesOrDeletes(globalCheckpoint);
+            final Engine.TranslogRecoveryRunner translogRunner = (engine, snapshot) -> runTranslogRecovery(
+                engine, snapshot, Engine.Operation.Origin.LOCAL_RESET, () -> {
+                    // TODO: add a dedicate recovery stats for the reset translog
+                });
+            newEngine.recoverFromTranslog(translogRunner, globalCheckpoint);
+            synchronized (mutex) {
+                verifyNotClosed();
+                IOUtils.close(currentEngineReference.getAndSet(newEngine));
+                // We set active because we are now writing operations to the engine; this way,
+                // if we go idle after some time and become inactive, we still give sync'd flush a chance to run.
+                active.set(true);
+                newEngine = null;
+            }
+            // time elapses after the engine is created above (pulling the config settings) until we set the engine reference, during
+            // which settings changes could possibly have happened, so here we forcefully push any config changes to the new engine.
+            onSettingsChanged();
+        } finally {
+            IOUtils.close(newEngine);
+        }
+        */
+    }
 
     /**
      * Returns the maximum sequence number of either update or delete operations have been processed in this shard

@@ -184,7 +184,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
         if (opType == DocWriteRequest.OpType.UPDATE) {
             final UpdateRequest updateRequest = (UpdateRequest) context.getCurrent();
             try {
-                updateResult = updateHelper.prepare(updateRequest, context.getPrimary(), nowInMillisSupplier);
+                updateResult = updateHelper.prepare(updateRequest, context.getPrimary(), canUseIfSeqNo, nowInMillisSupplier);
             } catch (Exception failure) {
                 // we may fail translating a update to index or delete operation
                 // we use index result to communicate failure while translating update request
@@ -306,6 +306,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                     final Tuple<XContentType, Map<String, Object>> sourceAndContent =
                         XContentHelper.convertToMap(indexSourceAsBytes, true, updateIndexRequest.getContentType());
                     updateResponse.setGetResult(UpdateHelper.extractGetResult(updateRequest, concreteIndex,
+                        indexResponse.getSeqNo(), indexResponse.getPrimaryTerm(),
                         indexResponse.getVersion(), sourceAndContent.v2(), sourceAndContent.v1(), indexSourceAsBytes));
                 }
             } else if (translatedResult == DocWriteResponse.Result.DELETED) {
@@ -315,7 +316,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                     deleteResponse.getVersion(), deleteResponse.getResult());
 
                 final GetResult getResult = UpdateHelper.extractGetResult(updateRequest, concreteIndex,
-                    deleteResponse.getVersion(),
+                    deleteResponse.getSeqNo(), deleteResponse.getPrimaryTerm(), deleteResponse.getVersion(),
                     translate.updatedSourceAsMap(), translate.updateSourceContentType(), null);
 
                 updateResponse.setGetResult(getResult);

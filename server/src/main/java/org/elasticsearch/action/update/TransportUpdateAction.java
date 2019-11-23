@@ -176,7 +176,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
         final IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
         final IndexShard indexShard = indexService.getShard(shardId.getId());
         final UpdateHelper.Result result = updateHelper.prepare(
-            request, indexShard, threadPool::absoluteTimeInMillis);
+            request, indexShard, DocWriteRequest.canUseIfSeqNo(clusterService.state()), threadPool::absoluteTimeInMillis);
         switch (result.getResponseResult()) {
             case CREATED:
                 IndexRequest upsertRequest = result.action();
@@ -192,7 +192,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                                 Tuple<XContentType, Map<String, Object>> sourceAndContent =
                                         XContentHelper.convertToMap(upsertSourceBytes, true, upsertRequest.getContentType());
                                 update.setGetResult(UpdateHelper.extractGetResult(request, request.concreteIndex(),
-                                    response.getVersion(), sourceAndContent.v2(),
+                                    response.getSeqNo(), response.getPrimaryTerm(), response.getVersion(), sourceAndContent.v2(),
                                     sourceAndContent.v1(), upsertSourceBytes));
                             } else {
                                 update.setGetResult(null);
@@ -213,7 +213,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                                 response.getType(), response.getId(), response.getSeqNo(), response.getPrimaryTerm(),
                                 response.getVersion(), response.getResult());
                             update.setGetResult(UpdateHelper.extractGetResult(request, request.concreteIndex(),
-                                response.getVersion(), result.updatedSourceAsMap(),
+                                response.getSeqNo(), response.getPrimaryTerm(), response.getVersion(), result.updatedSourceAsMap(),
                                 result.updateSourceContentType(), indexSourceBytes));
                             update.setForcedRefresh(response.forcedRefresh());
                             listener.onResponse(update);
@@ -228,7 +228,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                                 response.getType(), response.getId(), response.getSeqNo(), response.getPrimaryTerm(),
                                 response.getVersion(), response.getResult());
                             update.setGetResult(UpdateHelper.extractGetResult(request, request.concreteIndex(),
-                                response.getVersion(), result.updatedSourceAsMap(),
+                                response.getSeqNo(), response.getPrimaryTerm(), response.getVersion(), result.updatedSourceAsMap(),
                                 result.updateSourceContentType(), null));
                             update.setForcedRefresh(response.forcedRefresh());
                             listener.onResponse(update);

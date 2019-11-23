@@ -24,6 +24,7 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.util.set.Sets;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -38,6 +39,8 @@ public class ReplicationGroup {
     private final Set<String> unavailableInSyncShards; // derived from the other fields
     private final List<ShardRouting> replicationTargets; // derived from the other fields
     private final List<ShardRouting> skippedShards; // derived from the other fields
+
+    public static final ReplicationGroup DUMMY_REPLICATION_GROUP = new ReplicationGroup(null, Collections.EMPTY_SET, Collections.EMPTY_SET);
 
     public ReplicationGroup(IndexShardRoutingTable routingTable, Set<String> inSyncAllocationIds, Set<String> trackedAllocationIds) {
         this.routingTable = routingTable;
