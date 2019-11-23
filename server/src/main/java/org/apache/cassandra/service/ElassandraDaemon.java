@@ -183,7 +183,7 @@ public class ElassandraDaemon extends CassandraDaemon {
             // add ElassandraDaemon as a ClusterPlugin
             List<Class<? extends Plugin>> pluginList2 = Lists.newArrayList(pluginList);
             pluginList2.add(ElassandraPlugin.class);
-            this.node = new Node(getSettings(), pluginList2) {
+            this.node = new Node(getSettings(), pluginList2, true) {
                 @Override
                 protected void validateNodeBeforeAcceptingRequests(
                     final BootstrapContext context,
@@ -410,7 +410,7 @@ public class ElassandraDaemon extends CassandraDaemon {
     }
 
     // for tests only
-    public Node newNode(Settings settings, Collection<Class<? extends Plugin>> classpathPlugins) {
+    public Node newNode(Settings settings, Collection<Class<? extends Plugin>> classpathPlugins, boolean forbidPrivateIndexSettings) {
         Settings nodeSettings = nodeSettings(settings);
         System.out.println("node settings="+nodeSettings.getAsGroups());
         System.out.println("node plugins="+classpathPlugins);
@@ -418,7 +418,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         // add ElassandraDaemon as a ClusterPlugin
         List<Class<? extends Plugin>> classpathPlugins2 = Lists.newArrayList(classpathPlugins);
         classpathPlugins2.add(ElassandraPlugin.class);
-        this.node = new Node(nodeSettings, classpathPlugins2)  {
+        this.node = new Node(nodeSettings, classpathPlugins2, forbidPrivateIndexSettings)  {
             @Override
             protected void validateNodeBeforeAcceptingRequests(
                 final BootstrapContext context,

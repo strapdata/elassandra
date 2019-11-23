@@ -263,8 +263,8 @@ public abstract class Node implements Closeable {
         this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null));
     }
 
-    public Node(Settings preparedSettings, Collection<Class<? extends Plugin>> classpathPlugins) {
-        this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), classpathPlugins, true);
+    public Node(Settings preparedSettings, Collection<Class<? extends Plugin>> classpathPlugins, boolean forbidPrivateIndexSettings) {
+        this(InternalSettingsPreparer.prepareEnvironment(preparedSettings, null), classpathPlugins, forbidPrivateIndexSettings);
     }
 
     public Node(Environment environment) {

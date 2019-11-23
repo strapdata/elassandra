@@ -257,7 +257,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             }
         }
         logger.info("plugins={}", plugins);
-        Node node = ElassandraDaemon.instance.newNode(ElassandraDaemon.instance.nodeSettings(nodeSettings()), plugins);
+        Node node = ElassandraDaemon.instance.newNode(ElassandraDaemon.instance.nodeSettings(nodeSettings()), plugins, forbidPrivateIndexSettings());
         try {
             node.activate();
             node.start();
