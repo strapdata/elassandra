@@ -391,7 +391,7 @@ public abstract class ESTestCase extends LuceneTestCase {
         //Check that there are no unaccounted warning headers. These should be checked with {@link #assertWarnings(String...)} in the
         //appropriate test
         try {
-            final List<String> warnings = threadContext.getResponseHeaders().get("Warning");
+            final List<String> warnings = filterHttpEnabledDeprectationWarnings(threadContext.getResponseHeaders().get("Warning"));
             if (warnings != null && enableJodaDeprecationWarningsCheck() == false) {
                 List<String> filteredWarnings = filterJodaDeprecationWarnings(warnings);
                 assertThat( filteredWarnings, empty());
@@ -446,6 +446,12 @@ public abstract class ESTestCase extends LuceneTestCase {
         return actualWarnings.stream()
                              .filter(m -> m.contains(JodaDeprecationPatterns.USE_PREFIX_8_WARNING) == false)
                              .collect(Collectors.toList());
+    }
+
+    private List<String> filterHttpEnabledDeprectationWarnings(List<String> actualWarnings) {
+        return actualWarnings == null ? null : actualWarnings.stream()
+            .filter(m -> m.contains("http.enabled") == false)
+            .collect(Collectors.toList());
     }
 
     private void assertWarnings(List<String> actualWarnings, String[] expectedWarnings) {
