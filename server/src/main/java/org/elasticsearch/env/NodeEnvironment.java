@@ -20,7 +20,7 @@
 package org.elasticsearch.env;
 
 import java.io.UncheckedIOException;
-import java.util.Iterator;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -72,16 +72,6 @@ import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -425,8 +415,16 @@ public final class NodeEnvironment  implements Closeable {
         return metaData;
     }
 
+    public static String getLocalHostId() {
+        try {
+            return SystemKeyspace.getLocalHostId().toString();
+        } catch(java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException |java.lang.NoClassDefFoundError e) {
+            return UUID.randomUUID().toString();
+        }
+    }
+
     public static String generateNodeId(Settings settings) {
-        return SystemKeyspace.getLocalHostId().toString();
+        return getLocalHostId();
     }
 
     @SuppressForbidden(reason = "System.out.*")
