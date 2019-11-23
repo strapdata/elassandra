@@ -772,8 +772,9 @@ public class ClusterService extends BaseClusterService {
                     metadata = readMetaDataAsComment();
                     upgradeMetadata(metadata, "migrate metadata from 6.2.3.7-");
                 } catch(NoPersistedMetaDataException e3) {
-                    // fall back to initial stated for new cluster
-                    metadata = state().metaData();
+                    // fall back to a new metadata
+                    metadata = MetaData.builder().setClusterUuid().build();
+                    logger.info("Start with a new empty metaData=[{}]", metadata.x2());
                 }
             }
         }
