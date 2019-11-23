@@ -490,7 +490,7 @@ public class MetaDataCreateIndexService {
                  * We can not check the shard limit until we have applied templates, otherwise we do not know the actual number of shards
                  * that will be used to create this index.
                  */
-                //checkShardLimit(actualIndexSettings, currentState);
+                checkShardLimit(actualIndexSettings, currentState);
 
                 tmpImdBuilder.settings(actualIndexSettings);
 
