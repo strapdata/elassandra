@@ -385,6 +385,7 @@ public class InternalEngine extends Engine {
 
     @Override
     public InternalEngine recoverFromTranslog(TranslogRecoveryRunner translogRecoveryRunner, long recoverUpToSeqNo) throws IOException {
+        /*
         flushLock.lock();
         try (ReleasableLock lock = readLock.acquire()) {
             ensureOpen();
@@ -407,6 +408,7 @@ public class InternalEngine extends Engine {
         } finally {
             flushLock.unlock();
         }
+        */
         return this;
     }
 
@@ -2856,6 +2858,7 @@ public class InternalEngine extends Engine {
     }
 
     private boolean assertMaxSeqNoOfUpdatesIsAdvanced(Term id, long seqNo, boolean allowDeleted, boolean relaxIfGapInSeqNo) {
+        /*
         final long maxSeqNoOfUpdates = getMaxSeqNoOfUpdatesOrDeletes();
         // If the primary is on an old version which does not replicate msu, we need to relax this assertion for that.
         if (maxSeqNoOfUpdates == SequenceNumbers.UNASSIGNED_SEQ_NO) {
@@ -2876,6 +2879,8 @@ public class InternalEngine extends Engine {
             return true;
         }
         assert seqNo <= maxSeqNoOfUpdates : "id=" + id + " seq_no=" + seqNo + " msu=" + maxSeqNoOfUpdates;
+
+         */
         return true;
     }
 
