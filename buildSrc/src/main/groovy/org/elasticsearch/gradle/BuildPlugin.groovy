@@ -626,8 +626,8 @@ class BuildPlugin implements Plugin<Project> {
             }
         }
         repos.maven {
-            name "elastic"
-            url "https://artifacts.elastic.co/maven"
+            name "sonatype"
+            url "https://oss.sonatype.org/content/repositories/snapshots"
         }
         repos.mavenCentral()
         repos.jcenter()
@@ -989,8 +989,8 @@ class BuildPlugin implements Plugin<Project> {
             }
 
             // TODO: why are we not passing maxmemory to junit4?
-            jvmArg '-Xmx' + System.getProperty('tests.heap.size', '1512m')
-            jvmArg '-Xms' + System.getProperty('tests.heap.size', '1512m')
+            jvmArg '-Xmx' + System.getProperty('tests.heap.size', '2512m')
+            jvmArg '-Xms' + System.getProperty('tests.heap.size', '2512m')
             jvmArg '-XX:+HeapDumpOnOutOfMemoryError'
             jvmArg '-Xdebug'
             jvmArg '-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4242'
@@ -1054,17 +1054,24 @@ class BuildPlugin implements Plugin<Project> {
             systemProperty 'cassandra.home', "${project.buildDir}/testrun/test/J0"
             systemProperty 'cassandra.logdir', "${project.buildDir}/testrun/test/J0"
             systemProperty 'logback.configurationFile', "${project.projectDir}/src/test/resources/conf/logback.xml"
-            systemProperty 'java.library.path', "${project.projectDir}/server/cassandra/lib/sigar-bin"
+            systemProperty 'java.library.path', "${project.projectDir}/cassandra/lib/sigar-bin"
             systemProperty 'cassandra.config', "file://${project.projectDir}/src/test/resources/conf/cassandra.yaml"
             systemProperty 'cassandra.config.dir', "${project.projectDir}/src/test/resources/conf"
             systemProperty 'cassandra-rackdc.properties', "file://${project.projectDir}/src/test/resources/conf/cassandra-rackdc.properties"
             systemProperty 'cassandra.config.loader', "org.elassandra.config.YamlTestConfigurationLoader"
             systemProperty 'cassandra.storagedir', "${project.buildDir}/testrun/test/J0"
+
+            // epoll is only supoorted on Linux
+            systemProperty 'cassandra.native.epoll.enabled', 'false'
+            systemProperty 'cassandra.ring_delay_ms', '0'
+            systemProperty 'cassandra.skip_wait_for_gossip_to_settle', '0'
+            systemProperty 'java.net.preferIPv4Stack', 'true'
+
             systemProperty 'es.synchronous_refresh', 'true'
             systemProperty 'es.drop_on_delete_index', 'true'
             systemProperty 'tests.maven', 'true'
             systemProperty 'cassandra.custom_query_handler_class', 'org.elassandra.index.ElasticQueryHandler'
-            //systemProperty 'io.netty.tryReflectionSetAccessible', 'false'
+            systemProperty 'io.netty.tryReflectionSetAccessible', 'false'
 
             boolean assertionsEnabled = Boolean.parseBoolean(System.getProperty('tests.asserts', 'true'))
             enableSystemAssertions assertionsEnabled
@@ -1252,6 +1259,13 @@ class BuildPlugin implements Plugin<Project> {
             exclude '**/InternalTestClusterTests.class'
             exclude '**/discovery/*.class'
             exclude '**/*IT.class'
+            exclude '**/ClusterStateTests.class'
+            exclude '**/SearchHitsTests.class'
+            exclude '**/TransportShardBulkActionTests.class'
+            exclude '**/DiscoveryNodesTests.class'
+            exclude '**/CombinedDeletionPolicyTests.class'
+            exclude '**/BlobStoreRepositoryTests'
+            exclude '**/PrimaryTermsTests.class'
         }
     }
 
