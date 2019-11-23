@@ -82,7 +82,7 @@ public class TokenRangesBitsetFilterCache extends AbstractIndexComponent impleme
     };
 
     private final TokenRangesService tokenRangesService;
-    private final Map<Query, TokenRangesBitsetProducer> perQueryBitsetCache = Collections.synchronizedMap(new WeakHashMap<Query,TokenRangesBitsetProducer>());
+    private final Map<Query, TokenRangesBitsetProducer> perQueryBitsetCache = Collections.synchronizedMap(new WeakHashMap<>());
     protected volatile Listener listener = DEFAULT_NOOP_LISTENER;
     protected final ShardId shardId;
 
@@ -99,7 +99,7 @@ public class TokenRangesBitsetFilterCache extends AbstractIndexComponent impleme
         TokenRangesBitsetProducer p = perQueryBitsetCache.computeIfAbsent(query, K -> new TokenRangesBitsetProducer(this, K));
         return p.getBitSet(context);
     }
-    
+
     /**
      * Sets a listener that is invoked for all subsequent cache and removal events.
      * @throws IllegalStateException if the listener is set more than once
@@ -122,7 +122,7 @@ public class TokenRangesBitsetFilterCache extends AbstractIndexComponent impleme
             p.remove(ownerCoreCacheKey);
         }
     }
-    
+
     /*
     @Override
     public void onClose(IndexReader reader) throws IOException {
@@ -162,7 +162,7 @@ public class TokenRangesBitsetFilterCache extends AbstractIndexComponent impleme
             logger.trace("query={} removed, cache size={}", query, perQueryBitsetCache.size());
     }
 
-    
+
     @Override
     public void close() {
         clear("close");

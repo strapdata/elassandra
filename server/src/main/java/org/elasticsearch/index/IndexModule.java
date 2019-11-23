@@ -24,8 +24,10 @@ import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.store.MMapDirectory;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.SetOnce;
+import org.elassandra.index.search.TokenRangesSearcherWrapper;
 import org.elasticsearch.Version;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.TriFunction;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -34,8 +36,10 @@ import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
+import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.analysis.AnalysisRegistry;
+import org.elasticsearch.index.analysis.IndexAnalyzers;
 import org.elasticsearch.index.cache.query.DisabledQueryCache;
 import org.elasticsearch.index.cache.query.IndexQueryCache;
 import org.elasticsearch.index.cache.query.QueryCache;
@@ -386,26 +390,49 @@ public final class IndexModule {
             NamedWriteableRegistry namedWriteableRegistry)
         throws IOException {
         final IndexEventListener eventListener = freeze();
-        IndexSearcherWrapperFactory searcherWrapperFactory = indexSearcherWrapper.get() == null
-            ? (shard) -> null : indexSearcherWrapper.get();
+
+        IndexSearcherWrapperFactory searcherWrapperFactory;
+        if (indexSearcherWrapper.get() == null) {
+            searcherWrapperFactory = (this.indexSettings.getValue(IndexMetaData.INDEX_TOKEN_RANGES_BITSET_CACHE_SETTING)) ?
+                new IndexSearcherWrapperFactory() {
+                    public IndexSearcherWrapper newWrapper(IndexService indexService) {
+                        return new TokenRangesSearcherWrapper(indexService.tokenRangesBitsetFilterCache, clusterService.tokenRangesService());
+                    }
+                } :
+                (shard) -> null;
+        } else {
+            searcherWrapperFactory = indexSearcherWrapper.get();
+        }
+
         eventListener.beforeIndexCreated(indexSettings.getIndex(), indexSettings.getSettings());
         final IndexStore store = getIndexStore(indexSettings, indexStoreFactories);
-        final QueryCache queryCache;
-        if (indexSettings.getValue(INDEX_QUERY_CACHE_ENABLED_SETTING)) {
-            BiFunction<IndexSettings, IndicesQueryCache, QueryCache> queryCacheProvider = forceQueryCacheProvider.get();
-            if (queryCacheProvider == null) {
-                queryCache = new IndexQueryCache(indexSettings, indicesQueryCache);
+        QueryCache queryCache = null;
+        IndexAnalyzers indexAnalyzers = null;
+        boolean success = false;
+        try {
+            if (indexSettings.getValue(INDEX_QUERY_CACHE_ENABLED_SETTING)) {
+                BiFunction<IndexSettings, IndicesQueryCache, QueryCache> queryCacheProvider = forceQueryCacheProvider.get();
+                if (queryCacheProvider == null) {
+                    queryCache = new IndexQueryCache(indexSettings, indicesQueryCache);
+                } else {
+                    queryCache = queryCacheProvider.apply(indexSettings, indicesQueryCache);
+                }
             } else {
-                queryCache = queryCacheProvider.apply(indexSettings, indicesQueryCache);
+                queryCache = new DisabledQueryCache(indexSettings);
             }
-        } else {
-            queryCache = new DisabledQueryCache(indexSettings);
-        }
-        return new IndexService(indexSettings, environment, xContentRegistry,
+            indexAnalyzers = analysisRegistry.build(indexSettings);
+            final IndexService indexService = new IndexService(indexSettings, environment, xContentRegistry,
                 new SimilarityService(indexSettings, scriptService, similarities),
-                shardStoreDeleter, analysisRegistry, engineFactory, circuitBreakerService, bigArrays, threadPool, scriptService,
-                clusterService, client, queryCache, store, eventListener, searcherWrapperFactory, mapperRegistry,
+                shardStoreDeleter, indexAnalyzers, engineFactory, circuitBreakerService, bigArrays, threadPool, scriptService, clusterService,
+                client, queryCache, store, eventListener, searcherWrapperFactory, mapperRegistry,
                 indicesFieldDataCache, searchOperationListeners, indexOperationListeners, namedWriteableRegistry);
+            success = true;
+            return indexService;
+        } finally {
+            if (success == false) {
+                IOUtils.closeWhileHandlingException(queryCache, indexAnalyzers);
+            }
+        }
     }
 
     private static IndexStore getIndexStore(

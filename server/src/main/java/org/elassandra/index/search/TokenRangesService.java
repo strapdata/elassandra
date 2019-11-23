@@ -7,6 +7,8 @@ import com.google.common.cache.RemovalNotification;
 
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
@@ -24,7 +26,8 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 
-public class TokenRangesService extends AbstractComponent {
+public class TokenRangesService {
+    protected final Logger logger = LogManager.getLogger(TokenRangesService.class);
 
     Queue<TokenRangesQueryListener> tokenRangesQueryListeners = new ConcurrentLinkedQueue<TokenRangesQueryListener>();
     final Settings settings;

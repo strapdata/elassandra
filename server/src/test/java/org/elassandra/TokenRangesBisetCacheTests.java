@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -40,20 +40,20 @@ import org.junit.Test;
  */
 public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
     static long N = 11000; // start query caching at 10k
-    
+
     @Test
     public void tokenBitsetTest() throws Exception {
         process(ConsistencyLevel.ONE,"CREATE KEYSPACE IF NOT EXISTS test WITH replication={ 'class':'NetworkTopologyStrategy', 'DC1':'1' }");
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.t1 ( a int,b bigint, primary key (a) )");
-        
+
         XContentBuilder mapping = XContentFactory.jsonBuilder().startObject().startObject("t1").field("discover", ".*").endObject().endObject();
         createIndex("test", Settings.builder()
                 .put("index.token_ranges_bitset_cache",true)
                 .put("index.queries.cache.enabled",true)
                 .build(),"t1", mapping);
         ensureGreen("test");
-        
-        for(int j=0 ; j < N; j++) 
+
+        for(int j=0 ; j < N; j++)
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", j, ESSingleNodeTestCase.randomLong());
 
         // ensure we have at least one segment > 10k docs.
@@ -68,28 +68,28 @@ public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
             }
         }
         assertThat(hasOneBigSegment, equalTo(true));
-        
+
         // force caching after 20 requests.
         long nbHits = 0;
-        for(int i=0; i< 30 ; i++)
+        for(int i=0; i< 30 ; i++) {
             nbHits = client().prepareSearch().setIndices("test").setTypes("t1")
-            .setQuery(QueryBuilders.rangeQuery("b").from(0).to(Long.MAX_VALUE))
-            .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(Long.MIN_VALUE+1), new LongToken(Long.MAX_VALUE-1))))
-            .get().getHits().getTotalHits();
-        
+                .setQuery(QueryBuilders.rangeQuery("b").gte(0))
+                .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(Long.MIN_VALUE+1), new LongToken(Long.MAX_VALUE-1))))
+                .get().getHits().getTotalHits();
+        }
+
         long upper = client().prepareSearch().setIndices("test").setTypes("t1")
-                .setQuery(QueryBuilders.matchAllQuery())
-                .setQuery(QueryBuilders.rangeQuery("b").from(0).to(Long.MAX_VALUE))
+                .setQuery(QueryBuilders.rangeQuery("b").gte(0))
                 .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(0), new LongToken(Long.MAX_VALUE-1))))
                 .get().getHits().getTotalHits();
         assertThat(upper, lessThan(nbHits));
-        
+
         long lower = client().prepareSearch().setIndices("test").setTypes("t1")
-                .setQuery(QueryBuilders.rangeQuery("b").from(0).to(Long.MAX_VALUE))
+                .setQuery(QueryBuilders.rangeQuery("b").gte(0))
                 .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(Long.MIN_VALUE+1), new LongToken(0))))
                 .get().getHits().getTotalHits();
         assertThat(lower, lessThan(nbHits));
-        
+
         assertThat(lower+upper, equalTo(nbHits));
         assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
     }

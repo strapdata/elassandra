@@ -5,13 +5,12 @@ import java.io.IOException;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.FilterDirectoryReader;
 import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.IndexReader.CacheHelper;
 import org.apache.lucene.search.Query;
 
 public class TokenRangesDirectoryReader extends FilterDirectoryReader {
     final Query query;
     final TokenRangesBitsetFilterCache cache;
-    
+
     public TokenRangesDirectoryReader(DirectoryReader in, Query query, TokenRangesBitsetFilterCache cache) throws IOException {
         super(in, new FilterDirectoryReader.SubReaderWrapper() {
             @Override
@@ -27,12 +26,12 @@ public class TokenRangesDirectoryReader extends FilterDirectoryReader {
         this.cache = cache;
         assert !(in instanceof TokenRangesDirectoryReader);
     }
-    
+
     @Override
     protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {
         return new TokenRangesDirectoryReader(in, query, cache);
     }
-    
+
     @Override
     public CacheHelper getReaderCacheHelper() {
         // safe to delegate since this reader does not alter the index

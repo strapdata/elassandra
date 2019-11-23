@@ -26,6 +26,7 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.util.Accountable;
+
 import org.apache.lucene.util.IOUtils;
 import org.elassandra.index.search.TokenRangesBitsetFilterCache;
 import org.elassandra.search.SearchProcessorFactory;
@@ -133,7 +134,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
     // don't convert to Setting<> and register... we only set this in tests and register via a plugin
     private final String INDEX_TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING = "index.translog.retention.check_interval";
 
-    private final AsyncTrimTranslogTask trimTranslogTask;
+    //private final AsyncTrimTranslogTask trimTranslogTask;
     private final ThreadPool threadPool;
     private final BigArrays bigArrays;
     private final ScriptService scriptService;
@@ -150,8 +151,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             NamedXContentRegistry xContentRegistry,
             SimilarityService similarityService,
             ShardStoreDeleter shardStoreDeleter,
-            AnalysisRegistry registry,
-            EngineFactory engineFactory,
+            IndexAnalyzers indexAnalyzers, EngineFactory engineFactory,
             CircuitBreakerService circuitBreakerService,
             BigArrays bigArrays,
             ThreadPool threadPool,
@@ -166,7 +166,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             IndicesFieldDataCache indicesFieldDataCache,
             List<SearchOperationListener> searchOperationListeners,
             List<IndexingOperationListener> indexingOperationListeners,
-            NamedWriteableRegistry namedWriteableRegistry) throws IOException {
+            NamedWriteableRegistry namedWriteableRegistry) {
         super(indexSettings);
         this.clusterService = clusterService;
         this.indexSettings = indexSettings;
@@ -174,7 +174,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         this.similarityService = similarityService;
         this.namedWriteableRegistry = namedWriteableRegistry;
         this.circuitBreakerService = circuitBreakerService;
-        this.mapperService = new MapperService(indexSettings, registry.build(indexSettings), xContentRegistry, similarityService,
+        this.mapperService = new MapperService(indexSettings, indexAnalyzers, xContentRegistry, similarityService,
             mapperRegistry,
             // we parse all percolator queries as they would be parsed on shard 0
             () -> newQueryShardContext(0, null, System::currentTimeMillis, null));
@@ -205,14 +205,16 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
 
         this.warmer = new IndexWarmer(threadPool, indexFieldData, bitsetFilterCache.createListener(threadPool));
         this.indexCache = new IndexCache(indexSettings, queryCache, bitsetFilterCache);
+        this.indexCache.tokenRangeBitsetFilterCache(this.tokenRangesBitsetFilterCache);
+
         this.engineFactory = Objects.requireNonNull(engineFactory);
         // initialize this last -- otherwise if the wrapper requires any other member to be non-null we fail with an NPE
         this.searcherWrapper = wrapperFactory.newWrapper(this);
         this.searchOperationListeners = Collections.unmodifiableList(searchOperationListeners);
         this.indexingOperationListeners = Collections.unmodifiableList(indexingOperationListeners);
         // kick off async ops for the first shard in this index
-        this.refreshTask = new AsyncRefreshTask(this);
-        this.trimTranslogTask = new AsyncTrimTranslogTask(this);
+        //this.refreshTask = new AsyncRefreshTask(this);
+        //this.trimTranslogTask = new AsyncTrimTranslogTask(this);
     }
 
     public int numberOfShards() {
@@ -300,8 +302,8 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
                         indexCache,
                         indexFieldData,
                         mapperService,
-                        refreshTask,
-                        trimTranslogTask);
+                        refreshTask
+                        );
             }
         }
     }

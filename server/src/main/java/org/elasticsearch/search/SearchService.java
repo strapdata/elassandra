@@ -672,9 +672,14 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                                                      boolean assertAsyncActions, String source)
             throws IOException {
         IndexService indexService = indicesService.indexServiceSafe(request.shardId().getIndex());
-        IndexShard indexShard = indexService.getShard(request.shardId().getId());
+        //IndexShard indexShard = indexService.getShard(request.shardId().getId());
+        IndexShard indexShard = indexService.getShard(0);
         SearchShardTarget shardTarget = new SearchShardTarget(clusterService.localNode().getId(),
                 indexShard.shardId(), request.getClusterAlias(), OriginalIndices.NONE);
+
+        if (indexService.isTokenRangesBitsetCacheEnabled())
+            TokenRangesSearcherWrapper.current(request);
+
         Engine.Searcher engineSearcher = indexShard.acquireSearcher(source);
 
         final DefaultSearchContext searchContext = new DefaultSearchContext(idGenerator.incrementAndGet(), request, shardTarget,
