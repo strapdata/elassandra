@@ -438,8 +438,6 @@ public final class KeywordFieldMapper extends FieldMapper {
 
         if (fieldType().hasDocValues()) {
             fields.add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
-        } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
-            createFieldNamesField(context, fields);
         }
     }
 
@@ -488,8 +486,6 @@ public final class KeywordFieldMapper extends FieldMapper {
         }
         if (fieldType().hasDocValues()) {
             context.doc().add(new SortedSetDocValuesField(fieldName, binaryValue));
-        } else if (fieldType().stored() || fieldType().indexOptions() != IndexOptions.NONE) {
-            createFieldNamesField(context, context.doc().getFields());
         }
         super.createField(context, object, keyName);
     }

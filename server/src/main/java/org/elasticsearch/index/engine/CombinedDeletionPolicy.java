@@ -67,6 +67,7 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
 
     @Override
     public synchronized void onInit(List<? extends IndexCommit> commits) throws IOException {
+        /*
         assert commits.isEmpty() == false : "index is opened, but we have no commits";
         onCommit(commits);
         if (safeCommit != commits.get(commits.size() - 1)) {
@@ -75,10 +76,12 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
                 + SequenceNumbers.loadSeqNoInfoFromLuceneCommit(lastCommit.getUserData().entrySet()) + "], "
                 + "seqNos in safe commit [" + SequenceNumbers.loadSeqNoInfoFromLuceneCommit(safeCommit.getUserData().entrySet()) + "]");
         }
+        */
     }
 
     @Override
     public synchronized void onCommit(List<? extends IndexCommit> commits) throws IOException {
+        /*
         final int keptPosition = indexOfKeptCommits(commits, SequenceNumbers.UNASSIGNED_SEQ_NO);
         lastCommit = commits.get(commits.size() - 1);
         safeCommit = commits.get(keptPosition);
@@ -88,16 +91,22 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
             }
         }
         updateRetentionPolicy();
+
+         */
     }
 
     private void deleteCommit(IndexCommit commit) throws IOException {
+        /*
         assert commit.isDeleted() == false : "Index commit [" + commitDescription(commit) + "] is deleted twice";
         logger.debug("Delete index commit [{}]", commitDescription(commit));
         commit.delete();
         assert commit.isDeleted() : "Deletion commit [" + commitDescription(commit) + "] was suppressed";
+
+         */
     }
 
     private void updateRetentionPolicy() throws IOException {
+                /*
         assert Thread.holdsLock(this);
         logger.debug("Safe commit [{}], last commit [{}]", commitDescription(safeCommit), commitDescription(lastCommit));
         assert safeCommit.isDeleted() == false : "The safe commit must not be deleted";
@@ -109,7 +118,7 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
         translogDeletionPolicy.setTranslogGenerationOfLastCommit(lastGen);
         translogDeletionPolicy.setMinTranslogGenerationForRecovery(minRequiredGen);
 
-        /*
+
         softDeletesPolicy.setLocalCheckpointOfSafeCommit(
             Long.parseLong(safeCommit.getUserData().get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)));
          */

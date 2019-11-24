@@ -222,6 +222,11 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
     }
 
     @Override
+    public void postCreate(ParseContext context) throws IOException {
+
+    }
+
+    @Override
     public void parse(ParseContext context) throws IOException {
         // Adding values to the _field_names field is handled by the mappers for each field type
     }
@@ -261,6 +266,36 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
                 };
             }
         };
+    }
+
+    @Override
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
+        if (fieldType().isEnabled() == false) {
+            return;
+        }
+        for (ParseContext.Document document : context) {
+            final List<String> paths = new ArrayList<>(document.getFields().size());
+            String previousPath = ""; // used as a sentinel - field names can't be empty
+            for (IndexableField field : document.getFields()) {
+                final String path = field.name();
+                if (path.equals(previousPath)) {
+                    // Sometimes mappers create multiple Lucene fields, eg. one for indexing,
+                    // one for doc values and one for storing. Deduplicating is not required
+                    // for correctness but this simple check helps save utf-8 conversions and
+                    // gives Lucene fewer values to deal with.
+                    continue;
+                }
+                paths.add(path);
+                previousPath = path;
+            }
+            for (String path : paths) {
+                for (String fieldName : extractFieldNames(path)) {
+                    if (fieldType().indexOptions() != IndexOptions.NONE || fieldType().stored()) {
+                        document.add(new Field(fieldType().name(), fieldName, fieldType()));
+                    }
+                }
+            }
+        }
     }
 
     @Override
