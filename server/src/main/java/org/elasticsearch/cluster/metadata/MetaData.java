@@ -1173,7 +1173,8 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
             String[] allOpenIndicesArray = allOpenIndices.toArray(new String[allOpenIndices.size()]);
             String[] allClosedIndicesArray = allClosedIndices.toArray(new String[allClosedIndices.size()]);
 
-            return new MetaData(clusterUUID, version, transientSettings, persistentSettings, indices.build(), templates.build(),
+            return new MetaData(clusterUUID == null ? NodeEnvironment.getLocalHostId() : clusterUUID,
+                                version, transientSettings, persistentSettings, indices.build(), templates.build(),
                                 customs.build(), allIndicesArray, allOpenIndicesArray, allClosedIndicesArray, aliasAndIndexLookup);
         }
 
