@@ -293,7 +293,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         final List<SearchOperationListener> searchListenersList = new ArrayList<>(searchOperationListener);
         searchListenersList.add(searchStats);
         this.searchOperationListener = new SearchOperationListener.CompositeListener(searchListenersList, logger);
-        this.getService = new ShardGetService(indexSettings, this, mapperService, indexService, clusterService);
+        this.getService = new ShardGetService(indexSettings, this, mapperService, clusterService);
         this.shardWarmerService = new ShardIndexWarmerService(shardId, indexSettings);
         this.requestCacheStats = new ShardRequestCache();
         this.shardFieldData = new ShardFieldData();
@@ -363,9 +363,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         return shardBitsetFilterCache;
     }
 
-    public IndexService indexService() {
-        return this.indexService;
-    }
+    public IndexService indexService() { return this.indexService; }
 
     public ShardBitsetFilterCache tokenRangesBitsetFilterCache() {
         return tokenRangesBitsetFilterCache;
@@ -921,7 +919,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     public Engine.GetResult get(String type, String id) throws IOException {
         readAllowed();
-        return clusterService.getQueryManager().fetchSourceInternal(this.indexService, type, id, this.mapperService.documentMapper(type).getColumnDefinitions(), (timeElapsed) -> refreshMetric.inc(timeElapsed));
+        return clusterService.getQueryManager().fetchSourceInternal(this, type, id, this.mapperService.documentMapper(type).getColumnDefinitions(), (timeElapsed) -> refreshMetric.inc(timeElapsed));
     }
 
     /**
@@ -2414,7 +2412,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         */
     }
 
-    private DocumentMapperForType docMapper(String type) {
+    public DocumentMapperForType docMapper(String type) {
         return mapperService.documentMapperWithAutoCreate(mapperService.resolveDocumentType(type));
     }
 

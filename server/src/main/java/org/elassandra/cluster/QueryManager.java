@@ -118,8 +118,9 @@ public class QueryManager extends AbstractComponent {
         return mapper.cqlStaticColumn() || mapper.cqlPartitionKey();
     }
 
-    public boolean isStaticDocument(final IndexService indexService, Uid uid) throws JsonParseException, JsonMappingException, IOException {
-        CFMetaData metadata = SchemaManager.getCFMetaData(indexService.keyspace(), SchemaManager.typeToCfName(indexService.keyspace(), uid.type()));
+    public boolean isStaticDocument(final IndexShard indexShard, Uid uid) throws JsonParseException, JsonMappingException, IOException {
+        CFMetaData metadata = SchemaManager.getCFMetaData(indexShard.mapperService().keyspace(),
+            SchemaManager.typeToCfName(indexShard.mapperService().keyspace(), uid.type()));
         String id = uid.id();
         if (id.startsWith("[") && id.endsWith("]")) {
             org.codehaus.jackson.map.ObjectMapper jsonMapper = new org.codehaus.jackson.map.ObjectMapper();
@@ -212,51 +213,50 @@ public class QueryManager extends AbstractComponent {
     }
 
 
-    public BytesReference source(IndexService indexService, DocumentMapper docMapper, Map sourceAsMap, Uid uid) throws JsonParseException, JsonMappingException, IOException {
-        if (docMapper.sourceMapper().enabled()  || indexService.getMetaData().isOpaqueStorage()) {
+    public BytesReference source(final IndexShard indexShard, DocumentMapper docMapper, Map sourceAsMap, Uid uid) throws JsonParseException, JsonMappingException, IOException {
+        if (docMapper.sourceMapper().enabled()  || indexShard.mapperService().getIndexMetaData().isOpaqueStorage()) {
             // retreive from _source columns stored as blob in cassandra if available.
             ByteBuffer bb = (ByteBuffer) sourceAsMap.get(SourceFieldMapper.NAME);
             if (bb != null)
                return new BytesArray(bb.array(), bb.position(), bb.limit() - bb.position());
         }
         // rebuild _source from all cassandra columns.
-        XContentBuilder builder = buildDocument(docMapper, sourceAsMap, true, isStaticDocument(indexService, uid));
+        XContentBuilder builder = buildDocument(docMapper, sourceAsMap, true, isStaticDocument(indexShard, uid));
         builder.humanReadable(true);
         return BytesReference.bytes(builder);
     }
 
 
-    public BytesReference source(IndexService indexService, DocumentMapper docMapper, Map sourceAsMap, String id) throws JsonParseException, JsonMappingException, IOException {
-        return source( indexService, docMapper, sourceAsMap, new Uid(docMapper.type(), id));
+    public BytesReference source(final IndexShard indexShard, DocumentMapper docMapper, Map sourceAsMap, String id) throws JsonParseException, JsonMappingException, IOException {
+        return source( indexShard, docMapper, sourceAsMap, new Uid(docMapper.type(), id));
     }
 
-    public Token getToken(final IndexService indexService, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
-        DocPrimaryKey pk = parseElasticRouting(indexService, type, routing);
-        CFMetaData cfm = SchemaManager.getCFMetaData(indexService.keyspace(), type);
+    public Token getToken(final String ksName, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
+        DocPrimaryKey pk = parseElasticRouting(ksName, type, routing);
+        CFMetaData cfm = SchemaManager.getCFMetaData(ksName, type);
         CBuilder builder = CBuilder.create(cfm.getKeyValidatorAsClusteringComparator());
         for (int i = 0; i < cfm.partitionKeyColumns().size(); i++)
             builder.add(pk.values[i]);
         return cfm.partitioner.getToken(CFMetaData.serializePartitionKey(builder.build()));
     }
 
-    public Set<Token> getTokens(final IndexService indexService, final String[] types, final String routing) throws JsonParseException, JsonMappingException, IOException {
+    public Set<Token> getTokens(final String ksName, final String[] types, final String routing) throws JsonParseException, JsonMappingException, IOException {
         Set<Token> tokens = new HashSet<Token>();
         if (types != null && types.length > 0) {
             for(String type : types)
-                tokens.add(getToken(indexService, type, routing));
+                tokens.add(getToken(ksName, type, routing));
         }
         return tokens;
     }
 
-    public DocPrimaryKey parseElasticId(final IndexService indexService, final String type, final String id) throws IOException {
-        return parseElasticId(indexService, type, id, null);
+    public DocPrimaryKey parseElasticId(final String ksName, final String type, final String id) throws IOException {
+        return parseElasticId(ksName, type, id, null);
     }
 
     /**
      * Parse elastic _id (a value or a JSON array) to build a DocPrimaryKey or populate map.
      */
-    public DocPrimaryKey parseElasticId(final IndexService indexService, final String type, final String id, Map<String, Object> map) throws JsonParseException, JsonMappingException, IOException {
-        String ksName = indexService.keyspace();
+    public DocPrimaryKey parseElasticId(final String ksName, final String type, final String id, Map<String, Object> map) throws JsonParseException, JsonMappingException, IOException {
         String cfName = SchemaManager.typeToCfName(ksName, type);
         CFMetaData metadata = SchemaManager.getCFMetaData(ksName, cfName);
 
@@ -296,8 +296,7 @@ public class QueryManager extends AbstractComponent {
         }
     }
 
-    public DocPrimaryKey parseElasticRouting(final IndexService indexService, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
-        String ksName = indexService.keyspace();
+    public DocPrimaryKey parseElasticRouting(final String ksName, final String type, final String routing) throws JsonParseException, JsonMappingException, IOException {
         String cfName = SchemaManager.typeToCfName(ksName, type);
         CFMetaData metadata = SchemaManager.getCFMetaData(ksName, cfName);
         List<ColumnDefinition> partitionColumns = metadata.partitionKeyColumns();
@@ -326,28 +325,32 @@ public class QueryManager extends AbstractComponent {
         }
     }
 
-    public boolean rowExists(final IndexService indexService, final String type, final DocPrimaryKey docPk)
+    public boolean rowExists(final IndexShard indexShard, final String type, final DocPrimaryKey docPk)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        return this.clusterService.process(ConsistencyLevel.LOCAL_ONE, buildExistsQuery(indexService.mapperService().documentMapper(type), indexService.keyspace(), SchemaManager.typeToCfName(indexService.keyspace(), type)), docPk.values).size() > 0;
+        return this.clusterService.process(ConsistencyLevel.LOCAL_ONE,
+            buildExistsQuery(indexShard.mapperService().documentMapper(type),
+                indexShard.mapperService().keyspace(),
+                SchemaManager.typeToCfName(indexShard.mapperService().keyspace(),
+                    type)), docPk.values).size() > 0;
     }
 
     /**
      * Fetch from the coordinator node.
      */
-    public UntypedResultSet fetchRow(final IndexService indexService, final String type, DocPrimaryKey docPk, final String[] columns, Map<String,ColumnDefinition> columnDefs)
+    public UntypedResultSet fetchRow(final IndexShard indexShard, final String type, DocPrimaryKey docPk, final String[] columns, Map<String,ColumnDefinition> columnDefs)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        return fetchRow(indexService, type, docPk, columns, ConsistencyLevel.LOCAL_ONE, columnDefs);
+        return fetchRow(indexShard, type, docPk, columns, ConsistencyLevel.LOCAL_ONE, columnDefs);
     }
 
-    public UntypedResultSet fetchRow(final IndexService indexService, final String type, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs)
+    public UntypedResultSet fetchRow(final IndexShard indexShard, final String type, final  DocPrimaryKey docPk, final String[] columns, final ConsistencyLevel cl, Map<String,ColumnDefinition> columnDefs)
             throws InvalidRequestException, RequestExecutionException, RequestValidationException, IOException {
-        return this.clusterService.process(cl, buildFetchQuery(indexService, type, columns, docPk.isStaticDocument, columnDefs), docPk. values);
+        return this.clusterService.process(cl, buildFetchQuery(indexShard, type, columns, docPk.isStaticDocument, columnDefs), docPk. values);
     }
 
-    public Engine.GetResult fetchSourceInternal(final IndexService indexService, String type, String id, Map<String,ColumnDefinition> columnDefs, LongConsumer onRefresh) throws IOException {
+    public Engine.GetResult fetchSourceInternal(final IndexShard indexShard, String type, String id, Map<String,ColumnDefinition> columnDefs, LongConsumer onRefresh) throws IOException {
         long time = System.nanoTime();
-        DocPrimaryKey docPk = parseElasticId(indexService, type, id);
-        UntypedResultSet result = fetchRowInternal(indexService, type, docPk, columnDefs.keySet().toArray(new String[columnDefs.size()]), columnDefs);
+        DocPrimaryKey docPk = parseElasticId(indexShard.mapperService().keyspace(), type, id);
+        UntypedResultSet result = fetchRowInternal(indexShard, type, docPk, columnDefs.keySet().toArray(new String[columnDefs.size()]), columnDefs);
         onRefresh.accept(System.nanoTime() - time);
         if (!result.isEmpty()) {
             return new Engine.GetResult(true, 1L, new DocIdAndVersion(0, 1L, 1L, 1L, null, 0), null);
@@ -355,17 +358,17 @@ public class QueryManager extends AbstractComponent {
         return Engine.GetResult.NOT_EXISTS;
     }
 
-    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final  DocPrimaryKey docPk, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
-        return fetchRowInternal(indexService, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
+    public UntypedResultSet fetchRowInternal(final IndexShard indexShard, final String cfName, final  DocPrimaryKey docPk, final String[] columns, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
+        return fetchRowInternal(indexShard, cfName, columns, docPk.values, docPk.isStaticDocument, columnDefs);
     }
 
-    public UntypedResultSet fetchRowInternal(final IndexService indexService, final String cfName, final String[] columns, final Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
-        return QueryProcessor.executeInternal(buildFetchQuery(indexService, cfName, columns, forStaticDocument, columnDefs), pkColumns);
+    public UntypedResultSet fetchRowInternal(final IndexShard indexShard, final String cfName, final String[] columns, final Object[] pkColumns, boolean forStaticDocument, Map<String,ColumnDefinition> columnDefs) throws ConfigurationException, IOException  {
+        return QueryProcessor.executeInternal(buildFetchQuery(indexShard, cfName, columns, forStaticDocument, columnDefs), pkColumns);
     }
 
-    private String regularColumn(final IndexService indexService, final String type) throws IOException {
-        if (indexService != null) {
-            DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
+    private String regularColumn(final IndexShard indexShard, final String type) throws IOException {
+        if (indexShard != null) {
+            DocumentMapper docMapper = indexShard.mapperService().documentMapper(type);
             if (docMapper != null) {
                 for(Mapper fieldMapper : docMapper.mappers()) {
                     if (fieldMapper instanceof MetadataFieldMapper)
@@ -380,16 +383,16 @@ public class QueryManager extends AbstractComponent {
             }
         }
         if (logger.isDebugEnabled())
-            logger.debug("no regular columns for index=[{}] type=[{}]", indexService.index().getName(), type);
+            logger.debug("no regular columns for index=[{}] type=[{}]", indexShard.shardId().getIndex().getName(), type);
         return null;
     }
 
-    public String buildFetchQuery(final IndexService indexService, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs)
+    public String buildFetchQuery(final IndexShard indexShard, final String type, final String[] requiredColumns, boolean forStaticDocument, Map<String, ColumnDefinition> columnDefs)
             throws IOException
     {
-        DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
-        String cfName = SchemaManager.typeToCfName(indexService.keyspace(), type);
-        CFMetaData metadata = SchemaManager.getCFMetaData(indexService.keyspace(), cfName);
+        DocumentMapper docMapper = indexShard.mapperService().documentMapper(type);
+        String cfName = SchemaManager.typeToCfName(indexShard.mapperService().keyspace(), type);
+        CFMetaData metadata = SchemaManager.getCFMetaData(indexShard.mapperService().keyspace(), cfName);
         DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
         String regularColumn = null;
         StringBuilder query = new StringBuilder();
@@ -412,14 +415,14 @@ public class QueryManager extends AbstractComponent {
                     break;
                 case "_ttl":
                     if (regularColumn == null)
-                        regularColumn = regularColumn(indexService, cfName);
+                        regularColumn = regularColumn(indexShard, cfName);
                     if (regularColumn != null)
                         query.append(query.length() > 7 ? ',' : ' ').append("TTL(").append(regularColumn).append(") as \"_ttl\"");
                     break;
                 case SeqNoFieldMapper.NAME:
                 case "_timestamp":
                     if (regularColumn == null)
-                        regularColumn = regularColumn(indexService, cfName);
+                        regularColumn = regularColumn(indexShard, cfName);
                     if (regularColumn != null)
                         query.append(query.length() > 7 ? ',' : ' ').append("WRITETIME(").append(regularColumn).append(") as \"_timestamp\"");
                     break;
@@ -453,7 +456,7 @@ public class QueryManager extends AbstractComponent {
                 .append(cqlFragment.ptCols)
                 .append(") as \"_id\"");
         }
-        query.append(" FROM \"").append(indexService.keyspace()).append("\".\"").append(cfName)
+        query.append(" FROM \"").append(indexShard.mapperService().keyspace()).append("\".\"").append(cfName)
              .append("\" WHERE ").append((forStaticDocument) ? cqlFragment.ptWhere : cqlFragment.pkWhere )
              .append(" LIMIT 1");
         return query.toString();
@@ -468,11 +471,12 @@ public class QueryManager extends AbstractComponent {
     }
 
 
-    public Engine.DeleteResult deleteRow(final IndexService indexService, final String type, final String id, final ConsistencyLevel cl) throws IOException {
+    public Engine.DeleteResult deleteRow(final IndexShard indexShard, final String type, final String id, final ConsistencyLevel cl) throws IOException {
         try {
-            String cfName = SchemaManager.typeToCfName(indexService.keyspace(), type);
-            DocumentMapper docMapper = indexService.mapperService().documentMapper(type);
-            this.clusterService.process(cl, buildDeleteQuery(docMapper, indexService.keyspace(), cfName), parseElasticId(indexService, type, id).values);
+            String ksName = indexShard.mapperService().keyspace();
+            String cfName = SchemaManager.typeToCfName(indexShard.mapperService().keyspace(), type);
+            DocumentMapper docMapper = indexShard.mapperService().documentMapper(type);
+            this.clusterService.process(cl, buildDeleteQuery(docMapper, ksName, cfName), parseElasticId(ksName, type, id).values);
             return new Engine.DeleteResult( 1L, SequenceNumbers.UNASSIGNED_PRIMARY_TERM, SequenceNumbers.UNASSIGNED_SEQ_NO, true);
         } catch(RequestExecutionException | RequestValidationException e) {
             return new Engine.DeleteResult(e, 1L, SequenceNumbers.UNASSIGNED_PRIMARY_TERM, SequenceNumbers.UNASSIGNED_SEQ_NO, false);
@@ -480,15 +484,15 @@ public class QueryManager extends AbstractComponent {
     }
 
 
-    public Map<String, Object> rowAsMap(final IndexService indexService, final String type, UntypedResultSet.Row row) throws IOException {
+    public Map<String, Object> rowAsMap(final IndexShard indexShard, final String type, UntypedResultSet.Row row) throws IOException {
         Map<String, Object> mapObject = new HashMap<String, Object>();
-        rowAsMap(indexService, type, row, mapObject);
+        rowAsMap(indexShard, type, row, mapObject);
         return mapObject;
     }
 
 
-    public int rowAsMap(final IndexService indexService, final String type, UntypedResultSet.Row row, Map<String, Object> mapObject) throws IOException {
-        Object[] values = rowAsArray(indexService, type, row);
+    public int rowAsMap(final IndexShard indexShard, final String type, UntypedResultSet.Row row, Map<String, Object> mapObject) throws IOException {
+        Object[] values = rowAsArray(indexShard, type, row);
         int i=0;
         int j=0;
         for(ColumnSpecification colSpec: row.getColumns()) {
@@ -502,8 +506,8 @@ public class QueryManager extends AbstractComponent {
     }
 
 
-    public Object[] rowAsArray(final IndexService indexService, final String type, UntypedResultSet.Row row) throws IOException {
-        return rowAsArray(indexService, type, row, false);
+    public Object[] rowAsArray(final IndexShard indexShard, final String type, UntypedResultSet.Row row) throws IOException {
+        return rowAsArray(indexShard, type, row, false);
     }
 
     private Object value(FieldMapper fieldMapper, Object rowValue, boolean valueForSearch) {
@@ -516,9 +520,9 @@ public class QueryManager extends AbstractComponent {
     }
 
     // TODO: return raw values if no mapper found.
-    public Object[] rowAsArray(final IndexService indexService, final String type, UntypedResultSet.Row row, boolean valueForSearch) throws IOException {
+    public Object[] rowAsArray(final IndexShard indexShard, final String type, UntypedResultSet.Row row, boolean valueForSearch) throws IOException {
         final Object values[] = new Object[row.getColumns().size()];
-        final DocumentMapper documentMapper = indexService.mapperService().documentMapper(type);
+        final DocumentMapper documentMapper = indexShard.mapperService().documentMapper(type);
         final DocumentFieldMappers docFieldMappers = documentMapper.mappers();
 
         int i = 0;
@@ -682,12 +686,12 @@ public class QueryManager extends AbstractComponent {
         return values;
     }
 
-    public Engine.IndexResult updateDocument(final IndexRequest request, final IndexMetaData indexMetaData) throws IOException {
-        return upsertDocument(request, indexMetaData, true);
+    public Engine.IndexResult updateDocument(final IndexShard indexShard, final IndexRequest request, final IndexMetaData indexMetaData) throws IOException {
+        return upsertDocument(indexShard, request, indexMetaData, true);
     }
 
-    public Engine.IndexResult insertDocument(final IndexRequest request, final IndexMetaData indexMetaData) throws IOException {
-        return upsertDocument(request, indexMetaData, false);
+    public Engine.IndexResult insertDocument(final IndexShard indexShard, final IndexRequest request, final IndexMetaData indexMetaData) throws IOException {
+        return upsertDocument(indexShard, request, indexMetaData, false);
     }
 
     private Map<String, Object> updateField(Map<String, Object> node, String fieldName, Object fieldValue) {
@@ -704,38 +708,34 @@ public class QueryManager extends AbstractComponent {
     /**
      * Convert an IndexRequest to a CQL insert
      */
-    private Engine.IndexResult upsertDocument(final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation) throws IOException {
-        final IndexService indexService = clusterService.indexService(indexMetaData.getIndex());
-        final IndexShard indexShard = indexService.getShard(0);
-
+    private Engine.IndexResult upsertDocument(final IndexShard indexShard, final IndexRequest request, final IndexMetaData indexMetaData, boolean updateOperation) throws IOException {
         final SourceToParse sourceToParse = SourceToParse.source(request.index(), request.type(), request.id(), request.source(), request.getContentType());
         if (request.routing() != null)
             sourceToParse.routing(request.routing());
         if (request.parent() != null)
             sourceToParse.parent(request.parent());
 
-        final String keyspaceName = indexMetaData.keyspace();
-        final String cfName = SchemaManager.typeToCfName(keyspaceName, request.type());
-
         // get the docMapper after a potential mapping update
-        DocumentMapperForType docMapperForType = indexService.mapperService().documentMapperWithAutoCreate(request.type());
+        DocumentMapperForType docMapperForType = indexShard.mapperService().documentMapperWithAutoCreate(request.type());
         DocumentMapper docMapper = docMapperForType.getDocumentMapper();
 
         ParsedDocument doc = docMapper.parse(sourceToParse);
         Mapping mappingUpdate = doc.dynamicMappingsUpdate();
 
-        if (mappingUpdate == null && !indexService.mapperService().hasMapping(request.type())) {
+        if (mappingUpdate == null && !indexShard.mapperService().hasMapping(request.type())) {
             mappingUpdate = docMapper.mapping();
         }
 
-        final boolean dynamicMappingEnable = indexService.mapperService().dynamic();
-        if (mappingUpdate != null && dynamicMappingEnable) {
+        if (mappingUpdate != null) {
             if (logger.isDebugEnabled())
                 logger.debug("Document source={} require a blocking mapping update of [{}] mapping={}",
-                        request.sourceAsMap(), indexService.index().getName(), mappingUpdate);
+                    request.sourceAsMap(), indexShard.shardId().getIndex().getName(), mappingUpdate);
             // retry done by the caller once the mapping is updated
             return new Engine.IndexResult(mappingUpdate);
         }
+
+        final String keyspaceName = indexMetaData.keyspace();
+        final String cfName = SchemaManager.typeToCfName(keyspaceName, request.type());
 
         // insert document into cassandra keyspace=index, table = type
         final Map<String, Object> sourceMap = new HashMap<>();
@@ -749,7 +749,7 @@ public class QueryManager extends AbstractComponent {
         if (logger.isTraceEnabled())
             logger.trace("Insert metadata.version={} index=[{}] table=[{}] id=[{}] source={} consistency={}",
                 this.clusterService.state().metaData().version(),
-                indexService.index().getName(), cfName, request.id(), sourceMap,
+                indexShard.shardId().getIndex().getName(), cfName, request.id(), sourceMap,
                 request.waitForActiveShards().toCassandraConsistencyLevel());
 
         final CFMetaData cfm = SchemaManager.getCFMetaData(keyspaceName, cfName);
@@ -766,7 +766,7 @@ public class QueryManager extends AbstractComponent {
             // normalize the _id and may find some column value in _id.
             // if the provided columns does not contains all the primary key columns, parse the _id to populate the columns in map.
             final Map<String, Object> idMap = new HashMap<>();
-            this.parseElasticId(indexService, cfName, request.id(), idMap);
+            this.parseElasticId(indexShard.mapperService().keyspace(), cfName, request.id(), idMap);
             sourceMap.putAll(idMap);
 
             // workaround because ParentFieldMapper.value() and UidFieldMapper.value() create an Uid.

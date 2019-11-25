@@ -159,7 +159,7 @@ public class OperationRouting {
                     for (IndexShardRoutingTable indexShard : indexRouting) {
                         for(String type :types) {
                             try {
-                                Token token = this.clusterService.getQueryManager().getToken(this.clusterService.indexServiceSafe(indexMetaData.getIndex()), type, r);
+                                Token token = this.clusterService.getQueryManager().getToken(indexMetaData.keyspace(), type, r);
                                 if (TokenRangesService.tokenRangesContains(indexShard.activeShards().iterator().next().tokenRanges(), token)) {
                                     set.add(indexShard);
                                     break;

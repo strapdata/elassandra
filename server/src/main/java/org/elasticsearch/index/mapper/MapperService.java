@@ -201,6 +201,10 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
         }
     }
 
+    public IndexMetaData getIndexMetaData() {
+        return indexSettings.getIndexMetaData();
+    }
+
     public String keyspace() {
         return getIndexSettings().getKeyspace();
     }
