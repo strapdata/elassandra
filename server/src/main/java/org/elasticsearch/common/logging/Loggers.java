@@ -19,18 +19,29 @@
 
 package org.elasticsearch.common.logging;
 
+import ch.qos.logback.classic.jmx.JMXConfiguratorMBean;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.joran.spi.JoranException;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
+import org.slf4j.LoggerFactory;
 
+import javax.management.JMX;
+import javax.management.MalformedObjectNameException;
+import javax.management.ObjectName;
+import java.lang.management.ManagementFactory;
+import java.util.Iterator;
 import java.util.Map;
 
 import static org.elasticsearch.common.util.CollectionUtils.asArrayList;
@@ -98,6 +109,44 @@ public class Loggers {
     }
 
     /**
+     * Duplicate code from org.apache.cassandra.service.StorageService.setLoggingLevel, allowing to set log level without StorageService.instance for tests.
+     */
+    public static void setLoggingLevel(String classQualifier, String rawLevel)
+    {
+        ch.qos.logback.classic.Logger logBackLogger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(classQualifier);
+
+        // if both classQualifer and rawLevel are empty, reload from configuration
+        if (StringUtils.isBlank(classQualifier) && StringUtils.isBlank(rawLevel) )
+        {
+            try {
+                JMXConfiguratorMBean jmxConfiguratorMBean = JMX.newMBeanProxy(ManagementFactory.getPlatformMBeanServer(),
+                    new ObjectName("ch.qos.logback.classic:Name=default,Type=ch.qos.logback.classic.jmx.JMXConfigurator"),
+                    JMXConfiguratorMBean.class);
+                jmxConfiguratorMBean.reloadDefaultConfiguration();
+                return;
+            } catch (MalformedObjectNameException | JoranException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        // classQualifer is set, but blank level given
+        else if (StringUtils.isNotBlank(classQualifier) && StringUtils.isBlank(rawLevel) )
+        {
+            if (logBackLogger.getLevel() != null || hasAppenders(logBackLogger))
+                logBackLogger.setLevel(null);
+            return;
+        }
+
+        ch.qos.logback.classic.Level level = ch.qos.logback.classic.Level.toLevel(rawLevel);
+        logBackLogger.setLevel(level);
+    }
+
+    private static boolean hasAppenders(ch.qos.logback.classic.Logger logger)
+    {
+        Iterator<ch.qos.logback.core.Appender<ILoggingEvent>> it = logger.iteratorForAppenders();
+        return it.hasNext();
+    }
+
+    /**
      * Set the level of the logger. If the new level is null, the logger will inherit it's level from its nearest ancestor with a non-null
      * level.
      */
@@ -112,11 +161,10 @@ public class Loggers {
     }
 
     public static void setLevel(Logger logger, Level level) {
-        ClusterService.setLoggingLevel(logger.getName(), level.toString());
-
+        setLoggingLevel(logger.getName(), level.name());
         /*
         if (!LogManager.ROOT_LOGGER_NAME.equals(logger.getName())) {
-            Configurator.setLevel(logger.getName(), level);
+            setLoggingLevel(logger.getName(), level.name());
         } else {
             final LoggerContext ctx = LoggerContext.getContext(false);
             final Configuration config = ctx.getConfiguration();
@@ -129,14 +177,15 @@ public class Loggers {
         final LoggerContext ctx = LoggerContext.getContext(false);
         for (final LoggerConfig loggerConfig : ctx.getConfiguration().getLoggers().values()) {
             if (LogManager.ROOT_LOGGER_NAME.equals(logger.getName()) || loggerConfig.getName().startsWith(logger.getName() + ".")) {
-                Configurator.setLevel(loggerConfig.getName(), level);
+                setLoggingLevel(loggerConfig.getName(), level.name());
             }
         }
         */
     }
 
     public static void addAppender(final Logger logger, final Appender appender) {
-        final LoggerContext context = (LoggerContext) LogManager.getContext(false);
+        // log4j2 -> slf4j -> logback
+        final org.apache.logging.slf4j.SLF4JLoggerContext context = (org.apache.logging.slf4j.SLF4JLoggerContext) LogManager.getContext(false);
         final LoggerContext ctx = (LoggerContext) context.getExternalContext();
         if (ctx != null) {
             final Configuration config = ctx.getConfiguration();

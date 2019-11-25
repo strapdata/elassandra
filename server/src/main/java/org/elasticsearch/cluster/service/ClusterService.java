@@ -15,12 +15,6 @@
  */
 package org.elasticsearch.cluster.service;
 
-
-import ch.qos.logback.classic.jmx.JMXConfiguratorMBean;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.Appender;
-import ch.qos.logback.core.joran.spi.JoranException;
-
 import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
@@ -361,7 +355,7 @@ public class ClusterService extends BaseClusterService {
 
     @Inject
     public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool,
-            Map<String, java.util.function.Supplier<ClusterState.Custom>> initialClusterStateCustoms) {
+                          Map<String, java.util.function.Supplier<ClusterState.Custom>> initialClusterStateCustoms) {
         super(settings, clusterSettings, threadPool, initialClusterStateCustoms);
         this.operationRouting = new OperationRouting(settings, clusterSettings, this);
         this.mappingUpdatedAction = null;
@@ -1317,44 +1311,6 @@ public class ClusterService extends BaseClusterService {
         }
         logger.error("Failed to read metadata owner for version={} after {} attempts", attempts);
         return null;
-    }
-
-    /**
-     * Duplicate code from org.apache.cassandra.service.StorageService.setLoggingLevel, allowing to set log level without StorageService.instance for tests.
-     */
-    public static void setLoggingLevel(String classQualifier, String rawLevel)
-    {
-        ch.qos.logback.classic.Logger logBackLogger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(classQualifier);
-
-        // if both classQualifer and rawLevel are empty, reload from configuration
-        if (StringUtils.isBlank(classQualifier) && StringUtils.isBlank(rawLevel) )
-        {
-            try {
-                JMXConfiguratorMBean jmxConfiguratorMBean = JMX.newMBeanProxy(ManagementFactory.getPlatformMBeanServer(),
-                        new ObjectName("ch.qos.logback.classic:Name=default,Type=ch.qos.logback.classic.jmx.JMXConfigurator"),
-                        JMXConfiguratorMBean.class);
-                jmxConfiguratorMBean.reloadDefaultConfiguration();
-                return;
-            } catch (MalformedObjectNameException | JoranException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        // classQualifer is set, but blank level given
-        else if (StringUtils.isNotBlank(classQualifier) && StringUtils.isBlank(rawLevel) )
-        {
-            if (logBackLogger.getLevel() != null || hasAppenders(logBackLogger))
-                logBackLogger.setLevel(null);
-            return;
-        }
-
-        ch.qos.logback.classic.Level level = ch.qos.logback.classic.Level.toLevel(rawLevel);
-        logBackLogger.setLevel(level);
-    }
-
-    private static boolean hasAppenders(ch.qos.logback.classic.Logger logger)
-    {
-        Iterator<Appender<ILoggingEvent>> it = logger.iteratorForAppenders();
-        return it.hasNext();
     }
 
     public IndexService indexService(org.elasticsearch.index.Index index) {
