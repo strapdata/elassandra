@@ -18,6 +18,7 @@
  */
 
 import com.carrotsearch.gradle.junit4.RandomizedTestingTask
+import org.elasticsearch.gradle.BuildPlugin
 
 apply plugin: 'elasticsearch.build'
 apply plugin: 'nebula.optional-base'
@@ -32,7 +33,7 @@ publishing {
   }
 }
 
-archivesBaseName = 'elasticsearch'
+archivesBaseName = 'elassandra'
 
 // we want to keep the JDKs in our IDEs set to JDK 8 until minimum JDK is bumped to 9 so we do not include this source set in our IDEs
 if (!isEclipse && !isIdea) {
@@ -142,14 +143,14 @@ dependencies {
   }
 
   testCompile 'com.google.jimfs:jimfs:1.1'
-  compile "com.google.guava:guava:19"
+  compile 'com.google.guava:guava:19.0'
   
   // Elassandra add-ons
   runtime("com.strapdata.cassandra:cassandra-all:${versions.cassandra}") {
     exclude group:'net.java.dev.jna', module:'jna'
     exclude group:'org.ow2.asm', module:'asm'
     exclude group:'org.apache.commons', module:'commons-lang3'
-    exclude group:'org.slf4j', module:'slf4j-api' 
+    exclude group:'org.slf4j', module:'slf4j-api'
     exclude group:'org.yaml', module:'snakeyaml' 
     exclude group:'io.netty', module:'netty-all' 
     exclude group:'joda-time', module:'joda-time' 
@@ -186,12 +187,19 @@ dependencies {
   compile "io.netty:netty-all:4.1.32.Final"
 
   // https://www.elastic.co/guide/en/elasticsearch/client/java-api/current/_using_another_logger.html
-  // log4j2 to slf4j to logback
-  compile "org.slf4j:slf4j-api:1.7.25", optional
+  compile "org.slf4j:slf4j-api:${versions.slf4j}", optional
+  compile "org.apache.logging.log4j:log4j-to-slf4j:${versions.log4j}"       // log4j2 to slf4j to logback (for prod)
   compile "ch.qos.logback:logback-classic:1.1.8"
   compile "ch.qos.logback:logback-core:1.1.8"
-  compile "org.javassist:javassist:3.20.0-GA"
 
+  // slf4j to log4j2 (for ES testing only)
+  /*
+  testRuntime("org.apache.logging.log4j:log4j-slf4j-impl:${versions.log4j}") {
+    exclude group: 'org.slf4j', module: 'slf4j-api'
+  }
+  */
+
+  compile "org.javassist:javassist:3.20.0-GA"
   compile 'net.sf.jopt-simple:jopt-simple:5.0.2'
 }
 
@@ -210,6 +218,9 @@ check.dependsOn(testScriptDocValuesMissingV7Behaviour)
 unitTest {
   // these are tested explicitly in separate test tasks
   exclude '**/*ScriptDocValuesMissingV7BehaviourTests.class'
+  exclude '**/TransportShardBulkActionTests.class'
+  exclude '**/BlobStoreRepositoryRestoreTests.class'
+  exclude '**/ClusterStateTests.class'
   jvmArg '-Djava.locale.providers=COMPAT'
 
 }

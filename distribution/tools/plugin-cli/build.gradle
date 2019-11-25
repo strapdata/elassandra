@@ -26,7 +26,7 @@ dependencies {
   compileOnly "com.strapdata.elasticsearch:elasticsearch-cli:${version}"
   compile "org.bouncycastle:bcpg-jdk15on:${versions.bouncycastle}"
   compile "org.bouncycastle:bcprov-jdk15on:${versions.bouncycastle}"
-  testCompile "org.elasticsearch.test:framework:${version}"
+  testCompile "com.strapdata.elasticsearch.test:framework:${version}"
   testCompile 'com.google.jimfs:jimfs:1.1'
   testCompile 'com.google.guava:guava:18.0'
 }
