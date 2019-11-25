@@ -24,6 +24,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -417,10 +418,13 @@ public final class NodeEnvironment  implements Closeable {
 
     public static String getLocalHostId() {
         try {
-            return SystemKeyspace.getLocalHostId().toString();
-        } catch(java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException |java.lang.NoClassDefFoundError e) {
-            return UUID.randomUUID().toString();
+            if (DatabaseDescriptor.isDaemonInitialized()) {
+                return SystemKeyspace.getLocalHostId().toString();
+            }
+        } catch(java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException | java.lang.NoClassDefFoundError e) {
+            LogManager.getLogger(NodeEnvironment.class).warn("Cannot get cassandra hostId", e);
         }
+        return UUID.randomUUID().toString();
     }
 
     public static String generateNodeId(Settings settings) {
