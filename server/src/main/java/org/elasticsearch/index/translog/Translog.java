@@ -1290,18 +1290,22 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
 
     static void verifyChecksum(BufferedChecksumStreamInput in) throws IOException {
         // This absolutely must come first, or else reading the checksum becomes part of the checksum
+        /*
         long expectedChecksum = in.getChecksum();
         long readChecksum = Integer.toUnsignedLong(in.readInt());
         if (readChecksum != expectedChecksum) {
             throw new TranslogCorruptedException(in.getSource(), "checksum verification failed - expected: 0x" +
                 Long.toHexString(expectedChecksum) + ", got: 0x" + Long.toHexString(readChecksum));
         }
+
+         */
     }
 
     /**
      * Reads a list of operations written with {@link #writeOperations(StreamOutput, List)}
      */
     public static List<Operation> readOperations(StreamInput input, String source) throws IOException {
+        /*
         ArrayList<Operation> operations = new ArrayList<>();
         int numOps = input.readInt();
         final BufferedChecksumStreamInput checksumStreamInput = new BufferedChecksumStreamInput(input, source);
@@ -1309,9 +1313,12 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
             operations.add(readOperation(checksumStreamInput));
         }
         return operations;
+         */
+        throw new UnsupportedOperationException("Translog is disabled in elassandra");
     }
 
     static Translog.Operation readOperation(BufferedChecksumStreamInput in) throws IOException {
+        /*
         final Translog.Operation operation;
         try {
             final int opSize = in.readInt();
@@ -1335,6 +1342,9 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
             throw new TruncatedTranslogException(in.getSource(), "reached premature end of file, translog is truncated", e);
         }
         return operation;
+
+         */
+        throw new UnsupportedOperationException("Translog is disabled in elassandra");
     }
 
     /**
@@ -1342,6 +1352,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
      * use {@link #readOperations(StreamInput, String)} to read it back.
      */
     public static void writeOperations(StreamOutput outStream, List<Operation> toWrite) throws IOException {
+        /*
         final ReleasableBytesStreamOutput out = new ReleasableBytesStreamOutput(BigArrays.NON_RECYCLING_INSTANCE);
         try {
             outStream.writeInt(toWrite.size());
@@ -1362,7 +1373,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
         } finally {
             Releasables.close(out);
         }
-
+        */
     }
 
     public static void writeOperationNoSize(BufferedChecksumStreamOutput out, Translog.Operation op) throws IOException {
@@ -1528,6 +1539,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
 
     static String createEmptyTranslog(Path location, long initialGlobalCheckpoint, ShardId shardId,
                                       ChannelFactory channelFactory, long primaryTerm) throws IOException {
+        /*
         IOUtils.rm(location);
         Files.createDirectories(location);
         final Checkpoint checkpoint =
@@ -1542,6 +1554,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
             () -> { throw new UnsupportedOperationException(); }, () -> { throw new UnsupportedOperationException(); }, primaryTerm,
                 new TragicExceptionHolder());
         writer.close();
-        return translogUUID;
+        */
+        return UUIDs.randomBase64UUID();
     }
 }
