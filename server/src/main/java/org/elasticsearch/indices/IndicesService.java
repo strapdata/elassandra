@@ -241,7 +241,6 @@ public class IndicesService extends AbstractLifecycleComponent
         this.bigArrays = bigArrays;
         this.scriptService = scriptService;
         this.clusterService = clusterService;
-        this.clusterService.setIndicesService(this);
         this.client = client;
         this.indicesFieldDataCache = new IndicesFieldDataCache(settings, new IndexFieldDataCache.Listener() {
             @Override
