@@ -213,7 +213,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         this.searchOperationListeners = Collections.unmodifiableList(searchOperationListeners);
         this.indexingOperationListeners = Collections.unmodifiableList(indexingOperationListeners);
         // kick off async ops for the first shard in this index
-        //this.refreshTask = new AsyncRefreshTask(this);
+        this.refreshTask = new AsyncRefreshTask(this);
         //this.trimTranslogTask = new AsyncTrimTranslogTask(this);
     }
 
