@@ -24,7 +24,6 @@ import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.transport.Event;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.Version;
@@ -179,8 +178,8 @@ public class MetaDataIndexStateService {
                                     listener::onFailure)
                                 )
                             );
-
-                         */
+                            */
+                        listener.onResponse(new AcknowledgedResponse(true));
                     }
                 }
 
@@ -223,13 +222,13 @@ public class MetaDataIndexStateService {
         }
 
         // Check if index closing conflicts with any running restores
-        RestoreService.checkIndexClosing(currentState, indicesToClose);
+        //RestoreService.checkIndexClosing(currentState, indicesToClose);
         // Check if index closing conflicts with any running snapshots
-        SnapshotsService.checkIndexClosing(currentState, indicesToClose);
+        //SnapshotsService.checkIndexClosing(currentState, indicesToClose);
 
         // If the cluster is in a mixed version that does not support the shard close action,
         // we use the previous way to close indices and directly close them without sanity checks
-        final boolean useDirectClose = currentState.nodes().getMinNodeVersion().before(Version.V_6_7_0);
+        final boolean useDirectClose = true; //currentState.nodes().getMinNodeVersion().before(Version.V_6_7_0);
 
         final ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
         final RoutingTable.Builder routingTable = RoutingTable.builder(clusterService, currentState);
@@ -277,7 +276,7 @@ public class MetaDataIndexStateService {
      * this action succeed then the shard is considered to be ready for closing. When all shards of a given index are ready for closing,
      * the index is considered ready to be closed.
      */
-    /*
+     /*
     class WaitForClosedBlocksApplied extends AbstractRunnable {
 
         private final Map<Index, ClusterBlock> blockedIndices;
@@ -316,7 +315,7 @@ public class MetaDataIndexStateService {
         }
     }
     */
-
+     
     /**
      * Step 3 - Move index states from OPEN to CLOSE in cluster state for indices that are ready for closing.
      */
