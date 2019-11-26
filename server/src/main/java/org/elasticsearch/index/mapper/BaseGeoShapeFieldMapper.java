@@ -37,10 +37,7 @@ import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.QueryShardException;
 
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 import static org.elasticsearch.index.mapper.GeoPointFieldMapper.Names.IGNORE_MALFORMED;
 
@@ -167,6 +164,7 @@ public abstract class BaseGeoShapeFieldMapper extends FieldMapper {
             Orientation orientation = null;
             DeprecatedParameters deprecatedParameters = new DeprecatedParameters();
             boolean parsedDeprecatedParams = false;
+            Map<String, Object> cqlProperties = new HashMap<>();
             for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
                 Map.Entry<String, Object> entry = iterator.next();
                 String fieldName = entry.getKey();
@@ -186,6 +184,9 @@ public abstract class BaseGeoShapeFieldMapper extends FieldMapper {
                 } else if (GeoPointFieldMapper.Names.IGNORE_Z_VALUE.getPreferredName().equals(fieldName)) {
                     ignoreZ = XContentMapValues.nodeBooleanValue(fieldNode,
                         name + "." + GeoPointFieldMapper.Names.IGNORE_Z_VALUE.getPreferredName());
+                    iterator.remove();
+                } else if (TypeParsers.CQL_PROPERTIES.contains(fieldName)) {
+                    cqlProperties.put(fieldName, fieldNode);
                     iterator.remove();
                 }
             }
@@ -214,6 +215,13 @@ public abstract class BaseGeoShapeFieldMapper extends FieldMapper {
                 builder.orientation(orientation);
             }
 
+            // set CQL properties
+            for (Iterator<Map.Entry<String, Object>> iterator = cqlProperties.entrySet().iterator(); iterator.hasNext();) {
+                Map.Entry<String, Object> entry = iterator.next();
+                String fieldName = entry.getKey();
+                Object fieldNode = entry.getValue();
+                TypeParsers.parseCqlFields(builder, name, parserContext, iterator, fieldName, fieldNode);
+            }
             return builder;
         }
     }

@@ -29,15 +29,23 @@ import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
+import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.elasticsearch.test.InternalSettingsPlugin;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 
 public class SourceFieldMapperTests extends ESSingleNodeTestCase {
+
+    @Override
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+        return pluginList(InternalSettingsPlugin.class);
+    }
 
     public void testNoFormat() throws Exception {
         String mapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
@@ -66,7 +74,7 @@ public class SourceFieldMapperTests extends ESSingleNodeTestCase {
 
     public void testIncludes() throws Exception {
         String mapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("includes", new String[]{"path1*"}).endObject()
+            .startObject("_source").field("enabled", true).array("includes", new String[]{"path1*"}).endObject()
             .endObject().endObject());
 
         DocumentMapper documentMapper = createIndex("test").mapperService().documentMapperParser()
@@ -90,7 +98,7 @@ public class SourceFieldMapperTests extends ESSingleNodeTestCase {
 
     public void testExcludes() throws Exception {
         String mapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("excludes", new String[]{"path1*"}).endObject()
+            .startObject("_source").field("enabled", true).array("excludes", new String[]{"path1*"}).endObject()
             .endObject().endObject());
 
         DocumentMapper documentMapper = createIndex("test").mapperService().documentMapperParser()
@@ -177,13 +185,13 @@ public class SourceFieldMapperTests extends ESSingleNodeTestCase {
         // using default of true
         String mapping1 = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject());
         String mapping2 = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").field("enabled", false).endObject()
+            .startObject("_source").field("enabled", true).endObject() // elassandra _source is disabled by default.
             .endObject().endObject());
         assertConflicts(mapping1, mapping2, parser, "Cannot update enabled setting for [_source]");
 
         // not changing is ok
         String mapping3 = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").field("enabled", true).endObject()
+            .startObject("_source").field("enabled", false).endObject()
             .endObject().endObject());
         assertConflicts(mapping1, mapping3, parser);
     }
@@ -192,7 +200,7 @@ public class SourceFieldMapperTests extends ESSingleNodeTestCase {
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
         String defaultMapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject());
         String mapping1 = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("includes", "foo.*").endObject()
+            .startObject("_source").field("enabled", true).array("includes", "foo.*").endObject()
             .endObject().endObject());
         assertConflicts(defaultMapping, mapping1, parser, "Cannot update includes setting for [_source]");
         assertConflicts(mapping1, defaultMapping, parser, "Cannot update includes setting for [_source]");
@@ -210,13 +218,13 @@ public class SourceFieldMapperTests extends ESSingleNodeTestCase {
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
         String defaultMapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject());
         String mapping1 = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("excludes", "foo.*").endObject()
+            .startObject("_source").field("enabled", true).array("excludes", "foo.*").endObject()
             .endObject().endObject());
         assertConflicts(defaultMapping, mapping1, parser, "Cannot update excludes setting for [_source]");
         assertConflicts(mapping1, defaultMapping, parser, "Cannot update excludes setting for [_source]");
 
         String mapping2 = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("excludes", "foo.*", "bar.*").endObject()
+            .startObject("_source").field("enabled", true).array("excludes", "foo.*", "bar.*").endObject()
             .endObject().endObject());
         assertConflicts(mapping1, mapping2, parser, "Cannot update excludes setting for [_source]");
 
@@ -227,20 +235,20 @@ public class SourceFieldMapperTests extends ESSingleNodeTestCase {
     public void testComplete() throws Exception {
         DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
         String mapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type").endObject().endObject());
+        assertFalse(parser.parse("type", new CompressedXContent(mapping)).sourceMapper().isComplete());
+
+        mapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
+            .startObject("_source").field("enabled", true).endObject()
+            .endObject().endObject());
         assertTrue(parser.parse("type", new CompressedXContent(mapping)).sourceMapper().isComplete());
 
         mapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").field("enabled", false).endObject()
+            .startObject("_source").field("enabled", true).array("includes", "foo.*").endObject()
             .endObject().endObject());
         assertFalse(parser.parse("type", new CompressedXContent(mapping)).sourceMapper().isComplete());
 
         mapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("includes", "foo.*").endObject()
-            .endObject().endObject());
-        assertFalse(parser.parse("type", new CompressedXContent(mapping)).sourceMapper().isComplete());
-
-        mapping = Strings.toString(XContentFactory.jsonBuilder().startObject().startObject("type")
-            .startObject("_source").array("excludes", "foo.*").endObject()
+            .startObject("_source").field("enabled", true).array("excludes", "foo.*").endObject()
             .endObject().endObject());
         assertFalse(parser.parse("type", new CompressedXContent(mapping)).sourceMapper().isComplete());
     }

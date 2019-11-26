@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.mapper;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.CQLFragmentParser;
 import org.apache.cassandra.cql3.CqlParser;
@@ -86,6 +87,10 @@ public class TypeParsers {
     public static final String CQL_CLUSTERING_KEY_DESC = "cql_clustering_key_desc";
     public static final String CQL_PARTITION_KEY = "cql_partition_key";
     public static final String CQL_PRIMARY_KEY_ORDER = "cql_primary_key_order";
+
+    public static final List<String> CQL_PROPERTIES = ImmutableList.of(
+        CQL_COLLECTION, CQL_STRUCT, CQL_TYPE, CQL_UDT_NAME, CQL_STATIC_COLUMN,
+        CQL_STATIC_COLUMN, CQL_CLUSTERING_KEY_DESC, CQL_MANDATORY, CQL_PARTITION_KEY, CQL_PRIMARY_KEY_ORDER);
 
     private static final DeprecationLogger DEPRECATION_LOGGER = new DeprecationLogger(Loggers.getLogger(TypeParsers.class));
 

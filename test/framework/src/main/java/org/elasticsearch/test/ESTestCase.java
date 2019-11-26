@@ -449,9 +449,12 @@ public abstract class ESTestCase extends LuceneTestCase {
     }
 
     private List<String> filterHttpEnabledDeprectationWarnings(List<String> actualWarnings) {
-        return actualWarnings == null ? null : actualWarnings.stream()
+        if (actualWarnings == null)
+            return null;
+        List<String> actualWarnings2 = actualWarnings.stream()
             .filter(m -> m.contains("http.enabled") == false)
             .collect(Collectors.toList());
+        return actualWarnings2.size() == 0 ? null : actualWarnings2;
     }
 
     private void assertWarnings(List<String> actualWarnings, String[] expectedWarnings) {
