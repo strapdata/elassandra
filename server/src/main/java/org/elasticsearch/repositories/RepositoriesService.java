@@ -78,9 +78,11 @@ public class RepositoriesService implements ClusterStateApplier {
         this.threadPool = threadPool;
         // Doesn't make sense to maintain repositories on non-master and non-data nodes
         // Nothing happens there anyway
+        /*
         if (DiscoveryNode.isDataNode(settings) || DiscoveryNode.isMasterNode(settings)) {
             clusterService.addStateApplier(this);
         }
+        */
         this.verifyAction = new VerifyNodeRepositoryAction(transportService, clusterService, this);
     }
 
