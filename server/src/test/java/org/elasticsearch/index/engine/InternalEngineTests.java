@@ -3343,7 +3343,7 @@ public class InternalEngineTests extends EngineTestCase {
         Thread[] thread = new Thread[randomIntBetween(3, 5)];
         int numDocs = randomIntBetween(1000, 10000);
         List<Engine.Index> docs = new ArrayList<>();
-        final boolean primary = randomBoolean();
+        final boolean primary = true;
         for (int i = 0; i < numDocs; i++) {
             final ParsedDocument doc = testParsedDocument(Integer.toString(i), null, testDocumentWithTextField(), new BytesArray("{}".getBytes(Charset.defaultCharset())), null);
             final Engine.Index originalIndex;
