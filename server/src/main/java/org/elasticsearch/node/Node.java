@@ -306,7 +306,7 @@ public class Node implements Closeable {
 
             this.pluginsService = new PluginsService(tmpSettings, environment.configFile(), environment.modulesFile(), environment.pluginsFile(), classpathPlugins);
             this.settings = pluginsService.updatedSettings();
-            localNodeFactory = new LocalNodeFactory(settings, SystemKeyspace.getLocalHostId().toString());
+            localNodeFactory = new LocalNodeFactory(settings, NodeEnvironment.getLocalHostId(tmpSettings));
 
             // create the environment based on the finalized (processed) view of the settings
             // this is just to makes sure that people get the same settings, no matter where they ask them from

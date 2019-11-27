@@ -396,6 +396,7 @@ public class NodeEnvironmentTests extends ESTestCase {
         env.close();
     }
 
+    /*
     public void testPersistentNodeId() throws IOException {
         NodeEnvironment env = newNodeEnvironment(new String[0], Settings.builder()
             .put("node.local_storage", false)
@@ -416,7 +417,8 @@ public class NodeEnvironmentTests extends ESTestCase {
         assertThat(env.nodeId(), not(equalTo(nodeID)));
         env.close();
     }
-
+    */
+    
     public void testExistingTempFiles() throws IOException {
         String[] paths = tmpPaths();
         // simulate some previous left over temp files

@@ -56,6 +56,7 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.gateway.MetaDataStateFormat;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexNotFoundException;
@@ -854,12 +855,7 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
         private final ImmutableOpenMap.Builder<String, Custom> customs;
 
         public Builder() {
-            try {
-                clusterUUID = SystemKeyspace.getLocalHostId().toString();
-            } catch (java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException |java.lang.NoClassDefFoundError e) {
-                // for testing when Cassandra is nnot initialized.
-                clusterUUID = UUID.randomUUID().toString();
-            }
+            this.clusterUUID = NodeEnvironment.getLocalHostId();
             indices = ImmutableOpenMap.builder();
             templates = ImmutableOpenMap.builder();
             customs = ImmutableOpenMap.builder();
@@ -1045,12 +1041,12 @@ public class MetaData implements Iterable<IndexMetaData>, Diffable<MetaData>, To
 
         public Builder incrementVersion() {
             this.version = version + 1;
-            this.clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            this.clusterUUID = NodeEnvironment.getLocalHostId();
             return this;
         }
 
         public Builder setClusterUuid() {
-            this.clusterUUID = SystemKeyspace.getLocalHostId().toString();
+            this.clusterUUID = NodeEnvironment.getLocalHostId();
             return this;
         }
 

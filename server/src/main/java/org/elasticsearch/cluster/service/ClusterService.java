@@ -114,6 +114,7 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.discovery.Discovery;
+import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.gateway.MetaStateService;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
@@ -750,7 +751,7 @@ public class ClusterService extends BaseClusterService {
         byte[] metadataBytes = MetaData.Builder.toBytes(metadata, MetaData.CQL_FORMAT_PARAMS);
         extensions.put(ELASTIC_EXTENSION_METADATA, ByteBuffer.wrap(metadataBytes) );
         extensions.put(ELASTIC_EXTENSION_VERSION, ByteBufferUtil.bytes(metadata.version()) );
-        extensions.put(ELASTIC_EXTENSION_OWNER, ByteBufferUtil.bytes(SystemKeyspace.getLocalHostId()) );
+        extensions.put(ELASTIC_EXTENSION_OWNER, ByteBufferUtil.bytes(NodeEnvironment.getLocalHostId()));
 
         SchemaKeyspace.addTableExtensionsToSchemaMutation(cfm, extensions, builder);
     }

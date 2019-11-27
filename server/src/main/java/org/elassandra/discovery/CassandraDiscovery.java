@@ -82,6 +82,7 @@ import org.elasticsearch.discovery.AckClusterStatePublishResponseHandler;
 import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoverySettings;
 import org.elasticsearch.discovery.DiscoveryStats;
+import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.transport.TransportService;
 
@@ -912,7 +913,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
         public DiscoveryNodes nodes() {
             DiscoveryNodes.Builder nodesBuilder = new DiscoveryNodes.Builder();
-            nodesBuilder.localNodeId(SystemKeyspace.getLocalHostId().toString()).masterNodeId(SystemKeyspace.getLocalHostId().toString());
+            String hostId = NodeEnvironment.getLocalHostId();
+            nodesBuilder.localNodeId(hostId).masterNodeId(hostId);
             for (DiscoveryNode node : members.values()) {
                 nodesBuilder.add(node);
             }

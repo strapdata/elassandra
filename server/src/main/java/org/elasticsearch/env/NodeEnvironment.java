@@ -19,6 +19,8 @@
 
 package org.elasticsearch.env;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
@@ -38,6 +40,7 @@ import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.io.FileSystemUtils;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.logging.ServerLoggers;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
@@ -74,6 +77,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -363,10 +367,28 @@ public final class NodeEnvironment  implements Closeable {
         NodeMetaData.FORMAT.write(metaData, paths);
         return metaData;
     }
+    
+    public static String getLocalHostId() {
+        return getLocalHostId(null);
+    }
+    
+    public static String getLocalHostId(Settings settings) {
+        try {
+            if (DatabaseDescriptor.isDaemonInitialized()) {
+                return SystemKeyspace.getLocalHostId().toString();
+            }
+        } catch(java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException | java.lang.NoClassDefFoundError e) {
+            Loggers.getLogger(NodeEnvironment.class).warn("Cannot get cassandra hostId", e);
+        }
+        if (settings != null && settings.hasValue(NODE_ID_SEED_SETTING.getKey())) {
+            Random random = Randomness.get(settings, NODE_ID_SEED_SETTING);
+            return UUIDs.randomBase64UUID(random);
+        }
+        return UUIDs.randomBase64UUID();
+    }
 
     public static String generateNodeId(Settings settings) {
-        Random random = Randomness.get(settings, NODE_ID_SEED_SETTING);
-        return UUIDs.randomBase64UUID(random);
+        return getLocalHostId(settings);
     }
 
     @SuppressForbidden(reason = "System.out.*")
