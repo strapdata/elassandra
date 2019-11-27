@@ -78,7 +78,6 @@ public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
             .get().getHits().getTotalHits();
         
         long upper = client().prepareSearch().setIndices("test").setTypes("t1")
-                .setQuery(QueryBuilders.matchAllQuery())
                 .setQuery(QueryBuilders.rangeQuery("b").from(0).to(Long.MAX_VALUE))
                 .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(0), new LongToken(Long.MAX_VALUE-1))))
                 .get().getHits().getTotalHits();
