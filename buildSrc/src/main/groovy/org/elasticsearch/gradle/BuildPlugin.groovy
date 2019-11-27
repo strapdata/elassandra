@@ -664,11 +664,18 @@ class BuildPlugin implements Plugin<Project> {
             systemProperty 'cassandra-rackdc.properties', "file://${project.projectDir}/src/test/resources/conf/cassandra-rackdc.properties"
             systemProperty 'cassandra.config.loader', "org.elassandra.config.YamlTestConfigurationLoader"
             systemProperty 'cassandra.storagedir', "${project.buildDir}/testrun/test/J0"
-            systemProperty 'es.synchronous_refresh', 'true'
+            
+			// epoll is only supoorted on Linux
+            systemProperty 'cassandra.native.epoll.enabled', 'false'
+            systemProperty 'cassandra.ring_delay_ms', '0'
+            systemProperty 'cassandra.skip_wait_for_gossip_to_settle', '0'
+            systemProperty 'java.net.preferIPv4Stack', 'true'
+			
+			systemProperty 'es.synchronous_refresh', 'true'
             systemProperty 'es.drop_on_delete_index', 'true'
             systemProperty 'tests.maven', 'true'
             systemProperty 'cassandra.custom_query_handler_class', 'org.elassandra.index.ElasticQueryHandler'
-            //systemProperty 'io.netty.tryReflectionSetAccessible', 'false'
+            systemProperty 'io.netty.tryReflectionSetAccessible', 'false'
 
             boolean assertionsEnabled = Boolean.parseBoolean(System.getProperty('tests.asserts', 'true'))
             enableSystemAssertions assertionsEnabled
