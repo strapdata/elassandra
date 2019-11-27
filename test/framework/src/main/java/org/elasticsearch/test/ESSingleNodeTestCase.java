@@ -19,6 +19,7 @@
 package org.elasticsearch.test;
 
 import com.carrotsearch.randomizedtesting.RandomizedContext;
+import com.google.common.collect.Lists;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
@@ -326,7 +327,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
             assertThat("test leaves transient cluster metadata behind: " + metaData.transientSettings().getAsGroups(),
                     metaData.transientSettings().size(), equalTo(0));
 
-            List<String> userKeyspaces = Schema.instance.getUserKeyspaces();
+            List<String> userKeyspaces = Lists.newArrayList(Schema.instance.getUserKeyspaces());
             userKeyspaces.remove(this.clusterService().getElasticAdminKeyspaceName());
             assertThat("test leaves a user keyspace behind:" + userKeyspaces, userKeyspaces.size(), equalTo(0));
         } catch(Exception e) {
