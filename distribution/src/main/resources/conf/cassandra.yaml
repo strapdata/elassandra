@@ -498,6 +498,19 @@ concurrent_materialized_view_writes: 32
 #    off heap objects
 memtable_allocation_type: heap_buffers
 
+# Limits the maximum Merkle tree depth to avoid consuming too much
+# memory during repairs.
+#
+# The default setting of 18 generates trees of maximum size around
+# 50 MiB / tree. If you are running out of memory during repairs consider
+# lowering this to 15 (~6 MiB / tree) or lower, but try not to lower it
+# too much past that or you will lose too much resolution and stream
+# too much redundant data during repair. Cannot be set lower than 10.
+#
+# For more details see https://issues.apache.org/jira/browse/CASSANDRA-14096.
+#
+# repair_session_max_tree_depth: 18
+
 # Total space to use for commit logs on disk.
 #
 # If space gets above this value, Cassandra will flush every dirty CF
@@ -1099,10 +1112,6 @@ enable_user_defined_functions: false
 # This option has no effect, if enable_user_defined_functions is false.
 enable_scripted_user_defined_functions: false
 
-# Enables materialized view creation on this node.
-# Materialized views are considered experimental and are not recommended for production use.
-enable_materialized_views: false
-
 # The default Windows kernel timer and scheduling resolution is 15.6ms for power conservation.
 # Lowering this value on Windows can provide much tighter latency and better throughput, however
 # some virtualized environments may see a negative performance impact from changing this setting
@@ -1235,3 +1244,16 @@ back_pressure_strategy:
 # An interval of 0 disables any wait time, which is the behavior of former Cassandra versions.
 #
 # otc_backlog_expiration_interval_ms: 200
+
+
+#########################
+# EXPERIMENTAL FEATURES #
+#########################
+
+# Enables materialized view creation on this node.
+# Materialized views are considered experimental and are not recommended for production use.
+enable_materialized_views: false
+
+# Enables SASI index creation on this node.
+# SASI indexes are considered experimental and are not recommended for production use.
+enable_sasi_indexes: false

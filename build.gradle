@@ -70,6 +70,9 @@ configure(subprojects.findAll { it.projectDir.toPath().startsWith(rootPath) }) {
  
    repositories {
      mavenLocal()
+     maven {
+       url 'https://oss.sonatype.org/content/repositories/snapshots'
+     }
    }
 
   // we only use maven publish to add tasks for pom generation

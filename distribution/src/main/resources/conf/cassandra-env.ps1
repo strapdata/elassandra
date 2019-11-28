@@ -422,7 +422,7 @@ Function SetCassandraEnvironment
     }
 
     # provides hints to the JIT compiler
-    $env:JVM_OPTS = "$env:JVM_OPTS -XX:CompileCommandFile=$env:CASSANDRA_CONF\hotspot_compiler"
+    $env:JVM_OPTS = "$env:JVM_OPTS -XX:CompileCommandFile=""$env:CASSANDRA_CONF\hotspot_compiler"""
 
     # add the jamm javaagent
     if (($env:JVM_VENDOR -ne "OpenJDK") -or ($env:JVM_VERSION.CompareTo("1.6.0") -eq 1) -or
@@ -435,8 +435,18 @@ Function SetCassandraEnvironment
     if ($env:CASSANDRA_HEAPDUMP_DIR)
     {
         $unixTimestamp = [int64](([datetime]::UtcNow)-(get-date "1/1/1970")).TotalSeconds
-        $env:JVM_OPTS="$env:JVM_OPTS -XX:HeapDumpPath=$env:CASSANDRA_HEAPDUMP_DIR\cassandra-$unixTimestamp-pid$pid.hprof"
+        $env:JVM_OPTS="$env:JVM_OPTS -XX:HeapDumpPath=""$env:CASSANDRA_HEAPDUMP_DIR\cassandra-$unixTimestamp-pid$pid.hprof"""
     }
+
+    # stop the jvm on OutOfMemoryError as it can result in some data corruption
+    # uncomment the preferred option
+    # ExitOnOutOfMemoryError and CrashOnOutOfMemoryError require a JRE greater or equals to 1.7 update 101 or 1.8 update 92
+    # $env:JVM_OPTS="$env:JVM_OPTS -XX:+ExitOnOutOfMemoryError"
+    # $env:JVM_OPTS="$env:JVM_OPTS -XX:+CrashOnOutOfMemoryError"
+    $env:JVM_OPTS="$env:JVM_OPTS -XX:OnOutOfMemoryError=""taskkill /F /PID %p"""
+
+    # print an heap histogram on OutOfMemoryError
+    # $env:JVM_OPTS="$env:JVM_OPTS -Dcassandra.printHeapHistogramOnOutOfMemoryError=true"
 
     if ($env:JVM_VERSION.CompareTo("1.8.0") -eq -1 -or [convert]::ToInt32($env:JVM_PATCH_VERSION) -lt 40)
     {
@@ -514,9 +524,36 @@ Function SetCassandraEnvironment
     # with authentication and ssl enabled. See https://wiki.apache.org/cassandra/JmxSecurity
     #
     #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.port=$JMX_PORT"
-    #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.ssl=false"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.rmi.port=$JMX_PORT"
+    #
+    # JMX SSL options
+    #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.ssl=true"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.ssl.need.client.auth=true"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.ssl.enabled.protocols=<enabled-protocols>"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.ssl.enabled.cipher.suites=<enabled-cipher-suites>"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Djavax.net.ssl.keyStore=C:/keystore"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Djavax.net.ssl.keyStorePassword=<keystore-password>"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Djavax.net.ssl.trustStore=C:/truststore"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Djavax.net.ssl.trustStorePassword=<truststore-password>"
+    #
+    # JMX auth options
     #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.authenticate=true"
+    ## Basic file based authn & authz
     #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.password.file=C:/jmxremote.password"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Dcom.sun.management.jmxremote.access.file=C:/jmxremote.access"
+
+    ## Custom auth settings which can be used as alternatives to JMX's out of the box auth utilities.
+    ## JAAS login modules can be used for authentication by uncommenting these two properties.
+    ## Cassandra ships with a LoginModule implementation - org.apache.cassandra.auth.CassandraLoginModule -
+    ## which delegates to the IAuthenticator configured in cassandra.yaml
+    #$env:JVM_OPTS="$env:JVM_OPTS -Dcassandra.jmx.remote.login.config=CassandraLogin"
+    #$env:JVM_OPTS="$env:JVM_OPTS -Djava.security.auth.login.config=C:/cassandra-jaas.config"
+
+    ## Cassandra also ships with a helper for delegating JMX authz calls to the configured IAuthorizer,
+    ## uncomment this to use it. Requires one of the two authentication options to be enabled
+    #$env:JVM_OPTS="$env:JVM_OPTS -Dcassandra.jmx.authorizer=org.apache.cassandra.auth.jmx.AuthorizationProxy"
+
+    # Default JMX setup, bound to local loopback address only
     $env:JVM_OPTS="$env:JVM_OPTS -Dcassandra.jmx.local.port=$JMX_PORT -XX:+DisableExplicitGC"
 
     $env:JVM_OPTS="$env:JVM_OPTS $env:JVM_EXTRA_OPTS"
