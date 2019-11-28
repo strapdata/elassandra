@@ -850,8 +850,7 @@ class BuildPlugin implements Plugin<Project> {
             classes.add(javaCompile.destinationDir)
         }
         project.tasks.withType(Javadoc) { javadoc ->
-            // build javadoc with jdk8
-            javadoc.executable = new File(project.cassandraJavaHome, 'bin/javadoc')
+            javadoc.executable = new File(project.compilerJavaHome, 'bin/javadoc')
             javadoc.classpath = javadoc.getClasspath().filter { f ->
                 return classes.contains(f) == false
             }
