@@ -40,6 +40,7 @@ import org.apache.lucene.store.SimpleFSDirectory;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.logging.DeprecationLogger;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -417,18 +418,26 @@ public final class NodeEnvironment  implements Closeable {
     }
 
     public static String getLocalHostId() {
+        return getLocalHostId(null);
+    }
+
+    public static String getLocalHostId(Settings settings) {
         try {
             if (DatabaseDescriptor.isDaemonInitialized()) {
                 return SystemKeyspace.getLocalHostId().toString();
             }
         } catch(java.lang.AssertionError |  org.apache.cassandra.db.KeyspaceNotDefinedException | java.lang.NoClassDefFoundError e) {
-            LogManager.getLogger(NodeEnvironment.class).warn("Cannot get cassandra hostId", e);
+            Loggers.getLogger(NodeEnvironment.class).warn("Cannot get cassandra hostId", e);
         }
-        return UUID.randomUUID().toString();
+        if (settings != null && settings.hasValue(NODE_ID_SEED_SETTING.getKey())) {
+            Random random = Randomness.get(settings, NODE_ID_SEED_SETTING);
+            return UUIDs.randomBase64UUID(random);
+        }
+        return UUIDs.randomBase64UUID();
     }
 
     public static String generateNodeId(Settings settings) {
-        return getLocalHostId();
+        return getLocalHostId(settings);
     }
 
     @SuppressForbidden(reason = "System.out.*")
