@@ -55,7 +55,7 @@ public class TransportClusterHealthAction
     @Inject
     public TransportClusterHealthAction(Settings settings, TransportService transportService, ClusterService clusterService,
                                         ThreadPool threadPool, ActionFilters actionFilters,
-                                        IndexNameExpressionResolver indexNameExpressionResolver, GatewayAllocator gatewayAllocator) {
+                                        IndexNameExpressionResolver indexNameExpressionResolver) {
         super(settings, ClusterHealthAction.NAME, false, transportService, clusterService, threadPool, actionFilters,
             indexNameExpressionResolver, ClusterHealthRequest::new);
         //this.gatewayAllocator = gatewayAllocator;
