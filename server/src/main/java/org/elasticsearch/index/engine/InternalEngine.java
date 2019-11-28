@@ -169,7 +169,7 @@ public class InternalEngine extends Engine {
                 //this.softDeleteEnabled = engineConfig.getIndexSettings().isSoftDeleteEnabled();
                 //this.softDeletesPolicy = newSoftDeletesPolicy();
                 this.combinedDeletionPolicy =
-                    new CombinedDeletionPolicy(logger, translogDeletionPolicy, engineConfig.getGlobalCheckpointSupplier());
+                    new CombinedDeletionPolicy(logger, translogDeletionPolicy, translog::getLastSyncedGlobalCheckpoint);
                 writer = createWriter();
                 bootstrapAppendOnlyInfoFromWriter(writer);
                 historyUUID = loadHistoryUUID(writer);
@@ -349,7 +349,6 @@ public class InternalEngine extends Engine {
 
     @Override
     public int fillSeqNoGaps(long primaryTerm) throws IOException {
-        /*
         try (ReleasableLock ignored = writeLock.acquire()) {
             ensureOpen();
             final long localCheckpoint = localCheckpointTracker.getCheckpoint();
@@ -367,8 +366,6 @@ public class InternalEngine extends Engine {
             }
             return numNoOpsAdded;
         }
-        */
-        return 0;
     }
 
     private void bootstrapAppendOnlyInfoFromWriter(IndexWriter writer) {
@@ -552,7 +549,7 @@ public class InternalEngine extends Engine {
     /** Returns how many bytes we are currently moving from indexing buffer to segments on disk */
     @Override
     public long getWritingBytes() {
-        return indexWriter.getFlushingBytes();
+        return indexWriter.getFlushingBytes() + versionMap.getRefreshingBytes();
     }
 
     /**
@@ -713,8 +710,8 @@ public class InternalEngine extends Engine {
                         status = OpVsLuceneDocStatus.LUCENE_DOC_NOT_FOUND;
                     }
                 } else if (op.seqNo() == docAndSeqNo.seqNo) {
-                    //assert localCheckpointTracker.contains(op.seqNo()) || softDeleteEnabled == false :
-                    //   "local checkpoint tracker is not updated seq_no=" + op.seqNo() + " id=" + op.id();
+                    assert localCheckpointTracker.contains(op.seqNo()) || softDeleteEnabled == false :
+                        "local checkpoint tracker is not updated seq_no=" + op.seqNo() + " id=" + op.id();
                     status = OpVsLuceneDocStatus.OP_STALE_OR_EQUAL;
                 } else {
                     status = OpVsLuceneDocStatus.OP_STALE_OR_EQUAL;
