@@ -2,8 +2,11 @@ dist: trusty
 sudo: required
 env:
   global:
+    - JAVA8_HOME=$(jdk_switcher home oraclejdk8)
+    - JAVA9_HOME=$(jdk_switcher home oraclejdk9)
+    - JAVA_HOME=$(jdk_switcher home oraclejdk12)
     # this variable determine when docker images are tagged 'latest'
-    - LATEST_VERSION=6.2.3
+    - LATEST_VERSION=6.8.4
     # Make sure gcloud command is on our PATH and the App Engine SDK is in the Python path
     - GAE_PYTHONPATH=${HOME}/.cache/google_appengine PATH=$PATH:${HOME}/google-cloud-sdk/bin PYTHONPATH=${PYTHONPATH}:${GAE_PYTHONPATH} CLOUDSDK_CORE_DISABLE_PROMPTS=1
     # jdk used to build some cassandra artifacts
@@ -15,6 +18,11 @@ env:
 language: 
   - java
   - bash
+
+jdk:
+  - oraclejdk8
+  - oraclejdk9
+  - oraclejdk12
 
 services:
   - docker
@@ -41,7 +49,9 @@ matrix:
     - env: JDK='Oracle JDK 10'
       install: . ./install-jdk.sh -v -f 9; keytool -import -trustcacerts -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -alias SFSRootCAG2x -file SFSRootCAG2.pem -noprompt
 
-install: ./gradlew --version
+install:
+  - ./gradlew --version
+  - ant deps
 
 script:
   - ./gradlew server:test -Dbuild.snapshot=false
