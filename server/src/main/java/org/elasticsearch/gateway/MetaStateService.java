@@ -47,10 +47,6 @@ public class MetaStateService {
     private final NamedXContentRegistry namedXContentRegistry;
     private final ClusterService clusterService;
 
-    public MetaStateService(NodeEnvironment nodeEnv, NamedXContentRegistry namedXContentRegistry) {
-        this(nodeEnv, namedXContentRegistry, null);
-    }
-
     public MetaStateService(NodeEnvironment nodeEnv, NamedXContentRegistry namedXContentRegistry, ClusterService clusterService) {
         this.nodeEnv = nodeEnv;
         this.namedXContentRegistry = namedXContentRegistry;
