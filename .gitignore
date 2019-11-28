@@ -44,3 +44,5 @@ eclipse-build
 /private/
 
 docker
+*.rej
+*.orig
