@@ -47,42 +47,34 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
     private final Logger logger;
     private final TranslogDeletionPolicy translogDeletionPolicy;
     //private final SoftDeletesPolicy softDeletesPolicy;
-    //private final LongSupplier globalCheckpointSupplier;
+    private final LongSupplier globalCheckpointSupplier;
     private final ObjectIntHashMap<IndexCommit> snapshottedCommits; // Number of snapshots held against each commit point.
     private volatile IndexCommit safeCommit; // the most recent safe commit point - its max_seqno at most the persisted global checkpoint.
     private volatile IndexCommit lastCommit; // the most recent commit point
 
-    CombinedDeletionPolicy(Logger logger, TranslogDeletionPolicy translogDeletionPolicy) {
-        this(logger, translogDeletionPolicy, null, null);
-    }
-
-    CombinedDeletionPolicy(Logger logger, TranslogDeletionPolicy translogDeletionPolicy,
-                           SoftDeletesPolicy softDeletesPolicy, LongSupplier globalCheckpointSupplier) {
+    CombinedDeletionPolicy(Logger logger, TranslogDeletionPolicy translogDeletionPolicy, LongSupplier globalCheckpointSupplier) {
         this.logger = logger;
         this.translogDeletionPolicy = translogDeletionPolicy;
         //this.softDeletesPolicy = softDeletesPolicy;
-        //this.globalCheckpointSupplier = globalCheckpointSupplier;
+        this.globalCheckpointSupplier = globalCheckpointSupplier;
         this.snapshottedCommits = new ObjectIntHashMap<>();
     }
 
     @Override
     public synchronized void onInit(List<? extends IndexCommit> commits) throws IOException {
-        /*
         assert commits.isEmpty() == false : "index is opened, but we have no commits";
         onCommit(commits);
         if (safeCommit != commits.get(commits.size() - 1)) {
             throw new IllegalStateException("Engine is opened, but the last commit isn't safe. Global checkpoint ["
-                + SequenceNumbers.UNASSIGNED_SEQ_NO + "], seqNo is last commit ["
+                + globalCheckpointSupplier.getAsLong() + "], seqNo is last commit ["
                 + SequenceNumbers.loadSeqNoInfoFromLuceneCommit(lastCommit.getUserData().entrySet()) + "], "
                 + "seqNos in safe commit [" + SequenceNumbers.loadSeqNoInfoFromLuceneCommit(safeCommit.getUserData().entrySet()) + "]");
         }
-        */
     }
 
     @Override
     public synchronized void onCommit(List<? extends IndexCommit> commits) throws IOException {
-        /*
-        final int keptPosition = indexOfKeptCommits(commits, SequenceNumbers.UNASSIGNED_SEQ_NO);
+        final int keptPosition = indexOfKeptCommits(commits, globalCheckpointSupplier.getAsLong());
         lastCommit = commits.get(commits.size() - 1);
         safeCommit = commits.get(keptPosition);
         for (int i = 0; i < keptPosition; i++) {
@@ -91,22 +83,16 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
             }
         }
         updateRetentionPolicy();
-
-         */
     }
 
     private void deleteCommit(IndexCommit commit) throws IOException {
-        /*
         assert commit.isDeleted() == false : "Index commit [" + commitDescription(commit) + "] is deleted twice";
         logger.debug("Delete index commit [{}]", commitDescription(commit));
         commit.delete();
         assert commit.isDeleted() : "Deletion commit [" + commitDescription(commit) + "] was suppressed";
-
-         */
     }
 
     private void updateRetentionPolicy() throws IOException {
-                /*
         assert Thread.holdsLock(this);
         logger.debug("Safe commit [{}], last commit [{}]", commitDescription(safeCommit), commitDescription(lastCommit));
         assert safeCommit.isDeleted() == false : "The safe commit must not be deleted";
@@ -114,13 +100,14 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
         assert lastCommit.isDeleted() == false : "The last commit must not be deleted";
         final long lastGen = Long.parseLong(lastCommit.getUserData().get(Translog.TRANSLOG_GENERATION_KEY));
 
-        //assert minRequiredGen <= lastGen : "minRequiredGen must not be greater than lastGen";
+        assert minRequiredGen <= lastGen : "minRequiredGen must not be greater than lastGen";
         translogDeletionPolicy.setTranslogGenerationOfLastCommit(lastGen);
         translogDeletionPolicy.setMinTranslogGenerationForRecovery(minRequiredGen);
 
-
+        /*
         softDeletesPolicy.setLocalCheckpointOfSafeCommit(
             Long.parseLong(safeCommit.getUserData().get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)));
+
          */
     }
 
@@ -178,7 +165,6 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
      * Index commits with different translog UUID will be filtered out as they don't belong to this engine.
      */
     private static int indexOfKeptCommits(List<? extends IndexCommit> commits, long globalCheckpoint) throws IOException {
-        /*
         final String expectedTranslogUUID = commits.get(commits.size() - 1).getUserData().get(Translog.TRANSLOG_UUID_KEY);
 
         // Commits are sorted by age (the 0th one is the oldest commit).
@@ -228,7 +214,6 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
      * Checks if the deletion policy can release some index commits with the latest global checkpoint.
      */
     boolean hasUnreferencedCommits() throws IOException {
-        /*
         final IndexCommit lastCommit = this.lastCommit;
         if (safeCommit != lastCommit) { // Race condition can happen but harmless
             if (lastCommit.getUserData().containsKey(SequenceNumbers.MAX_SEQ_NO)) {
@@ -237,7 +222,6 @@ public final class CombinedDeletionPolicy extends IndexDeletionPolicy {
                 return globalCheckpointSupplier.getAsLong() >= maxSeqNoFromLastCommit;
             }
         }
-        */
         return false;
     }
 

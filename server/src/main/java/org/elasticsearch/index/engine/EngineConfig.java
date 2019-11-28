@@ -79,7 +79,7 @@ public final class EngineConfig {
     private final Sort indexSort;
     @Nullable
     private final CircuitBreakerService circuitBreakerService;
-    //private final LongSupplier globalCheckpointSupplier;
+    private final LongSupplier globalCheckpointSupplier;
     //private final Supplier<RetentionLeases> retentionLeasesSupplier;
 
     /**
@@ -92,7 +92,7 @@ public final class EngineConfig {
         return () -> RetentionLeases.EMPTY;
     }
 
-    private final TombstoneDocSupplier tombstoneDocSupplier;
+    //private final TombstoneDocSupplier tombstoneDocSupplier;
 
     /**
      * Index setting to change the low level lucene codec used for writing new segments.
@@ -138,8 +138,7 @@ public final class EngineConfig {
                         TranslogConfig translogConfig, TimeValue flushMergesAfter,
                         List<ReferenceManager.RefreshListener> externalRefreshListener,
                         List<ReferenceManager.RefreshListener> internalRefreshListener, Sort indexSort,
-                        CircuitBreakerService circuitBreakerService,
-                        TombstoneDocSupplier tombstoneDocSupplier) {
+                        CircuitBreakerService circuitBreakerService, LongSupplier globalCheckpointSupplier) {
         this.shardId = shardId;
         this.allocationId = allocationId;
         this.indexSettings = indexSettings;
@@ -174,8 +173,12 @@ public final class EngineConfig {
         this.internalRefreshListener = internalRefreshListener;
         this.indexSort = indexSort;
         this.circuitBreakerService = circuitBreakerService;
-
+        this.globalCheckpointSupplier = globalCheckpointSupplier;
+        /*
+        this.retentionLeasesSupplier = Objects.requireNonNull(retentionLeasesSupplier);
+        this.primaryTermSupplier = primaryTermSupplier;
         this.tombstoneDocSupplier = tombstoneDocSupplier;
+         */
     }
 
     /**
@@ -246,6 +249,13 @@ public final class EngineConfig {
      */
     public Store getStore() {
         return store;
+    }
+
+    /**
+     * Returns the global checkpoint tracker
+     */
+    public LongSupplier getGlobalCheckpointSupplier() {
+        return globalCheckpointSupplier;
     }
 
     /**
@@ -385,6 +395,6 @@ public final class EngineConfig {
     }
 
     public TombstoneDocSupplier getTombstoneDocSupplier() {
-        return tombstoneDocSupplier;
+        return null;
     }
 }
