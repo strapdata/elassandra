@@ -26,22 +26,15 @@ Nested or Object types cannot be empty
 
 Because Elasticsearch nested and object types are backed by a Cassandra User Defined Type, it requires at least one sub-field in the mapping.
 
-Document version is meaningless
--------------------------------
+Document _version, _seq_no and _primary_term are meaningless
+------------------------------------------------------------
 
-Elasticsearch's versioning system helps to cope with conflicts, but in a multi-master database like Apache Cassandra, versionning cannot ensure global consistency
+Elasticsearch's versioning system helps to cope with conflicts, but in a multi-master database like Apache Cassandra, versioning cannot ensure global consistency
 of compare-and-set operations.
 
-In Elassandra, Elasticsearch version management is disabled by default, document version is not more indexed in lucene files and **document version is always 1**. This simplification
-improves write throughput and reduce the memory footprint by eliminating the in-memory version cache implemented in the Elasticsearch internal lucene engine.
-
-If you want to keep the Elasticsearch internal lucene file format including a version number for each document, you should create your index with ``index.version_less_engine`` set to *false* like this :
-
-.. code::
-
-   $curl -XPUT -H "Content-Type: application/json" "$NODE:9200/twitter/" -d'{ 
-      "settings":{ "index.version_less_engine":false } }
-   }'
+In Elassandra, Elasticsearch version management is disabled by default, document version is not more indexed in lucene files and **document version is always 1**.
+Elasticsearch version 6.x introduced the _primary_term and _seq_no to uniquely identify updates on a document, but again, in a multi-master system, these counters are not more relevant,
+and your applications should not rely on it.
 
 Finally, if you need to avoid conflicts on write operations, you should use Cassandra `lightweight transactions <http://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0>`_ (or PAXOS transaction).
 Such lightweight transactions is also used when updating the Elassandra mapping or when indexing a document with *op_type=create*, but of course, it comes with a network cost.
