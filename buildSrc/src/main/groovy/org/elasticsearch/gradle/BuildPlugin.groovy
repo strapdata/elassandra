@@ -1253,19 +1253,6 @@ class BuildPlugin implements Plugin<Project> {
     static Task configureTest(Project project) {
         project.tasks.getByName('test') {
             include '**/*Tests.class'
-            exclude '**/MockNodeTests.class'
-            exclude '**/MockTcpTransportTests.class'
-            exclude '**/InternalTestCluster.class'
-            exclude '**/InternalTestClusterTests.class'
-            exclude '**/discovery/*.class'
-            exclude '**/*IT.class'
-            exclude '**/ClusterStateTests.class'
-            exclude '**/SearchHitsTests.class'
-            exclude '**/TransportShardBulkActionTests.class'
-            exclude '**/DiscoveryNodesTests.class'
-            exclude '**/CombinedDeletionPolicyTests.class'
-            exclude '**/BlobStoreRepositoryTests'
-            exclude '**/PrimaryTermsTests.class'
         }
     }
 
