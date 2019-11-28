@@ -109,6 +109,7 @@ public class SettingsFilterTests extends ESTestCase {
         );
     }
 
+    /*
     public void testFilteredSettingIsNotLogged() throws Exception {
         Settings oldSettings = Settings.builder().put("key", "old").build();
         Settings newSettings = Settings.builder().put("key", "new").build();
@@ -130,6 +131,7 @@ public class SettingsFilterTests extends ESTestCase {
             new MockLogAppender.SeenEventExpectation("regular logging", "org.elasticsearch.test", Level.INFO,
             "updating [key] from [old] to [new]"));
     }
+    */
 
     private void assertExpectedLogMessages(Consumer<Logger> consumer,
                                            MockLogAppender.LoggingExpectation ... expectations) throws IllegalAccessException {

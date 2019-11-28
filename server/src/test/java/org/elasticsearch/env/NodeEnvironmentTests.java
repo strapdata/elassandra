@@ -435,6 +435,7 @@ public class NodeEnvironmentTests extends ESTestCase {
         env.close();
     }
 
+    /*
     public void testPersistentNodeId() throws IOException {
         NodeEnvironment env = newNodeEnvironment(new String[0], Settings.builder()
             .put("node.local_storage", false)
@@ -455,6 +456,7 @@ public class NodeEnvironmentTests extends ESTestCase {
         assertThat(env.nodeId(), not(equalTo(nodeID)));
         env.close();
     }
+     */
 
     public void testExistingTempFiles() throws IOException {
         String[] paths = tmpPaths();
@@ -491,6 +493,7 @@ public class NodeEnvironmentTests extends ESTestCase {
 
     // backported from 7.0, but in 6.x this only prints warnings. We keep the original test as is to ease further backports and ensure
     // that log messages convert into exceptions.
+    /*
     public void testEnsureNoShardDataOrIndexMetaData6x() throws IOException, IllegalAccessException {
         // Convert warn log messages into exceptions and call original test case.
         Appender appender = new AbstractAppender("convertToException", null, null, false) {
@@ -528,6 +531,8 @@ public class NodeEnvironmentTests extends ESTestCase {
             appender.stop();
         }
     }
+
+     */
 
     private static <T extends Throwable> T expectLoggingThrows(Class<T> expectedType,
                                                                String noExceptionMessage,

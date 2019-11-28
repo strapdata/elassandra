@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Strapdata (http://www.strapdata.com)
  * Contains some code from Elasticsearch (http://www.elastic.co)
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
@@ -28,8 +28,6 @@ import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcke
 import static org.hamcrest.Matchers.equalTo;
 
 /**
- * Because of distribution (and Hinted Handoff) Cassandra may write events not properly time-ordered. 
- * This could lead to index in elasticsearch the last written row and not the up-to-date row.
  * @author vroyer
  *
  */
@@ -55,7 +53,7 @@ public class ExplainTests extends ESSingleNodeTestCase {
                 .endObject();
         assertAcked(client().admin().indices().prepareCreate("test").addMapping("t1", mapping));
         ensureGreen("test");
-        
+
         long N = 10;
         for(int i=0; i < N; i++)
             process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id, f1) VALUES ('%d',%d)", i,i));

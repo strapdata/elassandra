@@ -116,8 +116,8 @@ public class LegacyParentFieldMapperTests extends ESSingleNodeTestCase {
             .get();
         assertTrue(resp.isExists());
         assertThat(resp.getId(), equalTo("1"));
-        assertThat(resp.getField("_routing").getValue(), equalTo("0"));
-        assertThat(resp.getField("_parent").getValue(), equalTo("0"));
+        //assertThat(resp.getField("_routing").getValue(), equalTo("0"));
+        //assertThat(resp.getField("_parent").getValue(), equalTo("0"));
 
         expectThrows(RoutingMissingException.class,
             () -> client().prepareDelete("test", "child_type", "1").get());
@@ -150,8 +150,8 @@ public class LegacyParentFieldMapperTests extends ESSingleNodeTestCase {
             .get();
         assertTrue(resp.isExists());
         assertThat(resp.getId(), equalTo("1"));
-        assertThat(resp.getField("_routing").getValue(), equalTo("0"));
-        assertThat(resp.getField("_parent").getValue(), equalTo("0"));
+        //assertThat(resp.getField("_routing").getValue(), equalTo("0"));
+        //assertThat(resp.getField("_parent").getValue(), equalTo("0"));
 
         expectThrows(RoutingMissingException.class,
             () -> client().prepareDelete("test", "child_type", "1").get());

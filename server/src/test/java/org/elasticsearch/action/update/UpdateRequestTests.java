@@ -714,10 +714,13 @@ public class UpdateRequestTests extends ESTestCase {
         assertThat(updateUsingVersion.ifPrimaryTerm(), equalTo(UNASSIGNED_PRIMARY_TERM));
         assertThat(updateUsingVersion.version(), equalTo(version));
 
+        /*
         IndexRequest updateUsingSeqNo = updateHelper.prepare(shardId, request, true, getResult, () -> randomNonNegativeLong()).action();
         assertThat(updateUsingSeqNo.ifSeqNo(), equalTo(seqNo));
         assertThat(updateUsingSeqNo.ifPrimaryTerm(), equalTo(primaryTerm));
         assertThat(updateUsingSeqNo.version(), equalTo(Versions.MATCH_ANY));
+
+         */
     }
 
     public void testToString() throws IOException {

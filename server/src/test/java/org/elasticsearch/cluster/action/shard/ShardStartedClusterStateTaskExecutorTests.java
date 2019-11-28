@@ -131,6 +131,7 @@ public class ShardStartedClusterStateTaskExecutorTests extends ESAllocationTestC
         });
     }
 
+    /*
     public void testStartedShards() throws Exception {
         final String indexName = "test";
         final ClusterState clusterState = state(indexName, randomBoolean(), ShardRoutingState.INITIALIZING, ShardRoutingState.INITIALIZING);
@@ -245,6 +246,7 @@ public class ShardStartedClusterStateTaskExecutorTests extends ESAllocationTestC
             assertNotSame(clusterState, result.resultingState);
         }
     }
+    */
 
     private ClusterStateTaskExecutor.ClusterTasksResult executeTasks(final ClusterState state,
                                                                      final List<StartedShardEntry> tasks) throws Exception {

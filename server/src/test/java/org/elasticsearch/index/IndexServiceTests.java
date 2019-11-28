@@ -172,6 +172,7 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
         assertTrue(refreshTask.isClosed());
     }
 
+    /*
     public void testFsyncTaskIsRunning() throws IOException {
         Settings settings = Settings.builder()
             .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC).build();
@@ -189,7 +190,9 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
         indexService = createIndex("test1", Settings.EMPTY);
         assertNull(indexService.getFsyncTask());
     }
+    */
 
+    /* Refresh is synchronous for unit test in elassandra
     public void testRefreshActuallyWorks() throws Exception {
         IndexService indexService = createIndex("test", Settings.EMPTY);
         ensureGreen("test");
@@ -218,6 +221,7 @@ public class IndexServiceTests extends ESSingleNodeTestCase {
             }
         });
     }
+    */
 
     /* Elassandra does not sync translog
     public void testAsyncFsyncActuallyWorks() throws Exception {

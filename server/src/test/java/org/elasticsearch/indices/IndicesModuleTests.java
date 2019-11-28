@@ -90,7 +90,7 @@ public class IndicesModuleTests extends ESTestCase {
 
     private static String[] EXPECTED_METADATA_FIELDS = new String[]{IgnoredFieldMapper.NAME, UidFieldMapper.NAME, IdFieldMapper.NAME,
             RoutingFieldMapper.NAME, IndexFieldMapper.NAME, SourceFieldMapper.NAME, TypeFieldMapper.NAME, AllFieldMapper.NAME,
-            VersionFieldMapper.NAME, ParentFieldMapper.NAME, SeqNoFieldMapper.NAME, FieldNamesFieldMapper.NAME};
+            VersionFieldMapper.NAME, ParentFieldMapper.NAME, SeqNoFieldMapper.NAME, TokenFieldMapper.NAME,  NodeFieldMapper.NAME, FieldNamesFieldMapper.NAME };
 
     public void testBuiltinMappers() {
         IndicesModule module = new IndicesModule(Collections.emptyList());

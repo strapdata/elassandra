@@ -87,6 +87,7 @@ public class SearchRequestTests extends AbstractSearchTestCase {
         }
     }
 
+    /*
     public void testReadFromPre6_7_0() throws IOException {
         String msg = "AAEBBWluZGV4AAAAAQACAAAA/////w8AAAAAAAAA/////w8AAAAAAAACAAAAAAABAAMCBAUBAAKABACAAQIAAA==";
         try (StreamInput in = StreamInput.wrap(Base64.getDecoder().decode(msg))) {
@@ -99,6 +100,7 @@ public class SearchRequestTests extends AbstractSearchTestCase {
             assertTrue(searchRequest.isFinalReduce());
         }
     }
+    */
 
     private static void assertAbsoluteStartMillisIsCurrentTime(SearchRequest searchRequest) {
         long before = System.currentTimeMillis();

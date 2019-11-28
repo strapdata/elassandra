@@ -60,6 +60,7 @@ import static org.hamcrest.Matchers.nullValue;
 
 public class ClusterSerializationTests extends ESAllocationTestCase {
 
+    /*
     public void testClusterStateSerialization() throws Exception {
         MetaData metaData = MetaData.builder()
                 .put(IndexMetaData.builder("test").settings(settings(Version.CURRENT)).numberOfShards(10).numberOfReplicas(1))
@@ -114,7 +115,9 @@ public class ClusterSerializationTests extends ESAllocationTestCase {
 
         assertThat(target.toString(), equalTo(source.toString()));
     }
+*/
 
+/*
     public void testSnapshotDeletionsInProgressSerialization() throws Exception {
 
         boolean includeRestore = randomBoolean();
@@ -156,6 +159,8 @@ public class ClusterSerializationTests extends ESAllocationTestCase {
         assertThat(stateAfterDiffs.custom(SnapshotDeletionsInProgress.TYPE), notNullValue());
 
     }
+    */
+
 
     private ClusterState updateUsingSerialisedDiff(ClusterState original, Diff<ClusterState> diff) throws IOException {
         BytesStreamOutput outStream = new BytesStreamOutput();

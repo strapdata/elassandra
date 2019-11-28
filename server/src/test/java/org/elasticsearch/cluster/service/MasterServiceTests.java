@@ -304,6 +304,7 @@ public class MasterServiceTests extends ESTestCase {
         assertTrue(published.get());
     }
 
+    /*
     @TestLogging("org.elasticsearch.cluster.service:TRACE") // To ensure that we log cluster state events on TRACE level
     public void testClusterStateUpdateLogging() throws Exception {
         MockLogAppender mockAppender = new MockLogAppender();
@@ -404,6 +405,7 @@ public class MasterServiceTests extends ESTestCase {
             mockAppender.stop();
         }
     }
+    */
 
     public void testClusterStateBatchedUpdates() throws BrokenBarrierException, InterruptedException {
         AtomicInteger counter = new AtomicInteger();
@@ -641,6 +643,7 @@ public class MasterServiceTests extends ESTestCase {
             containsString("Reason: [Blocking operation]"));
     }
 
+    /*
     @TestLogging("org.elasticsearch.cluster.service:WARN") // To ensure that we log cluster state events on WARN level
     public void testLongClusterStateUpdateLogging() throws Exception {
         MockLogAppender mockAppender = new MockLogAppender();
@@ -772,7 +775,9 @@ public class MasterServiceTests extends ESTestCase {
         }
         mockAppender.assertAllExpectationsMatched();
     }
+    */
 
+    /*
     public void testAcking() throws InterruptedException {
         final DiscoveryNode node1 = new DiscoveryNode("node1", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT);
         final DiscoveryNode node2 = new DiscoveryNode("node2", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT);
@@ -898,6 +903,7 @@ public class MasterServiceTests extends ESTestCase {
 
         timedMasterService.close();
     }
+ */
 
     static class TimedMasterService extends MasterService {
 

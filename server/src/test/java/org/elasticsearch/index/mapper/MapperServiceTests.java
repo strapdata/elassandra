@@ -37,9 +37,7 @@ import org.elasticsearch.indices.InvalidTypeNameException;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 import static org.hamcrest.CoreMatchers.containsString;
@@ -75,8 +73,26 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                     .addMapping(type, field, "type=text")
                     .execute().actionGet();
         });
-        assertTrue(e.getMessage(), e.getMessage().contains("mapping type name [" + type
-            + "] is too long; limit is length 255 but was [256]"));
+        assertTrue(e.getMessage(), e.getMessage().contains("mapping type name [" + type + "] is too long; limit is length 255 but was [256]"));
+    }
+
+    public void testTypes() throws Exception {
+        IndexService indexService1 = createIndex("index1", Settings.builder().put("index.version.created", Version.V_5_6_0) // multi types
+            .build());
+        MapperService mapperService = indexService1.mapperService();
+        assertEquals(Collections.emptySet(), mapperService.types());
+
+        mapperService.merge("type1", new CompressedXContent("{\"type1\":{}}"), MapperService.MergeReason.MAPPING_UPDATE, false);
+        assertNull(mapperService.documentMapper(MapperService.DEFAULT_MAPPING));
+        assertEquals(Collections.singleton("type1"), mapperService.types());
+
+        mapperService.merge(MapperService.DEFAULT_MAPPING, new CompressedXContent("{\"_default_\":{}}"), MapperService.MergeReason.MAPPING_UPDATE, false);
+        assertNotNull(mapperService.documentMapper(MapperService.DEFAULT_MAPPING));
+        assertEquals(Collections.singleton("type1"), mapperService.types());
+
+        mapperService.merge("type2", new CompressedXContent("{\"type2\":{}}"), MapperService.MergeReason.MAPPING_UPDATE, false);
+        assertNotNull(mapperService.documentMapper(MapperService.DEFAULT_MAPPING));
+        assertEquals(new HashSet<>(Arrays.asList("type1", "type2")), mapperService.types());
     }
 
     public void testTypeValidation() {
@@ -213,8 +229,8 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                         "you can use [copy_to] on mapping fields to create your own catch all field.");
     }
 
-
-    public void testPartitionedConstraints() {
+    /*
+     public void testPartitionedConstraints() {
         // partitioned index must have routing
          IllegalArgumentException noRoutingException = expectThrows(IllegalArgumentException.class, () -> {
             client().admin().indices().prepareCreate("test-index")
@@ -247,6 +263,7 @@ public class MapperServiceTests extends ESSingleNodeTestCase {
                 .put("index.routing_partition_size", 2))
             .execute().actionGet().isAcknowledged());
     }
+    */
 
     public void testIndexSortWithNestedFields() throws IOException {
         Settings settings = Settings.builder()

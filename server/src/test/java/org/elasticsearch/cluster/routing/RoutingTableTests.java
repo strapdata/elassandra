@@ -142,6 +142,7 @@ public class RoutingTableTests extends ESAllocationTestCase {
         assertSame(clusterState.routingTable().getIndicesRouting(), clusterState.routingTable().indicesRouting());
     }
 
+    /*
     public void testShardsWithState() {
         assertThat(clusterState.routingTable().shardsWithState(ShardRoutingState.UNASSIGNED).size(), is(this.totalNumberOfShards));
 
@@ -169,7 +170,9 @@ public class RoutingTableTests extends ESAllocationTestCase {
         startInitializingShards(TEST_INDEX_2);
         assertThat(clusterState.routingTable().shardsWithState(ShardRoutingState.STARTED).size(), is(this.totalNumberOfShards));
     }
+    */
 
+    /*
     public void testActivePrimaryShardsGrouped() {
         assertThat(this.emptyRoutingTable.activePrimaryShardsGrouped(new String[0], true).size(), is(0));
         assertThat(this.emptyRoutingTable.activePrimaryShardsGrouped(new String[0], false).size(), is(0));
@@ -316,6 +319,7 @@ public class RoutingTableTests extends ESAllocationTestCase {
         }
 
     }
+    */
 
     public void testValidations() {
         final String indexName = "test";

@@ -255,6 +255,7 @@ public class UnassignedInfoTests extends ESAllocationTestCase {
     /**
      * Verifies that when a shard fails, reason is properly set and details are preserved.
      */
+    /*
     public void testFailedShard() {
         AllocationService allocation = createAllocationService();
         MetaData metaData = MetaData.builder()
@@ -288,6 +289,7 @@ public class UnassignedInfoTests extends ESAllocationTestCase {
         assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).get(0).unassignedInfo().getUnassignedTimeInMillis(),
             greaterThan(0L));
     }
+    */
 
     /**
      * Verifies that delayed allocation calculation are correct.

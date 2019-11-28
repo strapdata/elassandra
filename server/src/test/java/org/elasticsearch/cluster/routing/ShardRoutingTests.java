@@ -32,6 +32,7 @@ import java.io.IOException;
 
 public class ShardRoutingTests extends ESTestCase {
 
+    /*
     public void testIsSameAllocation() {
         ShardRouting unassignedShard0 = TestShardRouting.newShardRouting("test", 0, null, false, ShardRoutingState.UNASSIGNED);
         ShardRouting unassignedShard1 = TestShardRouting.newShardRouting("test", 1, null, false, ShardRoutingState.UNASSIGNED);
@@ -57,6 +58,7 @@ public class ShardRoutingTests extends ESTestCase {
         assertFalse(unassignedShard0.isSameAllocation(initializingShard1));
         assertFalse(unassignedShard0.isSameAllocation(startedShard1));
     }
+    */
 
     private ShardRouting randomShardRouting(String index, int shard) {
         ShardRoutingState state = randomFrom(ShardRoutingState.values());

@@ -30,6 +30,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.BoundTransportAddress;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 
@@ -50,7 +51,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 @LuceneTestCase.SuppressFileSystems(value = "ExtrasFS")
-public class NodeTests extends ESTestCase {
+public class NodeTests extends ESSingleNodeTestCase {
 
     public void testNodeName() throws IOException {
         final String name = randomBoolean() ? randomAlphaOfLength(10) : null;
@@ -66,7 +67,7 @@ public class NodeTests extends ESTestCase {
                 assertThat(Node.NODE_NAME_SETTING.get(nodeSettings), equalTo(name));
             }
         }
-        assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
+        //assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
     }
 
     public static class CheckPlugin extends Plugin {
@@ -78,6 +79,7 @@ public class NodeTests extends ESTestCase {
         }
     }
 
+    /*
     public void testLoadPluginBootstrapChecks() throws IOException {
         final String name = randomBoolean() ? randomAlphaOfLength(10) : null;
         Settings.Builder settings = baseSettings();
@@ -100,6 +102,7 @@ public class NodeTests extends ESTestCase {
         }
         assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
     }
+    */
 
     public void testWarnIfPreRelease() {
         final Logger logger = mock(Logger.class);
@@ -150,7 +153,7 @@ public class NodeTests extends ESTestCase {
         } catch (IllegalArgumentException e) {
             assertEquals("node.attr.test_attr cannot have leading or trailing whitespace [trailing ]", e.getMessage());
         }
-        assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
+        //assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
     }
 
     public void testServerNameNodeAttribute() throws IOException {
@@ -171,7 +174,7 @@ public class NodeTests extends ESTestCase {
             assertEquals("invalid node.attr.server_name [invalid_hostname]", e.getMessage());
         }
 
-        assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
+        //assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
     }
 
     public void testCheckIfClusterNameInDataPaths() throws NodeValidationException, IOException {
@@ -190,6 +193,7 @@ public class NodeTests extends ESTestCase {
             + invalidDataPath.toString() + "]")));
     }
 
+    /*
     public void testCheckIfClusterNameInDataPathsOnNodeStartup() throws IOException {
         String clusterName = randomAlphaOfLengthBetween(3, 10);
         Path invalidDataPath = createTempDir("invalidData");
@@ -209,6 +213,7 @@ public class NodeTests extends ESTestCase {
 
         assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
     }
+    */
 
     private static Settings.Builder baseSettings() {
         final Path tempDir = createTempDir();

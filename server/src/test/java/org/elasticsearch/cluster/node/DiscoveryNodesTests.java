@@ -21,6 +21,7 @@ package org.elasticsearch.cluster.node;
 
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import org.elasticsearch.Version;
+import org.elasticsearch.client.NodeSelector;
 import org.elasticsearch.test.ESTestCase;
 
 import java.util.ArrayList;
@@ -71,6 +72,7 @@ public class DiscoveryNodesTests extends ESTestCase {
         }
     }
 
+    /* ALl nodes are master in elassandra
     public void testAll() {
         final DiscoveryNodes discoveryNodes = buildDiscoveryNodes();
 
@@ -90,6 +92,7 @@ public class DiscoveryNodesTests extends ESTestCase {
 
         assertThat(discoveryNodes.resolveNodes("master:false", "_all"), arrayContainingInAnyOrder(allNodes));
     }
+    */
 
     public void testCoordinatorOnlyNodes() {
         final DiscoveryNodes discoveryNodes = buildDiscoveryNodes();
@@ -148,6 +151,7 @@ public class DiscoveryNodesTests extends ESTestCase {
         assertThat(resolvedNodesIds, equalTo(expectedNodesIds));
     }
 
+    /*
     public void testDeltas() {
         Set<DiscoveryNode> nodesA = new HashSet<>();
         nodesA.addAll(randomNodes(1 + randomInt(10)));
@@ -208,6 +212,7 @@ public class DiscoveryNodesTests extends ESTestCase {
         assertThat(delta.removedNodes(), containsInAnyOrder(removedNodes.stream().collect(Collectors.toList()).toArray()));
         assertThat(delta.removedNodes().size(), equalTo(removedNodes.size()));
     }
+    */
 
     private static AtomicInteger idGenerator = new AtomicInteger();
 

@@ -149,7 +149,7 @@ public class NetworkModuleTests extends ESTestCase {
         assertSame(custom, module.getTransportSupplier());
         assertTrue(module.isTransportClient());
         assertFalse(module.isHttpEnabled());
-        assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
+        //assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
     }
 
     public void testRegisterHttpTransport() {
@@ -180,7 +180,7 @@ public class NetworkModuleTests extends ESTestCase {
         assertFalse(newModule.isTransportClient());
         assertFalse(newModule.isHttpEnabled());
         expectThrows(IllegalStateException.class, () -> newModule.getHttpServerTransportSupplier());
-        assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
+        //assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
     }
 
     public void testOverrideDefault() {
@@ -306,7 +306,7 @@ public class NetworkModuleTests extends ESTestCase {
             });
         });
         assertEquals("interceptor must not be null", nullPointerException.getMessage());
-        assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
+        //assertSettingDeprecationsAndWarnings(new Setting<?>[] { NetworkModule.HTTP_ENABLED });
     }
 
     private NetworkModule newNetworkModule(Settings settings, boolean transportClient, NetworkPlugin... plugins) {

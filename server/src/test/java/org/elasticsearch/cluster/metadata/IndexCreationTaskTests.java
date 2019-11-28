@@ -180,7 +180,7 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
 
-        assertThat(result.getMetaData().index("test").getSettings().get(SETTING_NUMBER_OF_SHARDS), equalTo("5"));
+        assertThat(result.getMetaData().index("test").getSettings().get(SETTING_NUMBER_OF_SHARDS), equalTo("1"));
     }
 
     public void testSettingsFromClusterState() throws Exception {
@@ -192,7 +192,7 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
 
-        assertThat(result.getMetaData().index("test").getSettings().get(SETTING_NUMBER_OF_SHARDS), equalTo("15"));
+        assertThat(result.getMetaData().index("test").getSettings().get(SETTING_NUMBER_OF_SHARDS), equalTo("1"));
     }
 
     public void testTemplateOrder() throws Exception {
@@ -259,11 +259,13 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
 
         expectThrows(RuntimeException.class, this::executeTask);
 
+        /* No such warning in elassandra
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
 
         verify(indicesService, times(1)).removeIndex(anyObject(), anyObject(), anyObject());
+         */
     }
 
     /*
@@ -299,10 +301,11 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
 
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, this::executeTask);
 
+        /* No such warning in Elassandra
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
-
+        */
         assertThat(e.getMessage(), containsString("invalid wait_for_active_shards"));
     }
 
@@ -316,9 +319,11 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
         assertThat(result.metaData().index("test").getAliases(), hasKey("alias1"));
         assertThat(result.metaData().index("test").getAliases().get("alias1").writeIndex(), equalTo(writeIndex));
 
+        /* No such warning in elassandra
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
             + "if you wish to continue using the default of [5] shards, "
             + "you must manage this on the create index request or with an index template");
+         */
     }
 
     public void testWriteIndexValidationException() throws Exception {

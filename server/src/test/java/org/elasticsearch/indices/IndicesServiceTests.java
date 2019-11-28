@@ -568,6 +568,7 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
         assertThat(e, hasToString(new RegexMatcher(pattern)));
     }
 
+    /*
     public void testOverShardLimit() {
         int nodesInCluster = randomIntBetween(1,100);
         ClusterShardLimitIT.ShardCounts counts = forDataNodeCount(nodesInCluster);
@@ -591,6 +592,7 @@ public class IndicesServiceTests extends ESSingleNodeTestCase {
             " Before upgrading, reduce the number of shards in your cluster or adjust the cluster setting [cluster.max_shards_per_node].");
         assertFalse(errorMessage.isPresent());
     }
+    */
 
     public void testUnderShardLimit() {
         int nodesInCluster = randomIntBetween(2,100);

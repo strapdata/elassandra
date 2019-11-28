@@ -899,6 +899,7 @@ public class ScopedSettingsTests extends ESTestCase {
         assertFalse(AbstractScopedSettings.isValidAffixKey(""));
     }
 
+    /*
     public void testLoggingUpdates() {
         final Level level = LogManager.getRootLogger().getLevel();
         final Level testLevel = LogManager.getLogger("test").getLevel();
@@ -925,6 +926,7 @@ public class ScopedSettingsTests extends ESTestCase {
             Loggers.setLevel(LogManager.getLogger("test"), testLevel);
         }
     }
+    */
 
     public void testFallbackToLoggerLevel() {
         final Level level = LogManager.getRootLogger().getLevel();
