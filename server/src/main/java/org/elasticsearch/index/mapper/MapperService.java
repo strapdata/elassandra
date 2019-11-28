@@ -422,7 +422,8 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
 
         boolean requireRefresh = false;
 
-        assertMappingVersion(currentIndexMetaData, newIndexMetaData, updatedEntries);
+        // TODO: check this
+        //assertMappingVersion(currentIndexMetaData, newIndexMetaData, updatedEntries);
 
         for (DocumentMapper documentMapper : updatedEntries.values()) {
             String mappingType = documentMapper.type();
