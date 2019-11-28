@@ -45,7 +45,6 @@ apply plugin: 'signing'
 repositories {
   mavenLocal()
   maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
-  maven { url 'https://oss.sonatype.org/content/repositories/releases/' }
 }
 
 // common maven publishing configuration
