@@ -33,7 +33,7 @@ publishing {
   }
 }
 
-archivesBaseName = 'elassandra'
+archivesBaseName = 'elasticsearch'
 
 // we want to keep the JDKs in our IDEs set to JDK 8 until minimum JDK is bumped to 9 so we do not include this source set in our IDEs
 if (!isEclipse && !isIdea) {
@@ -219,8 +219,33 @@ unitTest {
   // these are tested explicitly in separate test tasks
   exclude '**/*ScriptDocValuesMissingV7BehaviourTests.class'
   exclude '**/TransportShardBulkActionTests.class'
-  exclude '**/BlobStoreRepositoryRestoreTests.class'
+  exclude '**/SnapshotTests.class'
+  exclude '**/CreateSnapshotRequestTests.class'
+  exclude '**/SnapshotStatusTests,.class'
+  exclude 'org/elasticsearch/repositories/**'
+  exclude 'org/elasticsearch/snapshots/**'
+  exclude 'org/elasticsearch/action/admin/cluster/reroute/**'
+  exclude 'org/elasticsearch/action/admin/indices/shrink/**'
+  exclude 'org/elasticsearch/action/support/master/**'
+  exclude 'org/elasticsearch/cluster/routing/allocation/decider/**'
+  exclude '**/ReplicationOperationTests.class'
+  exclude '**/DelayedAllocationServiceTests.class'
+  exclude '**/PrimaryTermsTests.class'
   exclude '**/ClusterStateTests.class'
+  exclude '**/CombinedDeletionPolicyTests.class'
+  exclude '**/IndexMetaDataUpdater.class'
+  exclude '**/IndexShardRetentionLeaseTests.class'
+  exclude '**/BulkPrimaryExecutionContextTests.class'
+  exclude '**/RemoveCorruptedShardDataCommandTests.class'
+  exclude '**/ShardGetServiceTests.class'
+  exclude '**/LoggersTests.class'
+  exclude '**/TransportLoggerTests.class'
+  exclude '**/JodaCompatibleZonedDateTimeTests.class'
+  exclude '**/UnassignedInfoTests.class'
+  exclude '**/ESPolicyTests.class'
+  exclude '**/ReadOnlyEngineTests.class'
+  exclude '**/GatewayMetaStateTests.class'
+  exclude '**/SearchServiceTests.class'   // TODO fix
   jvmArg '-Djava.locale.providers=COMPAT'
 
 }
