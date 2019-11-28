@@ -428,6 +428,7 @@ public class MetaDataCreateIndexServiceTests extends ESTestCase {
         assertThat(e.getMessage(), endsWith(errorMessage));
     }
 
+    /*
     public void testShardLimitDeprecationWarning() {
         int nodesInCluster = randomIntBetween(2,100);
         ClusterShardLimitIT.ShardCounts counts = forDataNodeCount(nodesInCluster);
@@ -452,5 +453,5 @@ public class MetaDataCreateIndexServiceTests extends ESTestCase {
             totalShards + "] total shards, but this cluster currently has [" + currentShards + "]/[" + maxShards + "] maximum shards open."+
             " Before upgrading, reduce the number of shards in your cluster or adjust the cluster setting [cluster.max_shards_per_node].");
     }
-
+    */
 }
