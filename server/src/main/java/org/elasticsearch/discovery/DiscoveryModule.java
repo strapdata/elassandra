@@ -100,13 +100,13 @@ public class DiscoveryModule {
             hostsProviderNames = extendedHostsProviderNames;
         }
 
-        /*
+
         final Set<String> missingProviderNames = new HashSet<>(hostsProviderNames);
         missingProviderNames.removeAll(hostProviders.keySet());
         if (missingProviderNames.isEmpty() == false) {
             throw new IllegalArgumentException("Unknown zen hosts providers " + missingProviderNames);
         }
-        */
+
         List<UnicastHostsProvider> filteredHostsProviders = hostsProviderNames.stream()
             .map(hostProviders::get).map(Supplier::get).collect(Collectors.toList());
 
