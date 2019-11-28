@@ -49,8 +49,8 @@ public class TransportBulkActionTests extends ESTestCase {
 
     /** Services needed by bulk action */
     private TransportService transportService;
-    private ClusterService clusterService;
-    private ThreadPool threadPool;
+    public ClusterService clusterService;
+    public ThreadPool threadPool;
 
     private TestTransportBulkAction bulkAction;
 
