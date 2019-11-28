@@ -410,11 +410,11 @@ final class StoreRecovery {
                 final String translogUUID = Translog.createEmptyTranslog(
                     indexShard.shardPath().resolveTranslog(), localCheckpoint, shardId, SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
                 store.associateIndexWithNewTranslog(translogUUID);
-                //writeEmptyRetentionLeasesFile(indexShard);
+                writeEmptyRetentionLeasesFile(indexShard);
             } else if (indexShouldExists) {
                 if (recoveryState.getRecoverySource().shouldBootstrapNewHistoryUUID()) {
                     store.bootstrapNewHistory();
-                    //writeEmptyRetentionLeasesFile(indexShard);
+                    writeEmptyRetentionLeasesFile(indexShard);
                 }
                 if (indexShard.indexSettings().getIndexVersionCreated().before(Version.V_6_0_0_rc1)) {
                     if (store.ensureIndexHas6xCommitTags()) {
@@ -436,27 +436,24 @@ final class StoreRecovery {
                     indexShard.shardPath().resolveTranslog(), SequenceNumbers.NO_OPS_PERFORMED, shardId,
                     SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
                 store.associateIndexWithNewTranslog(translogUUID);
-                //writeEmptyRetentionLeasesFile(indexShard);
+                writeEmptyRetentionLeasesFile(indexShard);
             }
-            indexShard.openEngineAndSkipTranslogRecovery();
+            indexShard.openEngineAndRecoverFromTranslog();
+            indexShard.getEngine().fillSeqNoGaps(indexShard.getPendingPrimaryTerm());
             indexShard.finalizeRecovery();
             indexShard.postRecovery("post recovery from shard_store");
         } catch (EngineException | IOException e) {
             throw new IndexShardRecoveryException(shardId, "failed to recover from gateway", e);
-        } catch (Exception e) {
-            logger.warn("Unexpected Exception", e);
         } finally {
             store.decRef();
         }
     }
 
-    /*
     private static void writeEmptyRetentionLeasesFile(IndexShard indexShard) throws IOException {
         assert indexShard.getRetentionLeases().leases().isEmpty() : indexShard.getRetentionLeases(); // not loaded yet
         indexShard.persistRetentionLeases();
         assert indexShard.loadRetentionLeases().leases().isEmpty();
     }
-     */
 
     private void addRecoveredFileDetails(SegmentInfos si, Store store, RecoveryState.Index index) throws IOException {
         final Directory directory = store.directory();
@@ -497,7 +494,7 @@ final class StoreRecovery {
                 indexShard.shardPath().resolveTranslog(), localCheckpoint, shardId, SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
             store.associateIndexWithNewTranslog(translogUUID);
             assert indexShard.shardRouting.primary() : "only primary shards can recover from store";
-            //writeEmptyRetentionLeasesFile(indexShard);
+            writeEmptyRetentionLeasesFile(indexShard);
             indexShard.openEngineAndRecoverFromTranslog();
             indexShard.getEngine().fillSeqNoGaps(SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
             indexShard.finalizeRecovery();

@@ -123,6 +123,7 @@ public class RecoverySourceHandler {
      * performs the recovery from the local engine to the target
      */
     public void recoverToTarget(ActionListener<RecoveryResponse> listener) {
+        /*
         final List<Closeable> resources = new CopyOnWriteArrayList<>();
         final Closeable releaseResources = () -> IOUtils.close(resources);
         final ActionListener<RecoveryResponse> wrappedListener = ActionListener.notifyOnce(listener);
@@ -143,7 +144,6 @@ public class RecoverySourceHandler {
             final Consumer<Exception> onFailure = e ->
                 IOUtils.closeWhileHandlingException(releaseResources, () -> wrappedListener.onFailure(e));
 
-            /*
             runUnderPrimaryPermit(() -> {
                 final IndexShardRoutingTable routingTable = shard.getReplicationGroup().getRoutingTable();
                 ShardRouting targetShardRouting = routingTable.getByAllocationId(request.targetAllocationId());
@@ -155,17 +155,16 @@ public class RecoverySourceHandler {
                 assert targetShardRouting.initializing() : "expected recovery target to be initializing but was " + targetShardRouting;
             }, shardId + " validating recovery target ["+ request.targetAllocationId() + "] registered ",
                 shard, cancellableThreads, logger);
-             */
+
             final Closeable retentionLock = shard.acquireRetentionLock();
             resources.add(retentionLock);
             final long startingSeqNo;
             final boolean isSequenceNumberBasedRecovery = request.startingSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO &&
                 isTargetSameHistory() && shard.hasCompleteHistoryOperations("peer-recovery", request.startingSeqNo());
-            final SendFileResult sendFileResult;
+            final SendFileResult sendFileResult = SendFileResult.EMPTY;
             if (isSequenceNumberBasedRecovery) {
                 logger.trace("performing sequence numbers based recovery. starting at [{}]", request.startingSeqNo());
                 startingSeqNo = request.startingSeqNo();
-                sendFileResult = SendFileResult.EMPTY;
             } else {
                 final Engine.IndexCommitRef phase1Snapshot;
                 try {
@@ -173,6 +172,7 @@ public class RecoverySourceHandler {
                 } catch (final Exception e) {
                     throw new RecoveryEngineException(shard.shardId(), 1, "snapshot failed", e);
                 }
+
                 // If soft-deletes enabled, we need to transfer only operations after the local_checkpoint of the commit to have
                 // the same history on the target. However, with translog, we need to set this to 0 to create a translog roughly
                 // according to the retention policy on the target. Note that it will still filter out legacy operations without seqNo.
@@ -182,6 +182,7 @@ public class RecoverySourceHandler {
                 } else {
                     startingSeqNo = 0;
                 }
+                startingSeqNo = 0;
                 try {
                     final int estimateNumOps = shard.estimateNumberOfHistoryOperations("peer-recovery", startingSeqNo);
                     sendFileResult = phase1(phase1Snapshot.getIndexCommit(), () -> estimateNumOps);
@@ -208,11 +209,9 @@ public class RecoverySourceHandler {
                  * This means that any document indexed into the primary after this will be replicated to this replica as well
                  * make sure to do this before sampling the max sequence number in the next step, to ensure that we send
                  * all documents up to maxSeqNo in phase2.
-                 */
-                /*
+                 *
                 runUnderPrimaryPermit(() -> shard.initiateTracking(request.targetAllocationId()),
                     shardId + " initiating tracking of " + request.targetAllocationId(), shard, cancellableThreads, logger);
-                */
 
                 final long endingSeqNo = shard.seqNoStats().getMaxSeqNo();
                 if (logger.isTraceEnabled()) {
@@ -228,10 +227,9 @@ public class RecoverySourceHandler {
                 final long maxSeenAutoIdTimestamp = shard.getMaxSeenAutoIdTimestamp();
                 final long maxSeqNoOfUpdatesOrDeletes = shard.getMaxSeqNoOfUpdatesOrDeletes();
                 //final RetentionLeases retentionLeases = shard.getRetentionLeases();
-                /*
                 phase2(startingSeqNo, endingSeqNo, phase2Snapshot, maxSeenAutoIdTimestamp, maxSeqNoOfUpdatesOrDeletes,
                     retentionLeases, sendSnapshotStep);
-                 */
+
                 sendSnapshotStep.whenComplete(
                     r -> IOUtils.close(phase2Snapshot),
                     e -> {
@@ -260,6 +258,8 @@ public class RecoverySourceHandler {
         } catch (Exception e) {
             IOUtils.closeWhileHandlingException(releaseResources, () -> wrappedListener.onFailure(e));
         }
+
+                 */
     }
 
     private boolean isTargetSameHistory() {
