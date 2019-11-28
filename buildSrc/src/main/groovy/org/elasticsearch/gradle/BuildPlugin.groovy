@@ -374,8 +374,7 @@ class BuildPlugin implements Plugin<Project> {
     }
 
     private static String findCompilerJavaHome() {
-        String compilerJavaHome = System.getenv('JAVA_HOME')
-        compilerJavaHome = '/Library/Java/JavaVirtualMachines/jdk-12.0.2.jdk/Contents/Home'
+        String compilerJavaHome = System.getenv('JAVA12_HOME')
         final String compilerJavaProperty = System.getProperty('compiler.java')
         if (compilerJavaProperty != null) {
             compilerJavaHome = findJavaHome(compilerJavaProperty)
