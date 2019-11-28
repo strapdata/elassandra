@@ -20,6 +20,7 @@
 package org.elasticsearch.index.engine;
 
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
+import org.elasticsearch.index.seqno.LocalCheckpointTracker;
 import org.elasticsearch.index.seqno.SequenceNumbers;
 
 import java.io.IOException;
@@ -34,6 +35,10 @@ class InternalTestEngine extends InternalEngine {
 
     InternalTestEngine(EngineConfig engineConfig) {
         super(engineConfig);
+    }
+
+    InternalTestEngine(EngineConfig engineConfig, BiFunction<Long, Long, LocalCheckpointTracker> localCheckpointTrackerSupplier) {
+        super(engineConfig, localCheckpointTrackerSupplier);
     }
 
     @Override

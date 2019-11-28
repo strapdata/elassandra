@@ -362,6 +362,10 @@ public abstract class ESTestCase extends LuceneTestCase {
         return false;
     }
 
+    protected boolean enableHttpEnableWarningsCheck() {
+        return false;
+    }
+
     @After
     public final void after() throws Exception {
         checkStaticState(false);
@@ -387,11 +391,14 @@ public abstract class ESTestCase extends LuceneTestCase {
         return "[" + name.substring(start + 1, end) + "] ";
     }
 
-    private void ensureNoWarnings() throws IOException {
+    protected void ensureNoWarnings() throws IOException {
         //Check that there are no unaccounted warning headers. These should be checked with {@link #assertWarnings(String...)} in the
         //appropriate test
         try {
-            final List<String> warnings = filterHttpEnabledDeprectationWarnings(threadContext.getResponseHeaders().get("Warning"));
+            List<String> warnings = threadContext.getResponseHeaders().get("Warning");
+            if (warnings != null && enableHttpEnableWarningsCheck() == false) {
+                warnings = filterHttpEnabledDeprectationWarnings(warnings);
+            }
             if (warnings != null && enableJodaDeprecationWarningsCheck() == false) {
                 List<String> filteredWarnings = filterJodaDeprecationWarnings(warnings);
                 assertThat( filteredWarnings, empty());
@@ -430,7 +437,10 @@ public abstract class ESTestCase extends LuceneTestCase {
             throw new IllegalStateException("unable to check warning headers if the test is not set to do so");
         }
         try {
-            final List<String> actualWarnings = threadContext.getResponseHeaders().get("Warning");
+            List<String> actualWarnings = threadContext.getResponseHeaders().get("Warning");
+            if (actualWarnings != null && enableHttpEnableWarningsCheck() == false) {
+                actualWarnings = filterHttpEnabledDeprectationWarnings(actualWarnings);
+            }
             if (actualWarnings != null && enableJodaDeprecationWarningsCheck() == false) {
                 List<String> filteredWarnings = filterJodaDeprecationWarnings(actualWarnings);
                 assertWarnings(filteredWarnings, expectedWarnings);

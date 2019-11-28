@@ -31,7 +31,6 @@ import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
 import org.apache.lucene.util.IOUtils;
-import org.elassandra.discovery.CassandraDiscovery;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequestBuilder;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
@@ -67,7 +66,6 @@ import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.MockSearchService;
 import org.elasticsearch.search.internal.SearchContext;
-import org.elasticsearch.test.ESIntegTestCase.TestSeedPlugin;
 import org.elasticsearch.test.discovery.MockCassandraDiscovery;
 import org.elasticsearch.test.store.MockFSIndexStore;
 import org.elasticsearch.test.transport.MockTransportService;
@@ -344,6 +342,10 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
         stopNode();
     }
 
+    protected void ensureNoWarnings() throws IOException {
+        super.ensureNoWarnings();
+    }
+
     /**
      * This method returns <code>true</code> if the node that is used in the background should be reset
      * after each test. This is useful if the test changes the cluster state metadata etc. The default is
@@ -361,7 +363,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
     /** Helper method to create list of plugins without specifying generic types. */
     @SafeVarargs
     @SuppressWarnings("varargs") // due to type erasure, the varargs type is non-reifiable, which causes this warning
-    protected final Collection<Class<? extends Plugin>> pluginList(Class<? extends Plugin>... plugins) {
+    protected final Collection<Class<? extends Plugin>> pluginList(Class<? extends Plugin>...plugins) {
         return Arrays.asList(plugins);
     }
 
@@ -500,7 +502,7 @@ public abstract class ESSingleNodeTestCase extends ESTestCase {
      * are now allocated and started.
      */
     public ClusterHealthStatus ensureGreen(String... indices) {
-        return ensureGreen(TimeValue.timeValueSeconds(30), indices);
+        return ensureGreen(TimeValue.timeValueSeconds(60), indices);
     }
 
 
