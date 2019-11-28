@@ -107,10 +107,11 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
 
         final ClusterState result = executeTask();
 
+        /*
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
-
+         */
         assertThat(result.metaData().index("test").getAliases(), hasAllKeys("alias_from_template_1", "alias_from_template_2"));
         assertThat(result.metaData().index("test").getAliases(), not(hasKey("alias_from_template_3")));
     }
@@ -165,9 +166,12 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
 
         final ClusterState result = executeTask();
 
+        /*
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
+
+         */
         assertThat(result.metaData().index("test").getAliases().get("alias1").getSearchRouting(), equalTo("fromReq"));
         assertThat(result.metaData().index("test").getSettings().get("key1"), equalTo("reqValue"));
         assertThat(getMappingsFromResponse().get("mapping1").toString(), equalTo("{type={properties={field={type=keyword}}}}"));
@@ -176,10 +180,11 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
     public void testDefaultSettings() throws Exception {
         final ClusterState result = executeTask();
 
+        /*
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
-
+        */
         assertThat(result.getMetaData().index("test").getSettings().get(SETTING_NUMBER_OF_SHARDS), equalTo("1"));
     }
 
@@ -188,10 +193,11 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
 
         final ClusterState result = executeTask();
 
+        /*
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
-
+        */
         assertThat(result.getMetaData().index("test").getSettings().get(SETTING_NUMBER_OF_SHARDS), equalTo("1"));
     }
 
