@@ -490,7 +490,7 @@ public class MetaDataCreateIndexService {
                  * We can not check the shard limit until we have applied templates, otherwise we do not know the actual number of shards
                  * that will be used to create this index.
                  */
-                checkShardLimit(actualIndexSettings, currentState);
+                //checkShardLimit(actualIndexSettings, currentState);
 
                 tmpImdBuilder.settings(actualIndexSettings);
 
@@ -606,9 +606,9 @@ public class MetaDataCreateIndexService {
                 if (indexMetaData.virtualIndex() != null) {
                     virtualIndexMetaData = currentState.metaData().index(indexMetaData.virtualIndex());
 
-			if (virtualIndexMetaData == null) {
-				// create the new virtual index
-				Settings.Builder virtualSettingsBuilder = Settings.builder().put(indexMetaData.getSettings());
+			    if (virtualIndexMetaData == null) {
+				        // create the new virtual index
+				        Settings.Builder virtualSettingsBuilder = Settings.builder().put(indexMetaData.getSettings());
                         virtualSettingsBuilder.remove(IndexMetaData.SETTING_VIRTUAL_INDEX);
                         virtualSettingsBuilder.remove(IndexMetaData.SETTING_PARTITION_FUNCTION);
                         virtualSettingsBuilder.remove(IndexMetaData.SETTING_PARTITION_FUNCTION_CLASS);
@@ -710,7 +710,7 @@ public class MetaDataCreateIndexService {
                             removalExtraInfo = "failed on merging mapping with the existing virtual index="+virtualIndexMetaData.getIndex().toString();
                             throw e;
                         }
-			}
+			        }
                 }
 
                 newMetaDataBuilder.put(indexMetaData, false);
