@@ -161,14 +161,14 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         createIndex("fb2", Settings.builder().put("index.keyspace","fb").put("index.table","messages").build(),"messages", mapping2);
         ensureGreen("fb2");
 
-        client().prepareIndex("fb", "messages","\"Lisa%20Revol\",201]")
+        client().prepareIndex("fb", "messages","[\"Lisa\",201]")
         .setSource("{\"content\": \"ouais\", \"num\": 201, \"conversation\": \"Lisa\", \"author\": \"Barth\", \"date\": 1469968740000, \"recipients\": [\"Lisa\"]}", XContentType.JSON)
         .get();
 
         assertThat(client().prepareSearch().setIndices("fb").setTypes("messages").get().getHits().getTotalHits(), equalTo(1L));
         assertThat(client().prepareSearch().setIndices("fb2").setTypes("messages").get().getHits().getTotalHits(), equalTo(1L));
     }
-    
+
     @Test
     public void basicVirtualIndexTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
@@ -191,12 +191,12 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
 
         for(long i=20; i < 30; i++)
             assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
-        
+
         // add a doc with new field in ks_25
         assertEquals(client().prepareIndex("ks_25", "t1","xx")
         .setSource("{\"age\": 20, \"content\": \"ouais\", \"num\": 201, \"conversation\": \"Lisa\", \"author\": \"Barth\", \"date\": 1469968740000, \"recipients\": [\"Lisa\"]}", XContentType.JSON)
         .get().getResult(), DocWriteResponse.Result.CREATED);
-        
+
         // check others have it in their mapping updated
         for(long i=20; i < 30; i++) {
             Map<String, Object> md = client().admin().indices().prepareGetMappings("ks_"+i).addTypes("t1").get().getMappings().get("ks_"+i).get("t1").getSourceAsMap();
@@ -204,12 +204,12 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
             //System.out.println("ks_"+i+" properties="+properties);
             assertEquals(Boolean.TRUE, properties.containsKey("content"));
         }
-        
+
         // check the doc is inserted in ks_20 and not in the others
         assertThat(client().prepareSearch().setIndices("ks_"+20).setTypes("t1").setQuery(QueryBuilders.termQuery("content", "ouais")).get().getHits().getTotalHits(), equalTo(1L));
         for(long i=21; i < 30; i++)
             assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.termQuery("content", "ouais")).get().getHits().getTotalHits(), equalTo(0L));
-        
+
         // check tables extensions indexMetaData has only mappings for the virtual index
         UntypedResultSet rs = process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "SELECT extensions FROM system_schema.tables WHERE keyspace_name='ks' AND table_name='t1'"));
         Row row = rs.one();
@@ -217,7 +217,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         Map<String, ByteBuffer> extensions = row.getMap("extensions", UTF8Type.instance, BytesType.instance);
         System.out.println("extensions.keys=" + extensions.keySet());
         System.out.println("extensions.ks=0x"+ByteBufferUtil.bytesToHex(extensions.get("elastic_admin/ks")));
-        
+
         IndexMetaData ksIndexMetaData = clusterService().getIndexMetaDataFromExtension(extensions.get("elastic_admin/ks"));
         assertEquals(1, ksIndexMetaData.getMappings().size());
         assertEquals(Boolean.TRUE, ksIndexMetaData.getSettings().getAsBoolean(IndexMetaData.INDEX_SETTING_VIRTUAL_SETTING.getKey(), false));
@@ -227,14 +227,14 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
             assertEquals(0, indexMetaData.getMappings().size() );
             assertEquals(Boolean.FALSE, indexMetaData.getSettings().getAsBoolean(IndexMetaData.INDEX_SETTING_VIRTUAL_SETTING.getKey(), false));
             assertEquals("ks", indexMetaData.getSettings().get(IndexMetaData.INDEX_SETTING_VIRTUAL_INDEX_SETTING.getKey()));
-            
+
             IndexMetaData ksi = this.clusterService().state().metaData().index("ks_"+i);
             MappingMetaData mmd = ksi.getMappings().get("t1");
             Map<String, Object> mapping = mmd.getSourceAsMap();
             Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
             assertTrue(properties.containsKey("content"));
         }
-        
+
         {
             IndexMetaData indexMetaDataKs = clusterService().getIndexMetaDataFromExtension(extensions.get("elastic_admin/ks"));
             MappingMetaData mmd = indexMetaDataKs.getMappings().get("t1");
@@ -242,7 +242,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
             Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
             assertTrue(properties.containsKey("content"));
         }
-        
+
         // create a new index with a mapping
         XContentBuilder mapping2 = XContentFactory.jsonBuilder()
                 .startObject()
@@ -269,7 +269,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
             assertEquals(Boolean.FALSE, indexMetaDataX.getSettings().getAsBoolean(IndexMetaData.INDEX_SETTING_VIRTUAL_SETTING.getKey(), false));
             assertEquals("ks", indexMetaDataX.getSettings().get(IndexMetaData.INDEX_SETTING_VIRTUAL_INDEX_SETTING.getKey()));
         }
-        
+
         {
             IndexMetaData indexMetaDataKs = clusterService().getIndexMetaDataFromExtension(extensions.get("elastic_admin/ks"));
             MappingMetaData mmd = indexMetaDataKs.getMappings().get("t1");
