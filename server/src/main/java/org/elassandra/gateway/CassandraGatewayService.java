@@ -76,7 +76,10 @@ public class CassandraGatewayService extends GatewayService {
 
                 // update the state to reflect
                 ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).build();
-                return updatedState;
+
+                // update routing table
+                RoutingTable routingTable = RoutingTable.build(clusterService, updatedState);
+                return ClusterState.builder(updatedState).routingTable(routingTable).build();
             }
 
             @Override
