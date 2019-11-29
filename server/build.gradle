@@ -247,6 +247,7 @@ unitTest {
   exclude '**/GatewayMetaStateTests.class'
   exclude '**/SearchServiceTests.class'   // TODO fix
   exclude '**/GeoShapeQueryTests.class'   // TODO fix
+  exclude '**/InternalEngineTests.class'
   jvmArg '-Djava.locale.providers=COMPAT'
 
 }
