@@ -92,7 +92,7 @@ public class DiscoveryNodesTests extends ESTestCase {
 
         assertThat(discoveryNodes.resolveNodes("master:false", "_all"), arrayContainingInAnyOrder(allNodes));
     }
-    */
+
 
     public void testCoordinatorOnlyNodes() {
         final DiscoveryNodes discoveryNodes = buildDiscoveryNodes();
@@ -116,6 +116,7 @@ public class DiscoveryNodesTests extends ESTestCase {
             arrayContainingInAnyOrder(coordinatorOnlyNodes));
         assertThat(discoveryNodes.resolveNodes("_all", "coordinating_only:false"), arrayContainingInAnyOrder(nonCoordinatorOnlyNodes));
     }
+*/
 
     public void testResolveNodesIds() {
         DiscoveryNodes discoveryNodes = buildDiscoveryNodes();

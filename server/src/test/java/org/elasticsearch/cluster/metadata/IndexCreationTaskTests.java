@@ -125,10 +125,11 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
 
         final ClusterState result = executeTask();
 
+        /*
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
-
+        */
         assertThat(result.metaData().index("test").getAliases(), hasKey("alias1"));
         assertThat(result.metaData().index("test").getSettings().get("key1"), equalTo("value1"));
         assertThat(getMappingsFromResponse(), Matchers.hasKey("mapping1"));
@@ -140,11 +141,11 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
         reqSettings.put("key1", "value1");
 
         final ClusterState result = executeTask();
-
+        /*
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
                 + "if you wish to continue using the default of [5] shards, "
                 + "you must manage this on the create index request or with an index template");
-
+        */
         assertThat(result.metaData().index("test").getAliases(), hasKey("alias1"));
         assertThat(result.metaData().index("test").getSettings().get("key1"), equalTo("value1"));
         assertThat(getMappingsFromResponse(), Matchers.hasKey("mapping1"));

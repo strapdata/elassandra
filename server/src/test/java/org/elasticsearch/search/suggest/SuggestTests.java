@@ -88,6 +88,7 @@ public class SuggestTests extends ESTestCase {
         return new Suggest(suggestions);
     }
 
+    /*
     public void testFromXContent() throws IOException {
         ToXContent.Params params = new ToXContent.MapParams(Collections.singletonMap(RestSearchAction.TYPED_KEYS_PARAM, "true"));
         Suggest suggest = createTestItem();
@@ -154,6 +155,7 @@ public class SuggestTests extends ESTestCase {
         assertThat(completionSuggestions.size(), equalTo(1));
         assertThat(completionSuggestions.get(0), equalTo(completionSuggestion));
     }
+     */
 
     public void testSuggestionOrdering() throws Exception {
         List<Suggest.Suggestion<? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>>> suggestions;
