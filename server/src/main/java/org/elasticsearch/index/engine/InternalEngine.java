@@ -1025,6 +1025,8 @@ public class InternalEngine extends Engine {
     }
 
     protected final IndexingStrategy planIndexingAsPrimary(Index index) throws IOException {
+        final IndexingStrategy plan = IndexingStrategy.overrideExistingAsIfNotThere(0L, 1L);
+        /*
         assert index.origin() == Operation.Origin.PRIMARY : "planing as primary but origin isn't. got " + index.origin();
         //assert getMaxSeqNoOfUpdatesOrDeletes() != SequenceNumbers.UNASSIGNED_SEQ_NO : "max_seq_no_of_updates is not initialized";
         final IndexingStrategy plan;
@@ -1076,6 +1078,8 @@ public class InternalEngine extends Engine {
         if (toAppend == false) {
             advanceMaxSeqNoOfUpdatesOrDeletes(plan.seqNoForIndexing);
         }
+
+         */
         return plan;
     }
 
