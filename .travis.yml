@@ -2,7 +2,7 @@ dist: trusty
 sudo: required
 env:
   global:
-    # this variable determine when docker images are tagged 'latest'
+    # this variable determine when docker images are tagged  'latest'
     - LATEST_VERSION=6.2.3
     # Make sure gcloud command is on our PATH and the App Engine SDK is in the Python path
     - GAE_PYTHONPATH=${HOME}/.cache/google_appengine PATH=$PATH:${HOME}/google-cloud-sdk/bin PYTHONPATH=${PYTHONPATH}:${GAE_PYTHONPATH} CLOUDSDK_CORE_DISABLE_PROMPTS=1
@@ -34,6 +34,10 @@ before_install:
   - wget https://github.com/strapdata/bach/raw/master/install-jdk.sh
   # solves gpg server problems
   - wget -qO- 'https://github.com/tianon/pgp-happy-eyeballs/raw/master/hack-my-builds.sh' | bash
+  - wget -O ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
+  - unzip ccm-elassandra.zip
+  - cd ecm-ccm-elassandra
+  - sudo ./setup.py install
 
 matrix:
   include:
@@ -46,6 +50,7 @@ install: ./gradlew --version
 script:
   - ./gradlew server:test -Dbuild.snapshot=false
   - ./gradlew assemble -Dbuild.snapshot=false
+  - ./run-ccm-tests.sh
 
 before_deploy:
   - export TARBALL=$(ls distribution/tar/build/distributions/elassandra-*.tar.gz)

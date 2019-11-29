@@ -51,10 +51,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasToString;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.*;
 
 @LuceneTestCase.SuppressFileSystems(value = "ExtrasFS")
 public class PluginsServiceTests extends ESTestCase {
@@ -164,7 +161,7 @@ public class PluginsServiceTests extends ESTestCase {
             if (Constants.WINDOWS) {
                 assertThat(e.getCause(), instanceOf(NoSuchFileException.class));
             } else {
-                assertThat(e.getCause(), hasToString(containsString("Not a directory")));
+                assertThat(e.getCause(), hasToString(anyOf(containsString("Not a directory"), containsString("N'est pas un dossier"))));
             }
         }
     }
