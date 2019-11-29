@@ -345,9 +345,12 @@ public class IndexCreationTaskTests extends ESSingleNodeTestCase {
         Exception exception = expectThrows(IllegalStateException.class, () -> executeTask());
         assertThat(exception.getMessage(), startsWith("alias [alias1] has more than one write index ["));
 
+        /*
         assertWarnings("the default number of shards will change from [5] to [1] in 7.0.0; "
             + "if you wish to continue using the default of [5] shards, "
             + "you must manage this on the create index request or with an index template");
+            
+         */
     }
 
     public void testTypelessTemplateWithTypedIndexCreation() throws Exception {
