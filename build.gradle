@@ -39,8 +39,6 @@ plugins {
 apply plugin: 'nebula.info-scm'
 apply from: 'gradle/build-scan.gradle'
 apply plugin: 'com.github.jk1.dependency-license-report'
-apply plugin: 'maven'
-apply plugin: 'signing'
 
 repositories {
   mavenLocal()
@@ -54,7 +52,6 @@ allprojects {
   description = "Elasticsearch subproject ${project.path}"
 }
 
-ext.enableArtifactSigning = !version.endsWith("SNAPSHOT") && project.hasProperty("repoUsername")
 ext.repoUsername = { project.hasProperty("repoUsername") ? getProperty("repoUsername") : "" }
 ext.repoPassword = { project.hasProperty("repoPassword") ? getProperty("repoPassword") : "" }
 // repoUrl can override the publication repo URL.
@@ -67,19 +64,35 @@ if (VersionProperties.elasticsearch.toString().endsWith('-SNAPSHOT')) {
 } else {
   licenseCommit = "v${version}"
 }
-String elasticLicenseUrl = "https://raw.githubusercontent.com/elastic/elasticsearch/${licenseCommit}/licenses/ELASTIC-LICENSE.txt"
 
 subprojects {
   // Default to the apache license
   project.ext.licenseName = 'The Apache Software License, Version 2.0'
   project.ext.licenseUrl = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
 
-  // But stick the Elastic license url in project.ext so we can get it if we need to switch to it
-  project.ext.elasticLicenseUrl = elasticLicenseUrl
-
   // we only use maven publish to add tasks for pom generation
   plugins.withType(MavenPublishPlugin).whenPluginAdded {
     publishing {
+      repositories {
+        maven {
+          name = 'target'
+          credentials {
+            username = repoUsername
+            password = repoPassword
+          }
+          if (project.hasProperty("repoUrl")) {
+            url project.getProperty("repoUrl")
+          } else if(project.version.endsWith('-SNAPSHOT')) {
+            url "https://oss.sonatype.org/content/repositories/snapshots/"
+          } else {
+            url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+          }
+        }
+        maven {
+          name = 'test'
+          url = "${rootProject.buildDir}/local-test-repo"
+        }
+      }
       publications {
         // add license information to generated poms
         all {
@@ -97,122 +110,22 @@ subprojects {
             developer.appendNode('url', 'https://www.strapdata.com')
           }
         }
-      }
-      repositories {
-      /*
-        maven {
-           credentials {
-             username = repoUsername
-             password = repoPassword
-           }
-           if (project.hasProperty("repoUrl")) {
-             url project.getProperty("repoUrl")
-           } else if(project.version.endsWith('-SNAPSHOT')) {
-             url "https://oss.sonatype.org/content/repositories/snapshots/"
-           } else {
-             url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
-           }
-        }
-      */
-        maven {
-          name = 'test'
-          url = "${rootProject.buildDir}/local-test-repo"
-        }
-        
-      publications {
-        // add license information to generated poms
-        all {
-          pom.withXml { XmlProvider xml ->
-            Node node = xml.asNode()
-            node.appendNode('inceptionYear', '2015')
-
-            Node license = node.appendNode('licenses').appendNode('license')
-            license.appendNode('name', 'The Apache Software License, Version 2.0')
-            license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
-            license.appendNode('distribution', 'repo')
-
-            Node developer = node.appendNode('developers').appendNode('developer')
-            developer.appendNode('name', 'Strapdata')
-            developer.appendNode('url', 'https://www.strapdata.com')
+        maven(MavenPublication) {
+          if (components.hasProperty('java')) {
+            from components.java
+            artifacts {
+              archives sourcesJar
+              archives javadocJar
+            }
           }
         }
-        
-        maven(MavenPublication) {
-         if (components.hasProperty('java')) {
-             from components.java
-             artifacts {
-                 archives sourcesJar
-                 archives javadocJar
-             }
-         }
-        }
       }
-     }
     }
+  }
 
-    /*
-    if (enableArtifactSigning) {
-       signing {
-         sign configurations.archives
-       }
-    }
-   */
-
-    // OSSRH publication
-    /*
-    uploadArchives {
-        repositories {
-            mavenDeployer {
-                uploadDescriptor = true
-                
-                // POM signature
-                beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-                
-                if (project.hasProperty("repoUrl")) {
-                    repository(url: project.getProperty("repoUrl")) {
-                        authentication(userName: repoUsername, password: repoPassword)
-                    }
-                } else if(project.version.endsWith('-SNAPSHOT')) {
-                    snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
-                        authentication(userName: repoUsername, password: repoPassword)
-                    }
-                } else {
-                    repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
-                        authentication(userName: repoUsername, password: repoPassword)
-                    }
-                }
-    
-                pom.withXml { XmlProvider xml ->
-                    Node node = xml.asNode()
-                    node.appendNode('name',it.name)
-                    node.appendNode('description',"Elasticsearch subproject ${project.path}")
-                    node.appendNode('url', 'https://github.com/strapdata/elassandra')
-                    node.appendNode('inceptionYear', '2015')
-        
-                    Node license = node.appendNode('licenses').appendNode('license')
-                    license.appendNode('name', 'The Apache Software License, Version 2.0')
-                    license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0.txt')
-                    license.appendNode('distribution', 'repo')
-                    
-                    def scm = node.appendNode('scm')
-                    scm.appendNode('url', 'https://github.com/strapdata/elassandra')
-                    scm.appendNode('connection', 'scm:git:git@github.com:strapdata/elassandra.git')
-                    scm.appendNode('developerConnection', 'scm:git:git@github.com:strapdata/elassandra.git')
-                    
-                    Node developer = node.appendNode('developers').appendNode('developer')
-                    developer.appendNode('name', 'Strapdata')
-                    developer.appendNode('url', 'https://github.com/strapdata/elassandra')
-                    developer.appendNode('organizationUrl', 'https://www.strapdata.com/')
-                }
-            }
-        }
-    }
-    */
-    
-    plugins.withType(BuildPlugin).whenPluginAdded {
+  plugins.withType(BuildPlugin).whenPluginAdded {
       project.licenseFile = project.rootProject.file('licenses/APACHE-LICENSE-2.0.txt')
       project.noticeFile = project.rootProject.file('NOTICE.txt')
-    }
   }
 }
 
@@ -364,15 +277,17 @@ allprojects {
     "com.strapdata.elasticsearch.client:transport:${version}": ':client:transport',
     "com.strapdata.elasticsearch.plugin:elasticsearch-scripting-painless-spi:${version}": ':modules:lang-painless:spi',
     "com.strapdata.elasticsearch.test:framework:${version}": ':test:framework',
-    "com.strapdata.elasticsearch.distribution.integ-test-zip:elasticsearch:${version}": ':distribution:archives:integ-test-zip',
     "com.strapdata.elasticsearch.distribution.zip:elasticsearch:${version}": ':distribution:archives:zip',
-    "com.strapdata.elasticsearch.distribution.zip:elasticsearch-oss:${version}": ':distribution:archives:oss-zip',
     "com.strapdata.elasticsearch.distribution.tar:elasticsearch:${version}": ':distribution:archives:tar',
-    "com.strapdata.elasticsearch.distribution.tar:elasticsearch-oss:${version}": ':distribution:archives:oss-tar',
     "com.strapdata.elasticsearch.distribution.rpm:elasticsearch:${version}": ':distribution:packages:rpm',
-    "com.strapdata.elasticsearch.distribution.rpm:elasticsearch-oss:${version}": ':distribution:packages:oss-rpm',
     "com.strapdata.elasticsearch.distribution.deb:elasticsearch:${version}": ':distribution:packages:deb',
+          /*
+    "com.strapdata.elasticsearch.distribution.integ-test-zip:elasticsearch:${version}": ':distribution:archives:integ-test-zip',
+    "com.strapdata.elasticsearch.distribution.zip:elasticsearch-oss:${version}": ':distribution:archives:oss-zip',
+    "com.strapdata.elasticsearch.distribution.tar:elasticsearch-oss:${version}": ':distribution:archives:oss-tar',
+    "com.strapdata.elasticsearch.distribution.rpm:elasticsearch-oss:${version}": ':distribution:packages:oss-rpm',
     "com.strapdata.elasticsearch.distribution.deb:elasticsearch-oss:${version}": ':distribution:packages:oss-deb',
+           */
     "com.strapdata.elasticsearch.test:logger-usage:${version}": ':test:logger-usage',
     // for transport client
     "com.strapdata.elasticsearch.plugin:transport-netty4-client:${version}": ':modules:transport-netty4',
@@ -570,15 +485,7 @@ allprojects {
   }
 
   File licenseHeaderFile
-  String prefix = ':x-pack'
-  if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-    prefix = prefix.replace(':', '_')
-  }
-  if (eclipse.project.name.startsWith(prefix)) {
-      licenseHeaderFile = new File(project.rootDir, 'buildSrc/src/main/resources/license-headers/elastic-license-header.txt')
-  } else {
-      licenseHeaderFile = new File(project.rootDir, 'buildSrc/src/main/resources/license-headers/oss-license-header.txt')
-  }
+  licenseHeaderFile = new File(project.rootDir, 'buildSrc/src/main/resources/license-headers/oss-license-header.txt')
 
   String lineSeparator = Os.isFamily(Os.FAMILY_WINDOWS) ? '\\\\r\\\\n' : '\\\\n'
   String licenseHeader = licenseHeaderFile.getText('UTF-8').replace(System.lineSeparator(), lineSeparator)
